@@ -52,6 +52,11 @@ import { AgentUpdateContext } from './maintenance/AgentUpdateContext';
 import { createAgentMaintenanceController } from './maintenance/createAgentMaintenanceController';
 import { createAgentUpdatePromptCoordinator } from './maintenance/createAgentUpdatePromptCoordinator';
 import { createAgentVersionModel } from './maintenance/createAgentVersionModel';
+import {
+  REMOTE_FAST_RECONNECT_POLICY,
+  classifyReconnectFailure,
+  createAgentReconnectController,
+} from './reconnect/createAgentReconnectController';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
@@ -141,6 +146,10 @@ function getErrorMessage(error: unknown): string {
     return String(error.message || '').trim();
   }
   return String(error ?? '').trim();
+}
+
+function trimString(value: unknown): string {
+  return String(value ?? '').trim();
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -248,7 +257,7 @@ export function EnvAppShell() {
   const fileBrowserSurfaceController = createFileBrowserSurfaceController();
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
-  const reconnectPolicy = {
+  const directReconnectPolicy = {
     enabled: true,
     maxAttempts: 1_000_000,
     initialDelayMs: 500,
@@ -406,6 +415,7 @@ export function EnvAppShell() {
   );
 
   const [manualError, setManualError] = createSignal<string | null>(null);
+  const [connectionAttemptSeq, setConnectionAttemptSeq] = createSignal(0);
   const [auditOpen, setAuditOpen] = createSignal(false);
   const canViewAudit = createMemo(() => Boolean(env()?.permissions?.can_admin));
   const canAdmin = createMemo(() => Boolean(env()?.permissions?.can_admin || env()?.permissions?.is_owner));
@@ -672,49 +682,6 @@ export function EnvAppShell() {
     }
   };
 
-  const status = createMemo(() => {
-    if (accessGatePhase() === 'unlock_required') return 'disconnected';
-    if (manualError()) return 'error';
-    return protocol.status();
-  });
-  const statusLabel = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-        return 'Checking access';
-      case 'unlock_required':
-        return 'Locked';
-      default:
-        return undefined;
-    }
-  });
-  const connecting = () => !accessGateVisible() && protocol.status() === 'connecting';
-  const reconnectDisabled = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-      case 'unlock_required':
-        return true;
-      case 'resuming':
-      case 'resume_blocked':
-        return accessRecoveryBusy() || accessUnlocking();
-      default:
-        return accessRecoveryBusy() || connecting();
-    }
-  });
-  const reconnectLabel = createMemo(() => {
-    switch (accessGatePhase()) {
-      case 'checking':
-        return 'Checking access';
-      case 'unlock_required':
-        return 'Unlock required';
-      case 'resuming':
-      case 'resume_blocked':
-        return accessRecoveryBusy() ? 'Preparing secure session' : 'Retry connection';
-      default:
-        return connecting() ? 'Connecting...' : 'Reconnect';
-    }
-  });
-  const connectError = createMemo(() => (accessGateVisible() ? null : manualError() ?? protocol.error()?.message ?? null));
-
   const RECENT_AGENT_RX_MS = 10_000;
   const PROBE_TIMEOUT_MS = 1_200;
 
@@ -824,7 +791,8 @@ export function EnvAppShell() {
   };
 
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
-    if (accessRecoveryBusy() || connecting() || accessPending() || accessLocked()) return;
+    const protocolStatusValue = String(protocol.status() ?? '').trim();
+    if (accessRecoveryBusy() || protocolStatusValue === 'connecting' || accessPending() || accessLocked()) return;
 
     const id = envId();
     if (!id) {
@@ -834,6 +802,9 @@ export function EnvAppShell() {
     }
 
     const attemptKey = ++accessRecoverySeq;
+    if (!isLocalMode()) {
+      setConnectionAttemptSeq((n) => n + 1);
+    }
     accessResumeClient = null;
     accessResumeInFlight = null;
     setAccessRecoveryBusy(true);
@@ -850,7 +821,7 @@ export function EnvAppShell() {
           connect: {
             keepaliveIntervalMs: 15_000,
           },
-          autoReconnect: reconnectPolicy,
+          autoReconnect: directReconnectPolicy,
         });
         if (accessRecoverySeq !== attemptKey) return;
         accessResumeClient = protocol.client();
@@ -862,7 +833,7 @@ export function EnvAppShell() {
           mode: 'tunnel',
           getGrant: createGetGrant(),
           observer,
-          autoReconnect: reconnectPolicy,
+          autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
         });
         if (accessRecoverySeq !== attemptKey) return;
         await ensureAccessResumed(attemptKey);
@@ -896,12 +867,23 @@ export function EnvAppShell() {
       await retryAccessConnection();
       return;
     }
+    if (!isLocalMode() && remoteReconnectController.phase() === 'waiting_for_agent') {
+      remoteReconnectController.requestReconnectNow();
+      return;
+    }
     await reconnect();
   };
 
   const reloadAccessPage = () => {
     reloadCurrentPage(window);
   };
+
+  const remoteReconnectController = createAgentReconnectController({
+    enabled: () => !isLocalMode() && !accessGateVisible() && connectionAttemptSeq() > 0,
+    envId,
+    getEnvironment,
+    reconnect,
+  });
 
   const currentPingSource = createMemo(() => {
     if (accessGateVisible()) return null;
@@ -942,6 +924,143 @@ export function EnvAppShell() {
     version: agentVersionModel,
     maintenance: agentMaintenanceController,
   });
+
+  const remoteReconnectFailure = createMemo(() => remoteReconnectController.failure());
+  const connectNotice = createMemo<Readonly<{ title: string; message: string }> | null>(() => {
+    if (accessGateVisible()) return null;
+
+    if (remoteReconnectController.phase() === 'waiting_for_agent') {
+      return {
+        title: 'Waiting for agent',
+        message: remoteReconnectFailure()?.message || 'Agent is unavailable right now. Retrying automatically.',
+      };
+    }
+
+    const fatalError = manualError();
+    if (fatalError) {
+      return {
+        title: 'Connection failed',
+        message: fatalError,
+      };
+    }
+
+    return null;
+  });
+  const status = createMemo(() => {
+    if (accessGatePhase() === 'unlock_required') return 'disconnected';
+    if (accessGatePhase() === 'checking' || accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked') {
+      return 'connecting';
+    }
+
+    switch (remoteReconnectController.phase()) {
+      case 'transport_retry':
+      case 'waiting_for_agent':
+      case 'reconnecting':
+        return 'connecting';
+      default:
+        break;
+    }
+
+    if (manualError()) return 'error';
+    return protocol.status();
+  });
+  const statusLabel = createMemo(() => {
+    switch (accessGatePhase()) {
+      case 'checking':
+        return 'Checking access';
+      case 'unlock_required':
+        return 'Locked';
+      case 'resuming':
+        return 'Preparing secure session';
+      case 'resume_blocked':
+        return 'Secure session blocked';
+      default:
+        break;
+    }
+
+    switch (remoteReconnectController.phase()) {
+      case 'transport_retry':
+        return 'Retrying connection';
+      case 'waiting_for_agent':
+        if (
+          remoteReconnectController.controlplaneStatus() === 'offline'
+          || remoteReconnectFailure()?.kind === 'agent_offline'
+        ) {
+          return 'Waiting for agent';
+        }
+        return 'Reconnecting soon';
+      case 'reconnecting':
+        return 'Reconnecting';
+      default:
+        return undefined;
+    }
+  });
+  const connecting = () => !accessGateVisible() && (protocol.status() === 'connecting' || remoteReconnectController.phase() === 'reconnecting');
+  const reconnectDisabled = createMemo(() => {
+    switch (accessGatePhase()) {
+      case 'checking':
+      case 'unlock_required':
+        return true;
+      case 'resuming':
+      case 'resume_blocked':
+        return accessRecoveryBusy() || accessUnlocking();
+      default:
+        break;
+    }
+
+    if (remoteReconnectController.phase() === 'transport_retry' || remoteReconnectController.phase() === 'reconnecting') {
+      return true;
+    }
+
+    return accessRecoveryBusy() || connecting();
+  });
+  const reconnectLabel = createMemo(() => {
+    switch (accessGatePhase()) {
+      case 'checking':
+        return 'Checking access';
+      case 'unlock_required':
+        return 'Unlock required';
+      case 'resuming':
+      case 'resume_blocked':
+        return accessRecoveryBusy() ? 'Preparing secure session' : 'Retry connection';
+      default:
+        break;
+    }
+
+    switch (remoteReconnectController.phase()) {
+      case 'transport_retry':
+      case 'reconnecting':
+        return 'Reconnecting...';
+      case 'waiting_for_agent':
+        return 'Retry now';
+      default:
+        return connecting() ? 'Connecting...' : 'Reconnect';
+    }
+  });
+  const connectionOverlayVisible = createMemo(() => !accessGateVisible() && protocol.status() !== 'connected');
+  const connectionOverlayMessage = createMemo(() => {
+    if (isLocalMode()) return 'Connecting to local agent...';
+    if (agentMaintenanceController.maintaining()) {
+      return agentMaintenanceController.stage() || 'Agent restarting...';
+    }
+
+    switch (remoteReconnectController.phase()) {
+      case 'transport_retry':
+      case 'reconnecting':
+        return 'Reconnecting to agent...';
+      case 'waiting_for_agent':
+        if (
+          remoteReconnectController.controlplaneStatus() === 'offline'
+          || remoteReconnectFailure()?.kind === 'agent_offline'
+        ) {
+          return 'Waiting for agent...';
+        }
+        return 'Trying the agent again soon...';
+      default:
+        return 'Connecting to agent...';
+    }
+  });
+  const connectError = createMemo(() => connectNotice()?.message ?? null);
 
   const submitAccessUnlock = async (event?: SubmitEvent) => {
     event?.preventDefault();
@@ -999,6 +1118,55 @@ export function EnvAppShell() {
     if (protocol.status() !== 'connected') {
       setCurrentAccessChannelReady(false);
     }
+  });
+
+  let lastRemoteReconnectSignal = '';
+  let lastRemoteConnectedClient: unknown = null;
+
+  createEffect(() => {
+    if (isLocalMode() || accessGateVisible()) {
+      remoteReconnectController.noteBlocked();
+      lastRemoteReconnectSignal = '';
+      lastRemoteConnectedClient = null;
+      return;
+    }
+
+    if (connectionAttemptSeq() <= 0) return;
+
+    const protocolStatusValue = String(protocol.status() ?? '').trim();
+    if (!protocolStatusValue) return;
+    if (accessRecoveryBusy() && protocolStatusValue === 'disconnected') return;
+
+    const rawFailure = manualError() || protocol.error();
+    const failure = classifyReconnectFailure(rawFailure);
+    const signal = `${protocolStatusValue}:${failure.kind}:${trimString(failure.message)}`;
+
+    if (protocolStatusValue === 'connected') {
+      if (lastRemoteConnectedClient !== protocol.client()) {
+        lastRemoteConnectedClient = protocol.client();
+        void refetchEnv();
+      }
+      remoteReconnectController.noteConnected();
+      lastRemoteReconnectSignal = signal;
+      return;
+    }
+
+    lastRemoteConnectedClient = null;
+    if (protocolStatusValue === 'connecting') {
+      remoteReconnectController.noteTransportRetry();
+      lastRemoteReconnectSignal = signal;
+      return;
+    }
+
+    if (signal === lastRemoteReconnectSignal) return;
+    lastRemoteReconnectSignal = signal;
+
+    if (failure.kind === 'fatal') {
+      remoteReconnectController.noteBlocked();
+      return;
+    }
+
+    remoteReconnectController.activateWaiting(failure);
   });
 
   createEffect(() => {
@@ -1074,6 +1242,12 @@ export function EnvAppShell() {
     ensureInFlight = (async () => {
       if (accessGateVisible()) return;
       if (connecting()) return;
+      if (manualError() && classifyReconnectFailure(manualError()).kind === 'fatal') return;
+      if (!isLocalMode() && remoteReconnectController.phase() === 'waiting_for_agent') {
+        console.debug('[envapp] ensureHealthy: nudge waiting reconnect', { reason });
+        remoteReconnectController.requestImmediateTick();
+        return;
+      }
 
       const st = protocol.status();
       const client = protocol.client();
@@ -1912,8 +2086,8 @@ export function EnvAppShell() {
           <Panel class="h-auto rounded-none border-0 border-b border-error/40">
             <PanelContent class="p-3 text-xs">
               <div role="alert">
-                <div class="text-error font-medium">Connection failed</div>
-                <div class="text-muted-foreground break-words">{connectError()}</div>
+                <div class="text-error font-medium">{connectNotice()?.title ?? 'Connection failed'}</div>
+                <div class="text-muted-foreground break-words">{connectNotice()?.message ?? connectError()}</div>
               </div>
             </PanelContent>
           </Panel>
@@ -1954,6 +2128,8 @@ export function EnvAppShell() {
         connect,
         connecting,
         connectError,
+        connectionOverlayVisible,
+        connectionOverlayMessage,
         goTab,
         filesSidebarOpen: filesMobileSidebarOpen,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,

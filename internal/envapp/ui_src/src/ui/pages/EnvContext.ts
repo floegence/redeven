@@ -34,6 +34,8 @@ export type EnvContextValue = {
   connect: () => Promise<void>;
   connecting: () => boolean;
   connectError: () => string | null;
+  connectionOverlayVisible: () => boolean;
+  connectionOverlayMessage: () => string;
 
   goTab: (tab: EnvNavTab) => void;
   filesSidebarOpen: () => boolean;

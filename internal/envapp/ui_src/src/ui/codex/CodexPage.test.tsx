@@ -145,6 +145,8 @@ function renderPage(host: HTMLDivElement) {
         connect: async () => undefined,
         connecting: () => false,
         connectError: () => null,
+        connectionOverlayVisible: () => false,
+        connectionOverlayMessage: () => '',
         goTab: () => undefined,
         filesSidebarOpen: () => false,
         setFilesSidebarOpen: () => undefined,

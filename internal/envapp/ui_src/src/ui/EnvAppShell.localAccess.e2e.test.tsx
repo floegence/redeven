@@ -21,10 +21,12 @@ const reloadCurrentPageMock = vi.fn();
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-1' };
+  protocolError = null;
 });
 const reconnectMock = vi.fn(async () => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-2' };
+  protocolError = null;
 });
 const disconnectMock = vi.fn(() => {
   protocolStatus = 'disconnected';
@@ -37,6 +39,7 @@ const accessResumeMock = vi.fn(async ({ token }: { token: string }) => {
 
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
 let protocolClient: unknown = null;
+let protocolError: unknown = null;
 let resumeCalls: string[] = [];
 let layoutIsMobile = false;
 let sidebarActiveTabValue = 'deck';
@@ -135,7 +138,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
     connect: connectMock,
     reconnect: reconnectMock,
     disconnect: disconnectMock,
-    error: () => null,
+    error: () => protocolError,
   }),
 }));
 
@@ -264,6 +267,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   protocolStatus = 'disconnected';
   protocolClient = null;
+  protocolError = null;
   resumeCalls = [];
   layoutIsMobile = false;
   sidebarActiveTabValue = 'deck';
@@ -810,14 +814,73 @@ describe('EnvAppShell remote access gate', () => {
         getGrant: expect.any(Function),
         autoReconnect: {
           enabled: true,
-          maxAttempts: 1_000_000,
+          maxAttempts: 3,
           initialDelayMs: 500,
-          maxDelayMs: 30_000,
+          maxDelayMs: 3_000,
         },
       });
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(host.textContent).toContain('activity main');
       expect(host.textContent).not.toContain('Unlock agent');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('switches to waiting-for-agent mode after remote reconnect exhausts fast retries and probes again later', async () => {
+    vi.useFakeTimers();
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+    accessStatusMock.mockResolvedValue({ passwordRequired: false, unlocked: true });
+    getGatewayAccessStatusMock.mockReset();
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    connectMock.mockImplementationOnce(async () => {
+      protocolStatus = 'error';
+      protocolClient = null;
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'No agent connected' };
+    });
+    getEnvironmentMock
+      .mockResolvedValueOnce({
+        public_id: 'env_demo',
+        name: 'Remote agent',
+        namespace_public_id: 'ns_remote',
+        status: 'offline',
+        lifecycle_status: 'running',
+        permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
+      })
+      .mockResolvedValueOnce({
+        public_id: 'env_demo',
+        name: 'Remote agent',
+        namespace_public_id: 'ns_remote',
+        status: 'online',
+        lifecycle_status: 'running',
+        permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
+      });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).toContain('Waiting for agent');
+      expect(findButtonByText(host, 'Retry now')).toBeTruthy();
+
+      await vi.advanceTimersByTimeAsync(2_000);
+      await flushAsync();
+
+      expect(getEnvironmentMock).toHaveBeenCalled();
+      expect(reconnectMock).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      await flushAsync();
+
+      expect(reconnectMock).toHaveBeenCalledTimes(1);
+      expect(protocolStatus).toBe('connected');
     } finally {
       dispose();
     }

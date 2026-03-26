@@ -488,7 +488,7 @@ export function EnvSettingsPage() {
     }
   };
 
-  const connectOverlayMessage = createMemo(() => (maintaining() ? 'Agent restarting...' : 'Connecting to agent...'));
+  const connectOverlayMessage = createMemo(() => (maintaining() ? 'Agent restarting...' : env.connectionOverlayMessage()));
 
   // View mode signals
   const [configView, setConfigView] = createSignal<ViewMode>('ui');
@@ -4038,7 +4038,7 @@ export function EnvSettingsPage() {
       </ConfirmDialog>
 
       {/* Loading Overlays */}
-      <LoadingOverlay visible={protocol.status() !== 'connected'} message={connectOverlayMessage()} />
+      <LoadingOverlay visible={env.connectionOverlayVisible()} message={connectOverlayMessage()} />
       <LoadingOverlay visible={settings.loading && protocol.status() === 'connected'} message="Loading settings..." />
     </div>
   );

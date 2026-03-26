@@ -1,10 +1,11 @@
 import { useDeckDrag } from '@floegence/floe-webapp-core';
 import { DeckGrid, DeckTopBar } from '@floegence/floe-webapp-core/deck';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
+
+import { useEnvContext } from './EnvContext';
 
 export function EnvDeckPage() {
-  const protocol = useProtocol();
+  const env = useEnvContext();
   useDeckDrag();
 
   return (
@@ -13,7 +14,7 @@ export function EnvDeckPage() {
 
       <div class="flex-1 min-h-0 overflow-hidden relative">
         <DeckGrid class="p-0" />
-        <LoadingOverlay visible={protocol.status() !== 'connected'} message="Connecting to agent..." />
+        <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
       </div>
     </div>
   );

@@ -4277,7 +4277,7 @@ export function EnvAIPage() {
         </ConfirmDialog>
       </ChatProvider>
 
-      <LoadingOverlay visible={protocol.status() !== 'connected'} message="Connecting to agent..." />
+      <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
       <LoadingOverlay visible={ai.settings.loading && protocol.status() === 'connected'} message="Loading settings..." />
       <LoadingOverlay visible={ai.models.loading && ai.aiEnabled()} message="Loading models..." />
       {/* Show global loading only on first load (no cached data); hide it for background refreshes. */}

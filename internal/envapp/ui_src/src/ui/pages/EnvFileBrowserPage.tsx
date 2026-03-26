@@ -1,14 +1,15 @@
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
+
+import { useEnvContext } from './EnvContext';
 import { RemoteFileBrowser } from '../widgets/RemoteFileBrowser';
 
 export function EnvFileBrowserPage() {
-  const protocol = useProtocol();
+  const env = useEnvContext();
 
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
       <RemoteFileBrowser />
-      <LoadingOverlay visible={protocol.status() !== 'connected'} message="Connecting to agent..." />
+      <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
     </div>
   );
 }

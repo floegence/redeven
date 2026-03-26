@@ -151,6 +151,37 @@ Security baseline:
 - One-time `entry_ticket` values are exchanged on demand with short TTL.
 - If sandbox session context is missing or expired, the browser must return to the Redeven web app for re-issuance.
 
+## Reconnect recovery strategy
+
+Env App reconnect recovery is intentionally split into two layers:
+
+1. **Transport fast retries**
+   - Flowersec transport reconnect keeps a small bounded retry budget for short websocket/tunnel blips.
+   - This path is optimized for brief network hiccups and quick agent restarts.
+
+2. **App-level waiting loop**
+   - If fast retries are exhausted, Env App switches into an explicit waiting state instead of hammering full reconnect attempts.
+   - The shell polls environment availability with a single-flight backoff timer and only launches controlled hard reconnect probes.
+   - Manual retries and lifecycle nudges (`online`, `focus`, `visibilitychange`) reuse the same coordinator so the UI never spawns parallel reconnect loops.
+
+UI contract:
+
+- `Connecting to agent...`
+  - initial session establishment
+- `Reconnecting to agent...`
+  - transport fast retry or an explicit hard reconnect probe is in flight
+- `Waiting for agent...`
+  - prolonged outage / restart window after offline-like failures
+- `Preparing secure session`
+  - transport is back, but the access-gate password/session resume handshake is still running
+
+Design goals:
+
+- keep transient recovery fast,
+- bound control-plane pressure during prolonged downtime,
+- distinguish agent unavailability from secure-session recovery,
+- keep reconnect policy centralized in the Env App shell instead of scattering timers across pages.
+
 ## Audit log
 
 There are **two** audit log sources:
