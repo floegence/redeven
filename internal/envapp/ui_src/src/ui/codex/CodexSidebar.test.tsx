@@ -275,6 +275,6 @@ describe('CodexSidebar', () => {
     expect(host.textContent).toContain('Polish note');
     expect(host.textContent).toContain('src/ui/codex/CodexSidebar.tsx');
     expect(host.textContent).toContain('Review recent changes');
-    expect(host.textContent).toContain('Send to Codex');
+    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
   });
 });
