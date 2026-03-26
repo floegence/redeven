@@ -1,6 +1,7 @@
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createEffect, createSignal } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
 import { Activity, Folder, Send } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, Tag, Textarea } from '@floegence/floe-webapp-core/ui';
+import { Input } from '@floegence/floe-webapp-core/ui';
 
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 
@@ -39,118 +40,189 @@ export function CodexComposerShell(props: {
   onSend: () => void;
 }) {
   const [isComposing, setIsComposing] = createSignal(false);
+  const [isFocused, setIsFocused] = createSignal(false);
+  const [showOptions, setShowOptions] = createSignal(!props.activeThreadID);
+  let textareaRef: HTMLTextAreaElement | undefined;
+  let rafId: number | null = null;
+
   const canSend = () =>
     props.hostAvailable &&
     !!String(props.composerText ?? '').trim() &&
     !props.submitting;
 
+  const scheduleAdjustHeight = () => {
+    if (!textareaRef) return;
+    if (rafId !== null) return;
+    if (typeof requestAnimationFrame !== 'function') {
+      textareaRef.style.height = 'auto';
+      textareaRef.style.height = `${Math.min(textareaRef.scrollHeight, 320)}px`;
+      return;
+    }
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      if (!textareaRef) return;
+      textareaRef.style.height = 'auto';
+      textareaRef.style.height = `${Math.min(textareaRef.scrollHeight, 320)}px`;
+    });
+  };
+
+  createEffect(() => {
+    void props.composerText;
+    scheduleAdjustHeight();
+  });
+
+  createEffect(() => {
+    if (!props.activeThreadID) {
+      setShowOptions(true);
+    }
+  });
+
+  const statusNote = () => {
+    if (!props.hostAvailable) {
+      return 'Install `codex` on the host to enable sending from this editor.';
+    }
+    if (props.statusFlags.length > 0) {
+      return `Active status: ${props.statusFlags[0]?.replaceAll('_', ' ')}`;
+    }
+    return '';
+  };
+
+  const workspaceChipLabel = () => String(props.workspaceLabel ?? '').trim() || 'Working dir';
+  const modelChipLabel = () => String(props.modelLabel ?? '').trim() || 'Host default model';
+  const sendLabel = () => (props.activeThreadID ? 'Send to Codex' : 'Create chat and send');
+
   return (
-    <div data-codex-surface="composer" class="codex-composer-shell">
-      <div class="codex-composer-presets">
-        <For each={COMPOSER_PRESETS}>
-          {(preset) => (
-            <button
-              type="button"
-              onClick={() => props.onPromptSelect(preset.prompt)}
-              class="codex-composer-preset"
-            >
-              {preset.label}
-            </button>
-          )}
-        </For>
-      </div>
-
-      <div class="codex-composer-card">
-        <div class="codex-composer-top">
-          <div class="flex flex-wrap items-center gap-2">
-            <Tag variant="neutral" tone="soft" size="sm">
-              {props.activeThreadID ? 'Active review' : 'Draft review'}
-            </Tag>
-            <Tag variant="neutral" tone="soft" size="sm">
-              {props.activeStatus ? props.activeStatus.replaceAll('_', ' ') : 'idle'}
-            </Tag>
-            <Tag variant={props.hostAvailable ? 'success' : 'warning'} tone="soft" size="sm">
-              {props.hostAvailable ? 'Host ready' : 'Install required'}
-            </Tag>
-            <Show when={props.statusFlags.length > 0}>
-              <Tag variant="info" tone="soft" size="sm">
-                {props.statusFlags[0]?.replaceAll('_', ' ')}
-              </Tag>
-            </Show>
-          </div>
-          <div class="text-[11px] text-muted-foreground">
-            {props.activeThreadID ? 'Continue the current Codex thread' : 'Create a new Codex thread on send'}
-          </div>
-        </div>
-
-        <div class="codex-composer-grid">
-          <div class="codex-composer-field">
-            <div class="codex-composer-field-label">
-              <Folder class="h-3.5 w-3.5" />
-              Workspace
-            </div>
-            <Input
-              value={props.workspaceLabel}
-              onInput={(event) => props.onWorkspaceInput(event.currentTarget.value)}
-              placeholder="Absolute workspace path"
-              class="w-full"
-            />
-          </div>
-          <div class="codex-composer-field">
-            <div class="codex-composer-field-label">
-              <Activity class="h-3.5 w-3.5" />
-              Model
-            </div>
-            <Input
-              value={props.modelLabel}
-              onInput={(event) => props.onModelInput(event.currentTarget.value)}
-              placeholder="Use host Codex default model"
-              class="w-full"
-            />
-          </div>
-        </div>
-
-        <div class="codex-composer-editor">
-          <Textarea
+    <div data-codex-surface="composer" class={cn(
+      'chat-input-container codex-chat-input',
+      isFocused() && 'chat-input-container-focused',
+    )}>
+      <div class="chat-input-body codex-chat-input-body">
+        <div class="codex-chat-input-primary-row">
+          <textarea
+            ref={textareaRef}
             value={props.composerText}
-            onInput={(event) => props.onComposerInput(event.currentTarget.value)}
+            onInput={(event) => {
+              props.onComposerInput(event.currentTarget.value);
+              scheduleAdjustHeight();
+            }}
             onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
+            onCompositionUpdate={scheduleAdjustHeight}
+            onCompositionEnd={() => {
+              setIsComposing(false);
+              scheduleAdjustHeight();
+            }}
             onKeyDown={(event) => {
               if (!shouldSubmitOnEnterKeydown({ event, isComposing: isComposing() })) return;
               event.preventDefault();
               props.onSend();
             }}
-            rows={5}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            rows={2}
             placeholder="Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step..."
-            class="codex-composer-textarea"
+            class="chat-input-textarea codex-chat-input-textarea"
           />
+
+          <div class="codex-chat-input-send-slot">
+            <button
+              type="button"
+              class={cn(
+                'chat-input-send-btn codex-chat-input-send-btn',
+                canSend() && 'chat-input-send-btn-active',
+              )}
+              onClick={props.onSend}
+              disabled={!canSend()}
+              aria-label={sendLabel()}
+              title={props.submitting ? 'Sending…' : sendLabel()}
+            >
+              <Send class="h-[18px] w-[18px]" />
+            </button>
+          </div>
         </div>
 
-        <div class="codex-composer-footer">
-          <div class="space-y-2">
-            <div class="text-xs leading-6 text-muted-foreground">
-              Codex runs directly from the host machine. Keep the prompt focused, then review the generated output before applying it.
-            </div>
-            <div class="codex-composer-hints">
-              <span class="codex-composer-hint-chip">
-                Enter to send
+        <div class="codex-chat-input-meta">
+          <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input secondary actions">
+            <button
+              type="button"
+              class="codex-chat-chip codex-chat-chip-actionable codex-chat-working-dir-chip"
+              onClick={() => setShowOptions((value) => !value)}
+              title={workspaceChipLabel()}
+            >
+              <Folder class="h-3.5 w-3.5" />
+              <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
+            </button>
+
+            <button
+              type="button"
+              class="codex-chat-chip codex-chat-chip-actionable"
+              onClick={() => setShowOptions((value) => !value)}
+              title={modelChipLabel()}
+            >
+              <Activity class="h-3.5 w-3.5" />
+              <span class="truncate">{modelChipLabel()}</span>
+            </button>
+
+            <span class="codex-chat-chip">
+              {props.activeThreadID ? 'Continue thread' : 'New thread'}
+            </span>
+
+            <Show when={props.activeStatus}>
+              <span class="codex-chat-chip">
+                {props.activeStatus.replaceAll('_', ' ')}
               </span>
-              <span class="codex-composer-hint-chip">
-                Shift+Enter for newline
-              </span>
-              <Show when={!props.hostAvailable}>
-                <span class="codex-composer-hint-chip">
-                  Host Codex unavailable
-                </span>
-              </Show>
-            </div>
+            </Show>
+
+            <For each={COMPOSER_PRESETS}>
+              {(preset) => (
+                <button
+                  type="button"
+                  class="codex-chat-chip codex-chat-secondary-chip"
+                  onClick={() => props.onPromptSelect(preset.prompt)}
+                  disabled={!props.hostAvailable}
+                  title={preset.prompt}
+                >
+                  {preset.label}
+                </button>
+              )}
+            </For>
           </div>
 
-          <Button onClick={props.onSend} disabled={!canSend()}>
-            <Send class="mr-1 h-4 w-4" />
-            {props.submitting ? 'Sending...' : props.activeThreadID ? 'Send to Codex' : 'Create chat and send'}
-          </Button>
+          <Show when={showOptions()}>
+            <div class="codex-chat-input-options">
+              <div class="codex-chat-input-options-grid">
+                <label class="codex-chat-input-field">
+                  <span class="codex-chat-input-field-label">Workspace</span>
+                  <Input
+                    value={props.workspaceLabel}
+                    onInput={(event) => props.onWorkspaceInput(event.currentTarget.value)}
+                    placeholder="Absolute workspace path"
+                    class="w-full"
+                  />
+                </label>
+                <label class="codex-chat-input-field">
+                  <span class="codex-chat-input-field-label">Model</span>
+                  <Input
+                    value={props.modelLabel}
+                    onInput={(event) => props.onModelInput(event.currentTarget.value)}
+                    placeholder="Use host Codex default model"
+                    class="w-full"
+                  />
+                </label>
+              </div>
+              <div class="codex-chat-input-options-note">
+                Codex runs directly on the host. Keep prompts focused, then review output before applying edits.
+              </div>
+            </div>
+          </Show>
+
+          <Show when={statusNote()}>
+            <div class={cn(
+              'codex-chat-input-status',
+              !props.hostAvailable && 'text-error',
+            )}>
+              {statusNote()}
+            </div>
+          </Show>
         </div>
       </div>
     </div>

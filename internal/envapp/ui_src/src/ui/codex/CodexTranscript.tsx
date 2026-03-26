@@ -2,6 +2,9 @@ import { For, Show, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Tag } from '@floegence/floe-webapp-core/ui';
 
+import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
+import { ShellBlock } from '../chat/blocks/ShellBlock';
+import { ThinkingBlock } from '../chat/blocks/ThinkingBlock';
 import { CodexIcon } from '../icons/CodexIcon';
 import {
   displayStatus,
@@ -82,6 +85,33 @@ function EmptyTranscriptState(props: {
   );
 }
 
+function CodexMessageLane(props: {
+  role: 'assistant' | 'user';
+  showAvatar?: boolean;
+  children: JSX.Element;
+}) {
+  return (
+    <div
+      class={cn(
+        'chat-message-item codex-chat-message-item',
+        props.role === 'assistant' ? 'chat-message-item-assistant codex-chat-message-item-assistant' : 'chat-message-item-user codex-chat-message-item-user',
+        props.showAvatar ? 'chat-message-item-with-avatar' : 'chat-message-item-without-avatar',
+      )}
+    >
+      <Show when={props.showAvatar}>
+        <div class="chat-message-avatar chat-message-avatar-assistant codex-chat-message-avatar">
+          <div class="chat-message-avatar-custom-wrapper">
+            <CodexIcon class="h-8 w-8" />
+          </div>
+        </div>
+      </Show>
+      <div class="chat-message-content-wrapper">
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
 function TranscriptMeta(props: {
   label: string;
   status?: string | null;
@@ -102,42 +132,25 @@ function TranscriptMeta(props: {
   );
 }
 
+function normalizeExecutionStatus(status: string | null | undefined, exitCode: number | null | undefined): 'running' | 'success' | 'error' {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  if (normalized.includes('error') || normalized.includes('fail')) return 'error';
+  if (normalized === 'running' || normalized === 'inprogress' || normalized === 'in_progress') return 'running';
+  if (typeof exitCode === 'number' && exitCode !== 0) return 'error';
+  return 'success';
+}
+
 function CommandExecutionBody(props: { item: CodexTranscriptItem }) {
   return (
-    <div class="space-y-3">
-      <div class="overflow-hidden rounded-[1.25rem] border border-slate-800/90 bg-slate-950 shadow-[0_20px_45px_-32px_rgba(15,23,42,0.9)]">
-        <div class="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
-          <div class="flex items-center gap-2">
-            <span class="h-2.5 w-2.5 rounded-full bg-rose-400/70" />
-            <span class="h-2.5 w-2.5 rounded-full bg-amber-300/70" />
-            <span class="h-2.5 w-2.5 rounded-full bg-emerald-400/70" />
-          </div>
-          <div class="truncate font-mono text-[11px] text-slate-400">
-            {props.item.cwd || 'Working directory unavailable'}
-          </div>
-        </div>
-        <div class="space-y-3 p-4 font-mono text-xs text-slate-100">
-          <div class="whitespace-pre-wrap break-words text-slate-100">{props.item.command || 'Command unavailable'}</div>
-          <Show when={props.item.aggregated_output}>
-            <pre class="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-800 bg-slate-900/80 p-3 text-[11px] text-slate-300">
-              {props.item.aggregated_output}
-            </pre>
-          </Show>
-        </div>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <Show when={typeof props.item.exit_code === 'number'}>
-          <Tag variant={props.item.exit_code === 0 ? 'success' : 'error'} tone="soft" size="sm">
-            Exit code: {props.item.exit_code}
-          </Tag>
-        </Show>
-        <Show when={typeof props.item.duration_ms === 'number'}>
-          <Tag variant="neutral" tone="soft" size="sm">
-            {props.item.duration_ms} ms
-          </Tag>
-        </Show>
-      </div>
-    </div>
+    <ShellBlock
+      command={props.item.command || 'Command unavailable'}
+      output={props.item.aggregated_output}
+      cwd={props.item.cwd}
+      durationMs={props.item.duration_ms}
+      exitCode={props.item.exit_code}
+      status={normalizeExecutionStatus(props.item.status, props.item.exit_code)}
+      class="codex-chat-shell-block"
+    />
   );
 }
 
@@ -146,21 +159,19 @@ function FileChangeBody(props: { item: CodexTranscriptItem }) {
     <div class="space-y-3">
       <For each={props.item.changes ?? []}>
         {(change) => (
-          <div class="rounded-[1.25rem] border border-border/60 bg-background/90 p-4 shadow-sm">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="truncate font-mono text-xs text-foreground">{change.path}</div>
+          <div class="chat-code-diff-block codex-chat-diff-block">
+            <div class="chat-code-diff-header">
+              <div class="chat-code-diff-info">
+                <span class="chat-code-diff-filename">{change.path}</span>
+                <span class="chat-code-diff-stats">{change.kind}</span>
                 <Show when={change.move_path}>
-                  <div class="mt-1 text-[11px] text-muted-foreground">Move path: {change.move_path}</div>
+                  <span class="chat-code-diff-stats" title={change.move_path}>→ {change.move_path}</span>
                 </Show>
               </div>
-              <Tag variant="success" tone="soft" size="sm">
-                {change.kind}
-              </Tag>
             </div>
-            <pre class="mt-4 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-slate-800/80 bg-slate-950 p-3 font-mono text-[11px] text-slate-200">
-              {change.diff || 'No diff provided.'}
-            </pre>
+            <div class="chat-code-diff-content">
+              <pre class="codex-chat-diff-pre">{change.diff || 'No diff provided.'}</pre>
+            </div>
           </div>
         )}
       </For>
@@ -180,9 +191,7 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
         </ul>
       </Show>
       <Show when={props.item.text}>
-        <pre class="whitespace-pre-wrap break-words rounded-[1.25rem] border border-border/60 bg-background/85 p-4 text-sm leading-7 text-muted-foreground">
-          {props.item.text}
-        </pre>
+        <ThinkingBlock content={props.item.text} class="codex-chat-thinking-block" />
       </Show>
     </div>
   );
@@ -190,22 +199,22 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
 
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div data-codex-item-type={props.item.type} class="flex items-start gap-4">
-      <div class="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/88 text-foreground shadow-sm">
-        {itemGlyph(props.item)}
-      </div>
-      <div class="min-w-0 flex-1">
-        <div class="rounded-[1.5rem] border border-border/60 bg-card/82 p-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.45)]">
+    <CodexMessageLane role="assistant">
+      <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
+        <div class="codex-chat-evidence-card">
           <TranscriptMeta
             label={itemTitle(props.item)}
             status={props.item.status}
             extra={
-              <Tag variant="neutral" tone="soft" size="sm">
-                {displayStatus(props.item.type, 'Event')}
-              </Tag>
+              <>
+                <span class="codex-chat-evidence-kicker">{itemGlyph(props.item)}</span>
+                <Tag variant="neutral" tone="soft" size="sm">
+                  {displayStatus(props.item.type, 'Event')}
+                </Tag>
+              </>
             }
           />
-          <div class="mt-3">
+          <div class="mt-3 codex-chat-evidence-body">
             <Show when={props.item.type === 'commandExecution'}>
               <CommandExecutionBody item={props.item} />
             </Show>
@@ -223,21 +232,20 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
                 props.item.type !== 'plan'
               }
             >
-              <div class="whitespace-pre-wrap break-words text-[15px] leading-8 text-foreground">{itemText(props.item)}</div>
+              <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" />
             </Show>
           </div>
         </div>
       </div>
-    </div>
+    </CodexMessageLane>
   );
 }
 
 function AgentMessageRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div data-codex-item-type={props.item.type} class="flex items-start gap-4">
-      <CodexIcon class="mt-1 h-8 w-8 shrink-0" />
-      <div class="min-w-0 flex-1">
-        <div class="rounded-[1.75rem] rounded-tl-md border border-border/60 bg-card/88 p-5 shadow-[0_22px_50px_-34px_rgba(15,23,42,0.45)]">
+    <CodexMessageLane role="assistant" showAvatar>
+      <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
+        <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
           <TranscriptMeta
             label="Codex"
             status={props.item.status}
@@ -247,20 +255,20 @@ function AgentMessageRow(props: { item: CodexTranscriptItem }) {
               </Tag>
             }
           />
-          <div class="mt-3 whitespace-pre-wrap break-words text-[15px] leading-8 text-foreground">
-            {itemText(props.item)}
+          <div class="mt-3">
+            <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" />
           </div>
         </div>
       </div>
-    </div>
+    </CodexMessageLane>
   );
 }
 
 function UserMessageRow(props: { item: CodexTranscriptItem }) {
   return (
-    <div data-codex-item-type={props.item.type} class="flex justify-end">
-      <div class="w-full max-w-[min(42rem,84%)]">
-        <div class="rounded-[1.75rem] rounded-br-md border border-primary/20 bg-[color-mix(in_srgb,var(--primary)_8%,var(--background))] p-5 shadow-[0_20px_50px_-36px_rgba(15,23,42,0.42)]">
+    <CodexMessageLane role="user">
+      <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-user codex-chat-message-bubble-user">
+        <div class="codex-chat-message-surface codex-chat-message-surface-user">
           <TranscriptMeta
             label="You"
             status={props.item.status}
@@ -270,12 +278,12 @@ function UserMessageRow(props: { item: CodexTranscriptItem }) {
               </Tag>
             }
           />
-          <div class="mt-3 whitespace-pre-wrap break-words text-[15px] leading-8 text-foreground">
+          <div class="mt-3 whitespace-pre-wrap break-words text-[15px] leading-8 text-primary-foreground">
             {itemText(props.item)}
           </div>
         </div>
       </div>
-    </div>
+    </CodexMessageLane>
   );
 }
 

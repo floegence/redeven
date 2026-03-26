@@ -166,7 +166,7 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Install Codex on the host');
     expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
     expect(host.textContent).toContain('Redeven does not install Codex for you');
-    expect(host.textContent).toContain('Create chat and send');
+    expect(host.querySelector('button[aria-label="Create chat and send"]')).not.toBeNull();
     expect(host.querySelector('img')).not.toBeNull();
   });
 
@@ -263,8 +263,9 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Command evidence');
     expect(host.textContent).toContain('finalizing');
     expect(host.textContent).toContain('Review recent changes');
-    expect(host.textContent).toContain('Workspace');
-    expect(host.textContent).toContain('Send to Codex');
+    expect(host.textContent).toContain('/workspace/ui');
+    expect(host.querySelector('.codex-chat-input-meta-rail')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
   });
 
   it('renders pending request cards inside the Codex dock support lane', async () => {

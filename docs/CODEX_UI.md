@@ -66,8 +66,9 @@ Current Env App behavior:
 - Codex shows as a separate activity-bar item, not inside Flower.
 - If host `codex` is unavailable, the entry point still stays visible and the Codex surface shows inline host diagnostics instead of a separate disabled/settings-jump flow.
 - The Codex sidebar is a dedicated conversation navigator for Codex threads plus compact host/runtime context; it mirrors the same overall layout rhythm as Flower without reusing Flower-owned UI modules.
-- The main Codex page is a Codex-owned chat shell with a compact header, transcript stage, inline approvals, a Flower-aligned bottom dock, and a dedicated composer surface.
+- The main Codex page is a Codex-owned chat shell with a compact header, a Flower-aligned transcript lane for user/assistant/evidence rows, inline approvals, a Flower-aligned bottom dock, and a dedicated composer surface.
 - The Codex surface uses floe-webapp cards/forms/tags for a consistent Env App look while keeping Codex-specific state and request handling separate.
+- The Codex transcript and send bar intentionally mirror Flower's message lane geometry, bubble cadence, and editor chrome through Codex-local components and selectors only; Flower files and selectors are not changed.
 - Codex UI structure stays isolated under `src/ui/codex/*`, including its own namespaced `codex.css` layer, so Flower selectors and component contracts do not change when Codex layout evolves.
 - New threads can override working directory and model before the first turn.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
