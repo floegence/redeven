@@ -57,8 +57,8 @@ import type {
   GitGetBranchCompareResponse,
   GitGetCommitDetailRequest,
   GitGetCommitDetailResponse,
-  GitGetFullContextDiffRequest,
-  GitGetFullContextDiffResponse,
+  GitGetDiffContentRequest,
+  GitGetDiffContentResponse,
   GitListBranchesRequest,
   GitListBranchesResponse,
   GitListCommitsRequest,
@@ -133,7 +133,7 @@ import {
   fromWireGitFetchRepoResponse,
   fromWireGitGetBranchCompareResponse,
   fromWireGitGetCommitDetailResponse,
-  fromWireGitGetFullContextDiffResponse,
+  fromWireGitGetDiffContentResponse,
   fromWireGitGetRepoSummaryResponse,
   fromWireGitListBranchesResponse,
   fromWireGitListCommitsResponse,
@@ -160,7 +160,7 @@ import {
   toWireGitFetchRepoRequest,
   toWireGitGetBranchCompareRequest,
   toWireGitGetCommitDetailRequest,
-  toWireGitGetFullContextDiffRequest,
+  toWireGitGetDiffContentRequest,
   toWireGitGetRepoSummaryRequest,
   toWireGitListBranchesRequest,
   toWireGitListCommitsRequest,
@@ -239,8 +239,8 @@ import type {
   wire_git_get_branch_compare_resp,
   wire_git_get_commit_detail_req,
   wire_git_get_commit_detail_resp,
-  wire_git_get_full_context_diff_req,
-  wire_git_get_full_context_diff_resp,
+  wire_git_get_diff_content_req,
+  wire_git_get_diff_content_resp,
   wire_git_get_repo_summary_req,
   wire_git_get_repo_summary_resp,
   wire_git_list_branches_req,
@@ -311,7 +311,7 @@ export type RedevenV1Rpc = {
     listCommits: (req: GitListCommitsRequest) => Promise<GitListCommitsResponse>;
     getCommitDetail: (req: GitGetCommitDetailRequest) => Promise<GitGetCommitDetailResponse>;
     getBranchCompare: (req: GitGetBranchCompareRequest) => Promise<GitGetBranchCompareResponse>;
-    getFullContextDiff: (req: GitGetFullContextDiffRequest) => Promise<GitGetFullContextDiffResponse>;
+    getDiffContent: (req: GitGetDiffContentRequest) => Promise<GitGetDiffContentResponse>;
   };
   terminal: {
     createSession: (req: TerminalSessionCreateRequest) => Promise<TerminalSessionCreateResponse>;
@@ -542,10 +542,10 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call<wire_git_get_branch_compare_req, wire_git_get_branch_compare_resp>(redevenV1TypeIds.git.getBranchCompare, payload);
         return fromWireGitGetBranchCompareResponse(resp);
       },
-      getFullContextDiff: async (req) => {
-        const payload = toWireGitGetFullContextDiffRequest(req);
-        const resp = await call<wire_git_get_full_context_diff_req, wire_git_get_full_context_diff_resp>(redevenV1TypeIds.git.getFullContextDiff, payload);
-        return fromWireGitGetFullContextDiffResponse(resp);
+      getDiffContent: async (req) => {
+        const payload = toWireGitGetDiffContentRequest(req);
+        const resp = await call<wire_git_get_diff_content_req, wire_git_get_diff_content_resp>(redevenV1TypeIds.git.getDiffContent, payload);
+        return fromWireGitGetDiffContentResponse(resp);
       },
     },
     terminal: {

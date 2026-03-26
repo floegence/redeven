@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout, useNotification } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import type { GitCommitFileSummary, GitWorkspaceChange } from '../protocol/redeven_v1';
+import type { GitDiffFileContent } from '../protocol/redeven_v1';
 import {
   GIT_PATCH_PREVIEW_LINES,
   formatGitPatchLineNumber,
@@ -14,16 +14,16 @@ import { changeDisplayPath, changeMetricsText } from '../utils/gitWorkbench';
 import { gitToneActionButtonClass } from './GitChrome';
 import { GitChangeStatusPill, GitMetaPill } from './GitWorkbenchPrimitives';
 
-export type GitPatchRenderable = GitCommitFileSummary | GitWorkspaceChange;
+export type GitPatchRenderable = GitDiffFileContent;
 
-export interface GitPatchViewerProps<T extends GitPatchRenderable> {
-  item: T | null | undefined;
+export interface GitPatchViewerProps {
+  item: GitPatchRenderable | null | undefined;
   emptyMessage: string;
-  unavailableMessage?: string | ((item: T) => string | undefined);
+  unavailableMessage?: string | ((item: GitPatchRenderable) => string | undefined);
   class?: string;
 }
 
-export function GitPatchViewer<T extends GitPatchRenderable>(props: GitPatchViewerProps<T>) {
+export function GitPatchViewer(props: GitPatchViewerProps) {
   const layout = useLayout();
   const notification = useNotification();
   const [patchExpanded, setPatchExpanded] = createSignal(false);

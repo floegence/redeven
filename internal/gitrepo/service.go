@@ -34,7 +34,7 @@ const (
 	TypeID_GIT_DELETE_BRANCH     uint32 = 1116
 	TypeID_GIT_PREVIEW_MERGE     uint32 = 1117
 	TypeID_GIT_MERGE_BRANCH      uint32 = 1118
-	TypeID_GIT_FULL_CONTEXT_DIFF uint32 = 1119
+	TypeID_GIT_DIFF_CONTENT      uint32 = 1119
 	TypeID_GIT_SWITCH_DETACHED   uint32 = 1120
 	TypeID_GIT_LIST_STASHES      uint32 = 1121
 	TypeID_GIT_GET_STASH_DETAIL  uint32 = 1122
@@ -275,12 +275,12 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return compare, nil
 	})
 
-	accessgate.RegisterTyped[getFullContextDiffReq, getFullContextDiffResp](r, TypeID_GIT_FULL_CONTEXT_DIFF, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getFullContextDiffReq) (*getFullContextDiffResp, error) {
+	accessgate.RegisterTyped[getDiffContentReq, getDiffContentResp](r, TypeID_GIT_DIFF_CONTENT, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *getDiffContentReq) (*getDiffContentResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
 		if req == nil {
-			req = &getFullContextDiffReq{}
+			req = &getDiffContentReq{}
 		}
 		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
 		if err != nil {
@@ -292,7 +292,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if strings.TrimSpace(req.File.Path) == "" && strings.TrimSpace(req.File.OldPath) == "" && strings.TrimSpace(req.File.NewPath) == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing diff file"}
 		}
-		resp, err := s.getFullContextDiff(ctx, repo, *req)
+		resp, err := s.getDiffContent(ctx, repo, *req)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
 		}
@@ -803,23 +803,32 @@ func (s *Service) getCommitDetail(ctx context.Context, repo repoContext, commit 
 	if len(details) == 0 {
 		return gitCommitDetail{}, nil, errors.New("commit not found")
 	}
-	entries, err := s.readGitDiffEntries(ctx, repo.repoRootReal,
-		"show",
-		"--format=",
-		"--patch",
-		"--find-renames",
-		"--find-copies",
-		"--no-ext-diff",
-		"--binary",
-		"--root",
-		commit,
+	files, err := s.readGitDiffMetadata(ctx, repo.repoRootReal,
+		[]string{
+			"show",
+			"--format=",
+			"--name-status",
+			"-z",
+			"--find-renames",
+			"--find-copies",
+			"--no-ext-diff",
+			"--root",
+			commit,
+		},
+		[]string{
+			"show",
+			"--format=",
+			"--numstat",
+			"-z",
+			"--find-renames",
+			"--find-copies",
+			"--no-ext-diff",
+			"--root",
+			commit,
+		},
 	)
 	if err != nil {
 		return gitCommitDetail{}, nil, err
-	}
-	files := make([]gitCommitFileSummary, 0, len(entries))
-	for _, entry := range entries {
-		files = append(files, entry.toCommitFileSummary())
 	}
 	return details[0], files, nil
 }
@@ -1149,17 +1158,4 @@ type gitCommitDetail struct {
 	AuthorTimeMs int64    `json:"author_time_ms,omitempty"`
 	Subject      string   `json:"subject,omitempty"`
 	Body         string   `json:"body,omitempty"`
-}
-
-type gitCommitFileSummary struct {
-	ChangeType     string `json:"change_type,omitempty"`
-	Path           string `json:"path,omitempty"`
-	OldPath        string `json:"old_path,omitempty"`
-	NewPath        string `json:"new_path,omitempty"`
-	DisplayPath    string `json:"display_path,omitempty"`
-	PatchText      string `json:"patch_text,omitempty"`
-	PatchTruncated bool   `json:"patch_truncated,omitempty"`
-	Additions      int    `json:"additions,omitempty"`
-	Deletions      int    `json:"deletions,omitempty"`
-	IsBinary       bool   `json:"is_binary,omitempty"`
 }

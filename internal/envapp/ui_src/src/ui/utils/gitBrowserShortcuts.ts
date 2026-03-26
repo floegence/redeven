@@ -11,6 +11,8 @@ import { createClientId } from './clientId';
 import {
   branchDisplayName,
   changeDisplayPath,
+  type GitSeededCommitFileSummary,
+  type GitSeededWorkspaceChange,
   type GitWorkspaceViewSection,
   workspaceViewSectionLabel,
 } from './gitWorkbench';
@@ -93,7 +95,7 @@ function formatPathLabel(item: GitWorkspaceChange | GitCommitFileSummary): strin
   return changeDisplayPath(item);
 }
 
-function formatMetrics(item: GitWorkspaceChange | GitCommitFileSummary): string {
+function formatMetrics(item: GitSeededWorkspaceChange | GitSeededCommitFileSummary): string {
   const details: string[] = [];
   const hasAdditions = typeof item.additions === 'number' && Number.isFinite(item.additions);
   const hasDeletions = typeof item.deletions === 'number' && Number.isFinite(item.deletions);
@@ -107,7 +109,7 @@ function formatMetrics(item: GitWorkspaceChange | GitCommitFileSummary): string 
   return details.length > 0 ? ` (${details.join(', ')})` : '';
 }
 
-function summarizeChangedFiles(items: Array<GitWorkspaceChange | GitCommitFileSummary>): string[] {
+function summarizeChangedFiles(items: Array<GitSeededWorkspaceChange | GitSeededCommitFileSummary>): string[] {
   const lines = items.map((item) => `- ${formatChangeType(item.changeType)} ${formatPathLabel(item)}${formatMetrics(item)}`);
   if (lines.length <= MAX_GIT_SNAPSHOT_FILES) {
     return lines;

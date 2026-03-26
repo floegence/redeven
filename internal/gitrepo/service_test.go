@@ -52,6 +52,20 @@ func mustPreviewMergeBranch(
 	return resp
 }
 
+func mustGetDiffContent(
+	t *testing.T,
+	svc *Service,
+	repo repoContext,
+	req getDiffContentReq,
+) *getDiffContentResp {
+	t.Helper()
+	resp, err := svc.getDiffContent(context.Background(), repo, req)
+	if err != nil {
+		t.Fatalf("getDiffContent(%s): %v", req.SourceKind, err)
+	}
+	return resp
+}
+
 func TestResolveRepoForPath(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
@@ -218,8 +232,23 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	if files[0].ChangeType != "renamed" || files[0].OldPath != "src/app.txt" || files[0].NewPath != "src/main.txt" {
 		t.Fatalf("unexpected rename summary: %+v", files[0])
 	}
-	if files[0].DisplayPath != "src/main.txt" || !strings.Contains(files[0].PatchText, "diff --git") || !strings.Contains(files[0].PatchText, "rename to src/main.txt") {
-		t.Fatalf("rename patch text not embedded correctly: %+v", files[0])
+	if files[0].DisplayPath != "src/main.txt" {
+		t.Fatalf("rename metadata not preserved correctly: %+v", files[0])
+	}
+	renameDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "commit",
+		Commit:       fixture.RenameCommit,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: "renamed",
+			Path:       "src/main.txt",
+			OldPath:    "src/app.txt",
+			NewPath:    "src/main.txt",
+		},
+	})
+	if !strings.Contains(renameDiff.File.PatchText, "diff --git") || !strings.Contains(renameDiff.File.PatchText, "rename to src/main.txt") {
+		t.Fatalf("rename patch content mismatch: %+v", renameDiff.File)
 	}
 
 	_, binaryFiles, err := svc.getCommitDetail(context.Background(), repo, fixture.BinaryCommit)
@@ -233,10 +262,34 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	foundDeleted := false
 	for _, file := range binaryFiles {
 		if file.Path == "bin/data.bin" && file.IsBinary {
-			foundBinary = strings.TrimSpace(file.PatchText) != ""
+			content := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+				RepoRootPath: fixture.Root,
+				SourceKind:   "commit",
+				Commit:       fixture.BinaryCommit,
+				Mode:         "preview",
+				File: gitDiffFileRef{
+					ChangeType: file.ChangeType,
+					Path:       file.Path,
+					OldPath:    file.OldPath,
+					NewPath:    file.NewPath,
+				},
+			})
+			foundBinary = strings.TrimSpace(content.File.PatchText) != ""
 		}
 		if file.Path == "README.md" && file.ChangeType == "deleted" {
-			foundDeleted = strings.Contains(file.PatchText, "diff --git")
+			content := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+				RepoRootPath: fixture.Root,
+				SourceKind:   "commit",
+				Commit:       fixture.BinaryCommit,
+				Mode:         "preview",
+				File: gitDiffFileRef{
+					ChangeType: file.ChangeType,
+					Path:       file.Path,
+					OldPath:    file.OldPath,
+					NewPath:    file.NewPath,
+				},
+			})
+			foundDeleted = strings.Contains(content.File.PatchText, "diff --git")
 		}
 	}
 	if !foundBinary {
@@ -247,7 +300,7 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 	}
 }
 
-func TestGetFullContextDiff_CommitRenamePreservesRenameMetadata(t *testing.T) {
+func TestGetDiffContent_CommitRenamePreservesRenameMetadata(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
 	svc := NewService(fixture.Root)
@@ -256,10 +309,11 @@ func TestGetFullContextDiff_CommitRenamePreservesRenameMetadata(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	resp, err := svc.getFullContextDiff(context.Background(), repo, getFullContextDiffReq{
+	resp, err := svc.getDiffContent(context.Background(), repo, getDiffContentReq{
 		RepoRootPath: fixture.Root,
 		SourceKind:   "commit",
 		Commit:       fixture.RenameCommit,
+		Mode:         "full",
 		File: gitDiffFileRef{
 			ChangeType: "renamed",
 			Path:       "src/main.txt",
@@ -268,7 +322,7 @@ func TestGetFullContextDiff_CommitRenamePreservesRenameMetadata(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("getFullContextDiff(rename): %v", err)
+		t.Fatalf("getDiffContent(rename): %v", err)
 	}
 	if resp.File.ChangeType != "renamed" || resp.File.OldPath != "src/app.txt" || resp.File.NewPath != "src/main.txt" {
 		t.Fatalf("unexpected rename summary: %+v", resp.File)
@@ -494,7 +548,7 @@ func TestDropStash_RejectsStaleFingerprint(t *testing.T) {
 	}
 }
 
-func TestGetFullContextDiff_WorkspaceUnstagedIncludesFullFileContext(t *testing.T) {
+func TestGetDiffContent_WorkspaceUnstagedIncludesFullFileContext(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
 	writeFixtureFile(t, fixture.Root, "src/context.txt", []byte(strings.Join([]string{
@@ -528,10 +582,11 @@ func TestGetFullContextDiff_WorkspaceUnstagedIncludesFullFileContext(t *testing.
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	resp, err := svc.getFullContextDiff(context.Background(), repo, getFullContextDiffReq{
+	resp, err := svc.getDiffContent(context.Background(), repo, getDiffContentReq{
 		RepoRootPath:     fixture.Root,
 		SourceKind:       "workspace",
 		WorkspaceSection: "unstaged",
+		Mode:             "full",
 		File: gitDiffFileRef{
 			ChangeType: "modified",
 			Path:       "src/context.txt",
@@ -539,7 +594,7 @@ func TestGetFullContextDiff_WorkspaceUnstagedIncludesFullFileContext(t *testing.
 		},
 	})
 	if err != nil {
-		t.Fatalf("getFullContextDiff(unstaged): %v", err)
+		t.Fatalf("getDiffContent(unstaged): %v", err)
 	}
 	if !strings.Contains(resp.File.PatchText, "@@ -1,8 +1,8 @@") {
 		t.Fatalf("full-context patch should expand to the whole file hunk: %+v", resp.File)
@@ -552,7 +607,7 @@ func TestGetFullContextDiff_WorkspaceUnstagedIncludesFullFileContext(t *testing.
 	}
 }
 
-func TestListWorkspaceChanges_EmbedsPatchText(t *testing.T) {
+func TestListWorkspaceChanges_ProvidesMetadataOnlySummariesAndLazyDiffContent(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
 	workspace := createWorkspaceChangesFixture(t, fixture.Root)
@@ -566,17 +621,59 @@ func TestListWorkspaceChanges_EmbedsPatchText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listWorkspaceChanges: %v", err)
 	}
-	if len(resp.Staged) != 1 || !strings.Contains(resp.Staged[0].PatchText, "+staged") {
-		t.Fatalf("staged patch text not embedded: %+v", resp.Staged)
+	if len(resp.Staged) != 1 || resp.Staged[0].Path != workspace.TrackedPath {
+		t.Fatalf("unexpected staged metadata: %+v", resp.Staged)
 	}
-	if len(resp.Unstaged) != 1 || !strings.Contains(resp.Unstaged[0].PatchText, "+unstaged") {
-		t.Fatalf("unstaged patch text not embedded: %+v", resp.Unstaged)
+	if len(resp.Unstaged) != 1 || resp.Unstaged[0].Path != workspace.TrackedPath {
+		t.Fatalf("unexpected unstaged metadata: %+v", resp.Unstaged)
 	}
 	if len(resp.Untracked) != 1 || resp.Untracked[0].Path != workspace.UntrackedPath {
 		t.Fatalf("unexpected untracked entry: %+v", resp.Untracked)
 	}
-	if !strings.Contains(resp.Untracked[0].PatchText, "diff --git a/todo.txt b/todo.txt") || !strings.Contains(resp.Untracked[0].PatchText, "+todo") {
-		t.Fatalf("untracked patch text not embedded: %+v", resp.Untracked[0])
+	stagedDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "staged",
+		Mode:             "preview",
+		File: gitDiffFileRef{
+			ChangeType: resp.Staged[0].ChangeType,
+			Path:       resp.Staged[0].Path,
+			OldPath:    resp.Staged[0].OldPath,
+			NewPath:    resp.Staged[0].NewPath,
+		},
+	})
+	if !strings.Contains(stagedDiff.File.PatchText, "+staged") {
+		t.Fatalf("staged diff content mismatch: %+v", stagedDiff.File)
+	}
+	unstagedDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "unstaged",
+		Mode:             "preview",
+		File: gitDiffFileRef{
+			ChangeType: resp.Unstaged[0].ChangeType,
+			Path:       resp.Unstaged[0].Path,
+			OldPath:    resp.Unstaged[0].OldPath,
+			NewPath:    resp.Unstaged[0].NewPath,
+		},
+	})
+	if !strings.Contains(unstagedDiff.File.PatchText, "+unstaged") {
+		t.Fatalf("unstaged diff content mismatch: %+v", unstagedDiff.File)
+	}
+	untrackedDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "untracked",
+		Mode:             "preview",
+		File: gitDiffFileRef{
+			ChangeType: resp.Untracked[0].ChangeType,
+			Path:       resp.Untracked[0].Path,
+			OldPath:    resp.Untracked[0].OldPath,
+			NewPath:    resp.Untracked[0].NewPath,
+		},
+	})
+	if !strings.Contains(untrackedDiff.File.PatchText, "diff --git a/todo.txt b/todo.txt") || !strings.Contains(untrackedDiff.File.PatchText, "+todo") {
+		t.Fatalf("untracked diff content mismatch: %+v", untrackedDiff.File)
 	}
 	if resp.Untracked[0].Additions != 1 || resp.Untracked[0].Deletions != 0 {
 		t.Fatalf("unexpected untracked metrics: %+v", resp.Untracked[0])
@@ -637,8 +734,20 @@ func TestListWorkspaceChanges_ReportsOnlyRealConflictsInConflictedSection(t *tes
 	if resp.Conflicted[0].ChangeType != "conflicted" {
 		t.Fatalf("changeType=%q, want conflicted", resp.Conflicted[0].ChangeType)
 	}
-	if !strings.Contains(resp.Conflicted[0].PatchText, "diff --cc") {
-		t.Fatalf("expected combined diff patch text, got: %q", resp.Conflicted[0].PatchText)
+	conflictedDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "conflicted",
+		Mode:             "preview",
+		File: gitDiffFileRef{
+			ChangeType: resp.Conflicted[0].ChangeType,
+			Path:       resp.Conflicted[0].Path,
+			OldPath:    resp.Conflicted[0].OldPath,
+			NewPath:    resp.Conflicted[0].NewPath,
+		},
+	})
+	if !strings.Contains(conflictedDiff.File.PatchText, "diff --cc") {
+		t.Fatalf("expected combined diff patch text, got: %q", conflictedDiff.File.PatchText)
 	}
 	if len(resp.Unstaged) != 0 {
 		t.Fatalf("conflicted file must not also leak into unstaged: %+v", resp.Unstaged)
@@ -1950,7 +2059,20 @@ func TestGetBranchCompare(t *testing.T) {
 	foundFile := false
 	for _, file := range resp.Files {
 		if file.Path == compare.FilePath && file.ChangeType == "added" {
-			foundFile = strings.Contains(file.PatchText, "+feature branch") && strings.Contains(file.PatchText, compare.FilePath)
+			content := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+				RepoRootPath: fixture.Root,
+				SourceKind:   "compare",
+				BaseRef:      compare.BaseBranch,
+				TargetRef:    compare.Branch,
+				Mode:         "preview",
+				File: gitDiffFileRef{
+					ChangeType: file.ChangeType,
+					Path:       file.Path,
+					OldPath:    file.OldPath,
+					NewPath:    file.NewPath,
+				},
+			})
+			foundFile = strings.Contains(content.File.PatchText, "+feature branch") && strings.Contains(content.File.PatchText, compare.FilePath)
 			break
 		}
 	}

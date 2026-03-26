@@ -5,7 +5,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockGetFullContextDiff = vi.hoisted(() => vi.fn());
+const mockGetDiffContent = vi.hoisted(() => vi.fn());
 
 vi.mock('../protocol/redeven_v1', async () => {
   const actual = await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1');
@@ -13,7 +13,7 @@ vi.mock('../protocol/redeven_v1', async () => {
     ...actual,
     useRedevenRpc: () => ({
       git: {
-        getFullContextDiff: mockGetFullContextDiff,
+        getDiffContent: mockGetDiffContent,
       },
     }),
   };
@@ -42,9 +42,10 @@ beforeEach(() => {
     })),
   });
 
-  mockGetFullContextDiff.mockReset();
-  mockGetFullContextDiff.mockResolvedValue({
+  mockGetDiffContent.mockReset();
+  mockGetDiffContent.mockResolvedValue({
     repoRootPath: '/workspace/repo',
+    mode: 'full',
     file: {
       changeType: 'modified',
       path: 'src/app.ts',
@@ -106,9 +107,9 @@ describe('GitDiffDialog', () => {
     try {
       expect(document.body.textContent).toContain('Patch');
       expect(document.body.textContent).toContain('Full Context');
-      expect(document.body.textContent).toContain('Compact patch preview from the current Git payload.');
+      expect(document.body.textContent).toContain('Loads a single-file patch on demand.');
       expect(document.body.textContent).toContain('newMiddle();');
-      expect(mockGetFullContextDiff).not.toHaveBeenCalled();
+      expect(mockGetDiffContent).not.toHaveBeenCalled();
 
       const patchButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Patch');
       const fullContextButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Full Context');
@@ -120,11 +121,12 @@ describe('GitDiffDialog', () => {
       fullContextButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(mockGetFullContextDiff).toHaveBeenCalledTimes(1);
-      expect(mockGetFullContextDiff.mock.calls[0]?.[0]).toMatchObject({
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(mockGetDiffContent.mock.calls[0]?.[0]).toMatchObject({
         repoRootPath: '/workspace/repo',
         sourceKind: 'commit',
         commit: 'abc123',
+        mode: 'full',
         file: {
           changeType: 'modified',
           path: 'src/app.ts',
@@ -139,8 +141,8 @@ describe('GitDiffDialog', () => {
   });
 
   it('keeps the existing patch preview visible while full context is loading', async () => {
-    let resolveFullContext: ((value: Awaited<ReturnType<typeof mockGetFullContextDiff>>) => void) | undefined;
-    mockGetFullContextDiff.mockImplementationOnce(() => new Promise((resolve) => {
+    let resolveFullContext: ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void) | undefined;
+    mockGetDiffContent.mockImplementationOnce(() => new Promise((resolve) => {
       resolveFullContext = resolve;
     }));
 
@@ -179,7 +181,7 @@ describe('GitDiffDialog', () => {
       fullContextButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(mockGetFullContextDiff).toHaveBeenCalledTimes(1);
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
       expect(document.body.textContent).toContain('Loading full-context diff...');
       expect(document.body.textContent).toContain('newMiddle();');
       expect(resolveFullContext).toBeTruthy();
@@ -304,7 +306,7 @@ describe('GitDiffDialog', () => {
       fullContextButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(mockGetFullContextDiff).toHaveBeenCalledTimes(1);
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
       expect(document.body.textContent).toContain('context-before');
 
       const swapButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.includes('Swap File'));
@@ -312,17 +314,17 @@ describe('GitDiffDialog', () => {
       swapButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(document.body.textContent).toContain('Compact patch preview from the current Git payload.');
+      expect(document.body.textContent).toContain('Loads a single-file patch on demand.');
       expect(document.body.textContent).toContain('afterSwap();');
       expect(document.body.textContent).not.toContain('context-before');
-      expect(mockGetFullContextDiff).toHaveBeenCalledTimes(1);
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
     } finally {
       dispose();
     }
   });
 
   it('shows an error state when the full-context request fails', async () => {
-    mockGetFullContextDiff.mockRejectedValueOnce(new Error('full context failed'));
+    mockGetDiffContent.mockRejectedValueOnce(new Error('full context failed'));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -358,7 +360,7 @@ describe('GitDiffDialog', () => {
       fullContextButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(mockGetFullContextDiff).toHaveBeenCalledTimes(1);
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
       expect(document.body.textContent).toContain('full context failed');
     } finally {
       dispose();

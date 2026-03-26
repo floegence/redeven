@@ -21,6 +21,7 @@ import {
   type GitStashSummary,
   type GitWorkspaceChange,
   type GitWorkspaceSection,
+  type GitWorkspaceSummary,
 } from '../protocol/redeven_v1';
 import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
@@ -416,7 +417,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [stashWindowTab, setStashWindowTab] = createSignal<GitStashWindowTab>('save');
   const [stashWindowContext, setStashWindowContext] = createSignal<GitStashWindowContext | null>(null);
   const [stashRepoSummary, setStashRepoSummary] = createSignal<GitRepoSummaryResponse | null>(null);
-  const [stashWorkspace, setStashWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
+  const [stashWorkspaceSummary, setStashWorkspaceSummary] = createSignal<GitWorkspaceSummary | null>(null);
   const [stashContextLoading, setStashContextLoading] = createSignal(false);
   const [stashContextError, setStashContextError] = createSignal('');
   const [stashList, setStashList] = createSignal<GitStashSummary[]>([]);
@@ -841,7 +842,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setStashWindowTab('save');
     setStashWindowContext(null);
     setStashRepoSummary(null);
-    setStashWorkspace(null);
+    setStashWorkspaceSummary(null);
     setStashContextLoading(false);
     setStashContextError('');
     setStashList([]);
@@ -1238,24 +1239,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setStashContextError('');
     }
     try {
-      const [repoSummaryResp, workspaceResp] = await Promise.all([
-        rpc.git.getRepoSummary({ repoRootPath }),
-        rpc.git.listWorkspaceChanges({ repoRootPath }),
-      ]);
+      const repoSummaryResp = await rpc.git.getRepoSummary({ repoRootPath });
       if (seq !== stashContextReqSeq) return;
       setStashRepoSummary(repoSummaryResp);
-      setStashWorkspace(workspaceResp);
+      setStashWorkspaceSummary(repoSummaryResp?.workspaceSummary ?? null);
       setStashContextError('');
       return {
         repoSummary: repoSummaryResp,
-        workspace: workspaceResp,
+        workspaceSummary: repoSummaryResp?.workspaceSummary ?? null,
       };
     } catch (err) {
       if (seq !== stashContextReqSeq) return;
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to load stash context');
       if (!options.silent) {
         setStashRepoSummary(null);
-        setStashWorkspace(null);
+        setStashWorkspaceSummary(null);
         setStashContextError(message);
       } else {
         notification.warning('Stash refresh incomplete', message);
@@ -1415,7 +1413,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       stashListReqSeq += 1;
       stashDetailReqSeq += 1;
       setStashRepoSummary(null);
-      setStashWorkspace(null);
+      setStashWorkspaceSummary(null);
       setStashContextError('');
       setStashList([]);
       setStashListError('');
@@ -3324,7 +3322,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         repoRootPath={activeStashRepoRootPath()}
         source={activeStashSource()}
         repoSummary={stashRepoSummary()}
-        workspace={stashWorkspace()}
+        workspaceSummary={stashWorkspaceSummary()}
         contextLoading={stashContextLoading()}
         contextError={stashContextError()}
         stashes={stashList()}

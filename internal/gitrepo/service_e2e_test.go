@@ -109,14 +109,15 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	if len(detailResp.Files) != 1 || detailResp.Files[0].ChangeType != "renamed" {
 		t.Fatalf("unexpected detail files: %+v", detailResp.Files)
 	}
-	if !strings.Contains(detailResp.Files[0].PatchText, "rename to src/main.txt") || !strings.Contains(detailResp.Files[0].PatchText, "diff --git") {
-		t.Fatalf("detail patch text not embedded: %+v", detailResp.Files[0])
+	if detailResp.Files[0].NewPath != "src/main.txt" {
+		t.Fatalf("detail metadata mismatch: %+v", detailResp.Files[0])
 	}
 
-	fullContextPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_FULL_CONTEXT_DIFF, mustMarshalJSON(t, getFullContextDiffReq{
+	fullContextPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
 		RepoRootPath: fixture.Root,
 		SourceKind:   "commit",
 		Commit:       fixture.RenameCommit,
+		Mode:         "full",
 		File: gitDiffFileRef{
 			ChangeType: "renamed",
 			Path:       "src/main.txt",
@@ -130,7 +131,7 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	if rpcErr != nil {
 		t.Fatalf("get full-context diff rpc error: %+v", rpcErr)
 	}
-	var fullContextResp getFullContextDiffResp
+	var fullContextResp getDiffContentResp
 	if err := json.Unmarshal(fullContextPayload, &fullContextResp); err != nil {
 		t.Fatalf("unmarshal full-context diff: %v", err)
 	}
@@ -280,11 +281,55 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	if len(workspaceResp.Untracked) != 1 || workspaceResp.Untracked[0].Path != workspace.UntrackedPath {
 		t.Fatalf("unexpected untracked items: %+v", workspaceResp.Untracked)
 	}
-	if !strings.Contains(workspaceResp.Staged[0].PatchText, "+staged") || !strings.Contains(workspaceResp.Unstaged[0].PatchText, "+unstaged") {
-		t.Fatalf("workspace patch text not embedded: staged=%+v unstaged=%+v", workspaceResp.Staged[0], workspaceResp.Unstaged[0])
+	stagedDiffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "staged",
+		Mode:             "preview",
+		File: gitDiffFileRef{
+			ChangeType: workspaceResp.Staged[0].ChangeType,
+			Path:       workspaceResp.Staged[0].Path,
+			OldPath:    workspaceResp.Staged[0].OldPath,
+			NewPath:    workspaceResp.Staged[0].NewPath,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("get staged diff call: %v", err)
 	}
-	if !strings.Contains(workspaceResp.Untracked[0].PatchText, "diff --git a/todo.txt b/todo.txt") || !strings.Contains(workspaceResp.Untracked[0].PatchText, "+todo") {
-		t.Fatalf("untracked entry should include patch text: %+v", workspaceResp.Untracked[0])
+	if rpcErr != nil {
+		t.Fatalf("get staged diff rpc error: %+v", rpcErr)
+	}
+	var stagedDiffResp getDiffContentResp
+	if err := json.Unmarshal(stagedDiffPayload, &stagedDiffResp); err != nil {
+		t.Fatalf("unmarshal staged diff: %v", err)
+	}
+	if !strings.Contains(stagedDiffResp.File.PatchText, "+staged") {
+		t.Fatalf("unexpected staged diff content: %+v", stagedDiffResp.File)
+	}
+	untrackedDiffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
+		RepoRootPath:     fixture.Root,
+		SourceKind:       "workspace",
+		WorkspaceSection: "untracked",
+		Mode:             "preview",
+		File: gitDiffFileRef{
+			ChangeType: workspaceResp.Untracked[0].ChangeType,
+			Path:       workspaceResp.Untracked[0].Path,
+			OldPath:    workspaceResp.Untracked[0].OldPath,
+			NewPath:    workspaceResp.Untracked[0].NewPath,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("get untracked diff call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get untracked diff rpc error: %+v", rpcErr)
+	}
+	var untrackedDiffResp getDiffContentResp
+	if err := json.Unmarshal(untrackedDiffPayload, &untrackedDiffResp); err != nil {
+		t.Fatalf("unmarshal untracked diff: %v", err)
+	}
+	if !strings.Contains(untrackedDiffResp.File.PatchText, "diff --git a/todo.txt b/todo.txt") || !strings.Contains(untrackedDiffResp.File.PatchText, "+todo") {
+		t.Fatalf("unexpected untracked diff content: %+v", untrackedDiffResp.File)
 	}
 
 	branchesPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_BRANCHES, mustMarshalJSON(t, listBranchesReq{
@@ -344,8 +389,31 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	if len(compareResp.Files) != 1 || compareResp.Files[0].Path != compare.FilePath {
 		t.Fatalf("unexpected compare files: %+v", compareResp.Files)
 	}
-	if !strings.Contains(compareResp.Files[0].PatchText, "+feature branch") || !strings.Contains(compareResp.Files[0].PatchText, compare.FilePath) {
-		t.Fatalf("compare patch text not embedded: %+v", compareResp.Files[0])
+	compareDiffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "compare",
+		BaseRef:      compare.BaseBranch,
+		TargetRef:    compare.Branch,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: compareResp.Files[0].ChangeType,
+			Path:       compareResp.Files[0].Path,
+			OldPath:    compareResp.Files[0].OldPath,
+			NewPath:    compareResp.Files[0].NewPath,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("get compare diff call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get compare diff rpc error: %+v", rpcErr)
+	}
+	var compareDiffResp getDiffContentResp
+	if err := json.Unmarshal(compareDiffPayload, &compareDiffResp); err != nil {
+		t.Fatalf("unmarshal compare diff: %v", err)
+	}
+	if !strings.Contains(compareDiffResp.File.PatchText, "+feature branch") || !strings.Contains(compareDiffResp.File.PatchText, compare.FilePath) {
+		t.Fatalf("compare diff content mismatch: %+v", compareDiffResp.File)
 	}
 }
 

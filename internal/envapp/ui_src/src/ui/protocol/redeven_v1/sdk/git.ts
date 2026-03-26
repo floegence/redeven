@@ -49,18 +49,24 @@ export type GitRepoSummaryResponse = {
 
 export type GitWorkspaceSection = 'staged' | 'unstaged' | 'untracked' | 'conflicted';
 
-export type GitWorkspaceChange = {
-  section?: GitWorkspaceSection | string;
+export type GitDiffFileSummary = {
   changeType?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'conflicted' | string;
   path?: string;
   oldPath?: string;
   newPath?: string;
   displayPath?: string;
-  patchText?: string;
-  patchTruncated?: boolean;
   additions?: number;
   deletions?: number;
   isBinary?: boolean;
+};
+
+export type GitDiffFileContent = GitDiffFileSummary & {
+  patchText?: string;
+  patchTruncated?: boolean;
+};
+
+export type GitWorkspaceChange = GitDiffFileSummary & {
+  section?: GitWorkspaceSection | string;
 };
 
 export type GitLinkedWorktreeSnapshot = {
@@ -436,18 +442,7 @@ export type GitCommitDetail = {
   body?: string;
 };
 
-export type GitCommitFileSummary = {
-  changeType?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | string;
-  path?: string;
-  oldPath?: string;
-  newPath?: string;
-  displayPath?: string;
-  patchText?: string;
-  patchTruncated?: boolean;
-  additions?: number;
-  deletions?: number;
-  isBinary?: boolean;
-};
+export type GitCommitFileSummary = GitDiffFileSummary;
 
 export type GitDiffFileRef = {
   changeType?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'conflicted' | string;
@@ -486,19 +481,23 @@ export type GitGetBranchCompareResponse = {
   linkedWorktree?: GitLinkedWorktreeSnapshot;
 };
 
-export type GitFullContextDiffSourceKind = 'workspace' | 'commit' | 'compare';
+export type GitDiffContentSourceKind = 'workspace' | 'commit' | 'compare' | 'stash';
+export type GitDiffContentMode = 'preview' | 'full';
 
-export type GitGetFullContextDiffRequest = {
+export type GitGetDiffContentRequest = {
   repoRootPath: string;
-  sourceKind: GitFullContextDiffSourceKind | string;
+  sourceKind: GitDiffContentSourceKind | string;
   workspaceSection?: GitWorkspaceSection | string;
   commit?: string;
   baseRef?: string;
   targetRef?: string;
+  stashId?: string;
+  mode?: GitDiffContentMode | string;
   file: GitDiffFileRef;
 };
 
-export type GitGetFullContextDiffResponse = {
+export type GitGetDiffContentResponse = {
   repoRootPath: string;
-  file: GitCommitFileSummary;
+  mode?: GitDiffContentMode | string;
+  file: GitDiffFileContent;
 };

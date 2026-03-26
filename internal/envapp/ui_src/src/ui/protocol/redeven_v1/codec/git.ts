@@ -8,7 +8,9 @@ import type {
   GitDeleteLinkedWorktreePreview,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
+  GitDiffFileContent,
   GitDiffFileRef,
+  GitDiffFileSummary,
   GitGetStashDetailRequest,
   GitGetStashDetailResponse,
   GitMergeBranchRequest,
@@ -34,8 +36,8 @@ import type {
   GitGetBranchCompareResponse,
   GitGetCommitDetailRequest,
   GitGetCommitDetailResponse,
-  GitGetFullContextDiffRequest,
-  GitGetFullContextDiffResponse,
+  GitGetDiffContentRequest,
+  GitGetDiffContentResponse,
   GitLinkedWorktreeSnapshot,
   GitListBranchesRequest,
   GitListBranchesResponse,
@@ -76,7 +78,9 @@ import type {
   wire_git_delete_linked_worktree_preview,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
+  wire_git_diff_file_content,
   wire_git_diff_file_ref,
+  wire_git_diff_file_summary,
   wire_git_get_stash_detail_req,
   wire_git_get_stash_detail_resp,
   wire_git_merge_branch_req,
@@ -102,8 +106,8 @@ import type {
   wire_git_get_branch_compare_resp,
   wire_git_get_commit_detail_req,
   wire_git_get_commit_detail_resp,
-  wire_git_get_full_context_diff_req,
-  wire_git_get_full_context_diff_resp,
+  wire_git_get_diff_content_req,
+  wire_git_get_diff_content_resp,
   wire_git_get_repo_summary_req,
   wire_git_get_repo_summary_resp,
   wire_git_linked_worktree_snapshot,
@@ -156,19 +160,31 @@ function fromWireGitMutationBlocker(resp: wire_git_mutation_blocker | undefined)
   };
 }
 
-function fromWireGitWorkspaceChange(resp: wire_git_workspace_change): GitWorkspaceChange {
+function fromWireGitDiffFileSummary(resp: wire_git_diff_file_summary | undefined): GitDiffFileSummary {
   return {
-    section: typeof resp?.section === 'string' ? resp.section : undefined,
     changeType: typeof resp?.change_type === 'string' ? resp.change_type : undefined,
     path: typeof resp?.path === 'string' ? resp.path : undefined,
     oldPath: typeof resp?.old_path === 'string' ? resp.old_path : undefined,
     newPath: typeof resp?.new_path === 'string' ? resp.new_path : undefined,
     displayPath: typeof resp?.display_path === 'string' ? resp.display_path : undefined,
-    patchText: typeof resp?.patch_text === 'string' ? resp.patch_text : undefined,
-    patchTruncated: typeof resp?.patch_truncated === 'boolean' ? resp.patch_truncated : undefined,
     additions: typeof resp?.additions === 'number' ? resp.additions : undefined,
     deletions: typeof resp?.deletions === 'number' ? resp.deletions : undefined,
     isBinary: typeof resp?.is_binary === 'boolean' ? resp.is_binary : undefined,
+  };
+}
+
+function fromWireGitDiffFileContent(resp: wire_git_diff_file_content | undefined): GitDiffFileContent {
+  return {
+    ...fromWireGitDiffFileSummary(resp),
+    patchText: typeof resp?.patch_text === 'string' ? resp.patch_text : undefined,
+    patchTruncated: typeof resp?.patch_truncated === 'boolean' ? resp.patch_truncated : undefined,
+  };
+}
+
+function fromWireGitWorkspaceChange(resp: wire_git_workspace_change): GitWorkspaceChange {
+  return {
+    section: typeof resp?.section === 'string' ? resp.section : undefined,
+    ...fromWireGitDiffFileSummary(resp),
   };
 }
 
@@ -217,18 +233,7 @@ function fromWireGitCommitDetail(resp: wire_git_commit_detail): GitCommitDetail 
 }
 
 function fromWireGitCommitFileSummary(resp: wire_git_commit_file_summary): GitCommitFileSummary {
-  return {
-    changeType: typeof resp?.change_type === 'string' ? resp.change_type : undefined,
-    path: typeof resp?.path === 'string' ? resp.path : undefined,
-    oldPath: typeof resp?.old_path === 'string' ? resp.old_path : undefined,
-    newPath: typeof resp?.new_path === 'string' ? resp.new_path : undefined,
-    displayPath: typeof resp?.display_path === 'string' ? resp.display_path : undefined,
-    patchText: typeof resp?.patch_text === 'string' ? resp.patch_text : undefined,
-    patchTruncated: typeof resp?.patch_truncated === 'boolean' ? resp.patch_truncated : undefined,
-    additions: typeof resp?.additions === 'number' ? resp.additions : undefined,
-    deletions: typeof resp?.deletions === 'number' ? resp.deletions : undefined,
-    isBinary: typeof resp?.is_binary === 'boolean' ? resp.is_binary : undefined,
-  };
+  return fromWireGitDiffFileSummary(resp);
 }
 
 function toWireGitDiffFileRef(req: GitDiffFileRef): wire_git_diff_file_ref {
@@ -547,7 +552,7 @@ export function fromWireGitGetCommitDetailResponse(resp: wire_git_get_commit_det
   };
 }
 
-export function toWireGitGetFullContextDiffRequest(req: GitGetFullContextDiffRequest): wire_git_get_full_context_diff_req {
+export function toWireGitGetDiffContentRequest(req: GitGetDiffContentRequest): wire_git_get_diff_content_req {
   return {
     repo_root_path: req.repoRootPath,
     source_kind: req.sourceKind,
@@ -555,14 +560,17 @@ export function toWireGitGetFullContextDiffRequest(req: GitGetFullContextDiffReq
     commit: typeof req.commit === 'string' ? req.commit : undefined,
     base_ref: typeof req.baseRef === 'string' ? req.baseRef : undefined,
     target_ref: typeof req.targetRef === 'string' ? req.targetRef : undefined,
+    stash_id: typeof req.stashId === 'string' ? req.stashId : undefined,
+    mode: typeof req.mode === 'string' ? req.mode : undefined,
     file: toWireGitDiffFileRef(req.file),
   };
 }
 
-export function fromWireGitGetFullContextDiffResponse(resp: wire_git_get_full_context_diff_resp): GitGetFullContextDiffResponse {
+export function fromWireGitGetDiffContentResponse(resp: wire_git_get_diff_content_resp): GitGetDiffContentResponse {
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
-    file: fromWireGitCommitFileSummary(resp?.file ?? {}),
+    mode: typeof resp?.mode === 'string' ? resp.mode : undefined,
+    file: fromWireGitDiffFileContent(resp?.file ?? {}),
   };
 }
 

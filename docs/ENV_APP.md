@@ -29,6 +29,8 @@ Key points:
 - Env App right-click menus that expose cross-surface handoff actions keep a shared priority order: `Ask Flower` first, `Open in Terminal` second when present, `Browse files` next when present, then a separator before any remaining actions.
 - Git browser cards now follow the same helper-action ordering where it makes semantic sense: `Changes` exposes `Ask Flower`, `Open in Terminal`, and `Browse Files`; `Branches` exposes directory handoffs only when the selected branch resolves to a checked-out worktree; `Graph` exposes commit-scoped `Ask Flower` plus `Switch --detach here`, branch-history commit detail exposes the same detach action, and detached repository chrome now shows explicit `Detached HEAD` state plus a one-click `Checkout <branch>` action back to the latest attached local branch when checkout history can resolve one safely.
 - Git stash is implemented as one shared floating Git surface instead of a fourth top-level browse mode: the header `Stashes` badge opens the saved-stack review tab, `Changes` and `Branches -> Status` open the save tab for the correct worktree target, and merge blockers can deep-link directly into `Stash current changes` when structured blocker data says the workspace can be stashed.
+- Git collection RPCs now keep file lists metadata-only; the UI resolves selected file patches lazily through a single `getDiffContent` contract instead of embedding `patch_text` into workspace, compare, commit, or stash collection payloads.
+- Large Git file tables use shared virtualization in the Env App (`Changes`, `Branches -> Compare`, `Branches -> Status`, and `Graph` commit files), while stash review remains summary-first and fetches patch content only for the actively selected file.
 - CSS, HTML, SCSS, Less, TOML, Makefile-family files, Vue/Svelte-class files, and other text formats now stay on the same Monaco-backed preview/edit path instead of splitting by language support tables.
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
@@ -72,7 +74,9 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - For a linked local branch, branch status uses the branch `worktreePath`.
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.
 - Git browse `Ask Flower` entry points use Git-authored snapshot context instead of pretending commit or workspace summaries are file-browser selections, so Flower receives a clean summary of the selected workspace section or commit metadata/file list.
+- Workspace, compare, and commit detail collection RPCs return metadata-only file summaries. Inline diff text is retrieved only when the user opens a specific file dialog, using `getDiffContent` for preview or full-context mode.
 - Git diff dialogs keep the embedded `Patch` preview as the default fast path, and now also expose an on-demand `Full Context` mode that re-fetches a single selected file diff with unchanged lines included for broader review context.
+- Large Git file tables render through a shared fixed-row virtual table so browsing repositories with large change sets does not require mounting every row at once.
 - Git branch deletion keeps `safe delete` as the default path, but when an unmerged local branch cannot be safely deleted the review dialog can escalate into an exact branch-name-confirmed `force delete`; linked worktrees are force-removed together with their pending changes, while inaccessible linked worktrees remain blocked.
 
 This keeps worktree status consistent even when the user opens `Branches` first without visiting `Changes`.
@@ -86,11 +90,13 @@ Git stash stays a workflow overlay owned by Git browse rather than a separate pr
 - `Changes -> Stash...` targets the active repository root.
 - `Branches -> Status -> Stash...` targets the selected checked-out branch worktree (`worktreePath` when present, otherwise the active repository root for the current branch).
 - Merge review blockers no longer rely on message parsing. The merge preview returns structured blocker metadata, and the dialog only shows `Stash current changes` when the blocker explicitly exposes a stashable workspace path.
+- The `Save Changes` tab boots from repository summary data only. It reads workspace counts from `workspaceSummary` and does not preload the full workspace file list before the user decides to stash.
 
 The stash surface itself is split into two tabs:
 
 - `Save Changes` shows the target repository/worktree context, current workspace summary, optional stash message, and explicit `Include untracked files` / `Keep staged changes ready to commit` options.
 - `Saved Stashes` shows the shared stash stack, stash detail, changed-file patch browsing, and guarded actions for `Apply`, `Apply & Remove`, and `Delete`.
+- Stash detail returns file metadata first; the selected stash file patch is fetched lazily through `getDiffContent` when the user focuses that file.
 
 Safety and refresh behavior:
 

@@ -1,12 +1,14 @@
-import { For, Show, createEffect, createSignal } from 'solid-js';
+import { Show, createEffect, createSignal } from 'solid-js';
 import { Folder, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
-import type { GitListWorkspaceChangesResponse, GitRepoSummaryResponse, GitWorkspaceChange } from '../protocol/redeven_v1';
+import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
   changeSecondaryPath,
   pickDefaultWorkspaceViewSection,
   repoDisplayName,
+  type GitSeededWorkspaceChange,
+  type GitSeededWorkspaceChangesResponse,
   workspaceEntryKey,
   workspaceViewBulkActionLabel,
   workspaceViewSectionActionKey,
@@ -21,7 +23,6 @@ import { GitDiffDialog } from './GitDiffDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_HEAD_CLASS,
   GIT_CHANGED_FILES_HEADER_ROW_CLASS,
   GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
   GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
@@ -41,14 +42,15 @@ import {
 } from './GitWorkbenchPrimitives';
 import type { GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
+import { GitVirtualTable } from './GitVirtualTable';
 
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
-  workspace?: GitListWorkspaceChangesResponse | null;
+  workspace?: GitSeededWorkspaceChangesResponse | null;
   selectedSection?: GitWorkspaceViewSection;
   onSelectSection?: (section: GitWorkspaceViewSection) => void;
-  selectedItem?: GitWorkspaceChange | null;
-  onSelectItem?: (item: GitWorkspaceChange) => void;
+  selectedItem?: GitSeededWorkspaceChange | null;
+  onSelectItem?: (item: GitSeededWorkspaceChange) => void;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | '';
   loading?: boolean;
@@ -57,8 +59,8 @@ export interface GitChangesPanelProps {
   onCommitMessageChange?: (value: string) => void;
   onCommit?: (message: string) => void;
   commitBusy?: boolean;
-  onStageSelected?: (item: GitWorkspaceChange) => void;
-  onUnstageSelected?: (item: GitWorkspaceChange) => void;
+  onStageSelected?: (item: GitSeededWorkspaceChange) => void;
+  onUnstageSelected?: (item: GitSeededWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' }>) => void;
@@ -66,16 +68,16 @@ export interface GitChangesPanelProps {
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
 }
 
-function itemPath(item: GitWorkspaceChange): string {
+function itemPath(item: GitSeededWorkspaceChange): string {
   return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
 }
 
-function listItemActionLabel(item: GitWorkspaceChange): string {
+function listItemActionLabel(item: GitSeededWorkspaceChange): string {
   return item.section === 'staged' ? 'Unstage' : '+ Stage';
 }
 
-function sectionItems(workspace: GitListWorkspaceChangesResponse | null | undefined, section: GitWorkspaceViewSection): GitWorkspaceChange[] {
-  return workspaceViewSectionItems(workspace, section);
+function sectionItems(workspace: GitSeededWorkspaceChangesResponse | null | undefined, section: GitWorkspaceViewSection): GitSeededWorkspaceChange[] {
+  return workspaceViewSectionItems(workspace, section) as GitSeededWorkspaceChange[];
 }
 
 function emptySectionMessage(section: GitWorkspaceViewSection): string {
@@ -93,11 +95,11 @@ function emptySectionMessage(section: GitWorkspaceViewSection): string {
 
 interface WorkspaceTableProps {
   section: GitWorkspaceViewSection;
-  items: GitWorkspaceChange[];
+  items: GitSeededWorkspaceChange[];
   selectedKey?: string;
-  onSelectItem?: (item: GitWorkspaceChange) => void;
-  onOpenDiff?: (item: GitWorkspaceChange) => void;
-  onAction?: (item: GitWorkspaceChange) => void;
+  onSelectItem?: (item: GitSeededWorkspaceChange) => void;
+  onOpenDiff?: (item: GitSeededWorkspaceChange) => void;
+  onAction?: (item: GitSeededWorkspaceChange) => void;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | '';
 }
@@ -113,72 +115,70 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           </div>
         )}
       >
-        <div class="min-h-0 flex-1 overflow-auto">
-          <table class={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}>
-            <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
-              <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <For each={props.items}>
-                {(item) => {
-                  const active = () => props.selectedKey === workspaceEntryKey(item);
-                  const action = () => (item.section === 'staged' ? 'unstage' : 'stage');
-                  const busy = () => (
-                    (props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === workspaceViewSectionActionKey(props.section))
-                    && props.busyWorkspaceAction === action()
-                  );
-                  return (
-                    <tr
-                      aria-selected={active()}
-                      class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                      onClick={() => props.onSelectItem?.(item)}
+        <GitVirtualTable
+          items={props.items}
+          colSpan={4}
+          rowHeight={54}
+          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}
+          header={(
+            <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+            </tr>
+          )}
+          renderRow={(item) => {
+            const active = () => props.selectedKey === workspaceEntryKey(item);
+            const action = () => (item.section === 'staged' ? 'unstage' : 'stage');
+            const busy = () => (
+              (props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === workspaceViewSectionActionKey(props.section))
+              && props.busyWorkspaceAction === action()
+            );
+            return (
+              <tr
+                aria-selected={active()}
+                class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                onClick={() => props.onSelectItem?.(item)}
+              >
+                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                  <div class="min-w-0">
+                    <button
+                      type="button"
+                      class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                      title={changeSecondaryPath(item)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onOpenDiff?.(item);
+                      }}
                     >
-                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                        <div class="min-w-0">
-                          <button
-                            type="button"
-                            class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
-                            title={changeSecondaryPath(item)}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              props.onOpenDiff?.(item);
-                            }}
-                          >
-                            {itemPath(item)}
-                          </button>
-                          <Show when={changeSecondaryPath(item) !== itemPath(item)}>
-                            <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
-                          </Show>
-                        </div>
-                      </td>
-                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                        <GitChangeStatusPill change={item.changeType} />
-                      </td>
-                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
-                      <td class={gitChangedFilesStickyCellClass(active())}>
-                        <GitChangedFilesActionButton
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            props.onAction?.(item);
-                          }}
-                          busy={busy()}
-                          disabled={busy()}
-                        >
-                          {listItemActionLabel(item)}
-                        </GitChangedFilesActionButton>
-                      </td>
-                    </tr>
-                  );
-                }}
-              </For>
-            </tbody>
-          </table>
-        </div>
+                      {itemPath(item)}
+                    </button>
+                    <Show when={changeSecondaryPath(item) !== itemPath(item)}>
+                      <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
+                    </Show>
+                  </div>
+                </td>
+                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                  <GitChangeStatusPill change={item.changeType} />
+                </td>
+                <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
+                <td class={gitChangedFilesStickyCellClass(active())}>
+                  <GitChangedFilesActionButton
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      props.onAction?.(item);
+                    }}
+                    busy={busy()}
+                    disabled={busy()}
+                  >
+                    {listItemActionLabel(item)}
+                  </GitChangedFilesActionButton>
+                </td>
+              </tr>
+            );
+          }}
+        />
       </Show>
     </div>
   );
@@ -187,7 +187,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
 export function GitChangesPanel(props: GitChangesPanelProps) {
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
-  const [diffDialogItem, setDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
+  const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededWorkspaceChange | null>(null);
 
   const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceViewSection(props.workspace);
   const visibleItems = () => sectionItems(props.workspace, selectedSection());
