@@ -12,6 +12,7 @@ import { cn } from '@floegence/floe-webapp-core';
 
 import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
 import { createMarkdownRenderer } from '../markdown/markedConfig';
+import type { MarkdownRendererVariant } from '../markdown/markdownRendererOptions';
 import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { AppendOnlyText, isAppendOnlyTextCompatible } from '../status/AppendOnlyText';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
@@ -23,38 +24,58 @@ export interface MarkdownBlockProps {
   content: string;
   streaming?: boolean;
   class?: string;
+  rendererVariant?: MarkdownRendererVariant;
 }
 
-let markedInstance: Marked<string, string> | null = null;
-let markedLoading = false;
-let markedLoadQueue: Array<() => void> = [];
+type MarkedState = {
+  instance: Marked<string, string> | null;
+  loading: boolean;
+  queue: Array<() => void>;
+};
+
+const DEFAULT_MARKDOWN_RENDERER_VARIANT: MarkdownRendererVariant = 'default';
+const markedStates = new Map<MarkdownRendererVariant, MarkedState>();
 
 let markdownWorkerUnavailable = false;
 let markdownWorkerErrorLogged = false;
 
-async function getMarked(): Promise<Marked<string, string> | null> {
-  if (markedInstance) return markedInstance;
+function getMarkedState(variant: MarkdownRendererVariant): MarkedState {
+  let state = markedStates.get(variant);
+  if (!state) {
+    state = {
+      instance: null,
+      loading: false,
+      queue: [],
+    };
+    markedStates.set(variant, state);
+  }
+  return state;
+}
+
+async function getMarked(variant: MarkdownRendererVariant): Promise<Marked<string, string> | null> {
+  const state = getMarkedState(variant);
+  if (state.instance) return state.instance;
 
   return new Promise<Marked<string, string> | null>((resolve) => {
-    markedLoadQueue.push(() => resolve(markedInstance));
+    state.queue.push(() => resolve(state?.instance ?? null));
 
-    if (markedLoading) return;
-    markedLoading = true;
+    if (state.loading) return;
+    state.loading = true;
 
     import('marked')
       .then(({ Marked }) => {
         const instance = new Marked<string, string>();
-        instance.use({ renderer: createMarkdownRenderer() });
-        markedInstance = instance;
-        markedLoading = false;
+        instance.use({ renderer: createMarkdownRenderer({ variant }) });
+        state.instance = instance;
+        state.loading = false;
 
-        for (const callback of markedLoadQueue) callback();
-        markedLoadQueue = [];
+        for (const callback of state.queue) callback();
+        state.queue = [];
       })
       .catch((err) => {
         console.error('Failed to load marked:', err);
-        markedLoading = false;
-        markedLoadQueue = [];
+        state.loading = false;
+        state.queue = [];
       });
   });
 }
@@ -62,8 +83,9 @@ async function getMarked(): Promise<Marked<string, string> | null> {
 async function renderMarkdownFallback(
   content: string,
   streaming: boolean,
+  rendererVariant: MarkdownRendererVariant,
 ): Promise<MarkdownRenderSnapshot> {
-  const marked = await getMarked();
+  const marked = await getMarked(rendererVariant);
   if (!marked) {
     throw new Error('marked failed to load');
   }
@@ -73,6 +95,10 @@ async function renderMarkdownFallback(
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   const [renderedSnapshot, setRenderedSnapshot] = createSignal<MarkdownRenderSnapshot | null>(null);
   const [renderedText, setRenderedText] = createSignal('');
+  const [renderedVariant, setRenderedVariant] = createSignal<MarkdownRendererVariant | null>(null);
+  const rendererVariant = createMemo<MarkdownRendererVariant>(() => (
+    props.rendererVariant === 'codex' ? 'codex' : DEFAULT_MARKDOWN_RENDERER_VARIANT
+  ));
   const displayContent = createMemo(() => (
     props.streaming === true
       ? normalizeMarkdownForStreamingDisplay(String(props.content ?? ''))
@@ -83,15 +109,16 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
 
   let destroyed = false;
   let inFlight = false;
-  let queuedContent: { content: string; streaming: boolean } | null = null;
+  let queuedContent: { content: string; streaming: boolean; rendererVariant: MarkdownRendererVariant } | null = null;
 
   const clearSnapshot = () => {
     queuedContent = null;
     setRenderedSnapshot(null);
     setRenderedText('');
+    setRenderedVariant(null);
   };
 
-  const startRender = (content: string, streaming: boolean) => {
+  const startRender = (content: string, streaming: boolean, currentRendererVariant: MarkdownRendererVariant) => {
     if (destroyed) return;
     const requested = String(content ?? '');
     if (!requested) {
@@ -104,7 +131,10 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
       try {
         let snapshot: MarkdownRenderSnapshot | null = null;
         if (!markdownWorkerUnavailable) {
-          snapshot = await renderMarkdownSnapshot(requested, { streaming }).catch(async (err) => {
+          const workerOptions = currentRendererVariant === 'codex'
+            ? { streaming, rendererVariant: 'codex' as const }
+            : { streaming };
+          snapshot = await renderMarkdownSnapshot(requested, workerOptions).catch(async (err) => {
             markdownWorkerUnavailable = true;
             if (!markdownWorkerErrorLogged) {
               markdownWorkerErrorLogged = true;
@@ -113,16 +143,17 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
             if (streaming) {
               throw err;
             }
-            return await renderMarkdownFallback(requested, streaming);
+            return await renderMarkdownFallback(requested, streaming, currentRendererVariant);
           });
         } else if (!streaming) {
-          snapshot = await renderMarkdownFallback(requested, streaming);
+          snapshot = await renderMarkdownFallback(requested, streaming, currentRendererVariant);
         }
 
         if (destroyed || snapshot === null) return;
         batch(() => {
           setRenderedSnapshot(snapshot);
           setRenderedText(requested);
+          setRenderedVariant(currentRendererVariant);
         });
       } catch (err) {
         if (!streaming) {
@@ -136,13 +167,21 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
 
       const next = queuedContent;
       queuedContent = null;
-      if (next && (next.content !== requested || next.streaming !== streaming)) {
-        scheduleRender(next.content, next.streaming);
+      if (next && (
+        next.content !== requested
+        || next.streaming !== streaming
+        || next.rendererVariant !== currentRendererVariant
+      )) {
+        scheduleRender(next.content, next.streaming, next.rendererVariant);
       }
     })();
   };
 
-  const scheduleRender = (content: string, streaming: boolean) => {
+  const scheduleRender = (
+    content: string,
+    streaming: boolean,
+    currentRendererVariant: MarkdownRendererVariant,
+  ) => {
     if (destroyed) return;
 
     if (!content) {
@@ -155,11 +194,11 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     }
 
     if (inFlight) {
-      queuedContent = { content, streaming };
+      queuedContent = { content, streaming, rendererVariant: currentRendererVariant };
       return;
     }
 
-    startRender(content, streaming);
+    startRender(content, streaming, currentRendererVariant);
   };
 
   onCleanup(() => {
@@ -168,7 +207,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
   });
 
   createEffect(() => {
-    scheduleRender(displayContent(), props.streaming === true);
+    scheduleRender(displayContent(), props.streaming === true, rendererVariant());
   });
 
   const renderState = createMemo(() => {
@@ -177,6 +216,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
 
     const base = renderedText();
     const current = displayContent();
+    if (renderedVariant() !== rendererVariant()) return null;
     if (!isAppendOnlyTextCompatible(base, current)) return null;
 
     return {

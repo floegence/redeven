@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Marked } from 'marked';
 
 import { createMarkdownRenderer } from '../markdown/markedConfig';
+import type { MarkdownRendererVariant } from '../markdown/markdownRendererOptions';
 import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { MarkdownBlock } from './MarkdownBlock';
@@ -23,14 +24,18 @@ vi.mock('../workers/markdownWorkerClient', () => ({
   renderMarkdownSnapshot: (...args: unknown[]) => renderMarkdownSnapshotMock(...args),
 }));
 
-function createMarked(): Marked<string, string> {
+function createMarked(rendererVariant: MarkdownRendererVariant = 'default'): Marked<string, string> {
   const marked = new Marked<string, string>();
-  marked.use({ renderer: createMarkdownRenderer() });
+  marked.use({ renderer: createMarkdownRenderer({ variant: rendererVariant }) });
   return marked;
 }
 
-function createSnapshot(content: string, streaming: boolean) {
-  return buildMarkdownRenderSnapshot(createMarked(), content, streaming);
+function createSnapshot(
+  content: string,
+  streaming: boolean,
+  rendererVariant: MarkdownRendererVariant = 'default',
+) {
+  return buildMarkdownRenderSnapshot(createMarked(rendererVariant), content, streaming);
 }
 
 function deferred<T>() {
@@ -320,5 +325,51 @@ describe('MarkdownBlock', () => {
     expect(links[1]?.getAttribute('href')).toContain('#L1113');
     expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L1069');
     expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L1113');
+  });
+
+  it('renders compact file-reference chips for codex markdown links', async () => {
+    const content = [
+      'Current path is',
+      '[controlplaneApi.ts',
+      'L278](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278).',
+    ].join(' ');
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />, host);
+
+    await waitFor(() => {
+      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(1);
+    });
+
+    const fileRef = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
+    expect(fileRef?.getAttribute('href')).toContain('#L278');
+    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('controlplaneApi.ts');
+    expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L278');
+    expect(renderMarkdownSnapshotMock).toHaveBeenCalledWith(normalized, {
+      streaming: false,
+      rendererVariant: 'codex',
+    });
+  });
+
+  it('keeps default markdown link rendering outside codex', async () => {
+    const content = '[controlplaneApi.ts\nL278](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)';
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} />, host);
+
+    await waitFor(() => {
+      expect(host.querySelectorAll('a.chat-md-link')).toHaveLength(1);
+    });
+
+    expect(host.querySelector('.chat-md-file-ref')).toBeNull();
+    expect((host.querySelector('a.chat-md-link') as HTMLAnchorElement | null)?.textContent).toContain('controlplaneApi.ts');
   });
 });
