@@ -120,4 +120,47 @@ describe('GitWorkbench interactions', () => {
       dispose();
     }
   });
+
+  it('renders detached HEAD explicitly in the header and disables pull and push', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitWorkbench
+                currentPath="/workspace/repo/src"
+                subview="history"
+                repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'HEAD', headCommit: 'def56789abc12345' }}
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'HEAD',
+                  headCommit: 'def56789abc12345',
+                  detached: true,
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                commits={[]}
+                onPull={() => {}}
+                onPush={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const pullButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Pull')) as HTMLButtonElement | undefined;
+      const pushButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Push')) as HTMLButtonElement | undefined;
+      expect(host.textContent).toContain('Detached HEAD');
+      expect(host.textContent).toContain('def56789');
+      expect(host.textContent).toContain('Pull and push are unavailable while HEAD is detached.');
+      expect(pullButton?.disabled).toBe(true);
+      expect(pushButton?.disabled).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
 });

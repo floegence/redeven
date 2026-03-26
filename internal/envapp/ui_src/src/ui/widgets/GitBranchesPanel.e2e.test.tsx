@@ -1395,4 +1395,77 @@ describe('GitBranchesPanel interactions', () => {
       dispose();
     }
   });
+
+  it('offers a branch-history action to detach HEAD at the expanded commit', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onSwitchDetached = vi.fn();
+    mockGetCommitDetail.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      commit: {
+        hash: '2222222222222222',
+        shortHash: '22222222',
+        parents: ['1111111111111111'],
+        subject: 'Merge feature',
+      },
+      files: [
+        {
+          changeType: 'modified',
+          path: 'src/history.ts',
+          displayPath: 'src/history.ts',
+          additions: 8,
+          deletions: 3,
+          patchText: '@@ -1 +1 @@\n-history\n+history updated',
+        },
+      ],
+    });
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: '1111111111111111',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                selectedBranch={{
+                  name: 'feature/demo',
+                  fullName: 'refs/heads/feature/demo',
+                  kind: 'local',
+                }}
+                selectedBranchSubview="history"
+                commits={[
+                  { hash: '2222222222222222', shortHash: '22222222', parents: ['1111111111111111'], subject: 'Merge feature', authorName: 'Bob', authorTimeMs: 1706003600000 },
+                ]}
+                selectedCommitHash="2222222222222222"
+                onSwitchDetached={onSwitchDetached}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const detachButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Switch --detach')) as HTMLButtonElement | undefined;
+      expect(detachButton).toBeTruthy();
+
+      detachButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onSwitchDetached).toHaveBeenCalledWith({
+        commitHash: '2222222222222222',
+        shortHash: '22222222',
+        source: 'branch_history',
+        branchName: 'feature/demo',
+      });
+    } finally {
+      dispose();
+    }
+  });
 });

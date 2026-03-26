@@ -13,7 +13,7 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { repoDisplayName, syncStatusLabel, type GitBranchSubview, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { describeGitHead, repoDisplayName, syncStatusLabel, type GitBranchSubview, type GitDetachedSwitchTarget, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
@@ -56,6 +56,7 @@ export interface GitWorkbenchProps {
   selectedCommitHash?: string;
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
+  switchDetachedBusy?: boolean;
   checkoutBusy?: boolean;
   mergeBusy?: boolean;
   deleteBusy?: boolean;
@@ -74,6 +75,7 @@ export interface GitWorkbenchProps {
   onCheckoutBranch?: (branch: GitBranchSummary) => void;
   onMergeBranch?: (branch: GitBranchSummary) => void;
   onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
   onCloseMergeReview?: () => void;
   onRetryMergePreview?: (branch: GitBranchSummary) => void;
   onConfirmMergeBranch?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
@@ -125,6 +127,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
   const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
+  const headDisplay = () => describeGitHead(props.repoSummary, props.repoInfo);
   const activeSubview = () => normalizeSubview(props.subview);
   const loadingBusy = () => {
     if (props.repoInfoLoading) return true;
@@ -134,7 +137,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     return false;
   };
   const subviewTone = () => gitSubviewTone(activeSubview());
-  const detachedHead = () => Boolean(props.repoSummary?.detached) || headRef() === '' || headRef() === 'HEAD';
+  const detachedHead = () => headDisplay().detached;
   const repoActionsDisabled = () => Boolean(
     props.repoInfoLoading
     || !(props.repoInfo?.available ?? Boolean(props.repoSummary?.repoRootPath))
@@ -151,7 +154,14 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             tone={subviewTone()}
             meta={
               <>
-                <GitMetaPill tone={subviewTone()}>{headRef() || 'Detached HEAD'}</GitMetaPill>
+                <Show when={headDisplay().detached} fallback={<GitMetaPill tone={subviewTone()}>{headRef() || 'HEAD'}</GitMetaPill>}>
+                  <>
+                    <GitMetaPill tone="warning">{headDisplay().label}</GitMetaPill>
+                    <Show when={headDisplay().detail}>
+                      <GitMetaPill tone="neutral">{headDisplay().detail}</GitMetaPill>
+                    </Show>
+                  </>
+                </Show>
                 <Show when={loadingBusy()}>
                   <GitMetaPill tone="neutral">Refreshing…</GitMetaPill>
                 </Show>
@@ -167,6 +177,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               </Show>
             </div>
             <div class="min-w-0 max-w-full truncate text-[11px] text-muted-foreground">{repoPath()}</div>
+            <Show when={headDisplay().detached}>
+              <div class="text-[11px] text-warning">Pull and push are unavailable while HEAD is detached.</div>
+            </Show>
           </GitLabelBlock>
 
           <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-start">
@@ -284,6 +297,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               selectedCommitHash={props.selectedCommitHash}
               onSelectCommit={props.onSelectCommit}
               onLoadMore={props.onLoadMore}
+              switchDetachedBusy={props.switchDetachedBusy}
               checkoutBusy={props.checkoutBusy}
               mergeBusy={props.mergeBusy}
               deleteBusy={props.deleteBusy}
@@ -302,6 +316,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onCheckoutBranch={props.onCheckoutBranch}
               onMergeBranch={props.onMergeBranch}
               onDeleteBranch={props.onDeleteBranch}
+              onSwitchDetached={props.onSwitchDetached}
               onCloseMergeReview={props.onCloseMergeReview}
               onRetryMergePreview={props.onRetryMergePreview}
               onConfirmMergeBranch={props.onConfirmMergeBranch}
@@ -328,7 +343,10 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               currentPath={props.currentPath}
               repoInfo={props.repoInfo}
               repoInfoLoading={props.repoInfoLoading}
+              repoSummary={props.repoSummary}
               selectedCommitHash={props.selectedCommitHash}
+              switchDetachedBusy={props.switchDetachedBusy}
+              onSwitchDetached={props.onSwitchDetached}
               onAskFlower={(request) => props.onAskFlower?.(request)}
             />
           </div>

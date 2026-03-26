@@ -147,6 +147,18 @@ export type GitCheckoutBranchResponse = {
   headCommit?: string;
 };
 
+export type GitSwitchDetachedRequest = {
+  repoRootPath: string;
+  targetRef: string;
+};
+
+export type GitSwitchDetachedResponse = {
+  repoRootPath: string;
+  headRef?: string;
+  headCommit?: string;
+  detached?: boolean;
+};
+
 export type GitDeleteLinkedWorktreePreview = {
   worktreePath?: string;
   accessible: boolean;

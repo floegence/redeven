@@ -9,7 +9,7 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitDetachedSwitchTarget, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { GitViewNav } from './GitViewNav';
@@ -72,6 +72,7 @@ export interface GitWorkspaceProps {
   selectedCommitHash?: string;
   onSelectCommit?: (hash: string) => void;
   onLoadMore?: () => void;
+  switchDetachedBusy?: boolean;
   commitMessage?: string;
   commitBusy?: boolean;
   onCommitMessageChange?: (value: string) => void;
@@ -100,6 +101,7 @@ export interface GitWorkspaceProps {
   onCheckoutBranch?: (branch: GitBranchSummary) => void;
   onMergeBranch?: (branch: GitBranchSummary) => void;
   onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
   onCloseMergeReview?: () => void;
   onRetryMergePreview?: (branch: GitBranchSummary) => void;
   onConfirmMergeBranch?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
@@ -213,6 +215,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               hasMore={props.hasMore}
               onSelectCommit={props.onSelectCommit}
               onLoadMore={props.onLoadMore}
+              switchDetachedBusy={props.switchDetachedBusy}
               checkoutBusy={props.checkoutBusy}
               mergeBusy={props.mergeBusy}
               deleteBusy={props.deleteBusy}
@@ -231,6 +234,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onCheckoutBranch={props.onCheckoutBranch}
               onMergeBranch={props.onMergeBranch}
               onDeleteBranch={props.onDeleteBranch}
+              onSwitchDetached={props.onSwitchDetached}
               onCloseMergeReview={props.onCloseMergeReview}
               onRetryMergePreview={props.onRetryMergePreview}
               onConfirmMergeBranch={props.onConfirmMergeBranch}

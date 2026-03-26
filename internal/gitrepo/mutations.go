@@ -199,6 +199,29 @@ func (s *Service) checkoutBranch(ctx context.Context, repo repoContext, name str
 	}, nil
 }
 
+func (s *Service) switchDetached(ctx context.Context, repo repoContext, targetRef string) (*switchDetachedResp, error) {
+	state, err := s.buildDetachedSwitchState(ctx, repo, targetRef)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(state.BlockingReason) != "" {
+		return nil, errors.New(state.BlockingReason)
+	}
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "switch", "--detach", state.TargetRef); err != nil {
+		return nil, err
+	}
+	updatedRepo, err := s.loadRepoContext(ctx, repo.repoRootReal)
+	if err != nil {
+		return nil, err
+	}
+	return &switchDetachedResp{
+		RepoRootPath: updatedRepo.repoRootReal,
+		HeadRef:      updatedRepo.headRef,
+		HeadCommit:   updatedRepo.headCommit,
+		Detached:     updatedRepo.headRef == "" || updatedRepo.headRef == "HEAD",
+	}, nil
+}
+
 func (s *Service) mergeBranch(ctx context.Context, repo repoContext, name string, fullName string, kind string, planFingerprint string) (*mergeBranchResp, error) {
 	target, err := normalizeMergeBranchTarget(name, fullName, kind)
 	if err != nil {

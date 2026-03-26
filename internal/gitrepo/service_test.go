@@ -590,6 +590,84 @@ func TestCheckoutBranch_RemoteCreatesTrackingBranch(t *testing.T) {
 	}
 }
 
+func TestSwitchDetached_ChecksOutCommit(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.switchDetached(context.Background(), repo, fixture.BinaryCommit)
+	if err != nil {
+		t.Fatalf("switchDetached: %v", err)
+	}
+	if !resp.Detached {
+		t.Fatalf("Detached=%v, want true", resp.Detached)
+	}
+	if resp.HeadRef != "HEAD" {
+		t.Fatalf("HeadRef=%q, want HEAD", resp.HeadRef)
+	}
+	if resp.HeadCommit != fixture.BinaryCommit {
+		t.Fatalf("HeadCommit=%q, want %q", resp.HeadCommit, fixture.BinaryCommit)
+	}
+	current := runGitFixture(t, fixture.Root, "rev-parse", "--abbrev-ref", "HEAD")
+	if current != "HEAD" {
+		t.Fatalf("current branch=%q, want HEAD", current)
+	}
+	localHead := runGitFixture(t, fixture.Root, "rev-parse", "HEAD")
+	if localHead != fixture.BinaryCommit {
+		t.Fatalf("local HEAD=%q, want %q", localHead, fixture.BinaryCommit)
+	}
+}
+
+func TestSwitchDetached_BlocksDirtyWorkspace(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	_, err = svc.switchDetached(context.Background(), repo, fixture.BinaryCommit)
+	if err == nil {
+		t.Fatalf("switchDetached: expected error")
+	}
+	if !strings.Contains(err.Error(), "Current workspace must be clean before switching to detached HEAD") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSwitchDetached_BlocksInProgressOperation(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	mergeHeadPath := runGitFixture(t, fixture.Root, "rev-parse", "--git-path", "MERGE_HEAD")
+	mergeHeadPath = strings.TrimSpace(mergeHeadPath)
+	if !filepath.IsAbs(mergeHeadPath) {
+		mergeHeadPath = filepath.Join(fixture.Root, mergeHeadPath)
+	}
+	if err := os.WriteFile(mergeHeadPath, []byte(fixture.BinaryCommit+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(MERGE_HEAD): %v", err)
+	}
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	_, err = svc.switchDetached(context.Background(), repo, fixture.BinaryCommit)
+	if err == nil {
+		t.Fatalf("switchDetached: expected error")
+	}
+	if !strings.Contains(err.Error(), "Finish the current merge before switching to detached HEAD") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestPreviewMergeBranch_FastForward(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

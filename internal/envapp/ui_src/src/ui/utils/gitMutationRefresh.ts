@@ -1,6 +1,6 @@
 import type { GitBranchSubview, GitWorkbenchSubview } from './gitWorkbench';
 
-export type GitMutationRefreshKind = 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | 'merge';
+export type GitMutationRefreshKind = 'commit' | 'fetch' | 'pull' | 'push' | 'checkout' | 'switchDetached' | 'merge';
 
 export type GitMutationRefreshPlan = {
   refreshRepoSummary: boolean;
@@ -43,6 +43,7 @@ export function buildGitMutationRefreshPlan(
       };
     case 'pull':
     case 'checkout':
+    case 'switchDetached':
     case 'merge':
     default:
       return {

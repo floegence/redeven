@@ -173,4 +173,44 @@ describe('GitWorkbenchSidebar interactions', () => {
       dispose();
     }
   });
+
+  it('shows detached HEAD explicitly in the changes sidebar card', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[520px]">
+          <GitWorkbenchSidebar
+            subview="changes"
+            repoAvailable
+            repoSummary={{
+              repoRootPath: '/workspace/repo',
+              headRef: 'HEAD',
+              headCommit: '89abcdef12345678',
+              detached: true,
+              workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+            }}
+            workspace={{
+              repoRootPath: '/workspace/repo',
+              summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              staged: [],
+              unstaged: [],
+              untracked: [],
+              conflicted: [],
+            }}
+            selectedWorkspaceSection="changes"
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('Detached HEAD');
+      expect(host.textContent).toContain('89abcdef');
+      expect(host.textContent).toContain('Detached HEAD keeps history browsing read-only for pull and push.');
+    } finally {
+      dispose();
+    }
+  });
 });

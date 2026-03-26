@@ -122,13 +122,13 @@ func (s *Service) buildMergeBranchPlan(ctx context.Context, repo repoContext, ta
 	}
 	if workspaceSummaryHasChanges(plan.WorkspaceSummary) {
 		plan.Outcome = mergeBranchOutcomeBlocked
-		plan.BlockingReason = formatMergeWorkspaceBlockedReason(plan.WorkspaceSummary)
+		plan.BlockingReason = formatWorkspaceBlockedReason("merging", plan.WorkspaceSummary)
 		plan.PlanFingerprint = buildMergeBranchPlanFingerprint(plan)
 		return plan, nil
 	}
 	if operation := readGitOperationState(ctx, repo.repoRootReal); operation != "" {
 		plan.Outcome = mergeBranchOutcomeBlocked
-		plan.BlockingReason = fmt.Sprintf("Finish the current %s before merging another branch.", operation)
+		plan.BlockingReason = formatOperationBlockedReason("merging another branch", operation)
 		plan.PlanFingerprint = buildMergeBranchPlanFingerprint(plan)
 		return plan, nil
 	}
@@ -249,26 +249,6 @@ func buildMergeBranchPlanFingerprint(plan mergeBranchPlan) string {
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
-}
-
-func formatMergeWorkspaceBlockedReason(summary gitWorkspaceSummary) string {
-	parts := make([]string, 0, 4)
-	if summary.StagedCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d staged", summary.StagedCount))
-	}
-	if summary.UnstagedCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d unstaged", summary.UnstagedCount))
-	}
-	if summary.UntrackedCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d untracked", summary.UntrackedCount))
-	}
-	if summary.ConflictedCount > 0 {
-		parts = append(parts, fmt.Sprintf("%d conflicted", summary.ConflictedCount))
-	}
-	if len(parts) == 0 {
-		return "Current workspace must be clean before merging."
-	}
-	return fmt.Sprintf("Current workspace must be clean before merging (%s).", strings.Join(parts, " · "))
 }
 
 func readGitOperationState(ctx context.Context, repoRoot string) string {

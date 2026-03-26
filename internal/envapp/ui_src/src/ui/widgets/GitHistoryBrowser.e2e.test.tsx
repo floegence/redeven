@@ -250,6 +250,50 @@ describe('GitHistoryBrowser interactions', () => {
     }
   });
 
+  it('offers a graph action to detach HEAD at the selected commit', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onSwitchDetached = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[640px]">
+            <GitHistoryBrowser
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: '3a47b67b1234567890' }}
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                headCommit: '3a47b67b1234567890',
+                workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              currentPath="/workspace/repo/src"
+              selectedCommitHash="3a47b67b1234567890"
+              onSwitchDetached={onSwitchDetached}
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const detachButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Switch --detach')) as HTMLButtonElement | undefined;
+      expect(detachButton).toBeTruthy();
+      expect(detachButton?.disabled).toBe(false);
+
+      detachButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onSwitchDetached).toHaveBeenCalledWith({
+        commitHash: '3a47b67b1234567890',
+        shortHash: '3a47b67b',
+        source: 'graph',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('uses left-rail guidance before a commit is selected', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

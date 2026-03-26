@@ -14,6 +14,7 @@ import {
   branchDisplayName,
   branchIdentity,
   branchStatusSummary,
+  describeGitHead,
   summarizeWorkspaceCount,
   workspaceHealthLabel,
   workspaceViewSectionCount,
@@ -91,6 +92,7 @@ function selectorDescription(view: GitWorkbenchSubview): string {
 export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   const closeAfterPick = () => props.onClose?.();
   const activeSubview = () => normalizeSubview(props.subview);
+  const headDisplay = () => describeGitHead(props.repoSummary);
   const workspaceCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
   const localBranchCount = () => props.branches?.local.length ?? 0;
   const remoteBranchCount = () => props.branches?.remote.length ?? 0;
@@ -128,10 +130,18 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                         <div class="rounded-md border border-border/65 bg-card p-2.5">
                           <div class="flex items-start justify-between gap-2 px-0.5">
                             <div class="min-w-0 flex-1">
-                              <div class="text-xs font-medium text-foreground">{props.repoSummary?.headRef || 'HEAD'}</div>
+                              <div class="flex flex-wrap items-center gap-1.5">
+                                <div class="text-xs font-medium text-foreground">{headDisplay().label}</div>
+                                <Show when={headDisplay().detail}>
+                                  <GitMetaPill tone="neutral">{headDisplay().detail}</GitMetaPill>
+                                </Show>
+                              </div>
                               <div class="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                                 {workspaceHealthLabel(props.workspace?.summary ?? props.repoSummary?.workspaceSummary)}
                               </div>
+                              <Show when={headDisplay().detached}>
+                                <div class="mt-0.5 text-[10px] leading-relaxed text-warning">Detached HEAD keeps history browsing read-only for pull and push.</div>
+                              </Show>
                             </div>
                             <GitMetaPill tone={workspaceCount() > 0 ? 'warning' : 'success'}>
                               {workspaceCount() > 0 ? `${workspaceCount()} open` : 'Clean'}

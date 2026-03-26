@@ -51,6 +51,7 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
     pullBusy: boolean;
     pushBusy: boolean;
     checkoutBusy: boolean;
+    switchDetachedBusy: boolean;
     mergeBusy: boolean;
     deleteBusy: boolean;
   }>,
@@ -94,6 +95,7 @@ const mockRpc = vi.hoisted(() => ({
     pullRepo: vi.fn(),
     pushRepo: vi.fn(),
     checkoutBranch: vi.fn(),
+    switchDetached: vi.fn(),
     previewMergeBranch: vi.fn(),
     mergeBranch: vi.fn(),
     previewDeleteBranch: vi.fn(),
@@ -284,6 +286,7 @@ vi.mock('./GitWorkspace', () => ({
     pullBusy?: boolean;
     pushBusy?: boolean;
     checkoutBusy?: boolean;
+    switchDetachedBusy?: boolean;
     mergeBusy?: boolean;
     deleteBusy?: boolean;
     mergeReviewOpen?: boolean;
@@ -297,6 +300,7 @@ vi.mock('./GitWorkspace', () => ({
     onPull?: () => void;
     onPush?: () => void;
     onCheckoutBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
+    onSwitchDetached?: (target: { commitHash: string; shortHash?: string; source: 'graph' | 'branch_history'; branchName?: string }) => void;
     onMergeBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onDeleteBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onAskFlower?: (request: {
@@ -341,6 +345,7 @@ vi.mock('./GitWorkspace', () => ({
         pullBusy: Boolean(props.pullBusy),
         pushBusy: Boolean(props.pushBusy),
         checkoutBusy: Boolean(props.checkoutBusy),
+        switchDetachedBusy: Boolean(props.switchDetachedBusy),
         mergeBusy: Boolean(props.mergeBusy),
         deleteBusy: Boolean(props.deleteBusy),
       });
@@ -411,6 +416,17 @@ vi.mock('./GitWorkspace', () => ({
           })}
         >
           mock-checkout
+        </button>
+        <button
+          type="button"
+          onClick={() => props.onSwitchDetached?.({
+            commitHash: 'fedcba9876543210',
+            shortHash: 'fedcba98',
+            source: 'branch_history',
+            branchName: 'feature/demo',
+          })}
+        >
+          mock-switch-detached
         </button>
         <button
           type="button"
@@ -632,6 +648,12 @@ beforeEach(() => {
     repoRootPath: '/workspace/repo',
     headRef: 'feature/demo',
     headCommit: 'fedcba9',
+  });
+  mockRpc.git.switchDetached.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'HEAD',
+    headCommit: 'fedcba9876543210',
+    detached: true,
   });
   mockRpc.git.previewMergeBranch.mockResolvedValue({
     repoRootPath: '/workspace/repo',
@@ -1457,6 +1479,41 @@ describe('RemoteFileBrowser persistence', () => {
       expect(notificationStore.success).toContainEqual({ title: 'Checked out', message: 'feature/demo is now active.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.checkoutBusy)).toBe(true);
       expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps detached switch on local busy state, redirects branch history to graph, and shows a toast', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      gitWorkspaceRenderStore.snapshots = [];
+      widgetStateStore.updateCalls = [];
+
+      const detachButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-switch-detached') as HTMLButtonElement | undefined;
+      expect(detachButton).toBeTruthy();
+      detachButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.switchDetached).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        targetRef: 'fedcba9876543210',
+      });
+      expect(notificationStore.success).toContainEqual({ title: 'Detached HEAD', message: 'Detached HEAD at fedcba98.' });
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.switchDetachedBusy)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.subview === 'history')).toBe(true);
     } finally {
       dispose();
     }
