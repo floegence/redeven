@@ -103,6 +103,29 @@ export function reattachBranchFromRepoSummary(summary?: GitRepoSummaryResponse |
   return branch;
 }
 
+export function detachedHeadViewingSummary(headCommit: string | null | undefined): string {
+  const detail = shortGitHash(headCommit);
+  return detail ? `Viewing ${detail} without a branch.` : 'Viewing repository history without a branch.';
+}
+
+export function detachedHeadReattachSummary(
+  branch: GitBranchSummary | null | undefined,
+  options?: { compact?: boolean },
+): string {
+  const name = String(branch?.name ?? '').trim();
+  if (!name) return '';
+  return options?.compact ? `Last attached: ${name}` : `Last attached branch: ${name}.`;
+}
+
+export function detachedHeadCheckoutActionLabel(
+  branch: GitBranchSummary | null | undefined,
+  busy = false,
+): string {
+  if (busy) return 'Checking out...';
+  const name = String(branch?.name ?? '').trim();
+  return name ? `Checkout ${name}` : 'Checkout branch';
+}
+
 export function workspaceSectionLabel(section: GitWorkspaceSection): string {
   switch (section) {
     case 'staged':

@@ -1504,11 +1504,14 @@ describe('GitBranchesPanel interactions', () => {
 
     try {
       await flush();
-      expect(host.textContent).toContain('Return to main to reattach HEAD');
-      const returnButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Return to main')) as HTMLButtonElement | undefined;
-      expect(returnButton).toBeTruthy();
+      expect(host.textContent).toContain('Detached HEAD');
+      expect(host.textContent).toContain('Viewing 11111111 without a branch.');
+      expect(host.textContent).toContain('Checkout a local branch to reattach HEAD before pull, push, or merge.');
+      expect(host.textContent).toContain('Last attached branch: main.');
+      const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout main')) as HTMLButtonElement | undefined;
+      expect(checkoutButton).toBeTruthy();
 
-      returnButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      checkoutButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(onCheckoutBranch).toHaveBeenCalledWith({
         name: 'main',

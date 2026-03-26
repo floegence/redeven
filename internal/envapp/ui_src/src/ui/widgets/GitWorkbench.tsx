@@ -13,7 +13,19 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { branchDisplayName, describeGitHead, reattachBranchFromRepoSummary, repoDisplayName, syncStatusLabel, type GitBranchSubview, type GitDetachedSwitchTarget, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import {
+  describeGitHead,
+  detachedHeadCheckoutActionLabel,
+  detachedHeadReattachSummary,
+  detachedHeadViewingSummary,
+  reattachBranchFromRepoSummary,
+  repoDisplayName,
+  syncStatusLabel,
+  type GitBranchSubview,
+  type GitDetachedSwitchTarget,
+  type GitWorkbenchSubview,
+  type GitWorkspaceViewSection,
+} from '../utils/gitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
@@ -144,12 +156,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     || !(props.repoInfo?.available ?? Boolean(props.repoSummary?.repoRootPath))
     || !(props.repoInfo?.repoRootPath || props.repoSummary?.repoRootPath)
   );
-  const reattachLabel = () => {
-    const branch = reattachBranch();
-    if (!branch) return 'Return to branch';
-    if (props.checkoutBusy) return 'Returning...';
-    return `Return to ${branchDisplayName(branch)}`;
-  };
+  const detachedHeadSummary = () => detachedHeadViewingSummary(props.repoSummary?.headCommit || props.repoInfo?.headCommit);
+  const reattachSummary = () => detachedHeadReattachSummary(reattachBranch(), { compact: true });
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
@@ -185,7 +193,10 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             </div>
             <div class="min-w-0 max-w-full truncate text-[11px] text-muted-foreground">{repoPath()}</div>
             <Show when={headDisplay().detached}>
-              <div class="text-[11px] text-warning">Pull and push are unavailable while HEAD is detached.</div>
+              <div class="text-[11px] text-warning">{detachedHeadSummary()}</div>
+              <Show when={reattachBranch()}>
+                <div class="text-[11px] text-muted-foreground">{reattachSummary()}</div>
+              </Show>
             </Show>
           </GitLabelBlock>
 
@@ -201,7 +212,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                   if (branch) props.onCheckoutBranch?.(branch);
                 }}
               >
-                {reattachLabel()}
+                {detachedHeadCheckoutActionLabel(reattachBranch(), props.checkoutBusy)}
               </Button>
             </Show>
             <Show when={props.onFetch}>

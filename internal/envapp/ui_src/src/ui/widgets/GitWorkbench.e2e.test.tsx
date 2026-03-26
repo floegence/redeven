@@ -156,7 +156,7 @@ describe('GitWorkbench interactions', () => {
       const pushButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Push')) as HTMLButtonElement | undefined;
       expect(host.textContent).toContain('Detached HEAD');
       expect(host.textContent).toContain('def56789');
-      expect(host.textContent).toContain('Pull and push are unavailable while HEAD is detached.');
+      expect(host.textContent).toContain('Viewing def56789 without a branch.');
       expect(pullButton?.disabled).toBe(true);
       expect(pushButton?.disabled).toBe(true);
     } finally {
@@ -164,7 +164,7 @@ describe('GitWorkbench interactions', () => {
     }
   });
 
-  it('offers a one-click return to the suggested reattach branch while detached', () => {
+  it('offers a one-click checkout to the suggested reattach branch while detached', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onCheckoutBranch = vi.fn();
@@ -203,9 +203,11 @@ describe('GitWorkbench interactions', () => {
     ), host);
 
     try {
-      const returnButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Return to main')) as HTMLButtonElement | undefined;
-      expect(returnButton).toBeTruthy();
-      returnButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(host.textContent).toContain('Viewing def56789 without a branch.');
+      expect(host.textContent).toContain('Last attached: main');
+      const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout main')) as HTMLButtonElement | undefined;
+      expect(checkoutButton).toBeTruthy();
+      checkoutButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       expect(onCheckoutBranch).toHaveBeenCalledWith({
         name: 'main',
