@@ -148,7 +148,7 @@ html.dark {
 }
 
 .flower-chat-shell {
-  --flower-chat-surface: #f5f6f7;
+  --flower-chat-surface: rgb(246, 245, 244);
   --flower-chat-surface-soft: #fafbfc;
   --flower-chat-surface-elevated: #ffffff;
   --flower-chat-surface-border: color-mix(in srgb, var(--border) 82%, white 18%);
