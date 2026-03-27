@@ -43,6 +43,8 @@ import type {
   GitListBranchesResponse,
   GitListCommitsRequest,
   GitListCommitsResponse,
+  GitListWorkspacePageRequest,
+  GitListWorkspacePageResponse,
   GitListStashesRequest,
   GitListStashesResponse,
   GitSaveStashRequest,
@@ -66,6 +68,7 @@ import type {
   GitResolveRepoRequest,
   GitResolveRepoResponse,
   GitWorkspaceChange,
+  GitWorkspacePageSection,
   GitWorkspaceSummary,
 } from '../sdk/git';
 import type {
@@ -115,6 +118,8 @@ import type {
   wire_git_list_branches_resp,
   wire_git_list_commits_req,
   wire_git_list_commits_resp,
+  wire_git_list_workspace_page_req,
+  wire_git_list_workspace_page_resp,
   wire_git_list_stashes_req,
   wire_git_list_stashes_resp,
   wire_git_save_stash_req,
@@ -359,6 +364,31 @@ export function fromWireGitListWorkspaceChangesResponse(resp: wire_git_list_work
   };
 }
 
+export function toWireGitListWorkspacePageRequest(req: GitListWorkspacePageRequest): wire_git_list_workspace_page_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    section: typeof req.section === 'string' ? req.section : undefined,
+    offset: typeof req.offset === 'number' ? req.offset : undefined,
+    limit: typeof req.limit === 'number' ? req.limit : undefined,
+  };
+}
+
+export function fromWireGitListWorkspacePageResponse(resp: wire_git_list_workspace_page_resp): GitListWorkspacePageResponse {
+  const section = resp?.section;
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+    section: section === 'changes' || section === 'staged' || section === 'conflicted'
+      ? (section as GitWorkspacePageSection)
+      : undefined,
+    summary: fromWireGitWorkspaceSummary(resp?.summary),
+    totalCount: typeof resp?.total_count === 'number' ? resp.total_count : undefined,
+    offset: typeof resp?.offset === 'number' ? resp.offset : undefined,
+    nextOffset: typeof resp?.next_offset === 'number' ? resp.next_offset : undefined,
+    hasMore: typeof resp?.has_more === 'boolean' ? resp.has_more : undefined,
+    items: Array.isArray(resp?.items) ? resp.items.map(fromWireGitWorkspaceChange) : [],
+  };
+}
+
 export function toWireGitListStashesRequest(req: GitListStashesRequest): wire_git_list_stashes_req {
   return {
     repo_root_path: req.repoRootPath,
@@ -480,6 +510,7 @@ export function fromWireGitDropStashResponse(resp: wire_git_drop_stash_resp): Gi
 export function toWireGitStageWorkspaceRequest(req: GitStageWorkspaceRequest): wire_git_stage_workspace_req {
   return {
     repo_root_path: req.repoRootPath,
+    section: typeof req.section === 'string' ? req.section : undefined,
     paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
   };
 }
@@ -493,6 +524,7 @@ export function fromWireGitStageWorkspaceResponse(resp: wire_git_stage_workspace
 export function toWireGitUnstageWorkspaceRequest(req: GitUnstageWorkspaceRequest): wire_git_unstage_workspace_req {
   return {
     repo_root_path: req.repoRootPath,
+    section: typeof req.section === 'string' ? req.section : undefined,
     paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
   };
 }

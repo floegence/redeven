@@ -48,6 +48,7 @@ export type GitRepoSummaryResponse = {
 };
 
 export type GitWorkspaceSection = 'staged' | 'unstaged' | 'untracked' | 'conflicted';
+export type GitWorkspacePageSection = 'changes' | 'staged' | 'conflicted';
 
 export type GitDiffFileSummary = {
   changeType?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'conflicted' | string;
@@ -89,6 +90,24 @@ export type GitListWorkspaceChangesResponse = {
   unstaged: GitWorkspaceChange[];
   untracked: GitWorkspaceChange[];
   conflicted: GitWorkspaceChange[];
+};
+
+export type GitListWorkspacePageRequest = {
+  repoRootPath: string;
+  section?: GitWorkspacePageSection;
+  offset?: number;
+  limit?: number;
+};
+
+export type GitListWorkspacePageResponse = {
+  repoRootPath: string;
+  section?: GitWorkspacePageSection;
+  summary: GitWorkspaceSummary;
+  totalCount?: number;
+  offset?: number;
+  nextOffset?: number;
+  hasMore?: boolean;
+  items: GitWorkspaceChange[];
 };
 
 export type GitListStashesRequest = {
@@ -197,6 +216,7 @@ export type GitDropStashResponse = {
 
 export type GitStageWorkspaceRequest = {
   repoRootPath: string;
+  section?: GitWorkspacePageSection;
   paths?: string[];
 };
 
@@ -206,6 +226,7 @@ export type GitStageWorkspaceResponse = {
 
 export type GitUnstageWorkspaceRequest = {
   repoRootPath: string;
+  section?: GitWorkspacePageSection;
   paths?: string[];
 };
 

@@ -9,7 +9,7 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitDetachedSwitchTarget, type GitStashWindowRequest, type GitWorkbenchSubview, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitDetachedSwitchTarget, type GitStashWindowRequest, type GitWorkbenchSubview, type GitWorkspaceViewPageState, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { GitViewNav } from './GitViewNav';
@@ -41,6 +41,7 @@ export interface GitWorkspaceProps {
   repoSummaryLoading?: boolean;
   repoSummaryError?: string;
   workspace?: GitListWorkspaceChangesResponse | null;
+  workspacePages?: Partial<Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>>;
   workspaceLoading?: boolean;
   workspaceError?: string;
   selectedWorkspaceSection?: GitWorkspaceViewSection;
@@ -79,6 +80,8 @@ export interface GitWorkspaceProps {
   commitBusy?: boolean;
   onCommitMessageChange?: (value: string) => void;
   onCommit?: (message: string) => void;
+  onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
+  onOpenCommitDialog?: () => void;
   fetchBusy?: boolean;
   pullBusy?: boolean;
   pushBusy?: boolean;
@@ -194,6 +197,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               repoSummaryLoading={props.repoSummaryLoading}
               repoSummaryError={props.repoSummaryError}
               workspace={props.workspace}
+              workspacePages={props.workspacePages}
               workspaceLoading={props.workspaceLoading}
               workspaceError={props.workspaceError}
               selectedWorkspaceSection={props.selectedWorkspaceSection}
@@ -251,6 +255,8 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onStageSelected={props.onStageWorkspaceItem}
               onUnstageSelected={props.onUnstageWorkspaceItem}
               onBulkAction={props.onBulkWorkspaceAction}
+              onLoadMoreWorkspaceSection={props.onLoadMoreWorkspaceSection}
+              onOpenCommitDialog={props.onOpenCommitDialog}
               onOpenStash={props.onOpenStash}
               onAskFlower={props.onAskFlower}
               onOpenInTerminal={props.onOpenInTerminal}

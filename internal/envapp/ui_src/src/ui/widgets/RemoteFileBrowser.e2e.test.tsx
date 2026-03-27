@@ -87,7 +87,7 @@ const mockRpc = vi.hoisted(() => ({
   git: {
     resolveRepo: vi.fn(),
     getRepoSummary: vi.fn(),
-    listWorkspaceChanges: vi.fn(),
+    listWorkspacePage: vi.fn(),
     listBranches: vi.fn(),
     getBranchCompare: vi.fn(),
     listCommits: vi.fn(),
@@ -604,13 +604,15 @@ beforeEach(() => {
     headCommit: 'abc1234',
     workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
   });
-  mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+  mockRpc.git.listWorkspacePage.mockResolvedValue({
     repoRootPath: '/workspace/repo',
+    section: 'changes',
     summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-    staged: [],
-    unstaged: [],
-    untracked: [],
-    conflicted: [],
+    totalCount: 0,
+    offset: 0,
+    nextOffset: 0,
+    hasMore: false,
+    items: [],
   });
   mockRpc.git.listBranches.mockResolvedValue({
     repoRootPath: '/workspace/repo',
@@ -1570,27 +1572,31 @@ describe('RemoteFileBrowser persistence', () => {
   });
 
   it('focuses conflicted changes after a merge conflict', async () => {
-    const cleanWorkspace = {
+    const cleanWorkspacePage = {
       repoRootPath: '/workspace/repo',
+      section: 'changes',
       summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-      staged: [],
-      unstaged: [],
-      untracked: [],
-      conflicted: [],
+      totalCount: 0,
+      offset: 0,
+      nextOffset: 0,
+      hasMore: false,
+      items: [],
     };
-    const conflictedWorkspace = {
+    const conflictedWorkspacePage = {
       repoRootPath: '/workspace/repo',
+      section: 'conflicted',
       summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 1 },
-      staged: [],
-      unstaged: [],
-      untracked: [],
-      conflicted: [{ section: 'conflicted', changeType: 'conflicted', path: 'src/conflict.txt', displayPath: 'src/conflict.txt' }],
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'conflicted', changeType: 'conflicted', path: 'src/conflict.txt', displayPath: 'src/conflict.txt' }],
     };
 
-    mockRpc.git.listWorkspaceChanges.mockReset();
-    mockRpc.git.listWorkspaceChanges
-      .mockResolvedValueOnce(cleanWorkspace)
-      .mockResolvedValue(conflictedWorkspace);
+    mockRpc.git.listWorkspacePage.mockReset();
+    mockRpc.git.listWorkspacePage
+      .mockResolvedValueOnce(cleanWorkspacePage)
+      .mockResolvedValue(conflictedWorkspacePage);
     mockRpc.git.mergeBranch.mockResolvedValueOnce({
       repoRootPath: '/workspace/repo',
       headRef: 'main',

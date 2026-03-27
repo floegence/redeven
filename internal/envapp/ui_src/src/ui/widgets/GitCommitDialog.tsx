@@ -1,4 +1,4 @@
-import { For, createMemo } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
 import { gitChangePathClass } from './GitChrome';
@@ -11,17 +11,22 @@ import {
   GitChangeMetrics,
   GitChangeStatusPill,
   GitStatStrip,
+  GitSubtleNote,
   gitChangedFilesRowClass,
 } from './GitWorkbenchPrimitives';
 
 export interface GitCommitDialogProps {
   open: boolean;
   stagedItems: GitWorkspaceChange[];
+  totalCount?: number;
+  hasMore?: boolean;
+  loadingItems?: boolean;
   message: string;
   loading?: boolean;
   canCommit?: boolean;
   onMessageChange?: (value: string) => void;
   onConfirm?: () => void;
+  onLoadMore?: () => void;
   onClose: () => void;
 }
 
@@ -30,7 +35,9 @@ function itemPath(item: GitWorkspaceChange): string {
 }
 
 export function GitCommitDialog(props: GitCommitDialogProps) {
-  const fileCount = createMemo(() => props.stagedItems.length);
+  const loadedCount = createMemo(() => props.stagedItems.length);
+  const fileCount = createMemo(() => Math.max(loadedCount(), Number(props.totalCount ?? 0)));
+  const partial = createMemo(() => fileCount() > loadedCount());
   const additions = createMemo(() => props.stagedItems.reduce((sum, item) => sum + Number(item.additions ?? 0), 0));
   const deletions = createMemo(() => props.stagedItems.reduce((sum, item) => sum + Number(item.deletions ?? 0), 0));
 
@@ -54,6 +61,11 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
     >
       <div class="space-y-3">
         <div class="text-xs text-muted-foreground">Review the staged files below, then write the commit message for this snapshot.</div>
+        <Show when={partial()}>
+          <GitSubtleNote>
+            Showing {loadedCount()} of {fileCount()} staged file{fileCount() === 1 ? '' : 's'}.
+          </GitSubtleNote>
+        </Show>
 
         <GitStatStrip
           columnsClass="grid-cols-1 gap-1 sm:grid-cols-3"
@@ -65,30 +77,58 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
         />
 
         <div class="overflow-hidden rounded-md border border-border/65 bg-card">
-          <div class="max-h-[16rem] overflow-auto">
-            <table class={GIT_CHANGED_FILES_TABLE_CLASS}>
-              <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
-                <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                </tr>
-              </thead>
-              <tbody>
-                <For each={props.stagedItems}>
-                  {(item) => (
-                    <tr class={gitChangedFilesRowClass(false)}>
-                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                        <div class={`truncate text-[11px] font-medium ${gitChangePathClass(item.changeType)}`} title={itemPath(item)}>{itemPath(item)}</div>
-                      </td>
-                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={item.changeType} /></td>
-                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-          </div>
+          <Show
+            when={!props.loadingItems || props.stagedItems.length > 0}
+            fallback={(
+              <div class="px-4 py-8">
+                <GitSubtleNote>Loading staged files...</GitSubtleNote>
+              </div>
+            )}
+          >
+            <div class="max-h-[16rem] overflow-auto">
+              <table class={GIT_CHANGED_FILES_TABLE_CLASS}>
+                <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
+                  <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
+                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
+                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <For each={props.stagedItems}>
+                    {(item) => (
+                      <tr class={gitChangedFilesRowClass(false)}>
+                        <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                          <div class={`truncate text-[11px] font-medium ${gitChangePathClass(item.changeType)}`} title={itemPath(item)}>{itemPath(item)}</div>
+                        </td>
+                        <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={item.changeType} /></td>
+                        <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
+                      </tr>
+                    )}
+                  </For>
+                </tbody>
+              </table>
+            </div>
+            <Show when={props.hasMore || (props.loadingItems && props.stagedItems.length > 0)}>
+              <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
+                <GitSubtleNote>
+                  {partial()
+                    ? `More staged files are available.`
+                    : 'Load more staged files if you want to review the full snapshot here.'}
+                </GitSubtleNote>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  class="rounded-md"
+                  onClick={() => props.onLoadMore?.()}
+                  loading={props.loadingItems && props.stagedItems.length > 0}
+                  disabled={!props.hasMore || props.loadingItems}
+                >
+                  Load more
+                </Button>
+              </div>
+            </Show>
+          </Show>
         </div>
 
         <div>

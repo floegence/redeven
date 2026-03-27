@@ -25,6 +25,7 @@ import {
   type GitBranchSubview,
   type GitDetachedSwitchTarget,
   type GitWorkbenchSubview,
+  type GitWorkspaceViewPageState,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
@@ -46,6 +47,7 @@ export interface GitWorkbenchProps {
   repoSummaryLoading?: boolean;
   repoSummaryError?: string;
   workspace?: GitListWorkspaceChangesResponse | null;
+  workspacePages?: Partial<Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>>;
   workspaceLoading?: boolean;
   workspaceError?: string;
   selectedWorkspaceSection?: GitWorkspaceViewSection;
@@ -103,6 +105,8 @@ export interface GitWorkbenchProps {
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
+  onOpenCommitDialog?: () => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: GitAskFlowerRequest) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
@@ -307,6 +311,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             <GitChangesPanel
               repoSummary={props.repoSummary}
               workspace={props.workspace}
+              workspacePages={props.workspacePages}
               selectedSection={props.selectedWorkspaceSection}
               onSelectSection={props.onSelectWorkspaceSection}
               selectedItem={props.selectedWorkspaceItem}
@@ -322,6 +327,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onStageSelected={props.onStageSelected}
               onUnstageSelected={props.onUnstageSelected}
               onBulkAction={props.onBulkAction}
+              onLoadMoreWorkspaceSection={props.onLoadMoreWorkspaceSection}
+              onOpenCommitDialog={props.onOpenCommitDialog}
               onOpenStash={props.onOpenStash}
               onAskFlower={(request) => props.onAskFlower?.(request)}
               onOpenInTerminal={props.onOpenInTerminal}

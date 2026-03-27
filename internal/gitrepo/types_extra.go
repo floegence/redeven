@@ -70,6 +70,24 @@ type listWorkspaceChangesResp struct {
 	Conflicted   []gitWorkspaceChange `json:"conflicted,omitempty"`
 }
 
+type listWorkspacePageReq struct {
+	RepoRootPath string `json:"repo_root_path"`
+	Section      string `json:"section,omitempty"`
+	Offset       int    `json:"offset,omitempty"`
+	Limit        int    `json:"limit,omitempty"`
+}
+
+type listWorkspacePageResp struct {
+	RepoRootPath string               `json:"repo_root_path"`
+	Section      string               `json:"section,omitempty"`
+	Summary      gitWorkspaceSummary  `json:"summary"`
+	TotalCount   int                  `json:"total_count,omitempty"`
+	Offset       int                  `json:"offset,omitempty"`
+	NextOffset   int                  `json:"next_offset,omitempty"`
+	HasMore      bool                 `json:"has_more,omitempty"`
+	Items        []gitWorkspaceChange `json:"items,omitempty"`
+}
+
 type listStashesReq struct {
 	RepoRootPath string `json:"repo_root_path"`
 }

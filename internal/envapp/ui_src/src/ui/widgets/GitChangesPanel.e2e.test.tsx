@@ -61,7 +61,7 @@ describe('GitChangesPanel interactions', () => {
                   untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
                   conflicted: [],
                 }}
-                selectedSection="unstaged"
+                selectedSection="changes"
               />
             </div>
           </ProtocolProvider>
@@ -70,7 +70,7 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Unstaged');
+      expect(host.textContent).toContain('Changes');
       expect(host.textContent).toContain('Path');
       expect(host.textContent).toContain('Status');
       expect(host.textContent).toContain('Modified');
@@ -155,7 +155,7 @@ describe('GitChangesPanel interactions', () => {
                   untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
                   conflicted: [],
                 }}
-                selectedSection="untracked"
+                selectedSection="changes"
                 onBulkAction={onBulkAction}
               />
             </div>
@@ -165,10 +165,10 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const bulkButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Track All'));
+      const bulkButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stage All'));
       expect(bulkButton).toBeTruthy();
       bulkButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(onBulkAction).toHaveBeenCalledWith('untracked');
+      expect(onBulkAction).toHaveBeenCalledWith('changes');
     } finally {
       dispose();
     }
@@ -429,7 +429,7 @@ describe('GitChangesPanel interactions', () => {
                   untracked: [],
                   conflicted: [],
                 }}
-                selectedSection="unstaged"
+                selectedSection="changes"
               />
             </div>
           </ProtocolProvider>
@@ -490,7 +490,7 @@ describe('GitChangesPanel interactions', () => {
                   }],
                   conflicted: [],
                 }}
-                selectedSection="untracked"
+                selectedSection="changes"
               />
             </div>
           </ProtocolProvider>

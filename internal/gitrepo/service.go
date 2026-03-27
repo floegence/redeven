@@ -16,33 +16,34 @@ import (
 )
 
 const (
-	TypeID_GIT_RESOLVE_REPO      uint32 = 1101
-	TypeID_GIT_LIST_COMMITS      uint32 = 1102
-	TypeID_GIT_GET_COMMIT_DETAIL uint32 = 1103
-	TypeID_GIT_GET_REPO_SUMMARY  uint32 = 1104
-	TypeID_GIT_LIST_WORKSPACE    uint32 = 1105
-	TypeID_GIT_LIST_BRANCHES     uint32 = 1106
-	TypeID_GIT_GET_BRANCH_DIFF   uint32 = 1107
-	TypeID_GIT_STAGE_WORKSPACE   uint32 = 1108
-	TypeID_GIT_UNSTAGE_WORKSPACE uint32 = 1109
-	TypeID_GIT_COMMIT_WORKSPACE  uint32 = 1110
-	TypeID_GIT_FETCH_REPO        uint32 = 1111
-	TypeID_GIT_PULL_REPO         uint32 = 1112
-	TypeID_GIT_PUSH_REPO         uint32 = 1113
-	TypeID_GIT_CHECKOUT_BRANCH   uint32 = 1114
-	TypeID_GIT_PREVIEW_DELETE    uint32 = 1115
-	TypeID_GIT_DELETE_BRANCH     uint32 = 1116
-	TypeID_GIT_PREVIEW_MERGE     uint32 = 1117
-	TypeID_GIT_MERGE_BRANCH      uint32 = 1118
-	TypeID_GIT_DIFF_CONTENT      uint32 = 1119
-	TypeID_GIT_SWITCH_DETACHED   uint32 = 1120
-	TypeID_GIT_LIST_STASHES      uint32 = 1121
-	TypeID_GIT_GET_STASH_DETAIL  uint32 = 1122
-	TypeID_GIT_SAVE_STASH        uint32 = 1123
-	TypeID_GIT_PREVIEW_APPLY     uint32 = 1124
-	TypeID_GIT_APPLY_STASH       uint32 = 1125
-	TypeID_GIT_PREVIEW_DROP      uint32 = 1126
-	TypeID_GIT_DROP_STASH        uint32 = 1127
+	TypeID_GIT_RESOLVE_REPO        uint32 = 1101
+	TypeID_GIT_LIST_COMMITS        uint32 = 1102
+	TypeID_GIT_GET_COMMIT_DETAIL   uint32 = 1103
+	TypeID_GIT_GET_REPO_SUMMARY    uint32 = 1104
+	TypeID_GIT_LIST_WORKSPACE      uint32 = 1105
+	TypeID_GIT_LIST_BRANCHES       uint32 = 1106
+	TypeID_GIT_GET_BRANCH_DIFF     uint32 = 1107
+	TypeID_GIT_STAGE_WORKSPACE     uint32 = 1108
+	TypeID_GIT_UNSTAGE_WORKSPACE   uint32 = 1109
+	TypeID_GIT_COMMIT_WORKSPACE    uint32 = 1110
+	TypeID_GIT_FETCH_REPO          uint32 = 1111
+	TypeID_GIT_PULL_REPO           uint32 = 1112
+	TypeID_GIT_PUSH_REPO           uint32 = 1113
+	TypeID_GIT_CHECKOUT_BRANCH     uint32 = 1114
+	TypeID_GIT_PREVIEW_DELETE      uint32 = 1115
+	TypeID_GIT_DELETE_BRANCH       uint32 = 1116
+	TypeID_GIT_PREVIEW_MERGE       uint32 = 1117
+	TypeID_GIT_MERGE_BRANCH        uint32 = 1118
+	TypeID_GIT_DIFF_CONTENT        uint32 = 1119
+	TypeID_GIT_SWITCH_DETACHED     uint32 = 1120
+	TypeID_GIT_LIST_STASHES        uint32 = 1121
+	TypeID_GIT_GET_STASH_DETAIL    uint32 = 1122
+	TypeID_GIT_SAVE_STASH          uint32 = 1123
+	TypeID_GIT_PREVIEW_APPLY       uint32 = 1124
+	TypeID_GIT_APPLY_STASH         uint32 = 1125
+	TypeID_GIT_PREVIEW_DROP        uint32 = 1126
+	TypeID_GIT_DROP_STASH          uint32 = 1127
+	TypeID_GIT_LIST_WORKSPACE_PAGE uint32 = 1128
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -203,6 +204,24 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return status, nil
 	})
 
+	accessgate.RegisterTyped[listWorkspacePageReq, listWorkspacePageResp](r, TypeID_GIT_LIST_WORKSPACE_PAGE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listWorkspacePageReq) (*listWorkspacePageResp, error) {
+		if meta == nil || !meta.CanRead {
+			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
+		}
+		if req == nil {
+			req = &listWorkspacePageReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		resp, err := s.listWorkspacePage(ctx, repo, req.Section, req.Offset, req.Limit)
+		if err != nil {
+			return nil, classifyGitRPCError(err)
+		}
+		return resp, nil
+	})
+
 	accessgate.RegisterTyped[listStashesReq, listStashesResp](r, TypeID_GIT_LIST_STASHES, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *listStashesReq) (*listStashesResp, error) {
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
@@ -310,7 +329,14 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		if err := s.stageWorkspacePaths(ctx, repo, req.Paths); err != nil {
+		paths := req.Paths
+		if len(paths) == 0 && strings.TrimSpace(req.Section) != "" {
+			paths, err = s.resolveWorkspaceMutationPaths(ctx, repo, req.Section)
+			if err != nil {
+				return nil, classifyGitMutationRPCError(err)
+			}
+		}
+		if err := s.stageWorkspacePaths(ctx, repo, paths); err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
 		return &stageWorkspaceResp{RepoRootPath: repo.repoRootReal}, nil
@@ -327,7 +353,14 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		if err := s.unstageWorkspacePaths(ctx, repo, req.Paths); err != nil {
+		paths := req.Paths
+		if len(paths) == 0 && strings.TrimSpace(req.Section) != "" {
+			paths, err = s.resolveWorkspaceMutationPaths(ctx, repo, req.Section)
+			if err != nil {
+				return nil, classifyGitMutationRPCError(err)
+			}
+		}
+		if err := s.unstageWorkspacePaths(ctx, repo, paths); err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
 		return &unstageWorkspaceResp{RepoRootPath: repo.repoRootReal}, nil
@@ -1105,6 +1138,7 @@ type getCommitDetailReq struct {
 
 type stageWorkspaceReq struct {
 	RepoRootPath string   `json:"repo_root_path"`
+	Section      string   `json:"section,omitempty"`
 	Paths        []string `json:"paths,omitempty"`
 }
 
@@ -1114,6 +1148,7 @@ type stageWorkspaceResp struct {
 
 type unstageWorkspaceReq struct {
 	RepoRootPath string   `json:"repo_root_path"`
+	Section      string   `json:"section,omitempty"`
 	Paths        []string `json:"paths,omitempty"`
 }
 

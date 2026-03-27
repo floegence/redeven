@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetCommitDetail = vi.fn();
 const mockGetBranchCompare = vi.fn();
-const mockListWorkspaceChanges = vi.fn();
+const mockListWorkspacePage = vi.fn();
 const mockGetDiffContent = vi.fn();
 
 vi.mock('../protocol/redeven_v1', async () => {
@@ -20,7 +20,7 @@ vi.mock('../protocol/redeven_v1', async () => {
         getCommitDetail: mockGetCommitDetail,
         getBranchCompare: mockGetBranchCompare,
         getDiffContent: mockGetDiffContent,
-        listWorkspaceChanges: mockListWorkspaceChanges,
+        listWorkspacePage: mockListWorkspacePage,
       },
     }),
   };
@@ -38,7 +38,7 @@ async function flush() {
 beforeEach(() => {
   mockGetCommitDetail.mockReset();
   mockGetBranchCompare.mockReset();
-  mockListWorkspaceChanges.mockReset();
+  mockListWorkspacePage.mockReset();
   mockGetDiffContent.mockReset();
   mockGetCommitDetail.mockResolvedValue({
     repoRootPath: '/workspace/repo',
@@ -81,13 +81,15 @@ beforeEach(() => {
       patchText: '@@ -1 +1 @@\n-before\n+after',
     },
   });
-  mockListWorkspaceChanges.mockResolvedValue({
+  mockListWorkspacePage.mockResolvedValue({
     repoRootPath: '/workspace/repo-linked',
+    section: 'changes',
     summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
-    staged: [],
-    unstaged: [],
-    untracked: [],
-    conflicted: [],
+    totalCount: 0,
+    offset: 0,
+    nextOffset: 0,
+    hasMore: false,
+    items: [],
   });
 
   Object.defineProperty(window, 'matchMedia', {
@@ -125,13 +127,18 @@ describe('GitBranchesPanel interactions', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    mockListWorkspaceChanges.mockResolvedValueOnce({
+    mockListWorkspacePage.mockResolvedValueOnce({
       repoRootPath: '/workspace/repo-linked',
+      section: 'changes',
       summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
-      staged: [{ section: 'staged', changeType: 'modified', path: 'README.md', displayPath: 'README.md', additions: 1, deletions: 0, patchText: '@@ -1 +1 @@' }],
-      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@' }],
-      untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' }],
-      conflicted: [],
+      totalCount: 2,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: false,
+      items: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@' },
+        { section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' },
+      ],
     });
 
     const dispose = render(() => (
@@ -184,7 +191,12 @@ describe('GitBranchesPanel interactions', () => {
     try {
       await flush();
 
-      expect(mockListWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo-linked' });
+      expect(mockListWorkspacePage).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        offset: 0,
+        limit: 200,
+      });
       expect(host.textContent).toContain('Status');
       expect(host.textContent).toContain('History');
       expect(host.textContent).toContain('Compare');
@@ -270,7 +282,7 @@ describe('GitBranchesPanel interactions', () => {
     try {
       expect(host.textContent).toContain('Remote branch is not checked out');
       expect(host.textContent).toContain('Status is only available for checked-out local worktrees.');
-      expect(mockListWorkspaceChanges).not.toHaveBeenCalled();
+      expect(mockListWorkspacePage).not.toHaveBeenCalled();
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
@@ -293,13 +305,18 @@ describe('GitBranchesPanel interactions', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    mockListWorkspaceChanges.mockResolvedValueOnce({
+    mockListWorkspacePage.mockResolvedValueOnce({
       repoRootPath: '/workspace/repo-linked',
+      section: 'changes',
       summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
-      staged: [],
-      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 3, deletions: 1, patchText: '@@ -1 +1 @@\n-before\n+after' }],
-      untracked: [{ section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt', patchText: '@@ -0,0 +1 @@\n+scratch' }],
-      conflicted: [],
+      totalCount: 2,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: false,
+      items: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 3, deletions: 1, patchText: '@@ -1 +1 @@\n-before\n+after' },
+        { section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt', patchText: '@@ -0,0 +1 @@\n+scratch' },
+      ],
     });
 
     const dispose = render(() => (
@@ -334,7 +351,12 @@ describe('GitBranchesPanel interactions', () => {
     try {
       await flush();
 
-      expect(mockListWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo-linked' });
+      expect(mockListWorkspacePage).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        offset: 0,
+        limit: 200,
+      });
       expect(host.textContent).toContain('src/linked.ts');
       expect(host.textContent).toContain('scratch.txt');
       expect(host.textContent).toContain('Changes');
@@ -354,13 +376,15 @@ describe('GitBranchesPanel interactions', () => {
     document.body.appendChild(host);
     const onOpenStash = vi.fn();
 
-    mockListWorkspaceChanges.mockResolvedValueOnce({
+    mockListWorkspacePage.mockResolvedValueOnce({
       repoRootPath: '/workspace/repo-linked',
+      section: 'changes',
       summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-      staged: [],
-      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts' }],
-      untracked: [],
-      conflicted: [],
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts' }],
     });
 
     const branch = {
@@ -419,13 +443,18 @@ describe('GitBranchesPanel interactions', () => {
     const onOpenInTerminal = vi.fn();
     const onBrowseFiles = vi.fn();
 
-    mockListWorkspaceChanges.mockResolvedValueOnce({
+    mockListWorkspacePage.mockResolvedValueOnce({
       repoRootPath: '/workspace/repo-linked',
+      section: 'changes',
       summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
-      staged: [],
-      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 3, deletions: 1 }],
-      untracked: [{ section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt' }],
-      conflicted: [],
+      totalCount: 2,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: false,
+      items: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 3, deletions: 1 },
+        { section: 'untracked', changeType: 'added', path: 'scratch.txt', displayPath: 'scratch.txt' },
+      ],
     });
 
     const branch = {
@@ -549,7 +578,7 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('Branch is not checked out');
       expect(host.textContent).toContain('Status is only available for checked-out local worktrees.');
       expect(host.textContent).toContain('Use Compare to inspect file diffs, or open this branch in a worktree to review workspace changes.');
-      expect(mockListWorkspaceChanges).not.toHaveBeenCalled();
+      expect(mockListWorkspacePage).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -1211,13 +1240,15 @@ describe('GitBranchesPanel interactions', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    mockListWorkspaceChanges.mockResolvedValue({
+    mockListWorkspacePage.mockResolvedValue({
       repoRootPath: '/workspace/repo-linked',
+      section: 'changes',
       summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
-      staged: [],
-      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts' }],
-      untracked: [],
-      conflicted: [],
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts' }],
     });
 
     let setRefreshToken!: (value: number) => number;
@@ -1259,13 +1290,18 @@ describe('GitBranchesPanel interactions', () => {
 
     try {
       await flush();
-      expect(mockListWorkspaceChanges).toHaveBeenCalledTimes(1);
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(1);
 
       setRefreshToken(1);
       await flush();
 
-      expect(mockListWorkspaceChanges).toHaveBeenCalledTimes(2);
-      expect(mockListWorkspaceChanges).toHaveBeenLastCalledWith({ repoRootPath: '/workspace/repo-linked' });
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(mockListWorkspacePage).toHaveBeenLastCalledWith({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        offset: 0,
+        limit: 200,
+      });
     } finally {
       dispose();
     }

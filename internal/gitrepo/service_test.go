@@ -66,6 +66,16 @@ func mustGetDiffContent(
 	return resp
 }
 
+func mustContainPath(t *testing.T, paths []string, want string) {
+	t.Helper()
+	for _, path := range paths {
+		if path == want {
+			return
+		}
+	}
+	t.Fatalf("paths=%v, want %q", paths, want)
+}
+
 func TestResolveRepoForPath(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
@@ -752,6 +762,138 @@ func TestListWorkspaceChanges_ReportsOnlyRealConflictsInConflictedSection(t *tes
 	if len(resp.Unstaged) != 0 {
 		t.Fatalf("conflicted file must not also leak into unstaged: %+v", resp.Unstaged)
 	}
+}
+
+func TestListWorkspacePage_SlicesPendingChangesAcrossSections(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	writeFixtureFile(t, fixture.Root, "src/second.txt", []byte("tracked\n"))
+	runGitFixture(t, fixture.Root, "add", "src/second.txt")
+	runGitFixture(t, fixture.Root, "commit", "-m", "add second tracked file")
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	writeFixtureFile(t, fixture.Root, "src/second.txt", []byte("tracked\npending\n"))
+	writeFixtureFile(t, fixture.Root, "scratch.txt", []byte("scratch\n"))
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	resp, err := svc.listWorkspacePage(context.Background(), repo, "changes", 1, 2)
+	if err != nil {
+		t.Fatalf("listWorkspacePage(changes): %v", err)
+	}
+	if resp.Section != "changes" {
+		t.Fatalf("Section=%q, want changes", resp.Section)
+	}
+	if resp.TotalCount != 4 || resp.Offset != 1 || resp.NextOffset != 3 || !resp.HasMore {
+		t.Fatalf("unexpected page window: %+v", resp)
+	}
+	if len(resp.Items) != 2 {
+		t.Fatalf("len(items)=%d, want 2", len(resp.Items))
+	}
+	if resp.Items[0].Section != "unstaged" || resp.Items[1].Section != "untracked" {
+		t.Fatalf("expected changes page to cross the unstaged/untracked boundary: %+v", resp.Items)
+	}
+	if resp.Items[1].Path != workspace.UntrackedPath && resp.Items[1].Path != "scratch.txt" {
+		t.Fatalf("unexpected untracked item: %+v", resp.Items[1])
+	}
+}
+
+func TestListWorkspacePage_StagesAndConflictsRemainSectionScoped(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+	if err := svc.stageWorkspacePaths(context.Background(), repo, []string{workspace.UntrackedPath}); err != nil {
+		t.Fatalf("stageWorkspacePaths: %v", err)
+	}
+
+	stagedPage, err := svc.listWorkspacePage(context.Background(), repo, "staged", 0, 1)
+	if err != nil {
+		t.Fatalf("listWorkspacePage(staged): %v", err)
+	}
+	if stagedPage.Section != "staged" {
+		t.Fatalf("Section=%q, want staged", stagedPage.Section)
+	}
+	if stagedPage.TotalCount != 2 || stagedPage.Offset != 0 || stagedPage.NextOffset != 1 || !stagedPage.HasMore {
+		t.Fatalf("unexpected staged page: %+v", stagedPage)
+	}
+	if len(stagedPage.Items) != 1 || stagedPage.Items[0].Section != "staged" {
+		t.Fatalf("unexpected staged items: %+v", stagedPage.Items)
+	}
+
+	conflictFixture := createTestRepoFixture(t)
+	conflict := createWorkspaceConflictFixture(t, conflictFixture.Root)
+	conflictSvc := NewService(conflictFixture.Root)
+	conflictRepo, err := conflictSvc.resolveExplicitRepo(context.Background(), conflictFixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo(conflict): %v", err)
+	}
+	conflictedPage, err := conflictSvc.listWorkspacePage(context.Background(), conflictRepo, "conflicted", 0, 10)
+	if err != nil {
+		t.Fatalf("listWorkspacePage(conflicted): %v", err)
+	}
+	if conflictedPage.Section != "conflicted" || conflictedPage.TotalCount != 1 || conflictedPage.NextOffset != 1 || conflictedPage.HasMore {
+		t.Fatalf("unexpected conflicted page: %+v", conflictedPage)
+	}
+	if len(conflictedPage.Items) != 1 {
+		t.Fatalf("len(conflicted items)=%d, want 1", len(conflictedPage.Items))
+	}
+	if conflictedPage.Items[0].Section != "conflicted" || conflictedPage.Items[0].Path != conflict.ConflictPath {
+		t.Fatalf("unexpected conflicted item: %+v", conflictedPage.Items[0])
+	}
+	if conflictedPage.Items[0].ChangeType != "conflicted" {
+		t.Fatalf("ChangeType=%q, want conflicted", conflictedPage.Items[0].ChangeType)
+	}
+}
+
+func TestResolveWorkspaceMutationPaths_UsesPagedSections(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	changePaths, err := svc.resolveWorkspaceMutationPaths(context.Background(), repo, "changes")
+	if err != nil {
+		t.Fatalf("resolveWorkspaceMutationPaths(changes): %v", err)
+	}
+	mustContainPath(t, changePaths, workspace.TrackedPath)
+	mustContainPath(t, changePaths, workspace.UntrackedPath)
+
+	if err := svc.stageWorkspacePaths(context.Background(), repo, []string{workspace.UntrackedPath}); err != nil {
+		t.Fatalf("stageWorkspacePaths: %v", err)
+	}
+	stagedPaths, err := svc.resolveWorkspaceMutationPaths(context.Background(), repo, "staged")
+	if err != nil {
+		t.Fatalf("resolveWorkspaceMutationPaths(staged): %v", err)
+	}
+	mustContainPath(t, stagedPaths, workspace.TrackedPath)
+	mustContainPath(t, stagedPaths, workspace.UntrackedPath)
+
+	conflictFixture := createTestRepoFixture(t)
+	conflict := createWorkspaceConflictFixture(t, conflictFixture.Root)
+	conflictSvc := NewService(conflictFixture.Root)
+	conflictRepo, err := conflictSvc.resolveExplicitRepo(context.Background(), conflictFixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo(conflict): %v", err)
+	}
+	conflictPaths, err := conflictSvc.resolveWorkspaceMutationPaths(context.Background(), conflictRepo, "conflicted")
+	if err != nil {
+		t.Fatalf("resolveWorkspaceMutationPaths(conflicted): %v", err)
+	}
+	mustContainPath(t, conflictPaths, conflict.ConflictPath)
 }
 
 func TestStageAndUnstageWorkspacePaths(t *testing.T) {

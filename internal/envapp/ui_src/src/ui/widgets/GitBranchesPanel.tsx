@@ -3,9 +3,10 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { ChevronRight, Folder, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
-import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitPreviewDeleteBranchResponse, type GitPreviewMergeBranchResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
+import { useRedevenRpc, type GitBranchSummary, type GitCommitFileSummary, type GitCommitSummary, type GitGetBranchCompareResponse, type GitListBranchesResponse, type GitListWorkspaceChangesResponse, type GitListWorkspacePageResponse, type GitPreviewDeleteBranchResponse, type GitPreviewMergeBranchResponse, type GitRepoSummaryResponse, type GitWorkspaceChange, type GitWorkspaceSection } from '../protocol/redeven_v1';
 import {
   WORKSPACE_VIEW_SECTIONS,
+  applyWorkspaceViewPageSnapshot,
   allGitBranches,
   branchContextSummary,
   branchDisplayName,
@@ -13,17 +14,19 @@ import {
   branchStatusSummary,
   branchSubviewLabel,
   changeSecondaryPath,
+  createEmptyWorkspaceViewPageStateRecord,
   describeGitHead,
   detachedHeadCheckoutActionLabel,
   detachedHeadReattachSummary,
   detachedHeadViewingSummary,
   gitDiffEntryIdentity,
-  pickDefaultWorkspaceViewSection,
+  pickDefaultWorkspaceViewSectionFromSummary,
   reattachBranchFromRepoSummary,
   repoDisplayName,
   shortGitHash,
   workspaceEntryKey,
   workspaceSectionLabel,
+  type GitWorkspaceViewPageState,
   workspaceViewSectionCount,
   workspaceViewSectionItems,
   workspaceViewSectionLabel,
@@ -61,6 +64,8 @@ import {
 import { GitDeleteBranchConfirmDialog } from './GitDeleteBranchConfirmDialog';
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
+
+const BRANCH_STATUS_PAGE_SIZE = 200;
 
 export interface GitBranchesPanelProps {
   repoRootPath?: string;
@@ -264,8 +269,12 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
 
 interface BranchStatusTableProps {
   items: GitWorkspaceChange[];
+  totalCount: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
   selectedKey?: string;
   onOpenDiff?: (item: GitWorkspaceChange) => void;
+  onLoadMore?: () => void;
 }
 
 function BranchStatusTable(props: BranchStatusTableProps) {
@@ -327,6 +336,23 @@ function BranchStatusTable(props: BranchStatusTableProps) {
             );
           }}
         />
+        <Show when={props.hasMore || props.loadingMore}>
+          <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
+            <GitSubtleNote>
+              Showing {props.items.length} of {props.totalCount} file{props.totalCount === 1 ? '' : 's'}.
+            </GitSubtleNote>
+            <Button
+              size="sm"
+              variant="outline"
+              class="rounded-md"
+              onClick={() => props.onLoadMore?.()}
+              loading={props.loadingMore}
+              disabled={!props.hasMore || props.loadingMore}
+            >
+              Load more
+            </Button>
+          </div>
+        </Show>
       </Show>
     </div>
   );
@@ -841,6 +867,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchSubviewTabRefs = new Map<GitBranchSubview, HTMLButtonElement>();
 
   const [statusWorkspace, setStatusWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
+  const [statusPages, setStatusPages] = createSignal<Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>>(createEmptyWorkspaceViewPageStateRecord());
   const [statusLoading, setStatusLoading] = createSignal(false);
   const [statusError, setStatusError] = createSignal('');
   const [selectedStatusSection, setSelectedStatusSection] = createSignal<GitWorkspaceViewSection>('changes');
@@ -848,7 +875,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
   const [compareDialogOpen, setCompareDialogOpen] = createSignal(false);
 
-  let statusReqSeq = 0;
+  let statusReqSeqBySection: Record<GitWorkspaceViewSection, number> = { changes: 0, conflicted: 0, staged: 0 };
+  let lastStatusContextKey = '';
 
   const branchSubview = () => props.selectedBranchSubview ?? 'status';
   const activeRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
@@ -863,9 +891,53 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       preferredName: repoDisplayName(path),
     };
   };
+  const resetStatusWorkspace = () => {
+    statusReqSeqBySection = { changes: 0, conflicted: 0, staged: 0 };
+    setStatusWorkspace(null);
+    setStatusPages(createEmptyWorkspaceViewPageStateRecord());
+    setStatusLoading(false);
+    setStatusError('');
+  };
+  const updateStatusPageState = (
+    section: GitWorkspaceViewSection,
+    updater: (state: GitWorkspaceViewPageState) => GitWorkspaceViewPageState,
+  ) => {
+    setStatusPages((prev) => ({
+      ...prev,
+      [section]: updater(prev[section]),
+    }));
+  };
+  const statusPageState = (section: GitWorkspaceViewSection) => statusPages()[section];
+  const applyStatusPageSnapshot = (
+    page: GitListWorkspacePageResponse | null | undefined,
+    options: { append?: boolean } = {},
+  ) => {
+    if (!page) return;
+    const section = page.section ?? 'changes';
+    setStatusWorkspace((prev) => applyWorkspaceViewPageSnapshot(prev, page, options));
+    updateStatusPageState(section, (state) => ({
+      ...state,
+      items: options.append ? [...state.items, ...page.items] : [...page.items],
+      totalCount: Number(page.totalCount ?? 0),
+      nextOffset: Number(page.nextOffset ?? 0),
+      hasMore: Boolean(page.hasMore),
+      loading: false,
+      error: '',
+      initialized: true,
+    }));
+    setStatusError('');
+  };
+  const visibleStatusPageState = () => statusPageState(selectedStatusSection());
   const visibleStatusWorkspace = () => statusWorkspace();
-  const visibleStatusLoading = () => statusLoading();
-  const visibleStatusError = () => statusError();
+  const visibleStatusSummary = () => visibleStatusWorkspace()?.summary ?? null;
+  const visibleStatusLoading = () => Boolean(statusLoading() || (visibleStatusPageState().loading && !visibleStatusPageState().initialized));
+  const visibleStatusError = () => String(statusError() || (!visibleStatusPageState().initialized ? visibleStatusPageState().error : ''));
+  const visibleStatusCount = () => (
+    visibleStatusPageState().initialized
+      ? visibleStatusPageState().totalCount
+      : workspaceViewSectionCount(visibleStatusSummary(), selectedStatusSection())
+  );
+  const visibleStatusLoadingMore = () => Boolean(visibleStatusPageState().loading && visibleStatusPageState().initialized);
   const visibleStatusItems = () => workspaceViewSectionItems(visibleStatusWorkspace(), selectedStatusSection());
   const visibleStatusKey = () => workspaceEntryKey(diffDialogItem());
   const statusEmptyState = () => branchStatusEmptyState(props.selectedBranch, statusRepoRootPath());
@@ -953,46 +1025,116 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     queueMicrotask(() => branchSubviewTabRefs.get(nextView)?.focus());
   };
 
+  const loadStatusSection = async (
+    section: GitWorkspaceViewSection,
+    options: { append?: boolean; force?: boolean } = {},
+  ): Promise<GitListWorkspacePageResponse | undefined> => {
+    const repoRootPath = statusRepoRootPath();
+    if (!repoRootPath) return;
+
+    const currentState = statusPageState(section);
+    const append = Boolean(options.append);
+    const offset = append ? currentState.nextOffset : 0;
+
+    if (!options.force) {
+      if (append) {
+        if (!currentState.initialized || currentState.loading || !currentState.hasMore) {
+          return;
+        }
+      } else if (currentState.initialized && !currentState.loading) {
+        return;
+      }
+    }
+
+    const seq = (statusReqSeqBySection[section] ?? 0) + 1;
+    statusReqSeqBySection[section] = seq;
+
+    updateStatusPageState(section, (state) => ({
+      ...state,
+      loading: true,
+      error: '',
+    }));
+    if (selectedStatusSection() === section && !append) {
+      setStatusLoading(true);
+      setStatusError('');
+    }
+
+    try {
+      const resp = await rpc.git.listWorkspacePage({
+        repoRootPath,
+        section,
+        offset,
+        limit: BRANCH_STATUS_PAGE_SIZE,
+      });
+      if (seq !== statusReqSeqBySection[section]) return;
+      applyStatusPageSnapshot(resp, { append });
+      return resp;
+    } catch (err) {
+      if (seq !== statusReqSeqBySection[section]) return;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to load branch status');
+      updateStatusPageState(section, (state) => ({
+        ...state,
+        loading: false,
+        error: message,
+      }));
+      if (selectedStatusSection() === section && !append) {
+        if (!currentState.initialized) {
+          setStatusWorkspace(null);
+        }
+        setStatusError(message);
+      }
+    } finally {
+      if (seq === statusReqSeqBySection[section]) {
+        updateStatusPageState(section, (state) => ({
+          ...state,
+          loading: false,
+        }));
+      }
+      if (selectedStatusSection() === section && !append && seq === statusReqSeqBySection[section]) {
+        setStatusLoading(false);
+      }
+    }
+  };
+
+  const loadMoreStatusSection = async (section: GitWorkspaceViewSection) => {
+    const state = statusPageState(section);
+    if (!state.initialized || state.loading || !state.hasMore) return;
+    return loadStatusSection(section, { append: true, force: true });
+  };
+
   createEffect(() => {
     const branch = props.selectedBranch;
     const subview = branchSubview();
     const repoRootPath = statusRepoRootPath();
     const refreshToken = Number(props.statusRefreshToken ?? 0);
-    void refreshToken;
-    if (!branch) {
-      statusReqSeq += 1;
-      setStatusWorkspace(null);
-      setStatusLoading(false);
-      setStatusError('');
-      return;
-    }
-    if (subview !== 'status') return;
-    if (!repoRootPath) {
-      statusReqSeq += 1;
-      setStatusWorkspace(null);
-      setStatusLoading(false);
-      setStatusError('');
-      return;
-    }
-
-    const seq = ++statusReqSeq;
-    setStatusLoading(true);
-    setStatusError('');
-    void rpc.git.listWorkspaceChanges({ repoRootPath }).then((resp) => {
-      if (seq !== statusReqSeq) return;
-      setStatusWorkspace(resp);
-    }).catch((err) => {
-      if (seq !== statusReqSeq) return;
-      setStatusWorkspace(null);
-      setStatusError(err instanceof Error ? err.message : String(err ?? 'Failed to load branch status'));
-    }).finally(() => {
-      if (seq === statusReqSeq) setStatusLoading(false);
-    });
+    const contextKey = branch && subview === 'status' && repoRootPath
+      ? `${branchIdentity(branch)}|${repoRootPath}|${refreshToken}`
+      : '';
+    if (contextKey === lastStatusContextKey) return;
+    lastStatusContextKey = contextKey;
+    resetStatusWorkspace();
   });
 
   createEffect(() => {
-    const nextWorkspace = visibleStatusWorkspace();
-    setSelectedStatusSection(pickDefaultWorkspaceViewSection(nextWorkspace));
+    const branch = props.selectedBranch;
+    const subview = branchSubview();
+    const repoRootPath = statusRepoRootPath();
+    const section = selectedStatusSection();
+    if (!branch || subview !== 'status' || !repoRootPath) return;
+    const pageState = statusPageState(section);
+    if (!pageState.initialized && !pageState.loading && !statusLoading()) {
+      void loadStatusSection(section);
+    }
+  });
+
+  createEffect(() => {
+    const summary = visibleStatusSummary();
+    if (!summary) return;
+    if (workspaceViewSectionCount(summary, selectedStatusSection()) > 0) return;
+    const nextSection = pickDefaultWorkspaceViewSectionFromSummary(summary);
+    if (nextSection !== selectedStatusSection()) {
+      setSelectedStatusSection(nextSection);
+    }
   });
 
   createEffect(() => {
@@ -1157,10 +1299,16 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               <div class="flex min-h-0 flex-1 overflow-hidden">
                 <BranchStatusTable
                   items={visibleStatusItems()}
+                  totalCount={visibleStatusCount()}
+                  hasMore={visibleStatusPageState().hasMore}
+                  loadingMore={visibleStatusLoadingMore()}
                   selectedKey={visibleStatusKey()}
                   onOpenDiff={(item) => {
                     setDiffDialogItem(item);
                     setDiffDialogOpen(true);
+                  }}
+                  onLoadMore={() => {
+                    void loadMoreStatusSection(selectedStatusSection());
                   }}
                 />
               </div>
