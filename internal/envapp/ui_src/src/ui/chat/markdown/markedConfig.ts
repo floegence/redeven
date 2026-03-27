@@ -3,6 +3,12 @@ import type { RendererObject } from 'marked';
 import { parseMarkdownFileReference } from './markdownFileReference';
 import type { MarkdownRendererOptions } from './markdownRendererOptions';
 
+interface MarkdownRenderContext {
+  fileReferencePrefixByPath?: ReadonlyMap<string, string>;
+}
+
+let activeMarkdownRenderContext: MarkdownRenderContext | null = null;
+
 function escapeHtml(raw: string): string {
   return String(raw ?? '')
     .replace(/&/g, '&amp;')
@@ -30,11 +36,28 @@ function renderCodexFileReference(token: { href: string; title?: string | null; 
 
   const title = token.title ? String(token.title) : reference.title;
   const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+  const prefix = activeMarkdownRenderContext?.fileReferencePrefixByPath?.get(reference.path) ?? '';
+  const prefixHtml = prefix
+    ? `<span class="chat-md-file-ref-prefix">${escapeHtml(prefix)}</span>`
+    : '';
   const line = reference.lineLabel
     ? `<span class="chat-md-file-ref-line">${escapeHtml(reference.lineLabel)}</span>`
     : '';
 
-  return `<a href="${escapeHtml(reference.href)}" class="chat-md-link chat-md-file-ref" target="_blank" rel="noopener noreferrer"${titleAttr}><span class="chat-md-file-ref-name">${escapeHtml(reference.displayName)}</span>${line}</a>`;
+  return `<a href="${escapeHtml(reference.href)}" class="chat-md-link chat-md-file-ref" target="_blank" rel="noopener noreferrer" data-file-path="${escapeHtml(reference.path)}"${titleAttr}>${prefixHtml}<span class="chat-md-file-ref-name">${escapeHtml(reference.displayName)}</span>${line}</a>`;
+}
+
+export function withMarkdownRenderContext<T>(
+  context: MarkdownRenderContext | undefined,
+  render: () => T,
+): T {
+  const previous = activeMarkdownRenderContext;
+  activeMarkdownRenderContext = context ?? null;
+  try {
+    return render();
+  } finally {
+    activeMarkdownRenderContext = previous;
+  }
 }
 
 export function createMarkdownRenderer(options?: MarkdownRendererOptions): RendererObject<string, string> {

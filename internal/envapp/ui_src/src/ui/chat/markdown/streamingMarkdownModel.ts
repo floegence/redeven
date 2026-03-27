@@ -1,5 +1,7 @@
 import type { Links, Marked, Token, TokensList } from 'marked';
 
+import { buildMarkdownFileReferencePrefixMap, collectMarkdownFileReferencesFromTokens } from './markdownFileReference';
+import { withMarkdownRenderContext } from './markedConfig';
 import type { MarkdownCommittedSegment, MarkdownRenderSnapshot } from '../types';
 
 type MarkdownParser = Pick<Marked<string, string>, 'lexer' | 'parser'>;
@@ -78,80 +80,89 @@ export function buildMarkdownRenderSnapshot(
     };
   }
 
-  const { entries, links } = toTokenEntries(markdown.lexer(source));
-  let lastMeaningfulIndex = -1;
-  for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (entries[index]?.token.type !== 'space') {
-      lastMeaningfulIndex = index;
-      break;
-    }
-  }
-
-  if (lastMeaningfulIndex < 0) {
-    return {
-      sourceLength: source.length,
-      committedSourceLength: source.length,
-      committedSegments: [],
-      tail: {
-        kind: 'empty',
-        key: 'empty',
-      },
-    };
-  }
-
-  if (!streaming) {
-    return {
-      sourceLength: source.length,
-      committedSourceLength: source.length,
-      committedSegments: renderCommittedSegments(
-        markdown,
-        entries.slice(0, lastMeaningfulIndex + 1),
-        links,
-      ),
-      tail: {
-        kind: 'empty',
-        key: 'empty',
-      },
-    };
-  }
-
-  const hasTrailingSpace = lastMeaningfulIndex < entries.length - 1;
-  if (hasTrailingSpace) {
-    return {
-      sourceLength: source.length,
-      committedSourceLength: source.length,
-      committedSegments: renderCommittedSegments(
-        markdown,
-        entries.slice(0, lastMeaningfulIndex + 1),
-        links,
-      ),
-      tail: {
-        kind: 'empty',
-        key: 'empty',
-      },
-    };
-  }
-
-  const tailEntry = entries[lastMeaningfulIndex];
-  const tailHtml = renderTokenHtml(markdown, tailEntry.token, links);
-
-  return {
-    sourceLength: source.length,
-    committedSourceLength: tailEntry.start,
-    committedSegments: renderCommittedSegments(
-      markdown,
-      entries.slice(0, lastMeaningfulIndex),
-      links,
+  const tokens = markdown.lexer(source);
+  const { entries, links } = toTokenEntries(tokens);
+  const renderContext = {
+    fileReferencePrefixByPath: buildMarkdownFileReferencePrefixMap(
+      collectMarkdownFileReferencesFromTokens(tokens),
     ),
-    tail: tailHtml.trim()
-      ? {
-        kind: 'html',
-        key: `${tailEntry.start}:${tailEntry.end}:${tailEntry.token.type}`,
-        html: tailHtml,
-      }
-      : {
-        kind: 'empty',
-        key: `${tailEntry.start}:${tailEntry.end}:${tailEntry.token.type}`,
-      },
   };
+
+  return withMarkdownRenderContext(renderContext, () => {
+    let lastMeaningfulIndex = -1;
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      if (entries[index]?.token.type !== 'space') {
+        lastMeaningfulIndex = index;
+        break;
+      }
+    }
+
+    if (lastMeaningfulIndex < 0) {
+      return {
+        sourceLength: source.length,
+        committedSourceLength: source.length,
+        committedSegments: [],
+        tail: {
+          kind: 'empty',
+          key: 'empty',
+        },
+      };
+    }
+
+    if (!streaming) {
+      return {
+        sourceLength: source.length,
+        committedSourceLength: source.length,
+        committedSegments: renderCommittedSegments(
+          markdown,
+          entries.slice(0, lastMeaningfulIndex + 1),
+          links,
+        ),
+        tail: {
+          kind: 'empty',
+          key: 'empty',
+        },
+      };
+    }
+
+    const hasTrailingSpace = lastMeaningfulIndex < entries.length - 1;
+    if (hasTrailingSpace) {
+      return {
+        sourceLength: source.length,
+        committedSourceLength: source.length,
+        committedSegments: renderCommittedSegments(
+          markdown,
+          entries.slice(0, lastMeaningfulIndex + 1),
+          links,
+        ),
+        tail: {
+          kind: 'empty',
+          key: 'empty',
+        },
+      };
+    }
+
+    const tailEntry = entries[lastMeaningfulIndex];
+    const tailHtml = renderTokenHtml(markdown, tailEntry.token, links);
+
+    return {
+      sourceLength: source.length,
+      committedSourceLength: tailEntry.start,
+      committedSegments: renderCommittedSegments(
+        markdown,
+        entries.slice(0, lastMeaningfulIndex),
+        links,
+      ),
+      tail: tailHtml.trim()
+        ? {
+          kind: 'html',
+          key: `${tailEntry.start}:${tailEntry.end}:${tailEntry.token.type}`,
+          html: tailHtml,
+        }
+        : {
+          kind: 'empty',
+          key: `${tailEntry.start}:${tailEntry.end}:${tailEntry.token.type}`,
+        },
+    };
+  });
 }

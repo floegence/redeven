@@ -355,6 +355,30 @@ describe('MarkdownBlock', () => {
     });
   });
 
+  it('shows short path prefixes when codex file refs share the same basename', async () => {
+    const content = [
+      '[controlplaneApi.ts',
+      'L278](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)',
+      'and',
+      '[controlplaneApi.ts',
+      'L330](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts#L330).',
+    ].join(' ');
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />, host);
+
+    await waitFor(() => {
+      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(2);
+    });
+
+    const prefixes = Array.from(host.querySelectorAll('.chat-md-file-ref-prefix')).map((node) => node.textContent);
+    expect(prefixes).toEqual(['…/services/', '…/api/']);
+  });
+
   it('keeps default markdown link rendering outside codex', async () => {
     const content = '[controlplaneApi.ts\nL278](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)';
     const normalized = normalizeMarkdownForDisplay(content);
