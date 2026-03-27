@@ -70,13 +70,16 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - The top-level `Changes` view shows the workspace state for the active repository root.
 - `Branches -> Status` resolves its own workspace snapshot from an explicit checked-out repository root instead of reusing cached data from `Changes`.
 - `Changes` is the shared user-facing pending-work category in both places, so `unstaged` and `untracked` entries are grouped together there while row-level metadata still keeps the original Git section visible.
+- Workspace rows are now fetched through section-scoped pagination rather than one eager full-workspace snapshot:
+  `Changes` pages over `unstaged + untracked`, `Staged` pages over the index snapshot, and `Conflicted` pages over merge-conflict entries.
+- Repository summary remains the lightweight source of truth for workspace counts, while each visible section loads only its current page window and can append more rows on demand.
 - For the current branch, branch status uses the active repository root.
 - For a linked local branch, branch status uses the branch `worktreePath`.
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.
 - Git browse `Ask Flower` entry points use Git-authored snapshot context instead of pretending commit or workspace summaries are file-browser selections, so Flower receives a clean summary of the selected workspace section or commit metadata/file list.
 - Workspace, compare, and commit detail collection RPCs return metadata-only file summaries. Inline diff text is retrieved only when the user opens a specific file dialog, using `getDiffContent` for preview or full-context mode.
 - Git diff dialogs keep the embedded `Patch` preview as the default fast path, and now also expose an on-demand `Full Context` mode that re-fetches a single selected file diff with unchanged lines included for broader review context.
-- Large Git file tables render through a shared fixed-row virtual table so browsing repositories with large change sets does not require mounting every row at once.
+- Large Git file tables render through a shared fixed-row virtual table, and the browser no longer downloads metadata for every workspace row up front, so repositories with very large change sets stay responsive.
 - Git branch deletion keeps `safe delete` as the default path, but when an unmerged local branch cannot be safely deleted the review dialog can escalate into an exact branch-name-confirmed `force delete`; linked worktrees are force-removed together with their pending changes, while inaccessible linked worktrees remain blocked.
 
 This keeps worktree status consistent even when the user opens `Branches` first without visiting `Changes`.
@@ -103,7 +106,7 @@ Safety and refresh behavior:
 - Stash entries use the stash commit OID as their stable identity, so selection survives index shifts like `stash@{0}` changing after new saves or deletions.
 - `Apply` and `Delete` both require preview fingerprints before mutation; stale plans are rejected and must be reviewed again.
 - Stash apply preview simulates the operation in a temporary detached worktree before enabling confirmation, so clean-apply checks do not depend on string heuristics in the visible worktree.
-- After stash mutations, the stash window refreshes its own target worktree context, while the main Git browser refreshes repository summary, stash count, and linked branch status without overwriting the active browse state with the wrong worktree root.
+- After stash mutations, the stash window refreshes its own target worktree context, while the main Git browser refreshes repository summary plus the currently active paged workspace section instead of forcing a full workspace reload or switching to the wrong worktree root.
 
 ## What runs where
 

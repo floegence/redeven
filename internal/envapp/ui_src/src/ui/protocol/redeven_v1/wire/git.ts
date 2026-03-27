@@ -80,6 +80,24 @@ export type wire_git_list_workspace_changes_resp = {
   conflicted: wire_git_workspace_change[];
 };
 
+export type wire_git_list_workspace_page_req = {
+  repo_root_path: string;
+  section?: string;
+  offset?: number;
+  limit?: number;
+};
+
+export type wire_git_list_workspace_page_resp = {
+  repo_root_path: string;
+  section?: string;
+  summary: wire_git_workspace_summary;
+  total_count?: number;
+  offset?: number;
+  next_offset?: number;
+  has_more?: boolean;
+  items: wire_git_workspace_change[];
+};
+
 export type wire_git_list_stashes_req = {
   repo_root_path: string;
 };
@@ -127,6 +145,26 @@ export type wire_git_save_stash_resp = {
   head_ref?: string;
   head_commit?: string;
   created?: wire_git_stash_summary;
+};
+
+export type wire_git_stage_workspace_req = {
+  repo_root_path: string;
+  section?: string;
+  paths?: string[];
+};
+
+export type wire_git_stage_workspace_resp = {
+  repo_root_path: string;
+};
+
+export type wire_git_unstage_workspace_req = {
+  repo_root_path: string;
+  section?: string;
+  paths?: string[];
+};
+
+export type wire_git_unstage_workspace_resp = {
+  repo_root_path: string;
 };
 
 export type wire_git_preview_apply_stash_req = {
@@ -193,23 +231,6 @@ export type wire_git_linked_worktree_snapshot = {
   conflicted: wire_git_workspace_change[];
 };
 
-export type wire_git_stage_workspace_req = {
-  repo_root_path: string;
-  paths?: string[];
-};
-
-export type wire_git_stage_workspace_resp = {
-  repo_root_path: string;
-};
-
-export type wire_git_unstage_workspace_req = {
-  repo_root_path: string;
-  paths?: string[];
-};
-
-export type wire_git_unstage_workspace_resp = {
-  repo_root_path: string;
-};
 
 export type wire_git_commit_workspace_req = {
   repo_root_path: string;

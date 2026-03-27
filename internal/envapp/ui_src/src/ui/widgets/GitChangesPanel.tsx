@@ -4,13 +4,16 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
+  createEmptyWorkspaceViewPageState,
   changeSecondaryPath,
   pickDefaultWorkspaceViewSection,
   repoDisplayName,
   type GitSeededWorkspaceChange,
   type GitSeededWorkspaceChangesResponse,
+  type GitWorkspaceViewPageState,
   workspaceEntryKey,
   workspaceViewBulkActionLabel,
+  workspaceViewSectionCount,
   workspaceViewSectionActionKey,
   workspaceViewSectionItems,
   workspaceViewSectionLabel,
@@ -47,6 +50,7 @@ import { GitVirtualTable } from './GitVirtualTable';
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
   workspace?: GitSeededWorkspaceChangesResponse | null;
+  workspacePages?: Partial<Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>>;
   selectedSection?: GitWorkspaceViewSection;
   onSelectSection?: (section: GitWorkspaceViewSection) => void;
   selectedItem?: GitSeededWorkspaceChange | null;
@@ -62,6 +66,8 @@ export interface GitChangesPanelProps {
   onStageSelected?: (item: GitSeededWorkspaceChange) => void;
   onUnstageSelected?: (item: GitSeededWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
+  onOpenCommitDialog?: () => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' }>) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
@@ -96,10 +102,14 @@ function emptySectionMessage(section: GitWorkspaceViewSection): string {
 interface WorkspaceTableProps {
   section: GitWorkspaceViewSection;
   items: GitSeededWorkspaceChange[];
+  totalCount: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
   selectedKey?: string;
   onSelectItem?: (item: GitSeededWorkspaceChange) => void;
   onOpenDiff?: (item: GitSeededWorkspaceChange) => void;
   onAction?: (item: GitSeededWorkspaceChange) => void;
+  onLoadMore?: () => void;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | '';
 }
@@ -179,10 +189,29 @@ function WorkspaceTable(props: WorkspaceTableProps) {
             );
           }}
         />
+        <Show when={props.hasMore || props.loadingMore}>
+          <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
+            <GitSubtleNote>
+              Showing {props.items.length} of {props.totalCount} file{props.totalCount === 1 ? '' : 's'}.
+            </GitSubtleNote>
+            <Button
+              size="sm"
+              variant="outline"
+              class="rounded-md"
+              onClick={() => props.onLoadMore?.()}
+              loading={props.loadingMore}
+              disabled={!props.hasMore || props.loadingMore}
+            >
+              Load more
+            </Button>
+          </div>
+        </Show>
       </Show>
     </div>
   );
 }
+
+const EMPTY_WORKSPACE_PAGE_STATE = createEmptyWorkspaceViewPageState();
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
@@ -190,9 +219,26 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededWorkspaceChange | null>(null);
 
   const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceViewSection(props.workspace);
+  const summary = () => props.workspace?.summary ?? props.repoSummary?.workspaceSummary ?? null;
+  const pageStateFor = (section: GitWorkspaceViewSection) => props.workspacePages?.[section] ?? EMPTY_WORKSPACE_PAGE_STATE;
+  const selectedPageState = () => pageStateFor(selectedSection());
+  const stagedPageState = () => pageStateFor('staged');
   const visibleItems = () => sectionItems(props.workspace, selectedSection());
   const stagedItems = () => sectionItems(props.workspace, 'staged');
-  const stagedCount = () => stagedItems().length;
+  const visibleCount = () => (
+    selectedPageState().initialized
+      ? selectedPageState().totalCount
+      : workspaceViewSectionCount(summary(), selectedSection())
+  );
+  const stagedCount = () => (
+    stagedPageState().initialized
+      ? stagedPageState().totalCount
+      : workspaceViewSectionCount(summary(), 'staged')
+  );
+  const visibleLoading = () => Boolean(props.loading || (selectedPageState().loading && !selectedPageState().initialized));
+  const visibleError = () => String(props.error ?? '').trim() || (!selectedPageState().initialized ? selectedPageState().error : '');
+  const visibleLoadingMore = () => Boolean(selectedPageState().loading && selectedPageState().initialized);
+  const stagedLoadingItems = () => Boolean(stagedPageState().loading && !props.commitBusy);
   const selectedTone = () => workspaceSectionTone(selectedSection());
   const visibleSectionLabel = () => workspaceViewSectionLabel(selectedSection());
   const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
@@ -239,15 +285,15 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
-        <Show when={!props.loading} fallback={<GitStatePane loading message="Loading workspace changes..." />}>
-          <Show when={!props.error} fallback={<GitStatePane tone="error" message={props.error} />}>
+        <Show when={!visibleLoading()} fallback={<GitStatePane loading message="Loading workspace changes..." />}>
+          <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
             <div class="flex min-h-0 flex-1 flex-col gap-3">
               <div class="shrink-0 rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <GitLabelBlock class="min-w-0 flex-1" label="Workspace" tone={selectedTone()}>
                     <div class="flex flex-wrap items-center gap-2">
                       <GitPrimaryTitle>{visibleSectionLabel()}</GitPrimaryTitle>
-                      <GitMetaPill tone={selectedTone()}>{visibleItems().length} file{visibleItems().length === 1 ? '' : 's'}</GitMetaPill>
+                      <GitMetaPill tone={selectedTone()}>{visibleCount()} file{visibleCount() === 1 ? '' : 's'}</GitMetaPill>
                       <Show when={stagedCount() > 0}>
                         <GitMetaPill tone="success">{stagedCount()} staged</GitMetaPill>
                       </Show>
@@ -257,6 +303,11 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         ? 'Review the staged snapshot, then commit it from the dialog.'
                         : 'Stage the files you want from this table, then commit them from the staged dialog.'}
                     </div>
+                    <Show when={visibleItems().length > 0 && visibleItems().length < visibleCount()}>
+                      <div class="text-[11px] leading-relaxed text-muted-foreground">
+                        Showing {visibleItems().length} loaded file{visibleItems().length === 1 ? '' : 's'} from this section.
+                      </div>
+                    </Show>
                   </GitLabelBlock>
                   <div class="flex shrink-0 flex-wrap items-center justify-end gap-2.5 self-start">
                     <Show when={props.onAskFlower || props.onOpenInTerminal || props.onBrowseFiles}>
@@ -336,7 +387,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         variant="outline"
                         class="rounded-md"
                         onClick={() => props.onBulkAction?.(selectedSection())}
-                        disabled={visibleItems().length === 0 || bulkActionBusy()}
+                        disabled={visibleCount() === 0 || bulkActionBusy()}
                         loading={bulkActionBusy()}
                       >
                         {bulkActionLabel()}
@@ -345,7 +396,10 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         size="sm"
                         variant="default"
                         class="rounded-md"
-                        onClick={() => setCommitDialogOpen(true)}
+                        onClick={() => {
+                          props.onOpenCommitDialog?.();
+                          setCommitDialogOpen(true);
+                        }}
                         disabled={stagedCount() === 0}
                       >
                         Commit...
@@ -359,6 +413,9 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                 <WorkspaceTable
                   section={selectedSection()}
                   items={visibleItems()}
+                  totalCount={visibleCount()}
+                  hasMore={selectedPageState().hasMore}
+                  loadingMore={visibleLoadingMore()}
                   selectedKey={selectedKey()}
                   onSelectItem={props.onSelectItem}
                   onOpenDiff={(item) => {
@@ -370,6 +427,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     if (item.section === 'staged') props.onUnstageSelected?.(item);
                     else props.onStageSelected?.(item);
                   }}
+                  onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
                   busyWorkspaceKey={props.busyWorkspaceKey}
                   busyWorkspaceAction={props.busyWorkspaceAction}
                 />
@@ -382,10 +440,14 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       <GitCommitDialog
         open={commitDialogOpen()}
         stagedItems={stagedItems()}
+        totalCount={stagedCount()}
+        hasMore={stagedPageState().hasMore}
+        loadingItems={stagedLoadingItems()}
         message={props.commitMessage ?? ''}
         loading={props.commitBusy}
         onMessageChange={(value) => props.onCommitMessageChange?.(value)}
         onConfirm={() => props.onCommit?.(String(props.commitMessage ?? ''))}
+        onLoadMore={() => props.onLoadMoreWorkspaceSection?.('staged')}
         onClose={() => setCommitDialogOpen(false)}
         canCommit={canCommit()}
       />

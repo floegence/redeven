@@ -21,6 +21,11 @@ type workspaceStatusSnapshot struct {
 	Conflicted  []gitWorkspaceChange
 }
 
+const (
+	defaultWorkspacePageSize = 200
+	maxWorkspacePageSize     = 500
+)
+
 func (s workspaceStatusSnapshot) Summary() gitWorkspaceSummary {
 	return gitWorkspaceSummary{
 		StagedCount:     len(s.Staged),
@@ -93,6 +98,162 @@ func (s *Service) listWorkspaceChanges(ctx context.Context, repo repoContext) (*
 	}, nil
 }
 
+func normalizeWorkspacePageSection(section string) (string, error) {
+	switch strings.TrimSpace(section) {
+	case "", "changes":
+		return "changes", nil
+	case "staged":
+		return "staged", nil
+	case "conflicted":
+		return "conflicted", nil
+	default:
+		return "", errors.New("invalid workspace page section")
+	}
+}
+
+func normalizeWorkspacePageLimit(limit int) int {
+	switch {
+	case limit <= 0:
+		return defaultWorkspacePageSize
+	case limit > maxWorkspacePageSize:
+		return maxWorkspacePageSize
+	default:
+		return limit
+	}
+}
+
+func normalizeWorkspacePageOffset(offset int) int {
+	if offset < 0 {
+		return 0
+	}
+	return offset
+}
+
+func workspacePageBounds(totalCount int, offset int, limit int) (int, int, int, bool) {
+	start := normalizeWorkspacePageOffset(offset)
+	if start > totalCount {
+		start = totalCount
+	}
+	end := start + normalizeWorkspacePageLimit(limit)
+	if end > totalCount {
+		end = totalCount
+	}
+	nextOffset := end
+	hasMore := nextOffset < totalCount
+	return start, end, nextOffset, hasMore
+}
+
+func sliceWorkspaceItems(items []gitWorkspaceChange, offset int, limit int) ([]gitWorkspaceChange, int, bool) {
+	start, end, nextOffset, hasMore := workspacePageBounds(len(items), offset, limit)
+	if start >= end {
+		return nil, nextOffset, hasMore
+	}
+	return items[start:end], nextOffset, hasMore
+}
+
+func slicePendingWorkspaceItems(unstaged []gitWorkspaceChange, untracked []gitWorkspaceChange, offset int, limit int) ([]gitWorkspaceChange, []gitWorkspaceChange, int, int, bool) {
+	totalCount := len(unstaged) + len(untracked)
+	start, end, nextOffset, hasMore := workspacePageBounds(totalCount, offset, limit)
+	if start >= end {
+		return nil, nil, totalCount, nextOffset, hasMore
+	}
+
+	unstagedStart := clampWorkspaceIndex(start, len(unstaged))
+	unstagedEnd := clampWorkspaceIndex(end, len(unstaged))
+	var unstagedPage []gitWorkspaceChange
+	if unstagedStart < unstagedEnd {
+		unstagedPage = unstaged[unstagedStart:unstagedEnd]
+	}
+
+	untrackedStart := clampWorkspaceIndex(start-len(unstaged), len(untracked))
+	untrackedEnd := clampWorkspaceIndex(end-len(unstaged), len(untracked))
+	var untrackedPage []gitWorkspaceChange
+	if untrackedStart < untrackedEnd {
+		untrackedPage = untracked[untrackedStart:untrackedEnd]
+	}
+
+	return unstagedPage, untrackedPage, totalCount, nextOffset, hasMore
+}
+
+func clampWorkspaceIndex(value int, max int) int {
+	switch {
+	case value < 0:
+		return 0
+	case value > max:
+		return max
+	default:
+		return value
+	}
+}
+
+func (s *Service) listWorkspacePage(ctx context.Context, repo repoContext, section string, offset int, limit int) (*listWorkspacePageResp, error) {
+	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
+	if err != nil {
+		return nil, err
+	}
+
+	pageSection, err := normalizeWorkspacePageSection(section)
+	if err != nil {
+		return nil, err
+	}
+	pageOffset := normalizeWorkspacePageOffset(offset)
+	pageLimit := normalizeWorkspacePageLimit(limit)
+	summary := status.Summary()
+
+	var (
+		totalCount int
+		nextOffset int
+		hasMore    bool
+		items      []gitWorkspaceChange
+	)
+
+	switch pageSection {
+	case "staged":
+		pageItems, pageNextOffset, pageHasMore := sliceWorkspaceItems(status.Staged, pageOffset, pageLimit)
+		items, err = s.readWorkspaceSectionChangesPage(ctx, repo.repoRootReal, "staged", pageItems)
+		if err != nil {
+			return nil, err
+		}
+		totalCount = len(status.Staged)
+		nextOffset = pageNextOffset
+		hasMore = pageHasMore
+	case "conflicted":
+		pageItems, pageNextOffset, pageHasMore := sliceWorkspaceItems(status.Conflicted, pageOffset, pageLimit)
+		items, err = s.readWorkspaceSectionChangesPage(ctx, repo.repoRootReal, "conflicted", pageItems)
+		if err != nil {
+			return nil, err
+		}
+		totalCount = len(status.Conflicted)
+		nextOffset = pageNextOffset
+		hasMore = pageHasMore
+	default:
+		unstagedPage, untrackedPage, pageTotalCount, pageNextOffset, pageHasMore := slicePendingWorkspaceItems(status.Unstaged, status.Untracked, pageOffset, pageLimit)
+		unstagedItems, err := s.readWorkspaceSectionChangesPage(ctx, repo.repoRootReal, "unstaged", unstagedPage)
+		if err != nil {
+			return nil, err
+		}
+		untrackedItems, err := s.readUntrackedWorkspaceChanges(ctx, repo.repoRootReal, untrackedPage)
+		if err != nil {
+			return nil, err
+		}
+		items = append(unstagedItems, untrackedItems...)
+		totalCount = pageTotalCount
+		nextOffset = pageNextOffset
+		hasMore = pageHasMore
+	}
+
+	return &listWorkspacePageResp{
+		RepoRootPath: repo.repoRootReal,
+		Section:      pageSection,
+		Summary:      summary,
+		TotalCount:   totalCount,
+		Offset:       pageOffset,
+		NextOffset:   nextOffset,
+		HasMore:      hasMore,
+		Items:        items,
+	}, nil
+}
+
 func workspaceMetadataArgs(section string) ([]string, error) {
 	base := []string{"diff", "--numstat", "-z", "--find-renames", "--find-copies", "--no-ext-diff"}
 	switch section {
@@ -107,13 +268,47 @@ func workspaceMetadataArgs(section string) ([]string, error) {
 	return base, nil
 }
 
+func workspaceSectionPathspecs(statusItems []gitWorkspaceChange) []string {
+	if len(statusItems) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(statusItems)*3)
+	pathspecs := make([]string, 0, len(statusItems))
+	for _, item := range statusItems {
+		for _, pathValue := range []string{item.Path, item.NewPath, item.OldPath} {
+			pathValue = strings.TrimSpace(pathValue)
+			if pathValue == "" {
+				continue
+			}
+			if _, ok := seen[pathValue]; ok {
+				continue
+			}
+			seen[pathValue] = struct{}{}
+			pathspecs = append(pathspecs, pathValue)
+		}
+	}
+	return pathspecs
+}
+
 func (s *Service) readWorkspaceSectionChanges(ctx context.Context, repoRoot string, section string, statusItems []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
+	return s.readWorkspaceSectionChangesWithPathspecs(ctx, repoRoot, section, statusItems, nil)
+}
+
+func (s *Service) readWorkspaceSectionChangesPage(ctx context.Context, repoRoot string, section string, statusItems []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
+	return s.readWorkspaceSectionChangesWithPathspecs(ctx, repoRoot, section, statusItems, workspaceSectionPathspecs(statusItems))
+}
+
+func (s *Service) readWorkspaceSectionChangesWithPathspecs(ctx context.Context, repoRoot string, section string, statusItems []gitWorkspaceChange, pathspecs []string) ([]gitWorkspaceChange, error) {
 	if len(statusItems) == 0 {
 		return nil, nil
 	}
 	args, err := workspaceMetadataArgs(section)
 	if err != nil {
 		return nil, err
+	}
+	if len(pathspecs) > 0 {
+		args = append(args, "--")
+		args = append(args, pathspecs...)
 	}
 	entries, err := s.readGitDiffNumstatMetadata(ctx, repoRoot, args...)
 	if err != nil {

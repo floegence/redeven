@@ -4,10 +4,12 @@ import type {
   GitDiffFileContent,
   GitGetBranchCompareResponse,
   GitListBranchesResponse,
+  GitListWorkspacePageResponse,
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
   GitStashDetail,
   GitWorkspaceChange,
+  GitWorkspacePageSection,
   GitWorkspaceSection,
   GitWorkspaceSummary,
 } from '../protocol/redeven_v1';
@@ -16,7 +18,7 @@ type GitDiffEntryLike = GitWorkspaceChange | GitCommitFileSummary | GitDiffFileC
 
 export type GitWorkbenchSubview = 'overview' | 'changes' | 'branches' | 'history';
 export type GitBranchSubview = 'status' | 'history';
-export type GitWorkspaceViewSection = GitWorkspaceSection | 'changes';
+export type GitWorkspaceViewSection = GitWorkspacePageSection;
 export type GitDetachedSwitchSource = 'graph' | 'branch_history';
 export type GitStashWindowTab = 'save' | 'stashes';
 export type GitStashWindowSource = 'header' | 'changes' | 'branch_status' | 'merge_blocker';
@@ -44,6 +46,15 @@ export type GitSeededWorkspaceChangesResponse = Omit<GitListWorkspaceChangesResp
   unstaged: GitSeededWorkspaceChange[];
   untracked: GitSeededWorkspaceChange[];
   conflicted: GitSeededWorkspaceChange[];
+};
+export type GitWorkspaceViewPageState = {
+  items: GitWorkspaceChange[];
+  totalCount: number;
+  nextOffset: number;
+  hasMore: boolean;
+  loading: boolean;
+  error: string;
+  initialized: boolean;
 };
 export type GitSeededStashDetail = Omit<GitStashDetail, 'files'> & {
   files: GitSeededCommitFileSummary[];
@@ -84,6 +95,26 @@ export type GitWorkbenchSubviewItem = {
 export const WORKSPACE_SECTIONS: GitWorkspaceSection[] = ['staged', 'unstaged', 'untracked', 'conflicted'];
 export const WORKSPACE_REVIEW_SECTIONS: GitWorkspaceSection[] = ['unstaged', 'untracked', 'conflicted', 'staged'];
 export const WORKSPACE_VIEW_SECTIONS: GitWorkspaceViewSection[] = ['changes', 'conflicted', 'staged'];
+
+export function createEmptyWorkspaceViewPageState(): GitWorkspaceViewPageState {
+  return {
+    items: [],
+    totalCount: 0,
+    nextOffset: 0,
+    hasMore: false,
+    loading: false,
+    error: '',
+    initialized: false,
+  };
+}
+
+export function createEmptyWorkspaceViewPageStateRecord(): Record<GitWorkspaceViewSection, GitWorkspaceViewPageState> {
+  return {
+    changes: createEmptyWorkspaceViewPageState(),
+    conflicted: createEmptyWorkspaceViewPageState(),
+    staged: createEmptyWorkspaceViewPageState(),
+  };
+}
 
 export function summarizeWorkspaceCount(summary: GitWorkspaceSummary | null | undefined): number {
   return Number(summary?.stagedCount ?? 0)
@@ -284,6 +315,74 @@ export function workspaceViewSectionItems(
   return workspaceSectionItems(workspace, section);
 }
 
+export function applyWorkspaceViewPageSnapshot(
+  workspace: GitListWorkspaceChangesResponse | null | undefined,
+  page: GitListWorkspacePageResponse | null | undefined,
+  options: { append?: boolean } = {},
+): GitListWorkspaceChangesResponse | null {
+  if (!page) return workspace ?? null;
+
+  const base: GitListWorkspaceChangesResponse = workspace && workspace.repoRootPath === page.repoRootPath
+    ? workspace
+    : {
+      repoRootPath: page.repoRootPath,
+      summary: page.summary,
+      staged: [],
+      unstaged: [],
+      untracked: [],
+      conflicted: [],
+    };
+
+  const append = Boolean(options.append);
+  const next = {
+    staged: [...base.staged],
+    unstaged: [...base.unstaged],
+    untracked: [...base.untracked],
+    conflicted: [...base.conflicted],
+  };
+
+  switch (page.section) {
+    case 'staged': {
+      next.staged = append ? [...next.staged, ...page.items] : [...page.items];
+      break;
+    }
+    case 'conflicted': {
+      next.conflicted = append ? [...next.conflicted, ...page.items] : [...page.items];
+      break;
+    }
+    case 'changes':
+    default: {
+      const unstagedItems = page.items.filter((item) => item.section === 'unstaged');
+      const untrackedItems = page.items.filter((item) => item.section === 'untracked');
+      next.unstaged = append ? [...next.unstaged, ...unstagedItems] : unstagedItems;
+      next.untracked = append ? [...next.untracked, ...untrackedItems] : untrackedItems;
+      break;
+    }
+  }
+
+  return {
+    ...base,
+    ...next,
+    repoRootPath: page.repoRootPath,
+    summary: page.summary,
+  };
+}
+
+export function clearWorkspaceViewSections(
+  workspace: GitListWorkspaceChangesResponse | null | undefined,
+  sections: GitWorkspaceViewSection[],
+): GitListWorkspaceChangesResponse | null {
+  if (!workspace) return null;
+  const wanted = new Set(sections);
+  return {
+    ...workspace,
+    staged: wanted.has('staged') ? [] : workspace.staged,
+    unstaged: wanted.has('changes') ? [] : workspace.unstaged,
+    untracked: wanted.has('changes') ? [] : workspace.untracked,
+    conflicted: wanted.has('conflicted') ? [] : workspace.conflicted,
+  };
+}
+
 export function workspaceViewSectionForItem(
   item: GitWorkspaceChange | null | undefined,
 ): GitWorkspaceViewSection {
@@ -331,6 +430,15 @@ export function pickDefaultWorkspaceViewSection(
 ): GitWorkspaceViewSection {
   for (const section of WORKSPACE_VIEW_SECTIONS) {
     if (workspaceViewSectionItems(workspace, section).length > 0) return section;
+  }
+  return 'changes';
+}
+
+export function pickDefaultWorkspaceViewSectionFromSummary(
+  summary: GitWorkspaceSummary | null | undefined,
+): GitWorkspaceViewSection {
+  for (const section of WORKSPACE_VIEW_SECTIONS) {
+    if (workspaceViewSectionCount(summary, section) > 0) return section;
   }
   return 'changes';
 }

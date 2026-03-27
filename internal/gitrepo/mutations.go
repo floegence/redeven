@@ -49,6 +49,25 @@ func normalizeGitPathspecs(paths []string) ([]string, error) {
 	return out, nil
 }
 
+func (s *Service) resolveWorkspaceMutationPaths(ctx context.Context, repo repoContext, section string) ([]string, error) {
+	pageSection, err := normalizeWorkspacePageSection(section)
+	if err != nil {
+		return nil, err
+	}
+	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
+	if err != nil {
+		return nil, err
+	}
+	switch pageSection {
+	case "staged":
+		return normalizeGitPathspecs(workspaceSectionPathspecs(status.Staged))
+	case "conflicted":
+		return normalizeGitPathspecs(workspaceSectionPathspecs(status.Conflicted))
+	default:
+		return normalizeGitPathspecs(workspaceSectionPathspecs(append(append([]gitWorkspaceChange{}, status.Unstaged...), status.Untracked...)))
+	}
+}
+
 func (s *Service) stageWorkspacePaths(ctx context.Context, repo repoContext, paths []string) error {
 	pathspecs, err := normalizeGitPathspecs(paths)
 	if err != nil {

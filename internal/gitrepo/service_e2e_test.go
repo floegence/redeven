@@ -281,6 +281,28 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	if len(workspaceResp.Untracked) != 1 || workspaceResp.Untracked[0].Path != workspace.UntrackedPath {
 		t.Fatalf("unexpected untracked items: %+v", workspaceResp.Untracked)
 	}
+	workspacePagePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_WORKSPACE_PAGE, mustMarshalJSON(t, listWorkspacePageReq{
+		RepoRootPath: fixture.Root,
+		Section:      "changes",
+		Offset:       0,
+		Limit:        1,
+	}))
+	if err != nil {
+		t.Fatalf("list workspace page call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list workspace page rpc error: %+v", rpcErr)
+	}
+	var workspacePageResp listWorkspacePageResp
+	if err := json.Unmarshal(workspacePagePayload, &workspacePageResp); err != nil {
+		t.Fatalf("unmarshal list workspace page: %v", err)
+	}
+	if workspacePageResp.Section != "changes" || workspacePageResp.TotalCount != 2 || workspacePageResp.NextOffset != 1 || !workspacePageResp.HasMore {
+		t.Fatalf("unexpected workspace page response: %+v", workspacePageResp)
+	}
+	if len(workspacePageResp.Items) != 1 || workspacePageResp.Items[0].Section != "unstaged" {
+		t.Fatalf("unexpected workspace page items: %+v", workspacePageResp.Items)
+	}
 	stagedDiffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
 		RepoRootPath:     fixture.Root,
 		SourceKind:       "workspace",

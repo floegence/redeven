@@ -373,7 +373,7 @@ describe('browser workspace layout wiring', () => {
     expect(dialogSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(dialogSrc).toContain('Full Context');
     expect(dialogSrc).toContain('Loading full-context diff...');
-    expect(dialogSrc).toContain('Compact patch preview from the current Git payload.');
+    expect(dialogSrc).toContain('Loads a single-file patch on demand.');
     expect(dialogSrc).toContain('Includes unchanged lines for broader review context.');
     expect(dialogSrc).not.toContain('border-0');
     expect(dialogSrc).not.toContain('rounded-[20px]');
@@ -422,7 +422,7 @@ describe('browser workspace layout wiring', () => {
     const changesSrc = read('./GitChangesPanel.tsx');
 
     expect(changesSrc).toContain('flex min-h-0 flex-1 flex-col gap-3');
-    expect(changesSrc).toContain('min-h-0 flex-1 overflow-auto');
+    expect(changesSrc).toContain('min-h-0 flex-1');
     expect(changesSrc).not.toContain('max-h-[32rem]');
   });
 
