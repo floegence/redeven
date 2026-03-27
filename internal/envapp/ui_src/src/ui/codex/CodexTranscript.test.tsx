@@ -87,6 +87,65 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
+  it('shows the Codex avatar only on the first agent message until a user message resets the run', () => {
+    const items: CodexTranscriptItem[] = [
+      {
+        id: 'item_reasoning_intro',
+        type: 'reasoning',
+        text: 'Planning the next steps.',
+        order: 0,
+      },
+      {
+        id: 'item_agent_first',
+        type: 'agentMessage',
+        text: 'First assistant message.',
+        order: 1,
+      },
+      {
+        id: 'item_web_search',
+        type: 'webSearch',
+        query: 'codex ui avatar grouping',
+        action: {
+          type: 'search',
+          queries: ['codex ui avatar grouping'],
+        },
+        order: 2,
+      },
+      {
+        id: 'item_agent_second',
+        type: 'agentMessage',
+        text: 'Second assistant message.',
+        order: 3,
+      },
+      {
+        id: 'item_user_reset',
+        type: 'userMessage',
+        text: 'Please continue.',
+        order: 4,
+      },
+      {
+        id: 'item_agent_after_user',
+        type: 'agentMessage',
+        text: 'Assistant message after user reset.',
+        order: 5,
+      },
+    ];
+
+    const { host, dispose } = renderTranscript(items);
+    const rows = Array.from(host.querySelectorAll('.codex-transcript-row'));
+
+    expect(rows).toHaveLength(6);
+    expect(rows[0]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(rows[1]?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(rows[2]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(rows[3]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(rows[4]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(rows[5]?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(2);
+
+    dispose();
+  });
+
   it('renders reasoning as a collapsible markdown block and auto-collapses it after completion', async () => {
     const [items, setItems] = createSignal<CodexTranscriptItem[]>([
       {
