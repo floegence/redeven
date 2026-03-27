@@ -84,7 +84,7 @@ describe('GitVirtualTable', () => {
     }
   });
 
-  it('uses totalCount to preserve virtual scroll height for partially loaded pages', async () => {
+  it('stops at the loaded end of the list without creating trailing blank scroll space', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -93,7 +93,6 @@ describe('GitVirtualTable', () => {
       <div class="h-[240px]">
         <GitVirtualTable
           items={items}
-          totalCount={100}
           colSpan={1}
           rowHeight={40}
           overscan={2}
@@ -123,20 +122,16 @@ describe('GitVirtualTable', () => {
       window.dispatchEvent(new Event('resize'));
       await flush();
 
-      let spacers = Array.from(host.querySelectorAll('tr[aria-hidden="true"] td')) as HTMLTableCellElement[];
-      expect(spacers).toHaveLength(1);
-      expect(spacers[0]?.style.height).toBe('3640px');
-      expect(host.querySelectorAll('button')).toHaveLength(9);
-
-      viewport!.scrollTop = 40 * 30;
+      viewport!.scrollTop = 40 * 15;
       viewport!.dispatchEvent(new Event('scroll'));
       await flush();
 
-      spacers = Array.from(host.querySelectorAll('tr[aria-hidden="true"] td')) as HTMLTableCellElement[];
-      expect(spacers).toHaveLength(2);
-      expect(spacers[0]?.style.height).toBe('1120px');
-      expect(spacers[1]?.style.height).toBe('2880px');
-      expect(host.querySelectorAll('button')).toHaveLength(0);
+      const spacers = Array.from(host.querySelectorAll('tr[aria-hidden="true"] td')) as HTMLTableCellElement[];
+      expect(spacers).toHaveLength(1);
+      expect(spacers[0]?.style.height).toBe('520px');
+      expect(host.textContent).toContain('item-13');
+      expect(host.textContent).toContain('item-19');
+      expect(host.querySelectorAll('button')).toHaveLength(7);
     } finally {
       dispose();
     }
