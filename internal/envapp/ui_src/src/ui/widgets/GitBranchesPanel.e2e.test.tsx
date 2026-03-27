@@ -238,7 +238,7 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('keeps the virtual scroll extent aligned with the paged branch status total count', async () => {
+  it('keeps paged branch totals in footer copy without inventing unloaded scroll space', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -295,9 +295,9 @@ describe('GitBranchesPanel interactions', () => {
       await flush();
 
       expect(host.textContent).toContain('Showing 2 of 40 files.');
-      const spacers = Array.from(host.querySelectorAll('tr[aria-hidden="true"] td')) as HTMLTableCellElement[];
-      expect(spacers).toHaveLength(1);
-      expect(spacers[0]?.style.height).toBe('2052px');
+      expect(host.textContent).toContain('src/linked.ts');
+      expect(host.textContent).toContain('notes.txt');
+      expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(0);
     } finally {
       dispose();
     }

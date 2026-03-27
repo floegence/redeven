@@ -84,7 +84,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('keeps the virtual scroll extent aligned with the paged workspace total count', async () => {
+  it('keeps paged totals in footer copy without inventing unloaded scroll space', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -97,18 +97,21 @@ describe('GitChangesPanel interactions', () => {
                 repoSummary={{
                   repoRootPath: '/workspace/repo',
                   headRef: 'main',
-                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                  workspaceSummary: { stagedCount: 2, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
                 }}
                 workspace={{
                   repoRootPath: '/workspace/repo',
-                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
-                  staged: [],
-                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
-                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
+                  summary: { stagedCount: 2, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [
+                    { section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 4, deletions: 2 },
+                    { section: 'staged', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 },
+                  ],
+                  unstaged: [],
+                  untracked: [],
                   conflicted: [],
                 }}
                 workspacePages={{
-                  changes: {
+                  staged: {
                     items: [],
                     totalCount: 40,
                     nextOffset: 2,
@@ -118,7 +121,7 @@ describe('GitChangesPanel interactions', () => {
                     initialized: true,
                   },
                 }}
-                selectedSection="changes"
+                selectedSection="staged"
               />
             </div>
           </ProtocolProvider>
@@ -131,9 +134,9 @@ describe('GitChangesPanel interactions', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(host.textContent).toContain('Showing 2 of 40 files.');
-      const spacers = Array.from(host.querySelectorAll('tr[aria-hidden="true"] td')) as HTMLTableCellElement[];
-      expect(spacers).toHaveLength(1);
-      expect(spacers[0]?.style.height).toBe('2052px');
+      expect(host.textContent).toContain('src/app.ts');
+      expect(host.textContent).toContain('notes.txt');
+      expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(0);
     } finally {
       dispose();
     }
