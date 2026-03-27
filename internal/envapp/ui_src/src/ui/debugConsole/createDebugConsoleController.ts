@@ -18,6 +18,7 @@ import { createUIPerformanceTracker, type UIPerformanceSnapshot } from './create
 const DEBUG_CONSOLE_MINIMIZED_STORAGE_KEY = 'redeven:debug-console:minimized';
 const MAX_SERVER_EVENTS = 320;
 const STREAM_RETRY_DELAY_MS = 1500;
+const SNAPSHOT_POLL_INTERVAL_MS = 1000;
 
 export type DebugConsoleTrace = Readonly<{
   key: string;
@@ -45,6 +46,7 @@ export type DebugConsoleExportBundle = Readonly<{
     stream_error?: string;
     state_dir?: string;
     last_snapshot_at?: string;
+    capture_window_started_at?: string;
   }>;
   diagnostics: DiagnosticsExportView;
   ui_performance: UIPerformanceSnapshot;
@@ -96,8 +98,8 @@ function sortEventsNewestFirst(events: readonly DiagnosticsEvent[]): Diagnostics
   });
 }
 
-function mergeServerEvents(existing: readonly DiagnosticsEvent[], incoming: readonly DiagnosticsEvent[]): DiagnosticsEvent[] {
-  const next = sortEventsNewestFirst([...incoming, ...existing]);
+function dedupeEventsNewestFirst(events: readonly DiagnosticsEvent[], maxEvents: number): DiagnosticsEvent[] {
+  const next = sortEventsNewestFirst(events);
   const seen = new Set<string>();
   const deduped: DiagnosticsEvent[] = [];
   for (const event of next) {
@@ -107,11 +109,25 @@ function mergeServerEvents(existing: readonly DiagnosticsEvent[], incoming: read
     }
     seen.add(key);
     deduped.push(event);
-    if (deduped.length >= MAX_SERVER_EVENTS) {
+    if (deduped.length >= maxEvents) {
       break;
     }
   }
   return deduped;
+}
+
+function mergeServerEvents(existing: readonly DiagnosticsEvent[], incoming: readonly DiagnosticsEvent[]): DiagnosticsEvent[] {
+  return dedupeEventsNewestFirst([...incoming, ...existing], MAX_SERVER_EVENTS);
+}
+
+function filterEventsSince(events: readonly DiagnosticsEvent[], cutoffMs: number): DiagnosticsEvent[] {
+  if (!Number.isFinite(cutoffMs) || cutoffMs <= 0) {
+    return [...events];
+  }
+  return events.filter((event) => {
+    const stamp = toUnixMs(event.created_at);
+    return stamp > 0 && stamp >= cutoffMs;
+  });
 }
 
 function uniqueStrings(values: readonly string[]): string[] {
@@ -248,7 +264,7 @@ function buildTraceGroups(events: readonly DiagnosticsEvent[]): DebugConsoleTrac
     .sort((left, right) => toUnixMs(right.last_seen_at) - toUnixMs(left.last_seen_at));
 }
 
-function waitBeforeRetry(signal: AbortSignal): Promise<void> {
+function waitWithSignal(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal.aborted) {
       reject(new DOMException('aborted', 'AbortError'));
@@ -257,13 +273,17 @@ function waitBeforeRetry(signal: AbortSignal): Promise<void> {
     const timer = window.setTimeout(() => {
       signal.removeEventListener('abort', onAbort);
       resolve();
-    }, STREAM_RETRY_DELAY_MS);
+    }, ms);
     const onAbort = () => {
       window.clearTimeout(timer);
       reject(new DOMException('aborted', 'AbortError'));
     };
     signal.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+function waitBeforeRetry(signal: AbortSignal): Promise<void> {
+  return waitWithSignal(STREAM_RETRY_DELAY_MS, signal);
 }
 
 export function createDebugConsoleController(args: CreateDebugConsoleControllerArgs) {
@@ -288,6 +308,8 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const [exporting, setExporting] = createSignal(false);
   const [lastExportAt, setLastExportAt] = createSignal('');
   const [minimized, setMinimized] = createSignal(readStoredMinimized());
+  const [captureCutoffMs, setCaptureCutoffMs] = createSignal(0);
+  const [captureCutoffAt, setCaptureCutoffAt] = createSignal('');
 
   const enabled = createMemo(() => configured().enabled);
   const collectUIMetrics = createMemo(() => configured().enabled && configured().collect_ui_metrics);
@@ -332,6 +354,8 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     setServerEvents([]);
     setStreamConnected(false);
     setStreamError(null);
+    setCaptureCutoffMs(0);
+    setCaptureCutoffAt('');
     performanceTracker.clear();
   };
 
@@ -400,10 +424,12 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
       if (generation !== refreshGeneration || !enabled()) {
         return;
       }
+      const nextEvents = filterEventsSince(snapshot.recent_events ?? [], captureCutoffMs());
       setRuntimeEnabled(snapshot.enabled === true);
       setStateDir(compact(snapshot.state_dir));
       setLastSnapshotAt(new Date().toISOString());
-      setServerEvents((current) => mergeServerEvents(current, snapshot.recent_events ?? []));
+      setServerEvents((current) => mergeServerEvents(current, nextEvents));
+      setSnapshotError(null);
     } catch (error) {
       setSnapshotError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -473,13 +499,74 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     });
   });
 
+  createEffect(() => {
+    const key = args.settingsKey();
+    const active = key != null && enabled() && compact(args.protocolStatus()) === 'connected';
+    if (!active) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let disposed = false;
+
+    const runSnapshotLoop = async () => {
+      while (!disposed && !controller.signal.aborted) {
+        try {
+          await waitWithSignal(SNAPSHOT_POLL_INTERVAL_MS, controller.signal);
+        } catch {
+          return;
+        }
+        if (disposed || controller.signal.aborted) {
+          return;
+        }
+        await refresh({ silent: true });
+      }
+    };
+
+    void runSnapshotLoop();
+
+    onCleanup(() => {
+      disposed = true;
+      controller.abort();
+    });
+  });
+
+  const clear = async (): Promise<void> => {
+    refreshGeneration += 1;
+    const nowMs = Date.now();
+    setCaptureCutoffMs(nowMs);
+    setCaptureCutoffAt(new Date(nowMs).toISOString());
+    setServerEvents([]);
+    setLastSnapshotAt('');
+    setSnapshotError(null);
+    performanceTracker.clear();
+    await refresh({ silent: true });
+  };
+
   const exportBundle = async (): Promise<DebugConsoleExportBundle> => {
     setExporting(true);
     try {
       const diagnostics = await exportSnapshot(1000);
-      setLastExportAt(diagnostics.exported_at);
+      const cutoffMs = captureCutoffMs();
+      const agentEvents = filterEventsSince(diagnostics.agent_events ?? [], cutoffMs);
+      const desktopEvents = filterEventsSince(diagnostics.desktop_events ?? [], cutoffMs);
+      const mergedEvents = dedupeEventsNewestFirst([...agentEvents, ...desktopEvents], Math.max(agentEvents.length + desktopEvents.length, 1));
+      const snapshotRecentLimit = Math.max(diagnostics.snapshot?.recent_events?.length ?? 0, 1);
+      const snapshotSummaryLimit = Math.max(diagnostics.snapshot?.slow_summary?.length ?? 0, 1);
+      const filteredDiagnostics: DiagnosticsExportView = {
+        ...diagnostics,
+        agent_events: agentEvents,
+        desktop_events: desktopEvents,
+        snapshot: {
+          ...diagnostics.snapshot,
+          recent_events: mergedEvents.slice(0, snapshotRecentLimit),
+          slow_summary: buildSlowSummary(mergedEvents, snapshotSummaryLimit),
+          stats: buildStats(mergedEvents),
+        },
+      };
+      setLastExportAt(filteredDiagnostics.exported_at);
       return {
-        exported_at: diagnostics.exported_at,
+        exported_at: filteredDiagnostics.exported_at,
         settings: configured(),
         runtime: {
           configured_enabled: enabled(),
@@ -487,10 +574,11 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
           collect_ui_metrics: configured().collect_ui_metrics,
           stream_connected: streamConnected(),
           stream_error: compact(streamError()) || undefined,
-          state_dir: compact(diagnostics.state_dir) || compact(stateDir()) || undefined,
+          state_dir: compact(filteredDiagnostics.state_dir) || compact(stateDir()) || undefined,
           last_snapshot_at: compact(lastSnapshotAt()) || undefined,
+          capture_window_started_at: compact(captureCutoffAt()) || undefined,
         },
-        diagnostics,
+        diagnostics: filteredDiagnostics,
         ui_performance: performanceTracker.snapshot(),
       };
     } finally {
@@ -524,7 +612,9 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     performanceSnapshot: performanceTracker.snapshot,
     exporting,
     lastExportAt,
+    captureCutoffAt,
     refresh,
+    clear,
     exportBundle,
   };
 }

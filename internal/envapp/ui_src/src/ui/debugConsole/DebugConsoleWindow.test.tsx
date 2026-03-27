@@ -92,6 +92,7 @@ function createController(overrides: Record<string, unknown> = {}) {
     stateDir: () => '/tmp/redeven',
     lastSnapshotAt: () => '2026-03-27T10:00:03Z',
     lastEventAt: () => serverEvents()[0]?.created_at ?? '',
+    captureCutoffAt: () => '',
     serverEvents,
     stats: () => ({ total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 }),
     slowSummary: () => [],
@@ -100,6 +101,7 @@ function createController(overrides: Record<string, unknown> = {}) {
     exporting: () => false,
     lastExportAt: () => '',
     refresh: vi.fn(async () => undefined),
+    clear: vi.fn(async () => undefined),
     exportBundle: vi.fn(async () => ({
       exported_at: '2026-03-27T10:00:05Z',
       settings: { enabled: true, collect_ui_metrics: true },
@@ -153,6 +155,23 @@ describe('DebugConsoleWindow', () => {
     expect(host.textContent).toContain('GET /_redeven_proxy/api/settings');
     expect(host.textContent).toContain('gateway request completed');
     expect(host.textContent).toContain('Detail JSON');
+    expect(host.textContent).toContain('Clear');
+    expect(host.textContent).not.toContain('Refresh');
+  });
+
+  it('invokes clear from the header action', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const clear = vi.fn(async () => undefined);
+    const controller = createController({ clear });
+
+    render(() => <DebugConsoleWindow controller={controller} />, host);
+
+    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Clear'));
+    expect(button).toBeTruthy();
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(clear).toHaveBeenCalledTimes(1);
   });
 
   it('shows a restore pill when minimized', () => {
