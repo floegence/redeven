@@ -133,6 +133,80 @@ html.dark {
   background: var(--primary);
 }
 
+.env-debug-console-switch {
+  border-color: color-mix(in srgb, var(--foreground) 16%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 96%, var(--card)) 0%,
+      color-mix(in srgb, var(--muted) 54%, var(--background)) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 40%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--background) 46%, transparent);
+}
+
+.env-debug-console-switch:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 94%, var(--card)) 0%,
+      color-mix(in srgb, var(--muted) 62%, var(--background)) 100%
+    );
+}
+
+.env-debug-console-switch[data-state='checked'] {
+  border-color: color-mix(in srgb, var(--primary) 54%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary) 88%, white 12%) 0%,
+      color-mix(in srgb, var(--primary) 74%, #0f172a 26%) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 26%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
+    0 8px 18px -16px color-mix(in srgb, var(--primary) 44%, transparent);
+}
+
+html.dark .env-debug-console-switch[data-state='checked'] {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary) 84%, white 16%) 0%,
+      color-mix(in srgb, var(--primary) 70%, #020617 30%) 100%
+    );
+}
+
+.env-debug-console-switch__thumb {
+  transform: translateX(0.25rem);
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, white 96%, var(--background) 4%) 0%,
+      color-mix(in srgb, var(--background) 94%, black 6%) 100%
+    );
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.18),
+    0 0 0 1px color-mix(in srgb, white 28%, transparent);
+}
+
+.env-debug-console-switch[data-state='checked'] .env-debug-console-switch__thumb {
+  transform: translateX(1.35rem);
+  border-color: color-mix(in srgb, white 34%, var(--primary));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, white 98%, var(--background) 2%) 0%,
+      color-mix(in srgb, white 90%, var(--background) 10%) 100%
+    );
+  box-shadow:
+    0 2px 8px rgba(15, 23, 42, 0.22),
+    0 0 0 1px color-mix(in srgb, white 36%, transparent);
+}
+
 .ai-model-select-trigger {
   overflow: hidden;
 }

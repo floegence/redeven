@@ -51,9 +51,31 @@ describe('EnvDebugConsoleSettingsPanel', () => {
 
     const switchButton = host.querySelector('button[role="switch"]') as HTMLButtonElement | null;
     expect(switchButton).not.toBeNull();
+    expect(switchButton?.getAttribute('data-state')).toBe('unchecked');
+    expect(switchButton?.className).toContain('env-debug-console-switch');
     expect(switchButton?.className).toContain('shrink-0');
     expect(switchButton?.className).toContain('flex-none');
     expect(switchButton?.className).toContain('cursor-pointer');
+    expect(switchButton?.className).toContain('focus-visible:ring-2');
+    expect(host.querySelector('.env-debug-console-switch__thumb')).not.toBeNull();
     expect(host.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('marks the enabled state for the theme-aware switch styles', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <EnvDebugConsoleSettingsPanel
+        enabled
+        canInteract
+        onEnabledChange={() => undefined}
+      />
+    ), host);
+
+    const switchButton = host.querySelector('button[role="switch"]') as HTMLButtonElement | null;
+    expect(switchButton).not.toBeNull();
+    expect(switchButton?.getAttribute('data-state')).toBe('checked');
+    expect(switchButton?.getAttribute('aria-checked')).toBe('true');
   });
 });
