@@ -83,12 +83,21 @@ type wireThreadItem struct {
 	DurationMs       *int64                 `json:"durationMs,omitempty"`
 	Changes          []wireFileUpdateChange `json:"changes,omitempty"`
 	Query            string                 `json:"query,omitempty"`
+	Action           *wireWebSearchAction   `json:"action,omitempty"`
 }
 
 type wireFileUpdateChange struct {
 	Path string              `json:"path"`
 	Kind wirePatchChangeKind `json:"kind"`
 	Diff string              `json:"diff"`
+}
+
+type wireWebSearchAction struct {
+	Type    string   `json:"type"`
+	Query   *string  `json:"query,omitempty"`
+	Queries []string `json:"queries,omitempty"`
+	URL     *string  `json:"url,omitempty"`
+	Pattern *string  `json:"pattern,omitempty"`
 }
 
 type wirePatchChangeKind struct {
@@ -256,6 +265,19 @@ type wireItemNotification struct {
 	ThreadID string         `json:"threadId"`
 	TurnID   string         `json:"turnId"`
 	Item     wireThreadItem `json:"item"`
+}
+
+type wireResponseItem struct {
+	Type   string               `json:"type"`
+	ID     *string              `json:"id,omitempty"`
+	Status *string              `json:"status,omitempty"`
+	Action *wireWebSearchAction `json:"action,omitempty"`
+}
+
+type wireRawResponseItemCompletedNotification struct {
+	ThreadID string           `json:"threadId"`
+	TurnID   string           `json:"turnId"`
+	Item     wireResponseItem `json:"item"`
 }
 
 type wireDeltaNotification struct {

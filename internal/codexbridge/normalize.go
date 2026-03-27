@@ -100,7 +100,35 @@ func normalizeItem(in wireThreadItem) Item {
 		}
 	}
 	out.Query = strings.TrimSpace(in.Query)
+	out.Action = normalizeWebSearchAction(in.Action)
+	if out.Query == "" {
+		out.Query = defaultWebSearchQuery(out.Action)
+	}
 	return out
+}
+
+func normalizeRawResponseItem(in wireResponseItem, fallbackID string) (Item, bool) {
+	switch strings.TrimSpace(in.Type) {
+	case "web_search_call":
+		action := normalizeWebSearchAction(in.Action)
+		item := Item{
+			ID:     normalizeRawResponseItemID(in, fallbackID),
+			Type:   "webSearch",
+			Status: strings.TrimSpace(stringValue(in.Status)),
+			Query:  defaultWebSearchQuery(action),
+			Action: action,
+		}
+		return item, strings.TrimSpace(item.ID) != ""
+	default:
+		return Item{}, false
+	}
+}
+
+func normalizeRawResponseItemID(in wireResponseItem, fallbackID string) string {
+	if id := strings.TrimSpace(stringValue(in.ID)); id != "" {
+		return id
+	}
+	return strings.TrimSpace(fallbackID)
 }
 
 func normalizeUserInput(in wireUserInput) UserInputEntry {
@@ -111,6 +139,67 @@ func normalizeUserInput(in wireUserInput) UserInputEntry {
 		Path: strings.TrimSpace(in.Path),
 		Name: strings.TrimSpace(in.Name),
 	}
+}
+
+func normalizeWebSearchAction(in *wireWebSearchAction) *WebSearchAction {
+	if in == nil {
+		return nil
+	}
+	out := &WebSearchAction{
+		Type: normalizeWebSearchActionType(in.Type),
+	}
+	if query := strings.TrimSpace(stringValue(in.Query)); query != "" {
+		out.Query = query
+	}
+	if len(in.Queries) > 0 {
+		out.Queries = make([]string, 0, len(in.Queries))
+		for _, query := range in.Queries {
+			if trimmed := strings.TrimSpace(query); trimmed != "" {
+				out.Queries = append(out.Queries, trimmed)
+			}
+		}
+	}
+	if url := strings.TrimSpace(stringValue(in.URL)); url != "" {
+		out.URL = url
+	}
+	if pattern := strings.TrimSpace(stringValue(in.Pattern)); pattern != "" {
+		out.Pattern = pattern
+	}
+	if out.Type == "" && out.Query == "" && len(out.Queries) == 0 && out.URL == "" && out.Pattern == "" {
+		return nil
+	}
+	return out
+}
+
+func normalizeWebSearchActionType(raw string) string {
+	switch strings.TrimSpace(raw) {
+	case "search":
+		return "search"
+	case "open_page", "openPage":
+		return "openPage"
+	case "find_in_page", "findInPage":
+		return "findInPage"
+	default:
+		return strings.TrimSpace(raw)
+	}
+}
+
+func defaultWebSearchQuery(action *WebSearchAction) string {
+	if action == nil {
+		return ""
+	}
+	if query := strings.TrimSpace(action.Query); query != "" {
+		return query
+	}
+	for _, query := range action.Queries {
+		if trimmed := strings.TrimSpace(query); trimmed != "" {
+			return trimmed
+		}
+	}
+	if url := strings.TrimSpace(action.URL); url != "" {
+		return url
+	}
+	return strings.TrimSpace(action.Pattern)
 }
 
 func normalizeThreadRuntimeConfig(

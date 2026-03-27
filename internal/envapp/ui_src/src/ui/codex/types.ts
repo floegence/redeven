@@ -68,6 +68,14 @@ export type CodexUserInputEntry = Readonly<{
   name?: string;
 }>;
 
+export type CodexWebSearchAction = Readonly<{
+  type: string;
+  query?: string;
+  queries?: string[];
+  url?: string;
+  pattern?: string;
+}>;
+
 export type CodexTokenUsageBreakdown = Readonly<{
   total_tokens: number;
   input_tokens: number;
@@ -97,6 +105,7 @@ export type CodexItem = Readonly<{
   duration_ms?: number;
   changes?: CodexFileChange[];
   query?: string;
+  action?: CodexWebSearchAction;
   inputs?: CodexUserInputEntry[];
 }>;
 

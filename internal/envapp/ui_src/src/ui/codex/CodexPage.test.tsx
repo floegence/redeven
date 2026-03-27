@@ -679,7 +679,7 @@ describe('CodexPage', () => {
         }),
       ],
     }));
-    expect(host.textContent).toContain('Codex is working.');
+    expect(host.textContent).toContain('Codex is working');
     expect(host.textContent).toContain('95% context left');
     expect(host.textContent).toContain('working');
     expect(host.querySelector('[data-codex-working-state="true"]')).not.toBeNull();

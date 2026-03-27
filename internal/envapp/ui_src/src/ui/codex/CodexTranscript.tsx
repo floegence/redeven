@@ -5,6 +5,7 @@ import { Tag } from '@floegence/floe-webapp-core/ui';
 import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
 import { ShellBlock } from '../chat/blocks/ShellBlock';
 import { ThinkingBlock } from '../chat/blocks/ThinkingBlock';
+import { StreamingCursor } from '../chat/status/StreamingCursor';
 import { CodexIcon } from '../icons/CodexIcon';
 import {
   displayStatus,
@@ -113,6 +114,18 @@ function FileChangeBody(props: { item: CodexTranscriptItem }) {
 }
 
 function ReasoningBody(props: { item: CodexTranscriptItem }) {
+  const detailText = () => {
+    const direct = String(props.item.text ?? '').trim();
+    if (direct) return direct;
+    const content = (props.item.content ?? []).map((entry) => String(entry ?? '').trim()).filter(Boolean);
+    if (content.length === 0) return '';
+    const summary = (props.item.summary ?? []).map((entry) => String(entry ?? '').trim()).filter(Boolean);
+    if (summary.length === content.length && summary.join('\n\n') === content.join('\n\n')) {
+      return '';
+    }
+    return content.join('\n\n');
+  };
+
   return (
     <div class="space-y-3">
       <Show when={(props.item.summary?.length ?? 0) > 0}>
@@ -120,8 +133,8 @@ function ReasoningBody(props: { item: CodexTranscriptItem }) {
           <For each={props.item.summary}>{(entry) => <li>{entry}</li>}</For>
         </ul>
       </Show>
-      <Show when={props.item.text}>
-        <ThinkingBlock content={props.item.text} class="codex-chat-thinking-block" />
+      <Show when={detailText()}>
+        <ThinkingBlock content={detailText()} class="codex-chat-thinking-block" />
       </Show>
     </div>
   );
@@ -144,6 +157,7 @@ function EvidenceHeader(props: { item: CodexTranscriptItem }) {
 }
 
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
+  const fallbackText = () => itemText(props.item);
   return (
     <CodexMessageLane role="assistant">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
@@ -164,10 +178,11 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
                 props.item.type !== 'commandExecution' &&
                 props.item.type !== 'fileChange' &&
                 props.item.type !== 'reasoning' &&
-                props.item.type !== 'plan'
+                props.item.type !== 'plan' &&
+                Boolean(fallbackText().trim())
               }
             >
-              <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" rendererVariant="codex" />
+              <MarkdownBlock content={fallbackText()} class="codex-chat-markdown-block" rendererVariant="codex" />
             </Show>
           </div>
         </div>
@@ -263,18 +278,22 @@ function WorkingStateRow(props: {
 }) {
   const normalizedLabel = () => String(props.label ?? '').trim() || 'working';
   return (
-    <CodexMessageLane role="assistant" showAvatar>
+    <CodexMessageLane role="assistant">
       <div
         data-codex-working-state="true"
         class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
       >
-        <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
-          <div class="flex items-center gap-2">
-            <span class="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse" />
-            <span class="text-sm font-medium text-foreground">Codex is {normalizedLabel()}.</span>
-            <Tag variant={statusTagVariant(normalizedLabel())} tone="soft" size="sm">
-              {displayStatus(normalizedLabel())}
-            </Tag>
+        <div class="codex-working-indicator-card">
+          <div class="codex-working-indicator-surface">
+            <span class="codex-working-indicator-dots" aria-hidden="true">
+              <span class="codex-working-indicator-dot" />
+              <span class="codex-working-indicator-dot" />
+              <span class="codex-working-indicator-dot" />
+            </span>
+            <span class="codex-working-indicator-label">Codex is {displayStatus(normalizedLabel())}</span>
+            <span class="codex-working-indicator-cursor">
+              <StreamingCursor />
+            </span>
           </div>
           <Show when={props.flags.length > 0}>
             <div class="mt-2 flex flex-wrap gap-2">
@@ -294,6 +313,25 @@ function WorkingStateRow(props: {
 }
 
 function TranscriptRow(props: { item: CodexTranscriptItem }) {
+  if (
+    (props.item.type === 'reasoning' || props.item.type === 'plan') &&
+    (props.item.summary?.length ?? 0) === 0 &&
+    (props.item.content?.length ?? 0) === 0 &&
+    !String(props.item.text ?? '').trim()
+  ) {
+    return null;
+  }
+  if (
+    props.item.type !== 'commandExecution' &&
+    props.item.type !== 'fileChange' &&
+    props.item.type !== 'userMessage' &&
+    props.item.type !== 'agentMessage' &&
+    props.item.type !== 'reasoning' &&
+    props.item.type !== 'plan' &&
+    !itemText(props.item).trim()
+  ) {
+    return null;
+  }
   if (props.item.type === 'userMessage') {
     return <UserMessageRow item={props.item} />;
   }

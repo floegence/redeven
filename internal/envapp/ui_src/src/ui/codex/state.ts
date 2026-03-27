@@ -163,6 +163,30 @@ function appendFileChangeDiff(
 function itemTextOrContent(item: CodexItem | null | undefined): string {
   const directText = String(item?.text ?? '').trim();
   if (directText) return directText;
+  if (String(item?.type ?? '').trim() !== 'reasoning' && (item?.content?.length ?? 0) > 0) {
+    return (item?.content ?? []).map((entry) => String(entry ?? '').trim()).filter(Boolean).join('\n\n');
+  }
+  const query = String(item?.query ?? '').trim();
+  if (query) return query;
+  const actionType = String(item?.action?.type ?? '').trim();
+  if (actionType === 'search') {
+    const actionQuery = String(item?.action?.query ?? '').trim();
+    if (actionQuery) return actionQuery;
+    const queries = Array.isArray(item?.action?.queries)
+      ? item.action?.queries?.map((entry) => String(entry ?? '').trim()).filter(Boolean) ?? []
+      : [];
+    if (queries.length > 0) return queries[0] ?? '';
+  }
+  if (actionType === 'openPage') {
+    const url = String(item?.action?.url ?? '').trim();
+    if (url) return url;
+  }
+  if (actionType === 'findInPage') {
+    const pattern = String(item?.action?.pattern ?? '').trim();
+    if (pattern) return pattern;
+    const url = String(item?.action?.url ?? '').trim();
+    if (url) return url;
+  }
   const content = Array.isArray(item?.inputs)
     ? item!.inputs
         .map((entry) => {
