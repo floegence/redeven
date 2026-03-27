@@ -148,15 +148,28 @@ html.dark {
 }
 
 .flower-chat-shell {
+  --flower-chat-surface: #f5f6f7;
+  --flower-chat-surface-soft: #fafbfc;
+  --flower-chat-surface-elevated: #ffffff;
+  --flower-chat-surface-border: color-mix(in srgb, var(--border) 82%, white 18%);
   display: flex;
   min-width: 0;
   min-height: 0;
   height: 100%;
   flex-direction: column;
+  background: var(--flower-chat-surface);
+}
+
+html.dark .flower-chat-shell {
+  --flower-chat-surface: rgb(41, 44, 51);
+  --flower-chat-surface-soft: #353942;
+  --flower-chat-surface-elevated: #40454f;
+  --flower-chat-surface-border: color-mix(in srgb, var(--border) 82%, #616976 18%);
 }
 
 .flower-chat-header {
   gap: 0.75rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 92%, transparent);
 }
 
 .flower-chat-header-title {
@@ -220,6 +233,7 @@ html.dark {
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
+  background: var(--flower-chat-surface);
 }
 
 .flower-chat-transcript {
@@ -228,6 +242,7 @@ html.dark {
   min-height: 0;
   flex: 1 1 auto;
   flex-direction: column;
+  background: var(--flower-chat-surface);
 }
 
 .flower-chat-status-stack {
@@ -241,6 +256,7 @@ html.dark {
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  background: var(--flower-chat-surface);
   --flower-chat-transcript-overlay-edge-gap: 12px;
   --flower-chat-transcript-overlay-bottom-inset: calc(5rem + env(safe-area-inset-bottom, 0px));
 }
@@ -250,9 +266,8 @@ html.dark {
   min-width: 0;
   flex-shrink: 0;
   flex-direction: column;
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--background) 92%, transparent), color-mix(in srgb, var(--card) 96%, transparent));
+  border-top: 1px solid var(--flower-chat-surface-border);
+  background: var(--flower-chat-surface-soft);
 }
 
 .flower-chat-toolbar {
@@ -307,8 +322,7 @@ html.dark {
   margin-top: 0.5rem;
   border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
   border-radius: 1rem;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--card) 98%, var(--background)), color-mix(in srgb, var(--card) 95%, var(--muted) 5%));
+  background: var(--flower-chat-surface-elevated);
   box-shadow: 0 10px 28px -26px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
@@ -2314,12 +2328,8 @@ a.chat-sources-cell-url:focus-visible {
 .flower-queued-turns-panel {
   margin: 0.25rem 0 0.5rem;
   border-radius: 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--card) 96%, transparent),
-    color-mix(in srgb, var(--card) 90%, var(--muted) 10%)
-  );
+  border: 1px solid var(--flower-chat-surface-border);
+  background: var(--flower-chat-surface-elevated);
   box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 10px 24px rgb(15 23 42 / 0.05);
   overflow: hidden;
 }
@@ -2331,11 +2341,7 @@ a.chat-sources-cell-url:focus-visible {
   gap: 0.75rem;
   padding: 0.75rem 0.875rem 0.625rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--muted) 34%, transparent),
-    color-mix(in srgb, var(--muted) 14%, transparent)
-  );
+  background: color-mix(in srgb, var(--muted) 22%, var(--flower-chat-surface-elevated));
 }
 
 .flower-queued-turns-header-main {
@@ -2393,7 +2399,7 @@ a.chat-sources-cell-url:focus-visible {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.75rem 0.875rem;
-  background-color: color-mix(in srgb, var(--card) 96%, transparent);
+  background-color: color-mix(in srgb, var(--flower-chat-surface-elevated) 96%, transparent);
 }
 
 .flower-queued-turn-item + .flower-queued-turn-item {
@@ -2435,7 +2441,7 @@ a.chat-sources-cell-url:focus-visible {
 }
 
 .flower-followup-item-loaded {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 6%, var(--card)), color-mix(in srgb, var(--primary) 3%, var(--card)));
+  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated));
 }
 
 .flower-followup-state-chip {

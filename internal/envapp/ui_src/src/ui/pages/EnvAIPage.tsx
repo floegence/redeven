@@ -3605,7 +3605,7 @@ export function EnvAIPage() {
               {/* Chat area — sidebar is managed by Shell */}
               <div class="flower-chat-shell">
                 {/* Header */}
-                <div class="chat-header flower-chat-header border-b border-border/80 bg-background/95 backdrop-blur-md">
+                <div class="chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
                   <div class="chat-header-title flower-chat-header-title">
                     <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
                   </div>
