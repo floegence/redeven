@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { SettingsPill } from '../pages/settings/SettingsPrimitives';
@@ -6,6 +6,7 @@ import {
   diagnosticsEventKey,
   diagnosticsExportFilename,
   type DiagnosticsEvent,
+  type DiagnosticsSummaryItem,
 } from '../services/diagnosticsApi';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
 import type { DebugConsoleController, DebugConsoleTrace } from './createDebugConsoleController';
@@ -16,6 +17,19 @@ type KeyValueItem = Readonly<{
   label: string;
   value: string;
   mono?: boolean;
+}>;
+
+type MetricItem = Readonly<{
+  label: string;
+  value: string;
+  note?: string;
+}>;
+
+type TabDescriptor = Readonly<{
+  value: DebugConsoleTab;
+  label: string;
+  description: string;
+  count?: string;
 }>;
 
 function compact(value: unknown): string {
@@ -119,14 +133,14 @@ function traceMatchesQuery(trace: DebugConsoleTrace, query: string): boolean {
 
 function tabButtonClass(active: boolean): string {
   return active
-    ? 'rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-medium text-primary'
-    : 'rounded-full border border-border/70 bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground';
+    ? 'w-full rounded-md border border-primary/20 bg-primary/[0.08] px-3 py-2 text-left shadow-sm'
+    : 'w-full rounded-md border border-transparent px-3 py-2 text-left transition-colors hover:border-border/70 hover:bg-background/80';
 }
 
 function listRowClass(active: boolean): string {
   return active
-    ? 'rounded-xl border border-primary/25 bg-primary/8 p-3 text-left shadow-sm'
-    : 'rounded-xl border border-border/70 bg-background/80 p-3 text-left transition-colors hover:border-border hover:bg-muted/30';
+    ? 'w-full border-b border-border/60 bg-primary/[0.06] text-left transition-colors'
+    : 'w-full border-b border-border/50 text-left transition-colors hover:bg-muted/[0.16]';
 }
 
 function detailItemsForEvent(event: DiagnosticsEvent | null): KeyValueItem[] {
@@ -159,14 +173,35 @@ function detailItemsForTrace(trace: DebugConsoleTrace | null): KeyValueItem[] {
   ];
 }
 
-function KeyValueGrid(props: Readonly<{ items: readonly KeyValueItem[] }>) {
+function StatusDot(props: Readonly<{ tone: 'default' | 'success' | 'warning' | 'danger' }>) {
+  const toneClass = () => {
+    switch (props.tone) {
+      case 'success':
+        return 'bg-emerald-500';
+      case 'warning':
+        return 'bg-amber-500';
+      case 'danger':
+        return 'bg-red-500';
+      case 'default':
+      default:
+        return 'bg-slate-400';
+    }
+  };
+
+  return <span class={`inline-block h-2 w-2 rounded-full ${toneClass()}`} aria-hidden="true" />;
+}
+
+function MetricStrip(props: Readonly<{ items: readonly MetricItem[]; columnsClass?: string }>) {
   return (
-    <div class="grid gap-2 sm:grid-cols-2">
+    <div class={`grid gap-2 ${props.columnsClass ?? 'sm:grid-cols-2 xl:grid-cols-5'}`}>
       <For each={props.items}>
         {(item) => (
-          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
+          <div class="rounded-md border border-border/70 bg-background/90 px-3 py-2.5 shadow-sm">
             <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{item.label}</div>
-            <div class={`mt-1 text-xs text-foreground ${item.mono ? 'font-mono break-all' : 'break-words'}`}>{item.value}</div>
+            <div class="mt-1 text-sm font-semibold tabular-nums text-foreground">{item.value}</div>
+            <Show when={compact(item.note)}>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{item.note}</div>
+            </Show>
           </div>
         )}
       </For>
@@ -174,13 +209,71 @@ function KeyValueGrid(props: Readonly<{ items: readonly KeyValueItem[] }>) {
   );
 }
 
-function DebugConsoleEmptyState(props: Readonly<{ title: string; message: string }>) {
+function DefinitionList(props: Readonly<{ items: readonly KeyValueItem[] }>) {
   return (
-    <div class="flex h-full min-h-[14rem] items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/12 px-6 py-10 text-center">
-      <div class="max-w-sm space-y-2">
-        <div class="text-sm font-semibold text-foreground">{props.title}</div>
-        <div class="text-xs leading-5 text-muted-foreground">{props.message}</div>
+    <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
+      <For each={props.items}>
+        {(item, index) => (
+          <div class={`grid grid-cols-[8rem_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs ${index() === 0 ? '' : 'border-t border-border/60'}`}>
+            <div class="text-[11px] font-medium text-muted-foreground">{item.label}</div>
+            <div class={`${item.mono ? 'font-mono text-[11px] break-all' : 'break-words'} text-foreground`}>{item.value}</div>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
+function SectionShell(props: Readonly<{ title: string; description?: string; action?: JSX.Element; children: JSX.Element }>) {
+  return (
+    <section class="space-y-2.5">
+      <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div class="text-sm font-semibold text-foreground">{props.title}</div>
+          <Show when={props.description}>
+            <div class="mt-0.5 text-[11px] leading-5 text-muted-foreground">{props.description}</div>
+          </Show>
+        </div>
+        <Show when={props.action}>
+          <div class="flex-shrink-0">{props.action}</div>
+        </Show>
       </div>
+      {props.children}
+    </section>
+  );
+}
+
+function EmptyState(props: Readonly<{ title: string; message: string }>) {
+  return (
+    <div class="flex h-full min-h-[12rem] flex-1 items-center justify-center px-6 py-10">
+      <div class="max-w-sm text-center">
+        <div class="text-sm font-semibold text-foreground">{props.title}</div>
+        <div class="mt-2 text-xs leading-5 text-muted-foreground">{props.message}</div>
+      </div>
+    </div>
+  );
+}
+
+function TableShell(props: Readonly<{ children: JSX.Element }>) {
+  return <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-none bg-background">{props.children}</div>;
+}
+
+function TableHeaderRow(props: Readonly<{ gridClass: string; columns: readonly string[] }>) {
+  return (
+    <div class={`grid ${props.gridClass} gap-3 border-b border-border/70 bg-muted/[0.14] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground`}>
+      <For each={props.columns}>{(column) => <div>{column}</div>}</For>
+    </div>
+  );
+}
+
+function InspectorShell(props: Readonly<{ children: JSX.Element }>) {
+  return <div class="min-h-[18rem] border-t border-border/70 bg-muted/[0.08] xl:min-h-0 xl:border-l xl:border-t-0">{props.children}</div>;
+}
+
+function MonoBlock(props: Readonly<{ value: string }>) {
+  return (
+    <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
+      <pre class="max-h-[20rem] overflow-auto px-3 py-3 font-mono text-[11px] leading-5 text-foreground">{props.value}</pre>
     </div>
   );
 }
@@ -193,6 +286,10 @@ function renderEventBadge(event: DiagnosticsEvent) {
     return <SettingsPill tone="danger">HTTP {event.status_code}</SettingsPill>;
   }
   return <SettingsPill>{compact(event.source) || 'event'}</SettingsPill>;
+}
+
+function slowSummaryTitle(item: DiagnosticsSummaryItem): string {
+  return [compact(item.method), compact(item.path) || compact(item.kind) || compact(item.scope)].filter(Boolean).join(' ');
 }
 
 export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleController }>) {
@@ -244,6 +341,66 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       .join(' · ');
   });
 
+  const headerMetrics = createMemo<MetricItem[]>(() => [
+    {
+      label: 'Events',
+      value: String(props.controller.stats().total_events),
+      note: `${props.controller.stats().agent_events} agent · ${props.controller.stats().desktop_events} desktop`,
+    },
+    {
+      label: 'Traces',
+      value: String(props.controller.stats().trace_count),
+      note: `${props.controller.stats().slow_events} slow markers`,
+    },
+    {
+      label: 'Runtime',
+      value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive',
+      note: props.controller.streamConnected() ? 'Streaming live updates' : 'Snapshot mode',
+    },
+    {
+      label: 'UI Metrics',
+      value: props.controller.collectUIMetrics() ? 'On' : 'Off',
+      note: props.controller.collectUIMetrics() ? 'Renderer instrumentation enabled' : 'Local probes paused',
+    },
+    {
+      label: 'Last Event',
+      value: formatTimestamp(props.controller.lastEventAt()),
+      note: compact(props.controller.stateDir()) || 'State directory unavailable',
+    },
+  ]);
+
+  const tabDescriptors = createMemo<TabDescriptor[]>(() => [
+    {
+      value: 'requests',
+      label: 'Requests',
+      description: 'Gateway and desktop request activity',
+      count: String(filteredEvents().length),
+    },
+    {
+      value: 'traces',
+      label: 'Traces',
+      description: 'Grouped request timelines',
+      count: String(filteredTraces().length),
+    },
+    {
+      value: 'ui',
+      label: 'UI Performance',
+      description: 'Renderer-only frame and layout signals',
+      count: String(props.controller.performanceSnapshot().recent_events.length),
+    },
+    {
+      value: 'runtime',
+      label: 'Runtime',
+      description: 'Collector state and slow summary',
+      count: String(props.controller.stats().slow_events),
+    },
+    {
+      value: 'export',
+      label: 'Export',
+      description: 'Portable debug bundle preview',
+    },
+  ]);
+
   const exportBundle = async () => {
     const bundle = await props.controller.exportBundle();
     const href = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }));
@@ -259,10 +416,11 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       <Show when={props.controller.enabled() && props.controller.minimized()}>
         <button
           type="button"
-          class="fixed bottom-4 right-4 z-[145] flex items-center gap-2 rounded-full border border-border/80 bg-background/96 px-3 py-2 shadow-[0_22px_40px_-26px_rgba(15,23,42,0.45)] backdrop-blur transition-colors hover:border-primary/30 hover:text-primary"
+          class="fixed bottom-4 right-4 z-[145] inline-flex items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25"
           onClick={props.controller.restore}
         >
-          <span class="text-[11px] font-semibold uppercase tracking-[0.12em]">Debug Console</span>
+          <StatusDot tone={props.controller.streamConnected() ? 'success' : 'warning'} />
+          <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground">Debug Console</span>
           <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'warning'}>
             {props.controller.streamConnected() ? 'Live' : 'Idle'}
           </SettingsPill>
@@ -280,24 +438,27 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
           title="Debug Console"
           persistenceKey="debug-console-window"
           defaultPosition={{ x: 48, y: 76 }}
-          defaultSize={{ width: 1080, height: 720 }}
-          minSize={{ width: 720, height: 480 }}
-          class="debug-console-window border-border/70 shadow-[0_36px_90px_-48px_rgba(15,23,42,0.5)]"
+          defaultSize={{ width: 1120, height: 720 }}
+          minSize={{ width: 760, height: 520 }}
+          class="debug-console-window border-border/80 shadow-[0_38px_92px_-56px_rgba(15,23,42,0.56)]"
           contentClass="!p-0"
           zIndex={145}
           footer={(
-            <div class="flex w-full min-w-0 items-center justify-between gap-3">
-              <div class="flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                <SettingsPill tone={props.controller.runtimeEnabled() ? 'success' : 'warning'}>
-                  {props.controller.runtimeEnabled() ? 'Runtime on' : 'Runtime off'}
-                </SettingsPill>
-                <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'default'}>
-                  {props.controller.streamConnected() ? 'Streaming' : 'Snapshot only'}
-                </SettingsPill>
-                <SettingsPill tone={props.controller.collectUIMetrics() ? 'success' : 'default'}>
-                  {props.controller.collectUIMetrics() ? 'UI metrics on' : 'UI metrics off'}
-                </SettingsPill>
-                <span>Last event: {formatTimestamp(props.controller.lastEventAt())}</span>
+            <div class="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
+                <span class="inline-flex items-center gap-1.5">
+                  <StatusDot tone={props.controller.runtimeEnabled() ? 'success' : 'warning'} />
+                  {props.controller.runtimeEnabled() ? 'Runtime collector active' : 'Runtime collector inactive'}
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                  <StatusDot tone={props.controller.streamConnected() ? 'success' : 'default'} />
+                  {props.controller.streamConnected() ? 'Streaming updates' : 'Snapshot only'}
+                </span>
+                <span class="inline-flex items-center gap-1.5">
+                  <StatusDot tone={props.controller.collectUIMetrics() ? 'success' : 'default'} />
+                  {props.controller.collectUIMetrics() ? 'UI metrics collecting' : 'UI metrics paused'}
+                </span>
+                <span>Last snapshot: {formatTimestamp(props.controller.lastSnapshotAt())}</span>
               </div>
               <div class="flex items-center gap-2">
                 <Button size="sm" variant="secondary" onClick={() => void props.controller.refresh()} disabled={props.controller.refreshing()}>
@@ -314,356 +475,486 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
           )}
         >
           <div class="flex h-full min-h-0 flex-col bg-background">
-            <div class="border-b border-border/70 px-4 py-3">
-              <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div class="space-y-1">
-                  <div class="text-sm font-semibold text-foreground">Operator diagnostics for gateway, desktop, and UI rendering</div>
-                  <div class="text-xs leading-5 text-muted-foreground">
-                    The console floats above page-local loading layers and updates live while the debug console setting is enabled.
+            <div class="border-b border-border/70 bg-muted/[0.14] px-4 py-3">
+              <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live Diagnostics Inspector</span>
+                    <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'default'}>
+                      {props.controller.streamConnected() ? 'Streaming' : 'Snapshot'}
+                    </SettingsPill>
+                  </div>
+                  <div class="mt-1 text-sm font-semibold text-foreground">Gateway requests, desktop transport, and local rendering metrics in one operator surface</div>
+                  <div class="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                    Mounted at the app-shell level so the console stays usable even while individual pages are loading or reconnecting.
                   </div>
                 </div>
-                <div class="min-w-[15rem] lg:w-[20rem]">
+                <div class="w-full xl:w-[20rem]">
+                  <label class="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Search</label>
                   <input
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
-                    class="w-full rounded-lg border border-border/70 bg-muted/18 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    class="w-full rounded-md border border-border/70 bg-background px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-primary/35 focus:ring-2 focus:ring-primary/10"
                     placeholder="Filter by path, trace id, message, source..."
+                    aria-label="Search diagnostics"
                   />
                 </div>
               </div>
 
-              <div class="mt-3 flex flex-wrap items-center gap-2">
-                <For each={[
-                  ['requests', 'Requests'],
-                  ['traces', 'Traces'],
-                  ['ui', 'UI Performance'],
-                  ['runtime', 'Runtime'],
-                  ['export', 'Export'],
-                ] as const}>
-                  {([value, label]) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={tab() === value}
-                      class={tabButtonClass(tab() === value)}
-                      onClick={() => setTab(value)}
-                    >
-                      {label}
-                    </button>
-                  )}
-                </For>
+              <div class="mt-3">
+                <MetricStrip items={headerMetrics()} />
               </div>
 
               <Show when={combinedError()}>
-                <div class="mt-3 rounded-lg border border-amber-300/50 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                <div class="mt-3 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
                   {combinedError()}
                 </div>
               </Show>
             </div>
 
-            <div class="flex-1 min-h-0 overflow-hidden px-4 py-4">
-              <Show when={!props.controller.loading()} fallback={<DebugConsoleEmptyState title="Loading debug console" message="Fetching settings and the latest diagnostics snapshot." />}>
-                <Show when={tab() === 'requests'}>
-                  <Show
-                    when={filteredEvents().length > 0}
-                    fallback={<DebugConsoleEmptyState title="No request events yet" message="Once gateway or desktop requests flow through this session, they will appear here with trace ids, timing, and scoped metadata." />}
-                  >
-                    <div class="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
-                      <div class="min-h-0 overflow-y-auto pr-1">
-                        <div class="space-y-2">
-                          <For each={filteredEvents()}>
-                            {(event) => {
-                              const key = diagnosticsEventKey(event);
-                              return (
-                                <button type="button" class={listRowClass(selectedEventKey() === key)} onClick={() => setSelectedEventKey(key)}>
-                                  <div class="flex items-start justify-between gap-3">
-                                    <div class="min-w-0 space-y-1">
-                                      <div class="truncate text-sm font-medium text-foreground">{eventTitle(event)}</div>
-                                      <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                        <span class="font-mono">{compact(event.scope) || '-'}</span>
-                                        <span>{formatTimestamp(event.created_at)}</span>
-                                        <span>{formatDuration(event.duration_ms)}</span>
-                                        <span>Trace {compact(event.trace_id) || 'none'}</span>
-                                      </div>
-                                    </div>
-                                    <div class="shrink-0">{renderEventBadge(event)}</div>
-                                  </div>
-                                  <Show when={compact(event.message)}>
-                                    <div class="mt-2 line-clamp-2 text-[11px] leading-5 text-muted-foreground">{compact(event.message)}</div>
-                                  </Show>
-                                </button>
-                              );
-                            }}
-                          </For>
-                        </div>
-                      </div>
+            <div class="grid flex-1 min-h-0 lg:grid-cols-[14rem_minmax(0,1fr)]">
+              <aside class="border-b border-border/70 bg-muted/[0.1] p-3 lg:min-h-0 lg:border-b-0 lg:border-r">
+                <div class="rounded-md border border-border/70 bg-background px-3 py-3 shadow-sm">
+                  <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Session</div>
+                  <div class="mt-2 space-y-2 text-[11px] text-muted-foreground">
+                    <div class="flex items-center justify-between gap-3">
+                      <span>State dir</span>
+                      <span class="max-w-[7rem] truncate font-mono text-[10px] text-foreground">{compact(props.controller.stateDir()) || '-'}</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                      <span>Runtime</span>
+                      <span class="inline-flex items-center gap-1.5 text-foreground">
+                        <StatusDot tone={props.controller.runtimeEnabled() ? 'success' : 'warning'} />
+                        {props.controller.runtimeEnabled() ? 'On' : 'Off'}
+                      </span>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                      <span>UI metrics</span>
+                      <span class="inline-flex items-center gap-1.5 text-foreground">
+                        <StatusDot tone={props.controller.collectUIMetrics() ? 'success' : 'default'} />
+                        {props.controller.collectUIMetrics() ? 'On' : 'Off'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-                      <div class="min-h-0 overflow-y-auto rounded-2xl border border-border/70 bg-muted/10 p-4">
-                        <Show when={selectedEvent()} fallback={<DebugConsoleEmptyState title="Select an event" message="Choose a request event from the left to inspect its trace id, metadata, and payload details." />}>
-                          {(event) => (
-                            <div class="space-y-4">
-                              <div>
-                                <div class="text-sm font-semibold text-foreground">{eventTitle(event())}</div>
-                                <div class="mt-1 text-xs leading-5 text-muted-foreground">
-                                  {compact(event().message) || 'No extra message was attached to this event.'}
-                                </div>
-                              </div>
-                              <KeyValueGrid items={detailItemsForEvent(event())} />
-                              <div>
-                                <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Detail JSON</div>
-                                <pre class="mt-2 max-h-[18rem] overflow-auto rounded-xl border border-border/70 bg-background px-3 py-3 text-[11px] leading-5 text-foreground">{prettyJSON(event().detail)}</pre>
+                <div class="mt-3 space-y-1" role="tablist" aria-orientation="vertical">
+                  <For each={tabDescriptors()}>
+                    {(descriptor) => (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={tab() === descriptor.value}
+                        class={tabButtonClass(tab() === descriptor.value)}
+                        onClick={() => setTab(descriptor.value)}
+                      >
+                        <div class="flex items-start justify-between gap-3">
+                          <div class="min-w-0">
+                            <div class={`text-xs font-semibold ${tab() === descriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{descriptor.label}</div>
+                            <div class="mt-0.5 text-[11px] leading-5 text-muted-foreground">{descriptor.description}</div>
+                          </div>
+                          <Show when={compact(descriptor.count)}>
+                            <span class="rounded-md border border-border/70 bg-background px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                              {descriptor.count}
+                            </span>
+                          </Show>
+                        </div>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </aside>
+
+              <main class="min-h-0">
+                <Show when={!props.controller.loading()} fallback={<EmptyState title="Loading debug console" message="Fetching settings and the latest diagnostics snapshot." />}>
+                  <Show when={tab() === 'requests'}>
+                    <div class="flex h-full min-h-0 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-1">
+                      <section class="min-h-0 flex-1">
+                        <TableShell>
+                          <div class="border-b border-border/70 px-4 py-3">
+                            <div class="text-sm font-semibold text-foreground">Request stream</div>
+                            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">A dense, chronological view of recent gateway and desktop requests with trace correlation.</div>
+                          </div>
+                          <Show
+                            when={filteredEvents().length > 0}
+                            fallback={<EmptyState title="No request events yet" message="Once gateway or desktop requests flow through this session, they will appear here with trace ids, timing, and scoped metadata." />}
+                          >
+                            <div class="min-h-0 flex-1 overflow-auto">
+                              <div class="min-w-[46rem]">
+                                <TableHeaderRow
+                                  gridClass="grid-cols-[minmax(0,2.2fr)_7rem_8rem_5rem_6rem]"
+                                  columns={['Request', 'Source', 'Trace', 'Status', 'Duration']}
+                                />
+                                <For each={filteredEvents()}>
+                                  {(event) => {
+                                    const key = diagnosticsEventKey(event);
+                                    return (
+                                      <button type="button" class={listRowClass(selectedEventKey() === key)} onClick={() => setSelectedEventKey(key)}>
+                                        <div class="grid grid-cols-[minmax(0,2.2fr)_7rem_8rem_5rem_6rem] gap-3 px-3 py-2.5 text-xs">
+                                          <div class="min-w-0">
+                                            <div class="truncate font-medium text-foreground">{eventTitle(event)}</div>
+                                            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                              <span>{formatTimestamp(event.created_at)}</span>
+                                              <span>{compact(event.scope) || '-'}</span>
+                                              <Show when={compact(event.message)}>
+                                                <span class="truncate">{compact(event.message)}</span>
+                                              </Show>
+                                            </div>
+                                          </div>
+                                          <div class="flex items-start pt-0.5">
+                                            {renderEventBadge(event)}
+                                          </div>
+                                          <div class="truncate font-mono text-[11px] text-muted-foreground">{compact(event.trace_id) || '-'}</div>
+                                          <div class="tabular-nums text-foreground">{typeof event.status_code === 'number' ? event.status_code : '-'}</div>
+                                          <div class="tabular-nums text-foreground">{formatDuration(event.duration_ms)}</div>
+                                        </div>
+                                      </button>
+                                    );
+                                  }}
+                                </For>
                               </div>
                             </div>
-                          )}
-                        </Show>
-                      </div>
+                          </Show>
+                        </TableShell>
+                      </section>
+
+                      <InspectorShell>
+                        <div class="h-full overflow-auto px-4 py-4">
+                          <Show when={selectedEvent()} fallback={<EmptyState title="Select a request" message="Choose a request row to inspect its trace id, message, and payload details." />}>
+                            {(event) => (
+                              <div class="space-y-4">
+                                <SectionShell title="Overview" description={compact(event().message) || 'No extra message was attached to this event.'}>
+                                  <div class="space-y-3">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                      <div class="text-sm font-semibold text-foreground">{eventTitle(event())}</div>
+                                      {renderEventBadge(event())}
+                                    </div>
+                                    <DefinitionList items={detailItemsForEvent(event())} />
+                                  </div>
+                                </SectionShell>
+
+                                <SectionShell title="Detail JSON" description="Structured payload captured for this event.">
+                                  <MonoBlock value={prettyJSON(event().detail)} />
+                                </SectionShell>
+                              </div>
+                            )}
+                          </Show>
+                        </div>
+                      </InspectorShell>
                     </div>
                   </Show>
-                </Show>
 
-                <Show when={tab() === 'traces'}>
-                  <Show
-                    when={filteredTraces().length > 0}
-                    fallback={<DebugConsoleEmptyState title="No traces yet" message="Traces appear when multiple diagnostics events share the same trace id across the desktop, gateway, and local UI surfaces." />}
-                  >
-                    <div class="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.95fr)]">
-                      <div class="min-h-0 overflow-y-auto pr-1">
-                        <div class="space-y-2">
-                          <For each={filteredTraces()}>
-                            {(trace) => (
-                              <button type="button" class={listRowClass(selectedTraceKey() === trace.key)} onClick={() => setSelectedTraceKey(trace.key)}>
-                                <div class="flex items-start justify-between gap-3">
-                                  <div class="min-w-0 space-y-1">
-                                    <div class="truncate text-sm font-medium text-foreground">{trace.title}</div>
-                                    <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                      <span>Events {trace.events.length}</span>
-                                      <span>{formatDuration(trace.max_duration_ms)}</span>
-                                      <span>{compact(trace.trace_id) || 'generated group'}</span>
-                                    </div>
-                                  </div>
-                                  <SettingsPill tone={trace.slow ? 'warning' : 'default'}>
-                                    {trace.slow ? 'Slow trace' : 'Trace'}
-                                  </SettingsPill>
-                                </div>
-                              </button>
-                            )}
-                          </For>
-                        </div>
-                      </div>
-
-                      <div class="min-h-0 overflow-y-auto rounded-2xl border border-border/70 bg-muted/10 p-4">
-                        <Show when={selectedTrace()} fallback={<DebugConsoleEmptyState title="Select a trace" message="Choose a grouped trace to inspect the full request lifecycle and participating scopes." />}>
-                          {(trace) => (
-                            <div class="space-y-4">
-                              <div>
-                                <div class="text-sm font-semibold text-foreground">{trace().title}</div>
-                                <div class="mt-1 text-xs leading-5 text-muted-foreground">
-                                  Sources: {trace().sources.join(', ') || '-'} · Scopes: {trace().scopes.join(', ') || '-'}
-                                </div>
-                              </div>
-                              <KeyValueGrid items={detailItemsForTrace(trace())} />
-                              <div class="space-y-2">
-                                <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Timeline</div>
-                                <For each={trace().events}>
-                                  {(event) => (
-                                    <div class="rounded-xl border border-border/70 bg-background/90 px-3 py-2">
-                                      <div class="flex items-start justify-between gap-3">
-                                        <div class="space-y-1">
-                                          <div class="text-sm font-medium text-foreground">{eventTitle(event)}</div>
-                                          <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                            <span class="font-mono">{compact(event.scope) || '-'}</span>
-                                            <span>{formatTimestamp(event.created_at)}</span>
-                                            <span>{formatDuration(event.duration_ms)}</span>
+                  <Show when={tab() === 'traces'}>
+                    <div class="flex h-full min-h-0 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-1">
+                      <section class="min-h-0 flex-1">
+                        <TableShell>
+                          <div class="border-b border-border/70 px-4 py-3">
+                            <div class="text-sm font-semibold text-foreground">Trace groups</div>
+                            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Events grouped by trace id so you can follow a request across scopes without scanning the whole stream.</div>
+                          </div>
+                          <Show
+                            when={filteredTraces().length > 0}
+                            fallback={<EmptyState title="No traces yet" message="Traces appear when multiple diagnostics events share the same trace id across the desktop, gateway, and local UI surfaces." />}
+                          >
+                            <div class="min-h-0 flex-1 overflow-auto">
+                              <div class="min-w-[46rem]">
+                                <TableHeaderRow
+                                  gridClass="grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem]"
+                                  columns={['Trace', 'Sources', 'Events', 'Max', 'Last Seen']}
+                                />
+                                <For each={filteredTraces()}>
+                                  {(trace) => (
+                                    <button type="button" class={listRowClass(selectedTraceKey() === trace.key)} onClick={() => setSelectedTraceKey(trace.key)}>
+                                      <div class="grid grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem] gap-3 px-3 py-2.5 text-xs">
+                                        <div class="min-w-0">
+                                          <div class="truncate font-medium text-foreground">{trace.title}</div>
+                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                            <span class="font-mono">{compact(trace.trace_id) || 'generated group'}</span>
+                                            <span>{trace.scopes.join(', ') || '-'}</span>
                                           </div>
                                         </div>
-                                        {renderEventBadge(event)}
+                                        <div class="truncate text-muted-foreground">{trace.sources.join(', ') || '-'}</div>
+                                        <div class="tabular-nums text-foreground">{trace.events.length}</div>
+                                        <div class="tabular-nums text-foreground">{formatDuration(trace.max_duration_ms)}</div>
+                                        <div class="text-muted-foreground">{formatTimestamp(trace.last_seen_at)}</div>
                                       </div>
-                                      <Show when={compact(event.message)}>
-                                        <div class="mt-2 text-[11px] leading-5 text-muted-foreground">{compact(event.message)}</div>
-                                      </Show>
-                                    </div>
+                                    </button>
                                   )}
                                 </For>
                               </div>
                             </div>
-                          )}
-                        </Show>
+                          </Show>
+                        </TableShell>
+                      </section>
+
+                      <InspectorShell>
+                        <div class="h-full overflow-auto px-4 py-4">
+                          <Show when={selectedTrace()} fallback={<EmptyState title="Select a trace" message="Choose a grouped trace to inspect the full request lifecycle and participating scopes." />}>
+                            {(trace) => (
+                              <div class="space-y-4">
+                                <SectionShell
+                                  title="Trace overview"
+                                  description={`Sources: ${trace().sources.join(', ') || '-'} · Scopes: ${trace().scopes.join(', ') || '-'}`}
+                                >
+                                  <div class="space-y-3">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                      <div class="text-sm font-semibold text-foreground">{trace().title}</div>
+                                      <SettingsPill tone={trace().slow ? 'warning' : 'default'}>
+                                        {trace().slow ? 'Slow trace' : 'Trace'}
+                                      </SettingsPill>
+                                    </div>
+                                    <DefinitionList items={detailItemsForTrace(trace())} />
+                                  </div>
+                                </SectionShell>
+
+                                <SectionShell title="Timeline" description="Ordered events within the selected trace.">
+                                  <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
+                                    <For each={trace().events}>
+                                      {(event, index) => (
+                                        <div class={`px-3 py-3 ${index() === 0 ? '' : 'border-t border-border/60'}`}>
+                                          <div class="flex items-start justify-between gap-3">
+                                            <div class="min-w-0">
+                                              <div class="truncate text-sm font-medium text-foreground">{eventTitle(event)}</div>
+                                              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                                <span>{formatTimestamp(event.created_at)}</span>
+                                                <span>{compact(event.scope) || '-'}</span>
+                                                <span>{formatDuration(event.duration_ms)}</span>
+                                              </div>
+                                              <Show when={compact(event.message)}>
+                                                <div class="mt-2 text-[11px] leading-5 text-muted-foreground">{compact(event.message)}</div>
+                                              </Show>
+                                            </div>
+                                            <div class="shrink-0">{renderEventBadge(event)}</div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </For>
+                                  </div>
+                                </SectionShell>
+                              </div>
+                            )}
+                          </Show>
+                        </div>
+                      </InspectorShell>
+                    </div>
+                  </Show>
+
+                  <Show when={tab() === 'ui'}>
+                    <div class="h-full overflow-auto px-4 py-4">
+                      <div class="space-y-4">
+                        <MetricStrip
+                          columnsClass="sm:grid-cols-2 xl:grid-cols-4"
+                          items={[
+                            {
+                              label: 'FPS',
+                              value: String(Math.round(props.controller.performanceSnapshot().fps.current || 0)),
+                              note: `Avg ${props.controller.performanceSnapshot().fps.average || 0} · Low ${props.controller.performanceSnapshot().fps.low || 0}`,
+                            },
+                            {
+                              label: 'Long Tasks',
+                              value: String(props.controller.performanceSnapshot().long_tasks.count),
+                              note: `Max ${formatDuration(props.controller.performanceSnapshot().long_tasks.max_duration_ms)}`,
+                            },
+                            {
+                              label: 'Layout Shift',
+                              value: String(props.controller.performanceSnapshot().layout_shift.total_score || 0),
+                              note: `Peaks ${props.controller.performanceSnapshot().layout_shift.max_score || 0}`,
+                            },
+                            {
+                              label: 'JS Heap',
+                              value: formatBytes(props.controller.performanceSnapshot().memory?.used_js_heap_size),
+                              note: `Total ${formatBytes(props.controller.performanceSnapshot().memory?.total_js_heap_size)}`,
+                            },
+                          ]}
+                        />
+
+                        <div class="grid gap-4 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
+                          <div class="space-y-4">
+                            <SectionShell title="Navigation and paints" description="Browser timing data captured from the current renderer session.">
+                              <DefinitionList
+                                items={[
+                                  { label: 'Collecting', value: props.controller.performanceSnapshot().collecting ? 'Yes' : 'No' },
+                                  { label: 'FPS samples', value: String(props.controller.performanceSnapshot().fps.samples) },
+                                  { label: 'First paint', value: formatDuration(props.controller.performanceSnapshot().paints.first_paint_ms) },
+                                  { label: 'First contentful paint', value: formatDuration(props.controller.performanceSnapshot().paints.first_contentful_paint_ms) },
+                                  { label: 'Navigation type', value: compact(props.controller.performanceSnapshot().navigation.type) || '-' },
+                                  { label: 'DOMContentLoaded', value: formatDuration(props.controller.performanceSnapshot().navigation.dom_content_loaded_ms) },
+                                  { label: 'Load event', value: formatDuration(props.controller.performanceSnapshot().navigation.load_event_ms) },
+                                  { label: 'Response end', value: formatDuration(props.controller.performanceSnapshot().navigation.response_end_ms) },
+                                ]}
+                              />
+                            </SectionShell>
+
+                            <SectionShell title="Instrumentation support" description="Capabilities currently available in this browser process.">
+                              <DefinitionList
+                                items={[
+                                  { label: 'Long tasks', value: props.controller.performanceSnapshot().supported.longtask ? 'Supported' : 'Unavailable' },
+                                  { label: 'Layout shift', value: props.controller.performanceSnapshot().supported.layout_shift ? 'Supported' : 'Unavailable' },
+                                  { label: 'Paint timing', value: props.controller.performanceSnapshot().supported.paint ? 'Supported' : 'Unavailable' },
+                                  { label: 'Navigation timing', value: props.controller.performanceSnapshot().supported.navigation ? 'Supported' : 'Unavailable' },
+                                  { label: 'Memory', value: props.controller.performanceSnapshot().supported.memory ? 'Supported' : 'Unavailable' },
+                                ]}
+                              />
+                            </SectionShell>
+                          </div>
+
+                          <SectionShell title="Recent UI events" description="A local ring buffer for frame drops, long tasks, and layout spikes.">
+                            <Show
+                              when={props.controller.performanceSnapshot().recent_events.length > 0}
+                              fallback={<EmptyState title="No UI spikes recorded" message="When frame drops, long tasks, or layout shifts happen, they will show up here with a small local event log." />}
+                            >
+                              <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
+                                <For each={props.controller.performanceSnapshot().recent_events}>
+                                  {(event, index) => (
+                                    <div class={`px-3 py-3 ${index() === 0 ? '' : 'border-t border-border/60'}`}>
+                                      <div class="flex items-start justify-between gap-3">
+                                        <div class="min-w-0">
+                                          <div class="truncate text-sm font-medium text-foreground">{eventTitle(event)}</div>
+                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                            <span>{formatTimestamp(event.created_at)}</span>
+                                            <span>{formatDuration(event.duration_ms)}</span>
+                                          </div>
+                                          <div class="mt-2 text-[11px] leading-5 text-muted-foreground">{compact(event.message) || '-'}</div>
+                                        </div>
+                                        <div class="shrink-0">{renderEventBadge(event)}</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </For>
+                              </div>
+                            </Show>
+                          </SectionShell>
+                        </div>
+                      </div>
+                    </div>
+                  </Show>
+
+                  <Show when={tab() === 'runtime'}>
+                    <div class="h-full overflow-auto px-4 py-4">
+                      <div class="space-y-4">
+                        <MetricStrip
+                          columnsClass="sm:grid-cols-2 xl:grid-cols-5"
+                          items={[
+                            { label: 'Events', value: String(props.controller.stats().total_events) },
+                            { label: 'Agent', value: String(props.controller.stats().agent_events) },
+                            { label: 'Desktop', value: String(props.controller.stats().desktop_events) },
+                            { label: 'Slow', value: String(props.controller.stats().slow_events) },
+                            { label: 'Traces', value: String(props.controller.stats().trace_count) },
+                          ]}
+                        />
+
+                        <div class="grid gap-4 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
+                          <SectionShell title="Collector state" description="Persisted settings, runtime enablement, and current storage location.">
+                            <DefinitionList
+                              items={[
+                                { label: 'Configured', value: props.controller.enabled() ? 'Enabled' : 'Disabled' },
+                                { label: 'Runtime collector', value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive' },
+                                { label: 'Stream', value: props.controller.streamConnected() ? 'Connected' : 'Disconnected' },
+                                { label: 'UI metrics', value: props.controller.collectUIMetrics() ? 'Enabled' : 'Disabled' },
+                                { label: 'State dir', value: compact(props.controller.stateDir()) || '-', mono: true },
+                                { label: 'Last snapshot', value: formatTimestamp(props.controller.lastSnapshotAt()) },
+                              ]}
+                            />
+                          </SectionShell>
+
+                          <SectionShell title="Slow summary" description="Aggregated hotspots from the live in-memory diagnostics buffer.">
+                            <Show
+                              when={props.controller.slowSummary().length > 0}
+                              fallback={<EmptyState title="No slow hotspots" message="Slow summaries populate from the same live event buffer shown in the Requests tab." />}
+                            >
+                              <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
+                                <TableHeaderRow
+                                  gridClass="grid-cols-[minmax(0,2fr)_4rem_4rem_6rem_6rem]"
+                                  columns={['Signature', 'Seen', 'Slow', 'Avg', 'Max']}
+                                />
+                                <For each={props.controller.slowSummary()}>
+                                  {(item) => (
+                                    <div class="border-b border-border/50 px-3 py-2.5 last:border-b-0">
+                                      <div class="grid grid-cols-[minmax(0,2fr)_4rem_4rem_6rem_6rem] gap-3 text-xs">
+                                        <div class="min-w-0">
+                                          <div class="truncate font-medium text-foreground">{slowSummaryTitle(item)}</div>
+                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                            <span>{compact(item.scope) || '-'}</span>
+                                            <span>{formatTimestamp(item.last_seen_at)}</span>
+                                          </div>
+                                        </div>
+                                        <div class="tabular-nums text-foreground">{item.count}</div>
+                                        <div class="tabular-nums text-foreground">{item.slow_count}</div>
+                                        <div class="tabular-nums text-foreground">{formatDuration(item.avg_duration_ms)}</div>
+                                        <div class="tabular-nums text-foreground">{formatDuration(item.max_duration_ms)}</div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </For>
+                              </div>
+                            </Show>
+                          </SectionShell>
+                        </div>
+                      </div>
+                    </div>
+                  </Show>
+
+                  <Show when={tab() === 'export'}>
+                    <div class="h-full overflow-auto px-4 py-4">
+                      <div class="space-y-4">
+                        <div class="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1fr)]">
+                          <div class="space-y-4">
+                            <SectionShell title="Bundle contents" description="Portable diagnostics you can attach to reviews, incident threads, or local debugging notes.">
+                              <DefinitionList
+                                items={[
+                                  { label: 'Last export', value: formatTimestamp(props.controller.lastExportAt()) },
+                                  { label: 'Server events', value: String(props.controller.serverEvents().length) },
+                                  { label: 'Trace groups', value: String(props.controller.traces().length) },
+                                  { label: 'UI events', value: String(props.controller.performanceSnapshot().recent_events.length) },
+                                ]}
+                              />
+                            </SectionShell>
+
+                            <SectionShell title="Included sources" description="The export merges persisted diagnostics with browser-local performance data.">
+                              <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
+                                <div class="border-b border-border/60 px-3 py-2.5 text-xs">
+                                  <div class="font-medium text-foreground">Backend diagnostics</div>
+                                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Snapshot summary, agent event list, desktop event list, and runtime state directory.</div>
+                                </div>
+                                <div class="border-b border-border/60 px-3 py-2.5 text-xs">
+                                  <div class="font-medium text-foreground">Current settings</div>
+                                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                                    <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">debug_console.enabled</code>
+                                    {' and '}
+                                    <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">collect_ui_metrics</code>
+                                    {' at export time.'}
+                                  </div>
+                                </div>
+                                <div class="px-3 py-2.5 text-xs">
+                                  <div class="font-medium text-foreground">UI performance snapshot</div>
+                                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Renderer-local FPS, long-task, layout-shift, paint, navigation, memory, and recent UI event data.</div>
+                                </div>
+                              </div>
+                            </SectionShell>
+                          </div>
+
+                          <SectionShell title="Bundle preview" description="High-level JSON preview of the current export payload.">
+                            <MonoBlock value={prettyJSON({
+                              runtime_enabled: props.controller.runtimeEnabled(),
+                              stream_connected: props.controller.streamConnected(),
+                              ui_metrics_enabled: props.controller.collectUIMetrics(),
+                              stats: props.controller.stats(),
+                              state_dir: props.controller.stateDir() || undefined,
+                            })}
+                            />
+                          </SectionShell>
+                        </div>
+
+                        <div class="flex items-center justify-end">
+                          <Button variant="default" onClick={() => void exportBundle()} disabled={props.controller.exporting()}>
+                            {props.controller.exporting() ? 'Exporting...' : 'Download debug bundle'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </Show>
                 </Show>
-
-                <Show when={tab() === 'ui'}>
-                  <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
-                    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                      <div class="rounded-2xl border border-border/70 bg-muted/12 p-4">
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">FPS</div>
-                        <div class="mt-2 text-2xl font-semibold text-foreground">{Math.round(props.controller.performanceSnapshot().fps.current || 0)}</div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">Avg {props.controller.performanceSnapshot().fps.average || 0} · Low {props.controller.performanceSnapshot().fps.low || 0}</div>
-                      </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/12 p-4">
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Long Tasks</div>
-                        <div class="mt-2 text-2xl font-semibold text-foreground">{props.controller.performanceSnapshot().long_tasks.count}</div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">Max {formatDuration(props.controller.performanceSnapshot().long_tasks.max_duration_ms)}</div>
-                      </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/12 p-4">
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Layout Shift</div>
-                        <div class="mt-2 text-2xl font-semibold text-foreground">{props.controller.performanceSnapshot().layout_shift.total_score || 0}</div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">Peaks {props.controller.performanceSnapshot().layout_shift.max_score || 0}</div>
-                      </div>
-                      <div class="rounded-2xl border border-border/70 bg-muted/12 p-4">
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">JS Heap</div>
-                        <div class="mt-2 text-2xl font-semibold text-foreground">
-                          {formatBytes(props.controller.performanceSnapshot().memory?.used_js_heap_size)}
-                        </div>
-                        <div class="mt-1 text-[11px] text-muted-foreground">
-                          Total {formatBytes(props.controller.performanceSnapshot().memory?.total_js_heap_size)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <KeyValueGrid
-                      items={[
-                        { label: 'Collecting', value: props.controller.performanceSnapshot().collecting ? 'Yes' : 'No' },
-                        { label: 'FPS samples', value: String(props.controller.performanceSnapshot().fps.samples) },
-                        { label: 'First paint', value: formatDuration(props.controller.performanceSnapshot().paints.first_paint_ms) },
-                        { label: 'First contentful paint', value: formatDuration(props.controller.performanceSnapshot().paints.first_contentful_paint_ms) },
-                        { label: 'Navigation type', value: compact(props.controller.performanceSnapshot().navigation.type) || '-' },
-                        { label: 'DOMContentLoaded', value: formatDuration(props.controller.performanceSnapshot().navigation.dom_content_loaded_ms) },
-                        { label: 'Load event', value: formatDuration(props.controller.performanceSnapshot().navigation.load_event_ms) },
-                        { label: 'Response end', value: formatDuration(props.controller.performanceSnapshot().navigation.response_end_ms) },
-                      ]}
-                    />
-
-                    <Show
-                      when={props.controller.performanceSnapshot().recent_events.length > 0}
-                      fallback={<DebugConsoleEmptyState title="No UI spikes recorded" message="When frame drops, long tasks, or layout shifts happen, they will show up here with a small local event log." />}
-                    >
-                      <div class="space-y-2">
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Recent UI events</div>
-                        <For each={props.controller.performanceSnapshot().recent_events}>
-                          {(event) => (
-                            <div class="rounded-xl border border-border/70 bg-background/90 px-3 py-2">
-                              <div class="flex items-start justify-between gap-3">
-                                <div class="space-y-1">
-                                  <div class="text-sm font-medium text-foreground">{eventTitle(event)}</div>
-                                  <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                    <span>{formatTimestamp(event.created_at)}</span>
-                                    <span>{formatDuration(event.duration_ms)}</span>
-                                  </div>
-                                </div>
-                                {renderEventBadge(event)}
-                              </div>
-                              <div class="mt-2 text-[11px] leading-5 text-muted-foreground">{compact(event.message) || '-'}</div>
-                            </div>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </div>
-                </Show>
-
-                <Show when={tab() === 'runtime'}>
-                  <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
-                    <KeyValueGrid
-                      items={[
-                        { label: 'Configured', value: props.controller.enabled() ? 'Enabled' : 'Disabled' },
-                        { label: 'Runtime collector', value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive' },
-                        { label: 'Stream', value: props.controller.streamConnected() ? 'Connected' : 'Disconnected' },
-                        { label: 'UI metrics', value: props.controller.collectUIMetrics() ? 'Enabled' : 'Disabled' },
-                        { label: 'State dir', value: compact(props.controller.stateDir()) || '-', mono: true },
-                        { label: 'Last snapshot', value: formatTimestamp(props.controller.lastSnapshotAt()) },
-                      ]}
-                    />
-
-                    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                      <For each={[
-                        ['Events', String(props.controller.stats().total_events)],
-                        ['Agent', String(props.controller.stats().agent_events)],
-                        ['Desktop', String(props.controller.stats().desktop_events)],
-                        ['Slow', String(props.controller.stats().slow_events)],
-                        ['Traces', String(props.controller.stats().trace_count)],
-                      ] as const}>
-                        {([label, value]) => (
-                          <div class="rounded-2xl border border-border/70 bg-muted/12 p-4">
-                            <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
-                            <div class="mt-2 text-2xl font-semibold text-foreground">{value}</div>
-                          </div>
-                        )}
-                      </For>
-                    </div>
-
-                    <Show
-                      when={props.controller.slowSummary().length > 0}
-                      fallback={<DebugConsoleEmptyState title="No slow hotspots" message="Slow summaries populate from the same live event buffer shown in the Requests tab." />}
-                    >
-                      <div class="space-y-2">
-                        <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Slow summary</div>
-                        <div class="grid gap-2">
-                          <For each={props.controller.slowSummary()}>
-                            {(item) => (
-                              <div class="rounded-xl border border-border/70 bg-background/90 px-3 py-2">
-                                <div class="flex items-start justify-between gap-3">
-                                  <div class="space-y-1">
-                                    <div class="text-sm font-medium text-foreground">{[compact(item.method), compact(item.path) || compact(item.kind) || compact(item.scope)].filter(Boolean).join(' ')}</div>
-                                    <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                                      <span>{item.scope}</span>
-                                      <span>Count {item.count}</span>
-                                      <span>Slow {item.slow_count}</span>
-                                      <span>Avg {formatDuration(item.avg_duration_ms)}</span>
-                                      <span>Max {formatDuration(item.max_duration_ms)}</span>
-                                    </div>
-                                  </div>
-                                  <SettingsPill tone={item.slow_count > 0 ? 'warning' : 'default'}>
-                                    {typeof item.last_status_code === 'number' ? `HTTP ${item.last_status_code}` : 'Summary'}
-                                  </SettingsPill>
-                                </div>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </div>
-                    </Show>
-                  </div>
-                </Show>
-
-                <Show when={tab() === 'export'}>
-                  <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
-                    <div class="rounded-2xl border border-border/70 bg-muted/12 p-4">
-                      <div class="text-sm font-semibold text-foreground">Portable diagnostics bundle</div>
-                      <div class="mt-1 text-xs leading-5 text-muted-foreground">
-                        Export includes the backend diagnostics snapshot, full agent and desktop event lists, current debug-console settings, and the local UI rendering snapshot collected in this browser session.
-                      </div>
-                    </div>
-
-                    <KeyValueGrid
-                      items={[
-                        { label: 'Last export', value: formatTimestamp(props.controller.lastExportAt()) },
-                        { label: 'Server events in memory', value: String(props.controller.serverEvents().length) },
-                        { label: 'Trace groups in memory', value: String(props.controller.traces().length) },
-                        { label: 'UI events in memory', value: String(props.controller.performanceSnapshot().recent_events.length) },
-                      ]}
-                    />
-
-                    <div class="rounded-2xl border border-border/70 bg-background px-4 py-4">
-                      <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Bundle preview</div>
-                      <pre class="mt-3 max-h-[18rem] overflow-auto rounded-xl border border-border/70 bg-muted/20 px-3 py-3 text-[11px] leading-5 text-foreground">{prettyJSON({
-                        runtime_enabled: props.controller.runtimeEnabled(),
-                        stream_connected: props.controller.streamConnected(),
-                        ui_metrics_enabled: props.controller.collectUIMetrics(),
-                        stats: props.controller.stats(),
-                        state_dir: props.controller.stateDir() || undefined,
-                      })}</pre>
-                    </div>
-
-                    <div class="flex items-center justify-end">
-                      <Button variant="default" onClick={() => void exportBundle()} disabled={props.controller.exporting()}>
-                        {props.controller.exporting() ? 'Exporting...' : 'Download debug bundle'}
-                      </Button>
-                    </div>
-                  </div>
-                </Show>
-              </Show>
+              </main>
             </div>
           </div>
         </PersistentFloatingWindow>
