@@ -252,6 +252,57 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('surfaces a clearer loading state for paged workspace footers', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 2, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [
+                    { section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 4, deletions: 2 },
+                    { section: 'staged', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 },
+                  ],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  staged: {
+                    items: [],
+                    totalCount: 40,
+                    nextOffset: 2,
+                    hasMore: true,
+                    loading: true,
+                    error: '',
+                    initialized: true,
+                  },
+                }}
+                selectedSection="staged"
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(host.textContent).toContain('Loading next page');
+      expect(host.textContent).toContain('Loading more...');
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows the section-specific bulk action button and emits the selected section', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

@@ -35,6 +35,7 @@ import {
   GitChangeStatusPill,
   GitLabelBlock,
   GitMetaPill,
+  GitPagedTableFooter,
   GitPrimaryTitle,
   GitShortcutOrbButton,
   GitShortcutOrbDock,
@@ -188,21 +189,18 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           }}
         />
         <Show when={(props.hasMore || props.loadingMore) && props.items.length > 0}>
-          <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
-            <GitSubtleNote>
-              Showing {props.items.length} of {props.totalCount} file{props.totalCount === 1 ? '' : 's'}.
-            </GitSubtleNote>
-            <Button
-              size="sm"
-              variant="outline"
-              class="rounded-md"
-              onClick={() => props.onLoadMore?.()}
-              loading={props.loadingMore}
-              disabled={!props.hasMore || props.loadingMore}
-            >
-              Load more
-            </Button>
-          </div>
+          <GitPagedTableFooter
+            summary={(
+              <>
+                Showing <span class="font-semibold tabular-nums text-foreground/90">{props.items.length}</span> of{' '}
+                <span class="font-semibold tabular-nums text-foreground/90">{props.totalCount}</span> file{props.totalCount === 1 ? '' : 's'}.
+              </>
+            )}
+            onLoadMore={props.onLoadMore}
+            hasMore={props.hasMore}
+            loading={props.loadingMore}
+            loadingStatus="Loading next page"
+          />
         </Show>
       </Show>
     </div>

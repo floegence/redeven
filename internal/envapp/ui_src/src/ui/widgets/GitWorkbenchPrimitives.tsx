@@ -1,6 +1,6 @@
 import { For, Show, type Component, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
+import { Button, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Tooltip } from '../primitives/Tooltip';
 import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
@@ -122,6 +122,67 @@ export interface GitSubtleNoteProps {
 
 export function GitSubtleNote(props: GitSubtleNoteProps) {
   return <div class={cn('rounded-md border border-border/45 bg-muted/[0.16] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
+}
+
+export interface GitPagedTableFooterProps {
+  summary: JSX.Element;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loading?: boolean;
+  buttonLabel?: string;
+  loadingLabel?: string;
+  loadingStatus?: JSX.Element;
+  class?: string;
+}
+
+export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
+  const loading = () => Boolean(props.loading);
+  const buttonLabel = () => (loading() ? (props.loadingLabel ?? 'Loading more...') : (props.buttonLabel ?? 'Load more'));
+  const loadingStatus = () => (loading() ? (props.loadingStatus ?? 'Loading next page') : '');
+
+  return (
+    <div
+      class={cn(
+        'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 border-t border-border/55 bg-background/72 px-3 py-2',
+        props.class,
+      )}
+    >
+      <div class="min-w-0 justify-self-start">
+        <Show when={loadingStatus()}>
+          {(status) => (
+            <div
+              aria-live="polite"
+              class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/45 bg-background/86 px-2 py-1 text-[10px] font-medium leading-none tracking-[0.02em] text-muted-foreground shadow-sm shadow-black/5"
+            >
+              <span class="inline-flex h-4 w-4 items-center justify-center text-primary/80">
+                <SnakeLoader size="sm" />
+              </span>
+              <span class="truncate">{status()}</span>
+            </div>
+          )}
+        </Show>
+      </div>
+
+      <div class="justify-self-center">
+        <Button
+          size="sm"
+          variant="outline"
+          class="min-w-[8.75rem] rounded-full border-border/60 bg-background/92 px-3 text-[11px] font-medium shadow-sm shadow-black/5 transition-[box-shadow,background-color,border-color] duration-150 hover:bg-accent/60 hover:shadow-md"
+          onClick={() => props.onLoadMore?.()}
+          loading={loading()}
+          disabled={!props.hasMore || loading()}
+        >
+          {buttonLabel()}
+        </Button>
+      </div>
+
+      <div class="min-w-0 justify-self-end">
+        <GitSubtleNote class="max-w-full border-border/40 bg-background/84 px-2 py-1 text-[10px] leading-4 shadow-sm shadow-black/5">
+          {props.summary}
+        </GitSubtleNote>
+      </div>
+    </div>
+  );
 }
 
 export interface GitChecklistItemProps {
