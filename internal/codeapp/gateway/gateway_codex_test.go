@@ -18,7 +18,7 @@ type stubCodexBackend struct {
 	status               func(ctx context.Context) codexbridge.Status
 	readCapabilities     func(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
 	listThreads          func(ctx context.Context, limit int) ([]codexbridge.Thread, error)
-	openThread           func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
+	readThread           func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	startThread          func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	startTurn            func(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
 	archiveThread        func(ctx context.Context, threadID string) error
@@ -47,9 +47,9 @@ func (s *stubCodexBackend) ListThreads(ctx context.Context, limit int) ([]codexb
 	return nil, nil
 }
 
-func (s *stubCodexBackend) OpenThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error) {
-	if s.openThread != nil {
-		return s.openThread(ctx, threadID)
+func (s *stubCodexBackend) ReadThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error) {
+	if s.readThread != nil {
+		return s.readThread(ctx, threadID)
 	}
 	return nil, nil
 }
@@ -162,14 +162,14 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 	}
 
 	var (
-		gotStartThread   codexbridge.StartThreadRequest
-		gotStartTurn     codexbridge.StartTurnRequest
+		gotStartThread     codexbridge.StartThreadRequest
+		gotStartTurn       codexbridge.StartTurnRequest
 		gotCapabilitiesCWD string
-		gotArchiveID     string
-		gotRespondThread string
-		gotRespondID     string
-		gotRespondBody   codexbridge.PendingRequestResponse
-		gotAfterSeq      int64
+		gotArchiveID       string
+		gotRespondThread   string
+		gotRespondID       string
+		gotRespondBody     codexbridge.PendingRequestResponse
+		gotAfterSeq        int64
 	)
 
 	gw, err := New(Options{
@@ -212,9 +212,10 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 			listThreads: func(ctx context.Context, limit int) ([]codexbridge.Thread, error) {
 				return []codexbridge.Thread{thread}, nil
 			},
-			openThread: func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error) {
+			readThread: func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error) {
+				contextWindow := int64(128000)
 				return &codexbridge.ThreadDetail{
-					Thread:       thread,
+					Thread: thread,
 					RuntimeConfig: codexbridge.ThreadRuntimeConfig{
 						CWD:             "/workspace",
 						Model:           "gpt-5.4",
@@ -222,8 +223,25 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 						SandboxMode:     "workspace-write",
 						ReasoningEffort: "medium",
 					},
-					LastEventSeq: 2,
-					ActiveStatus: "running",
+					TokenUsage: &codexbridge.ThreadTokenUsage{
+						Total: codexbridge.TokenUsageBreakdown{
+							TotalTokens:           6400,
+							InputTokens:           4200,
+							CachedInputTokens:     600,
+							OutputTokens:          1100,
+							ReasoningOutputTokens: 300,
+						},
+						Last: codexbridge.TokenUsageBreakdown{
+							TotalTokens:           1200,
+							InputTokens:           800,
+							CachedInputTokens:     200,
+							OutputTokens:          150,
+							ReasoningOutputTokens: 50,
+						},
+						ModelContextWindow: &contextWindow,
+					},
+					LastAppliedSeq: 2,
+					ActiveStatus:   "running",
 				}, nil
 			},
 			startThread: func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error) {
@@ -339,7 +357,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 		}
-		if !bytes.Contains(rr.Body.Bytes(), []byte(`"last_event_seq":2`)) {
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"last_applied_seq":2`)) || !bytes.Contains(rr.Body.Bytes(), []byte(`"token_usage"`)) {
 			t.Fatalf("unexpected body: %s", rr.Body.String())
 		}
 	})

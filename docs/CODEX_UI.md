@@ -18,6 +18,8 @@ High-level design:
 - The Go agent owns the Codex process boundary and spawns `codex app-server` from the host's `codex` binary as a child process.
 - Transport between Redeven Agent and Codex uses stdio (`codex app-server --listen stdio://`).
 - The bridge keeps `experimentalApi=false` and targets the stable app-server surface only.
+- The bridge keeps a per-thread projected state so browser bootstrap and SSE replay always agree on the same applied event cursor.
+- Thread bootstrap uses `thread/read(includeTurns=true)` semantics, while live work uses `thread/resume` only when a thread must become active for `turn/start`.
 - `thread/start` only forwards explicitly user-supplied fields such as `cwd` and optional `model`; host Codex defaults stay owned by Codex itself.
 - The gateway also aggregates a Codex-only capability snapshot for the browser by combining `model/list`, `config/read`, and `configRequirements/read`.
 
@@ -61,6 +63,18 @@ The current browser-facing contract is:
 
 The event stream endpoint is SSE and is used for live transcript / approval updates.
 
+`GET /_redeven_proxy/api/codex/threads/:id` returns a projected bootstrap payload with:
+
+- `thread`
+- `runtime_config`
+- `pending_requests`
+- `token_usage`
+- `last_applied_seq`
+- `active_status`
+- `active_status_flags`
+
+`last_applied_seq` means the returned bootstrap has already applied all bridge-projected events up to that sequence number. The browser must resume SSE from that exact sequence so refreshes do not lose live work state.
+
 `POST /_redeven_proxy/api/codex/threads` returns the normalized thread detail bootstrap, including `runtime_config` with the resolved app-server values for:
 
 - `model`
@@ -81,6 +95,8 @@ The event stream endpoint is SSE and is used for live transcript / approval upda
 - `sandbox_mode`
 - `approvals_reviewer`
 
+When the target thread is not currently live-loaded on the bridge connection, the bridge resumes it before forwarding `turn/start`.
+
 ## UI behavior
 
 Current Env App behavior:
@@ -93,6 +109,7 @@ Current Env App behavior:
 - The Codex transcript and send bar intentionally mirror Flower's message lane geometry, bubble cadence, and editor chrome through Codex-local components and selectors only; Flower files and selectors are not changed.
 - Codex UI structure stays isolated under `src/ui/codex/*`, including its own namespaced `codex.css` layer, so Flower selectors and component contracts do not change when Codex layout evolves.
 - The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
+- Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
 - The composer keeps the most useful Codex controls directly below the input instead of in a noisy chip rail:
   - working directory
   - image attachments
@@ -104,6 +121,7 @@ Current Env App behavior:
 - New threads can override working directory, model, approval policy, and sandbox before the first turn, and later turns can keep those settings sticky through explicit `turn/start` overrides.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
+- The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.
 - Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
 
 ## Permissions

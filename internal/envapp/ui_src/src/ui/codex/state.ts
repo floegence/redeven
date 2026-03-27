@@ -2,6 +2,7 @@ import type {
   CodexEvent,
   CodexItem,
   CodexPendingRequest,
+  CodexThreadTokenUsage,
   CodexThread,
   CodexThreadDetail,
   CodexThreadSession,
@@ -14,10 +15,20 @@ type MutableCodexThreadSession = {
   items_by_id: Record<string, CodexTranscriptItem>;
   item_order: string[];
   pending_requests: Record<string, CodexPendingRequest>;
-  last_event_seq: number;
+  token_usage?: CodexThreadTokenUsage | null;
+  last_applied_seq: number;
   active_status: string;
   active_status_flags: string[];
 };
+
+function cloneTokenUsage(usage: CodexThreadTokenUsage | null | undefined): CodexThreadTokenUsage | null | undefined {
+  if (!usage) return usage ?? null;
+  return {
+    ...usage,
+    total: { ...usage.total },
+    last: { ...usage.last },
+  };
+}
 
 function cloneSession(session: CodexThreadSession): MutableCodexThreadSession {
   return {
@@ -27,6 +38,7 @@ function cloneSession(session: CodexThreadSession): MutableCodexThreadSession {
     items_by_id: { ...session.items_by_id },
     item_order: [...session.item_order],
     pending_requests: { ...session.pending_requests },
+    token_usage: cloneTokenUsage(session.token_usage),
     active_status_flags: [...session.active_status_flags],
   };
 }
@@ -57,6 +69,95 @@ function addOrUpdateItem(session: CodexThreadSession, item: CodexItem, orderHint
 function ensureLiveItem(session: CodexThreadSession, itemID: string, fallback: CodexItem): CodexThreadSession {
   if (session.items_by_id[itemID]) return cloneSession(session);
   return addOrUpdateItem(session, { ...fallback, id: itemID }, session.item_order.length);
+}
+
+function ensureStringPart(values: readonly string[] | null | undefined, index: number): string[] {
+  const next = [...(values ?? [])];
+  while (next.length <= index) {
+    next.push('');
+  }
+  return next;
+}
+
+function appendItemText(
+  session: CodexThreadSession,
+  itemID: string,
+  fallback: CodexItem,
+  delta: string,
+): CodexThreadSession {
+  let next = ensureLiveItem(session, itemID, fallback);
+  const existing = next.items_by_id[itemID];
+  next.items_by_id[itemID] = {
+    ...existing,
+    text: `${existing.text ?? ''}${delta}`,
+  };
+  return next;
+}
+
+function appendItemSummary(
+  session: CodexThreadSession,
+  itemID: string,
+  fallback: CodexItem,
+  summaryIndex: number,
+  delta: string,
+): CodexThreadSession {
+  let next = ensureLiveItem(session, itemID, fallback);
+  const existing = next.items_by_id[itemID];
+  const summary = ensureStringPart(existing.summary, Math.max(0, summaryIndex));
+  summary[Math.max(0, summaryIndex)] = `${summary[Math.max(0, summaryIndex)] ?? ''}${delta}`;
+  next.items_by_id[itemID] = {
+    ...existing,
+    summary,
+  };
+  return next;
+}
+
+function appendItemContent(
+  session: CodexThreadSession,
+  itemID: string,
+  fallback: CodexItem,
+  contentIndex: number,
+  delta: string,
+): CodexThreadSession {
+  let next = ensureLiveItem(session, itemID, fallback);
+  const existing = next.items_by_id[itemID];
+  const normalizedIndex = Math.max(0, contentIndex);
+  const content = ensureStringPart(existing.content, normalizedIndex);
+  content[normalizedIndex] = `${content[normalizedIndex] ?? ''}${delta}`;
+  next.items_by_id[itemID] = {
+    ...existing,
+    content,
+    text: content.join('\n\n'),
+  };
+  return next;
+}
+
+function appendFileChangeDiff(
+  session: CodexThreadSession,
+  itemID: string,
+  delta: string,
+): CodexThreadSession {
+  let next = ensureLiveItem(session, itemID, { id: itemID, type: 'fileChange', changes: [], status: 'inProgress' });
+  const existing = next.items_by_id[itemID];
+  const changes = [...(existing.changes ?? [])];
+  if (changes.length === 0) {
+    changes.push({
+      path: 'Pending diff',
+      kind: 'stream',
+      diff: delta,
+    });
+  } else {
+    const lastIndex = changes.length - 1;
+    changes[lastIndex] = {
+      ...changes[lastIndex],
+      diff: `${changes[lastIndex]?.diff ?? ''}${delta}`,
+    };
+  }
+  next.items_by_id[itemID] = {
+    ...existing,
+    changes,
+  };
+  return next;
 }
 
 function itemTextOrContent(item: CodexItem | null | undefined): string {
@@ -105,7 +206,8 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
     items_by_id,
     item_order,
     pending_requests,
-    last_event_seq: Number(detail.last_event_seq ?? 0) || 0,
+    token_usage: cloneTokenUsage(detail.token_usage),
+    last_applied_seq: Number(detail.last_applied_seq ?? 0) || 0,
     active_status: String(detail.active_status ?? detail.thread.status ?? '').trim(),
     active_status_flags: Array.isArray(detail.active_status_flags) ? [...detail.active_status_flags] : [...(detail.thread.active_flags ?? [])],
   };
@@ -116,7 +218,7 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
   if (String(event.thread_id ?? '').trim() !== String(session.thread.id ?? '').trim()) return session;
 
   let next = cloneSession(session);
-  next.last_event_seq = Math.max(Number(next.last_event_seq ?? 0), Number(event.seq ?? 0));
+  next.last_applied_seq = Math.max(Number(next.last_applied_seq ?? 0), Number(event.seq ?? 0));
 
   switch (event.type) {
     case 'thread_started':
@@ -135,6 +237,15 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
         active_flags: [...next.active_status_flags],
       };
       return next;
+    case 'thread_name_updated':
+      next.thread = {
+        ...next.thread,
+        name: String(event.thread_name ?? '').trim(),
+      };
+      return next;
+    case 'thread_token_usage_updated':
+      next.token_usage = cloneTokenUsage(event.token_usage);
+      return next;
     case 'turn_started':
     case 'turn_completed':
       if (event.turn) {
@@ -148,13 +259,7 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
     case 'agent_message_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
-      next = ensureLiveItem(next, itemID, { id: itemID, type: 'agentMessage', text: '', status: 'inProgress' });
-      const existing = next.items_by_id[itemID];
-      next.items_by_id[itemID] = {
-        ...existing,
-        text: `${existing.text ?? ''}${String(event.delta ?? '')}`,
-      };
-      return next;
+      return appendItemText(next, itemID, { id: itemID, type: 'agentMessage', text: '', status: 'inProgress' }, String(event.delta ?? ''));
     }
     case 'command_output_delta': {
       const itemID = String(event.item_id ?? '').trim();
@@ -167,16 +272,46 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       };
       return next;
     }
+    case 'file_change_delta': {
+      const itemID = String(event.item_id ?? '').trim();
+      if (!itemID) return next;
+      return appendFileChangeDiff(next, itemID, String(event.delta ?? ''));
+    }
+    case 'plan_delta': {
+      const itemID = String(event.item_id ?? '').trim();
+      if (!itemID) return next;
+      return appendItemText(next, itemID, { id: itemID, type: 'plan', text: '', status: 'inProgress' }, String(event.delta ?? ''));
+    }
     case 'reasoning_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
-      next = ensureLiveItem(next, itemID, { id: itemID, type: 'reasoning', text: '', status: 'inProgress' });
-      const existing = next.items_by_id[itemID];
-      next.items_by_id[itemID] = {
-        ...existing,
-        text: `${existing.text ?? ''}${String(event.delta ?? '')}`,
-      };
-      return next;
+      const delta = String(event.delta ?? '');
+      if (typeof event.content_index === 'number') {
+        return appendItemContent(next, itemID, { id: itemID, type: 'reasoning', content: [], status: 'inProgress' }, event.content_index, delta);
+      }
+      return appendItemText(next, itemID, { id: itemID, type: 'reasoning', text: '', status: 'inProgress' }, delta);
+    }
+    case 'reasoning_summary_delta': {
+      const itemID = String(event.item_id ?? '').trim();
+      if (!itemID) return next;
+      return appendItemSummary(
+        next,
+        itemID,
+        { id: itemID, type: 'reasoning', summary: [], status: 'inProgress' },
+        Math.max(0, Number(event.summary_index ?? 0) || 0),
+        String(event.delta ?? ''),
+      );
+    }
+    case 'reasoning_summary_part_added': {
+      const itemID = String(event.item_id ?? '').trim();
+      if (!itemID) return next;
+      return appendItemSummary(
+        next,
+        itemID,
+        { id: itemID, type: 'reasoning', summary: [], status: 'inProgress' },
+        Math.max(0, Number(event.summary_index ?? 0) || 0),
+        '',
+      );
     }
     case 'request_created':
       if (event.request?.id) {
@@ -190,7 +325,18 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       return next;
     case 'thread_archived':
       next.active_status = 'archived';
-      next.thread = { ...next.thread, status: 'archived' };
+      next.thread = { ...next.thread, status: 'archived', active_flags: [] };
+      return next;
+    case 'thread_unarchived':
+    case 'thread_closed':
+      next.active_status = 'notLoaded';
+      next.active_status_flags = [];
+      next.thread = { ...next.thread, status: 'notLoaded', active_flags: [] };
+      return next;
+    case 'error':
+      next.active_status = 'systemError';
+      next.active_status_flags = [];
+      next.thread = { ...next.thread, status: 'systemError', active_flags: [] };
       return next;
     default:
       return next;

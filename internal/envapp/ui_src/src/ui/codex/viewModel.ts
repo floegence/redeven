@@ -5,6 +5,7 @@ import type {
   CodexPendingRequest,
   CodexStatus,
   CodexThread,
+  CodexThreadTokenUsage,
   CodexThreadRuntimeConfig,
 } from './types';
 
@@ -14,6 +15,8 @@ export type CodexWorkbenchSummary = Readonly<{
   modelLabel: string;
   statusLabel: string;
   statusFlags: string[];
+  contextLabel: string;
+  contextDetail: string;
   hostReady: boolean;
   pendingRequestCount: number;
 }>;
@@ -54,6 +57,59 @@ function firstDefinedList(candidates: unknown[]): string[] {
     if (values.length > 0) return values;
   }
   return [];
+}
+
+function compactTokenCount(value: number | null | undefined): string {
+  const normalized = Math.max(0, Number(value ?? 0) || 0);
+  if (normalized >= 1_000_000) {
+    return `${(normalized / 1_000_000).toFixed(normalized >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (normalized >= 1_000) {
+    return `${(normalized / 1_000).toFixed(normalized >= 10_000 ? 0 : 1)}k`;
+  }
+  return `${normalized}`;
+}
+
+function codexStatusLabel(status: string | null | undefined): string {
+  const normalized = String(status ?? '').trim().toLowerCase();
+  switch (normalized) {
+    case 'active':
+      return 'working';
+    case 'notloaded':
+    case 'not_loaded':
+      return 'not loaded';
+    case 'systemerror':
+    case 'system_error':
+      return 'system error';
+    default:
+      return displayStatus(status, 'idle');
+  }
+}
+
+function codexContextSummary(tokenUsage: CodexThreadTokenUsage | null | undefined): {
+  contextLabel: string;
+  contextDetail: string;
+} {
+  if (!tokenUsage) {
+    return {
+      contextLabel: '',
+      contextDetail: '',
+    };
+  }
+  const totalTokens = Math.max(0, Number(tokenUsage.total?.total_tokens ?? 0) || 0);
+  const lastTurnTokens = Math.max(0, Number(tokenUsage.last?.total_tokens ?? 0) || 0);
+  const contextWindow = Math.max(0, Number(tokenUsage.model_context_window ?? 0) || 0);
+  if (contextWindow > 0) {
+    const remainingPercent = Math.max(0, Math.min(100, Math.round(((contextWindow - totalTokens) / contextWindow) * 100)));
+    return {
+      contextLabel: `${remainingPercent}% context left`,
+      contextDetail: `${compactTokenCount(totalTokens)} used · ${compactTokenCount(lastTurnTokens)} last`,
+    };
+  }
+  return {
+    contextLabel: `${compactTokenCount(totalTokens)} used`,
+    contextDetail: lastTurnTokens > 0 ? `${compactTokenCount(lastTurnTokens)} last turn` : '',
+  };
 }
 
 export function findCodexModelOption(
@@ -187,6 +243,7 @@ export function buildCodexWorkbenchSummary(args: {
   status: CodexStatus | null | undefined;
   workingDirDraft: string;
   modelDraft: string;
+  tokenUsage: CodexThreadTokenUsage | null | undefined;
   activeStatus: string;
   activeStatusFlags: readonly string[];
   pendingRequests: readonly CodexPendingRequest[];
@@ -200,12 +257,15 @@ export function buildCodexWorkbenchSummary(args: {
   const modelValue = firstNonEmpty(args.modelDraft, args.runtimeConfig?.model);
   const hostReady = Boolean(args.status?.available);
   const pendingRequestCount = args.pendingRequests.length;
+  const contextSummary = codexContextSummary(args.tokenUsage);
   return {
     threadTitle: firstNonEmpty(args.thread?.name, args.thread?.preview, 'New thread'),
     workspaceLabel,
     modelLabel: codexModelLabel(args.capabilities, modelValue),
-    statusLabel: displayStatus(args.activeStatus, 'idle'),
+    statusLabel: codexStatusLabel(args.activeStatus),
     statusFlags: args.activeStatusFlags.map((flag) => displayStatus(flag)).filter(Boolean),
+    contextLabel: contextSummary.contextLabel,
+    contextDetail: contextSummary.contextDetail,
     hostReady,
     pendingRequestCount,
   };

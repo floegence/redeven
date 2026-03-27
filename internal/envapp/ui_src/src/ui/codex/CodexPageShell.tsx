@@ -32,6 +32,7 @@ export function CodexPageShell() {
     status: codex.status(),
     workingDirDraft: codex.workingDirDraft(),
     modelDraft: codex.modelDraft(),
+    tokenUsage: codex.activeTokenUsage(),
     activeStatus: codex.activeStatus(),
     activeStatusFlags: codex.activeStatusFlags(),
     pendingRequests: codex.pendingRequests(),

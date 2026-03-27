@@ -133,6 +133,22 @@ func normalizeThreadRuntimeConfig(
 	}
 }
 
+func normalizeThreadTokenUsage(in wireThreadTokenUsage) *ThreadTokenUsage {
+	out := &ThreadTokenUsage{
+		Total: normalizeTokenUsageBreakdown(in.Total),
+		Last:  normalizeTokenUsageBreakdown(in.Last),
+	}
+	if in.ModelContextWindow != nil {
+		window := *in.ModelContextWindow
+		out.ModelContextWindow = &window
+	}
+	return out
+}
+
+func normalizeTokenUsageBreakdown(in wireTokenUsageBreakdown) TokenUsageBreakdown {
+	return TokenUsageBreakdown(in)
+}
+
 func normalizeEffectiveConfig(in wireConfig, cwd string) ThreadRuntimeConfig {
 	return ThreadRuntimeConfig{
 		Model:             strings.TrimSpace(stringValue(in.Model)),

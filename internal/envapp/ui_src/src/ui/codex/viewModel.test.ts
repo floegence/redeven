@@ -42,7 +42,24 @@ describe('buildCodexWorkbenchSummary', () => {
       },
       workingDirDraft: '/workspace/ui',
       modelDraft: '',
-      activeStatus: 'running',
+      tokenUsage: {
+        total: {
+          total_tokens: 6400,
+          input_tokens: 4200,
+          cached_input_tokens: 600,
+          output_tokens: 1100,
+          reasoning_output_tokens: 300,
+        },
+        last: {
+          total_tokens: 1200,
+          input_tokens: 800,
+          cached_input_tokens: 200,
+          output_tokens: 150,
+          reasoning_output_tokens: 50,
+        },
+        model_context_window: 128000,
+      },
+      activeStatus: 'active',
       activeStatusFlags: ['finalizing'],
       pendingRequests: [
         {
@@ -58,8 +75,10 @@ describe('buildCodexWorkbenchSummary', () => {
     expect(summary.threadTitle).toBe('Workbench alignment');
     expect(summary.workspaceLabel).toBe('/workspace/ui');
     expect(summary.modelLabel).toBe('GPT-5.4');
-    expect(summary.statusLabel).toBe('running');
+    expect(summary.statusLabel).toBe('working');
     expect(summary.statusFlags).toEqual(['finalizing']);
+    expect(summary.contextLabel).toBe('95% context left');
+    expect(summary.contextDetail).toContain('6.4k used');
     expect(summary.pendingRequestCount).toBe(1);
   });
 
@@ -97,6 +116,7 @@ describe('buildCodexWorkbenchSummary', () => {
       },
       workingDirDraft: '',
       modelDraft: '',
+      tokenUsage: null,
       activeStatus: 'running',
       activeStatusFlags: [],
       pendingRequests: [],
@@ -104,6 +124,7 @@ describe('buildCodexWorkbenchSummary', () => {
 
     expect(summary.workspaceLabel).toBe('/workspace/codex-ui');
     expect(summary.modelLabel).toBe('GPT-5.4');
+    expect(summary.contextLabel).toBe('');
   });
 });
 

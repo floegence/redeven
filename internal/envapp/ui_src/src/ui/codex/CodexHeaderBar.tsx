@@ -21,8 +21,18 @@ export function CodexHeaderBar(props: {
       <div class="codex-page-header-main">
         <div class="codex-page-header-summary">
           <CodexIcon class="h-7 w-7 shrink-0" />
-          <div class="codex-page-header-thread" title={props.summary.threadTitle}>
-            {props.summary.threadTitle}
+          <div class="codex-page-header-copy">
+            <div class="codex-page-header-thread" title={props.summary.threadTitle}>
+              {props.summary.threadTitle}
+            </div>
+            <Show when={props.summary.contextLabel}>
+              <div class="codex-page-header-context">
+                <span class="codex-page-header-context-primary">{props.summary.contextLabel}</span>
+                <Show when={props.summary.contextDetail}>
+                  <span class="codex-page-header-context-secondary">{props.summary.contextDetail}</span>
+                </Show>
+              </div>
+            </Show>
           </div>
         </div>
 

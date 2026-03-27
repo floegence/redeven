@@ -43,12 +43,14 @@ type Manager struct {
 }
 
 type threadState struct {
-	thread        *Thread
-	runtimeConfig ThreadRuntimeConfig
-	lastEventSeq  int64
-	events        []Event
-	pending       map[string]*pendingRequestRecord
-	subscribers   map[int64]chan Event
+	thread         *Thread
+	runtimeConfig  ThreadRuntimeConfig
+	tokenUsage     *ThreadTokenUsage
+	lastAppliedSeq int64
+	liveLoaded     bool
+	events         []Event
+	pending        map[string]*pendingRequestRecord
+	subscribers    map[int64]chan Event
 }
 
 type pendingRequestRecord struct {
@@ -131,15 +133,15 @@ func (m *Manager) ListThreads(ctx context.Context, limit int) ([]Thread, error) 
 	return out, nil
 }
 
-func (m *Manager) OpenThread(ctx context.Context, threadID string) (*ThreadDetail, error) {
+func (m *Manager) ReadThread(ctx context.Context, threadID string) (*ThreadDetail, error) {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil, ErrThreadNotFound
 	}
-	var resp wireThreadResumeResponse
-	if err := m.call(ctx, "thread/resume", wireThreadResumeParams{
-		ThreadID:               threadID,
-		PersistExtendedHistory: false,
+	var resp wireThreadReadResponse
+	if err := m.call(ctx, "thread/read", wireThreadReadParams{
+		ThreadID:     threadID,
+		IncludeTurns: true,
 	}, &resp); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			return nil, ErrThreadNotFound
@@ -147,20 +149,14 @@ func (m *Manager) OpenThread(ctx context.Context, threadID string) (*ThreadDetai
 		return nil, err
 	}
 	thread := normalizeThread(resp.Thread)
-	runtimeConfig := normalizeThreadRuntimeConfig(
-		resp.Model,
-		resp.ModelProvider,
-		resp.CWD,
-		resp.ApprovalPolicy,
-		resp.ApprovalsReviewer,
-		resp.Sandbox,
-		resp.ReasoningEffort,
-	)
 	m.mu.Lock()
 	state := m.ensureThreadStateLocked(thread.ID)
-	state.thread = &thread
-	state.runtimeConfig = runtimeConfig
-	detail := m.buildThreadDetailLocked(state, thread)
+	projectedThread := mergeProjectedThread(state, thread)
+	state.thread = &projectedThread
+	if isLoadedThreadStatus(thread.Status) {
+		state.liveLoaded = true
+	}
+	detail := m.buildThreadDetailLocked(state, projectedThread)
 	m.mu.Unlock()
 	return &detail, nil
 }
@@ -209,9 +205,55 @@ func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*Thr
 	state := m.ensureThreadStateLocked(thread.ID)
 	state.thread = &thread
 	state.runtimeConfig = runtimeConfig
+	state.liveLoaded = true
 	detail := m.buildThreadDetailLocked(state, thread)
 	m.mu.Unlock()
 	return &detail, nil
+}
+
+func (m *Manager) ensureThreadLoaded(ctx context.Context, threadID string) error {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return ErrThreadNotFound
+	}
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	if state.liveLoaded {
+		m.mu.Unlock()
+		return nil
+	}
+	m.mu.Unlock()
+
+	var resp wireThreadResumeResponse
+	if err := m.call(ctx, "thread/resume", wireThreadResumeParams{
+		ThreadID:               threadID,
+		PersistExtendedHistory: false,
+	}, &resp); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			return ErrThreadNotFound
+		}
+		return err
+	}
+
+	thread := normalizeThread(resp.Thread)
+	runtimeConfig := normalizeThreadRuntimeConfig(
+		resp.Model,
+		resp.ModelProvider,
+		resp.CWD,
+		resp.ApprovalPolicy,
+		resp.ApprovalsReviewer,
+		resp.Sandbox,
+		resp.ReasoningEffort,
+	)
+
+	m.mu.Lock()
+	state = m.ensureThreadStateLocked(thread.ID)
+	projectedThread := mergeProjectedThread(state, thread)
+	state.thread = &projectedThread
+	state.runtimeConfig = runtimeConfig
+	state.liveLoaded = true
+	m.mu.Unlock()
+	return nil
 }
 
 func (m *Manager) ReadCapabilities(ctx context.Context, cwd string) (*Capabilities, error) {
@@ -254,6 +296,9 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 	threadID := strings.TrimSpace(req.ThreadID)
 	if threadID == "" {
 		return nil, ErrThreadNotFound
+	}
+	if err := m.ensureThreadLoaded(ctx, threadID); err != nil {
+		return nil, err
 	}
 	inputs := make([]wireUserInput, 0, len(req.Inputs)+1)
 	if text := strings.TrimSpace(req.InputText); text != "" {
@@ -305,6 +350,12 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 	turn := normalizeTurn(resp.Turn)
 	m.mu.Lock()
 	if state := m.threads[threadID]; state != nil {
+		thread := ensureProjectedThread(state, threadID)
+		upsertProjectedTurn(thread, turn)
+		if thread.Preview == "" {
+			thread.Preview = strings.TrimSpace(req.InputText)
+		}
+		thread.UpdatedAtUnixS = time.Now().Unix()
 		if nextCWD := strings.TrimSpace(req.CWD); nextCWD != "" {
 			state.runtimeConfig.CWD = nextCWD
 		}
@@ -337,7 +388,13 @@ func (m *Manager) ArchiveThread(ctx context.Context, threadID string) error {
 		return err
 	}
 	m.mu.Lock()
-	delete(m.threads, threadID)
+	if state := m.threads[threadID]; state != nil {
+		thread := ensureProjectedThread(state, threadID)
+		thread.Status = "archived"
+		thread.ActiveFlags = nil
+		thread.UpdatedAtUnixS = time.Now().Unix()
+		state.liveLoaded = false
+	}
 	m.mu.Unlock()
 	return nil
 }
@@ -551,117 +608,257 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 			thread := normalizeThread(msg.Thread)
 			m.mu.Lock()
 			state := m.ensureThreadStateLocked(thread.ID)
-			state.thread = &thread
+			projectedThread := mergeProjectedThread(state, thread)
+			state.thread = &projectedThread
+			state.liveLoaded = true
+			threadCopy := cloneThread(projectedThread)
 			m.appendEventLocked(state, Event{
 				Type:     "thread_started",
 				ThreadID: thread.ID,
-				Thread:   &thread,
+				Thread:   &threadCopy,
 			})
 			m.mu.Unlock()
 		}
 	case "turn/started":
 		var msg wireTurnNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
 			turn := normalizeTurn(msg.Turn)
 			m.mu.Lock()
-			state := m.ensureThreadStateLocked(msg.ThreadID)
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			upsertProjectedTurn(thread, turn)
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			turnCopy := cloneTurn(turn)
 			m.appendEventLocked(state, Event{
 				Type:     "turn_started",
-				ThreadID: strings.TrimSpace(msg.ThreadID),
+				ThreadID: threadID,
 				TurnID:   turn.ID,
-				Turn:     &turn,
+				Turn:     &turnCopy,
 			})
 			m.mu.Unlock()
 		}
 	case "turn/completed":
 		var msg wireTurnNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
 			turn := normalizeTurn(msg.Turn)
 			m.mu.Lock()
-			state := m.ensureThreadStateLocked(msg.ThreadID)
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			upsertProjectedTurn(thread, turn)
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			turnCopy := cloneTurn(turn)
 			m.appendEventLocked(state, Event{
 				Type:     "turn_completed",
-				ThreadID: strings.TrimSpace(msg.ThreadID),
+				ThreadID: threadID,
 				TurnID:   turn.ID,
-				Turn:     &turn,
+				Turn:     &turnCopy,
 			})
 			m.mu.Unlock()
 		}
 	case "item/started":
 		var msg wireItemNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
+			turnID := strings.TrimSpace(msg.TurnID)
 			item := normalizeItem(msg.Item)
 			m.mu.Lock()
-			state := m.ensureThreadStateLocked(msg.ThreadID)
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			turn := ensureProjectedTurn(thread, turnID)
+			upsertProjectedItem(turn, item)
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			itemCopy := cloneItem(item)
 			m.appendEventLocked(state, Event{
 				Type:     "item_started",
-				ThreadID: strings.TrimSpace(msg.ThreadID),
-				TurnID:   strings.TrimSpace(msg.TurnID),
+				ThreadID: threadID,
+				TurnID:   turnID,
 				ItemID:   item.ID,
-				Item:     &item,
+				Item:     &itemCopy,
 			})
 			m.mu.Unlock()
 		}
 	case "item/completed":
 		var msg wireItemNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
+			turnID := strings.TrimSpace(msg.TurnID)
 			item := normalizeItem(msg.Item)
 			m.mu.Lock()
-			state := m.ensureThreadStateLocked(msg.ThreadID)
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			turn := ensureProjectedTurn(thread, turnID)
+			upsertProjectedItem(turn, item)
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			itemCopy := cloneItem(item)
 			m.appendEventLocked(state, Event{
 				Type:     "item_completed",
-				ThreadID: strings.TrimSpace(msg.ThreadID),
-				TurnID:   strings.TrimSpace(msg.TurnID),
+				ThreadID: threadID,
+				TurnID:   turnID,
 				ItemID:   item.ID,
-				Item:     &item,
+				Item:     &itemCopy,
 			})
 			m.mu.Unlock()
 		}
 	case "item/agentMessage/delta":
-		m.handleDeltaEvent(env.Params, "agent_message_delta")
+		m.handleDeltaEvent(env.Params, "agent_message_delta", "agentMessage")
 	case "item/commandExecution/outputDelta":
-		m.handleDeltaEvent(env.Params, "command_output_delta")
+		m.handleDeltaEvent(env.Params, "command_output_delta", "commandExecution")
+	case "item/fileChange/outputDelta":
+		m.handleDeltaEvent(env.Params, "file_change_delta", "fileChange")
+	case "item/plan/delta":
+		m.handleDeltaEvent(env.Params, "plan_delta", "plan")
+	case "item/reasoningSummary/textDelta":
+		m.handleReasoningSummaryTextDelta(env.Params)
+	case "item/reasoningSummary/partAdded":
+		m.handleReasoningSummaryPartAdded(env.Params)
+	case "item/reasoning/textDelta":
+		m.handleReasoningTextDelta(env.Params)
 	case "item/reasoning/delta":
-		m.handleDeltaEvent(env.Params, "reasoning_delta")
+		m.handleDeltaEvent(env.Params, "reasoning_delta", "reasoning")
 	case "thread/status/changed":
 		var msg wireThreadStatusChangedNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
 			m.mu.Lock()
-			state := m.ensureThreadStateLocked(msg.ThreadID)
-			if state.thread != nil {
-				state.thread.Status = strings.TrimSpace(msg.Status.Type)
-				state.thread.ActiveFlags = append([]string(nil), msg.Status.ActiveFlags...)
-			}
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			thread.Status = strings.TrimSpace(msg.Status.Type)
+			thread.ActiveFlags = append([]string(nil), msg.Status.ActiveFlags...)
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			state.liveLoaded = isLoadedThreadStatus(thread.Status)
 			m.appendEventLocked(state, Event{
 				Type:     "thread_status_changed",
-				ThreadID: strings.TrimSpace(msg.ThreadID),
+				ThreadID: threadID,
 				Status:   strings.TrimSpace(msg.Status.Type),
 				Flags:    append([]string(nil), msg.Status.ActiveFlags...),
+			})
+			m.mu.Unlock()
+		}
+	case "thread/name/updated":
+		var msg wireThreadNameUpdatedNotification
+		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
+			threadName := strings.TrimSpace(stringValue(msg.ThreadName))
+			m.mu.Lock()
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			thread.Name = threadName
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			m.appendEventLocked(state, Event{
+				Type:       "thread_name_updated",
+				ThreadID:   threadID,
+				ThreadName: threadName,
+			})
+			m.mu.Unlock()
+		}
+	case "thread/tokenUsage/updated":
+		var msg wireThreadTokenUsageUpdatedNotification
+		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
+			turnID := strings.TrimSpace(msg.TurnID)
+			tokenUsage := normalizeThreadTokenUsage(msg.TokenUsage)
+			m.mu.Lock()
+			state := m.ensureThreadStateLocked(threadID)
+			state.tokenUsage = cloneThreadTokenUsage(tokenUsage)
+			if thread := ensureProjectedThread(state, threadID); thread != nil {
+				thread.UpdatedAtUnixS = time.Now().Unix()
+			}
+			m.appendEventLocked(state, Event{
+				Type:       "thread_token_usage_updated",
+				ThreadID:   threadID,
+				TurnID:     turnID,
+				TokenUsage: cloneThreadTokenUsage(tokenUsage),
 			})
 			m.mu.Unlock()
 		}
 	case "thread/archived":
 		var msg wireThreadArchivedNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
 			m.mu.Lock()
-			state := m.ensureThreadStateLocked(msg.ThreadID)
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			thread.Status = "archived"
+			thread.ActiveFlags = nil
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			state.liveLoaded = false
 			m.appendEventLocked(state, Event{
 				Type:     "thread_archived",
-				ThreadID: strings.TrimSpace(msg.ThreadID),
+				ThreadID: threadID,
 			})
-			delete(m.threads, strings.TrimSpace(msg.ThreadID))
+			m.mu.Unlock()
+		}
+	case "thread/unarchived":
+		var msg wireThreadUnarchivedNotification
+		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
+			m.mu.Lock()
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			if strings.TrimSpace(thread.Status) == "archived" {
+				thread.Status = "notLoaded"
+			}
+			thread.ActiveFlags = nil
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			state.liveLoaded = false
+			m.appendEventLocked(state, Event{
+				Type:     "thread_unarchived",
+				ThreadID: threadID,
+			})
+			m.mu.Unlock()
+		}
+	case "thread/closed":
+		var msg wireThreadClosedNotification
+		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
+			m.mu.Lock()
+			state := m.ensureThreadStateLocked(threadID)
+			thread := ensureProjectedThread(state, threadID)
+			thread.Status = "notLoaded"
+			thread.ActiveFlags = nil
+			thread.UpdatedAtUnixS = time.Now().Unix()
+			state.liveLoaded = false
+			m.appendEventLocked(state, Event{
+				Type:     "thread_closed",
+				ThreadID: threadID,
+			})
+			m.mu.Unlock()
+		}
+	case "error":
+		var msg wireErrorNotification
+		if json.Unmarshal(env.Params, &msg) == nil {
+			threadID := strings.TrimSpace(msg.ThreadID)
+			turnID := strings.TrimSpace(msg.TurnID)
+			message := strings.TrimSpace(msg.Error.Message)
+			m.mu.Lock()
+			state := m.ensureThreadStateLocked(threadID)
+			if !msg.WillRetry {
+				thread := ensureProjectedThread(state, threadID)
+				thread.Status = "systemError"
+				thread.ActiveFlags = nil
+				thread.UpdatedAtUnixS = time.Now().Unix()
+			}
+			m.appendEventLocked(state, Event{
+				Type:     "error",
+				ThreadID: threadID,
+				TurnID:   turnID,
+				Error:    message,
+			})
 			m.mu.Unlock()
 		}
 	case "serverRequest/resolved":
 		var msg wireServerRequestResolvedNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
 			requestID := normalizeExternalRequestID(msg.RequestID)
+			threadID := strings.TrimSpace(msg.ThreadID)
 			m.mu.Lock()
-			state := m.ensureThreadStateLocked(msg.ThreadID)
+			state := m.ensureThreadStateLocked(threadID)
 			delete(state.pending, requestID)
 			m.appendEventLocked(state, Event{
 				Type:      "request_resolved",
-				ThreadID:  strings.TrimSpace(msg.ThreadID),
+				ThreadID:  threadID,
 				RequestID: requestID,
 			})
 			m.mu.Unlock()
@@ -677,19 +874,114 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 	}
 }
 
-func (m *Manager) handleDeltaEvent(raw json.RawMessage, typ string) {
+func (m *Manager) handleDeltaEvent(raw json.RawMessage, typ string, itemType string) {
 	var msg wireDeltaNotification
 	if json.Unmarshal(raw, &msg) != nil {
 		return
 	}
+	threadID := strings.TrimSpace(msg.ThreadID)
+	turnID := strings.TrimSpace(msg.TurnID)
+	itemID := strings.TrimSpace(msg.ItemID)
 	m.mu.Lock()
-	state := m.ensureThreadStateLocked(msg.ThreadID)
+	state := m.ensureThreadStateLocked(threadID)
+	thread := ensureProjectedThread(state, threadID)
+	turn := ensureProjectedTurn(thread, turnID)
+	item := ensureProjectedItem(turn, itemID, itemType)
+	switch typ {
+	case "agent_message_delta", "plan_delta", "reasoning_delta":
+		appendProjectedItemText(item, msg.Delta)
+	case "command_output_delta":
+		item.AggregatedOutput += msg.Delta
+	case "file_change_delta":
+		appendProjectedFileChange(item, msg.Delta)
+	}
+	thread.UpdatedAtUnixS = time.Now().Unix()
 	m.appendEventLocked(state, Event{
 		Type:     typ,
-		ThreadID: strings.TrimSpace(msg.ThreadID),
-		TurnID:   strings.TrimSpace(msg.TurnID),
-		ItemID:   strings.TrimSpace(msg.ItemID),
+		ThreadID: threadID,
+		TurnID:   turnID,
+		ItemID:   itemID,
 		Delta:    msg.Delta,
+	})
+	m.mu.Unlock()
+}
+
+func (m *Manager) handleReasoningSummaryTextDelta(raw json.RawMessage) {
+	var msg wireReasoningSummaryTextDeltaNotification
+	if json.Unmarshal(raw, &msg) != nil {
+		return
+	}
+	threadID := strings.TrimSpace(msg.ThreadID)
+	turnID := strings.TrimSpace(msg.TurnID)
+	itemID := strings.TrimSpace(msg.ItemID)
+	summaryIndex := msg.SummaryIndex
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	thread := ensureProjectedThread(state, threadID)
+	turn := ensureProjectedTurn(thread, turnID)
+	item := ensureProjectedItem(turn, itemID, "reasoning")
+	appendProjectedItemSummary(item, summaryIndex, msg.Delta)
+	thread.UpdatedAtUnixS = time.Now().Unix()
+	m.appendEventLocked(state, Event{
+		Type:         "reasoning_summary_delta",
+		ThreadID:     threadID,
+		TurnID:       turnID,
+		ItemID:       itemID,
+		Delta:        msg.Delta,
+		SummaryIndex: &summaryIndex,
+	})
+	m.mu.Unlock()
+}
+
+func (m *Manager) handleReasoningSummaryPartAdded(raw json.RawMessage) {
+	var msg wireReasoningSummaryPartAddedNotification
+	if json.Unmarshal(raw, &msg) != nil {
+		return
+	}
+	threadID := strings.TrimSpace(msg.ThreadID)
+	turnID := strings.TrimSpace(msg.TurnID)
+	itemID := strings.TrimSpace(msg.ItemID)
+	summaryIndex := msg.SummaryIndex
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	thread := ensureProjectedThread(state, threadID)
+	turn := ensureProjectedTurn(thread, turnID)
+	item := ensureProjectedItem(turn, itemID, "reasoning")
+	appendProjectedItemSummary(item, summaryIndex, "")
+	thread.UpdatedAtUnixS = time.Now().Unix()
+	m.appendEventLocked(state, Event{
+		Type:         "reasoning_summary_part_added",
+		ThreadID:     threadID,
+		TurnID:       turnID,
+		ItemID:       itemID,
+		SummaryIndex: &summaryIndex,
+	})
+	m.mu.Unlock()
+}
+
+func (m *Manager) handleReasoningTextDelta(raw json.RawMessage) {
+	var msg wireReasoningTextDeltaNotification
+	if json.Unmarshal(raw, &msg) != nil {
+		return
+	}
+	threadID := strings.TrimSpace(msg.ThreadID)
+	turnID := strings.TrimSpace(msg.TurnID)
+	itemID := strings.TrimSpace(msg.ItemID)
+	contentIndex := msg.ContentIndex
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	thread := ensureProjectedThread(state, threadID)
+	turn := ensureProjectedTurn(thread, turnID)
+	item := ensureProjectedItem(turn, itemID, "reasoning")
+	appendProjectedItemContent(item, contentIndex, msg.Delta)
+	thread.UpdatedAtUnixS = time.Now().Unix()
+	m.appendEventLocked(state, Event{
+		Type:         "reasoning_delta",
+		ThreadID:     threadID,
+		TurnID:       turnID,
+		ItemID:       itemID,
+		Delta:        msg.Delta,
+		ContentIndex: &contentIndex,
 	})
 	m.mu.Unlock()
 }
@@ -794,6 +1086,10 @@ func (m *Manager) storePendingRequest(record *pendingRequestRecord) {
 	defer m.mu.Unlock()
 	state := m.ensureThreadStateLocked(record.request.ThreadID)
 	state.pending[record.request.ID] = record
+	state.liveLoaded = true
+	if thread := ensureProjectedThread(state, record.request.ThreadID); thread != nil {
+		thread.UpdatedAtUnixS = time.Now().Unix()
+	}
 	requestCopy := record.request
 	m.appendEventLocked(state, Event{
 		Type:      "request_created",
@@ -837,8 +1133,8 @@ func (m *Manager) appendEventLocked(state *threadState, ev Event) {
 	if state == nil {
 		return
 	}
-	state.lastEventSeq++
-	ev.Seq = state.lastEventSeq
+	state.lastAppliedSeq++
+	ev.Seq = state.lastAppliedSeq
 	state.events = append(state.events, ev)
 	if len(state.events) > 400 {
 		state.events = append([]Event(nil), state.events[len(state.events)-400:]...)
@@ -855,11 +1151,12 @@ func (m *Manager) appendEventLocked(state *threadState, ev Event) {
 
 func (m *Manager) buildThreadDetailLocked(state *threadState, thread Thread) ThreadDetail {
 	out := ThreadDetail{
-		Thread:           thread,
-		RuntimeConfig:    state.runtimeConfig,
-		LastEventSeq:     state.lastEventSeq,
-		ActiveStatus:     thread.Status,
-		ActiveStatusFlag: append([]string(nil), thread.ActiveFlags...),
+		Thread:            cloneThread(thread),
+		RuntimeConfig:     state.runtimeConfig,
+		TokenUsage:        cloneThreadTokenUsage(state.tokenUsage),
+		LastAppliedSeq:    state.lastAppliedSeq,
+		ActiveStatus:      thread.Status,
+		ActiveStatusFlags: append([]string(nil), thread.ActiveFlags...),
 	}
 	if len(state.pending) > 0 {
 		out.PendingRequests = make([]PendingRequest, 0, len(state.pending))

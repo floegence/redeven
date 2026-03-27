@@ -167,3 +167,36 @@ func TestNormalizeCapabilitiesParts_KeepModelAndRequirementSemantics(t *testing.
 		t.Fatalf("unexpected normalized sandbox modes: %+v", requirements.AllowedSandboxModes)
 	}
 }
+
+func TestNormalizeThreadTokenUsage_MapsOfficialFields(t *testing.T) {
+	t.Parallel()
+
+	contextWindow := int64(128000)
+	got := normalizeThreadTokenUsage(wireThreadTokenUsage{
+		Total: wireTokenUsageBreakdown{
+			TotalTokens:           6400,
+			InputTokens:           4200,
+			CachedInputTokens:     600,
+			OutputTokens:          1100,
+			ReasoningOutputTokens: 300,
+		},
+		Last: wireTokenUsageBreakdown{
+			TotalTokens:           1200,
+			InputTokens:           800,
+			CachedInputTokens:     200,
+			OutputTokens:          150,
+			ReasoningOutputTokens: 50,
+		},
+		ModelContextWindow: &contextWindow,
+	})
+
+	if got == nil {
+		t.Fatalf("expected token usage")
+	}
+	if got.Total.TotalTokens != 6400 || got.Last.TotalTokens != 1200 {
+		t.Fatalf("unexpected token usage totals: %+v", got)
+	}
+	if got.ModelContextWindow == nil || *got.ModelContextWindow != contextWindow {
+		t.Fatalf("unexpected model context window: %+v", got.ModelContextWindow)
+	}
+}

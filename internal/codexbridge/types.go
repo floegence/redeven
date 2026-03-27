@@ -59,13 +59,28 @@ type StartTurnRequest struct {
 	ApprovalsReviewer string           `json:"approvals_reviewer,omitempty"`
 }
 
+type TokenUsageBreakdown struct {
+	TotalTokens           int64 `json:"total_tokens"`
+	InputTokens           int64 `json:"input_tokens"`
+	CachedInputTokens     int64 `json:"cached_input_tokens"`
+	OutputTokens          int64 `json:"output_tokens"`
+	ReasoningOutputTokens int64 `json:"reasoning_output_tokens"`
+}
+
+type ThreadTokenUsage struct {
+	Total              TokenUsageBreakdown `json:"total"`
+	Last               TokenUsageBreakdown `json:"last"`
+	ModelContextWindow *int64              `json:"model_context_window,omitempty"`
+}
+
 type ThreadDetail struct {
-	Thread           Thread              `json:"thread"`
-	RuntimeConfig    ThreadRuntimeConfig `json:"runtime_config,omitempty"`
-	PendingRequests  []PendingRequest    `json:"pending_requests,omitempty"`
-	LastEventSeq     int64               `json:"last_event_seq"`
-	ActiveStatus     string              `json:"active_status,omitempty"`
-	ActiveStatusFlag []string            `json:"active_status_flags,omitempty"`
+	Thread            Thread              `json:"thread"`
+	RuntimeConfig     ThreadRuntimeConfig `json:"runtime_config,omitempty"`
+	PendingRequests   []PendingRequest    `json:"pending_requests,omitempty"`
+	TokenUsage        *ThreadTokenUsage   `json:"token_usage,omitempty"`
+	LastAppliedSeq    int64               `json:"last_applied_seq"`
+	ActiveStatus      string              `json:"active_status,omitempty"`
+	ActiveStatusFlags []string            `json:"active_status_flags,omitempty"`
 }
 
 type Thread struct {
@@ -176,18 +191,22 @@ type PendingRequestResponse struct {
 }
 
 type Event struct {
-	Seq       int64           `json:"seq"`
-	Type      string          `json:"type"`
-	ThreadID  string          `json:"thread_id"`
-	TurnID    string          `json:"turn_id,omitempty"`
-	ItemID    string          `json:"item_id,omitempty"`
-	RequestID string          `json:"request_id,omitempty"`
-	Thread    *Thread         `json:"thread,omitempty"`
-	Turn      *Turn           `json:"turn,omitempty"`
-	Item      *Item           `json:"item,omitempty"`
-	Request   *PendingRequest `json:"request,omitempty"`
-	Delta     string          `json:"delta,omitempty"`
-	Status    string          `json:"status,omitempty"`
-	Flags     []string        `json:"flags,omitempty"`
-	Error     string          `json:"error,omitempty"`
+	Seq          int64             `json:"seq"`
+	Type         string            `json:"type"`
+	ThreadID     string            `json:"thread_id"`
+	TurnID       string            `json:"turn_id,omitempty"`
+	ItemID       string            `json:"item_id,omitempty"`
+	RequestID    string            `json:"request_id,omitempty"`
+	Thread       *Thread           `json:"thread,omitempty"`
+	Turn         *Turn             `json:"turn,omitempty"`
+	Item         *Item             `json:"item,omitempty"`
+	Request      *PendingRequest   `json:"request,omitempty"`
+	TokenUsage   *ThreadTokenUsage `json:"token_usage,omitempty"`
+	Delta        string            `json:"delta,omitempty"`
+	Status       string            `json:"status,omitempty"`
+	Flags        []string          `json:"flags,omitempty"`
+	ThreadName   string            `json:"thread_name,omitempty"`
+	SummaryIndex *int64            `json:"summary_index,omitempty"`
+	ContentIndex *int64            `json:"content_index,omitempty"`
+	Error        string            `json:"error,omitempty"`
 }

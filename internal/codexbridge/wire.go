@@ -210,6 +210,15 @@ type wireThreadResumeResponse struct {
 	ReasoningEffort   *string           `json:"reasoningEffort"`
 }
 
+type wireThreadReadParams struct {
+	ThreadID     string `json:"threadId"`
+	IncludeTurns bool   `json:"includeTurns"`
+}
+
+type wireThreadReadResponse struct {
+	Thread wireThread `json:"thread"`
+}
+
 type wireThreadArchiveParams struct {
 	ThreadID string `json:"threadId"`
 }
@@ -256,6 +265,29 @@ type wireDeltaNotification struct {
 	Delta    string `json:"delta"`
 }
 
+type wireReasoningSummaryTextDeltaNotification struct {
+	ThreadID     string `json:"threadId"`
+	TurnID       string `json:"turnId"`
+	ItemID       string `json:"itemId"`
+	Delta        string `json:"delta"`
+	SummaryIndex int64  `json:"summaryIndex"`
+}
+
+type wireReasoningSummaryPartAddedNotification struct {
+	ThreadID     string `json:"threadId"`
+	TurnID       string `json:"turnId"`
+	ItemID       string `json:"itemId"`
+	SummaryIndex int64  `json:"summaryIndex"`
+}
+
+type wireReasoningTextDeltaNotification struct {
+	ThreadID     string `json:"threadId"`
+	TurnID       string `json:"turnId"`
+	ItemID       string `json:"itemId"`
+	Delta        string `json:"delta"`
+	ContentIndex int64  `json:"contentIndex"`
+}
+
 type wireThreadStatusChangedNotification struct {
 	ThreadID string           `json:"threadId"`
 	Status   wireThreadStatus `json:"status"`
@@ -265,9 +297,49 @@ type wireThreadArchivedNotification struct {
 	ThreadID string `json:"threadId"`
 }
 
+type wireThreadUnarchivedNotification struct {
+	ThreadID string `json:"threadId"`
+}
+
+type wireThreadClosedNotification struct {
+	ThreadID string `json:"threadId"`
+}
+
+type wireThreadNameUpdatedNotification struct {
+	ThreadID   string  `json:"threadId"`
+	ThreadName *string `json:"threadName"`
+}
+
+type wireTokenUsageBreakdown struct {
+	TotalTokens           int64 `json:"totalTokens"`
+	InputTokens           int64 `json:"inputTokens"`
+	CachedInputTokens     int64 `json:"cachedInputTokens"`
+	OutputTokens          int64 `json:"outputTokens"`
+	ReasoningOutputTokens int64 `json:"reasoningOutputTokens"`
+}
+
+type wireThreadTokenUsage struct {
+	Total              wireTokenUsageBreakdown `json:"total"`
+	Last               wireTokenUsageBreakdown `json:"last"`
+	ModelContextWindow *int64                  `json:"modelContextWindow"`
+}
+
+type wireThreadTokenUsageUpdatedNotification struct {
+	ThreadID   string               `json:"threadId"`
+	TurnID     string               `json:"turnId"`
+	TokenUsage wireThreadTokenUsage `json:"tokenUsage"`
+}
+
 type wireServerRequestResolvedNotification struct {
 	ThreadID  string          `json:"threadId"`
 	RequestID json.RawMessage `json:"requestId"`
+}
+
+type wireErrorNotification struct {
+	Error     wireTurnError `json:"error"`
+	WillRetry bool          `json:"willRetry"`
+	ThreadID  string        `json:"threadId"`
+	TurnID    string        `json:"turnId"`
 }
 
 type wireCommandApprovalRequest struct {

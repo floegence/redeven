@@ -61,6 +61,20 @@ export type CodexUserInputEntry = Readonly<{
   name?: string;
 }>;
 
+export type CodexTokenUsageBreakdown = Readonly<{
+  total_tokens: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  reasoning_output_tokens: number;
+}>;
+
+export type CodexThreadTokenUsage = Readonly<{
+  total: CodexTokenUsageBreakdown;
+  last: CodexTokenUsageBreakdown;
+  model_context_window?: number;
+}>;
+
 export type CodexItem = Readonly<{
   id: string;
   type: string;
@@ -151,7 +165,8 @@ export type CodexThreadDetail = Readonly<{
   thread: CodexThread;
   runtime_config?: CodexThreadRuntimeConfig;
   pending_requests?: CodexPendingRequest[];
-  last_event_seq: number;
+  token_usage?: CodexThreadTokenUsage | null;
+  last_applied_seq: number;
   active_status?: string;
   active_status_flags?: string[];
 }>;
@@ -166,11 +181,20 @@ export type CodexEvent = Readonly<{
     | 'item_completed'
     | 'agent_message_delta'
     | 'command_output_delta'
+    | 'file_change_delta'
+    | 'plan_delta'
     | 'reasoning_delta'
+    | 'reasoning_summary_delta'
+    | 'reasoning_summary_part_added'
     | 'request_created'
     | 'request_resolved'
     | 'thread_status_changed'
+    | 'thread_name_updated'
+    | 'thread_token_usage_updated'
     | 'thread_archived'
+    | 'thread_unarchived'
+    | 'thread_closed'
+    | 'error'
     | string;
   thread_id: string;
   turn_id?: string;
@@ -180,9 +204,13 @@ export type CodexEvent = Readonly<{
   turn?: CodexTurn;
   item?: CodexItem;
   request?: CodexPendingRequest;
+  token_usage?: CodexThreadTokenUsage | null;
   delta?: string;
   status?: string;
   flags?: string[];
+  thread_name?: string;
+  summary_index?: number;
+  content_index?: number;
   error?: string;
 }>;
 
@@ -196,7 +224,8 @@ export type CodexThreadSession = Readonly<{
   items_by_id: Record<string, CodexTranscriptItem>;
   item_order: string[];
   pending_requests: Record<string, CodexPendingRequest>;
-  last_event_seq: number;
+  token_usage?: CodexThreadTokenUsage | null;
+  last_applied_seq: number;
   active_status: string;
   active_status_flags: string[];
 }>;

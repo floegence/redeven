@@ -52,7 +52,11 @@ export function itemText(item: CodexTranscriptItem): string {
 export function displayStatus(value: string | null | undefined, fallback = 'Idle'): string {
   const normalized = String(value ?? '').trim();
   if (!normalized) return fallback;
-  return normalized.replaceAll('_', ' ');
+  return normalized
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replaceAll('_', ' ')
+    .replaceAll('-', ' ')
+    .toLowerCase();
 }
 
 export function compactPathLabel(value: string | null | undefined, fallback = ''): string {
@@ -68,9 +72,20 @@ export function compactPathLabel(value: string | null | undefined, fallback = ''
 export function statusTagVariant(status: string | null | undefined): TagProps['variant'] {
   const normalized = String(status ?? '').trim().toLowerCase();
   if (!normalized) return 'neutral';
-  if (normalized === 'idle' || normalized === 'ready' || normalized === 'archived') return 'neutral';
+  if (
+    normalized === 'idle' ||
+    normalized === 'ready' ||
+    normalized === 'archived' ||
+    normalized === 'notloaded' ||
+    normalized === 'not_loaded' ||
+    normalized === 'not loaded'
+  ) {
+    return 'neutral';
+  }
   if (normalized === 'completed' || normalized === 'success') return 'success';
   if (
+    normalized === 'active' ||
+    normalized === 'working' ||
     normalized === 'running' ||
     normalized === 'accepted' ||
     normalized === 'recovering' ||
@@ -136,6 +151,8 @@ export function formatRelativeThreadTime(unixSeconds: number): string {
 export function threadStatusDotClass(status: string | null | undefined): string {
   const normalized = String(status ?? '').trim().toLowerCase();
   if (
+    normalized === 'active' ||
+    normalized === 'working' ||
     normalized === 'accepted' ||
     normalized === 'running' ||
     normalized === 'recovering' ||

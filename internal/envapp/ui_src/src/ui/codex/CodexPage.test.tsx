@@ -308,8 +308,25 @@ describe('CodexPage', () => {
         sandbox_mode: 'workspace-write',
         reasoning_effort: 'medium',
       },
+      token_usage: {
+        total: {
+          total_tokens: 6400,
+          input_tokens: 4200,
+          cached_input_tokens: 600,
+          output_tokens: 1100,
+          reasoning_output_tokens: 300,
+        },
+        last: {
+          total_tokens: 1200,
+          input_tokens: 800,
+          cached_input_tokens: 200,
+          output_tokens: 150,
+          reasoning_output_tokens: 50,
+        },
+        model_context_window: 128000,
+      },
       pending_requests: [],
-      last_event_seq: 0,
+      last_applied_seq: 0,
       active_status: 'running',
       active_status_flags: ['finalizing'],
     });
@@ -346,7 +363,8 @@ describe('CodexPage', () => {
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
-    expect(host.querySelector('.codex-page-header-context')).toBeNull();
+    expect(host.querySelector('.codex-page-header-context')).not.toBeNull();
+    expect(host.textContent).toContain('95% context left');
     expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
     const workingDirChip = host.querySelector('button[aria-label="Edit working directory"]') as HTMLButtonElement | null;
@@ -419,7 +437,7 @@ describe('CodexPage', () => {
           available_decisions: ['accept', 'decline'],
         },
       ],
-      last_event_seq: 0,
+      last_applied_seq: 0,
       active_status: 'waiting_approval',
       active_status_flags: [],
     });
@@ -491,7 +509,7 @@ describe('CodexPage', () => {
         reasoning_effort: 'medium',
       },
       pending_requests: [],
-      last_event_seq: 4,
+      last_applied_seq: 4,
       active_status: 'running',
       active_status_flags: [],
     });
@@ -550,7 +568,7 @@ describe('CodexPage', () => {
         reasoning_effort: 'medium',
       },
       pending_requests: [],
-      last_event_seq: 0,
+      last_applied_seq: 0,
       active_status: 'running',
       active_status_flags: [],
     };

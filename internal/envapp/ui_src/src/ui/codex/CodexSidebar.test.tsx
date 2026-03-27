@@ -301,7 +301,7 @@ describe('CodexSidebar', () => {
         reasoning_effort: 'medium',
       },
       pending_requests: [],
-      last_event_seq: 0,
+      last_applied_seq: 0,
       active_status: threadID === 'thread_1' ? 'idle' : 'running',
       active_status_flags: [],
     }));
@@ -344,5 +344,136 @@ describe('CodexSidebar', () => {
     expect(host.querySelector('.codex-page-header-context')).toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
     expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
+  });
+
+  it('keeps a newly started thread selected before the sidebar list refetch catches up', async () => {
+    const existingThread = {
+      id: 'thread_1',
+      name: 'Existing thread',
+      preview: 'Inspect the current gateway wiring',
+      ephemeral: false,
+      model_provider: 'gpt-5.4',
+      created_at_unix_s: 1,
+      updated_at_unix_s: 2,
+      status: 'idle',
+      cwd: '/workspace',
+    };
+    const existingDetail = {
+      thread: {
+        ...existingThread,
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'idle',
+      active_status_flags: [],
+    };
+    const freshDetail = {
+      thread: {
+        id: 'thread_new',
+        name: 'Fresh thread',
+        preview: 'Create a new Codex thread',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 10,
+        updated_at_unix_s: 11,
+        status: 'active',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'active',
+      active_status_flags: [],
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([existingThread]);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => (
+      threadID === 'thread_new' ? freshDetail : existingDetail
+    ));
+    startCodexThreadMock.mockResolvedValue(freshDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const newChatButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('New Chat'));
+    if (!newChatButton) {
+      throw new Error('New Chat button not found');
+    }
+    newChatButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    const composer = host.querySelector('textarea[placeholder^="Ask Codex"]') as HTMLTextAreaElement | null;
+    if (!composer) {
+      throw new Error('composer textarea not found');
+    }
+    composer.value = 'Create a new Codex thread';
+    composer.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!sendButton) {
+      throw new Error('send button not found');
+    }
+    sendButton.click();
+
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    expect(startCodexThreadMock).toHaveBeenCalledTimes(1);
+    expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadID: 'thread_new',
+      inputText: 'Create a new Codex thread',
+    }));
+    expect(host.textContent).toContain('Fresh thread');
+    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('Fresh thread');
+    expect(host.querySelectorAll('[data-codex-surface="thread-card"]').length).toBe(2);
   });
 });

@@ -51,7 +51,24 @@ function sampleDetail(): CodexThreadDetail {
       approval_policy: 'on-request',
       reasoning_effort: 'medium',
     },
-    last_event_seq: 4,
+    token_usage: {
+      total: {
+        total_tokens: 3200,
+        input_tokens: 2000,
+        cached_input_tokens: 400,
+        output_tokens: 700,
+        reasoning_output_tokens: 100,
+      },
+      last: {
+        total_tokens: 900,
+        input_tokens: 500,
+        cached_input_tokens: 100,
+        output_tokens: 250,
+        reasoning_output_tokens: 50,
+      },
+      model_context_window: 128000,
+    },
+    last_applied_seq: 4,
     active_status: 'running',
     active_status_flags: ['busy'],
   };
@@ -65,7 +82,8 @@ describe('buildCodexThreadSession', () => {
     expect(session.items_by_id.item_user.text).toBe('hello from content');
     expect(session.items_by_id.item_reasoning.summary).toEqual(['inspect files']);
     expect(session.pending_requests.request_1.reason).toBe('needs approval');
-    expect(session.last_event_seq).toBe(4);
+    expect(session.last_applied_seq).toBe(4);
+    expect(session.token_usage?.total.total_tokens).toBe(3200);
     expect(session.active_status_flags).toEqual(['busy']);
     expect(session.runtime_config.cwd).toBe('/workspace');
     expect(session.runtime_config.model).toBe('gpt-5.4');
@@ -117,5 +135,62 @@ describe('applyCodexEvent', () => {
     expect(finished?.active_status).toBe('completed');
     expect(finished?.thread.status).toBe('completed');
     expect(finished?.active_status_flags).toEqual(['idle']);
+  });
+
+  it('projects thread metadata, token usage, and reasoning deltas', () => {
+    const initial = buildCodexThreadSession(sampleDetail());
+
+    const renamed = applyCodexEvent(initial, {
+      seq: 5,
+      type: 'thread_name_updated',
+      thread_id: 'thread_1',
+      thread_name: 'Live renamed thread',
+    });
+    expect(renamed?.thread.name).toBe('Live renamed thread');
+
+    const usageUpdated = applyCodexEvent(renamed ?? null, {
+      seq: 6,
+      type: 'thread_token_usage_updated',
+      thread_id: 'thread_1',
+      token_usage: {
+        total: {
+          total_tokens: 6400,
+          input_tokens: 4200,
+          cached_input_tokens: 600,
+          output_tokens: 1100,
+          reasoning_output_tokens: 300,
+        },
+        last: {
+          total_tokens: 1200,
+          input_tokens: 800,
+          cached_input_tokens: 200,
+          output_tokens: 150,
+          reasoning_output_tokens: 50,
+        },
+        model_context_window: 128000,
+      },
+    });
+    expect(usageUpdated?.token_usage?.total.total_tokens).toBe(6400);
+
+    const withSummary = applyCodexEvent(usageUpdated ?? null, {
+      seq: 7,
+      type: 'reasoning_summary_delta',
+      thread_id: 'thread_1',
+      item_id: 'item_reasoning_live',
+      summary_index: 0,
+      delta: 'scan codebase',
+    });
+    expect(withSummary?.items_by_id.item_reasoning_live.summary).toEqual(['scan codebase']);
+
+    const withContent = applyCodexEvent(withSummary ?? null, {
+      seq: 8,
+      type: 'reasoning_delta',
+      thread_id: 'thread_1',
+      item_id: 'item_reasoning_live',
+      content_index: 0,
+      delta: 'Inspecting the event replay path.',
+    });
+    expect(withContent?.items_by_id.item_reasoning_live.text).toContain('Inspecting the event replay path.');
+    expect(withContent?.last_applied_seq).toBe(8);
   });
 });

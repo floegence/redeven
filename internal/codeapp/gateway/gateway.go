@@ -78,7 +78,7 @@ type CodexBackend interface {
 	Status(ctx context.Context) codexbridge.Status
 	ReadCapabilities(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
 	ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error)
-	OpenThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
+	ReadThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	StartTurn(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
 	ArchiveThread(ctx context.Context, threadID string) error
@@ -1398,7 +1398,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-			detail, err := g.codex.OpenThread(r.Context(), threadID)
+			detail, err := g.codex.ReadThread(r.Context(), threadID)
 			if err != nil {
 				writeCodexError(w, err)
 				return
