@@ -133,8 +133,7 @@ describe('GitChangesPanel interactions', () => {
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(host.textContent).toContain('Loaded 2 of 40 files.');
-      expect(host.textContent).toContain('Visible rows render while you scroll.');
+      expect(host.textContent).toContain('Showing 2 of 40 files.');
       expect(host.textContent).toContain('src/app.ts');
       expect(host.textContent).toContain('notes.txt');
       expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(0);
@@ -246,8 +245,8 @@ describe('GitChangesPanel interactions', () => {
       expect(commitButton).toBeTruthy();
       commitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-      expect(document.body.textContent).toContain('Loaded 2 of 40 staged files.');
       expect(document.body.textContent).toContain('More staged files are available.');
+      expect(document.body.textContent).not.toContain('Loaded 2 of 40 staged files.');
     } finally {
       dispose();
     }

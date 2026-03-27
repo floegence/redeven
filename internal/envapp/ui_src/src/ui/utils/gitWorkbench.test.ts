@@ -9,7 +9,6 @@ import {
   buildGitWorkbenchSubviewItems,
   changeSecondaryPath,
   compareHeadline,
-  describeLoadedFileCount,
   findWorkspaceChangeByKey,
   pickDefaultWorkspaceViewSection,
   repoDisplayName,
@@ -66,12 +65,6 @@ describe('gitWorkbench helpers', () => {
     expect(changeSecondaryPath({ path: 'src/app.ts', displayPath: 'src/app.ts' })).toBe('src/app.ts');
     expect(repoDisplayName('/workspace/repo')).toBe('repo');
     expect(repoDisplayName('/')).toBe('Repository');
-  });
-
-  it('describes partially loaded file slices without conflating them with rendered rows', () => {
-    expect(describeLoadedFileCount(2, 40)).toBe('Loaded 2 of 40 files');
-    expect(describeLoadedFileCount(2, 40, 'staged')).toBe('Loaded 2 of 40 staged files');
-    expect(describeLoadedFileCount(1, 1, 'staged')).toBe('Loaded 1 staged file');
   });
 
   it('builds stable workspace and branch identities', () => {
