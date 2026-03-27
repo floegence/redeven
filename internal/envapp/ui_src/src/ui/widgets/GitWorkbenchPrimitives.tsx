@@ -154,8 +154,8 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
               aria-live="polite"
               class="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/45 bg-background/86 px-2 py-1 text-[10px] font-medium leading-none tracking-[0.02em] text-muted-foreground shadow-sm shadow-black/5"
             >
-              <span class="inline-flex h-4 w-4 items-center justify-center text-primary/80">
-                <SnakeLoader size="sm" />
+              <span class="inline-grid h-3.5 w-3.5 shrink-0 place-items-center overflow-hidden text-primary/80">
+                <SnakeLoader size="sm" class="h-4 w-4 shrink-0 origin-center scale-[0.68]" />
               </span>
               <span class="truncate">{status()}</span>
             </div>
