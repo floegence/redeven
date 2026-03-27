@@ -294,8 +294,7 @@ describe('GitBranchesPanel interactions', () => {
     try {
       await flush();
 
-      expect(host.textContent).toContain('Loaded 2 of 40 files.');
-      expect(host.textContent).toContain('Visible rows render while you scroll.');
+      expect(host.textContent).toContain('Showing 2 of 40 files.');
       expect(host.textContent).toContain('src/linked.ts');
       expect(host.textContent).toContain('notes.txt');
       expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(0);

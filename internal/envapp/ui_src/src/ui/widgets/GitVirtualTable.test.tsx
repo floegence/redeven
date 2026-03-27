@@ -136,4 +136,56 @@ describe('GitVirtualTable', () => {
       dispose();
     }
   });
+
+  it('reports the currently rendered row count instead of the loaded item count', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const items = Array.from({ length: 20 }, (_, index) => `item-${index}`);
+    const reportedCounts: number[] = [];
+    const dispose = render(() => (
+      <div class="h-[240px]">
+        <GitVirtualTable
+          items={items}
+          colSpan={1}
+          rowHeight={40}
+          overscan={2}
+          tableClass="min-w-full"
+          viewportClass="git-virtual-table-count-test"
+          onRenderedItemsChange={(count) => reportedCounts.push(count)}
+          header={<tr><th>Item</th></tr>}
+          renderRow={(item) => (
+            <tr>
+              <td>
+                <button type="button">{item}</button>
+              </td>
+            </tr>
+          )}
+        />
+      </div>
+    ), host);
+
+    try {
+      const viewport = host.querySelector('.git-virtual-table-count-test') as HTMLDivElement | null;
+      expect(viewport).toBeTruthy();
+
+      Object.defineProperty(viewport!, 'clientHeight', {
+        configurable: true,
+        value: 200,
+      });
+
+      window.dispatchEvent(new Event('resize'));
+      await flush();
+
+      expect(reportedCounts.at(-1)).toBe(9);
+
+      viewport!.scrollTop = 40 * 15;
+      viewport!.dispatchEvent(new Event('scroll'));
+      await flush();
+
+      expect(reportedCounts.at(-1)).toBe(7);
+    } finally {
+      dispose();
+    }
+  });
 });

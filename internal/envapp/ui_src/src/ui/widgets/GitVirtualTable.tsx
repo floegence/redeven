@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
 const DEFAULT_ROW_HEIGHT = 52;
@@ -13,6 +13,7 @@ export interface GitVirtualTableProps<T> {
   viewportClass?: string;
   rowHeight?: number;
   overscan?: number;
+  onRenderedItemsChange?: (count: number) => void;
 }
 
 export function GitVirtualTable<T>(props: GitVirtualTableProps<T>) {
@@ -65,6 +66,10 @@ export function GitVirtualTable<T>(props: GitVirtualTableProps<T>) {
       window.removeEventListener('resize', onResize);
       resizeObserver?.disconnect();
     });
+  });
+
+  createEffect(() => {
+    props.onRenderedItemsChange?.(visibleItems().length);
   });
 
   return (
