@@ -47,6 +47,7 @@ function buildSettings(enabled: boolean, collectUIMetrics = false) {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  vi.useRealTimers();
 });
 
 describe('createDebugConsoleController', () => {
@@ -132,6 +133,229 @@ describe('createDebugConsoleController', () => {
 
     dispose();
     expect(connectStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('auto-refreshes snapshot data without requiring a manual refresh', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-27T10:00:00Z'));
+
+    const [settingsKey] = createSignal<number | null>(1);
+    const [protocolStatus] = createSignal('connected');
+    const fetchSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce({
+        enabled: true,
+        state_dir: '/tmp/redeven',
+        recent_events: [
+          {
+            created_at: '2026-03-27T10:00:00Z',
+            source: 'agent',
+            scope: 'gateway_api',
+            kind: 'request',
+            trace_id: 'trace-1',
+            method: 'GET',
+            path: '/_redeven_proxy/api/settings',
+            status_code: 200,
+            duration_ms: 12,
+          },
+        ],
+        slow_summary: [],
+        stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 },
+      })
+      .mockResolvedValueOnce({
+        enabled: true,
+        state_dir: '/tmp/redeven',
+        recent_events: [
+          {
+            created_at: '2026-03-27T10:00:01Z',
+            source: 'desktop',
+            scope: 'desktop_http',
+            kind: 'completed',
+            trace_id: 'trace-2',
+            method: 'POST',
+            path: '/_redeven_proxy/api/chat/send',
+            status_code: 200,
+            duration_ms: 21,
+          },
+          {
+            created_at: '2026-03-27T10:00:00Z',
+            source: 'agent',
+            scope: 'gateway_api',
+            kind: 'request',
+            trace_id: 'trace-1',
+            method: 'GET',
+            path: '/_redeven_proxy/api/settings',
+            status_code: 200,
+            duration_ms: 12,
+          },
+        ],
+        slow_summary: [],
+        stats: { total_events: 2, agent_events: 1, desktop_events: 1, slow_events: 0, trace_count: 2 },
+      });
+
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        settingsKey,
+        protocolStatus,
+        fetchSettings: vi.fn(async () => buildSettings(true, false)),
+        fetchSnapshot,
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
+        createPerformanceTracker: () => ({
+          snapshot: () => ({
+            collecting: false,
+            fps: { current: 0, average: 0, low: 0, samples: 0 },
+            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
+            layout_shift: { count: 0, total_score: 0, max_score: 0 },
+            paints: {},
+            navigation: {},
+            recent_events: [],
+            supported: { longtask: false, layout_shift: false, paint: false, navigation: false, memory: false },
+          }),
+          clear: vi.fn(),
+        }),
+      });
+      return disposeRoot;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.serverEvents()).toHaveLength(1);
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(fetchSnapshot).toHaveBeenCalledTimes(2);
+    expect(controller.serverEvents()).toHaveLength(2);
+    expect(controller.serverEvents()[0]?.path).toBe('/_redeven_proxy/api/chat/send');
+    expect(controller.stats().desktop_events).toBe(1);
+
+    dispose();
+  });
+
+  it('clear resets the local capture window and prevents old snapshot events from reappearing', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-27T10:00:00Z'));
+
+    const [settingsKey] = createSignal<number | null>(1);
+    const [protocolStatus] = createSignal('connected');
+    const trackerClear = vi.fn();
+    const fetchSnapshot = vi
+      .fn()
+      .mockResolvedValueOnce({
+        enabled: true,
+        state_dir: '/tmp/redeven',
+        recent_events: [
+          {
+            created_at: '2026-03-27T09:59:59Z',
+            source: 'agent',
+            scope: 'gateway_api',
+            kind: 'request',
+            trace_id: 'trace-1',
+            method: 'GET',
+            path: '/_redeven_proxy/api/settings',
+            status_code: 200,
+            duration_ms: 12,
+          },
+        ],
+        slow_summary: [],
+        stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 },
+      })
+      .mockResolvedValueOnce({
+        enabled: true,
+        state_dir: '/tmp/redeven',
+        recent_events: [
+          {
+            created_at: '2026-03-27T09:59:59Z',
+            source: 'agent',
+            scope: 'gateway_api',
+            kind: 'request',
+            trace_id: 'trace-1',
+            method: 'GET',
+            path: '/_redeven_proxy/api/settings',
+            status_code: 200,
+            duration_ms: 12,
+          },
+        ],
+        slow_summary: [],
+        stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 },
+      })
+      .mockResolvedValueOnce({
+        enabled: true,
+        state_dir: '/tmp/redeven',
+        recent_events: [
+          {
+            created_at: '2026-03-27T10:00:01Z',
+            source: 'desktop',
+            scope: 'desktop_http',
+            kind: 'completed',
+            trace_id: 'trace-2',
+            method: 'POST',
+            path: '/_redeven_proxy/api/chat/send',
+            status_code: 200,
+            duration_ms: 18,
+          },
+          {
+            created_at: '2026-03-27T09:59:59Z',
+            source: 'agent',
+            scope: 'gateway_api',
+            kind: 'request',
+            trace_id: 'trace-1',
+            method: 'GET',
+            path: '/_redeven_proxy/api/settings',
+            status_code: 200,
+            duration_ms: 12,
+          },
+        ],
+        slow_summary: [],
+        stats: { total_events: 2, agent_events: 1, desktop_events: 1, slow_events: 0, trace_count: 2 },
+      });
+
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        settingsKey,
+        protocolStatus,
+        fetchSettings: vi.fn(async () => buildSettings(true, true)),
+        fetchSnapshot,
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
+        createPerformanceTracker: () => ({
+          snapshot: () => ({
+            collecting: true,
+            fps: { current: 60, average: 58, low: 48, samples: 3 },
+            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
+            layout_shift: { count: 0, total_score: 0, max_score: 0 },
+            paints: {},
+            navigation: {},
+            recent_events: [],
+            supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false },
+          }),
+          clear: trackerClear,
+        }),
+      });
+      return disposeRoot;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.serverEvents()).toHaveLength(1);
+
+    await controller.clear();
+
+    expect(trackerClear).toHaveBeenCalled();
+    expect(controller.serverEvents()).toHaveLength(0);
+    expect(controller.stats().total_events).toBe(0);
+    expect(controller.captureCutoffAt()).toBe('2026-03-27T10:00:00.000Z');
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(controller.serverEvents()).toHaveLength(1);
+    expect(controller.serverEvents()[0]?.path).toBe('/_redeven_proxy/api/chat/send');
+    expect(controller.serverEvents()[0]?.created_at).toBe('2026-03-27T10:00:01Z');
+
+    dispose();
   });
 
   it('clears runtime data when the console is disabled', async () => {
