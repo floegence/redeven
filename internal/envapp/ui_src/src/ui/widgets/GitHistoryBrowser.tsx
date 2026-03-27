@@ -183,7 +183,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                     <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
                         <section class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
-                          <div class="flex flex-wrap items-start justify-between gap-3">
+                          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                             <GitLabelBlock
                               class="min-w-0 flex-1"
                               label="Commit Overview"
@@ -231,12 +231,12 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </div>
                               </Show>
                             </GitLabelBlock>
-                            <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
                               <Show when={props.onSwitchDetached}>
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  class="rounded-md bg-background/80"
+                                  class="w-full rounded-md bg-background/80 sm:w-auto"
                                   disabled={Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
                                   onClick={() => props.onSwitchDetached?.({
                                     commitHash: detail.hash,
@@ -248,7 +248,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </Button>
                               </Show>
                               <Show when={props.onAskFlower}>
-                                <GitShortcutOrbDock class="shrink-0">
+                                <GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">
                                   <GitShortcutOrbButton
                                     label="Ask Flower"
                                     tone="flower"
@@ -278,7 +278,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             <div class="mt-2.5 overflow-hidden rounded-md border border-border/65 bg-card">
                               <GitVirtualTable
                                 items={commitFiles()}
-                                tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}
+                                tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
                                 header={(
                                   <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
                                     <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>

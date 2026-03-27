@@ -37,23 +37,23 @@ export interface GitSectionProps {
 export function GitSection(props: GitSectionProps) {
   return (
     <section class={cn('rounded-md border border-border/65 bg-card px-3 py-2.5', gitToneSurfaceClass(props.tone), props.class)}>
-      <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5">
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
         <div class="min-w-0 space-y-1">
           <div class="flex items-center gap-2">
             <span class={cn('h-2 w-2 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.04)]', gitToneDotClass(props.tone))} aria-hidden="true" />
             <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">{props.label}</div>
           </div>
           <Show when={props.description}>
-            <div class="pl-4 text-xs leading-relaxed text-muted-foreground">{props.description}</div>
+            <div class="pl-0 text-xs leading-relaxed text-muted-foreground sm:pl-4">{props.description}</div>
           </Show>
         </div>
         <Show when={props.aside}>
-          <div class="flex min-w-fit max-w-full flex-wrap items-center justify-end gap-1.5 text-right text-[10px] font-medium leading-5 text-muted-foreground">{props.aside}</div>
+          <div class="flex max-w-full flex-wrap items-center gap-1.5 text-[10px] font-medium leading-5 text-muted-foreground sm:min-w-fit sm:justify-end sm:text-right">{props.aside}</div>
         </Show>
       </div>
 
       <Show when={props.children}>
-        <div class={cn('mt-2.5 pl-4', props.bodyClass)}>{props.children}</div>
+        <div class={cn('mt-2.5 pl-0 sm:pl-4', props.bodyClass)}>{props.children}</div>
       </Show>
     </section>
   );
@@ -79,7 +79,7 @@ export function GitLabelBlock(props: GitLabelBlockProps) {
         </Show>
       </div>
       <Show when={props.children}>
-        <div class={cn('space-y-1 pl-4', props.bodyClass)}>{props.children}</div>
+        <div class={cn('space-y-1 pl-0 sm:pl-4', props.bodyClass)}>{props.children}</div>
       </Show>
     </div>
   );
@@ -143,7 +143,7 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
   return (
     <div
       class={cn(
-        'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-2 border-t border-border/55 bg-background/72 px-3 py-2',
+        'grid grid-cols-1 gap-2 border-t border-border/55 bg-background/72 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2',
         props.class,
       )}
     >
@@ -163,11 +163,11 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
         </Show>
       </div>
 
-      <div class="justify-self-center">
+      <div class="justify-self-stretch sm:justify-self-center">
         <Button
           size="sm"
           variant="outline"
-          class="min-w-[8.75rem] rounded-full border-border/60 bg-background/92 px-3 text-[11px] font-medium shadow-sm shadow-black/5 transition-[box-shadow,background-color,border-color] duration-150 hover:bg-accent/60 hover:shadow-md"
+          class="w-full rounded-full border-border/60 bg-background/92 px-3 text-[11px] font-medium shadow-sm shadow-black/5 transition-[box-shadow,background-color,border-color] duration-150 hover:bg-accent/60 hover:shadow-md sm:min-w-[8.75rem] sm:w-auto"
           onClick={() => props.onLoadMore?.()}
           loading={loading()}
           disabled={!props.hasMore || loading()}
@@ -176,8 +176,8 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
         </Button>
       </div>
 
-      <div class="min-w-0 justify-self-end">
-        <GitSubtleNote class="max-w-full border-border/40 bg-background/84 px-2 py-1 text-[10px] leading-4 shadow-sm shadow-black/5">
+      <div class="min-w-0 justify-self-stretch sm:justify-self-end">
+        <GitSubtleNote class="w-full border-border/40 bg-background/84 px-2 py-1 text-[10px] leading-4 shadow-sm shadow-black/5 sm:max-w-full">
           {props.summary}
         </GitSubtleNote>
       </div>
@@ -444,7 +444,7 @@ export function GitShortcutOrbDock(props: GitShortcutOrbDockProps) {
   return (
     <div
       data-git-shortcut-dock
-      class={cn('inline-flex items-center gap-1.5', props.class)}
+      class={cn('inline-flex max-w-full flex-wrap items-center gap-1.5', props.class)}
     >
       {props.children}
     </div>
@@ -457,7 +457,7 @@ export interface GitPrimaryTitleProps {
 }
 
 export function GitPrimaryTitle(props: GitPrimaryTitleProps) {
-  return <div class={cn('text-[13px] font-bold leading-5 tracking-tight text-foreground', props.class)}>{props.children}</div>;
+  return <div class={cn('break-words text-[13px] font-bold leading-5 tracking-tight text-foreground', props.class)}>{props.children}</div>;
 }
 
 export interface GitChangeMetricsProps {

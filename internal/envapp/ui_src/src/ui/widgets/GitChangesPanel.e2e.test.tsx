@@ -84,6 +84,61 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('keeps the workspace header actions stacked for mobile widths instead of squeezing the summary copy', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 19, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 19, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="changes"
+                onAskFlower={() => undefined}
+                onOpenInTerminal={() => undefined}
+                onBrowseFiles={() => undefined}
+                onOpenStash={() => undefined}
+                onBulkAction={() => undefined}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const dock = host.querySelector('[data-git-shortcut-dock]') as HTMLElement | null;
+      const stashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stash...')) as HTMLButtonElement | undefined;
+      const stageAllButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stage All')) as HTMLButtonElement | undefined;
+      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...')) as HTMLButtonElement | undefined;
+
+      expect(dock).toBeTruthy();
+      expect(dock?.className).toContain('w-full justify-start');
+      expect(stashButton).toBeTruthy();
+      expect(stashButton?.className).toContain('w-full');
+      expect(stageAllButton).toBeTruthy();
+      expect(stageAllButton?.className).toContain('w-full');
+      expect(commitButton).toBeTruthy();
+      expect(commitButton?.className).toContain('w-full');
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps paged totals in footer copy without inventing unloaded scroll space', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

@@ -128,7 +128,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
       >
         <GitVirtualTable
           items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}
+          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
           header={(
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
               <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
@@ -285,7 +285,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
             <div class="flex min-h-0 flex-1 flex-col gap-3">
               <div class="shrink-0 rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
-                <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <GitLabelBlock class="min-w-0 flex-1" label="Workspace" tone={selectedTone()}>
                     <div class="flex flex-wrap items-center gap-2">
                       <GitPrimaryTitle>{visibleSectionLabel()}</GitPrimaryTitle>
@@ -294,15 +294,15 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         <GitMetaPill tone="success">{stagedCount()} staged</GitMetaPill>
                       </Show>
                     </div>
-                    <div class="text-[11px] leading-relaxed text-muted-foreground">
+                    <div class="max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[34rem]">
                       {selectedSection() === 'staged'
                         ? 'Review the staged snapshot, then commit it from the dialog.'
                         : 'Stage the files you want from this table, then commit them from the staged dialog.'}
                     </div>
                   </GitLabelBlock>
-                  <div class="flex shrink-0 flex-wrap items-center justify-end gap-2.5 self-start">
+                  <div class="flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:flex-col lg:items-end lg:justify-start">
                     <Show when={props.onAskFlower || props.onOpenInTerminal || props.onBrowseFiles}>
-                      <GitShortcutOrbDock>
+                      <GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">
                         <Show when={props.onAskFlower}>
                           <GitShortcutOrbButton
                             label="Ask Flower"
@@ -353,12 +353,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                       </GitShortcutOrbDock>
                     </Show>
 
-                    <div class="flex flex-wrap items-center justify-end gap-2">
+                    <div class="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
                       <Show when={props.onOpenStash}>
                         <Button
                           size="sm"
                           variant="outline"
-                          class="rounded-md"
+                          class="w-full rounded-md sm:w-auto"
                           disabled={!canOpenStash()}
                           onClick={() => {
                             const repoRoot = repoRootPath();
@@ -376,7 +376,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        class="rounded-md"
+                        class="w-full rounded-md sm:w-auto"
                         onClick={() => props.onBulkAction?.(selectedSection())}
                         disabled={visibleCount() === 0 || bulkActionBusy()}
                         loading={bulkActionBusy()}
@@ -386,7 +386,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                       <Button
                         size="sm"
                         variant="default"
-                        class="rounded-md"
+                        class="w-full rounded-md sm:w-auto"
                         onClick={() => {
                           props.onOpenCommitDialog?.();
                           setCommitDialogOpen(true);
