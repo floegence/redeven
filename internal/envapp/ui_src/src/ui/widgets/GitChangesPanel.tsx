@@ -6,6 +6,7 @@ import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
   createEmptyWorkspaceViewPageState,
   changeSecondaryPath,
+  describeLoadedFileCount,
   pickDefaultWorkspaceViewSection,
   repoDisplayName,
   type GitSeededWorkspaceChange,
@@ -192,7 +193,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
         <Show when={props.hasMore || props.loadingMore}>
           <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
             <GitSubtleNote>
-              Showing {props.items.length} of {props.totalCount} file{props.totalCount === 1 ? '' : 's'}.
+              {describeLoadedFileCount(props.items.length, props.totalCount)}. Visible rows render while you scroll.
             </GitSubtleNote>
             <Button
               size="sm"
@@ -305,7 +306,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     </div>
                     <Show when={visibleItems().length > 0 && visibleItems().length < visibleCount()}>
                       <div class="text-[11px] leading-relaxed text-muted-foreground">
-                        Showing {visibleItems().length} loaded file{visibleItems().length === 1 ? '' : 's'} from this section.
+                        {describeLoadedFileCount(visibleItems().length)} in this section so far.
                       </div>
                     </Show>
                   </GitLabelBlock>

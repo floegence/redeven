@@ -149,6 +149,26 @@ export function repoDisplayName(repoRootPath: string | null | undefined): string
   return parts[parts.length - 1] || 'Repository';
 }
 
+function normalizeGitCount(value: number | null | undefined): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.trunc(numeric));
+}
+
+function fileNoun(count: number, adjective?: string): string {
+  const prefix = String(adjective ?? '').trim();
+  return `${prefix ? `${prefix} ` : ''}file${count === 1 ? '' : 's'}`;
+}
+
+export function describeLoadedFileCount(loadedCount: number, totalCount?: number, adjective?: string): string {
+  const loaded = normalizeGitCount(loadedCount);
+  const total = Math.max(loaded, normalizeGitCount(totalCount));
+  if (total > loaded) {
+    return `Loaded ${loaded} of ${total} ${fileNoun(total, adjective)}`;
+  }
+  return `Loaded ${loaded} ${fileNoun(loaded, adjective)}`;
+}
+
 export function shortGitHash(hash: string | null | undefined, length = 8): string {
   const value = String(hash ?? '').trim();
   if (!value) return '';

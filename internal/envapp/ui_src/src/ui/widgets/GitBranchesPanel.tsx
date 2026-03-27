@@ -15,6 +15,7 @@ import {
   branchSubviewLabel,
   changeSecondaryPath,
   createEmptyWorkspaceViewPageStateRecord,
+  describeLoadedFileCount,
   describeGitHead,
   detachedHeadCheckoutActionLabel,
   detachedHeadReattachSummary,
@@ -339,7 +340,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
         <Show when={props.hasMore || props.loadingMore}>
           <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
             <GitSubtleNote>
-              Showing {props.items.length} of {props.totalCount} file{props.totalCount === 1 ? '' : 's'}.
+              {describeLoadedFileCount(props.items.length, props.totalCount)}. Visible rows render while you scroll.
             </GitSubtleNote>
             <Button
               size="sm"
