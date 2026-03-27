@@ -46,6 +46,13 @@ export type CodexComposerAttachmentDraft = Readonly<{
   preview_url: string;
 }>;
 
+export type CodexOptimisticUserTurn = Readonly<{
+  id: string;
+  thread_id: string;
+  text: string;
+  inputs: CodexUserInputEntry[];
+}>;
+
 export type CodexFileChange = Readonly<{
   path: string;
   kind: string;
@@ -212,6 +219,7 @@ export type CodexEvent = Readonly<{
   summary_index?: number;
   content_index?: number;
   error?: string;
+  will_retry?: boolean;
 }>;
 
 export type CodexTranscriptItem = CodexItem & Readonly<{

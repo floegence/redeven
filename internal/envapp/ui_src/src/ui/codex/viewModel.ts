@@ -1,4 +1,4 @@
-import { displayStatus } from './presentation';
+import { displayStatus, isWorkingStatus } from './presentation';
 import type {
   CodexCapabilitiesSnapshot,
   CodexModelOption,
@@ -72,9 +72,10 @@ function compactTokenCount(value: number | null | undefined): string {
 
 function codexStatusLabel(status: string | null | undefined): string {
   const normalized = String(status ?? '').trim().toLowerCase();
+  if (isWorkingStatus(normalized)) {
+    return 'working';
+  }
   switch (normalized) {
-    case 'active':
-      return 'working';
     case 'notloaded':
     case 'not_loaded':
       return 'not loaded';

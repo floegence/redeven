@@ -209,4 +209,5 @@ type Event struct {
 	SummaryIndex *int64            `json:"summary_index,omitempty"`
 	ContentIndex *int64            `json:"content_index,omitempty"`
 	Error        string            `json:"error,omitempty"`
+	WillRetry    bool              `json:"will_retry,omitempty"`
 }

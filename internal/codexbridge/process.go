@@ -28,11 +28,18 @@ type appServerProcess struct {
 	done       chan error
 }
 
-func startAppServerProcess(logger *slog.Logger, binaryPath string, onEnvelope func(rpcEnvelope)) (*appServerProcess, error) {
+func buildAppServerCommand(binaryPath string) (*exec.Cmd, error) {
 	if strings.TrimSpace(binaryPath) == "" {
 		return nil, errors.New("missing codex binary")
 	}
-	cmd := exec.Command(binaryPath, "app-server", "--listen", "stdio://")
+	return exec.Command("bash", "-lc", `exec "$0" app-server --listen stdio://`, binaryPath), nil
+}
+
+func startAppServerProcess(logger *slog.Logger, binaryPath string, onEnvelope func(rpcEnvelope)) (*appServerProcess, error) {
+	cmd, err := buildAppServerCommand(binaryPath)
+	if err != nil {
+		return nil, err
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err

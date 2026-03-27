@@ -59,6 +59,21 @@ export function displayStatus(value: string | null | undefined, fallback = 'Idle
     .toLowerCase();
 }
 
+export function isWorkingStatus(value: string | null | undefined): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return (
+    normalized === 'active' ||
+    normalized === 'working' ||
+    normalized === 'running' ||
+    normalized === 'accepted' ||
+    normalized === 'recovering' ||
+    normalized === 'finalizing' ||
+    normalized === 'inprogress' ||
+    normalized === 'in_progress' ||
+    normalized === 'in progress'
+  );
+}
+
 export function compactPathLabel(value: string | null | undefined, fallback = ''): string {
   const normalized = String(value ?? '').trim();
   if (!normalized) return fallback;
@@ -83,14 +98,7 @@ export function statusTagVariant(status: string | null | undefined): TagProps['v
     return 'neutral';
   }
   if (normalized === 'completed' || normalized === 'success') return 'success';
-  if (
-    normalized === 'active' ||
-    normalized === 'working' ||
-    normalized === 'running' ||
-    normalized === 'accepted' ||
-    normalized === 'recovering' ||
-    normalized === 'finalizing'
-  ) {
+  if (isWorkingStatus(normalized)) {
     return 'info';
   }
   if (normalized.includes('approval') || normalized.includes('waiting') || normalized.includes('input')) {
@@ -150,14 +158,7 @@ export function formatRelativeThreadTime(unixSeconds: number): string {
 
 export function threadStatusDotClass(status: string | null | undefined): string {
   const normalized = String(status ?? '').trim().toLowerCase();
-  if (
-    normalized === 'active' ||
-    normalized === 'working' ||
-    normalized === 'accepted' ||
-    normalized === 'running' ||
-    normalized === 'recovering' ||
-    normalized === 'finalizing'
-  ) {
+  if (isWorkingStatus(normalized)) {
     return 'bg-primary';
   }
   if (normalized.includes('approval') || normalized.includes('waiting') || normalized.includes('input')) {

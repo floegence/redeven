@@ -334,6 +334,9 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       next.thread = { ...next.thread, status: 'notLoaded', active_flags: [] };
       return next;
     case 'error':
+      if (event.will_retry) {
+        return next;
+      }
       next.active_status = 'systemError';
       next.active_status_flags = [];
       next.thread = { ...next.thread, status: 'systemError', active_flags: [] };

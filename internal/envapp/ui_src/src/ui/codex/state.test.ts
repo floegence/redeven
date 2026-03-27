@@ -193,4 +193,20 @@ describe('applyCodexEvent', () => {
     expect(withContent?.items_by_id.item_reasoning_live.text).toContain('Inspecting the event replay path.');
     expect(withContent?.last_applied_seq).toBe(8);
   });
+
+  it('keeps working state when Codex reports a retryable error', () => {
+    const initial = buildCodexThreadSession(sampleDetail());
+
+    const next = applyCodexEvent(initial, {
+      seq: 5,
+      type: 'error',
+      thread_id: 'thread_1',
+      error: 'temporary network failure',
+      will_retry: true,
+    });
+
+    expect(next?.active_status).toBe('running');
+    expect(next?.thread.status).toBe('running');
+    expect(next?.last_applied_seq).toBe(5);
+  });
 });

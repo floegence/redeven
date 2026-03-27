@@ -347,6 +347,7 @@ describe('CodexSidebar', () => {
   });
 
   it('keeps a newly started thread selected before the sidebar list refetch catches up', async () => {
+    let streamOnEvent: ((event: any) => void) | null = null;
     const existingThread = {
       id: 'thread_1',
       name: 'Existing thread',
@@ -433,7 +434,9 @@ describe('CodexSidebar', () => {
     ));
     startCodexThreadMock.mockResolvedValue(freshDetail);
     startCodexTurnMock.mockResolvedValue(undefined);
-    connectCodexEventStreamMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
+      streamOnEvent = args.onEvent;
+    });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -473,7 +476,23 @@ describe('CodexSidebar', () => {
       inputText: 'Create a new Codex thread',
     }));
     expect(host.textContent).toContain('Fresh thread');
+    expect(host.textContent).toContain('Create a new Codex thread');
+    expect(host.querySelector('[data-codex-working-state="true"]')).not.toBeNull();
     expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('Fresh thread');
     expect(host.querySelectorAll('[data-codex-surface="thread-card"]').length).toBe(2);
+
+    if (!streamOnEvent) {
+      throw new Error('stream callback not captured');
+    }
+    const emitStreamEvent = streamOnEvent as (event: any) => void;
+    emitStreamEvent({
+      seq: 1,
+      type: 'thread_name_updated',
+      thread_id: 'thread_new',
+      thread_name: 'Codex renamed thread',
+    });
+    await flushAsync();
+
+    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('Codex renamed thread');
   });
 });

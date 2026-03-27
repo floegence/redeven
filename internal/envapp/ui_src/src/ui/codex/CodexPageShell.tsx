@@ -6,6 +6,7 @@ import { CodexHeaderBar } from './CodexHeaderBar';
 import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
 import { CodexStatusBannerStack } from './CodexStatusBannerStack';
 import { CodexTranscript } from './CodexTranscript';
+import { isWorkingStatus } from './presentation';
 import {
   buildCodexWorkbenchSummary,
   codexAllowedApprovalPolicies,
@@ -104,6 +105,12 @@ export function CodexPageShell() {
     return out;
   });
   const supportsImages = createMemo(() => codexModelSupportsImages(codex.capabilities(), modelValue()));
+  const shouldShowWorkingState = createMemo(() => (
+    summary().hostReady && (
+      codex.submitting() ||
+      isWorkingStatus(codex.activeStatus())
+    )
+  ));
 
   return (
     <div data-codex-surface="page-shell" class="codex-page-shell">
@@ -129,6 +136,10 @@ export function CodexPageShell() {
             <div class="relative mx-auto flex h-full w-full max-w-5xl flex-col">
               <CodexTranscript
                 items={codex.transcriptItems()}
+                optimisticUserTurns={codex.activeOptimisticUserTurns()}
+                showWorkingState={shouldShowWorkingState()}
+                workingLabel={summary().statusLabel || 'working'}
+                workingFlags={summary().statusFlags}
                 emptyTitle={emptyStateTitle()}
                 emptyBody={emptyStateBody()}
               />

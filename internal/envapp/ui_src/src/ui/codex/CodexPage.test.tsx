@@ -547,6 +547,7 @@ describe('CodexPage', () => {
   });
 
   it('sends image attachments through the Codex-only turn contract', async () => {
+    let streamOnEvent: ((event: any) => void) | null = null;
     const startedDetail = {
       thread: {
         id: 'thread_new',
@@ -568,6 +569,23 @@ describe('CodexPage', () => {
         reasoning_effort: 'medium',
       },
       pending_requests: [],
+      token_usage: {
+        total: {
+          total_tokens: 6400,
+          input_tokens: 4200,
+          cached_input_tokens: 600,
+          output_tokens: 1100,
+          reasoning_output_tokens: 300,
+        },
+        last: {
+          total_tokens: 1200,
+          input_tokens: 800,
+          cached_input_tokens: 200,
+          output_tokens: 150,
+          reasoning_output_tokens: 50,
+        },
+        model_context_window: 128000,
+      },
       last_applied_seq: 0,
       active_status: 'running',
       active_status_flags: [],
@@ -604,7 +622,9 @@ describe('CodexPage', () => {
     startCodexThreadMock.mockResolvedValue(startedDetail);
     openCodexThreadMock.mockResolvedValue(startedDetail);
     startCodexTurnMock.mockResolvedValue(undefined);
-    connectCodexEventStreamMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
+      streamOnEvent = args.onEvent;
+    });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -658,6 +678,24 @@ describe('CodexPage', () => {
         }),
       ],
     }));
+    expect(host.textContent).toContain('Codex is working.');
+    expect(host.textContent).toContain('95% context left');
+    expect(host.textContent).toContain('working');
+    expect(host.querySelector('[data-codex-working-state="true"]')).not.toBeNull();
+
+    if (!streamOnEvent) {
+      throw new Error('stream callback not captured');
+    }
+    const emitStreamEvent = streamOnEvent as (event: any) => void;
+    emitStreamEvent({
+      seq: 1,
+      type: 'thread_name_updated',
+      thread_id: 'thread_new',
+      thread_name: 'Thread title from Codex',
+    });
+    await flushAsync();
+
+    expect(host.textContent).toContain('Thread title from Codex');
   });
 
 });

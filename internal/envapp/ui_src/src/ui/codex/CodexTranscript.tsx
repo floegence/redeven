@@ -13,7 +13,7 @@ import {
   itemTitle,
   statusTagVariant,
 } from './presentation';
-import type { CodexTranscriptItem, CodexUserInputEntry } from './types';
+import type { CodexOptimisticUserTurn, CodexTranscriptItem, CodexUserInputEntry } from './types';
 
 function EmptyTranscriptState(props: {
   title: string;
@@ -242,6 +242,57 @@ function UserMessageRow(props: { item: CodexTranscriptItem }) {
   );
 }
 
+function OptimisticUserMessageRow(props: { turn: CodexOptimisticUserTurn }) {
+  const syntheticItem: CodexTranscriptItem = {
+    id: props.turn.id,
+    type: 'userMessage',
+    text: props.turn.text,
+    inputs: props.turn.inputs,
+    order: -1,
+  };
+  return (
+    <div data-codex-optimistic-turn-id={props.turn.id}>
+      <UserMessageRow item={syntheticItem} />
+    </div>
+  );
+}
+
+function WorkingStateRow(props: {
+  label: string;
+  flags: readonly string[];
+}) {
+  const normalizedLabel = () => String(props.label ?? '').trim() || 'working';
+  return (
+    <CodexMessageLane role="assistant" showAvatar>
+      <div
+        data-codex-working-state="true"
+        class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
+      >
+        <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+            <span class="text-sm font-medium text-foreground">Codex is {normalizedLabel()}.</span>
+            <Tag variant={statusTagVariant(normalizedLabel())} tone="soft" size="sm">
+              {displayStatus(normalizedLabel())}
+            </Tag>
+          </div>
+          <Show when={props.flags.length > 0}>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <For each={props.flags}>
+                {(flag) => (
+                  <Tag variant="info" tone="soft" size="sm">
+                    {flag}
+                  </Tag>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </CodexMessageLane>
+  );
+}
+
 function TranscriptRow(props: { item: CodexTranscriptItem }) {
   if (props.item.type === 'userMessage') {
     return <UserMessageRow item={props.item} />;
@@ -254,13 +305,19 @@ function TranscriptRow(props: { item: CodexTranscriptItem }) {
 
 export function CodexTranscript(props: {
   items: readonly CodexTranscriptItem[];
+  optimisticUserTurns?: readonly CodexOptimisticUserTurn[];
+  showWorkingState?: boolean;
+  workingLabel?: string;
+  workingFlags?: readonly string[];
   emptyTitle: string;
   emptyBody: string;
 }) {
+  const optimisticUserTurns = () => [...(props.optimisticUserTurns ?? [])];
+  const hasRows = () => props.items.length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
   return (
     <div data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
       <Show
-        when={props.items.length > 0}
+        when={hasRows()}
         fallback={(
           <EmptyTranscriptState
             title={props.emptyTitle}
@@ -269,6 +326,13 @@ export function CodexTranscript(props: {
         )}
       >
         <div class="codex-transcript-feed">
+          <For each={optimisticUserTurns()}>
+            {(turn) => (
+              <div class="codex-transcript-row">
+                <OptimisticUserMessageRow turn={turn} />
+              </div>
+            )}
+          </For>
           <For each={props.items}>
             {(item) => (
               <div class="codex-transcript-row">
@@ -276,6 +340,14 @@ export function CodexTranscript(props: {
               </div>
             )}
           </For>
+          <Show when={props.showWorkingState}>
+            <div class="codex-transcript-row">
+              <WorkingStateRow
+                label={String(props.workingLabel ?? '').trim() || 'working'}
+                flags={props.workingFlags ?? []}
+              />
+            </div>
+          </Show>
         </div>
       </Show>
     </div>

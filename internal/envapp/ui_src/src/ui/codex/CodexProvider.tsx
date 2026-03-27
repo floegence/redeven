@@ -24,10 +24,12 @@ import {
   startCodexTurn,
 } from './api';
 import { applyCodexEvent, buildCodexThreadSession } from './state';
+import { isWorkingStatus } from './presentation';
 import { codexSupportedReasoningEfforts } from './viewModel';
 import type {
   CodexCapabilitiesSnapshot,
   CodexComposerAttachmentDraft,
+  CodexOptimisticUserTurn,
   CodexPendingRequest,
   CodexStatus,
   CodexThread,
@@ -40,6 +42,7 @@ import type {
 
 type CodexRequestDrafts = Record<string, Record<string, string>>;
 type CodexThreadMap = Record<string, CodexThread>;
+type CodexOptimisticTurnMap = Record<string, CodexOptimisticUserTurn[]>;
 
 function createAttachmentID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -92,6 +95,45 @@ function normalizeOptimisticThread(
   };
 }
 
+function normalizeUserTurnText(value: string | null | undefined): string {
+  return String(value ?? '').replaceAll('\r\n', '\n').trim();
+}
+
+function attachmentSignature(entry: CodexUserInputEntry): string {
+  return [
+    String(entry.type ?? '').trim(),
+    String(entry.url ?? '').trim(),
+    String(entry.path ?? '').trim(),
+    String(entry.name ?? '').trim(),
+  ].join('|');
+}
+
+function attachmentSignatures(inputs: readonly CodexUserInputEntry[] | null | undefined): string[] {
+  return [...(inputs ?? [])]
+    .filter((entry) => String(entry.type ?? '').trim() !== 'text')
+    .map((entry) => attachmentSignature(entry))
+    .filter(Boolean)
+    .sort();
+}
+
+function sameStringList(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function sessionContainsOptimisticTurn(
+  currentSession: CodexThreadSession,
+  optimisticTurn: CodexOptimisticUserTurn,
+): boolean {
+  const optimisticText = normalizeUserTurnText(optimisticTurn.text);
+  const optimisticAttachments = attachmentSignatures(optimisticTurn.inputs);
+  return Object.values(currentSession.items_by_id).some((item) => (
+    item.type === 'userMessage' &&
+    normalizeUserTurnText(item.text) === optimisticText &&
+    sameStringList(attachmentSignatures(item.inputs), optimisticAttachments)
+  ));
+}
+
 function buildOptimisticPlaceholderThread(args: {
   threadID: string;
   preview: string;
@@ -124,6 +166,7 @@ export type CodexContextValue = Readonly<{
   activeThread: Accessor<CodexThread | null>;
   activeRuntimeConfig: Accessor<CodexThreadRuntimeConfig>;
   activeTokenUsage: Accessor<CodexThreadTokenUsage | null | undefined>;
+  activeOptimisticUserTurns: Accessor<CodexOptimisticUserTurn[]>;
   activeStatus: Accessor<string>;
   activeStatusFlags: Accessor<string[]>;
   threadTitle: Accessor<string>;
@@ -178,6 +221,7 @@ export function CodexProvider(props: ParentProps) {
   const [protectedSelectionThreadID, setProtectedSelectionThreadID] = createSignal<string | null>(null);
   const [preferBlankComposer, setPreferBlankComposer] = createSignal(false);
   const [optimisticThreadsByID, setOptimisticThreadsByID] = createSignal<CodexThreadMap>({});
+  const [optimisticTurnsByThreadID, setOptimisticTurnsByThreadID] = createSignal<CodexOptimisticTurnMap>({});
   const [session, setSession] = createSignal<CodexThreadSession | null>(null);
   const [workingDirDraft, setWorkingDirDraft] = createSignal('');
   const [modelDraft, setModelDraft] = createSignal('');
@@ -239,6 +283,34 @@ export function CodexProvider(props: ParentProps) {
       const next = { ...current };
       delete next[normalizedThreadID];
       return next;
+    });
+  };
+
+  const appendOptimisticTurn = (optimisticTurn: CodexOptimisticUserTurn) => {
+    const threadID = String(optimisticTurn.thread_id ?? '').trim();
+    if (!threadID) return;
+    setOptimisticTurnsByThreadID((current) => ({
+      ...current,
+      [threadID]: [...(current[threadID] ?? []), optimisticTurn],
+    }));
+  };
+
+  const removeOptimisticTurns = (threadID: string, filterOut: ReadonlySet<string>) => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID || filterOut.size === 0) return;
+    setOptimisticTurnsByThreadID((current) => {
+      const existing = current[normalizedThreadID] ?? [];
+      const nextTurns = existing.filter((turn) => !filterOut.has(turn.id));
+      if (nextTurns.length === existing.length) return current;
+      if (nextTurns.length === 0) {
+        const next = { ...current };
+        delete next[normalizedThreadID];
+        return next;
+      }
+      return {
+        ...current,
+        [normalizedThreadID]: nextTurns,
+      };
     });
   };
 
@@ -348,6 +420,20 @@ export function CodexProvider(props: ParentProps) {
   });
 
   createEffect(() => {
+    const currentSession = session();
+    if (!currentSession) return;
+    const threadID = String(currentSession.thread.id ?? '').trim();
+    const optimisticTurns = optimisticTurnsByThreadID()[threadID] ?? [];
+    if (optimisticTurns.length === 0) return;
+    const matchedTurnIDs = new Set(
+      optimisticTurns
+        .filter((optimisticTurn) => sessionContainsOptimisticTurn(currentSession, optimisticTurn))
+        .map((optimisticTurn) => optimisticTurn.id),
+    );
+    removeOptimisticTurns(threadID, matchedTurnIDs);
+  });
+
+  createEffect(() => {
     if (!codexVisible()) return;
     const owner = String(activeThreadID() ?? '').trim() || '__new__';
     if (owner === lastComposerOwner) return;
@@ -404,7 +490,18 @@ export function CodexProvider(props: ParentProps) {
       signal: controller.signal,
       onEvent: (event) => {
         lastAppliedSeq = Math.max(lastAppliedSeq, Number(event.seq ?? 0) || 0);
-        setSession((prev) => applyCodexEvent(prev ?? buildCodexThreadSession(detail), event));
+        let nextThread: CodexThread | null = null;
+        setSession((prev) => {
+          const nextSession = applyCodexEvent(prev ?? buildCodexThreadSession(detail), event);
+          nextThread = nextSession?.thread ?? null;
+          return nextSession;
+        });
+        if (nextThread) {
+          upsertOptimisticThread(nextThread);
+        }
+        if (event.type === 'thread_name_updated') {
+          void refetchThreads();
+        }
       },
     }).catch((error) => {
       if (controller.signal.aborted) return;
@@ -442,6 +539,11 @@ export function CodexProvider(props: ParentProps) {
     threadDetail()?.runtime_config ??
     {}
   ));
+  const activeOptimisticUserTurns = createMemo<CodexOptimisticUserTurn[]>(() => {
+    const threadID = String(activeThreadID() ?? '').trim();
+    if (!threadID) return [];
+    return [...(optimisticTurnsByThreadID()[threadID] ?? [])];
+  });
   const activeTokenUsage = createMemo<CodexThreadTokenUsage | null | undefined>(() => (
     session()?.token_usage ??
     threadDetail()?.token_usage ??
@@ -547,8 +649,9 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
     setSubmitting(true);
+    let targetThreadID = String(activeThreadID() ?? '').trim();
+    let optimisticTurnID = '';
     try {
-      let targetThreadID = String(activeThreadID() ?? '').trim();
       const resolvedWorkingDir = String(
         workingDirDraft() ||
         capabilities()?.effective_config?.cwd ||
@@ -573,6 +676,29 @@ export function CodexProvider(props: ParentProps) {
           cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
         });
       }
+      optimisticTurnID = createAttachmentID();
+      appendOptimisticTurn({
+        id: optimisticTurnID,
+        thread_id: targetThreadID,
+        text: message,
+        inputs: attachmentInputs,
+      });
+      setSession((prev) => {
+        if (!prev || String(prev.thread.id ?? '').trim() !== targetThreadID) return prev;
+        const nextStatus = isWorkingStatus(prev.active_status) ? prev.active_status : 'active';
+        return {
+          ...prev,
+          active_status: nextStatus,
+          thread: {
+            ...prev.thread,
+            status: nextStatus,
+            updated_at_unix_s: Math.max(
+              Number(prev.thread.updated_at_unix_s ?? 0) || 0,
+              Math.floor(Date.now() / 1000),
+            ),
+          },
+        };
+      });
       await startCodexTurn({
         threadID: targetThreadID,
         inputText: message,
@@ -604,6 +730,11 @@ export function CodexProvider(props: ParentProps) {
       void refetchThreadDetail();
       void refetchCapabilities();
     } catch (error) {
+      if (targetThreadID && optimisticTurnID) {
+        removeOptimisticTurns(targetThreadID, new Set([optimisticTurnID]));
+      }
+      void refetchThreads();
+      void refetchThreadDetail();
       notify.error('Send failed', error instanceof Error ? error.message : String(error));
     } finally {
       setSubmitting(false);
@@ -617,6 +748,10 @@ export function CodexProvider(props: ParentProps) {
     try {
       await archiveCodexThread(normalizedThreadID);
       removeOptimisticThread(normalizedThreadID);
+      removeOptimisticTurns(
+        normalizedThreadID,
+        new Set((optimisticTurnsByThreadID()[normalizedThreadID] ?? []).map((turn) => turn.id)),
+      );
       notify.success('Archived', 'The Codex thread has been archived.');
       if (wasActiveThread) {
         startNewThreadDraft();
@@ -670,6 +805,7 @@ export function CodexProvider(props: ParentProps) {
     activeThreadID,
     activeThread,
     activeRuntimeConfig,
+    activeOptimisticUserTurns,
     activeTokenUsage,
     activeStatus,
     activeStatusFlags,

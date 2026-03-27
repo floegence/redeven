@@ -9,6 +9,7 @@ import {
   displayStatus,
   formatRelativeThreadTime,
   groupThreadsByDate,
+  isWorkingStatus,
   threadPreview,
   threadStatusDotClass,
 } from './presentation';
@@ -102,7 +103,7 @@ function ThreadCard(props: {
       >
         <div class="relative mt-1.5 h-2 w-2 shrink-0">
           <div class={`h-2 w-2 rounded-full ${threadStatusDotClass(props.thread.status)}`} title={displayStatus(props.thread.status, 'Idle')} />
-          <Show when={String(props.thread.status ?? '').trim().toLowerCase() === 'running'}>
+          <Show when={isWorkingStatus(props.thread.status)}>
             <div class="absolute inset-0 h-2 w-2 rounded-full bg-primary/50 animate-pulse" />
           </Show>
         </div>

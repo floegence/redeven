@@ -841,10 +841,11 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 				thread.UpdatedAtUnixS = time.Now().Unix()
 			}
 			m.appendEventLocked(state, Event{
-				Type:     "error",
-				ThreadID: threadID,
-				TurnID:   turnID,
-				Error:    message,
+				Type:      "error",
+				ThreadID:  threadID,
+				TurnID:    turnID,
+				Error:     message,
+				WillRetry: msg.WillRetry,
 			})
 			m.mu.Unlock()
 		}
@@ -1108,11 +1109,26 @@ func (m *Manager) resolveBinaryPath() (string, error) {
 	if current != "" {
 		return current, nil
 	}
+	if path := strings.TrimSpace(lookPathFromLoginShell("codex")); path != "" {
+		return path, nil
+	}
 	path, err := exec.LookPath("codex")
 	if err != nil {
 		return "", fmtUnavailable()
 	}
 	return path, nil
+}
+
+func lookPathFromLoginShell(binaryName string) string {
+	binaryName = strings.TrimSpace(binaryName)
+	if binaryName == "" {
+		return ""
+	}
+	out, err := exec.Command("bash", "-lc", `type -P "$0"`, binaryName).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func (m *Manager) ensureThreadStateLocked(threadID string) *threadState {
