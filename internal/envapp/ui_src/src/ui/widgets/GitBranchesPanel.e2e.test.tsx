@@ -436,6 +436,256 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
+  it('loads staged files after explicitly switching sections', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockListWorkspacePage
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [
+          { section: 'unstaged', changeType: 'modified', path: 'src/pending.ts', displayPath: 'src/pending.ts', additions: 3, deletions: 1 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'staged',
+        summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [
+          { section: 'staged', changeType: 'modified', path: 'src/indexed.ts', displayPath: 'src/indexed.ts', additions: 5, deletions: 2 },
+        ],
+      });
+
+    const branch = {
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    branch,
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const stagedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Staged')) as HTMLButtonElement | undefined;
+      expect(stagedButton).toBeTruthy();
+
+      stagedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(mockListWorkspacePage).toHaveBeenLastCalledWith({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'staged',
+        offset: 0,
+        limit: 200,
+      });
+      expect(host.textContent).toContain('src/indexed.ts');
+      expect(host.textContent).not.toContain('src/pending.ts');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps an explicit staged selection even when the previous summary reported no staged files', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockListWorkspacePage
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [
+          { section: 'unstaged', changeType: 'modified', path: 'src/pending.ts', displayPath: 'src/pending.ts', additions: 2, deletions: 1 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'staged',
+        summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [
+          { section: 'staged', changeType: 'modified', path: 'src/indexed.ts', displayPath: 'src/indexed.ts', additions: 4, deletions: 1 },
+        ],
+      });
+
+    const branch = {
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    branch,
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const stagedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Staged')) as HTMLButtonElement | undefined;
+      expect(stagedButton).toBeTruthy();
+
+      stagedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(mockListWorkspacePage).toHaveBeenLastCalledWith({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'staged',
+        offset: 0,
+        limit: 200,
+      });
+      expect(host.textContent).toContain('src/indexed.ts');
+      expect(host.textContent).not.toContain('src/pending.ts');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('auto-focuses conflicted files when a new branch context has no pending changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockListWorkspacePage
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 1 },
+        totalCount: 0,
+        offset: 0,
+        nextOffset: 0,
+        hasMore: false,
+        items: [],
+      })
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'conflicted',
+        summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 1 },
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [
+          { section: 'conflicted', changeType: 'conflicted', path: 'src/conflict.ts', displayPath: 'src/conflict.ts', additions: 0, deletions: 0 },
+        ],
+      });
+
+    const branch = {
+      name: 'feature/linked',
+      fullName: 'refs/heads/feature/linked',
+      kind: 'local' as const,
+      worktreePath: '/workspace/repo-linked',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={branch}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    branch,
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(mockListWorkspacePage).toHaveBeenNthCalledWith(1, {
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        offset: 0,
+        limit: 200,
+      });
+      expect(mockListWorkspacePage).toHaveBeenNthCalledWith(2, {
+        repoRootPath: '/workspace/repo-linked',
+        section: 'conflicted',
+        offset: 0,
+        limit: 200,
+      });
+      expect(host.textContent).toContain('src/conflict.ts');
+    } finally {
+      dispose();
+    }
+  });
+
   it('opens the stash window for a linked branch worktree from status actions', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

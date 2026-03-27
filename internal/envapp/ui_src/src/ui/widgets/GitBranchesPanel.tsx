@@ -865,12 +865,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const [statusLoading, setStatusLoading] = createSignal(false);
   const [statusError, setStatusError] = createSignal('');
   const [selectedStatusSection, setSelectedStatusSection] = createSignal<GitWorkspaceViewSection>('changes');
+  const [statusSectionPinned, setStatusSectionPinned] = createSignal(false);
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
   const [compareDialogOpen, setCompareDialogOpen] = createSignal(false);
 
   let statusReqSeqBySection: Record<GitWorkspaceViewSection, number> = { changes: 0, conflicted: 0, staged: 0 };
-  let lastStatusContextKey = '';
+  let lastStatusDataContextKey = '';
+  let lastStatusSelectionContextKey = '';
 
   const branchSubview = () => props.selectedBranchSubview ?? 'status';
   const activeRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
@@ -902,6 +904,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     }));
   };
   const statusPageState = (section: GitWorkspaceViewSection) => statusPages()[section];
+  const selectStatusSection = (
+    section: GitWorkspaceViewSection,
+    options: { pinned?: boolean } = {},
+  ) => {
+    setSelectedStatusSection(section);
+    setStatusSectionPinned(options.pinned ?? true);
+  };
   const applyStatusPageSnapshot = (
     page: GitListWorkspacePageResponse | null | undefined,
     options: { append?: boolean } = {},
@@ -1089,14 +1098,26 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   createEffect(() => {
     const branch = props.selectedBranch;
+    const repoRootPath = statusRepoRootPath();
+    const contextKey = branch && repoRootPath
+      ? `${branchIdentity(branch)}|${repoRootPath}`
+      : '';
+    if (contextKey === lastStatusSelectionContextKey) return;
+    lastStatusSelectionContextKey = contextKey;
+    setSelectedStatusSection('changes');
+    setStatusSectionPinned(false);
+  });
+
+  createEffect(() => {
+    const branch = props.selectedBranch;
     const subview = branchSubview();
     const repoRootPath = statusRepoRootPath();
     const refreshToken = Number(props.statusRefreshToken ?? 0);
     const contextKey = branch && subview === 'status' && repoRootPath
       ? `${branchIdentity(branch)}|${repoRootPath}|${refreshToken}`
       : '';
-    if (contextKey === lastStatusContextKey) return;
-    lastStatusContextKey = contextKey;
+    if (contextKey === lastStatusDataContextKey) return;
+    lastStatusDataContextKey = contextKey;
     resetStatusWorkspace();
   });
 
@@ -1107,18 +1128,21 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const section = selectedStatusSection();
     if (!branch || subview !== 'status' || !repoRootPath) return;
     const pageState = statusPageState(section);
-    if (!pageState.initialized && !pageState.loading && !statusLoading()) {
+    if (!pageState.initialized && !pageState.loading) {
       void loadStatusSection(section);
     }
   });
 
   createEffect(() => {
     const summary = visibleStatusSummary();
-    if (!summary) return;
-    if (workspaceViewSectionCount(summary, selectedStatusSection()) > 0) return;
+    const section = selectedStatusSection();
+    const pageState = statusPageState(section);
+    if (!summary || !pageState.initialized || pageState.loading) return;
+    if (workspaceViewSectionCount(summary, section) > 0) return;
+    if (statusSectionPinned()) return;
     const nextSection = pickDefaultWorkspaceViewSectionFromSummary(summary);
-    if (nextSection !== selectedStatusSection()) {
-      setSelectedStatusSection(nextSection);
+    if (nextSection !== section) {
+      selectStatusSection(nextSection, { pinned: false });
     }
   });
 
@@ -1247,7 +1271,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                     'w-full rounded-md border border-border/45 bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
                                     gitToneSelectableCardClass(workspaceSectionTone(section), active())
                                   )}
-                                  onClick={() => setSelectedStatusSection(section)}
+                                  onClick={() => selectStatusSection(section)}
                                 >
                                   <div class="flex min-h-[1.85rem] flex-col justify-center gap-0.5">
                                     <div class="flex items-center justify-between gap-1.5">

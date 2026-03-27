@@ -173,7 +173,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
       <div class="shrink-0 border-b border-border/50 bg-background/92 px-3 py-2 backdrop-blur-sm">
-        <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <GitLabelBlock
             class="min-w-0 flex-1"
             label={subviewLabel(activeSubview())}
@@ -211,7 +211,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
             </Show>
           </GitLabelBlock>
 
-          <div class="flex shrink-0 flex-wrap items-center justify-end gap-1.5 self-start">
+          <div class="flex w-full flex-wrap items-center justify-start gap-1.5 xl:w-auto xl:justify-end">
             <Show when={headDisplay().detached && reattachBranch() && props.onCheckoutBranch}>
               <Button
                 size="xs"

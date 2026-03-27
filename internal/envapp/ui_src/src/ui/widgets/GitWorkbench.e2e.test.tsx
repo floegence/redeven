@@ -121,6 +121,57 @@ describe('GitWorkbench interactions', () => {
     }
   });
 
+  it('stacks repository actions under the summary block for narrow layouts', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitWorkbench
+                currentPath="/workspace/repo/src"
+                subview="branches"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: 'abc1234',
+                  aheadCount: 1,
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+                  remote: [],
+                }}
+                onOpenStash={() => {}}
+                onFetch={() => {}}
+                onPull={() => {}}
+                onPush={() => {}}
+                onRefresh={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const fetchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Fetch')) as HTMLButtonElement | undefined;
+      expect(fetchButton).toBeTruthy();
+      const actionContainer = fetchButton?.parentElement as HTMLDivElement | null;
+      const headerContainer = actionContainer?.parentElement as HTMLDivElement | null;
+      expect(actionContainer?.className).toContain('w-full');
+      expect(actionContainer?.className).toContain('xl:w-auto');
+      expect(headerContainer?.className).toContain('flex-col');
+      expect(headerContainer?.className).toContain('xl:flex-row');
+    } finally {
+      dispose();
+    }
+  });
+
   it('renders detached HEAD explicitly in the header and disables pull and push', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
