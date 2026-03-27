@@ -6,7 +6,9 @@ import {
   createMemo,
   createResource,
   createSignal,
+  on,
   onCleanup,
+  untrack,
   useContext,
 } from 'solid-js';
 import { useLayout, useNotification } from '@floegence/floe-webapp-core';
@@ -23,8 +25,13 @@ import {
   startCodexThread,
   startCodexTurn,
 } from './api';
-import { applyCodexEvent, buildCodexThreadSession } from './state';
-import { isWorkingStatus } from './presentation';
+import {
+  CODEX_NEW_THREAD_OWNER,
+  codexOwnerIDForThread,
+  createCodexDraftController,
+  type CodexRuntimeDraft,
+} from './draftController';
+import { createCodexThreadController } from './threadController';
 import { codexSupportedReasoningEfforts } from './viewModel';
 import type {
   CodexCapabilitiesSnapshot,
@@ -35,7 +42,6 @@ import type {
   CodexThread,
   CodexThreadTokenUsage,
   CodexThreadRuntimeConfig,
-  CodexThreadSession,
   CodexTranscriptItem,
   CodexUserInputEntry,
 } from './types';
@@ -122,7 +128,7 @@ function sameStringList(left: readonly string[], right: readonly string[]): bool
 }
 
 function sessionContainsOptimisticTurn(
-  currentSession: CodexThreadSession,
+  currentSession: { items_by_id: Record<string, CodexTranscriptItem> },
   optimisticTurn: CodexOptimisticUserTurn,
 ): boolean {
   const optimisticText = normalizeUserTurnText(optimisticTurn.text);
@@ -155,6 +161,46 @@ function buildOptimisticPlaceholderThread(args: {
   };
 }
 
+function statusErrorMessage(status: Accessor<CodexStatus | null | undefined> & { error?: unknown }): string | null {
+  const payloadError = String(status()?.error ?? '').trim();
+  if (payloadError) return payloadError;
+  const err = status.error;
+  if (!err) return null;
+  return err instanceof Error ? err.message : String(err);
+}
+
+function runtimeConfigFromDraft(runtime: CodexRuntimeDraft): CodexThreadRuntimeConfig {
+  return {
+    cwd: runtime.cwd,
+    model: runtime.model,
+    reasoning_effort: runtime.effort,
+    approval_policy: runtime.approvalPolicy,
+    sandbox_mode: runtime.sandboxMode,
+  };
+}
+
+function defaultRuntimeConfig(args: {
+  thread?: CodexThread | null;
+  runtimeConfig?: CodexThreadRuntimeConfig | null | undefined;
+  fallbackCWD?: string | null | undefined;
+}): CodexThreadRuntimeConfig {
+  const fallbackCWD = String(args.fallbackCWD ?? '').trim();
+  return {
+    ...(args.runtimeConfig ?? {}),
+    cwd: String(args.runtimeConfig?.cwd ?? args.thread?.cwd ?? fallbackCWD).trim(),
+  };
+}
+
+function runtimeConfigKey(config: CodexThreadRuntimeConfig | null | undefined): string {
+  return [
+    String(config?.cwd ?? '').trim(),
+    String(config?.model ?? '').trim(),
+    String(config?.reasoning_effort ?? '').trim(),
+    String(config?.approval_policy ?? '').trim(),
+    String(config?.sandbox_mode ?? '').trim(),
+  ].join('\u0001');
+}
+
 export type CodexContextValue = Readonly<{
   status: Accessor<CodexStatus | null | undefined>;
   statusLoading: Accessor<boolean>;
@@ -163,6 +209,7 @@ export type CodexContextValue = Readonly<{
   capabilities: Accessor<CodexCapabilitiesSnapshot | null | undefined>;
   capabilitiesLoading: Accessor<boolean>;
   activeThreadID: Accessor<string | null>;
+  displayedThreadID: Accessor<string | null>;
   activeThread: Accessor<CodexThread | null>;
   activeRuntimeConfig: Accessor<CodexThreadRuntimeConfig>;
   activeTokenUsage: Accessor<CodexThreadTokenUsage | null | undefined>;
@@ -170,6 +217,8 @@ export type CodexContextValue = Readonly<{
   activeStatus: Accessor<string>;
   activeStatusFlags: Accessor<string[]>;
   threadTitle: Accessor<string>;
+  threadLoading: Accessor<boolean>;
+  activeThreadError: Accessor<string | null>;
   threads: Accessor<CodexThread[]>;
   threadsLoading: Accessor<boolean>;
   transcriptItems: Accessor<CodexTranscriptItem[]>;
@@ -204,36 +253,20 @@ export type CodexContextValue = Readonly<{
 
 const CodexContext = createContext<CodexContextValue>();
 
-function statusErrorMessage(status: Accessor<CodexStatus | null | undefined> & { error?: unknown }): string | null {
-  const payloadError = String(status()?.error ?? '').trim();
-  if (payloadError) return payloadError;
-  const err = status.error;
-  if (!err) return null;
-  return err instanceof Error ? err.message : String(err);
-}
-
 export function CodexProvider(props: ParentProps) {
   const layout = useLayout();
   const notify = useNotification();
   const env = useEnvContext();
 
-  const [activeThreadID, setActiveThreadID] = createSignal<string | null>(null);
-  const [protectedSelectionThreadID, setProtectedSelectionThreadID] = createSignal<string | null>(null);
-  const [preferBlankComposer, setPreferBlankComposer] = createSignal(false);
+  const threadController = createCodexThreadController();
+  const draftController = createCodexDraftController();
+
   const [optimisticThreadsByID, setOptimisticThreadsByID] = createSignal<CodexThreadMap>({});
   const [optimisticTurnsByThreadID, setOptimisticTurnsByThreadID] = createSignal<CodexOptimisticTurnMap>({});
-  const [session, setSession] = createSignal<CodexThreadSession | null>(null);
-  const [workingDirDraft, setWorkingDirDraft] = createSignal('');
-  const [modelDraft, setModelDraft] = createSignal('');
-  const [effortDraft, setEffortDraft] = createSignal('');
-  const [approvalPolicyDraft, setApprovalPolicyDraft] = createSignal('');
-  const [sandboxModeDraft, setSandboxModeDraft] = createSignal('');
-  const [attachments, setAttachments] = createSignal<CodexComposerAttachmentDraft[]>([]);
-  const [composerText, setComposerText] = createSignal('');
   const [submitting, setSubmitting] = createSignal(false);
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
   const [streamError, setStreamError] = createSignal<string | null>(null);
-  let lastComposerOwner = '__boot__';
+  const [streamBinding, setStreamBinding] = createSignal<Readonly<{ threadID: string; afterSeq: number }> | null>(null);
 
   const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
 
@@ -245,25 +278,162 @@ export function CodexProvider(props: ParentProps) {
     () => (codexVisible() && !status.loading && status()?.available ? env.settingsSeq() : null),
     async () => (status()?.available ? listCodexThreads(100) : []),
   );
-  const [threadDetail, { refetch: refetchThreadDetail }] = createResource(
-    () => (codexVisible() ? activeThreadID() : null),
-    async (threadID) => (threadID ? openCodexThread(threadID) : null),
-  );
+
+  const selectedThreadID = createMemo(() => threadController.selectedThreadID());
+  const displayedThreadID = createMemo(() => threadController.displayedThreadID());
+
+  const threads = createMemo<CodexThread[]>(() => {
+    const merged = new Map<string, CodexThread>();
+    for (const thread of threadsResource() ?? []) {
+      const threadID = String(thread.id ?? '').trim();
+      if (!threadID) continue;
+      merged.set(threadID, thread);
+    }
+    for (const [threadID, thread] of Object.entries(optimisticThreadsByID())) {
+      if (!threadID) continue;
+      merged.set(threadID, thread);
+    }
+    for (const entry of Object.values(threadController.sessionEntriesByID())) {
+      const thread = entry.session.thread;
+      const threadID = String(thread.id ?? '').trim();
+      if (!threadID) continue;
+      merged.set(threadID, normalizeOptimisticThread(thread));
+    }
+    return sortThreads(Array.from(merged.values()));
+  });
+
+  const selectedThread = createMemo<CodexThread | null>(() => {
+    const threadID = String(selectedThreadID() ?? '').trim();
+    if (!threadID) return null;
+    return (
+      threads().find((thread) => thread.id === threadID) ??
+      threadController.sessionForThread(threadID)?.thread ??
+      null
+    );
+  });
+
+  const selectedSession = createMemo(() => {
+    const threadID = String(selectedThreadID() ?? '').trim();
+    if (!threadID) return null;
+    return threadController.sessionForThread(threadID);
+  });
+
+  const displayedSession = createMemo(() => threadController.displayedSession());
+
+  const activeOwnerID = createMemo(() => (
+    String(selectedThreadID() ?? '').trim()
+      ? codexOwnerIDForThread(selectedThreadID())
+      : CODEX_NEW_THREAD_OWNER
+  ));
+
+  const ownerFallbackRuntimeConfig = createMemo<CodexThreadRuntimeConfig>(() => defaultRuntimeConfig({
+    thread: selectedThread(),
+    runtimeConfig: selectedSession()?.runtime_config,
+    fallbackCWD: status()?.agent_home_dir,
+  }));
+
+  createEffect(on(
+    () => (codexVisible() ? String(status()?.agent_home_dir ?? '').trim() : ''),
+    (agentHomeDir) => {
+      if (!codexVisible()) return;
+      draftController.ensureOwner(
+        CODEX_NEW_THREAD_OWNER,
+        { cwd: agentHomeDir },
+        agentHomeDir,
+      );
+    },
+  ));
+
+  createEffect(on(
+    () => (
+      codexVisible()
+        ? `${activeOwnerID()}::${runtimeConfigKey(ownerFallbackRuntimeConfig())}`
+        : ''
+    ),
+    (signature) => {
+      if (!signature) return;
+      const ownerID = activeOwnerID();
+      const fallback = ownerFallbackRuntimeConfig();
+      draftController.ensureOwner(ownerID, fallback, String(fallback.cwd ?? '').trim());
+    },
+  ));
+
+  const activeOwnerDraft = createMemo(() => draftController.draftForOwner(
+    activeOwnerID(),
+    ownerFallbackRuntimeConfig(),
+    String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+  ));
+
+  const activeCapabilitiesCWD = createMemo(() => {
+    const ownerDraft = draftController.draftsByOwner()[activeOwnerID()];
+    return String(
+      ownerDraft?.runtime.cwd ||
+      ownerFallbackRuntimeConfig().cwd ||
+      status()?.agent_home_dir,
+    ).trim();
+  });
+
   const [capabilities, { refetch: refetchCapabilities }] = createResource(
     () => {
       if (!codexVisible() || status.loading || !status()?.available) return null;
-      return {
-        settingsSeq: env.settingsSeq(),
-        cwd: String(
-          workingDirDraft() ||
-          session()?.runtime_config?.cwd ||
-          threadDetail()?.runtime_config?.cwd ||
-          status()?.agent_home_dir,
-        ).trim(),
-      };
+      return `${env.settingsSeq()}::${activeCapabilitiesCWD()}`;
     },
-    async (key) => fetchCodexCapabilities(key.cwd),
+    async (key) => fetchCodexCapabilities(String(key ?? '').split('::').slice(1).join('::')),
   );
+
+  createEffect(on(
+    () => {
+      if (!codexVisible()) return '';
+      const effectiveConfig = capabilities()?.effective_config;
+      const agentHomeDir = String(status()?.agent_home_dir ?? '').trim();
+      return `${agentHomeDir}::${runtimeConfigKey({
+        ...(effectiveConfig ?? {}),
+        cwd: String(effectiveConfig?.cwd ?? agentHomeDir).trim(),
+      })}`;
+    },
+    (signature) => {
+      if (!signature) return;
+      const effectiveConfig = capabilities()?.effective_config;
+      const agentHomeDir = String(status()?.agent_home_dir ?? '').trim();
+      draftController.mergeOwnerRuntimeConfig(
+        CODEX_NEW_THREAD_OWNER,
+        {
+          ...(effectiveConfig ?? {}),
+          cwd: String(effectiveConfig?.cwd ?? agentHomeDir).trim(),
+        },
+        agentHomeDir,
+      );
+    },
+  ));
+
+  createEffect(on(
+    () => {
+      if (!codexVisible()) return '';
+      const ownerDraft = activeOwnerDraft();
+      return [
+        activeOwnerID(),
+        String(ownerDraft.runtime.model ?? '').trim(),
+        String(ownerDraft.runtime.effort ?? '').trim(),
+        String(ownerDraft.runtime.cwd ?? '').trim(),
+        codexSupportedReasoningEfforts(capabilities(), ownerDraft.runtime.model).join(','),
+      ].join('\u0001');
+    },
+    (signature) => {
+      if (!signature) return;
+      const ownerDraft = activeOwnerDraft();
+      const supportedEfforts = codexSupportedReasoningEfforts(capabilities(), ownerDraft.runtime.model);
+      if (supportedEfforts.length === 0) return;
+      const currentEffort = String(ownerDraft.runtime.effort ?? '').trim();
+      if (currentEffort && supportedEfforts.includes(currentEffort)) return;
+      draftController.setRuntimeField(
+        activeOwnerID(),
+        'effort',
+        supportedEfforts[0],
+        false,
+        String(ownerDraft.runtime.cwd ?? '').trim(),
+      );
+    },
+  ));
 
   const upsertOptimisticThread = (thread: CodexThread | null | undefined, fallbackPreview?: string, fallbackCWD?: string) => {
     const normalizedThreadID = String(thread?.id ?? '').trim();
@@ -314,113 +484,8 @@ export function CodexProvider(props: ParentProps) {
     });
   };
 
-  const threads = createMemo<CodexThread[]>(() => {
-    const merged = new Map<string, CodexThread>();
-    for (const thread of threadsResource() ?? []) {
-      const threadID = String(thread.id ?? '').trim();
-      if (!threadID) continue;
-      merged.set(threadID, thread);
-    }
-    for (const [threadID, thread] of Object.entries(optimisticThreadsByID())) {
-      if (!threadID) continue;
-      merged.set(threadID, thread);
-    }
-    const liveThread = session()?.thread ?? threadDetail()?.thread;
-    if (liveThread?.id) {
-      merged.set(liveThread.id, normalizeOptimisticThread(liveThread));
-    }
-    return sortThreads(Array.from(merged.values()));
-  });
-
-  const applyRuntimeDrafts = (config: CodexThreadRuntimeConfig | null | undefined) => {
-    const fallbackWorkingDir = String(status()?.agent_home_dir ?? '').trim();
-    setWorkingDirDraft(String(config?.cwd ?? fallbackWorkingDir).trim());
-    setModelDraft(String(config?.model ?? '').trim());
-    setEffortDraft(String(config?.reasoning_effort ?? '').trim());
-    setApprovalPolicyDraft(String(config?.approval_policy ?? '').trim());
-    setSandboxModeDraft(String(config?.sandbox_mode ?? '').trim());
-  };
-
-  const resetNewThreadDrafts = () => {
-    applyRuntimeDrafts({
-      ...(capabilities()?.effective_config ?? {}),
-      cwd: String(capabilities()?.effective_config?.cwd ?? status()?.agent_home_dir ?? '').trim(),
-    });
-  };
-
   createEffect(() => {
-    const currentStatus = status();
-    if (!currentStatus) return;
-    if (!workingDirDraft()) {
-      setWorkingDirDraft(String(currentStatus.agent_home_dir ?? '').trim());
-    }
-  });
-
-  createEffect(() => {
-    if (!codexVisible()) return;
-    const list = threads();
-    if (!Array.isArray(list)) return;
-    const current = String(activeThreadID() ?? '').trim();
-    if (current && list.some((thread) => thread.id === current)) {
-      if (String(protectedSelectionThreadID() ?? '').trim() === current) {
-        setProtectedSelectionThreadID(null);
-      }
-      return;
-    }
-    if (current) {
-      const protectedThreadID = String(protectedSelectionThreadID() ?? '').trim();
-      const currentDetailThreadID = String(threadDetail()?.thread.id ?? '').trim();
-      const currentSessionThreadID = String(session()?.thread.id ?? '').trim();
-      if (
-        protectedThreadID === current ||
-        currentDetailThreadID === current ||
-        currentSessionThreadID === current ||
-        threadDetail.loading
-      ) {
-        return;
-      }
-    }
-    if (preferBlankComposer()) return;
-    setProtectedSelectionThreadID(null);
-    setActiveThreadID(list[0]?.id ?? null);
-  });
-
-  createEffect(() => {
-    const detail = threadDetail();
-    if (!codexVisible()) return;
-    if (!detail) {
-      if (!activeThreadID()) {
-        setSession(null);
-      }
-      return;
-    }
-    setSession((prev) => {
-      const nextSession = buildCodexThreadSession(detail);
-      if (
-        prev &&
-        String(prev.thread.id ?? '').trim() === String(nextSession.thread.id ?? '').trim() &&
-        Number(prev.last_applied_seq ?? 0) >= Number(nextSession.last_applied_seq ?? 0)
-      ) {
-        return prev;
-      }
-      return nextSession;
-    });
-    upsertOptimisticThread(detail.thread);
-    setStreamError(null);
-    applyRuntimeDrafts({
-      ...(detail.runtime_config ?? {}),
-      cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
-    });
-  });
-
-  createEffect(() => {
-    const currentSession = session();
-    if (!currentSession) return;
-    upsertOptimisticThread(currentSession.thread);
-  });
-
-  createEffect(() => {
-    const currentSession = session();
+    const currentSession = displayedSession();
     if (!currentSession) return;
     const threadID = String(currentSession.thread.id ?? '').trim();
     const optimisticTurns = optimisticTurnsByThreadID()[threadID] ?? [];
@@ -433,69 +498,80 @@ export function CodexProvider(props: ParentProps) {
     removeOptimisticTurns(threadID, matchedTurnIDs);
   });
 
+  const loadThreadBootstrap = async (threadID: string) => {
+    const token = threadController.beginThreadBootstrap(threadID);
+    if (!token) return;
+    try {
+      const detail = await openCodexThread(threadID);
+      if (!threadController.resolveThreadBootstrap(token, detail)) return;
+      upsertOptimisticThread(detail.thread);
+      draftController.mergeOwnerRuntimeConfig(
+        codexOwnerIDForThread(detail.thread.id),
+        {
+          ...(detail.runtime_config ?? {}),
+          cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
+        },
+        String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
+      );
+      setStreamError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!threadController.failThreadBootstrap(token, message)) return;
+    }
+  };
+
   createEffect(() => {
     if (!codexVisible()) return;
-    const owner = String(activeThreadID() ?? '').trim() || '__new__';
-    if (owner === lastComposerOwner) return;
-    lastComposerOwner = owner;
-    setComposerText('');
-    setAttachments([]);
+    if (threadController.blankDraftActive()) return;
+    const current = String(selectedThreadID() ?? '').trim();
+    if (current) return;
+    const list = threads();
+    if (list.length === 0) return;
+    untrack(() => threadController.selectThread(list[0].id));
+  });
+
+  createEffect(on(
+    () => (codexVisible() ? String(selectedThreadID() ?? '').trim() : ''),
+    (threadID) => {
+      if (!threadID) return;
+      void untrack(() => loadThreadBootstrap(threadID));
+    },
+  ));
+
+  createEffect(() => {
+    if (!codexVisible()) return;
+    const threadID = String(displayedThreadID() ?? '').trim();
+    if (!threadID) {
+      setStreamBinding(null);
+      return;
+    }
+    const entry = threadController.sessionEntryForThread(threadID);
+    if (!entry?.session) return;
+    setStreamBinding((current) => {
+      if (current?.threadID === threadID) return current;
+      return {
+        threadID,
+        afterSeq: Math.max(0, Number(entry.lastBootstrapSeq ?? entry.session.last_applied_seq ?? 0) || 0),
+      };
+    });
   });
 
   createEffect(() => {
     if (!codexVisible()) return;
-    if (activeThreadID()) return;
-    const effectiveConfig = capabilities()?.effective_config;
-    if (!effectiveConfig) return;
-    const agentHomeDir = String(status()?.agent_home_dir ?? '').trim();
-    if (!workingDirDraft() || workingDirDraft() === agentHomeDir) {
-      setWorkingDirDraft(String(effectiveConfig.cwd ?? agentHomeDir).trim());
-    }
-    if (!modelDraft()) {
-      setModelDraft(String(effectiveConfig.model ?? '').trim());
-    }
-    if (!effortDraft()) {
-      setEffortDraft(String(effectiveConfig.reasoning_effort ?? '').trim());
-    }
-    if (!approvalPolicyDraft()) {
-      setApprovalPolicyDraft(String(effectiveConfig.approval_policy ?? '').trim());
-    }
-    if (!sandboxModeDraft()) {
-      setSandboxModeDraft(String(effectiveConfig.sandbox_mode ?? '').trim());
-    }
-  });
-
-  createEffect(() => {
-    if (!codexVisible()) return;
-    const supportedEfforts = codexSupportedReasoningEfforts(capabilities(), modelDraft());
-    if (supportedEfforts.length === 0) return;
-    const currentEffort = String(effortDraft() ?? '').trim();
-    if (currentEffort && supportedEfforts.includes(currentEffort)) return;
-    setEffortDraft(supportedEfforts[0]);
-  });
-
-  createEffect(() => {
-    if (!codexVisible()) return;
-    const threadID = String(activeThreadID() ?? '').trim();
-    const detail = threadDetail();
-    if (!threadID || !detail) return;
-    if (String(detail.thread.id ?? '').trim() !== threadID) return;
+    const binding = streamBinding();
+    if (!binding) return;
+    const session = untrack(() => threadController.sessionForThread(binding.threadID));
+    if (!session) return;
 
     const controller = new AbortController();
-    let lastAppliedSeq = Math.max(0, Number(detail.last_applied_seq ?? 0) || 0);
+    const initialSession = session;
     setStreamError(null);
     void connectCodexEventStream({
-      threadID,
-      afterSeq: lastAppliedSeq,
+      threadID: binding.threadID,
+      afterSeq: binding.afterSeq,
       signal: controller.signal,
       onEvent: (event) => {
-        lastAppliedSeq = Math.max(lastAppliedSeq, Number(event.seq ?? 0) || 0);
-        let nextThread: CodexThread | null = null;
-        setSession((prev) => {
-          const nextSession = applyCodexEvent(prev ?? buildCodexThreadSession(detail), event);
-          nextThread = nextSession?.thread ?? null;
-          return nextSession;
-        });
+        const nextThread = threadController.applyEventToThread(event, initialSession);
         if (nextThread) {
           upsertOptimisticThread(nextThread);
         }
@@ -513,95 +589,133 @@ export function CodexProvider(props: ParentProps) {
 
   const statusError = createMemo(() => statusErrorMessage(status));
   const hasHostBinary = createMemo(() => !!status()?.available);
-  const transcriptItems = createMemo<CodexTranscriptItem[]>(() => {
-    const current = session();
-    if (!current) return [];
-    return current.item_order
-      .map((itemID) => current.items_by_id[itemID])
-      .filter(Boolean)
-      .sort((a, b) => a.order - b.order);
-  });
-  const pendingRequests = createMemo<CodexPendingRequest[]>(() => {
-    const current = session();
-    if (!current) return [];
-    return Object.values(current.pending_requests);
-  });
-  const activeThread = createMemo<CodexThread | null>(() => {
-    const currentSession = session();
-    if (currentSession?.thread) return currentSession.thread;
-    if (threadDetail()?.thread) return threadDetail()!.thread;
-    const currentThreadID = String(activeThreadID() ?? '').trim();
-    if (!currentThreadID) return null;
-    return threads().find((thread) => thread.id === currentThreadID) ?? null;
-  });
+
+  const activeThread = createMemo<CodexThread | null>(() => (
+    selectedSession()?.thread ??
+    selectedThread() ??
+    displayedSession()?.thread ??
+    null
+  ));
+
   const activeRuntimeConfig = createMemo<CodexThreadRuntimeConfig>(() => (
-    session()?.runtime_config ??
-    threadDetail()?.runtime_config ??
+    selectedSession()?.runtime_config ??
+    displayedSession()?.runtime_config ??
+    ownerFallbackRuntimeConfig() ??
     {}
   ));
+
   const activeOptimisticUserTurns = createMemo<CodexOptimisticUserTurn[]>(() => {
-    const threadID = String(activeThreadID() ?? '').trim();
+    const threadID = String(selectedThreadID() ?? displayedThreadID() ?? '').trim();
     if (!threadID) return [];
     return [...(optimisticTurnsByThreadID()[threadID] ?? [])];
   });
+
   const activeTokenUsage = createMemo<CodexThreadTokenUsage | null | undefined>(() => (
-    session()?.token_usage ??
-    threadDetail()?.token_usage ??
+    displayedSession()?.token_usage ??
     null
   ));
-  const activeStatus = createMemo(() => String(
-    session()?.active_status ??
-    threadDetail()?.active_status ??
-    activeThread()?.status ??
-    '',
-  ).trim());
-  const activeStatusFlags = createMemo(() => [
-    ...(
-      session()?.active_status_flags ??
-      threadDetail()?.active_status_flags ??
-      activeThread()?.active_flags ??
-      []
-    ),
-  ]);
+
+  const activeStatus = createMemo(() => {
+    if (threadController.threadLoading()) return 'loading';
+    return String(
+      displayedSession()?.active_status ??
+      activeThread()?.status ??
+      '',
+    ).trim();
+  });
+
+  const activeStatusFlags = createMemo(() => {
+    if (threadController.threadLoading()) return [];
+    return [
+      ...(
+        displayedSession()?.active_status_flags ??
+        activeThread()?.active_flags ??
+        []
+      ),
+    ];
+  });
+
   const threadTitle = createMemo(() => {
     const thread = activeThread();
     if (!thread) return 'New thread';
     return String(thread.name ?? thread.preview ?? '').trim() || 'Untitled thread';
   });
 
-  const selectThread = (threadID: string) => {
-    setPreferBlankComposer(false);
-    setProtectedSelectionThreadID(String(threadID ?? '').trim() || null);
-    setActiveThreadID(threadID);
+  const transcriptItems = createMemo<CodexTranscriptItem[]>(() => {
+    const current = displayedSession();
+    if (!current) return [];
+    return current.item_order
+      .map((itemID) => current.items_by_id[itemID])
+      .filter(Boolean)
+      .sort((a, b) => a.order - b.order);
+  });
+
+  const pendingRequests = createMemo<CodexPendingRequest[]>(() => {
+    const current = displayedSession();
+    if (!current) return [];
+    return Object.values(current.pending_requests);
+  });
+
+  const workingDirDraft = createMemo(() => activeOwnerDraft().runtime.cwd);
+  const modelDraft = createMemo(() => activeOwnerDraft().runtime.model);
+  const effortDraft = createMemo(() => activeOwnerDraft().runtime.effort);
+  const approvalPolicyDraft = createMemo(() => activeOwnerDraft().runtime.approvalPolicy);
+  const sandboxModeDraft = createMemo(() => activeOwnerDraft().runtime.sandboxMode);
+  const attachments = createMemo(() => [...activeOwnerDraft().composer.attachments]);
+  const composerText = createMemo(() => activeOwnerDraft().composer.text);
+
+  const setWorkingDirDraft = (value: string) => {
+    draftController.setRuntimeField(
+      activeOwnerID(),
+      'cwd',
+      value,
+      true,
+      String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+    );
   };
 
-  const startNewThreadDraft = () => {
-    setPreferBlankComposer(true);
-    setProtectedSelectionThreadID(null);
-    setActiveThreadID(null);
-    setSession(null);
-    setStreamError(null);
-    setAttachments([]);
-    resetNewThreadDrafts();
+  const setModelDraft = (value: string) => {
+    draftController.setRuntimeField(
+      activeOwnerID(),
+      'model',
+      value,
+      true,
+      String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+    );
   };
 
-  const refreshSidebar = async () => {
-    try {
-      await Promise.all([
-        refetchStatus(),
-        refetchThreads(),
-        refetchCapabilities(),
-        activeThreadID() ? refetchThreadDetail() : Promise.resolve(null),
-      ]);
-    } catch (error) {
-      notify.error('Refresh failed', error instanceof Error ? error.message : String(error));
-    }
+  const setEffortDraft = (value: string) => {
+    draftController.setRuntimeField(
+      activeOwnerID(),
+      'effort',
+      value,
+      true,
+      String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+    );
   };
 
-  const removeAttachment = (attachmentID: string) => {
-    const targetID = String(attachmentID ?? '').trim();
-    if (!targetID) return;
-    setAttachments((current) => current.filter((attachment) => attachment.id !== targetID));
+  const setApprovalPolicyDraft = (value: string) => {
+    draftController.setRuntimeField(
+      activeOwnerID(),
+      'approvalPolicy',
+      value,
+      true,
+      String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+    );
+  };
+
+  const setSandboxModeDraft = (value: string) => {
+    draftController.setRuntimeField(
+      activeOwnerID(),
+      'sandboxMode',
+      value,
+      true,
+      String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+    );
+  };
+
+  const setComposerDraftText = (value: string) => {
+    draftController.setComposerText(activeOwnerID(), value);
   };
 
   const addImageAttachments = async (files: readonly File[]) => {
@@ -632,139 +746,16 @@ export function CodexProvider(props: ParentProps) {
       notify.error('Unsupported attachment', 'Codex attachments currently support images only.');
     }
     if (nextAttachments.length > 0) {
-      setAttachments((current) => [...current, ...nextAttachments]);
+      draftController.appendAttachments(activeOwnerID(), nextAttachments);
     }
   };
 
-  const sendTurn = async () => {
-    const message = String(composerText() ?? '');
-    const attachmentInputs: CodexUserInputEntry[] = attachments().map((attachment) => ({
-      type: 'image',
-      url: attachment.data_url,
-      name: attachment.name,
-    }));
-    if ((!message.trim() && attachmentInputs.length === 0) || submitting()) return;
-    if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', 'Install `codex` on the host machine and refresh diagnostics.');
-      return;
-    }
-    setSubmitting(true);
-    let targetThreadID = String(activeThreadID() ?? '').trim();
-    let optimisticTurnID = '';
-    try {
-      const resolvedWorkingDir = String(
-        workingDirDraft() ||
-        capabilities()?.effective_config?.cwd ||
-        activeRuntimeConfig().cwd ||
-        status()?.agent_home_dir,
-      ).trim();
-      if (!targetThreadID) {
-        const detail = await startCodexThread({
-          cwd: resolvedWorkingDir,
-          model: modelDraft(),
-          approval_policy: approvalPolicyDraft(),
-          sandbox_mode: sandboxModeDraft(),
-        });
-        targetThreadID = detail.thread.id;
-        setPreferBlankComposer(false);
-        setProtectedSelectionThreadID(targetThreadID);
-        upsertOptimisticThread(detail.thread, message.trim(), resolvedWorkingDir);
-        setActiveThreadID(targetThreadID);
-        setSession(buildCodexThreadSession(detail));
-        applyRuntimeDrafts({
-          ...(detail.runtime_config ?? {}),
-          cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
-        });
-      }
-      optimisticTurnID = createAttachmentID();
-      appendOptimisticTurn({
-        id: optimisticTurnID,
-        thread_id: targetThreadID,
-        text: message,
-        inputs: attachmentInputs,
-      });
-      setSession((prev) => {
-        if (!prev || String(prev.thread.id ?? '').trim() !== targetThreadID) return prev;
-        const nextStatus = isWorkingStatus(prev.active_status) ? prev.active_status : 'active';
-        return {
-          ...prev,
-          active_status: nextStatus,
-          thread: {
-            ...prev.thread,
-            status: nextStatus,
-            updated_at_unix_s: Math.max(
-              Number(prev.thread.updated_at_unix_s ?? 0) || 0,
-              Math.floor(Date.now() / 1000),
-            ),
-          },
-        };
-      });
-      await startCodexTurn({
-        threadID: targetThreadID,
-        inputText: message,
-        inputs: attachmentInputs,
-        cwd: resolvedWorkingDir,
-        model: modelDraft(),
-        effort: effortDraft(),
-        approval_policy: approvalPolicyDraft(),
-        sandbox_mode: sandboxModeDraft(),
-      });
-      const currentThread = activeThread();
-      if (targetThreadID) {
-        upsertOptimisticThread(
-          currentThread && currentThread.id === targetThreadID
-            ? currentThread
-            : buildOptimisticPlaceholderThread({
-                threadID: targetThreadID,
-                preview: message.trim(),
-                modelProvider: String(modelDraft() ?? '').trim(),
-                cwd: resolvedWorkingDir,
-              }),
-          message.trim(),
-          resolvedWorkingDir,
-        );
-      }
-      setComposerText('');
-      setAttachments([]);
-      void refetchThreads();
-      void refetchThreadDetail();
-      void refetchCapabilities();
-    } catch (error) {
-      if (targetThreadID && optimisticTurnID) {
-        removeOptimisticTurns(targetThreadID, new Set([optimisticTurnID]));
-      }
-      void refetchThreads();
-      void refetchThreadDetail();
-      notify.error('Send failed', error instanceof Error ? error.message : String(error));
-    } finally {
-      setSubmitting(false);
-    }
+  const removeAttachment = (attachmentID: string) => {
+    draftController.removeAttachment(activeOwnerID(), attachmentID);
   };
 
-  const archiveThread = async (threadID: string) => {
-    const normalizedThreadID = String(threadID ?? '').trim();
-    if (!normalizedThreadID) return;
-    const wasActiveThread = normalizedThreadID === String(activeThreadID() ?? '').trim();
-    try {
-      await archiveCodexThread(normalizedThreadID);
-      removeOptimisticThread(normalizedThreadID);
-      removeOptimisticTurns(
-        normalizedThreadID,
-        new Set((optimisticTurnsByThreadID()[normalizedThreadID] ?? []).map((turn) => turn.id)),
-      );
-      notify.success('Archived', 'The Codex thread has been archived.');
-      if (wasActiveThread) {
-        startNewThreadDraft();
-      }
-      await refetchThreads();
-    } catch (error) {
-      notify.error('Archive failed', error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const archiveActiveThread = async () => {
-    await archiveThread(String(activeThreadID() ?? '').trim());
-  };
+  const requestDraftValue = (requestID: string, questionID: string) =>
+    requestDrafts()[requestID]?.[questionID] ?? '';
 
   const setRequestDraftValue = (requestID: string, questionID: string, value: string) => {
     setRequestDrafts((current) => ({
@@ -776,11 +767,178 @@ export function CodexProvider(props: ParentProps) {
     }));
   };
 
-  const requestDraftValue = (requestID: string, questionID: string) =>
-    requestDrafts()[requestID]?.[questionID] ?? '';
+  const selectThread = (threadID: string) => {
+    threadController.selectThread(threadID);
+  };
+
+  const startNewThreadDraft = () => {
+    threadController.startNewThreadDraft();
+    setStreamError(null);
+  };
+
+  const refreshSidebar = async () => {
+    try {
+      await Promise.all([
+        refetchStatus(),
+        refetchThreads(),
+        refetchCapabilities(),
+        String(selectedThreadID() ?? '').trim()
+          ? loadThreadBootstrap(String(selectedThreadID() ?? '').trim())
+          : Promise.resolve(),
+      ]);
+    } catch (error) {
+      notify.error('Refresh failed', error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const sendTurn = async () => {
+    const ownerID = activeOwnerID();
+    const ownerDraft = activeOwnerDraft();
+    const message = String(ownerDraft.composer.text ?? '');
+    const attachmentInputs: CodexUserInputEntry[] = ownerDraft.composer.attachments.map((attachment) => ({
+      type: 'image',
+      url: attachment.data_url,
+      name: attachment.name,
+    }));
+    if ((!message.trim() && attachmentInputs.length === 0) || submitting()) return;
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', 'Install `codex` on the host machine and refresh diagnostics.');
+      return;
+    }
+
+    setSubmitting(true);
+    let targetThreadID = String(selectedThreadID() ?? '').trim();
+    let targetOwnerID = ownerID;
+    let optimisticTurnID = '';
+    try {
+      const resolvedWorkingDir = String(
+        ownerDraft.runtime.cwd ||
+        capabilities()?.effective_config?.cwd ||
+        activeRuntimeConfig().cwd ||
+        status()?.agent_home_dir,
+      ).trim();
+      if (!targetThreadID) {
+        const detail = await startCodexThread({
+          cwd: resolvedWorkingDir,
+          model: ownerDraft.runtime.model,
+          approval_policy: ownerDraft.runtime.approvalPolicy,
+          sandbox_mode: ownerDraft.runtime.sandboxMode,
+        });
+        targetThreadID = detail.thread.id;
+        targetOwnerID = codexOwnerIDForThread(targetThreadID);
+        draftController.transferOwner(CODEX_NEW_THREAD_OWNER, targetOwnerID);
+        threadController.adoptThreadDetail(detail);
+        upsertOptimisticThread(detail.thread, message.trim(), resolvedWorkingDir);
+        draftController.mergeOwnerRuntimeConfig(
+          targetOwnerID,
+          {
+            ...(detail.runtime_config ?? {}),
+            cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
+          },
+          resolvedWorkingDir,
+        );
+      } else {
+        targetOwnerID = codexOwnerIDForThread(targetThreadID);
+        const existingThread = (
+          threads().find((thread) => thread.id === targetThreadID) ??
+          activeThread() ??
+          buildOptimisticPlaceholderThread({
+            threadID: targetThreadID,
+            preview: message.trim(),
+            modelProvider: ownerDraft.runtime.model,
+            cwd: resolvedWorkingDir,
+          })
+        );
+        threadController.ensureSessionForThread(existingThread, {
+          ...runtimeConfigFromDraft(ownerDraft.runtime),
+          cwd: resolvedWorkingDir,
+        });
+        threadController.selectThread(targetThreadID);
+      }
+
+      optimisticTurnID = createAttachmentID();
+      appendOptimisticTurn({
+        id: optimisticTurnID,
+        thread_id: targetThreadID,
+        text: message,
+        inputs: attachmentInputs,
+      });
+      threadController.markSessionWorking(targetThreadID);
+
+      await startCodexTurn({
+        threadID: targetThreadID,
+        inputText: message,
+        inputs: attachmentInputs,
+        cwd: resolvedWorkingDir,
+        model: ownerDraft.runtime.model,
+        effort: ownerDraft.runtime.effort,
+        approval_policy: ownerDraft.runtime.approvalPolicy,
+        sandbox_mode: ownerDraft.runtime.sandboxMode,
+      });
+
+      const currentThread = (
+        threads().find((thread) => thread.id === targetThreadID) ??
+        threadController.sessionForThread(targetThreadID)?.thread ??
+        null
+      );
+      if (currentThread) {
+        upsertOptimisticThread(currentThread, message.trim(), resolvedWorkingDir);
+      } else {
+        upsertOptimisticThread(
+          buildOptimisticPlaceholderThread({
+            threadID: targetThreadID,
+            preview: message.trim(),
+            modelProvider: ownerDraft.runtime.model,
+            cwd: resolvedWorkingDir,
+          }),
+          message.trim(),
+          resolvedWorkingDir,
+        );
+      }
+
+      draftController.setComposerText(targetOwnerID, '');
+      draftController.replaceAttachments(targetOwnerID, []);
+      void refetchThreads();
+      void loadThreadBootstrap(targetThreadID);
+      void refetchCapabilities();
+    } catch (error) {
+      if (targetThreadID && optimisticTurnID) {
+        removeOptimisticTurns(targetThreadID, new Set([optimisticTurnID]));
+      }
+      void refetchThreads();
+      if (targetThreadID) {
+        void loadThreadBootstrap(targetThreadID);
+      }
+      notify.error('Send failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const archiveThread = async (threadID: string) => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return;
+    try {
+      await archiveCodexThread(normalizedThreadID);
+      removeOptimisticThread(normalizedThreadID);
+      removeOptimisticTurns(
+        normalizedThreadID,
+        new Set((optimisticTurnsByThreadID()[normalizedThreadID] ?? []).map((turn) => turn.id)),
+      );
+      draftController.removeOwner(codexOwnerIDForThread(normalizedThreadID));
+      threadController.removeThreadState(normalizedThreadID);
+      notify.success('Archived', 'The Codex thread has been archived.');
+      await refetchThreads();
+    } catch (error) {
+      notify.error('Archive failed', error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const archiveActiveThread = async () => {
+    await archiveThread(String(selectedThreadID() ?? '').trim());
+  };
 
   const answerRequest = async (request: CodexPendingRequest, decision?: string) => {
-    if (!session()) return;
     try {
       await respondToCodexRequest({
         threadID: request.thread_id,
@@ -802,7 +960,8 @@ export function CodexProvider(props: ParentProps) {
     hasHostBinary,
     capabilities,
     capabilitiesLoading: () => capabilities.loading,
-    activeThreadID,
+    activeThreadID: selectedThreadID,
+    displayedThreadID,
     activeThread,
     activeRuntimeConfig,
     activeOptimisticUserTurns,
@@ -810,6 +969,8 @@ export function CodexProvider(props: ParentProps) {
     activeStatus,
     activeStatusFlags,
     threadTitle,
+    threadLoading: () => threadController.threadLoading(),
+    activeThreadError: () => threadController.activeThreadError(),
     threads: () => threads() ?? [],
     threadsLoading: () => threadsResource.loading,
     transcriptItems,
@@ -828,7 +989,7 @@ export function CodexProvider(props: ParentProps) {
     addImageAttachments,
     removeAttachment,
     composerText,
-    setComposerText,
+    setComposerText: setComposerDraftText,
     submitting,
     streamError,
     requestDraftValue,
