@@ -2,118 +2,111 @@ package codexbridge
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
-func TestBuildAppServerCommand_UsesLoginShell(t *testing.T) {
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("CODEX_HOME", "")
+func TestBuildAppServerCommand_UsesConfiguredShellWithLoginInteractiveFlags(t *testing.T) {
+	shellPath := writeExecutable(t, "preferred-shell")
+	t.Setenv("SHELL", shellPath)
 
 	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
 	if err != nil {
 		t.Fatalf("buildAppServerCommand: %v", err)
 	}
 
-	if got, want := filepath.Base(cmd.Path), "bash"; got != want {
-		t.Fatalf("filepath.Base(cmd.Path)=%q want=%q full=%q", got, want, cmd.Path)
+	if got, want := cmd.Path, shellPath; got != want {
+		t.Fatalf("cmd.Path=%q want=%q", got, want)
 	}
-	if len(cmd.Args) != 4 {
-		t.Fatalf("len(cmd.Args)=%d want=4 args=%v", len(cmd.Args), cmd.Args)
-	}
-	if got, want := cmd.Args[1], "-lc"; got != want {
-		t.Fatalf("cmd.Args[1]=%q want=%q", got, want)
-	}
-	if got, want := cmd.Args[2], `exec "$0" app-server --listen stdio://`; got != want {
-		t.Fatalf("cmd.Args[2]=%q want=%q", got, want)
-	}
-	if got, want := cmd.Args[3], "/opt/homebrew/bin/codex"; got != want {
-		t.Fatalf("cmd.Args[3]=%q want=%q", got, want)
-	}
-	if got, want := envValue(cmd.Env, "CODEX_HOME"), filepath.Join(homeDir, ".codex"); got != want {
-		t.Fatalf("CODEX_HOME=%q want=%q env=%v", got, want, cmd.Env)
+	assertCommandArgs(t, cmd, shellPath)
+	if cmd.Env != nil {
+		t.Fatalf("cmd.Env=%v want nil", cmd.Env)
 	}
 }
 
-func TestBuildAppServerCommand_PrefersExplicitCodexHomeEnv(t *testing.T) {
-	homeDir := t.TempDir()
-	explicitCodexHome := filepath.Join(homeDir, "custom-codex-home")
-	if err := os.MkdirAll(explicitCodexHome, 0o755); err != nil {
-		t.Fatalf("mkdir custom codex home: %v", err)
-	}
-	t.Setenv("HOME", homeDir)
-	t.Setenv("CODEX_HOME", explicitCodexHome)
+func TestBuildAppServerCommand_ResolvesConfiguredShellFromPath(t *testing.T) {
+	dir := t.TempDir()
+	shellPath := writeExecutableAt(t, dir, "custom-shell")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("SHELL", "custom-shell")
 
 	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
 	if err != nil {
 		t.Fatalf("buildAppServerCommand: %v", err)
 	}
 
-	if got, want := envValue(cmd.Env, "CODEX_HOME"), explicitCodexHome; got != want {
-		t.Fatalf("CODEX_HOME=%q want=%q env=%v", got, want, cmd.Env)
+	if got, want := cmd.Path, shellPath; got != want {
+		t.Fatalf("cmd.Path=%q want=%q", got, want)
 	}
+	assertCommandArgs(t, cmd, shellPath)
 }
 
-func TestBuildAppServerCommand_FallsBackToDesktopCodexHomeWhenDefaultAuthMissing(t *testing.T) {
-	homeDir := t.TempDir()
-	defaultCodexHome := filepath.Join(homeDir, ".codex")
-	desktopCodexHome := filepath.Join(homeDir, ".codex-cc")
-	if err := os.MkdirAll(defaultCodexHome, 0o755); err != nil {
-		t.Fatalf("mkdir default codex home: %v", err)
-	}
-	if err := os.MkdirAll(desktopCodexHome, 0o755); err != nil {
-		t.Fatalf("mkdir desktop codex home: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(desktopCodexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"test"}`), 0o600); err != nil {
-		t.Fatalf("write desktop auth: %v", err)
-	}
-	t.Setenv("HOME", homeDir)
-	t.Setenv("CODEX_HOME", "")
+func TestBuildAppServerCommand_FallsBackToBashWhenShellUnset(t *testing.T) {
+	t.Setenv("SHELL", "")
+	bashPath := mustLookPath(t, "bash")
 
 	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
 	if err != nil {
 		t.Fatalf("buildAppServerCommand: %v", err)
 	}
 
-	if got, want := envValue(cmd.Env, "CODEX_HOME"), desktopCodexHome; got != want {
-		t.Fatalf("CODEX_HOME=%q want=%q env=%v", got, want, cmd.Env)
+	if got, want := cmd.Path, bashPath; got != want {
+		t.Fatalf("cmd.Path=%q want=%q", got, want)
 	}
+	assertCommandArgs(t, cmd, bashPath)
 }
 
-func TestBuildAppServerCommand_KeepsDefaultCodexHomeWhenDefaultAuthExists(t *testing.T) {
-	homeDir := t.TempDir()
-	defaultCodexHome := filepath.Join(homeDir, ".codex")
-	desktopCodexHome := filepath.Join(homeDir, ".codex-cc")
-	if err := os.MkdirAll(defaultCodexHome, 0o755); err != nil {
-		t.Fatalf("mkdir default codex home: %v", err)
-	}
-	if err := os.MkdirAll(desktopCodexHome, 0o755); err != nil {
-		t.Fatalf("mkdir desktop codex home: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(defaultCodexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"test"}`), 0o600); err != nil {
-		t.Fatalf("write default auth: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(desktopCodexHome, "auth.json"), []byte(`{"OPENAI_API_KEY":"test"}`), 0o600); err != nil {
-		t.Fatalf("write desktop auth: %v", err)
-	}
-	t.Setenv("HOME", homeDir)
-	t.Setenv("CODEX_HOME", "")
+func TestBuildAppServerCommand_FallsBackToBashWhenConfiguredShellMissing(t *testing.T) {
+	t.Setenv("SHELL", filepath.Join(t.TempDir(), "missing-shell"))
+	bashPath := mustLookPath(t, "bash")
 
 	cmd, err := buildAppServerCommand("/opt/homebrew/bin/codex")
 	if err != nil {
 		t.Fatalf("buildAppServerCommand: %v", err)
 	}
 
-	if got, want := envValue(cmd.Env, "CODEX_HOME"), defaultCodexHome; got != want {
-		t.Fatalf("CODEX_HOME=%q want=%q env=%v", got, want, cmd.Env)
+	if got, want := cmd.Path, bashPath; got != want {
+		t.Fatalf("cmd.Path=%q want=%q", got, want)
+	}
+	assertCommandArgs(t, cmd, bashPath)
+}
+
+func assertCommandArgs(t *testing.T, cmd *exec.Cmd, shellPath string) {
+	t.Helper()
+	want := []string{
+		shellPath,
+		"-l",
+		"-i",
+		"-c",
+		`exec "$0" app-server --listen stdio://`,
+		"/opt/homebrew/bin/codex",
+	}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("cmd.Args=%v want=%v", cmd.Args, want)
 	}
 }
 
-func envValue(env []string, key string) string {
-	tail, ok := lookupEnv(env, key)
-	if !ok {
-		return ""
+func mustLookPath(t *testing.T, name string) string {
+	t.Helper()
+	path, err := exec.LookPath(name)
+	if err != nil {
+		t.Fatalf("exec.LookPath(%q): %v", name, err)
 	}
-	return tail
+	return path
+}
+
+func writeExecutable(t *testing.T, name string) string {
+	t.Helper()
+	return writeExecutableAt(t, t.TempDir(), name)
+}
+
+func writeExecutableAt(t *testing.T, dir string, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write executable %q: %v", path, err)
+	}
+	return path
 }

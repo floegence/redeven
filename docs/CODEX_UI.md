@@ -36,11 +36,8 @@ There is **no** `config.codex` block in `~/.redeven/config.json`.
 Redeven resolves `codex` like this:
 
 1. Look up `codex` on the host `PATH`.
-2. Resolve the app-server `CODEX_HOME` before launch:
-   - honor an explicit `CODEX_HOME` from the agent process environment;
-   - otherwise use the default `~/.codex`;
-   - if `~/.codex` does not currently contain `auth.json` but `~/.codex-cc/auth.json` exists, prefer `~/.codex-cc` so local Redeven sessions can reuse the host Codex desktop login.
-3. Start `codex app-server` on demand when a Codex route needs it, using a login shell and the resolved `CODEX_HOME`.
+2. Start `codex app-server` on demand when a Codex route needs it by spawning the user's configured shell in `login + interactive` mode and executing `codex app-server --listen stdio://` through that shell.
+3. Inherit the agent process environment as-is and let the user's shell startup files resolve host-specific settings such as `PATH`, `CODEX_HOME`, and related Codex runtime configuration.
 4. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
 
 Agent Settings -> Codex is diagnostic-only and currently shows:
