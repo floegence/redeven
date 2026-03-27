@@ -238,6 +238,71 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
+  it('keeps the virtual scroll extent aligned with the paged branch status total count', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo-linked',
+      section: 'changes',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+      totalCount: 40,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: true,
+      items: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@' },
+        { section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' },
+      ],
+    });
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo-linked"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo-linked',
+                  headRef: 'feature/demo',
+                  headCommit: 'abc1234',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                }}
+                selectedBranch={{
+                  name: 'feature/demo',
+                  fullName: 'refs/heads/feature/demo',
+                  kind: 'local',
+                  current: true,
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo-linked',
+                  currentRef: 'feature/demo',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local' },
+                    { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local', current: true },
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      expect(host.textContent).toContain('Showing 2 of 40 files.');
+      const spacers = Array.from(host.querySelectorAll('tr[aria-hidden="true"] td')) as HTMLTableCellElement[];
+      expect(spacers).toHaveLength(1);
+      expect(spacers[0]?.style.height).toBe('2052px');
+    } finally {
+      dispose();
+    }
+  });
+
   it('enables checkout for a non-current remote branch', () => {
     let checkoutBranch: string | undefined;
     let mergeBranch: string | undefined;

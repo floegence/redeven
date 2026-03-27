@@ -6,6 +6,7 @@ const DEFAULT_OVERSCAN = 8;
 
 export interface GitVirtualTableProps<T> {
   items: T[];
+  totalCount?: number;
   header: JSX.Element;
   renderRow: (item: T, index: number) => JSX.Element;
   colSpan: number;
@@ -23,10 +24,15 @@ export function GitVirtualTable<T>(props: GitVirtualTableProps<T>) {
 
   const rowHeight = () => Math.max(1, Math.round(props.rowHeight ?? DEFAULT_ROW_HEIGHT));
   const overscan = () => Math.max(1, Math.round(props.overscan ?? DEFAULT_OVERSCAN));
-  const itemCount = () => props.items.length;
+  const loadedCount = () => props.items.length;
+  const totalCount = () => {
+    const count = props.totalCount;
+    return Number.isFinite(count) ? Math.max(0, Math.round(count ?? 0)) : loadedCount();
+  };
+  const virtualCount = () => Math.max(loadedCount(), totalCount());
 
   const visibleRange = createMemo(() => {
-    const count = itemCount();
+    const count = virtualCount();
     if (count <= 0) return { start: 0, end: 0 };
     const start = Math.max(0, Math.floor(scrollTop() / rowHeight()) - overscan());
     const visibleCount = Math.max(1, Math.ceil(Math.max(viewportHeight(), rowHeight()) / rowHeight()));
@@ -34,8 +40,16 @@ export function GitVirtualTable<T>(props: GitVirtualTableProps<T>) {
     return { start, end };
   });
 
-  const visibleItems = createMemo(() => {
+  const renderedRange = createMemo(() => {
     const { start, end } = visibleRange();
+    const count = loadedCount();
+    const renderStart = Math.min(start, count);
+    const renderEnd = Math.min(end, count);
+    return { start: renderStart, end: renderEnd };
+  });
+
+  const visibleItems = createMemo(() => {
+    const { start, end } = renderedRange();
     return props.items.slice(start, end).map((item, offset) => ({
       item,
       index: start + offset,
@@ -43,7 +57,10 @@ export function GitVirtualTable<T>(props: GitVirtualTableProps<T>) {
   });
 
   const topSpacerHeight = createMemo(() => visibleRange().start * rowHeight());
-  const bottomSpacerHeight = createMemo(() => Math.max(0, (itemCount() - visibleRange().end) * rowHeight()));
+  const bottomSpacerHeight = createMemo(() => {
+    const renderedCount = Math.max(0, renderedRange().end - renderedRange().start);
+    return Math.max(0, (virtualCount() - visibleRange().start - renderedCount) * rowHeight());
+  });
 
   const syncViewport = () => {
     if (!viewportEl) return;

@@ -84,6 +84,61 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('keeps the virtual scroll extent aligned with the paged workspace total count', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 }],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  changes: {
+                    items: [],
+                    totalCount: 40,
+                    nextOffset: 2,
+                    hasMore: true,
+                    loading: false,
+                    error: '',
+                    initialized: true,
+                  },
+                }}
+                selectedSection="changes"
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(host.textContent).toContain('Showing 2 of 40 files.');
+      const spacers = Array.from(host.querySelectorAll('tr[aria-hidden="true"] td')) as HTMLTableCellElement[];
+      expect(spacers).toHaveLength(1);
+      expect(spacers[0]?.style.height).toBe('2052px');
+    } finally {
+      dispose();
+    }
+  });
+
   it('opens the commit dialog and lists staged files there', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
