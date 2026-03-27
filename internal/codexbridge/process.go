@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -28,11 +30,24 @@ type appServerProcess struct {
 	done       chan error
 }
 
+const (
+	codexHomeEnvKey     = "CODEX_HOME"
+	codexDefaultDirName = ".codex"
+	codexDesktopDirName = ".codex-cc"
+	codexAuthFileName   = "auth.json"
+)
+
 func buildAppServerCommand(binaryPath string) (*exec.Cmd, error) {
 	if strings.TrimSpace(binaryPath) == "" {
 		return nil, errors.New("missing codex binary")
 	}
-	return exec.Command("bash", "-lc", `exec "$0" app-server --listen stdio://`, binaryPath), nil
+	codexHomeDir, err := resolveCodexHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command("bash", "-lc", `exec "$0" app-server --listen stdio://`, binaryPath)
+	cmd.Env = upsertEnv(os.Environ(), codexHomeEnvKey, codexHomeDir)
+	return cmd, nil
 }
 
 func startAppServerProcess(logger *slog.Logger, binaryPath string, onEnvelope func(rpcEnvelope)) (*appServerProcess, error) {
@@ -231,4 +246,66 @@ func mustJSONRaw(v any) json.RawMessage {
 
 func bytesTrimSpace(b []byte) []byte {
 	return []byte(strings.TrimSpace(string(b)))
+}
+
+func resolveCodexHomeDir() (string, error) {
+	if explicit, ok := lookupEnv(os.Environ(), codexHomeEnvKey); ok {
+		return explicit, nil
+	}
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", codexHomeEnvKey, err)
+	}
+	defaultHome := filepath.Join(homeDir, codexDefaultDirName)
+	if codexHomeHasAuth(defaultHome) {
+		return defaultHome, nil
+	}
+	desktopHome := filepath.Join(homeDir, codexDesktopDirName)
+	if codexHomeHasAuth(desktopHome) {
+		return desktopHome, nil
+	}
+	return defaultHome, nil
+}
+
+func lookupEnv(env []string, key string) (string, bool) {
+	prefix := key + "="
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, prefix) {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(entry, prefix))
+		if value == "" {
+			return "", false
+		}
+		return value, true
+	}
+	return "", false
+}
+
+func upsertEnv(env []string, key string, value string) []string {
+	prefix := key + "="
+	next := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			if !replaced {
+				next = append(next, prefix+value)
+				replaced = true
+			}
+			continue
+		}
+		next = append(next, entry)
+	}
+	if !replaced {
+		next = append(next, prefix+value)
+	}
+	return next
+}
+
+func codexHomeHasAuth(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, codexAuthFileName))
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
 }
