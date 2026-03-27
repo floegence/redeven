@@ -53,6 +53,7 @@ describe('EnvDebugConsoleSettingsPanel', () => {
     expect(switchButton).not.toBeNull();
     expect(switchButton?.className).toContain('shrink-0');
     expect(switchButton?.className).toContain('flex-none');
+    expect(switchButton?.className).toContain('cursor-pointer');
     expect(host.querySelectorAll('button')).toHaveLength(1);
   });
 });
