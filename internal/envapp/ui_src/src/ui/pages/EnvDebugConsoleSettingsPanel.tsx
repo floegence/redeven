@@ -23,7 +23,7 @@ function DebugConsoleSwitch(props: Readonly<{ checked: boolean; disabled?: boole
       role="switch"
       aria-checked={props.checked}
       disabled={props.disabled}
-      class={`inline-flex h-6 w-11 shrink-0 flex-none items-center rounded-full border transition-colors ${
+      class={`inline-flex h-6 w-11 shrink-0 flex-none cursor-pointer items-center rounded-full border transition-colors ${
         props.checked
           ? 'border-primary/30 bg-primary/15 text-primary'
           : 'border-border bg-muted/60 text-muted-foreground'
