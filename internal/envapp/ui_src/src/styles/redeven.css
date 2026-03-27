@@ -681,6 +681,16 @@ html.dark .flower-chat-shell {
   flex-shrink: 0;
 }
 
+.redeven-flower-soft-aura-nav-glow {
+  inset: -4%;
+  filter: blur(6px);
+}
+
+.redeven-flower-soft-aura-nav-svg {
+  width: 88%;
+  height: 88%;
+}
+
 .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
   inset: -6%;
   filter: blur(6px);

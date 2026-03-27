@@ -17,7 +17,7 @@ import {
   Terminal,
 } from '@floegence/floe-webapp-core/icons';
 import { FlowerIcon } from './icons/FlowerIcon';
-import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
+import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
@@ -1607,7 +1607,7 @@ export function EnvAppShell() {
     if (canUseFlower()) {
       items.push({
         id: 'ai',
-        icon: (props) => <FlowerSoftAuraIcon class={props.class} tone="primary" />,
+        icon: FlowerNavigationIcon,
         label: 'Flower',
         collapseBehavior: 'toggle',
       });
