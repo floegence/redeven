@@ -113,6 +113,42 @@ describe("DesktopDiagnosticsRecorder", () => {
     }
   });
 
+  it("skips static asset requests so the console stays focused on API and RPC traffic", async () => {
+    const stateDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "redeven-desktop-diagnostics-static-assets-"),
+    );
+    try {
+      const recorder = new DesktopDiagnosticsRecorder();
+      await recorder.configureRuntime(
+        {
+          local_ui_url: "http://127.0.0.1:23998/",
+          local_ui_urls: ["http://127.0.0.1:23998/"],
+          state_dir: stateDir,
+          diagnostics_enabled: true,
+        },
+        "http://127.0.0.1:23998/",
+      );
+
+      expect(
+        recorder.startRequest({
+          requestID: 10,
+          method: "GET",
+          url: "http://127.0.0.1:23998/_redeven_proxy/env/assets/index.css",
+        }),
+      ).toBeNull();
+
+      expect(
+        recorder.startRequest({
+          requestID: 11,
+          method: "GET",
+          url: "http://127.0.0.1:23998/_redeven_proxy/env/assets/index.js",
+        }),
+      ).toBeNull();
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("can enable request tracking from a response header after startup began disabled", async () => {
     const stateDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "redeven-desktop-diagnostics-header-enable-"),
