@@ -366,4 +366,48 @@ describe('GitDiffDialog', () => {
       dispose();
     }
   });
+
+  it('shows directory placeholders as unavailable without requesting diff content', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitDiffDialog
+            open
+            onOpenChange={() => {}}
+            item={{
+              changeType: 'added',
+              path: 'node_modules/',
+              displayPath: 'node_modules/',
+              additions: 0,
+              deletions: 0,
+            }}
+            source={{
+              kind: 'workspace',
+              repoRootPath: '/workspace/repo',
+              workspaceSection: 'untracked',
+            }}
+            title="Workspace Diff"
+            emptyMessage="Select a file to inspect its diff."
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      expect(mockGetDiffContent).not.toHaveBeenCalled();
+      expect(document.body.textContent).toContain('Directory entries do not expose a single-file diff preview.');
+      expect(document.body.textContent).toContain('Diff preview is unavailable for directory entries.');
+
+      const fullContextButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Full Context') as HTMLButtonElement | undefined;
+      expect(fullContextButton).toBeTruthy();
+      expect(fullContextButton!.disabled).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
 });

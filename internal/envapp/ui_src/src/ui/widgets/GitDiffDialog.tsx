@@ -53,6 +53,35 @@ export interface GitDiffDialogProps {
   class?: string;
 }
 
+function normalizeDiffPathCandidate(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function isDirectoryDiffPlaceholder(item: GitDiffDialogItem | GitDiffFileContent | null | undefined): boolean {
+  if (!item) return false;
+  return [
+    normalizeDiffPathCandidate(item.displayPath),
+    normalizeDiffPathCandidate(item.path),
+    normalizeDiffPathCandidate(item.newPath),
+    normalizeDiffPathCandidate(item.oldPath),
+  ].some((path) => path.endsWith('/'));
+}
+
+function createUnavailableDiffItem(item: GitDiffDialogItem | null | undefined): GitDiffFileContent | null {
+  if (!item) return null;
+  return {
+    changeType: typeof item.changeType === 'string' ? item.changeType : undefined,
+    path: typeof item.path === 'string' ? item.path : undefined,
+    oldPath: typeof item.oldPath === 'string' ? item.oldPath : undefined,
+    newPath: typeof item.newPath === 'string' ? item.newPath : undefined,
+    displayPath: typeof item.displayPath === 'string' ? item.displayPath : undefined,
+    additions: typeof item.additions === 'number' ? item.additions : undefined,
+    deletions: typeof item.deletions === 'number' ? item.deletions : undefined,
+    isBinary: typeof item.isBinary === 'boolean' ? item.isBinary : undefined,
+    patchText: '',
+  };
+}
+
 function buildDiffContentRequest(
   source: GitDiffDialogSource | null | undefined,
   item: GitDiffDialogItem | null | undefined,
@@ -126,14 +155,26 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
   let previewReqSeq = 0;
   let fullReqSeq = 0;
 
-  const previewRequest = createMemo(() => buildDiffContentRequest(props.source, props.item, 'preview'));
-  const fullRequest = createMemo(() => buildDiffContentRequest(props.source, props.item, 'full'));
+  const directoryUnavailableItem = createMemo(() => (
+    isDirectoryDiffPlaceholder(props.item) ? createUnavailableDiffItem(props.item) : null
+  ));
+  const previewRequest = createMemo(() => (
+    directoryUnavailableItem() ? null : buildDiffContentRequest(props.source, props.item, 'preview')
+  ));
+  const fullRequest = createMemo(() => (
+    directoryUnavailableItem() ? null : buildDiffContentRequest(props.source, props.item, 'full')
+  ));
   const previewRequestKey = createMemo(() => diffRequestKey(previewRequest()));
   const fullRequestKey = createMemo(() => diffRequestKey(fullRequest()));
-  const canLoadFullContext = createMemo(() => fullRequestKey() !== '');
+  const canLoadFullContext = createMemo(() => !directoryUnavailableItem() && fullRequestKey() !== '');
   const seededPreviewItem = createMemo(() => seedGitDiffContent(props.item));
-  const effectivePreviewItem = createMemo(() => previewItem() ?? seededPreviewItem());
+  const effectivePreviewItem = createMemo(() => directoryUnavailableItem() ?? previewItem() ?? seededPreviewItem());
   const activeItem = createMemo(() => (mode() === 'full-context' ? fullItem() : effectivePreviewItem()));
+  const unavailableMessage = (item: GitDiffFileContent): string | undefined => {
+    if (isDirectoryDiffPlaceholder(item)) return 'Diff preview is unavailable for directory entries.';
+    if (typeof props.unavailableMessage === 'function') return props.unavailableMessage(item);
+    return props.unavailableMessage;
+  };
 
   createEffect(on(() => [props.open, previewRequestKey(), fullRequestKey()] as const, () => {
     previewReqSeq += 1;
@@ -238,6 +279,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
 
           <div class="text-[11px] text-muted-foreground">
             <Switch>
+              <Match when={Boolean(directoryUnavailableItem())}>Directory entries do not expose a single-file diff preview.</Match>
               <Match when={mode() === 'full-context' && fullLoading()}>Loading full context...</Match>
               <Match when={mode() === 'full-context' && !fullLoading()}>Includes unchanged lines for broader review context.</Match>
               <Match when={mode() === 'patch' && previewLoading()}>Loading patch preview...</Match>
@@ -261,7 +303,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
                 class="min-h-0 flex-1"
                 item={activeItem()}
                 emptyMessage={mode() === 'patch' ? props.emptyMessage : 'Full-context diff is unavailable for this file.'}
-                unavailableMessage={props.unavailableMessage}
+                unavailableMessage={unavailableMessage}
               />
             </Match>
 
@@ -274,7 +316,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
                 class="min-h-0 flex-1"
                 item={effectivePreviewItem()}
                 emptyMessage={props.emptyMessage}
-                unavailableMessage={props.unavailableMessage}
+                unavailableMessage={unavailableMessage}
               />
             </Match>
 
