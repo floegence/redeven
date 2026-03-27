@@ -23,6 +23,7 @@ function Banner(props: {
 
 export function CodexStatusBannerStack(props: {
   statusError: string | null;
+  threadError: string | null;
   streamError: string | null;
   hostAvailable: boolean;
 }) {
@@ -30,6 +31,13 @@ export function CodexStatusBannerStack(props: {
     <>
       <Show when={props.statusError}>
         <Banner title="Status error" body={props.statusError || ''} tone="warning" />
+      </Show>
+      <Show when={props.threadError}>
+        <Banner
+          title="Thread loading"
+          body={props.threadError || ''}
+          tone="warning"
+        />
       </Show>
       <Show when={props.streamError}>
         <Banner

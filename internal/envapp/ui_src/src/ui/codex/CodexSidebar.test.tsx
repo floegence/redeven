@@ -148,6 +148,16 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 function renderSurface(host: HTMLDivElement) {
   render(() => (
     <EnvContext.Provider
@@ -234,7 +244,7 @@ describe('CodexSidebar', () => {
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
-        updated_at_unix_s: 2,
+        updated_at_unix_s: 10,
         status: 'idle',
         cwd: '/workspace',
       },
@@ -495,5 +505,379 @@ describe('CodexSidebar', () => {
     await flushAsync();
 
     expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('Codex renamed thread');
+  });
+
+  it('shows a loading state instead of stale transcript content when switching to an uncached thread', async () => {
+    const thread2Detail = deferred<any>();
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'idle',
+        cwd: '/workspace',
+      },
+      {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation((threadID: string) => {
+      if (threadID === 'thread_2') {
+        return thread2Detail.promise;
+      }
+      return Promise.resolve({
+        thread: {
+          id: 'thread_1',
+          name: 'Backend audit',
+          preview: 'Review the gateway wiring',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 1,
+          updated_at_unix_s: 10,
+          status: 'idle',
+          cwd: '/workspace',
+          turns: [{
+            id: 'thread_1_turn_1',
+            status: 'completed',
+            items: [
+              {
+                id: 'thread_1_item_1',
+                type: 'agentMessage',
+                text: 'Gateway note',
+              },
+            ],
+          }],
+        },
+        runtime_config: {
+          cwd: '/workspace',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        pending_requests: [],
+        last_applied_seq: 0,
+        active_status: 'idle',
+        active_status_flags: [],
+      });
+    });
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.textContent).toContain('Gateway note');
+
+    const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
+    if (!target) {
+      throw new Error('UI polish thread button not found');
+    }
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushAsync();
+
+    expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
+    expect(host.textContent).toContain('Loading the selected Codex thread.');
+    expect(host.textContent).not.toContain('Gateway note');
+
+    thread2Detail.resolve({
+      thread: {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [{
+          id: 'thread_2_turn_1',
+          status: 'completed',
+          items: [
+            {
+              id: 'thread_2_item_1',
+              type: 'agentMessage',
+              text: 'Polish note',
+            },
+          ],
+        }],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.textContent).toContain('Polish note');
+    expect(host.textContent).not.toContain('Gateway note');
+  });
+
+  it('ignores out-of-order bootstrap responses when switching threads quickly', async () => {
+    const thread2Detail = deferred<any>();
+    const thread3Detail = deferred<any>();
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'idle',
+        cwd: '/workspace',
+      },
+      {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+      {
+        id: 'thread_3',
+        name: 'Release notes',
+        preview: 'Summarize the latest release work',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 5,
+        updated_at_unix_s: 6,
+        status: 'running',
+        cwd: '/workspace/release',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation((threadID: string) => {
+      if (threadID === 'thread_2') return thread2Detail.promise;
+      if (threadID === 'thread_3') return thread3Detail.promise;
+      return Promise.resolve({
+        thread: {
+          id: 'thread_1',
+          name: 'Backend audit',
+          preview: 'Review the gateway wiring',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 1,
+          updated_at_unix_s: 2,
+          status: 'idle',
+          cwd: '/workspace',
+          turns: [{
+            id: 'thread_1_turn_1',
+            status: 'completed',
+            items: [
+              {
+                id: 'thread_1_item_1',
+                type: 'agentMessage',
+                text: 'Gateway note',
+              },
+            ],
+          }],
+        },
+        runtime_config: {
+          cwd: '/workspace',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        pending_requests: [],
+        last_applied_seq: 0,
+        active_status: 'idle',
+        active_status_flags: [],
+      });
+    });
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const thread2Button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
+    const thread3Button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Release notes'));
+    if (!thread2Button || !thread3Button) {
+      throw new Error('thread buttons not found');
+    }
+
+    thread2Button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+    thread3Button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('Gateway note');
+
+    thread2Detail.resolve({
+      thread: {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [{
+          id: 'thread_2_turn_1',
+          status: 'completed',
+          items: [
+            {
+              id: 'thread_2_item_1',
+              type: 'agentMessage',
+              text: 'Polish note',
+            },
+          ],
+        }],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('Polish note');
+
+    thread3Detail.resolve({
+      thread: {
+        id: 'thread_3',
+        name: 'Release notes',
+        preview: 'Summarize the latest release work',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 5,
+        updated_at_unix_s: 6,
+        status: 'running',
+        cwd: '/workspace/release',
+        turns: [{
+          id: 'thread_3_turn_1',
+          status: 'completed',
+          items: [
+            {
+              id: 'thread_3_item_1',
+              type: 'agentMessage',
+              text: 'Release note summary',
+            },
+          ],
+        }],
+      },
+      runtime_config: {
+        cwd: '/workspace/release',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.textContent).toContain('Release note summary');
+    expect(host.textContent).not.toContain('Polish note');
+    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('Release notes');
   });
 });

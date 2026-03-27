@@ -31,6 +31,22 @@ This keeps the upgrade boundary small:
 - Redeven owns only the gateway adapter and the dedicated UI surface.
 - We do not mirror Codex defaults into Redeven config, so new Codex releases do not require a matching front-end settings schema here.
 
+### Browser Controller Ownership
+
+The browser-side Codex UI uses an explicit controller split so thread switching, bootstrap replay, and drafts are not reconciled ad hoc inside one large page component:
+
+- `CodexProvider` is orchestration glue only. It wires resources, user actions, SSE, and view-facing accessors.
+- `createCodexThreadController()` owns thread selection/display state, cached sessions, bootstrap status, stale-response guards, and event application into the correct cached thread.
+- `createCodexDraftController()` owns per-owner drafts for runtime fields, composer text, and attachments.
+- Draft ownership is explicit:
+  - `draft:new` for the blank New Chat surface
+  - `thread:<id>` for persisted thread-scoped drafts
+- The browser distinguishes:
+  - `selectedThreadID`: what the user most recently picked
+  - `displayedThreadID`: what the transcript is currently allowed to render
+- When the user selects a thread that has no ready cached session yet, the main pane enters a loading state instead of continuing to render the previous thread's transcript.
+- Thread bootstrap is guarded by a per-selection load token so an older response cannot revive stale content after the user has already switched to another thread.
+
 ## Host-managed runtime
 
 There is **no** `config.codex` block in `~/.redeven/config.json`.
@@ -113,6 +129,8 @@ Current Env App behavior:
 - Codex UI structure stays isolated under `src/ui/codex/*`, including its own namespaced `codex.css` layer, so Flower selectors and component contracts do not change when Codex layout evolves.
 - The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
+- Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
+- Per-thread drafts are preserved independently, so composer text, attachments, and runtime overrides no longer leak between existing threads and the New Chat surface.
 - The composer keeps the most useful Codex controls directly below the input instead of in a noisy chip rail:
   - working directory
   - image attachments
