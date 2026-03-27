@@ -5,14 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: any) => (
-    <button type="button" disabled={props.disabled} onClick={props.onClick}>
-      {props.children}
-    </button>
-  ),
-}));
-
 vi.mock('./settings/SettingsPrimitives', () => ({
   SettingsPill: (props: any) => <span>{props.children}</span>,
   SettingsTable: (props: any) => <table>{props.children}</table>,
@@ -36,7 +28,7 @@ afterEach(() => {
 });
 
 describe('EnvDebugConsoleSettingsPanel', () => {
-  it('renders frontend-only debug-console controls and disables the open button when off', () => {
+  it('renders only the debug-console switch row without redundant helper UI', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -45,7 +37,6 @@ describe('EnvDebugConsoleSettingsPanel', () => {
         enabled={false}
         canInteract
         onEnabledChange={() => undefined}
-        onOpenConsole={() => undefined}
       />
     ), host);
 
@@ -53,8 +44,15 @@ describe('EnvDebugConsoleSettingsPanel', () => {
     expect(host.textContent).toContain('Frontend only');
     expect(host.textContent).toContain('No agent config writes');
     expect(host.textContent).not.toContain('collect_ui_metrics');
-    const buttons = host.querySelectorAll('button');
-    const openButton = buttons[buttons.length - 1] as HTMLButtonElement | undefined;
-    expect(openButton?.disabled).toBe(true);
+    expect(host.textContent).not.toContain('Show the floating debug console in this Env App session.');
+    expect(host.textContent).not.toContain('Console hidden');
+    expect(host.textContent).not.toContain('UI metrics start on open');
+    expect(host.textContent).not.toContain('Open floating console');
+
+    const switchButton = host.querySelector('button[role="switch"]') as HTMLButtonElement | null;
+    expect(switchButton).not.toBeNull();
+    expect(switchButton?.className).toContain('shrink-0');
+    expect(switchButton?.className).toContain('flex-none');
+    expect(host.querySelectorAll('button')).toHaveLength(1);
   });
 });

@@ -1,5 +1,3 @@
-import { Button } from '@floegence/floe-webapp-core/ui';
-
 import {
   SettingsPill,
   SettingsTable,
@@ -16,7 +14,6 @@ export type EnvDebugConsoleSettingsPanelProps = Readonly<{
   enabled: boolean;
   canInteract: boolean;
   onEnabledChange: (value: boolean) => void;
-  onOpenConsole: () => void;
 }>;
 
 function DebugConsoleSwitch(props: Readonly<{ checked: boolean; disabled?: boolean; onChange: (value: boolean) => void }>) {
@@ -26,7 +23,7 @@ function DebugConsoleSwitch(props: Readonly<{ checked: boolean; disabled?: boole
       role="switch"
       aria-checked={props.checked}
       disabled={props.disabled}
-      class={`inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+      class={`inline-flex h-6 w-11 shrink-0 flex-none items-center rounded-full border transition-colors ${
         props.checked
           ? 'border-primary/30 bg-primary/15 text-primary'
           : 'border-border bg-muted/60 text-muted-foreground'
@@ -69,14 +66,13 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
           <SettingsTableRow>
             <SettingsTableCell class="font-medium text-muted-foreground">visible</SettingsTableCell>
             <SettingsTableCell>
-              <label class="flex items-center gap-3 text-sm text-foreground">
+              <div class="flex items-center">
                 <DebugConsoleSwitch
                   checked={props.enabled}
                   onChange={(value) => props.onEnabledChange(value)}
                   disabled={!props.canInteract}
                 />
-                <span>Show the floating debug console in this Env App session.</span>
-              </label>
+              </div>
             </SettingsTableCell>
             <SettingsTableCell class="text-[11px] text-muted-foreground">
               This switch is local to the current UI session. It does not change <code>log_level</code>, <code>log_format</code>, or any persisted agent setting.
@@ -84,25 +80,6 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
           </SettingsTableRow>
         </SettingsTableBody>
       </SettingsTable>
-
-      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/16 px-4 py-3">
-        <div class="space-y-1">
-          <div class="flex flex-wrap items-center gap-2">
-            <SettingsPill tone={props.enabled ? 'success' : 'default'}>
-              {props.enabled ? 'Console visible' : 'Console hidden'}
-            </SettingsPill>
-            <SettingsPill tone={props.enabled ? 'success' : 'default'}>
-              {props.enabled ? 'UI metrics active' : 'UI metrics start on open'}
-            </SettingsPill>
-          </div>
-          <div class="text-[11px] leading-5 text-muted-foreground">
-            Backend diagnostics stay available independently. This section only controls the frontend console surface and browser-local instrumentation.
-          </div>
-        </div>
-        <Button size="sm" variant="secondary" onClick={props.onOpenConsole} disabled={!props.enabled}>
-          Open floating console
-        </Button>
-      </div>
     </div>
   );
 }

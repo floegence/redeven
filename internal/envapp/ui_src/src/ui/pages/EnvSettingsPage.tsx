@@ -2808,7 +2808,6 @@ export function EnvSettingsPage() {
                 enabled={debugConsoleEnabled()}
                 canInteract={canInteract()}
                 onEnabledChange={(value) => env.setDebugConsoleEnabled(value)}
-                onOpenConsole={env.openDebugConsole}
               />
             </SettingsCard>
           </div>
