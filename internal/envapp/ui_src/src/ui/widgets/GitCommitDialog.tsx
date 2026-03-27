@@ -10,6 +10,7 @@ import {
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangeMetrics,
   GitChangeStatusPill,
+  GitPagedTableFooter,
   GitStatStrip,
   GitSubtleNote,
   gitChangedFilesRowClass,
@@ -105,23 +106,15 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
               </table>
             </div>
             <Show when={props.hasMore || (props.loadingItems && props.stagedItems.length > 0)}>
-              <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
-                <GitSubtleNote>
-                  {partial()
-                    ? `More staged files are available.`
-                    : 'Load more staged files if you want to review the full snapshot here.'}
-                </GitSubtleNote>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class="rounded-md"
-                  onClick={() => props.onLoadMore?.()}
-                  loading={props.loadingItems && props.stagedItems.length > 0}
-                  disabled={!props.hasMore || props.loadingItems}
-                >
-                  Load more
-                </Button>
-              </div>
+              <GitPagedTableFooter
+                summary={partial()
+                  ? 'More staged files are available.'
+                  : 'Load more staged files if you want to review the full snapshot here.'}
+                onLoadMore={props.onLoadMore}
+                hasMore={props.hasMore}
+                loading={props.loadingItems && props.stagedItems.length > 0}
+                loadingStatus="Loading next staged files"
+              />
             </Show>
           </Show>
         </div>
