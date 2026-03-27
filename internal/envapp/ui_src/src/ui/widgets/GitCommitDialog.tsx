@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
+import { describeLoadedFileCount } from '../utils/gitWorkbench';
 import { gitChangePathClass } from './GitChrome';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
@@ -63,7 +64,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
         <div class="text-xs text-muted-foreground">Review the staged files below, then write the commit message for this snapshot.</div>
         <Show when={partial()}>
           <GitSubtleNote>
-            Showing {loadedCount()} of {fileCount()} staged file{fileCount() === 1 ? '' : 's'}.
+            {describeLoadedFileCount(loadedCount(), fileCount(), 'staged')}.
           </GitSubtleNote>
         </Show>
 

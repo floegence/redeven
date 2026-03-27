@@ -133,7 +133,8 @@ describe('GitChangesPanel interactions', () => {
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(host.textContent).toContain('Showing 2 of 40 files.');
+      expect(host.textContent).toContain('Loaded 2 of 40 files.');
+      expect(host.textContent).toContain('Visible rows render while you scroll.');
       expect(host.textContent).toContain('src/app.ts');
       expect(host.textContent).toContain('notes.txt');
       expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(0);
@@ -189,6 +190,64 @@ describe('GitChangesPanel interactions', () => {
       expect(document.body.textContent).toContain('-1');
       expect(document.body.textContent).toContain('Message');
       expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('describes partially loaded staged snapshots in the commit dialog', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 2, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 2, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [
+                    { section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 3, deletions: 1 },
+                    { section: 'staged', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt', additions: 10, deletions: 0 },
+                  ],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  staged: {
+                    items: [],
+                    totalCount: 40,
+                    nextOffset: 2,
+                    hasMore: true,
+                    loading: false,
+                    error: '',
+                    initialized: true,
+                  },
+                }}
+                selectedSection="staged"
+                commitMessage="ship it"
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'));
+      expect(commitButton).toBeTruthy();
+      commitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(document.body.textContent).toContain('Loaded 2 of 40 staged files.');
+      expect(document.body.textContent).toContain('More staged files are available.');
     } finally {
       dispose();
     }
