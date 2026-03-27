@@ -278,8 +278,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             <div class="mt-2.5 overflow-hidden rounded-md border border-border/65 bg-card">
                               <GitVirtualTable
                                 items={commitFiles()}
-                                colSpan={4}
-                                rowHeight={54}
                                 tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}
                                 header={(
                                   <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
