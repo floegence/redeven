@@ -77,3 +77,57 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		t.Fatalf("Direct = %#v", cfg.Direct)
 	}
 }
+
+func TestBootstrapConfigPreservesDebugConsolePreferences(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+  "success": true,
+  "data": {
+    "direct": {
+      "ws_url": "wss://region.example.invalid/control/ws",
+      "channel_id": "ch_456",
+      "e2ee_psk_b64u": "cHNr",
+      "channel_init_expire_at_unix_s": 4102444800
+    }
+  }
+}`))
+	}))
+	defer server.Close()
+
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	if err := Save(cfgPath, &Config{
+		ControlplaneBaseURL: "https://old.example.invalid",
+		EnvironmentID:       "env_old",
+		AgentInstanceID:     "ai_existing",
+		DebugConsole: &DebugConsoleConfig{
+			Enabled:          true,
+			CollectUIMetrics: true,
+		},
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if _, err := BootstrapConfig(ctx, BootstrapArgs{
+		ControlplaneBaseURL: server.URL,
+		EnvironmentID:       "env_456",
+		EnvironmentToken:    "token-456",
+		ConfigPath:          cfgPath,
+	}); err != nil {
+		t.Fatalf("BootstrapConfig() error = %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.DebugConsole == nil {
+		t.Fatalf("DebugConsole = nil, want preserved config")
+	}
+	if !cfg.DebugConsole.Enabled || !cfg.DebugConsole.CollectUIMetrics {
+		t.Fatalf("DebugConsole = %#v, want enabled + collect_ui_metrics preserved", cfg.DebugConsole)
+	}
+}

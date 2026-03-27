@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -237,7 +238,7 @@ func (s *Server) Start(ctx context.Context) error {
 		RemoteEnabled:      s.remoteEnabled,
 		DesktopManaged:     s.desktopManaged,
 		StateDir:           s.stateDir,
-		DiagnosticsEnabled: s.diag != nil,
+		DiagnosticsEnabled: s.diag != nil && s.diag.Enabled(),
 		PID:                os.Getpid(),
 	}); err != nil {
 		_ = s.Close()
@@ -598,12 +599,13 @@ func (s *Server) withDiagnostics(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(diagnostics.EnabledHeader, strconv.FormatBool(s.diag.Enabled()))
 		if r == nil {
 			next.ServeHTTP(w, r)
 			return
 		}
 		path := strings.TrimSpace(r.URL.Path)
-		if !shouldTraceLocalUIPath(path) || shouldSkipLocalUIDiagnosticsPath(path) {
+		if !s.diag.Enabled() || !shouldTraceLocalUIPath(path) || shouldSkipLocalUIDiagnosticsPath(path) {
 			next.ServeHTTP(w, r)
 			return
 		}

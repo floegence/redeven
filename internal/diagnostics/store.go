@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -40,6 +41,7 @@ type Options struct {
 	Source     string
 	MaxBytes   int64
 	MaxBackups int
+	Disabled   bool
 }
 
 type Store struct {
@@ -49,6 +51,7 @@ type Store struct {
 	activePath string
 	maxBytes   int64
 	maxBackups int
+	enabled    atomic.Bool
 	mu         sync.Mutex
 }
 
@@ -83,11 +86,13 @@ func New(opts Options) (*Store, error) {
 	} else {
 		return nil, err
 	}
-	return &Store{log: logger, dir: dir, source: source, activePath: activePath, maxBytes: maxBytes, maxBackups: maxBackups}, nil
+	store := &Store{log: logger, dir: dir, source: source, activePath: activePath, maxBytes: maxBytes, maxBackups: maxBackups}
+	store.enabled.Store(!opts.Disabled)
+	return store, nil
 }
 
 func (s *Store) Append(e Event) {
-	if s == nil {
+	if s == nil || !s.Enabled() {
 		return
 	}
 	e = normalizeEvent(e, s.source)
@@ -106,6 +111,20 @@ func (s *Store) Append(e Event) {
 		return
 	}
 	s.maybeRotateLocked()
+}
+
+func (s *Store) Enabled() bool {
+	if s == nil {
+		return false
+	}
+	return s.enabled.Load()
+}
+
+func (s *Store) SetEnabled(enabled bool) {
+	if s == nil {
+		return
+	}
+	s.enabled.Store(enabled)
 }
 
 func (s *Store) List(limit int) ([]Event, error) {

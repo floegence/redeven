@@ -154,6 +154,7 @@ function renderPage(host: HTMLDivElement) {
         settingsSeq: () => 1,
         bumpSettingsSeq: () => undefined,
         openSettings: () => undefined,
+        openDebugConsole: () => undefined,
         settingsFocusSeq: () => 0,
         settingsFocusSection: () => null,
         askFlowerIntentSeq: () => 0,

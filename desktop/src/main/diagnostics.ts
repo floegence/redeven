@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { StartupReport } from './startup';
 
 const TRACE_HEADER = 'X-Redeven-Debug-Trace-ID';
+const ENABLED_HEADER = 'X-Redeven-Debug-Console-Enabled';
 const DEFAULT_MAX_BYTES = 4 << 20;
 const DEFAULT_MAX_BACKUPS = 3;
 
@@ -95,6 +96,17 @@ function headerValue(headers: DiagnosticsHeaders | null | undefined, name: strin
     return String(value ?? '').trim();
   }
   return '';
+}
+
+function parseEnabledHeader(headers: DiagnosticsHeaders | null | undefined): boolean | null {
+  const raw = headerValue(headers, ENABLED_HEADER).toLowerCase();
+  if (raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
+  return null;
 }
 
 function cloneHeaders(headers: DiagnosticsHeaders | null | undefined): DiagnosticsHeaders {
@@ -266,6 +278,10 @@ export class DesktopDiagnosticsRecorder {
   }
 
   async completeRequest(params: DesktopRequestComplete): Promise<void> {
+    const enabledFromResponse = parseEnabledHeader(params.responseHeaders);
+    if (enabledFromResponse != null) {
+      this.enabled = enabledFromResponse && this.stateDir !== '' && this.allowedOrigin !== '';
+    }
     const started = this.inFlight.get(params.requestID);
     this.inFlight.delete(params.requestID);
     if (!started) {

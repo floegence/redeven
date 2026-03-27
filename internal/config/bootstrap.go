@@ -137,6 +137,14 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		cfg.AI = prev.AI
 	}
 
+	// Preserve Debug Console preferences across bootstrap refreshes.
+	if prev != nil && prev.DebugConsole != nil {
+		cfg.DebugConsole = &DebugConsoleConfig{
+			Enabled:          prev.DebugConsole.Enabled,
+			CollectUIMetrics: prev.DebugConsole.CollectUIMetrics,
+		}
+	}
+
 	// Preserve Code App port range tweaks (Settings UI).
 	if prev != nil {
 		cfg.CodeServerPortMin = prev.CodeServerPortMin

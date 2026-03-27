@@ -68,3 +68,45 @@ func TestListSourceReadsRotatedFiles(t *testing.T) {
 		t.Fatalf("len(events) = %d, want 2", len(events))
 	}
 }
+
+func TestStoreDisabledUntilEnabled(t *testing.T) {
+	stateDir := t.TempDir()
+	store, err := New(Options{StateDir: stateDir, Source: SourceAgent, Disabled: true})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	store.Append(Event{Scope: ScopeGatewayAPI, Kind: "request", Method: "GET", Path: "/_redeven_proxy/api/settings"})
+	events, err := store.List(10)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("len(events) = %d, want 0 while disabled", len(events))
+	}
+
+	store.SetEnabled(true)
+	if !store.Enabled() {
+		t.Fatalf("Enabled() = false, want true after SetEnabled(true)")
+	}
+	store.Append(Event{Scope: ScopeGatewayAPI, Kind: "request", Method: "GET", Path: "/_redeven_proxy/api/settings"})
+
+	events, err = store.List(10)
+	if err != nil {
+		t.Fatalf("List() after enable error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("len(events) = %d, want 1 after enabling", len(events))
+	}
+
+	store.SetEnabled(false)
+	store.Append(Event{Scope: ScopeGatewayAPI, Kind: "request", Method: "POST", Path: "/_redeven_proxy/api/settings"})
+
+	events, err = store.List(10)
+	if err != nil {
+		t.Fatalf("List() after disable error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("len(events) = %d, want 1 after disabling again", len(events))
+	}
+}

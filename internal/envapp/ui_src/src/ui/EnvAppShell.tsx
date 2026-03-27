@@ -57,6 +57,8 @@ import {
   classifyReconnectFailure,
   createAgentReconnectController,
 } from './reconnect/createAgentReconnectController';
+import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
+import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
@@ -440,6 +442,10 @@ export function EnvAppShell() {
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
+  const debugConsole = createDebugConsoleController({
+    settingsKey: () => settingsSeq(),
+    protocolStatus: () => protocol.status(),
+  });
 
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
@@ -455,6 +461,10 @@ export function EnvAppShell() {
       setSettingsFocusSeq((n) => n + 1);
     }
     layout.setSidebarActiveTab('settings', { openSidebar: false });
+  };
+
+  const openDebugConsole = () => {
+    debugConsole.restore();
   };
 
   const injectAskFlowerIntent = (intent: AskFlowerIntent) => {
@@ -2116,6 +2126,7 @@ export function EnvAppShell() {
         onRetry={agentUpdatePrompt.retry}
         onSkip={agentUpdatePrompt.skipCurrentVersion}
       />
+      <DebugConsoleWindow controller={debugConsole} />
     </Shell>
   );
 
@@ -2137,6 +2148,7 @@ export function EnvAppShell() {
         settingsSeq,
         bumpSettingsSeq,
         openSettings,
+        openDebugConsole,
         settingsFocusSeq,
         settingsFocusSection,
         askFlowerIntentSeq,

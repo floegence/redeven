@@ -536,7 +536,7 @@ func (c *cli) runCmd(args []string) int {
 				RemoteEnabled:      controlChannelEnabled,
 				DesktopManaged:     *desktopManaged,
 				StateDir:           filepath.Dir(cfgPathAbs),
-				DiagnosticsEnabled: a.DiagnosticsStore() != nil,
+				DiagnosticsEnabled: a.DiagnosticsEnabled(),
 			}, desktopLaunchStatusReady); err != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", err)
 				return 1

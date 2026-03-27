@@ -64,7 +64,7 @@ Instead it validates and probes the configured Local UI base URL, then opens tha
 The ready/attached startup payload also carries:
 
 - `state_dir`: the runtime state directory used by the current agent instance
-- `diagnostics_enabled`: whether runtime diagnostics mode is active for this launch
+- `diagnostics_enabled`: whether the agent debug-console runtime collector is active for this launch
 
 ### Launch outcomes
 
@@ -146,8 +146,9 @@ Desktop-specific outcomes from this implementation:
 - Env App keeps `Restart agent`.
 - The maintenance card explains that updates must come from a new desktop release.
 - Desktop-managed Env App windows can reopen selected serialized surfaces as dedicated BrowserWindow instances instead of in-page overlays. The first detached surfaces are `File Preview` and the AI page `File Browser`, both reconstructed from query-driven scene state while keeping the same Local UI + Flowersec session contract.
-- When agent logging is set to `log_level=debug`, Desktop records Chromium-side request diagnostics into `<state_dir>/diagnostics/desktop-events.jsonl`.
-- Desktop skips self-observation for the diagnostics API itself so the diagnostics panel reflects application traffic rather than its own refresh/export requests.
+- When Agent Settings -> Logging -> Debug Console is enabled, Desktop records Chromium-side request diagnostics into `<state_dir>/diagnostics/desktop-events.jsonl`.
+- Desktop follows the runtime enable/disable state from the `X-Redeven-Debug-Console-Enabled` response header, so collection can start or stop without restarting the desktop shell.
+- Desktop skips self-observation for the diagnostics API itself so the floating debug console reflects application traffic rather than its own refresh/export requests.
 
 ## Release assets
 

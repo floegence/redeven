@@ -44,6 +44,44 @@ export type AIConfig = Readonly<{
 
 export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
 
+export type DebugConsoleSettings = Readonly<{
+  enabled: boolean;
+  collect_ui_metrics: boolean;
+}>;
+
+export type AgentSettingsResponse = Readonly<{
+  config_path: string;
+  connection: Readonly<{
+    controlplane_base_url: string;
+    environment_id: string;
+    agent_instance_id: string;
+    direct: Readonly<{
+      ws_url: string;
+      channel_id: string;
+      channel_init_expire_at_unix_s: number;
+      default_suite: number;
+      e2ee_psk_set: boolean;
+    }>;
+  }>;
+  runtime: Readonly<{ agent_home_dir: string; shell: string }>;
+  logging: Readonly<{ log_format: string; log_level: string }>;
+  debug_console: DebugConsoleSettings;
+  codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
+  permission_policy: PermissionPolicy | null;
+  ai: AIConfig | null;
+  ai_secrets?: AISecretsView | null;
+}>;
+
+export type SettingsAIUpdateMeta = Readonly<{
+  apply_scope?: string;
+  active_run_count?: number;
+}>;
+
+export type SettingsUpdateResponse = Readonly<{
+  settings: AgentSettingsResponse;
+  ai_update?: SettingsAIUpdateMeta | null;
+}>;
+
 export type CodexHostStatus = Readonly<{
   available: boolean;
   ready: boolean;

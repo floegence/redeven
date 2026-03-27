@@ -16,6 +16,7 @@ This folder contains the **source code** for the agent-bundled Env App UI:
 - Git Browser helper shortcuts such as `Ask Flower`, `Terminal`, and `Files` are intentionally styled as elevated orb actions inside a glass dock so they read as optional cross-surface capabilities rather than primary Git mutations.
 - Terminal handoffs are attach-activated: opening a session only creates the logical terminal record, while the mounted terminal view performs the first attach with measured dimensions and then sends one explicit post-attach resize confirmation once layout has settled.
 - Terminal size reclaim is focus-driven after attach: when the same session is shown in different surfaces, only the focused surface is allowed to emit remote resize updates, and restoring focus re-fits plus re-emits the current viewport so the active surface can reclaim remote PTY ownership.
+- The Debug Console is a shell-level floating surface mounted in `EnvAppShell` instead of individual pages so it stays visible above page-local loading overlays and can keep streaming diagnostics while the settings page is busy.
 
 Notes:
 

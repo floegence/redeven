@@ -40,10 +40,22 @@ type Config struct {
 	// LogLevel is "debug|info|warn|error".
 	LogLevel string `json:"log_level,omitempty"`
 
+	// DebugConsole controls the operator-focused in-app diagnostics console.
+	DebugConsole *DebugConsoleConfig `json:"debug_console,omitempty"`
+
 	// CodeServerPortMin/Max configures the dynamic port range used for code-server processes.
 	// If unset/invalid, the agent uses a safe default range.
 	CodeServerPortMin int `json:"code_server_port_min,omitempty"`
 	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
+}
+
+type DebugConsoleConfig struct {
+	Enabled          bool `json:"enabled,omitempty"`
+	CollectUIMetrics bool `json:"collect_ui_metrics,omitempty"`
+}
+
+func (c *Config) DebugConsoleEnabled() bool {
+	return c != nil && c.DebugConsole != nil && c.DebugConsole.Enabled
 }
 
 // ValidateLocalMinimal validates config fields required to start the agent in local-only mode.
