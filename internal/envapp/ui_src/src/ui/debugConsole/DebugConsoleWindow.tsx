@@ -553,6 +553,9 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                     <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => void exportBundle()} disabled={props.controller.exporting()}>
                       {props.controller.exporting() ? 'Exporting...' : 'Export'}
                     </Button>
+                    <Button size="sm" variant="destructive" class="cursor-pointer text-[10px]" onClick={() => void props.controller.exitConsole()} disabled={props.controller.exiting()}>
+                      {props.controller.exiting() ? 'Exiting...' : 'Exit Debug Mode'}
+                    </Button>
                     <Button size="sm" variant="ghost" class="cursor-pointer text-[10px]" onClick={props.controller.minimize}>
                       Minimize
                     </Button>

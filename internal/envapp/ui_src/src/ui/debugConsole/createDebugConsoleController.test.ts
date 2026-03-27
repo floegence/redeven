@@ -358,6 +358,78 @@ describe('createDebugConsoleController', () => {
     dispose();
   });
 
+  it('can exit debug console mode from the floating console actions', async () => {
+    const [settingsKey] = createSignal<number | null>(1);
+    const [protocolStatus] = createSignal('connected');
+    const trackerClear = vi.fn();
+    const saveSettings = vi.fn(async () => ({ settings: buildSettings(false, true) }));
+
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        settingsKey,
+        protocolStatus,
+        fetchSettings: vi.fn(async () => buildSettings(true, true)),
+        saveSettings,
+        fetchSnapshot: vi.fn(async () => ({
+          enabled: true,
+          state_dir: '/tmp/redeven',
+          recent_events: [
+            {
+              created_at: '2026-03-27T10:00:01Z',
+              source: 'agent',
+              scope: 'gateway_api',
+              kind: 'request',
+              method: 'GET',
+              path: '/_redeven_proxy/api/settings',
+            },
+          ],
+          slow_summary: [],
+          stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 0 },
+        })),
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
+        createPerformanceTracker: () => ({
+          snapshot: () => ({
+            collecting: true,
+            fps: { current: 60, average: 58, low: 48, samples: 3 },
+            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
+            layout_shift: { count: 0, total_score: 0, max_score: 0 },
+            paints: {},
+            navigation: {},
+            recent_events: [],
+            supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false },
+          }),
+          clear: trackerClear,
+        }),
+      });
+      return disposeRoot;
+    });
+
+    await tick();
+    await tick();
+
+    expect(controller.enabled()).toBe(true);
+    expect(controller.serverEvents()).toHaveLength(1);
+
+    await controller.exitConsole();
+
+    expect(saveSettings).toHaveBeenCalledWith({
+      debug_console: {
+        enabled: false,
+        collect_ui_metrics: true,
+      },
+    });
+    expect(controller.enabled()).toBe(false);
+    expect(controller.open()).toBe(false);
+    expect(controller.serverEvents()).toHaveLength(0);
+    expect(trackerClear).toHaveBeenCalled();
+    expect(controller.exiting()).toBe(false);
+
+    dispose();
+  });
+
   it('clears runtime data when the console is disabled', async () => {
     const [settingsKey, setSettingsKey] = createSignal<number | null>(1);
     const [protocolStatus] = createSignal('connected');
