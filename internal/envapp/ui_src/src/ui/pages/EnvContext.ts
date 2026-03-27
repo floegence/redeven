@@ -10,6 +10,7 @@ export type EnvSettingsSection =
   | 'agent'
   | 'runtime'
   | 'logging'
+  | 'debug_console'
   | 'codespaces'
   | 'permission_policy'
   | 'skills'
@@ -45,6 +46,8 @@ export type EnvContextValue = {
   settingsSeq: () => number;
   bumpSettingsSeq: () => void;
   openSettings: (section?: EnvSettingsSection) => void;
+  debugConsoleEnabled: () => boolean;
+  setDebugConsoleEnabled: (enabled: boolean) => void;
   openDebugConsole: () => void;
   settingsFocusSeq: () => number;
   settingsFocusSection: () => EnvSettingsSection | null;

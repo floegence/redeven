@@ -1,6 +1,5 @@
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 
-import type { AgentSettingsResponse, DebugConsoleSettings, SettingsUpdateResponse } from '../pages/settings/types';
 import {
   connectDiagnosticsStream,
   diagnosticsEventKey,
@@ -16,10 +15,10 @@ import {
   setDebugConsoleCaptureEnabled,
   subscribeDebugConsoleClientEvents,
 } from '../services/debugConsoleCapture';
-import { fetchGatewayJSON } from '../services/gatewayApi';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { createUIPerformanceTracker, type UIPerformanceSnapshot } from './createUIPerformanceTracker';
 
+const DEBUG_CONSOLE_VISIBLE_STORAGE_KEY = 'redeven:debug-console:visible';
 const DEBUG_CONSOLE_MINIMIZED_STORAGE_KEY = 'redeven:debug-console:minimized';
 const MAX_SERVER_EVENTS = 320;
 const STREAM_RETRY_DELAY_MS = 1500;
@@ -40,13 +39,17 @@ export type DebugConsoleTrace = Readonly<{
   events: DiagnosticsEvent[];
 }>;
 
+export type DebugConsoleUIState = Readonly<{
+  visible: boolean;
+  minimized: boolean;
+}>;
+
 export type DebugConsoleExportBundle = Readonly<{
   exported_at: string;
-  settings: DebugConsoleSettings;
+  ui_state: DebugConsoleUIState;
   runtime: Readonly<{
-    configured_enabled: boolean;
-    runtime_enabled: boolean;
-    collect_ui_metrics: boolean;
+    diagnostics_enabled: boolean;
+    ui_metrics_enabled: boolean;
     stream_connected: boolean;
     stream_error?: string;
     state_dir?: string;
@@ -63,10 +66,7 @@ type UIPerformanceTrackerHandle = Readonly<{
 }>;
 
 type CreateDebugConsoleControllerArgs = Readonly<{
-  settingsKey: Accessor<number | null>;
   protocolStatus: Accessor<string>;
-  fetchSettings?: () => Promise<AgentSettingsResponse>;
-  saveSettings?: (body: { debug_console: DebugConsoleSettings }) => Promise<AgentSettingsResponse | SettingsUpdateResponse>;
   fetchSnapshot?: (limit?: number) => Promise<Awaited<ReturnType<typeof getDiagnostics>>>;
   exportSnapshot?: (limit?: number) => Promise<DiagnosticsExportView>;
   connectStream?: typeof connectDiagnosticsStream;
@@ -89,26 +89,8 @@ function readStoredMinimized(): boolean {
   return compact(readUIStorageItem(DEBUG_CONSOLE_MINIMIZED_STORAGE_KEY)).toLowerCase() === 'true';
 }
 
-function normalizeDebugConsoleSettings(raw: unknown): DebugConsoleSettings {
-  const candidate = (raw ?? {}) as Partial<DebugConsoleSettings>;
-  return {
-    enabled: candidate.enabled === true,
-    collect_ui_metrics: candidate.collect_ui_metrics === true,
-  };
-}
-
-function normalizeSettingsSaveResponse(raw: unknown): AgentSettingsResponse | null {
-  if (!raw || typeof raw !== 'object') {
-    return null;
-  }
-  const candidate = raw as Partial<SettingsUpdateResponse & AgentSettingsResponse>;
-  if (candidate.settings && typeof candidate.settings === 'object') {
-    return candidate.settings as AgentSettingsResponse;
-  }
-  if (candidate.debug_console && typeof candidate.debug_console === 'object') {
-    return candidate as AgentSettingsResponse;
-  }
-  return null;
+function readStoredVisible(): boolean {
+  return compact(readUIStorageItem(DEBUG_CONSOLE_VISIBLE_STORAGE_KEY)).toLowerCase() === 'true';
 }
 
 function sortEventsNewestFirst(events: readonly DiagnosticsEvent[]): DiagnosticsEvent[] {
@@ -310,11 +292,6 @@ function waitBeforeRetry(signal: AbortSignal): Promise<void> {
 }
 
 export function createDebugConsoleController(args: CreateDebugConsoleControllerArgs) {
-  const fetchSettings = args.fetchSettings ?? (() => fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' }));
-  const saveSettings = args.saveSettings ?? ((body: { debug_console: DebugConsoleSettings }) => fetchGatewayJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  }));
   const fetchSnapshot = args.fetchSnapshot ?? getDiagnostics;
   const exportSnapshot = args.exportSnapshot ?? exportDiagnostics;
   const connectStream = args.connectStream ?? connectDiagnosticsStream;
@@ -323,9 +300,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const setClientCaptureEnabled = args.setClientCaptureEnabled ?? setDebugConsoleCaptureEnabled;
   const subscribeClientEvents = args.subscribeClientEvents ?? subscribeDebugConsoleClientEvents;
 
-  const [settingsLoaded, setSettingsLoaded] = createSignal(false);
-  const [settingsError, setSettingsError] = createSignal<string | null>(null);
-  const [configured, setConfigured] = createSignal<DebugConsoleSettings>({ enabled: false, collect_ui_metrics: false });
+  const [visible, setVisible] = createSignal(readStoredVisible());
   const [loading, setLoading] = createSignal(false);
   const [refreshing, setRefreshing] = createSignal(false);
   const [runtimeEnabled, setRuntimeEnabled] = createSignal(false);
@@ -337,24 +312,23 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const [streamError, setStreamError] = createSignal<string | null>(null);
   const [exporting, setExporting] = createSignal(false);
   const [lastExportAt, setLastExportAt] = createSignal('');
-  const [exiting, setExiting] = createSignal(false);
   const [minimized, setMinimized] = createSignal(readStoredMinimized());
   const [captureCutoffMs, setCaptureCutoffMs] = createSignal(0);
   const [captureCutoffAt, setCaptureCutoffAt] = createSignal('');
 
-  const enabled = createMemo(() => configured().enabled);
-  const collectUIMetrics = createMemo(() => configured().collect_ui_metrics);
+  const enabled = createMemo(() => visible());
+  const collectUIMetrics = createMemo(() => enabled());
   const uiMetricsCollecting = createMemo(() => enabled());
   const open = createMemo(() => enabled() && !minimized());
   const stats = createMemo(() => buildStats(serverEvents()));
   const slowSummary = createMemo(() => buildSlowSummary(serverEvents()));
   const traces = createMemo(() => buildTraceGroups(serverEvents()));
-  const lastEventAt = createMemo(() => compact(serverEvents()[0]?.created_at));
 
   const performanceTracker = performanceTrackerFactory({
     enabled: () => uiMetricsCollecting(),
     detailed: () => uiMetricsCollecting() && collectUIMetrics(),
   });
+  const lastEventAt = createMemo(() => compact(serverEvents()[0]?.created_at) || compact(performanceTracker.snapshot().recent_events[0]?.created_at));
   let refreshGeneration = 0;
 
   installClientCapture();
@@ -382,13 +356,20 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   });
 
   createEffect(() => {
+    writeUIStorageItem(DEBUG_CONSOLE_VISIBLE_STORAGE_KEY, enabled() ? 'true' : 'false');
+  });
+
+  createEffect(() => {
     writeUIStorageItem(DEBUG_CONSOLE_MINIMIZED_STORAGE_KEY, minimized() ? 'true' : 'false');
   });
 
+  const show = () => {
+    setVisible(true);
+    setMinimized(false);
+  };
+
   const restore = () => {
-    if (!enabled()) {
-      return;
-    }
+    setVisible(true);
     setMinimized(false);
   };
 
@@ -399,11 +380,8 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     setMinimized(true);
   };
 
-  const clearRuntimeState = (options?: { preserveSettings?: boolean }) => {
+  const resetRuntimeState = () => {
     refreshGeneration += 1;
-    if (!options?.preserveSettings) {
-      setConfigured({ enabled: false, collect_ui_metrics: false });
-    }
     setRuntimeEnabled(false);
     setStateDir('');
     setLastSnapshotAt('');
@@ -416,61 +394,18 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     performanceTracker.clear();
   };
 
-  createEffect(() => {
-    const key = args.settingsKey();
-    const connected = compact(args.protocolStatus()) === 'connected';
-    if (key == null) {
-      setSettingsLoaded(false);
-      setSettingsError(null);
-      clearRuntimeState();
-      return;
-    }
-    if (!connected) {
-      setLoading(false);
-      return;
-    }
-
-    let disposed = false;
-    setLoading(true);
-    void fetchSettings()
-      .then((settings) => {
-        if (disposed) {
-          return;
-        }
-        const next = normalizeDebugConsoleSettings(settings?.debug_console);
-        const wasEnabled = enabled();
-        setConfigured(next);
-        setSettingsLoaded(true);
-        setSettingsError(null);
-        if (next.enabled && !wasEnabled) {
-          setMinimized(false);
-        }
-      })
-      .catch((error) => {
-        if (disposed) {
-          return;
-        }
-        setSettingsLoaded(true);
-        setSettingsError(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        if (!disposed) {
-          setLoading(false);
-        }
-      });
-
-    onCleanup(() => {
-      disposed = true;
-    });
-  });
-
-  const refresh = async (options?: { silent?: boolean }): Promise<void> => {
+  const refresh = async (options?: { silent?: boolean; initial?: boolean }): Promise<void> => {
     if (!enabled()) {
-      clearRuntimeState({ preserveSettings: true });
+      return;
+    }
+    if (compact(args.protocolStatus()) !== 'connected') {
       return;
     }
     const generation = ++refreshGeneration;
-    if (options?.silent) {
+    if (options?.initial) {
+      setLoading(true);
+      setSnapshotError(null);
+    } else if (options?.silent) {
       setSnapshotError(null);
     } else {
       setRefreshing(true);
@@ -490,25 +425,24 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     } catch (error) {
       setSnapshotError(error instanceof Error ? error.message : String(error));
     } finally {
-      if (!options?.silent) {
+      if (options?.initial) {
+        setLoading(false);
+      } else if (!options?.silent) {
         setRefreshing(false);
       }
     }
   };
 
   createEffect(() => {
-    const key = args.settingsKey();
-    const active = key != null && enabled() && compact(args.protocolStatus()) === 'connected';
+    const active = enabled() && compact(args.protocolStatus()) === 'connected';
     if (!active) {
+      setLoading(false);
       setStreamConnected(false);
       setStreamError(null);
-      if (!enabled()) {
-        clearRuntimeState({ preserveSettings: true });
-      }
       return;
     }
 
-    void refresh({ silent: true });
+    void refresh({ initial: true });
 
     const controller = new AbortController();
     let disposed = false;
@@ -557,8 +491,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   });
 
   createEffect(() => {
-    const key = args.settingsKey();
-    const active = key != null && enabled() && compact(args.protocolStatus()) === 'connected';
+    const active = enabled() && compact(args.protocolStatus()) === 'connected';
     if (!active) {
       return;
     }
@@ -600,33 +533,17 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     await refresh({ silent: true });
   };
 
-  const exitConsole = async (): Promise<void> => {
+  const closeConsole = async (): Promise<void> => {
     if (!enabled()) {
       return;
     }
-    setExiting(true);
-    setSettingsError(null);
-    try {
-      const response = await saveSettings({
-        debug_console: {
-          enabled: false,
-          collect_ui_metrics: configured().collect_ui_metrics,
-        },
-      });
-      const savedSettings = normalizeSettingsSaveResponse(response);
-      const nextConfigured = normalizeDebugConsoleSettings(savedSettings?.debug_console ?? {
-        enabled: false,
-        collect_ui_metrics: configured().collect_ui_metrics,
-      });
-      setConfigured(nextConfigured);
-      setSettingsLoaded(true);
-      setMinimized(false);
-      clearRuntimeState({ preserveSettings: true });
-    } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setExiting(false);
-    }
+    setVisible(false);
+    setMinimized(false);
+    setLoading(false);
+    setRefreshing(false);
+    setStreamConnected(false);
+    setStreamError(null);
+    performanceTracker.clear();
   };
 
   const exportBundle = async (): Promise<DebugConsoleExportBundle> => {
@@ -653,11 +570,13 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
       setLastExportAt(filteredDiagnostics.exported_at);
       return {
         exported_at: filteredDiagnostics.exported_at,
-        settings: configured(),
+        ui_state: {
+          visible: enabled(),
+          minimized: minimized(),
+        },
         runtime: {
-          configured_enabled: enabled(),
-          runtime_enabled: runtimeEnabled(),
-          collect_ui_metrics: configured().collect_ui_metrics,
+          diagnostics_enabled: runtimeEnabled(),
+          ui_metrics_enabled: collectUIMetrics(),
           stream_connected: streamConnected(),
           stream_error: compact(streamError()) || undefined,
           state_dir: compact(filteredDiagnostics.state_dir) || compact(stateDir()) || undefined,
@@ -673,14 +592,12 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   };
 
   return {
-    settingsLoaded,
-    settingsError,
     enabled,
     collectUIMetrics,
     uiMetricsCollecting,
-    configured,
     open,
     minimized,
+    show,
     restore,
     minimize,
     loading,
@@ -697,13 +614,13 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     traces,
     lastEventAt,
     performanceSnapshot: performanceTracker.snapshot,
-    exiting,
     exporting,
     lastExportAt,
     captureCutoffAt,
     refresh,
     clear,
-    exitConsole,
+    closeConsole,
+    resetRuntimeState,
     exportBundle,
   };
 }

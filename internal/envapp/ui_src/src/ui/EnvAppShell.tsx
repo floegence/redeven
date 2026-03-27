@@ -443,7 +443,6 @@ export function EnvAppShell() {
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
   const debugConsole = createDebugConsoleController({
-    settingsKey: () => settingsSeq(),
     protocolStatus: () => protocol.status(),
   });
 
@@ -464,7 +463,15 @@ export function EnvAppShell() {
   };
 
   const openDebugConsole = () => {
-    debugConsole.restore();
+    debugConsole.show();
+  };
+
+  const setDebugConsoleEnabled = (enabled: boolean) => {
+    if (enabled) {
+      debugConsole.show();
+      return;
+    }
+    void debugConsole.closeConsole();
   };
 
   const injectAskFlowerIntent = (intent: AskFlowerIntent) => {
@@ -2148,6 +2155,8 @@ export function EnvAppShell() {
         settingsSeq,
         bumpSettingsSeq,
         openSettings,
+        debugConsoleEnabled: debugConsole.enabled,
+        setDebugConsoleEnabled,
         openDebugConsole,
         settingsFocusSeq,
         settingsFocusSection,

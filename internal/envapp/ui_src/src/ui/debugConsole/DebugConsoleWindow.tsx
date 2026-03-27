@@ -568,7 +568,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
   const selectedTrace = createMemo(() => filteredTraces().find((trace) => trace.key === compact(selectedTraceKey())) ?? null);
 
   const combinedError = createMemo(() => {
-    return [props.controller.settingsError(), props.controller.snapshotError(), props.controller.streamError()]
+    return [props.controller.snapshotError(), props.controller.streamError()]
       .map((value) => compact(value))
       .filter(Boolean)
       .join(' · ');
@@ -659,7 +659,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
               <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-[9px] text-muted-foreground">
                 <span class="inline-flex items-center gap-1.5">
                   <StatusDot tone={props.controller.runtimeEnabled() ? 'success' : 'warning'} />
-                  {props.controller.runtimeEnabled() ? 'Runtime collector active' : 'Runtime collector inactive'}
+                  {props.controller.runtimeEnabled() ? 'Diagnostics active' : 'Diagnostics unavailable'}
                 </span>
                 <span class="inline-flex items-center gap-1.5">
                   <StatusDot tone={props.controller.streamConnected() ? 'success' : 'default'} />
@@ -710,8 +710,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                     <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => void exportBundle()} disabled={props.controller.exporting()}>
                       {props.controller.exporting() ? 'Exporting...' : 'Export'}
                     </Button>
-                    <Button size="sm" variant="destructive" class="cursor-pointer text-[10px]" onClick={() => void props.controller.exitConsole()} disabled={props.controller.exiting()}>
-                      {props.controller.exiting() ? 'Exiting...' : 'Exit Debug Mode'}
+                    <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => void props.controller.closeConsole()}>
+                      Close Console
                     </Button>
                     <Button size="sm" variant="ghost" class="cursor-pointer text-[10px]" onClick={props.controller.minimize}>
                       Minimize
@@ -757,7 +757,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
             </div>
 
             <main class="min-h-0 flex-1">
-                <Show when={!props.controller.loading()} fallback={<EmptyState title="Loading debug console" message="Fetching settings and the latest diagnostics snapshot." />}>
+                <Show when={!props.controller.loading()} fallback={<EmptyState title="Loading debug console" message="Fetching the latest diagnostics snapshot." />}>
                   <Show when={tab() === 'requests'}>
                     <div class="flex h-full min-h-0 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-1">
                       <section class="min-h-0 flex-1">
@@ -1139,11 +1139,11 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                         />
 
                         <div class="grid gap-4 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
-                          <SectionShell title="Collector state" description="Persisted settings, runtime enablement, and current storage location.">
+                          <SectionShell title="Collector state" description="Frontend console visibility, diagnostics runtime, and current storage location.">
                             <DefinitionList
                               items={[
-                                { label: 'Configured', value: props.controller.enabled() ? 'Enabled' : 'Disabled' },
-                                { label: 'Runtime collector', value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive' },
+                                { label: 'Console visible', value: props.controller.enabled() ? 'Yes' : 'No' },
+                                { label: 'Diagnostics runtime', value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive' },
                                 { label: 'Stream', value: props.controller.streamConnected() ? 'Connected' : 'Disconnected' },
                                 { label: 'UI probes', value: props.controller.uiMetricsCollecting() ? 'Active' : 'Inactive' },
                                 { label: 'Advanced UI metrics', value: props.controller.collectUIMetrics() ? 'Enabled' : 'Optional' },
@@ -1218,12 +1218,12 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                   <div class="mt-1 text-[9px] leading-5 text-muted-foreground">Snapshot summary, agent event list, desktop event list, and runtime state directory.</div>
                                 </div>
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
-                                  <div class="font-medium text-foreground">Current settings</div>
+                                  <div class="font-medium text-foreground">Current UI state</div>
                                   <div class="mt-1 text-[9px] leading-5 text-muted-foreground">
-                                    <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">debug_console.enabled</code>
+                                    <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">visible</code>
                                     {' and '}
-                                    <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">collect_ui_metrics</code>
-                                    {' at export time.'}
+                                    <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">minimized</code>
+                                    {' flags from the current frontend console state. UI metrics are collected automatically while the console is visible.'}
                                   </div>
                                 </div>
                                 <div class="px-3 py-2.5 text-xs">
@@ -1236,7 +1236,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
 
                           <SectionShell title="Bundle preview" description="High-level JSON preview of the current export payload.">
                             <MonoBlock value={prettyJSON({
-                              runtime_enabled: props.controller.runtimeEnabled(),
+                              console_visible: props.controller.enabled(),
+                              diagnostics_enabled: props.controller.runtimeEnabled(),
                               stream_connected: props.controller.streamConnected(),
                               ui_metrics_enabled: props.controller.collectUIMetrics(),
                               stats: props.controller.stats(),

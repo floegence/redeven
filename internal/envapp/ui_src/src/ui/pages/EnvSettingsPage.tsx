@@ -76,7 +76,6 @@ import type {
   AIProviderType,
   AIPreservedUIFields,
   CodexHostStatus,
-  DebugConsoleSettings,
   PermissionPolicy,
   PermissionRow,
   PermissionSet,
@@ -115,6 +114,7 @@ const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   { id: 'agent', label: 'Agent', icon: Zap },
   { id: 'runtime', label: 'Runtime', icon: Terminal },
   { id: 'logging', label: 'Logging', icon: Database },
+  { id: 'debug_console', label: 'Debug Console', icon: RefreshIcon },
   { id: 'codespaces', label: 'Codespaces', icon: Code },
   { id: 'permission_policy', label: 'Permission Policy', icon: Shield },
   { id: 'skills', label: 'Skills', icon: Layers },
@@ -161,14 +161,6 @@ function normalizeSettingsUpdateResponse(raw: unknown): { settings: AgentSetting
   const settings = isSettingsResponseLike(v.settings) ? (v.settings as AgentSettingsResponse) : null;
   const aiUpdate = v.ai_update && typeof v.ai_update === 'object' ? (v.ai_update as SettingsAIUpdateMeta) : null;
   return { settings, aiUpdate };
-}
-
-function normalizeDebugConsoleSettings(raw: unknown): DebugConsoleSettings {
-  const candidate = raw && typeof raw === 'object' ? (raw as Partial<DebugConsoleSettings>) : {};
-  return {
-    enabled: candidate.enabled === true,
-    collect_ui_metrics: candidate.collect_ui_metrics === true,
-  };
 }
 
 function newProviderID(): string {
@@ -331,6 +323,7 @@ export function EnvSettingsPage() {
   );
 
   const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
+  const debugConsoleEnabled = createMemo(() => env.debugConsoleEnabled());
 
   // Settings quick-jump directory (sidebar/select).
   const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('config');
@@ -487,7 +480,6 @@ export function EnvSettingsPage() {
   };
   const [policyDirty, setPolicyDirty] = createSignal(false);
   const [aiDirty, setAiDirty] = createSignal(false);
-  const [debugConsoleDirty, setDebugConsoleDirty] = createSignal(false);
 
   // Runtime fields
   const [agentHomeDir, setAgentHomeDir] = createSignal('');
@@ -496,8 +488,6 @@ export function EnvSettingsPage() {
   // Logging fields
   const [logFormat, setLogFormat] = createSignal('');
   const [logLevel, setLogLevel] = createSignal('');
-  const [debugConsoleEnabled, setDebugConsoleEnabled] = createSignal(false);
-  const [debugConsoleCollectUIMetrics, setDebugConsoleCollectUIMetrics] = createSignal(false);
 
   // Codespaces fields
   const [useDefaultCodePorts, setUseDefaultCodePorts] = createSignal(true);
@@ -596,13 +586,11 @@ export function EnvSettingsPage() {
   const [codespacesSaving, setCodespacesSaving] = createSignal(false);
   const [policySaving, setPolicySaving] = createSignal(false);
   const [aiSaving, setAiSaving] = createSignal(false);
-  const [debugConsoleSaving, setDebugConsoleSaving] = createSignal(false);
   const [runtimeSavedAt, setRuntimeSavedAt] = createSignal<number | null>(null);
   const [loggingSavedAt, setLoggingSavedAt] = createSignal<number | null>(null);
   const [codespacesSavedAt, setCodespacesSavedAt] = createSignal<number | null>(null);
   const [policySavedAt, setPolicySavedAt] = createSignal<number | null>(null);
   const [aiSavedAt, setAiSavedAt] = createSignal<number | null>(null);
-  const [debugConsoleSavedAt, setDebugConsoleSavedAt] = createSignal<number | null>(null);
   const [disableAIOpen, setDisableAIOpen] = createSignal(false);
   const [disableAISaving, setDisableAISaving] = createSignal(false);
 
@@ -612,7 +600,6 @@ export function EnvSettingsPage() {
   const [codespacesError, setCodespacesError] = createSignal<string | null>(null);
   const [policyError, setPolicyError] = createSignal<string | null>(null);
   const [aiError, setAiError] = createSignal<string | null>(null);
-  const [debugConsoleError, setDebugConsoleError] = createSignal<string | null>(null);
 
   const aiEnabled = createMemo(() => !!settings()?.ai);
   const codexStatusError = createMemo(() => {
@@ -679,12 +666,6 @@ export function EnvSettingsPage() {
 
   const buildRuntimePatch = () => ({ agent_home_dir: String(agentHomeDir() ?? ''), shell: String(shell() ?? '') });
   const buildLoggingPatch = () => ({ log_format: String(logFormat() ?? ''), log_level: String(logLevel() ?? '') });
-  const buildDebugConsolePatch = (): { debug_console: DebugConsoleSettings } => ({
-    debug_console: {
-      enabled: !!debugConsoleEnabled(),
-      collect_ui_metrics: !!debugConsoleCollectUIMetrics(),
-    },
-  });
   const buildCodespacesPatch = () => {
     if (useDefaultCodePorts()) return { code_server_port_min: 0, code_server_port_max: 0 };
     const min = codePortMin();
@@ -1619,12 +1600,6 @@ export function EnvSettingsPage() {
       setLoggingJSON(JSON.stringify({ log_format: String(l?.log_format ?? ''), log_level: String(l?.log_level ?? '') }, null, 2));
     }
 
-    if (!debugConsoleDirty()) {
-      const debugConsole = normalizeDebugConsoleSettings(s.debug_console);
-      setDebugConsoleEnabled(debugConsole.enabled);
-      setDebugConsoleCollectUIMetrics(debugConsole.collect_ui_metrics);
-    }
-
     if (!codespacesDirty()) {
       const c = s.codespaces;
       const min = Number(c?.code_server_port_min ?? 0);
@@ -1924,11 +1899,6 @@ export function EnvSettingsPage() {
     return { body, signature: JSON.stringify(body) };
   };
 
-  const buildDebugConsoleDraft = () => {
-    const body = buildDebugConsolePatch();
-    return { body, signature: JSON.stringify(body) };
-  };
-
   const buildCodespacesDraft = () => {
     let body: any = null;
     if (codespacesView() === 'json') {
@@ -2059,38 +2029,6 @@ export function EnvSettingsPage() {
       notifyAutoSaveFailed('Logging settings', e);
     } finally {
       setLoggingSaving(false);
-    }
-  };
-
-  const saveDebugConsole = async () => {
-    let draft: { body: { debug_console: DebugConsoleSettings }; signature: string };
-    try {
-      draft = buildDebugConsoleDraft();
-      setDebugConsoleError(null);
-    } catch (e) {
-      setDebugConsoleError(formatUnknownError(e) || 'Save failed.');
-      return;
-    }
-    setDebugConsoleSaving(true);
-    try {
-      await saveSettings(draft.body);
-      const now = Date.now();
-      setDebugConsoleSavedAt(now);
-      setDebugConsoleError(null);
-      notifyAutoSaveSuccess('Debug console settings', now);
-      let unchanged = false;
-      try {
-        unchanged = buildDebugConsoleDraft().signature === draft.signature;
-      } catch {
-        unchanged = false;
-      }
-      setDebugConsoleDirty(!unchanged);
-    } catch (e) {
-      const msg = formatUnknownError(e) || 'Save failed.';
-      setDebugConsoleError(msg);
-      notifyAutoSaveFailed('Debug console settings', e);
-    } finally {
-      setDebugConsoleSaving(false);
     }
   };
 
@@ -2237,7 +2175,6 @@ export function EnvSettingsPage() {
 
   let runtimeAutoSaveTimer: number | null = null;
   let loggingAutoSaveTimer: number | null = null;
-  let debugConsoleAutoSaveTimer: number | null = null;
   let codespacesAutoSaveTimer: number | null = null;
   let policyAutoSaveTimer: number | null = null;
   let aiAutoSaveTimer: number | null = null;
@@ -2290,29 +2227,6 @@ export function EnvSettingsPage() {
       loggingAutoSaveTimer = null;
       if (!loggingDirty() || loggingSaving() || !canInteract()) return;
       void saveLogging();
-    }, AUTO_SAVE_DELAY_MS);
-  });
-
-  createEffect(() => {
-    const dirty = debugConsoleDirty();
-    const canAutoSave = canInteract() && !debugConsoleSaving();
-    if (!dirty || !canAutoSave) {
-      debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
-      return;
-    }
-    try {
-      buildDebugConsoleDraft();
-      setDebugConsoleError(null);
-    } catch (e) {
-      debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
-      setDebugConsoleError(formatUnknownError(e) || 'Save failed.');
-      return;
-    }
-    debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
-    debugConsoleAutoSaveTimer = window.setTimeout(() => {
-      debugConsoleAutoSaveTimer = null;
-      if (!debugConsoleDirty() || debugConsoleSaving() || !canInteract()) return;
-      void saveDebugConsole();
     }, AUTO_SAVE_DELAY_MS);
   });
 
@@ -2388,7 +2302,6 @@ export function EnvSettingsPage() {
   onCleanup(() => {
     runtimeAutoSaveTimer = clearAutoSaveTimer(runtimeAutoSaveTimer);
     loggingAutoSaveTimer = clearAutoSaveTimer(loggingAutoSaveTimer);
-    debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
     codespacesAutoSaveTimer = clearAutoSaveTimer(codespacesAutoSaveTimer);
     policyAutoSaveTimer = clearAutoSaveTimer(policyAutoSaveTimer);
     aiAutoSaveTimer = clearAutoSaveTimer(aiAutoSaveTimer);
@@ -2794,7 +2707,7 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={Database}
               title="Logging"
-              description="Log format, verbosity, and the live debug-console toggle."
+              description="Log format and verbosity for backend agent logs."
               badge="Log changes require restart"
               badgeVariant="warning"
               error={loggingError()}
@@ -2875,31 +2788,28 @@ export function EnvSettingsPage() {
                             class="w-full"
                           />
                         </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">Controls agent log verbosity only. The floating debug console is configured separately below.</SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Controls agent log verbosity only. Debug Console is a separate frontend diagnostics surface.</SettingsTableCell>
                       </SettingsTableRow>
                     </SettingsTableBody>
                   </SettingsTable>
-
-                  <EnvDebugConsoleSettingsPanel
-                    enabled={debugConsoleEnabled()}
-                    collectUIMetrics={debugConsoleCollectUIMetrics()}
-                    dirty={debugConsoleDirty()}
-                    saving={debugConsoleSaving()}
-                    error={debugConsoleError()}
-                    savedAt={debugConsoleSavedAt()}
-                    canInteract={canInteract()}
-                    onEnabledChange={(value) => {
-                      setDebugConsoleEnabled(value);
-                      setDebugConsoleDirty(true);
-                    }}
-                    onCollectUIMetricsChange={(value) => {
-                      setDebugConsoleCollectUIMetrics(value);
-                      setDebugConsoleDirty(true);
-                    }}
-                    onOpenConsole={env.openDebugConsole}
-                  />
                 </div>
               </Show>
+            </SettingsCard>
+          </div>
+
+          <div id={settingsSectionElementID('debug_console')} class="scroll-mt-6">
+            <SettingsCard
+              icon={RefreshIcon}
+              title="Debug Console"
+              description="Frontend-only diagnostics controls for the floating request and UI-performance console."
+              actions={<SettingsPill tone="success">Local UI state</SettingsPill>}
+            >
+              <EnvDebugConsoleSettingsPanel
+                enabled={debugConsoleEnabled()}
+                canInteract={canInteract()}
+                onEnabledChange={(value) => env.setDebugConsoleEnabled(value)}
+                onOpenConsole={env.openDebugConsole}
+              />
             </SettingsCard>
           </div>
 

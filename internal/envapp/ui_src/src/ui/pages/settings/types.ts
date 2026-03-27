@@ -44,11 +44,6 @@ export type AIConfig = Readonly<{
 
 export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
 
-export type DebugConsoleSettings = Readonly<{
-  enabled: boolean;
-  collect_ui_metrics: boolean;
-}>;
-
 export type AgentSettingsResponse = Readonly<{
   config_path: string;
   connection: Readonly<{
@@ -65,7 +60,6 @@ export type AgentSettingsResponse = Readonly<{
   }>;
   runtime: Readonly<{ agent_home_dir: string; shell: string }>;
   logging: Readonly<{ log_format: string; log_level: string }>;
-  debug_console: DebugConsoleSettings;
   codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
   permission_policy: PermissionPolicy | null;
   ai: AIConfig | null;

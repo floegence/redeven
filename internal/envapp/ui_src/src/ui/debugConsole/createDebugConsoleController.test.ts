@@ -4,45 +4,49 @@ import { createRoot, createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDebugConsoleController } from './createDebugConsoleController';
+import type { DiagnosticsEvent } from '../services/diagnosticsApi';
+
+const VISIBLE_KEY = 'redeven:debug-console:visible';
+const MINIMIZED_KEY = 'redeven:debug-console:minimized';
 
 function tick(): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, 0));
 }
 
-function buildSettings(enabled: boolean, collectUIMetrics = false) {
+function installStorageBridge() {
+  const store = new Map<string, string>();
+  window.redevenDesktopStateStorage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => {
+      store.set(String(key), String(value));
+    },
+    removeItem: (key) => {
+      store.delete(String(key));
+    },
+    keys: () => Array.from(store.keys()),
+  };
+  return store;
+}
+
+function setConsoleVisible(visible: boolean, minimized = false) {
+  window.redevenDesktopStateStorage?.setItem(VISIBLE_KEY, visible ? 'true' : 'false');
+  window.redevenDesktopStateStorage?.setItem(MINIMIZED_KEY, minimized ? 'true' : 'false');
+}
+
+function buildSnapshot(events: DiagnosticsEvent[], enabled = true) {
   return {
-    config_path: '/tmp/redeven/config.json',
-    connection: {
-      controlplane_base_url: 'https://example.invalid',
-      environment_id: 'env_123',
-      agent_instance_id: 'agent_123',
-      direct: {
-        ws_url: 'wss://example.invalid/ws',
-        channel_id: 'ch_123',
-        channel_init_expire_at_unix_s: 1,
-        default_suite: 1,
-        e2ee_psk_set: true,
-      },
+    enabled,
+    state_dir: '/tmp/redeven',
+    recent_events: events,
+    slow_summary: [],
+    stats: {
+      total_events: events.length,
+      agent_events: events.filter((event) => event.source === 'agent').length,
+      desktop_events: events.filter((event) => event.source === 'desktop' || event.source === 'browser').length,
+      slow_events: 0,
+      trace_count: new Set(events.map((event) => String(event.trace_id ?? '')).filter(Boolean)).size,
     },
-    runtime: {
-      agent_home_dir: '/workspace',
-      shell: '/bin/bash',
-    },
-    logging: {
-      log_format: 'json',
-      log_level: 'info',
-    },
-    debug_console: {
-      enabled,
-      collect_ui_metrics: collectUIMetrics,
-    },
-    codespaces: {
-      code_server_port_min: 20000,
-      code_server_port_max: 21000,
-    },
-    permission_policy: null,
-    ai: null,
-  } as const;
+  };
 }
 
 function buildPerformanceSnapshot(overrides: Record<string, unknown> = {}) {
@@ -80,12 +84,15 @@ function buildPerformanceSnapshot(overrides: Record<string, unknown> = {}) {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  delete window.redevenDesktopStateStorage;
   vi.useRealTimers();
 });
 
 describe('createDebugConsoleController', () => {
-  it('loads snapshot data and merges streamed events while enabled', async () => {
-    const [settingsKey] = createSignal<number | null>(1);
+  it('loads snapshot data and merges streamed events while visible', async () => {
+    installStorageBridge();
+    setConsoleVisible(true);
+
     const [protocolStatus] = createSignal('connected');
     const connectStream = vi.fn(async ({ signal, onEvent }) => {
       onEvent({
@@ -110,28 +117,20 @@ describe('createDebugConsoleController', () => {
     let controller!: ReturnType<typeof createDebugConsoleController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createDebugConsoleController({
-        settingsKey,
         protocolStatus,
-        fetchSettings: vi.fn(async () => buildSettings(true, true)),
-        fetchSnapshot: vi.fn(async () => ({
-          enabled: true,
-          state_dir: '/tmp/redeven',
-          recent_events: [
-            {
-              created_at: '2026-03-27T10:00:01Z',
-              source: 'agent',
-              scope: 'gateway_api',
-              kind: 'request',
-              trace_id: 'trace-1',
-              method: 'GET',
-              path: '/_redeven_proxy/api/settings',
-              status_code: 200,
-              duration_ms: 17,
-            },
-          ],
-          slow_summary: [],
-          stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 },
-        })),
+        fetchSnapshot: vi.fn(async () => buildSnapshot([
+          {
+            created_at: '2026-03-27T10:00:01Z',
+            source: 'agent',
+            scope: 'gateway_api',
+            kind: 'request',
+            trace_id: 'trace-1',
+            method: 'GET',
+            path: '/_redeven_proxy/api/settings',
+            status_code: 200,
+            duration_ms: 17,
+          },
+        ])),
         connectStream,
         createPerformanceTracker: () => ({
           snapshot: () => buildPerformanceSnapshot({
@@ -172,31 +171,32 @@ describe('createDebugConsoleController', () => {
     expect(connectStream).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps lightweight ui probes active even when advanced ui metrics stay optional', async () => {
-    const [settingsKey] = createSignal<number | null>(1);
-    const [protocolStatus] = createSignal('connected');
-    const connectStream = vi.fn(async ({ signal }) => {
-      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
-    });
+  it('stays hidden until the frontend shows the console', async () => {
+    installStorageBridge();
+    setConsoleVisible(false);
 
-    let trackerArgs!: Readonly<{
-      enabled: () => boolean;
-      detailed: () => boolean;
-    }>;
+    const [protocolStatus] = createSignal('connected');
+    const fetchSnapshot = vi.fn(async () => buildSnapshot([
+      {
+        created_at: '2026-03-27T10:00:01Z',
+        source: 'agent',
+        scope: 'gateway_api',
+        kind: 'request',
+        trace_id: 'trace-1',
+        method: 'GET',
+        path: '/_redeven_proxy/api/settings',
+      },
+    ]));
+
+    let trackerArgs!: Readonly<{ enabled: () => boolean; detailed: () => boolean }>;
     let controller!: ReturnType<typeof createDebugConsoleController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createDebugConsoleController({
-        settingsKey,
         protocolStatus,
-        fetchSettings: vi.fn(async () => buildSettings(true, false)),
-        fetchSnapshot: vi.fn(async () => ({
-          enabled: true,
-          state_dir: '/tmp/redeven',
-          recent_events: [],
-          slow_summary: [],
-          stats: { total_events: 0, agent_events: 0, desktop_events: 0, slow_events: 0, trace_count: 0 },
-        })),
-        connectStream,
+        fetchSnapshot,
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
         createPerformanceTracker: (args) => {
           trackerArgs = args;
           return {
@@ -211,88 +211,98 @@ describe('createDebugConsoleController', () => {
     });
 
     await tick();
+
+    expect(controller.enabled()).toBe(false);
+    expect(controller.collectUIMetrics()).toBe(false);
+    expect(controller.uiMetricsCollecting()).toBe(false);
+    expect(controller.open()).toBe(false);
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(trackerArgs.enabled()).toBe(false);
+    expect(trackerArgs.detailed()).toBe(false);
+
+    controller.show();
+    await tick();
     await tick();
 
     expect(controller.enabled()).toBe(true);
-    expect(controller.collectUIMetrics()).toBe(false);
+    expect(controller.collectUIMetrics()).toBe(true);
     expect(controller.uiMetricsCollecting()).toBe(true);
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
     expect(trackerArgs.enabled()).toBe(true);
-    expect(trackerArgs.detailed()).toBe(false);
+    expect(trackerArgs.detailed()).toBe(true);
 
     dispose();
-    expect(connectStream).toHaveBeenCalledTimes(1);
   });
 
   it('auto-refreshes snapshot data without requiring a manual refresh', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-27T10:00:00Z'));
+    installStorageBridge();
+    setConsoleVisible(true);
 
-    const [settingsKey] = createSignal<number | null>(1);
     const [protocolStatus] = createSignal('connected');
     const fetchSnapshot = vi
       .fn()
-      .mockResolvedValueOnce({
-        enabled: true,
-        state_dir: '/tmp/redeven',
-        recent_events: [
-          {
-            created_at: '2026-03-27T10:00:00Z',
-            source: 'agent',
-            scope: 'gateway_api',
-            kind: 'request',
-            trace_id: 'trace-1',
-            method: 'GET',
-            path: '/_redeven_proxy/api/settings',
-            status_code: 200,
-            duration_ms: 12,
-          },
-        ],
-        slow_summary: [],
-        stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 },
-      })
-      .mockResolvedValueOnce({
-        enabled: true,
-        state_dir: '/tmp/redeven',
-        recent_events: [
-          {
-            created_at: '2026-03-27T10:00:01Z',
-            source: 'desktop',
-            scope: 'desktop_http',
-            kind: 'completed',
-            trace_id: 'trace-2',
-            method: 'POST',
-            path: '/_redeven_proxy/api/chat/send',
-            status_code: 200,
-            duration_ms: 21,
-          },
-          {
-            created_at: '2026-03-27T10:00:00Z',
-            source: 'agent',
-            scope: 'gateway_api',
-            kind: 'request',
-            trace_id: 'trace-1',
-            method: 'GET',
-            path: '/_redeven_proxy/api/settings',
-            status_code: 200,
-            duration_ms: 12,
-          },
-        ],
-        slow_summary: [],
-        stats: { total_events: 2, agent_events: 1, desktop_events: 1, slow_events: 0, trace_count: 2 },
-      });
+      .mockResolvedValueOnce(buildSnapshot([
+        {
+          created_at: '2026-03-27T10:00:00Z',
+          source: 'agent',
+          scope: 'gateway_api',
+          kind: 'request',
+          trace_id: 'trace-1',
+          method: 'GET',
+          path: '/_redeven_proxy/api/settings',
+          status_code: 200,
+          duration_ms: 12,
+        },
+      ]))
+      .mockResolvedValueOnce(buildSnapshot([
+        {
+          created_at: '2026-03-27T10:00:01Z',
+          source: 'desktop',
+          scope: 'desktop_http',
+          kind: 'completed',
+          trace_id: 'trace-2',
+          method: 'POST',
+          path: '/_redeven_proxy/api/chat/send',
+          status_code: 200,
+          duration_ms: 21,
+        },
+        {
+          created_at: '2026-03-27T10:00:00Z',
+          source: 'agent',
+          scope: 'gateway_api',
+          kind: 'request',
+          trace_id: 'trace-1',
+          method: 'GET',
+          path: '/_redeven_proxy/api/settings',
+          status_code: 200,
+          duration_ms: 12,
+        },
+      ]));
 
     let controller!: ReturnType<typeof createDebugConsoleController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createDebugConsoleController({
-        settingsKey,
         protocolStatus,
-        fetchSettings: vi.fn(async () => buildSettings(true, false)),
         fetchSnapshot,
         connectStream: vi.fn(async ({ signal }) => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         }),
         createPerformanceTracker: () => ({
-          snapshot: () => buildPerformanceSnapshot(),
+          snapshot: () => buildPerformanceSnapshot({
+            collecting: true,
+            fps: { current: 60, average: 60, low: 60, samples: 1 },
+            supported: {
+              longtask: true,
+              layout_shift: true,
+              paint: true,
+              navigation: true,
+              memory: false,
+              mutation_observer: true,
+              interaction_latency: true,
+            },
+          }),
           clear: vi.fn(),
         }),
       });
@@ -314,23 +324,19 @@ describe('createDebugConsoleController', () => {
   });
 
   it('merges browser-captured request events in real time', async () => {
-    const [settingsKey] = createSignal<number | null>(1);
+    installStorageBridge();
+    setConsoleVisible(true);
+
     const [protocolStatus] = createSignal('connected');
-    const listeners = new Set<(event: any) => void>();
+    const listeners = new Set<(event: DiagnosticsEvent) => void>();
+    const installClientCapture = vi.fn();
+    const setClientCaptureEnabled = vi.fn();
 
     let controller!: ReturnType<typeof createDebugConsoleController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createDebugConsoleController({
-        settingsKey,
         protocolStatus,
-        fetchSettings: vi.fn(async () => buildSettings(true, true)),
-        fetchSnapshot: vi.fn(async () => ({
-          enabled: true,
-          state_dir: '/tmp/redeven',
-          recent_events: [],
-          slow_summary: [],
-          stats: { total_events: 0, agent_events: 0, desktop_events: 0, slow_events: 0, trace_count: 0 },
-        })),
+        fetchSnapshot: vi.fn(async () => buildSnapshot([])),
         connectStream: vi.fn(async ({ signal }) => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         }),
@@ -338,8 +344,8 @@ describe('createDebugConsoleController', () => {
           snapshot: () => buildPerformanceSnapshot({ collecting: true }),
           clear: vi.fn(),
         }),
-        installClientCapture: vi.fn(),
-        setClientCaptureEnabled: vi.fn(),
+        installClientCapture,
+        setClientCaptureEnabled,
         subscribeClientEvents: (listener) => {
           listeners.add(listener);
           return () => listeners.delete(listener);
@@ -351,6 +357,8 @@ describe('createDebugConsoleController', () => {
     await tick();
     await tick();
 
+    expect(installClientCapture).toHaveBeenCalledTimes(1);
+    expect(setClientCaptureEnabled).toHaveBeenCalledWith(true);
     expect(controller.serverEvents()).toHaveLength(0);
 
     const emit = [...listeners][0];
@@ -387,7 +395,7 @@ describe('createDebugConsoleController', () => {
           },
         },
       },
-    });
+    } as DiagnosticsEvent);
 
     expect(controller.serverEvents()).toHaveLength(1);
     expect(controller.serverEvents()[0]?.source).toBe('browser');
@@ -395,92 +403,50 @@ describe('createDebugConsoleController', () => {
     expect((controller.serverEvents()[0]?.detail as any)?.response?.payload?.thread?.id).toBe('thread_1');
 
     dispose();
+    expect(setClientCaptureEnabled).toHaveBeenLastCalledWith(false);
   });
 
-  it('clear resets the local capture window and prevents old snapshot events from reappearing', async () => {
+  it('clears the local capture window and resumes from later snapshots', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-27T10:00:00Z'));
+    installStorageBridge();
+    setConsoleVisible(true);
 
-    const [settingsKey] = createSignal<number | null>(1);
     const [protocolStatus] = createSignal('connected');
     const trackerClear = vi.fn();
     const fetchSnapshot = vi
       .fn()
-      .mockResolvedValueOnce({
-        enabled: true,
-        state_dir: '/tmp/redeven',
-        recent_events: [
-          {
-            created_at: '2026-03-27T09:59:59Z',
-            source: 'agent',
-            scope: 'gateway_api',
-            kind: 'request',
-            trace_id: 'trace-1',
-            method: 'GET',
-            path: '/_redeven_proxy/api/settings',
-            status_code: 200,
-            duration_ms: 12,
-          },
-        ],
-        slow_summary: [],
-        stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 },
-      })
-      .mockResolvedValueOnce({
-        enabled: true,
-        state_dir: '/tmp/redeven',
-        recent_events: [
-          {
-            created_at: '2026-03-27T09:59:59Z',
-            source: 'agent',
-            scope: 'gateway_api',
-            kind: 'request',
-            trace_id: 'trace-1',
-            method: 'GET',
-            path: '/_redeven_proxy/api/settings',
-            status_code: 200,
-            duration_ms: 12,
-          },
-        ],
-        slow_summary: [],
-        stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 1 },
-      })
-      .mockResolvedValueOnce({
-        enabled: true,
-        state_dir: '/tmp/redeven',
-        recent_events: [
-          {
-            created_at: '2026-03-27T10:00:01Z',
-            source: 'desktop',
-            scope: 'desktop_http',
-            kind: 'completed',
-            trace_id: 'trace-2',
-            method: 'POST',
-            path: '/_redeven_proxy/api/chat/send',
-            status_code: 200,
-            duration_ms: 18,
-          },
-          {
-            created_at: '2026-03-27T09:59:59Z',
-            source: 'agent',
-            scope: 'gateway_api',
-            kind: 'request',
-            trace_id: 'trace-1',
-            method: 'GET',
-            path: '/_redeven_proxy/api/settings',
-            status_code: 200,
-            duration_ms: 12,
-          },
-        ],
-        slow_summary: [],
-        stats: { total_events: 2, agent_events: 1, desktop_events: 1, slow_events: 0, trace_count: 2 },
-      });
+      .mockResolvedValueOnce(buildSnapshot([
+        {
+          created_at: '2026-03-27T10:00:00Z',
+          source: 'agent',
+          scope: 'gateway_api',
+          kind: 'request',
+          trace_id: 'trace-1',
+          method: 'GET',
+          path: '/_redeven_proxy/api/settings',
+          status_code: 200,
+          duration_ms: 14,
+        },
+      ]))
+      .mockResolvedValueOnce(buildSnapshot([
+        {
+          created_at: '2026-03-27T10:00:01Z',
+          source: 'desktop',
+          scope: 'desktop_http',
+          kind: 'completed',
+          trace_id: 'trace-2',
+          method: 'POST',
+          path: '/_redeven_proxy/api/chat/send',
+          status_code: 200,
+          duration_ms: 22,
+        },
+      ]));
 
     let controller!: ReturnType<typeof createDebugConsoleController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createDebugConsoleController({
-        settingsKey,
         protocolStatus,
-        fetchSettings: vi.fn(async () => buildSettings(true, true)),
         fetchSnapshot,
         connectStream: vi.fn(async ({ signal }) => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
@@ -511,48 +477,40 @@ describe('createDebugConsoleController', () => {
     await controller.clear();
 
     expect(trackerClear).toHaveBeenCalled();
-    expect(controller.serverEvents()).toHaveLength(0);
-    expect(controller.stats().total_events).toBe(0);
+    expect(controller.serverEvents()).toHaveLength(1);
+    expect(controller.serverEvents()[0]?.path).toBe('/_redeven_proxy/api/chat/send');
+    expect(controller.stats().total_events).toBe(1);
     expect(controller.captureCutoffAt()).toBe('2026-03-27T10:00:00.000Z');
 
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(controller.serverEvents()).toHaveLength(1);
     expect(controller.serverEvents()[0]?.path).toBe('/_redeven_proxy/api/chat/send');
-    expect(controller.serverEvents()[0]?.created_at).toBe('2026-03-27T10:00:01Z');
 
     dispose();
   });
 
-  it('can exit debug console mode from the floating console actions', async () => {
-    const [settingsKey] = createSignal<number | null>(1);
+  it('closes the console locally without saving backend settings', async () => {
+    installStorageBridge();
+    setConsoleVisible(true);
+
     const [protocolStatus] = createSignal('connected');
     const trackerClear = vi.fn();
-    const saveSettings = vi.fn(async () => ({ settings: buildSettings(false, true) }));
 
     let controller!: ReturnType<typeof createDebugConsoleController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createDebugConsoleController({
-        settingsKey,
         protocolStatus,
-        fetchSettings: vi.fn(async () => buildSettings(true, true)),
-        saveSettings,
-        fetchSnapshot: vi.fn(async () => ({
-          enabled: true,
-          state_dir: '/tmp/redeven',
-          recent_events: [
-            {
-              created_at: '2026-03-27T10:00:01Z',
-              source: 'agent',
-              scope: 'gateway_api',
-              kind: 'request',
-              method: 'GET',
-              path: '/_redeven_proxy/api/settings',
-            },
-          ],
-          slow_summary: [],
-          stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 0 },
-        })),
+        fetchSnapshot: vi.fn(async () => buildSnapshot([
+          {
+            created_at: '2026-03-27T10:00:01Z',
+            source: 'agent',
+            scope: 'gateway_api',
+            kind: 'request',
+            method: 'GET',
+            path: '/_redeven_proxy/api/settings',
+          },
+        ])),
         connectStream: vi.fn(async ({ signal }) => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         }),
@@ -582,76 +540,14 @@ describe('createDebugConsoleController', () => {
     expect(controller.enabled()).toBe(true);
     expect(controller.serverEvents()).toHaveLength(1);
 
-    await controller.exitConsole();
+    await controller.closeConsole();
 
-    expect(saveSettings).toHaveBeenCalledWith({
-      debug_console: {
-        enabled: false,
-        collect_ui_metrics: true,
-      },
-    });
     expect(controller.enabled()).toBe(false);
     expect(controller.open()).toBe(false);
-    expect(controller.serverEvents()).toHaveLength(0);
-    expect(trackerClear).toHaveBeenCalled();
-    expect(controller.exiting()).toBe(false);
-
-    dispose();
-  });
-
-  it('clears runtime data when the console is disabled', async () => {
-    const [settingsKey, setSettingsKey] = createSignal<number | null>(1);
-    const [protocolStatus] = createSignal('connected');
-    const trackerClear = vi.fn();
-    const fetchSettings = vi
-      .fn()
-      .mockResolvedValueOnce(buildSettings(true, false))
-      .mockResolvedValueOnce(buildSettings(false, false));
-
-    let controller!: ReturnType<typeof createDebugConsoleController>;
-    const dispose = createRoot((disposeRoot) => {
-      controller = createDebugConsoleController({
-        settingsKey,
-        protocolStatus,
-        fetchSettings,
-        fetchSnapshot: vi.fn(async () => ({
-          enabled: true,
-          state_dir: '/tmp/redeven',
-          recent_events: [
-            {
-              created_at: '2026-03-27T10:00:01Z',
-              source: 'agent',
-              scope: 'gateway_api',
-              kind: 'request',
-              method: 'GET',
-              path: '/_redeven_proxy/api/settings',
-            },
-          ],
-          slow_summary: [],
-          stats: { total_events: 1, agent_events: 1, desktop_events: 0, slow_events: 0, trace_count: 0 },
-        })),
-        connectStream: vi.fn(async ({ signal }) => {
-          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
-        }),
-        createPerformanceTracker: () => ({
-          snapshot: () => buildPerformanceSnapshot(),
-          clear: trackerClear,
-        }),
-      });
-      return disposeRoot;
-    });
-
-    await tick();
-    await tick();
-    expect(controller.enabled()).toBe(true);
+    expect(controller.collectUIMetrics()).toBe(false);
+    expect(controller.uiMetricsCollecting()).toBe(false);
+    expect(window.redevenDesktopStateStorage?.getItem(VISIBLE_KEY)).toBe('false');
     expect(controller.serverEvents()).toHaveLength(1);
-
-    setSettingsKey(2);
-    await tick();
-    await tick();
-
-    expect(controller.enabled()).toBe(false);
-    expect(controller.serverEvents()).toHaveLength(0);
     expect(trackerClear).toHaveBeenCalled();
 
     dispose();

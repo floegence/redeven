@@ -412,11 +412,10 @@ type apiResp struct {
 type settingsView struct {
 	ConfigPath string `json:"config_path"`
 
-	Connection   settingsConnectionView   `json:"connection"`
-	Runtime      settingsRuntimeView      `json:"runtime"`
-	Logging      settingsLoggingView      `json:"logging"`
-	DebugConsole settingsDebugConsoleView `json:"debug_console"`
-	Codespaces   settingsCodespacesView   `json:"codespaces"`
+	Connection settingsConnectionView `json:"connection"`
+	Runtime    settingsRuntimeView    `json:"runtime"`
+	Logging    settingsLoggingView    `json:"logging"`
+	Codespaces settingsCodespacesView `json:"codespaces"`
 
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
@@ -460,11 +459,6 @@ type settingsRuntimeView struct {
 type settingsLoggingView struct {
 	LogFormat string `json:"log_format"`
 	LogLevel  string `json:"log_level"`
-}
-
-type settingsDebugConsoleView struct {
-	Enabled          bool `json:"enabled"`
-	CollectUIMetrics bool `json:"collect_ui_metrics"`
 }
 
 type settingsCodespacesView struct {
@@ -781,12 +775,6 @@ func toSettingsView(cfg *config.Config, configPath string, secrets *settings.Sec
 		out.Logging = settingsLoggingView{
 			LogFormat: strings.TrimSpace(cfg.LogFormat),
 			LogLevel:  strings.TrimSpace(cfg.LogLevel),
-		}
-		if cfg.DebugConsole != nil {
-			out.DebugConsole = settingsDebugConsoleView{
-				Enabled:          cfg.DebugConsole.Enabled,
-				CollectUIMetrics: cfg.DebugConsole.CollectUIMetrics,
-			}
 		}
 		out.Codespaces = settingsCodespacesView{
 			CodeServerPortMin: cfg.CodeServerPortMin,
@@ -1220,8 +1208,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			LogFormat *string `json:"log_format,omitempty"`
 			LogLevel  *string `json:"log_level,omitempty"`
 
-			DebugConsole json.RawMessage `json:"debug_console,omitempty"`
-
 			CodeServerPortMin *int `json:"code_server_port_min,omitempty"`
 			CodeServerPortMax *int `json:"code_server_port_max,omitempty"`
 
@@ -1251,30 +1237,10 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		if body.AgentHomeDir == nil && body.Shell == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
-			len(body.DebugConsole) == 0 &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
 			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 			return
-		}
-
-		var nextDebugConsole *config.DebugConsoleConfig
-		if len(body.DebugConsole) > 0 {
-			raw := bytes.TrimSpace(body.DebugConsole)
-			if !bytes.Equal(raw, []byte("null")) {
-				var debugConsole config.DebugConsoleConfig
-				debugDec := json.NewDecoder(bytes.NewReader(raw))
-				debugDec.DisallowUnknownFields()
-				if err := debugDec.Decode(&debugConsole); err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid debug_console json"})
-					return
-				}
-				if err := debugDec.Decode(&struct{}{}); err != io.EOF {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid debug_console json"})
-					return
-				}
-				nextDebugConsole = &debugConsole
-			}
 		}
 
 		var nextPolicy *config.PermissionPolicy
@@ -1337,11 +1303,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if body.LogLevel != nil {
 			auditDetail["log_level"] = strings.TrimSpace(*body.LogLevel)
 		}
-		if len(body.DebugConsole) > 0 {
-			auditDetail["debug_console_updated"] = true
-			auditDetail["debug_console_enabled"] = nextDebugConsole != nil && nextDebugConsole.Enabled
-			auditDetail["debug_console_collect_ui_metrics"] = nextDebugConsole != nil && nextDebugConsole.CollectUIMetrics
-		}
 		if body.CodeServerPortMin != nil {
 			auditDetail["code_server_port_min"] = *body.CodeServerPortMin
 		}
@@ -1388,9 +1349,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				if body.LogLevel != nil {
 					c.LogLevel = strings.TrimSpace(*body.LogLevel)
 				}
-				if len(body.DebugConsole) > 0 {
-					c.DebugConsole = nextDebugConsole
-				}
 				if body.CodeServerPortMin != nil {
 					c.CodeServerPortMin = *body.CodeServerPortMin
 				}
@@ -1427,9 +1385,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
-		}
-		if g.diag != nil {
-			g.diag.SetEnabled(updated.DebugConsoleEnabled())
 		}
 
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)

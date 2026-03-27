@@ -11,18 +11,9 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
-  Checkbox: (props: any) => (
-    <input
-      type="checkbox"
-      checked={props.checked}
-      disabled={props.disabled}
-      onChange={(event) => props.onChange?.(event.currentTarget.checked)}
-    />
-  ),
 }));
 
 vi.mock('./settings/SettingsPrimitives', () => ({
-  AutoSaveIndicator: (props: any) => <span>{props.error ? props.error : props.saving ? 'saving' : props.dirty ? 'dirty' : 'saved'}</span>,
   SettingsPill: (props: any) => <span>{props.children}</span>,
   SettingsTable: (props: any) => <table>{props.children}</table>,
   SettingsTableBody: (props: any) => <tbody>{props.children}</tbody>,
@@ -45,28 +36,25 @@ afterEach(() => {
 });
 
 describe('EnvDebugConsoleSettingsPanel', () => {
-  it('renders independent debug-console controls and disables the open button when off', () => {
+  it('renders frontend-only debug-console controls and disables the open button when off', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
       <EnvDebugConsoleSettingsPanel
         enabled={false}
-        collectUIMetrics={false}
-        dirty={false}
-        saving={false}
-        error={null}
-        savedAt={null}
         canInteract
         onEnabledChange={() => undefined}
-        onCollectUIMetricsChange={() => undefined}
         onOpenConsole={() => undefined}
       />
     ), host);
 
     expect(host.textContent).toContain('Debug Console');
-    expect(host.textContent).toContain('Independent from');
-    const openButton = host.querySelector('button');
+    expect(host.textContent).toContain('Frontend only');
+    expect(host.textContent).toContain('No agent config writes');
+    expect(host.textContent).not.toContain('collect_ui_metrics');
+    const buttons = host.querySelectorAll('button');
+    const openButton = buttons[buttons.length - 1] as HTMLButtonElement | undefined;
     expect(openButton?.disabled).toBe(true);
   });
 });

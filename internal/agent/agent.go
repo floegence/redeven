@@ -220,7 +220,6 @@ func New(opts Options) (*Agent, error) {
 		Logger:   logger,
 		StateDir: stateDir,
 		Source:   diagnostics.SourceAgent,
-		Disabled: !opts.Config.DebugConsoleEnabled(),
 	})
 	if err != nil {
 		logger.Warn("diagnostics init failed", "error", err)

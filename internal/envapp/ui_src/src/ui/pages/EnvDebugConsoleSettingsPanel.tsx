@@ -1,7 +1,6 @@
-import { Button, Checkbox } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
 
 import {
-  AutoSaveIndicator,
   SettingsPill,
   SettingsTable,
   SettingsTableBody,
@@ -15,100 +14,94 @@ import {
 
 export type EnvDebugConsoleSettingsPanelProps = Readonly<{
   enabled: boolean;
-  collectUIMetrics: boolean;
-  dirty: boolean;
-  saving: boolean;
-  error: string | null;
-  savedAt: number | null;
   canInteract: boolean;
   onEnabledChange: (value: boolean) => void;
-  onCollectUIMetricsChange: (value: boolean) => void;
   onOpenConsole: () => void;
 }>;
 
+function DebugConsoleSwitch(props: Readonly<{ checked: boolean; disabled?: boolean; onChange: (value: boolean) => void }>) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={props.checked}
+      disabled={props.disabled}
+      class={`inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+        props.checked
+          ? 'border-primary/30 bg-primary/15 text-primary'
+          : 'border-border bg-muted/60 text-muted-foreground'
+      } disabled:cursor-not-allowed disabled:opacity-50`}
+      onClick={() => props.onChange(!props.checked)}
+    >
+      <span
+        class={`h-4 w-4 rounded-full bg-background shadow-sm transition-transform ${
+          props.checked ? 'translate-x-[1.3rem]' : 'translate-x-1'
+        }`}
+      />
+      <span class="sr-only">{props.checked ? 'Disable debug console' : 'Enable debug console'}</span>
+    </button>
+  );
+}
+
 export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanelProps) {
   return (
-    <div class="border-t border-border/70 pt-4">
+    <div class="space-y-4">
       <SubSectionHeader
         title="Debug Console"
-        description="Enable a floating operator console for live request traces, runtime status, and local UI rendering metrics."
+        description="Control the floating diagnostics window for this browser session. Logging stays independent, and local UI metrics start automatically while the console is visible."
         actions={(
-          <div class="flex items-center gap-2">
-            <SettingsPill tone="success">Live apply</SettingsPill>
-            <AutoSaveIndicator
-              dirty={props.dirty}
-              saving={props.saving}
-              error={props.error}
-              savedAt={props.savedAt}
-              enabled={props.canInteract}
-            />
+          <div class="flex flex-wrap items-center gap-2">
+            <SettingsPill tone="success">Frontend only</SettingsPill>
+            <SettingsPill tone="default">No agent config writes</SettingsPill>
           </div>
         )}
       />
 
-      <div class="mt-3 space-y-4">
-        <SettingsTable minWidthClass="min-w-[44rem]">
-          <SettingsTableHead>
-            <SettingsTableHeaderRow>
-              <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
-              <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-              <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
-            </SettingsTableHeaderRow>
-          </SettingsTableHead>
-          <SettingsTableBody>
-            <SettingsTableRow>
-              <SettingsTableCell class="font-medium text-muted-foreground">enabled</SettingsTableCell>
-              <SettingsTableCell>
-                <label class="flex items-center gap-3 text-sm text-foreground">
-                  <Checkbox
-                    checked={props.enabled}
-                    onChange={(value) => props.onEnabledChange(value)}
-                    disabled={!props.canInteract}
-                  />
-                  <span>Show the floating debug console across the Env App shell.</span>
-                </label>
-              </SettingsTableCell>
-              <SettingsTableCell class="text-[11px] text-muted-foreground">
-                Independent from <code>log_level</code>. When enabled, the window stays above page-local loading overlays and can be minimized to a small pill.
-              </SettingsTableCell>
-            </SettingsTableRow>
-            <SettingsTableRow>
-              <SettingsTableCell class="font-medium text-muted-foreground">collect_ui_metrics</SettingsTableCell>
-              <SettingsTableCell>
-                <label class="flex items-center gap-3 text-sm text-foreground">
-                  <Checkbox
-                    checked={props.collectUIMetrics}
-                    onChange={(value) => props.onCollectUIMetricsChange(value)}
-                    disabled={!props.canInteract}
-                  />
-                  <span>Capture advanced browser-native timing such as long tasks, layout shifts, paint timing, navigation, and memory.</span>
-                </label>
-              </SettingsTableCell>
-              <SettingsTableCell class="text-[11px] text-muted-foreground">
-                Core renderer probes stay visible in the floating console while Debug Console is open. Enable this option to add richer browser-native timings and include them in exported debug bundles.
-              </SettingsTableCell>
-            </SettingsTableRow>
-          </SettingsTableBody>
-        </SettingsTable>
+      <SettingsTable minWidthClass="min-w-[44rem]">
+        <SettingsTableHead>
+          <SettingsTableHeaderRow>
+            <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
+            <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
+            <SettingsTableHeaderCell class="w-80">Notes</SettingsTableHeaderCell>
+          </SettingsTableHeaderRow>
+        </SettingsTableHead>
+        <SettingsTableBody>
+          <SettingsTableRow>
+            <SettingsTableCell class="font-medium text-muted-foreground">visible</SettingsTableCell>
+            <SettingsTableCell>
+              <label class="flex items-center gap-3 text-sm text-foreground">
+                <DebugConsoleSwitch
+                  checked={props.enabled}
+                  onChange={(value) => props.onEnabledChange(value)}
+                  disabled={!props.canInteract}
+                />
+                <span>Show the floating debug console in this Env App session.</span>
+              </label>
+            </SettingsTableCell>
+            <SettingsTableCell class="text-[11px] text-muted-foreground">
+              This switch is local to the current UI session. It does not change <code>log_level</code>, <code>log_format</code>, or any persisted agent setting.
+            </SettingsTableCell>
+          </SettingsTableRow>
+        </SettingsTableBody>
+      </SettingsTable>
 
-        <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/16 px-4 py-3">
-          <div class="space-y-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <SettingsPill tone={props.enabled ? 'success' : 'default'}>
-                {props.enabled ? 'Console enabled' : 'Console disabled'}
-              </SettingsPill>
-              <SettingsPill tone={props.collectUIMetrics ? 'success' : 'default'}>
-                {props.collectUIMetrics ? 'Advanced UI metrics enabled' : 'Advanced UI metrics optional'}
-              </SettingsPill>
-            </div>
-            <div class="text-[11px] leading-5 text-muted-foreground">
-              Request tracing starts and stops at runtime from this setting, so there is no restart-only diagnostics mode to maintain here anymore.
-            </div>
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/16 px-4 py-3">
+        <div class="space-y-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <SettingsPill tone={props.enabled ? 'success' : 'default'}>
+              {props.enabled ? 'Console visible' : 'Console hidden'}
+            </SettingsPill>
+            <SettingsPill tone={props.enabled ? 'success' : 'default'}>
+              {props.enabled ? 'UI metrics active' : 'UI metrics start on open'}
+            </SettingsPill>
           </div>
-          <Button size="sm" variant="secondary" onClick={props.onOpenConsole} disabled={!props.enabled}>
-            Open floating console
-          </Button>
+          <div class="text-[11px] leading-5 text-muted-foreground">
+            Backend diagnostics stay available independently. This section only controls the frontend console surface and browser-local instrumentation.
+          </div>
         </div>
+        <Button size="sm" variant="secondary" onClick={props.onOpenConsole} disabled={!props.enabled}>
+          Open floating console
+        </Button>
       </div>
     </div>
   );

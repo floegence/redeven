@@ -111,11 +111,10 @@ function createController(overrides: Record<string, unknown> = {}) {
   });
 
   return {
-    settingsLoaded: () => true,
-    configured: () => ({ enabled: true, collect_ui_metrics: true }),
     enabled: () => true,
     open: () => true,
     minimized: () => false,
+    show: vi.fn(),
     restore: vi.fn(),
     minimize: vi.fn(),
     loading: () => false,
@@ -123,7 +122,6 @@ function createController(overrides: Record<string, unknown> = {}) {
     runtimeEnabled: () => true,
     collectUIMetrics: () => true,
     uiMetricsCollecting: () => true,
-    settingsError: () => null,
     snapshotError: () => null,
     streamConnected: () => true,
     streamError: () => null,
@@ -140,15 +138,14 @@ function createController(overrides: Record<string, unknown> = {}) {
     lastExportAt: () => '',
     refresh: vi.fn(async () => undefined),
     clear: vi.fn(async () => undefined),
-    exiting: () => false,
-    exitConsole: vi.fn(async () => undefined),
+    closeConsole: vi.fn(async () => undefined),
+    resetRuntimeState: vi.fn(),
     exportBundle: vi.fn(async () => ({
       exported_at: '2026-03-27T10:00:05Z',
-      settings: { enabled: true, collect_ui_metrics: true },
+      ui_state: { visible: true, minimized: false },
       runtime: {
-        configured_enabled: true,
-        runtime_enabled: true,
-        collect_ui_metrics: true,
+        diagnostics_enabled: true,
+        ui_metrics_enabled: true,
         stream_connected: true,
         state_dir: '/tmp/redeven',
       },
@@ -210,7 +207,7 @@ describe('DebugConsoleWindow', () => {
     expect(host.textContent).toContain('Response payload');
     expect(host.textContent).toContain('Clear');
     expect(host.textContent).not.toContain('Refresh');
-    expect(host.textContent).toContain('Exit Debug Mode');
+    expect(host.textContent).toContain('Close Console');
     expect(host.textContent).toContain('Static CSS, JS, document loads, and diagnostics self-requests are excluded');
 
     const uiTab = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('UI Performance'));
@@ -235,19 +232,19 @@ describe('DebugConsoleWindow', () => {
     expect(clear).toHaveBeenCalledTimes(1);
   });
 
-  it('invokes exit debug mode from the header action', () => {
+  it('invokes close console from the header action', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const exitConsole = vi.fn(async () => undefined);
-    const controller = createController({ exitConsole });
+    const closeConsole = vi.fn(async () => undefined);
+    const controller = createController({ closeConsole });
 
     render(() => <DebugConsoleWindow controller={controller} />, host);
 
-    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Exit Debug Mode'));
+    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Close Console'));
     expect(button).toBeTruthy();
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-    expect(exitConsole).toHaveBeenCalledTimes(1);
+    expect(closeConsole).toHaveBeenCalledTimes(1);
   });
 
   it('shows a restore pill when minimized', () => {

@@ -141,7 +141,7 @@ func TestGateway_DiagnosticsAPI_AggregatesAgentAndDesktopEvents(t *testing.T) {
 	}
 }
 
-func TestGateway_DebugConsoleSettingsToggleUpdatesRuntimeAndHeaders(t *testing.T) {
+func TestGateway_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsole(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := writeTestConfig(t)
@@ -173,12 +173,12 @@ func TestGateway_DebugConsoleSettingsToggleUpdatesRuntimeAndHeaders(t *testing.T
 	if got := getRes.Header().Get(diagnostics.EnabledHeader); got != "false" {
 		t.Fatalf("initial %s = %q, want false", diagnostics.EnabledHeader, got)
 	}
+	if strings.Contains(getRes.Body.String(), `"debug_console"`) {
+		t.Fatalf("settings response unexpectedly exposed debug_console: %s", getRes.Body.String())
+	}
 
 	updateReq := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(`{
-  "debug_console": {
-    "enabled": true,
-    "collect_ui_metrics": true
-  }
+  "log_level": "debug"
 }`))
 	updateReq.Header.Set("Origin", envOriginWithChannel(channelID))
 	updateRes := httptest.NewRecorder()
@@ -186,8 +186,8 @@ func TestGateway_DebugConsoleSettingsToggleUpdatesRuntimeAndHeaders(t *testing.T
 	if updateRes.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want %d body=%s", updateRes.Code, http.StatusOK, updateRes.Body.String())
 	}
-	if diagStore.Enabled() != true {
-		t.Fatalf("diagStore.Enabled() = false, want true after settings update")
+	if diagStore.Enabled() {
+		t.Fatalf("diagStore.Enabled() = true, want diagnostics runtime unchanged")
 	}
 
 	var updateBody struct {
@@ -197,24 +197,30 @@ func TestGateway_DebugConsoleSettingsToggleUpdatesRuntimeAndHeaders(t *testing.T
 	if err := json.Unmarshal(updateRes.Body.Bytes(), &updateBody); err != nil {
 		t.Fatalf("json.Unmarshal(update) error = %v", err)
 	}
-	if !updateBody.Data.Settings.DebugConsole.Enabled || !updateBody.Data.Settings.DebugConsole.CollectUIMetrics {
-		t.Fatalf("debug_console view = %#v, want enabled + collect_ui_metrics", updateBody.Data.Settings.DebugConsole)
+	if updateBody.Data.Settings.Logging.LogLevel != "debug" {
+		t.Fatalf("settings.logging.log_level = %q, want debug", updateBody.Data.Settings.Logging.LogLevel)
+	}
+	if strings.Contains(updateRes.Body.String(), `"debug_console"`) {
+		t.Fatalf("update response unexpectedly exposed debug_console: %s", updateRes.Body.String())
 	}
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if cfg.DebugConsole == nil || !cfg.DebugConsole.Enabled || !cfg.DebugConsole.CollectUIMetrics {
-		t.Fatalf("saved config debug_console = %#v", cfg.DebugConsole)
+	if cfg.LogLevel != "debug" {
+		t.Fatalf("saved config log_level = %q, want debug", cfg.LogLevel)
 	}
 
 	postReq := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 	postReq.Header.Set("Origin", envOriginWithChannel(channelID))
 	postRes := httptest.NewRecorder()
 	gw.serveHTTP(postRes, postReq)
-	if got := postRes.Header().Get(diagnostics.EnabledHeader); got != "true" {
-		t.Fatalf("post-toggle %s = %q, want true", diagnostics.EnabledHeader, got)
+	if got := postRes.Header().Get(diagnostics.EnabledHeader); got != "false" {
+		t.Fatalf("post-update %s = %q, want false", diagnostics.EnabledHeader, got)
+	}
+	if strings.Contains(postRes.Body.String(), `"debug_console"`) {
+		t.Fatalf("post-update settings response unexpectedly exposed debug_console: %s", postRes.Body.String())
 	}
 }
 
