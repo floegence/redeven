@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -68,7 +69,7 @@ afterEach(() => {
 });
 
 describe('CodexTranscript', () => {
-  it('renders the working indicator without a trailing assistant avatar and keeps a cursor visible', () => {
+  it('renders the compact working indicator without a trailing assistant avatar and keeps a cursor visible', () => {
     const { host, dispose } = renderTranscript([], {
       showWorkingState: true,
       workingLabel: 'working',
@@ -76,9 +77,60 @@ describe('CodexTranscript', () => {
     });
 
     expect(host.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
-    expect(host.textContent).toContain('Codex is working');
+    expect(host.textContent).toContain('Working...');
+    expect(host.textContent).not.toContain('Codex is');
+    expect(host.textContent).not.toContain('web search');
+    expect(host.querySelector('.codex-message-run-indicator-graph')).toBeTruthy();
     expect(host.querySelector('[data-testid="streaming-cursor"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"] .chat-message-avatar')).toBeNull();
+
+    dispose();
+  });
+
+  it('renders reasoning as a collapsible markdown block and auto-collapses it after completion', async () => {
+    const [items, setItems] = createSignal<CodexTranscriptItem[]>([
+      {
+        id: 'item_reasoning_live',
+        type: 'reasoning',
+        text: 'Investigating the event replay path.\n\n- Verify resume flow',
+        status: 'inProgress',
+        order: 0,
+      },
+    ]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => (
+      <CodexTranscript
+        items={items()}
+        emptyTitle="Empty"
+        emptyBody="Nothing yet."
+      />
+    ), host);
+
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.textContent).not.toContain('Reasoning note');
+    expect(host.querySelector('.codex-chat-reasoning-markdown')).toBeTruthy();
+
+    setItems([
+      {
+        id: 'item_reasoning_live',
+        type: 'reasoning',
+        text: 'Investigating the event replay path.\n\n- Verify resume flow',
+        status: 'completed',
+        order: 0,
+      },
+    ]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('false');
+
+    const toggle = host.querySelector('.codex-chat-reasoning-toggle') as HTMLButtonElement | null;
+    toggle?.click();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.textContent).toContain('Investigating the event replay path.');
 
     dispose();
   });

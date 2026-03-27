@@ -29,6 +29,35 @@ type appServerProcess struct {
 	done       chan error
 }
 
+type rpcMethodError struct {
+	Method  string
+	Code    int
+	Message string
+}
+
+func (e *rpcMethodError) Error() string {
+	if e == nil {
+		return ""
+	}
+	method := strings.TrimSpace(e.Method)
+	message := strings.TrimSpace(e.Message)
+	if method == "" {
+		return message
+	}
+	if message == "" {
+		return method
+	}
+	return fmt.Sprintf("%s: %s", method, message)
+}
+
+func asRPCMethodError(err error) (*rpcMethodError, bool) {
+	var target *rpcMethodError
+	if !errors.As(err, &target) {
+		return nil, false
+	}
+	return target, true
+}
+
 func buildAppServerCommand(binaryPath string) (*exec.Cmd, error) {
 	if strings.TrimSpace(binaryPath) == "" {
 		return nil, errors.New("missing codex binary")
@@ -103,7 +132,11 @@ func (p *appServerProcess) call(ctx context.Context, id string, method string, p
 		return err
 	case resp := <-respCh:
 		if resp.Error != nil {
-			return fmt.Errorf("%s: %s", method, strings.TrimSpace(resp.Error.Message))
+			return &rpcMethodError{
+				Method:  method,
+				Code:    resp.Error.Code,
+				Message: strings.TrimSpace(resp.Error.Message),
+			}
 		}
 		if out == nil || len(resp.Result) == 0 {
 			return nil

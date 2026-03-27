@@ -60,6 +60,34 @@ type pendingRequestRecord struct {
 	additionalPerms *PermissionProfile
 }
 
+func (m *Manager) invalidateLiveThreadsLocked() {
+	for _, state := range m.threads {
+		if state != nil {
+			state.liveLoaded = false
+		}
+	}
+}
+
+func isThreadNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrThreadNotFound) {
+		return true
+	}
+	if rpcErr, ok := asRPCMethodError(err); ok {
+		message := strings.ToLower(strings.TrimSpace(rpcErr.Message))
+		if strings.Contains(message, "thread not found") {
+			return true
+		}
+		method := strings.ToLower(strings.TrimSpace(rpcErr.Method))
+		if (method == "turn/start" || method == "thread/resume" || method == "thread/read") && strings.Contains(message, "not found") {
+			return true
+		}
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "thread not found")
+}
+
 func NewManager(opts Options) (*Manager, error) {
 	agentHomeDir := strings.TrimSpace(opts.AgentHomeDir)
 	if agentHomeDir == "" {
@@ -143,7 +171,7 @@ func (m *Manager) ReadThread(ctx context.Context, threadID string) (*ThreadDetai
 		ThreadID:     threadID,
 		IncludeTurns: true,
 	}, &resp); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+		if isThreadNotFoundError(err) {
 			return nil, ErrThreadNotFound
 		}
 		return nil, err
@@ -229,7 +257,7 @@ func (m *Manager) ensureThreadLoaded(ctx context.Context, threadID string) error
 		ThreadID:               threadID,
 		PersistExtendedHistory: true,
 	}, &resp); err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+		if isThreadNotFoundError(err) {
 			return ErrThreadNotFound
 		}
 		return err
@@ -345,7 +373,23 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 		params.SandboxPolicy = policy
 	}
 	if err := m.call(ctx, "turn/start", params, &resp); err != nil {
-		return nil, err
+		if !isThreadNotFoundError(err) {
+			return nil, err
+		}
+		m.mu.Lock()
+		if state := m.threads[threadID]; state != nil {
+			state.liveLoaded = false
+		}
+		m.mu.Unlock()
+		if loadErr := m.ensureThreadLoaded(ctx, threadID); loadErr != nil {
+			return nil, loadErr
+		}
+		if retryErr := m.call(ctx, "turn/start", params, &resp); retryErr != nil {
+			if isThreadNotFoundError(retryErr) {
+				return nil, ErrThreadNotFound
+			}
+			return nil, retryErr
+		}
 	}
 	turn := normalizeTurn(resp.Turn)
 	m.mu.Lock()
@@ -527,10 +571,14 @@ func (m *Manager) call(ctx context.Context, method string, params any, out any) 
 	defer cancel()
 	err = proc.call(callCtx, id, method, params, out)
 	if err != nil {
+		if _, ok := asRPCMethodError(err); ok {
+			return err
+		}
 		m.recordError(err)
 		m.mu.Lock()
 		if m.proc == proc {
 			m.proc = nil
+			m.invalidateLiveThreadsLocked()
 		}
 		m.mu.Unlock()
 		return err
@@ -548,6 +596,7 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 		case err := <-m.proc.done:
 			m.lastError = err.Error()
 			m.proc = nil
+			m.invalidateLiveThreadsLocked()
 		default:
 			proc := m.proc
 			m.mu.Unlock()

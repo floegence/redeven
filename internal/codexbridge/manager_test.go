@@ -1,9 +1,55 @@
 package codexbridge
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
+
+type scriptedRPCStep struct {
+	method  string
+	respond func(t *testing.T, proc *appServerProcess, env rpcEnvelope)
+}
+
+type scriptedRPCTransport struct {
+	t     *testing.T
+	proc  *appServerProcess
+	steps []scriptedRPCStep
+}
+
+func (s *scriptedRPCTransport) Write(p []byte) (int, error) {
+	s.t.Helper()
+	var env rpcEnvelope
+	if err := json.Unmarshal(bytesTrimSpace(p), &env); err != nil {
+		s.t.Fatalf("json.Unmarshal request: %v", err)
+	}
+	if len(s.steps) == 0 {
+		s.t.Fatalf("unexpected RPC call: method=%q", env.Method)
+	}
+	step := s.steps[0]
+	s.steps = s.steps[1:]
+	if env.Method != step.method {
+		s.t.Fatalf("rpc method=%q, want %q", env.Method, step.method)
+	}
+	step.respond(s.t, s.proc, env)
+	return len(p), nil
+}
+
+func (*scriptedRPCTransport) Close() error {
+	return nil
+}
+
+func newScriptedProcess(t *testing.T, steps []scriptedRPCStep) (*appServerProcess, *scriptedRPCTransport) {
+	t.Helper()
+	transport := &scriptedRPCTransport{t: t, steps: steps}
+	proc := &appServerProcess{
+		pending: make(map[string]chan rpcEnvelope),
+		done:    make(chan error, 1),
+	}
+	transport.proc = proc
+	proc.stdin = transport
+	return proc, transport
+}
 
 func mustMarshalParams(t *testing.T, value any) json.RawMessage {
 	t.Helper()
@@ -165,5 +211,108 @@ func TestHandleEnvelope_ProjectsLiveThreadState(t *testing.T) {
 	}
 	if webSearch.Action == nil || webSearch.Action.Type != "search" {
 		t.Fatalf("unexpected web search action: %+v", webSearch.Action)
+	}
+}
+
+func TestStartTurn_RetriesWhenLiveThreadNeedsResume(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "Retry thread",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "active",
+		CWD:           "/workspace/ui",
+	}
+	state.liveLoaded = true
+	manager.mu.Unlock()
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "turn/start",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Error: &rpcError{
+						Code:    -32000,
+						Message: "thread not found: thread_1",
+					},
+				})
+			},
+		},
+		{
+			method: "thread/resume",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireThreadResumeResponse{
+						Thread: wireThread{
+							ID:            "thread_1",
+							Preview:       "Retry thread",
+							ModelProvider: "openai/gpt-5.4",
+							CWD:           "/workspace/ui",
+							Status:        wireThreadStatus{Type: "active"},
+						},
+						Model:          "gpt-5.4",
+						ModelProvider:  "openai",
+						CWD:            "/workspace/ui",
+						ApprovalPolicy: json.RawMessage(`"on-request"`),
+						Sandbox:        wireSandboxPolicy{Type: "workspaceWrite"},
+					}),
+				})
+			},
+		},
+		{
+			method: "turn/start",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireTurnStartResponse{
+						Turn: wireTurn{
+							ID:     "turn_1",
+							Status: "in_progress",
+						},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	turn, err := manager.StartTurn(context.Background(), StartTurnRequest{
+		ThreadID:  "thread_1",
+		InputText: "hi",
+		CWD:       "/workspace/ui",
+		Model:     "gpt-5.4",
+	})
+	if err != nil {
+		t.Fatalf("StartTurn: %v", err)
+	}
+	if turn.ID != "turn_1" {
+		t.Fatalf("Turn.ID=%q", turn.ID)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if manager.proc == nil {
+		t.Fatalf("expected process to remain available after retryable RPC method error")
+	}
+	if manager.lastError != "" {
+		t.Fatalf("lastError=%q", manager.lastError)
+	}
+	if manager.threads["thread_1"] == nil || !manager.threads["thread_1"].liveLoaded {
+		t.Fatalf("expected thread_1 liveLoaded after resume retry")
 	}
 }

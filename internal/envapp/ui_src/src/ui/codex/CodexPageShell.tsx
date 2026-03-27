@@ -138,7 +138,7 @@ export function CodexPageShell() {
                 items={codex.transcriptItems()}
                 optimisticUserTurns={codex.activeOptimisticUserTurns()}
                 showWorkingState={shouldShowWorkingState()}
-                workingLabel={summary().statusLabel || 'working'}
+                workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
                 workingFlags={summary().statusFlags}
                 emptyTitle={emptyStateTitle()}
                 emptyBody={emptyStateBody()}

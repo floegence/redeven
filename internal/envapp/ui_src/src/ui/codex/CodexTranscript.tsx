@@ -1,17 +1,18 @@
-import { For, Show, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Tag } from '@floegence/floe-webapp-core/ui';
 
 import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
 import { ShellBlock } from '../chat/blocks/ShellBlock';
-import { ThinkingBlock } from '../chat/blocks/ThinkingBlock';
 import { StreamingCursor } from '../chat/status/StreamingCursor';
 import { CodexIcon } from '../icons/CodexIcon';
+import { CodexMessageRunIndicator } from './CodexMessageRunIndicator';
 import {
   displayStatus,
   itemGlyph,
   itemText,
   itemTitle,
+  isWorkingStatus,
   statusTagVariant,
 } from './presentation';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem, CodexUserInputEntry } from './types';
@@ -113,30 +114,186 @@ function FileChangeBody(props: { item: CodexTranscriptItem }) {
   );
 }
 
-function ReasoningBody(props: { item: CodexTranscriptItem }) {
-  const detailText = () => {
-    const direct = String(props.item.text ?? '').trim();
-    if (direct) return direct;
-    const content = (props.item.content ?? []).map((entry) => String(entry ?? '').trim()).filter(Boolean);
-    if (content.length === 0) return '';
-    const summary = (props.item.summary ?? []).map((entry) => String(entry ?? '').trim()).filter(Boolean);
-    if (summary.length === content.length && summary.join('\n\n') === content.join('\n\n')) {
-      return '';
+function reasoningSummary(item: CodexTranscriptItem): string[] {
+  return (item.summary ?? [])
+    .map((entry) => String(entry ?? '').trim())
+    .filter(Boolean);
+}
+
+function reasoningDetail(item: CodexTranscriptItem): string {
+  const direct = String(item.text ?? '').trim();
+  if (direct) return direct;
+  const content = (item.content ?? [])
+    .map((entry) => String(entry ?? '').trim())
+    .filter(Boolean);
+  if (content.length === 0) return '';
+  const summary = reasoningSummary(item);
+  if (summary.length === content.length && summary.join('\n\n') === content.join('\n\n')) {
+    return '';
+  }
+  return content.join('\n\n');
+}
+
+function reasoningMarkdown(item: CodexTranscriptItem): string {
+  const sections: string[] = [];
+  const summary = reasoningSummary(item);
+  if (summary.length > 0) {
+    sections.push(summary.map((entry) => `- ${entry}`).join('\n'));
+  }
+  const detail = reasoningDetail(item);
+  if (detail) {
+    sections.push(detail);
+  }
+  return sections.join('\n\n').trim();
+}
+
+function reasoningPreview(item: CodexTranscriptItem): string {
+  const summary = reasoningSummary(item);
+  if (summary.length > 0) return summary[0];
+  const detail = reasoningDetail(item);
+  if (detail) {
+    return detail.replace(/\s+/g, ' ').trim();
+  }
+  return item.type === 'plan' ? 'Planning next steps' : 'Thinking';
+}
+
+function titleCaseStatus(value: string): string {
+  return displayStatus(value, 'working')
+    .split(' ')
+    .map((part) => (part ? `${part.slice(0, 1).toUpperCase()}${part.slice(1)}` : ''))
+    .join(' ')
+    .trim();
+}
+
+function workingPhaseLabel(label: string, flags: readonly string[]): string {
+  const normalizedLabel = String(label ?? '').trim().toLowerCase();
+  const normalizedFlags = [...(flags ?? [])]
+    .map((entry) => String(entry ?? '').trim().toLowerCase())
+    .filter(Boolean);
+  const prioritizedFlag = normalizedFlags.find((entry) => {
+    return (
+      entry === 'planning' ||
+      entry === 'finalizing' ||
+      entry === 'recovering' ||
+      entry === 'waiting approval' ||
+      entry === 'waiting_approval' ||
+      entry === 'waitingapproval'
+    );
+  });
+  const selected = prioritizedFlag || normalizedLabel;
+  switch (selected) {
+    case 'planning':
+      return 'Planning...';
+    case 'finalizing':
+      return 'Finalizing...';
+    case 'recovering':
+      return 'Recovering...';
+    case 'waiting approval':
+    case 'waiting_approval':
+    case 'waitingapproval':
+      return 'Waiting for approval...';
+    case 'running':
+    case 'working':
+    case 'active':
+    case 'accepted':
+    case 'in progress':
+    case 'in_progress':
+    case 'inprogress':
+      return 'Working...';
+    default: {
+      const titled = titleCaseStatus(selected || 'working');
+      return titled.endsWith('...') ? titled : `${titled}...`;
     }
-    return content.join('\n\n');
-  };
+  }
+}
+
+function ThinkingGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M8 2.125 9.188 5.03l3.112.42-2.248 2.067.547 3.045L8 9.96l-2.599 1.601.547-3.045L3.7 5.45l3.112-.42L8 2.125Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function ChevronGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="m6 3.75 4 4.25-4 4.25"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ReasoningRow(props: { item: CodexTranscriptItem }) {
+  const markdown = createMemo(() => reasoningMarkdown(props.item));
+  const preview = createMemo(() => reasoningPreview(props.item));
+  const isActive = createMemo(() => isWorkingStatus(props.item.status));
+  const [expanded, setExpanded] = createSignal(false);
+
+  createEffect<boolean | undefined>((wasActive) => {
+    const active = isActive();
+    if (wasActive === undefined) {
+      setExpanded(active);
+      return active;
+    }
+    if (!wasActive && active) {
+      setExpanded(true);
+    } else if (wasActive && !active) {
+      setExpanded(false);
+    }
+    return active;
+  });
 
   return (
-    <div class="space-y-3">
-      <Show when={(props.item.summary?.length ?? 0) > 0}>
-        <ul class="codex-chat-summary-list">
-          <For each={props.item.summary}>{(entry) => <li>{entry}</li>}</For>
-        </ul>
-      </Show>
-      <Show when={detailText()}>
-        <ThinkingBlock content={detailText()} class="codex-chat-thinking-block" />
-      </Show>
-    </div>
+    <CodexMessageLane role="assistant">
+      <div
+        data-codex-item-type={props.item.type}
+        data-codex-reasoning-row="true"
+        data-codex-reasoning-expanded={expanded() ? 'true' : 'false'}
+        class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
+      >
+        <div class="codex-chat-reasoning-card">
+          <button
+            type="button"
+            class="codex-chat-reasoning-toggle"
+            aria-expanded={expanded() ? 'true' : 'false'}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <span class="codex-chat-reasoning-kicker">
+              <ThinkingGlyph />
+            </span>
+            <span class="codex-chat-reasoning-preview">{preview()}</span>
+            <Show when={isActive()}>
+              <span class="codex-chat-reasoning-cursor">
+                <StreamingCursor />
+              </span>
+            </Show>
+            <span class="codex-chat-reasoning-chevron" aria-hidden="true">
+              <ChevronGlyph />
+            </span>
+          </button>
+
+          <Show when={expanded() && markdown()}>
+            <div class="codex-chat-reasoning-body">
+              <MarkdownBlock
+                content={markdown()}
+                streaming={isActive()}
+                class="codex-chat-markdown-block codex-chat-reasoning-markdown"
+                rendererVariant="codex"
+              />
+            </div>
+          </Show>
+        </div>
+      </div>
+    </CodexMessageLane>
   );
 }
 
@@ -169,9 +326,6 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
             </Show>
             <Show when={props.item.type === 'fileChange'}>
               <FileChangeBody item={props.item} />
-            </Show>
-            <Show when={props.item.type === 'reasoning' || props.item.type === 'plan'}>
-              <ReasoningBody item={props.item} />
             </Show>
             <Show
               when={
@@ -276,7 +430,7 @@ function WorkingStateRow(props: {
   label: string;
   flags: readonly string[];
 }) {
-  const normalizedLabel = () => String(props.label ?? '').trim() || 'working';
+  const phaseLabel = () => workingPhaseLabel(props.label, props.flags);
   return (
     <CodexMessageLane role="assistant">
       <div
@@ -284,28 +438,7 @@ function WorkingStateRow(props: {
         class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
       >
         <div class="codex-working-indicator-card">
-          <div class="codex-working-indicator-surface">
-            <span class="codex-working-indicator-dots" aria-hidden="true">
-              <span class="codex-working-indicator-dot" />
-              <span class="codex-working-indicator-dot" />
-              <span class="codex-working-indicator-dot" />
-            </span>
-            <span class="codex-working-indicator-label">Codex is {displayStatus(normalizedLabel())}</span>
-            <span class="codex-working-indicator-cursor">
-              <StreamingCursor />
-            </span>
-          </div>
-          <Show when={props.flags.length > 0}>
-            <div class="mt-2 flex flex-wrap gap-2">
-              <For each={props.flags}>
-                {(flag) => (
-                  <Tag variant="info" tone="soft" size="sm">
-                    {flag}
-                  </Tag>
-                )}
-              </For>
-            </div>
-          </Show>
+          <CodexMessageRunIndicator phaseLabel={phaseLabel()} />
         </div>
       </div>
     </CodexMessageLane>
@@ -337,6 +470,9 @@ function TranscriptRow(props: { item: CodexTranscriptItem }) {
   }
   if (props.item.type === 'agentMessage') {
     return <AgentMessageRow item={props.item} />;
+  }
+  if (props.item.type === 'reasoning' || props.item.type === 'plan') {
+    return <ReasoningRow item={props.item} />;
   }
   return <TranscriptEvidenceRow item={props.item} />;
 }

@@ -8,6 +8,7 @@ import type {
   CodexThreadSession,
   CodexTranscriptItem,
 } from './types';
+import { isWorkingStatus } from './presentation';
 
 type MutableCodexThreadSession = {
   thread: CodexThread;
@@ -57,6 +58,8 @@ function addOrUpdateItem(session: CodexThreadSession, item: CodexItem, orderHint
   next.items_by_id[item.id] = {
     ...existing,
     ...item,
+    text: String(item.text ?? '').trim() ? item.text : existing.text,
+    status: String(item.status ?? '').trim() || existing.status,
     changes: item.changes && item.changes.length > 0 ? item.changes : existing.changes,
     inputs: item.inputs && item.inputs.length > 0 ? item.inputs : existing.inputs,
     summary: item.summary && item.summary.length > 0 ? item.summary : existing.summary,
@@ -89,6 +92,7 @@ function appendItemText(
   const existing = next.items_by_id[itemID];
   next.items_by_id[itemID] = {
     ...existing,
+    status: String(existing.status ?? '').trim() || String(fallback.status ?? '').trim() || 'inProgress',
     text: `${existing.text ?? ''}${delta}`,
   };
   return next;
@@ -107,6 +111,7 @@ function appendItemSummary(
   summary[Math.max(0, summaryIndex)] = `${summary[Math.max(0, summaryIndex)] ?? ''}${delta}`;
   next.items_by_id[itemID] = {
     ...existing,
+    status: String(existing.status ?? '').trim() || String(fallback.status ?? '').trim() || 'inProgress',
     summary,
   };
   return next;
@@ -126,6 +131,7 @@ function appendItemContent(
   content[normalizedIndex] = `${content[normalizedIndex] ?? ''}${delta}`;
   next.items_by_id[itemID] = {
     ...existing,
+    status: String(existing.status ?? '').trim() || String(fallback.status ?? '').trim() || 'inProgress',
     content,
     text: content.join('\n\n'),
   };
@@ -155,9 +161,21 @@ function appendFileChangeDiff(
   }
   next.items_by_id[itemID] = {
     ...existing,
+    status: String(existing.status ?? '').trim() || 'inProgress',
     changes,
   };
   return next;
+}
+
+function inferItemStatus(itemStatus: string | null | undefined, turnStatus: string | null | undefined): string {
+  const normalizedItemStatus = String(itemStatus ?? '').trim();
+  if (normalizedItemStatus) return normalizedItemStatus;
+
+  const normalizedTurnStatus = String(turnStatus ?? '').trim();
+  if (!normalizedTurnStatus) return '';
+  if (isWorkingStatus(normalizedTurnStatus)) return 'inProgress';
+  if (normalizedTurnStatus === 'notLoaded') return '';
+  return normalizedTurnStatus;
 }
 
 function itemTextOrContent(item: CodexItem | null | undefined): string {
@@ -208,6 +226,7 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
     for (const item of Array.isArray(turn.items) ? turn.items : []) {
       const normalized: CodexItem = {
         ...item,
+        status: inferItemStatus(item.status, turn.status),
         text: itemTextOrContent(item),
       };
       items_by_id[item.id] = {
@@ -279,7 +298,18 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
     case 'item_started':
     case 'item_completed':
       if (!event.item?.id) return next;
-      return addOrUpdateItem(next, { ...event.item, text: itemTextOrContent(event.item) }, next.item_order.length);
+      return addOrUpdateItem(
+        next,
+        {
+          ...event.item,
+          status: inferItemStatus(
+            event.item.status,
+            event.type === 'item_completed' ? 'completed' : 'inProgress',
+          ),
+          text: itemTextOrContent(event.item),
+        },
+        next.item_order.length,
+      );
     case 'agent_message_delta': {
       const itemID = String(event.item_id ?? '').trim();
       if (!itemID) return next;
