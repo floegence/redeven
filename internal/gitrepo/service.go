@@ -1026,8 +1026,6 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: "no staged changes to commit"}
 	case strings.Contains(lower, "no local changes to stash"):
 		return &rpc.Error{Code: 400, Message: "no local changes to stash"}
-	case strings.Contains(lower, "cannot unstage before the first commit"):
-		return &rpc.Error{Code: 400, Message: "cannot unstage before the first commit"}
 	case strings.Contains(lower, "invalid git path"):
 		return &rpc.Error{Code: 400, Message: "invalid path"}
 	case strings.Contains(lower, "please tell me who you are"):

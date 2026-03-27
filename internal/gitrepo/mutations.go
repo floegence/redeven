@@ -83,9 +83,6 @@ func (s *Service) stageWorkspacePaths(ctx context.Context, repo repoContext, pat
 }
 
 func (s *Service) unstageWorkspacePaths(ctx context.Context, repo repoContext, paths []string) error {
-	if strings.TrimSpace(repo.headCommit) == "" {
-		return errors.New("cannot unstage before the first commit")
-	}
 	pathspecs, err := normalizeGitPathspecs(paths)
 	if err != nil {
 		return err

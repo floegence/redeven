@@ -879,8 +879,9 @@ func TestResolveWorkspaceMutationPaths_UsesPagedSections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveWorkspaceMutationPaths(staged): %v", err)
 	}
-	mustContainPath(t, stagedPaths, workspace.TrackedPath)
-	mustContainPath(t, stagedPaths, workspace.UntrackedPath)
+	if len(stagedPaths) != 2 {
+		t.Fatalf("stagedPaths=%v, want 2 paths", stagedPaths)
+	}
 
 	conflictFixture := createTestRepoFixture(t)
 	conflict := createWorkspaceConflictFixture(t, conflictFixture.Root)
@@ -927,6 +928,87 @@ func TestStageAndUnstageWorkspacePaths(t *testing.T) {
 	if unstagedResp.Summary.StagedCount != 1 || unstagedResp.Summary.UntrackedCount != 1 {
 		t.Fatalf("unexpected unstaged summary: %+v", unstagedResp.Summary)
 	}
+}
+
+func TestStageAndUnstageWorkspacePaths_BeforeFirstCommit(t *testing.T) {
+	t.Parallel()
+	root := createUnbornRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, root)
+	svc := NewService(root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	if err := svc.stageWorkspacePaths(context.Background(), repo, []string{workspace.TrackedPath, workspace.UntrackedPath}); err != nil {
+		t.Fatalf("stageWorkspacePaths: %v", err)
+	}
+	stagedResp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after stage): %v", err)
+	}
+	if stagedResp.Summary.StagedCount != 2 || stagedResp.Summary.UnstagedCount != 0 || stagedResp.Summary.UntrackedCount != 0 {
+		t.Fatalf("unexpected staged summary: %+v", stagedResp.Summary)
+	}
+
+	if err := svc.unstageWorkspacePaths(context.Background(), repo, []string{workspace.UntrackedPath}); err != nil {
+		t.Fatalf("unstageWorkspacePaths: %v", err)
+	}
+	unstagedResp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after unstage): %v", err)
+	}
+	if unstagedResp.Summary.StagedCount != 1 || unstagedResp.Summary.UnstagedCount != 0 || unstagedResp.Summary.UntrackedCount != 1 {
+		t.Fatalf("unexpected unstaged summary: %+v", unstagedResp.Summary)
+	}
+	if len(unstagedResp.Untracked) != 1 || unstagedResp.Untracked[0].Path != workspace.UntrackedPath {
+		t.Fatalf("unexpected untracked items after unstage: %+v", unstagedResp.Untracked)
+	}
+}
+
+func TestUnstageAllWorkspacePaths_BeforeFirstCommit(t *testing.T) {
+	t.Parallel()
+	root := createUnbornRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, root)
+	svc := NewService(root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	if err := svc.stageWorkspacePaths(context.Background(), repo, []string{workspace.TrackedPath, workspace.UntrackedPath}); err != nil {
+		t.Fatalf("stageWorkspacePaths: %v", err)
+	}
+	stagedPaths, err := svc.resolveWorkspaceMutationPaths(context.Background(), repo, "staged")
+	if err != nil {
+		t.Fatalf("resolveWorkspaceMutationPaths(staged): %v", err)
+	}
+	if len(stagedPaths) != 2 {
+		t.Fatalf("stagedPaths=%v, want 2 paths", stagedPaths)
+	}
+
+	if err := svc.unstageWorkspacePaths(context.Background(), repo, stagedPaths); err != nil {
+		t.Fatalf("unstageWorkspacePaths(all): %v", err)
+	}
+	unstagedResp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after unstage all): %v", err)
+	}
+	if unstagedResp.Summary.StagedCount != 0 || unstagedResp.Summary.UnstagedCount != 0 || unstagedResp.Summary.UntrackedCount != 2 {
+		t.Fatalf("unexpected unstaged summary: %+v", unstagedResp.Summary)
+	}
+	untrackedPaths := make([]string, 0, len(unstagedResp.Untracked))
+	for _, item := range unstagedResp.Untracked {
+		untrackedPaths = append(untrackedPaths, item.Path)
+	}
+	mustContainPath(t, untrackedPaths, workspace.UntrackedPath)
+	trackedDir := filepath.ToSlash(filepath.Dir(workspace.TrackedPath))
+	for _, path := range untrackedPaths {
+		if path == workspace.TrackedPath || strings.HasPrefix(path, trackedDir+"/") || path == trackedDir+"/" {
+			return
+		}
+	}
+	t.Fatalf("expected tracked path to move back into untracked items: %+v", untrackedPaths)
 }
 
 func TestCommitWorkspace_UsesStagedChanges(t *testing.T) {

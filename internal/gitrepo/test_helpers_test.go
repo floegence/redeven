@@ -81,6 +81,15 @@ func createTestRepoFixture(t *testing.T) testRepoFixture {
 	}
 }
 
+func createUnbornRepoFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	runGitFixture(t, root, "init")
+	runGitFixture(t, root, "config", "user.name", "Tester")
+	runGitFixture(t, root, "config", "user.email", "tester@example.com")
+	return root
+}
+
 type comparisonBranchFixture struct {
 	BaseBranch string
 	Branch     string
