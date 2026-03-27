@@ -345,9 +345,9 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   );
 }
 
-function AgentMessageRow(props: { item: CodexTranscriptItem }) {
+function AgentMessageRow(props: { item: CodexTranscriptItem; showAvatar?: boolean }) {
   return (
-    <CodexMessageLane role="assistant" showAvatar>
+    <CodexMessageLane role="assistant" showAvatar={props.showAvatar}>
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
           <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" rendererVariant="codex" />
@@ -445,31 +445,50 @@ function WorkingStateRow(props: {
   );
 }
 
-function TranscriptRow(props: { item: CodexTranscriptItem }) {
+function shouldRenderTranscriptItem(item: CodexTranscriptItem): boolean {
   if (
-    (props.item.type === 'reasoning' || props.item.type === 'plan') &&
-    (props.item.summary?.length ?? 0) === 0 &&
-    (props.item.content?.length ?? 0) === 0 &&
-    !String(props.item.text ?? '').trim()
+    (item.type === 'reasoning' || item.type === 'plan') &&
+    (item.summary?.length ?? 0) === 0 &&
+    (item.content?.length ?? 0) === 0 &&
+    !String(item.text ?? '').trim()
   ) {
-    return null;
+    return false;
   }
   if (
-    props.item.type !== 'commandExecution' &&
-    props.item.type !== 'fileChange' &&
-    props.item.type !== 'userMessage' &&
-    props.item.type !== 'agentMessage' &&
-    props.item.type !== 'reasoning' &&
-    props.item.type !== 'plan' &&
-    !itemText(props.item).trim()
+    item.type !== 'commandExecution' &&
+    item.type !== 'fileChange' &&
+    item.type !== 'userMessage' &&
+    item.type !== 'agentMessage' &&
+    item.type !== 'reasoning' &&
+    item.type !== 'plan' &&
+    !itemText(item).trim()
   ) {
+    return false;
+  }
+  return true;
+}
+
+function shouldShowAgentAvatar(items: readonly CodexTranscriptItem[], index: number): boolean {
+  const item = items[index];
+  if (!item || item.type !== 'agentMessage') return false;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const previous = items[cursor];
+    if (!shouldRenderTranscriptItem(previous)) continue;
+    if (previous.type === 'userMessage') return true;
+    if (previous.type === 'agentMessage') return false;
+  }
+  return true;
+}
+
+function TranscriptRow(props: { item: CodexTranscriptItem; showAssistantAvatar?: boolean }) {
+  if (!shouldRenderTranscriptItem(props.item)) {
     return null;
   }
   if (props.item.type === 'userMessage') {
     return <UserMessageRow item={props.item} />;
   }
   if (props.item.type === 'agentMessage') {
-    return <AgentMessageRow item={props.item} />;
+    return <AgentMessageRow item={props.item} showAvatar={props.showAssistantAvatar} />;
   }
   if (props.item.type === 'reasoning' || props.item.type === 'plan') {
     return <ReasoningRow item={props.item} />;
@@ -508,9 +527,9 @@ export function CodexTranscript(props: {
             )}
           </For>
           <For each={props.items}>
-            {(item) => (
+            {(item, index) => (
               <div class="codex-transcript-row">
-                <TranscriptRow item={item} />
+                <TranscriptRow item={item} showAssistantAvatar={shouldShowAgentAvatar(props.items, index())} />
               </div>
             )}
           </For>
