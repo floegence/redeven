@@ -120,12 +120,12 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
 
   let waitAttempt = 0;
   let lastFailureKey = '';
-  let waitTimer: number | undefined;
+  let waitTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let tickInFlight = false;
 
   const clearWaitTimer = () => {
     if (typeof waitTimer !== 'undefined') {
-      window.clearTimeout(waitTimer);
+      globalThis.clearTimeout(waitTimer);
       waitTimer = undefined;
     }
     setNextRetryAtMs(null);
@@ -147,7 +147,7 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
 
     const safeDelay = Math.max(0, Math.floor(delayMs));
     setNextRetryAtMs(Date.now() + safeDelay);
-    waitTimer = window.setTimeout(() => {
+    waitTimer = globalThis.setTimeout(() => {
       waitTimer = undefined;
       setNextRetryAtMs(null);
       void runTick(forceReconnect);

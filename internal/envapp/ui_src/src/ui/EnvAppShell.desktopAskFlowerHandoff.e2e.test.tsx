@@ -178,7 +178,10 @@ vi.mock('./widgets/AskFlowerComposerWindow', () => ({
 }));
 vi.mock('./maintenance/AgentUpdateContext', () => ({ AgentUpdateContext: createContext({}) }));
 vi.mock('./maintenance/createAgentMaintenanceController', () => ({
-  createAgentMaintenanceController: () => ({}),
+  createAgentMaintenanceController: () => ({
+    maintaining: () => false,
+    stage: () => null,
+  }),
 }));
 vi.mock('./maintenance/createAgentUpdatePromptCoordinator', () => ({
   createAgentUpdatePromptCoordinator: () => ({

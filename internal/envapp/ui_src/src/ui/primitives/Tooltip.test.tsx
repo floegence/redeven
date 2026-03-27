@@ -75,6 +75,8 @@ describe('Tooltip', () => {
       expect(tooltip?.textContent).toContain('Delete blocked');
       expect(host.querySelector('[role="tooltip"]')).toBeNull();
       expect(tooltip?.style.visibility).toBe('visible');
+      expect(tooltip?.className).toContain('bg-popover');
+      expect(tooltip?.className).toContain('text-popover-foreground');
     } finally {
       dispose();
     }

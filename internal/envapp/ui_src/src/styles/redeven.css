@@ -7,6 +7,13 @@
 }
 
 :root {
+  /* Keep the Env App panel surface contract at root scope so body portals inherit it too. */
+  --redeven-surface-panel: rgb(246, 245, 244);
+  --redeven-surface-panel-soft: #fafbfc;
+  --redeven-surface-panel-elevated: #ffffff;
+  --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, white 18%);
+  --card: var(--redeven-surface-panel);
+  --popover: var(--redeven-surface-panel);
   --git-browser-selection-bg:
     linear-gradient(
       135deg,
@@ -22,6 +29,12 @@
 }
 
 html.dark {
+  --redeven-surface-panel: rgb(41, 44, 51);
+  --redeven-surface-panel-soft: #353942;
+  --redeven-surface-panel-elevated: #40454f;
+  --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, #616976 18%);
+  --card: var(--redeven-surface-panel);
+  --popover: var(--redeven-surface-panel);
   --git-browser-selection-bg:
     linear-gradient(
       135deg,
@@ -222,23 +235,16 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 }
 
 .flower-chat-shell {
-  --flower-chat-surface: rgb(246, 245, 244);
-  --flower-chat-surface-soft: #fafbfc;
-  --flower-chat-surface-elevated: #ffffff;
-  --flower-chat-surface-border: color-mix(in srgb, var(--border) 82%, white 18%);
+  --flower-chat-surface: var(--redeven-surface-panel);
+  --flower-chat-surface-soft: var(--redeven-surface-panel-soft);
+  --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated);
+  --flower-chat-surface-border: var(--redeven-surface-panel-border);
   display: flex;
   min-width: 0;
   min-height: 0;
   height: 100%;
   flex-direction: column;
   background: var(--flower-chat-surface);
-}
-
-html.dark .flower-chat-shell {
-  --flower-chat-surface: rgb(41, 44, 51);
-  --flower-chat-surface-soft: #353942;
-  --flower-chat-surface-elevated: #40454f;
-  --flower-chat-surface-border: color-mix(in srgb, var(--border) 82%, #616976 18%);
 }
 
 .flower-chat-header {

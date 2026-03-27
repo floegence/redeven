@@ -31,6 +31,9 @@ Notes:
 - `src/index.css` already imports the upstream Tailwind and floe-webapp compiled style stack. Prefer relying on that base layer instead of reintroducing repository-local universal resets.
 - Avoid global `border-style` injections on `*` selectors. They can turn intentional `border: none` declarations back into visible medium-width borders on native controls.
 - When a visual adjustment only belongs to one surface or component family, scope it to that component class instead of patching every element globally.
+- Env App standard panel surfaces live in the root-scoped `--redeven-surface-panel*` token family inside `src/styles/redeven.css`.
+- `--card` and `--popover` are intentionally aliased to that Env App panel family, so contributors should reuse semantic surface tokens instead of hardcoding the light/dark RGB pair in component selectors.
+- Any panel surface that must also style body-portal overlays such as tooltips or popovers must stay on the root theme scope; a page-local wrapper cannot reach those portals.
 
 ## Floating Layer Contract
 
