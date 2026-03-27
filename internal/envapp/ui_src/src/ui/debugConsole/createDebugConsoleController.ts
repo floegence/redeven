@@ -317,9 +317,9 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const [captureCutoffAt, setCaptureCutoffAt] = createSignal('');
 
   const enabled = createMemo(() => visible());
-  const collectUIMetrics = createMemo(() => enabled());
-  const uiMetricsCollecting = createMemo(() => enabled());
   const open = createMemo(() => enabled() && !minimized());
+  const collectUIMetrics = createMemo(() => open());
+  const uiMetricsCollecting = createMemo(() => open());
   const stats = createMemo(() => buildStats(serverEvents()));
   const slowSummary = createMemo(() => buildSlowSummary(serverEvents()));
   const traces = createMemo(() => buildTraceGroups(serverEvents()));
@@ -334,7 +334,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   installClientCapture();
 
   createEffect(() => {
-    setClientCaptureEnabled(enabled());
+    setClientCaptureEnabled(open());
   });
 
   onCleanup(() => {
@@ -343,7 +343,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
 
   createEffect(() => {
     const unsubscribe = subscribeClientEvents((event) => {
-      if (!enabled()) {
+      if (!open()) {
         return;
       }
       const cutoffMs = captureCutoffMs();
@@ -395,7 +395,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   };
 
   const refresh = async (options?: { silent?: boolean; initial?: boolean }): Promise<void> => {
-    if (!enabled()) {
+    if (!open()) {
       return;
     }
     if (compact(args.protocolStatus()) !== 'connected') {
@@ -413,7 +413,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     }
     try {
       const snapshot = await fetchSnapshot(200);
-      if (generation !== refreshGeneration || !enabled()) {
+      if (generation !== refreshGeneration || !open()) {
         return;
       }
       const nextEvents = filterEventsSince(snapshot.recent_events ?? [], captureCutoffMs());
@@ -434,7 +434,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   };
 
   createEffect(() => {
-    const active = enabled() && compact(args.protocolStatus()) === 'connected';
+    const active = open() && compact(args.protocolStatus()) === 'connected';
     if (!active) {
       setLoading(false);
       setStreamConnected(false);
@@ -491,7 +491,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   });
 
   createEffect(() => {
-    const active = enabled() && compact(args.protocolStatus()) === 'connected';
+    const active = open() && compact(args.protocolStatus()) === 'connected';
     if (!active) {
       return;
     }

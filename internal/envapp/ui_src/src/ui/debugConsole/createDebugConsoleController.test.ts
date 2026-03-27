@@ -89,7 +89,7 @@ afterEach(() => {
 });
 
 describe('createDebugConsoleController', () => {
-  it('loads snapshot data and merges streamed events while visible', async () => {
+  it('loads snapshot data and merges streamed events while open', async () => {
     installStorageBridge();
     setConsoleVisible(true);
 
@@ -230,6 +230,136 @@ describe('createDebugConsoleController', () => {
     expect(fetchSnapshot).toHaveBeenCalledTimes(1);
     expect(trackerArgs.enabled()).toBe(true);
     expect(trackerArgs.detailed()).toBe(true);
+
+    dispose();
+  });
+
+  it('keeps the console enabled but stops collection while minimized', async () => {
+    installStorageBridge();
+    setConsoleVisible(true, true);
+
+    const [protocolStatus] = createSignal('connected');
+    const fetchSnapshot = vi.fn(async () => buildSnapshot([
+      {
+        created_at: '2026-03-27T10:00:01Z',
+        source: 'agent',
+        scope: 'gateway_api',
+        kind: 'request',
+        trace_id: 'trace-1',
+        method: 'GET',
+        path: '/_redeven_proxy/api/settings',
+      },
+    ]));
+    const connectStream = vi.fn(async ({ signal }) => {
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const setClientCaptureEnabled = vi.fn();
+
+    let trackerArgs!: Readonly<{ enabled: () => boolean; detailed: () => boolean }>;
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        protocolStatus,
+        fetchSnapshot,
+        connectStream,
+        setClientCaptureEnabled,
+        createPerformanceTracker: (args) => {
+          trackerArgs = args;
+          return {
+            snapshot: () => buildPerformanceSnapshot({
+              collecting: args.enabled(),
+            }),
+            clear: vi.fn(),
+          };
+        },
+      });
+      return disposeRoot;
+    });
+
+    await tick();
+    await tick();
+
+    expect(controller.enabled()).toBe(true);
+    expect(controller.open()).toBe(false);
+    expect(controller.collectUIMetrics()).toBe(false);
+    expect(controller.uiMetricsCollecting()).toBe(false);
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(connectStream).not.toHaveBeenCalled();
+    expect(trackerArgs.enabled()).toBe(false);
+    expect(trackerArgs.detailed()).toBe(false);
+    expect(setClientCaptureEnabled).toHaveBeenCalledWith(false);
+
+    controller.restore();
+    await tick();
+    await tick();
+
+    expect(controller.open()).toBe(true);
+    expect(controller.collectUIMetrics()).toBe(true);
+    expect(controller.uiMetricsCollecting()).toBe(true);
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect(connectStream).toHaveBeenCalledTimes(1);
+    expect(trackerArgs.enabled()).toBe(true);
+    expect(trackerArgs.detailed()).toBe(true);
+    expect(setClientCaptureEnabled).toHaveBeenLastCalledWith(true);
+
+    dispose();
+  });
+
+  it('stops auto-refresh and browser capture after minimize', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-27T10:00:00Z'));
+    installStorageBridge();
+    setConsoleVisible(true);
+
+    const [protocolStatus] = createSignal('connected');
+    const fetchSnapshot = vi
+      .fn()
+      .mockResolvedValue(buildSnapshot([
+        {
+          created_at: '2026-03-27T10:00:00Z',
+          source: 'agent',
+          scope: 'gateway_api',
+          kind: 'request',
+          trace_id: 'trace-1',
+          method: 'GET',
+          path: '/_redeven_proxy/api/settings',
+          status_code: 200,
+          duration_ms: 12,
+        },
+      ]));
+    const setClientCaptureEnabled = vi.fn();
+
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        protocolStatus,
+        fetchSnapshot,
+        setClientCaptureEnabled,
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
+        createPerformanceTracker: () => ({
+          snapshot: () => buildPerformanceSnapshot({ collecting: true }),
+          clear: vi.fn(),
+        }),
+      });
+      return disposeRoot;
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect(setClientCaptureEnabled).toHaveBeenLastCalledWith(true);
+
+    controller.minimize();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(controller.enabled()).toBe(true);
+    expect(controller.open()).toBe(false);
+    expect(controller.collectUIMetrics()).toBe(false);
+    expect(controller.uiMetricsCollecting()).toBe(false);
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect(setClientCaptureEnabled).toHaveBeenLastCalledWith(false);
 
     dispose();
   });

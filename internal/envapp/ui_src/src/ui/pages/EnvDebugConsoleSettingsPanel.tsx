@@ -45,7 +45,7 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
     <div class="space-y-4">
       <SubSectionHeader
         title="Debug Console"
-        description="Control the floating diagnostics window for this browser session. Logging stays independent, and local UI metrics start automatically while the console is visible."
+        description="Control the floating diagnostics window for this browser session. Logging stays independent, and diagnostics collection starts only while the floating console is open."
         actions={(
           <div class="flex flex-wrap items-center gap-2">
             <SettingsPill tone="success">Frontend only</SettingsPill>
