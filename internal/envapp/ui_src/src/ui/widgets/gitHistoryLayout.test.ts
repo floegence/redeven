@@ -165,6 +165,9 @@ describe('browser workspace layout wiring', () => {
     expect(historySrc).toContain('Click a file to inspect its diff in a dialog.');
     expect(historySrc).toContain('Commit Diff');
     expect(historySrc).toContain('aria-expanded={commitBodyExpanded()}');
+    expect(historySrc).toContain('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between');
+    expect(historySrc).toContain('flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto');
+    expect(historySrc).toContain('min-w-[34rem] sm:min-w-[42rem] md:min-w-0');
   });
 
   it('routes branch review through status and history views with compare in a dialog', () => {
@@ -196,6 +199,7 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between');
     expect(branchesSrc).toContain("const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';");
     expect(branchesSrc).toContain("const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';");
+    expect(branchesSrc).toContain("const branchActionGridClass = () => 'grid-cols-1';");
     expect(branchesSrc).toContain("const secondaryActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto';");
     expect(branchesSrc).toContain("const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';");
     expect(branchesSrc).toContain("const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';");
@@ -203,8 +207,12 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('>Actions<');
     expect(branchesSrc).toContain('grid w-full grid-cols-2 rounded-lg border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]');
     expect(branchesSrc).toContain("'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150'");
-    expect(branchesSrc).toContain('<GitShortcutOrbDock>');
+    expect(branchesSrc).toContain('<GitShortcutOrbDock class="w-full">');
+    expect(branchesSrc).toContain('<GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">');
     expect(branchesSrc).toContain("class={cn('grid gap-1.5 sm:flex sm:flex-wrap sm:justify-end', branchActionGridClass())}");
+    expect(branchesSrc).toContain('grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5');
+    expect(branchesSrc).toContain('flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start sm:justify-end');
+    expect(branchesSrc).toContain('flex flex-col gap-1.5 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end');
     expect(branchesSrc).not.toContain('w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right');
     expect(branchesSrc).not.toContain('Subject');
   });
@@ -219,9 +227,10 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).toContain('Selected Branch');
     expect(overviewSrc).toContain('Repository Signals');
     expect(overviewSrc).toContain('GitStatStrip');
+    expect(overviewSrc).toContain('h-full min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4');
     expect(overviewSrc).toContain('columnsClass="grid-cols-2 xl:grid-cols-4"');
     expect(overviewSrc).toContain('space-y-0.5 rounded-md bg-muted/[0.12] p-0.5');
-    expect(overviewSrc).toContain('rounded bg-background/70 px-2 py-1.5 text-[11px] transition-shadow duration-150 hover:shadow-sm');
+    expect(overviewSrc).toContain('flex flex-col gap-1.5 rounded bg-background/70 px-2 py-1.5 text-[11px] transition-shadow duration-150 hover:shadow-sm sm:flex-row sm:items-start sm:justify-between');
     expect(overviewSrc).not.toContain('xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]');
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
 
@@ -232,10 +241,18 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('GitDiffDialog');
     expect(changesSrc).toContain('GIT_CHANGED_FILES_TABLE_CLASS');
     expect(changesSrc).toContain('GitChangedFilesActionButton');
+    expect(changesSrc).toContain('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between');
+    expect(changesSrc).toContain('flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:flex-col lg:items-end lg:justify-start');
+    expect(changesSrc).toContain('grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end');
+    expect(changesSrc).toContain('min-w-[34rem] sm:min-w-[42rem] md:min-w-0');
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEAD_CLASS = 'sticky top-0 z-10 bg-muted/30 backdrop-blur';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:pointer-events-none disabled:opacity-45';");
+    expect(primitivesSrc).toContain("grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5");
+    expect(primitivesSrc).toContain("grid grid-cols-1 gap-2 border-t border-border/55 bg-background/72 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2");
+    expect(primitivesSrc).toContain("class={cn('inline-flex max-w-full flex-wrap items-center gap-1.5', props.class)}");
+    expect(primitivesSrc).toContain("return <div class={cn('break-words text-[13px] font-bold leading-5 tracking-tight text-foreground', props.class)}>{props.children}</div>;");
     expect(primitivesSrc).toContain('sticky right-0 z-10 border-l border-border/45');
     expect(changesSrc).not.toContain('border-b border-border/70 px-3 py-2');
     expect(changesSrc).not.toContain('text-[24px] font-semibold tracking-tight');

@@ -219,7 +219,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
       >
         <GitVirtualTable
           items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[46rem] md:min-w-0`}
+          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[46rem] md:min-w-0`}
           header={(
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
               <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
@@ -289,7 +289,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
       >
         <GitVirtualTable
           items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[52rem] md:min-w-0`}
+          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[36rem] sm:min-w-[52rem] md:min-w-0`}
           header={(
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
               <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
@@ -996,16 +996,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     return branchWorkspaceDisabledReason() || 'Repository path is unavailable.';
   };
   const showWorkspaceHelpers = () => Boolean(props.onOpenInTerminal || props.onBrowseFiles);
-  const branchActionCount = () => Number(Boolean(props.onCheckoutBranch))
-    + Number(mergeAvailable())
-    + Number(deleteAvailable());
-  const branchActionGridClass = () => (
-    branchActionCount() >= 3
-      ? 'grid-cols-3'
-      : branchActionCount() === 2
-        ? 'grid-cols-2'
-        : 'grid-cols-1'
-  );
+  const branchActionGridClass = () => 'grid-cols-1';
   const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
   const secondaryActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto';
@@ -1168,12 +1159,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
             <section class="rounded-md border border-border/65 bg-card px-3 py-2.5">
-              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5">
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
                 <GitLabelBlock class="min-w-0" label="Status" tone="neutral" />
 
-                <div class="flex min-w-fit items-start justify-end gap-2">
+                <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start sm:justify-end">
                   <Show when={props.onAskFlower}>
-                    <GitShortcutOrbDock>
+                    <GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">
                       <GitShortcutOrbButton
                         label="Ask Flower"
                         tone="flower"
@@ -1195,14 +1186,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       />
                     </GitShortcutOrbDock>
                   </Show>
-                  <Button size="sm" variant="outline" class="rounded-md bg-background/80" onClick={() => setCompareDialogOpen(true)}>
+                  <Button size="sm" variant="outline" class="w-full rounded-md bg-background/80 sm:w-auto" onClick={() => setCompareDialogOpen(true)}>
                     Compare
                   </Button>
                   <Show when={props.onOpenStash}>
                     <Button
                       size="sm"
                       variant="outline"
-                      class="rounded-md bg-background/80"
+                      class="w-full rounded-md bg-background/80 sm:w-auto"
                       disabled={!canOpenStash()}
                       onClick={() => {
                         const repoRoot = statusRepoRootPath();
@@ -1386,7 +1377,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         <Show when={showWorkspaceHelpers()}>
                           <div class="flex flex-col gap-1.5">
                             <div class={headerControlGroupLabelClass}>Workspace</div>
-                            <GitShortcutOrbDock>
+                            <GitShortcutOrbDock class="w-full">
                               <Show when={props.onOpenInTerminal}>
                                 <GitShortcutOrbButton
                                   label="Terminal"
@@ -1420,7 +1411,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           </div>
                         </Show>
 
-                        <div class="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:ml-auto">
+                        <div class="flex flex-col gap-1.5 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
                           <div class={headerControlGroupLabelClass}>Actions</div>
                           <div class={cn('grid gap-1.5 sm:flex sm:flex-wrap sm:justify-end', branchActionGridClass())}>
                             <Show when={props.onCheckoutBranch}>

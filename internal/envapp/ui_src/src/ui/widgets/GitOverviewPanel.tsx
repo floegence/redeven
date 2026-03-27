@@ -28,7 +28,7 @@ function summaryValue(value: unknown, fallback = '—'): string {
 
 export function GitOverviewPanel(props: GitOverviewPanelProps) {
   return (
-    <div class="h-full min-h-0 overflow-auto px-3 py-3">
+    <div class="h-full min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
       <Show when={!props.summaryLoading} fallback={<div class="text-xs text-muted-foreground">Loading repository summary...</div>}>
         <Show when={!props.summaryError} fallback={<div class="text-xs break-words text-error">{props.summaryError}</div>}>
           <Show when={props.repoSummary} fallback={<div class="text-xs text-muted-foreground">Repository summary is unavailable.</div>}>
@@ -107,9 +107,9 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                     <div class="space-y-0.5 rounded-md bg-muted/[0.12] p-0.5">
                       <For each={repoSignals()}>
                         {(signal) => (
-                          <div class="flex items-start justify-between gap-3 rounded bg-background/70 px-2 py-1.5 text-[11px] transition-shadow duration-150 hover:shadow-sm" title={signal.value}>
+                          <div class="flex flex-col gap-1.5 rounded bg-background/70 px-2 py-1.5 text-[11px] transition-shadow duration-150 hover:shadow-sm sm:flex-row sm:items-start sm:justify-between" title={signal.value}>
                             <div class="shrink-0 text-muted-foreground/80">{signal.label}</div>
-                            <div class="min-w-0 flex-1 truncate text-right font-medium text-foreground">{signal.value}</div>
+                            <div class="min-w-0 break-words text-left font-medium text-foreground sm:flex-1 sm:truncate sm:text-right">{signal.value}</div>
                           </div>
                         )}
                       </For>
