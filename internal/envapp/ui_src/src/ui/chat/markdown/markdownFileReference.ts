@@ -6,6 +6,12 @@ export interface MarkdownFileReference {
   title: string;
 }
 
+export interface MarkdownLocalFileHref {
+  href: string;
+  path: string;
+  fragment: string;
+}
+
 const LOCAL_FILE_PATH_RE = /^(?:\/|\.{1,2}\/|[A-Za-z]:[\\/])/;
 const FRAGMENT_LINE_RE = /^L(\d+)(?:C(\d+))?$/i;
 const TEXT_LINE_RE = /\bL(\d+)(?:C(\d+))?\b/i;
@@ -26,7 +32,7 @@ function splitHref(href: string): { path: string; fragment: string } {
   };
 }
 
-function basenameFromPath(path: string): string {
+export function basenameFromMarkdownPath(path: string): string {
   const normalized = String(path ?? '').replace(/\\/g, '/').replace(/\/+$/, '');
   const slashIndex = normalized.lastIndexOf('/');
   return slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
@@ -88,24 +94,36 @@ function extractLineLabelFromText(text: string): string | null {
 }
 
 export function parseMarkdownFileReference(href: string, text: string): MarkdownFileReference | null {
-  const rawHref = String(href ?? '').trim();
-  if (!rawHref) return null;
+  const localHref = parseMarkdownLocalFileHref(href);
+  if (!localHref) return null;
 
-  const { path, fragment } = splitHref(rawHref);
-  if (!LOCAL_FILE_PATH_RE.test(path)) return null;
-
-  const displayName = basenameFromPath(path);
+  const { path, fragment } = localHref;
+  const displayName = basenameFromMarkdownPath(path);
   if (!displayName) return null;
 
   const lineLabel = extractLineLabelFromFragment(fragment) ?? extractLineLabelFromText(text);
   if (!lineLabel && !displayName.includes('.')) return null;
 
   return {
-    href: rawHref,
+    href: localHref.href,
     path,
     displayName,
     lineLabel,
-    title: rawHref,
+    title: localHref.href,
+  };
+}
+
+export function parseMarkdownLocalFileHref(href: string): MarkdownLocalFileHref | null {
+  const rawHref = String(href ?? '').trim();
+  if (!rawHref) return null;
+
+  const { path, fragment } = splitHref(rawHref);
+  if (!LOCAL_FILE_PATH_RE.test(path)) return null;
+
+  return {
+    href: rawHref,
+    path,
+    fragment,
   };
 }
 

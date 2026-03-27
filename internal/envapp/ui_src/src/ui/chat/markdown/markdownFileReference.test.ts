@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildMarkdownFileReferencePrefixMap, parseMarkdownFileReference } from './markdownFileReference';
+import {
+  basenameFromMarkdownPath,
+  buildMarkdownFileReferencePrefixMap,
+  parseMarkdownFileReference,
+  parseMarkdownLocalFileHref,
+} from './markdownFileReference';
 
 describe('parseMarkdownFileReference', () => {
   it('parses multiline file reference labels from local file links', () => {
@@ -42,5 +47,14 @@ describe('parseMarkdownFileReference', () => {
 
     expect(prefixMap.get('/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts')).toBe('…/services/');
     expect(prefixMap.get('/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts')).toBe('…/api/');
+  });
+
+  it('parses local file hrefs independently from the visible link label', () => {
+    expect(parseMarkdownLocalFileHref('/Users/tangjianyin/.codex-cc/auth.json#L3')).toEqual({
+      href: '/Users/tangjianyin/.codex-cc/auth.json#L3',
+      path: '/Users/tangjianyin/.codex-cc/auth.json',
+      fragment: 'L3',
+    });
+    expect(basenameFromMarkdownPath('/Users/tangjianyin/.codex-cc/auth.json')).toBe('auth.json');
   });
 });

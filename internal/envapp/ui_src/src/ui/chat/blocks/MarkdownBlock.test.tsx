@@ -12,12 +12,15 @@ import type { MarkdownRendererVariant } from '../markdown/markdownRendererOption
 import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel';
 import { MarkdownBlock } from './MarkdownBlock';
+import { FilePreviewContext } from '../../widgets/FilePreviewContext';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
 }));
 
 const renderMarkdownSnapshotMock = vi.fn();
+const openPreviewMock = vi.fn();
+const closePreviewMock = vi.fn();
 const chatStyles = readFileSync(resolve(process.cwd(), 'src/ui/chat/chat.css'), 'utf8');
 
 vi.mock('../workers/markdownWorkerClient', () => ({
@@ -36,6 +39,22 @@ function createSnapshot(
   rendererVariant: MarkdownRendererVariant = 'default',
 ) {
   return buildMarkdownRenderSnapshot(createMarked(rendererVariant), content, streaming);
+}
+
+function renderWithFilePreviewContext(factory: () => any, host: Element) {
+  return render(() => (
+    <FilePreviewContext.Provider
+      value={{
+        controller: {} as any,
+        openPreview: async (item) => {
+          openPreviewMock(item);
+        },
+        closePreview: closePreviewMock,
+      }}
+    >
+      {factory()}
+    </FilePreviewContext.Provider>
+  ), host);
 }
 
 function deferred<T>() {
@@ -70,6 +89,8 @@ async function waitFor(check: () => void): Promise<void> {
 
 beforeEach(() => {
   renderMarkdownSnapshotMock.mockReset();
+  openPreviewMock.mockReset();
+  closePreviewMock.mockReset();
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
 });
@@ -395,5 +416,34 @@ describe('MarkdownBlock', () => {
 
     expect(host.querySelector('.chat-md-file-ref')).toBeNull();
     expect((host.querySelector('a.chat-md-link') as HTMLAnchorElement | null)?.textContent).toContain('controlplaneApi.ts');
+  });
+
+  it('opens the floating file preview instead of navigating local codex links', async () => {
+    const content = '[auth.json\nL3](/Users/tangjianyin/.codex-cc/auth.json#L3)';
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderWithFilePreviewContext(
+      () => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />,
+      host,
+    );
+
+    await waitFor(() => {
+      expect(host.querySelector('.chat-md-file-ref')).toBeTruthy();
+    });
+
+    const fileLink = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
+    fileLink?.click();
+    await flushAsync();
+
+    expect(openPreviewMock).toHaveBeenCalledWith({
+      id: '/Users/tangjianyin/.codex-cc/auth.json',
+      name: 'auth.json',
+      path: '/Users/tangjianyin/.codex-cc/auth.json',
+      type: 'file',
+    });
   });
 });

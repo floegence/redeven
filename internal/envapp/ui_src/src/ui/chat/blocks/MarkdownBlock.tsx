@@ -5,13 +5,15 @@
 // it back into raw markdown source. Raw streaming text is only used before the first compatible
 // snapshot exists or when the current snapshot still has no rendered tail.
 
-import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, useContext } from 'solid-js';
 import type { Component } from 'solid-js';
 import type { Marked } from 'marked';
 import { cn } from '@floegence/floe-webapp-core';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
 import { createMarkdownRenderer } from '../markdown/markedConfig';
+import { basenameFromMarkdownPath, parseMarkdownLocalFileHref } from '../markdown/markdownFileReference';
 import type { MarkdownRendererVariant } from '../markdown/markdownRendererOptions';
 import { normalizeMarkdownForDisplay, normalizeMarkdownForStreamingDisplay } from '../markdown/normalizeMarkdownForDisplay';
 import { AppendOnlyText, isAppendOnlyTextCompatible } from '../status/AppendOnlyText';
@@ -19,6 +21,7 @@ import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel'
 import { StreamingCursor } from '../status/StreamingCursor';
 import type { MarkdownRenderSnapshot } from '../types';
 import { renderMarkdownSnapshot } from '../workers/markdownWorkerClient';
+import { FilePreviewContext } from '../../widgets/FilePreviewContext';
 
 export interface MarkdownBlockProps {
   content: string;
@@ -93,6 +96,7 @@ async function renderMarkdownFallback(
 }
 
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
+  const filePreview = useContext(FilePreviewContext);
   const [renderedSnapshot, setRenderedSnapshot] = createSignal<MarkdownRenderSnapshot | null>(null);
   const [renderedText, setRenderedText] = createSignal('');
   const [renderedVariant, setRenderedVariant] = createSignal<MarkdownRendererVariant | null>(null);
@@ -225,8 +229,39 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     };
   });
 
+  const openLocalFilePreview = (path: string) => {
+    if (!filePreview) return;
+    const normalizedPath = String(path ?? '').trim();
+    if (!normalizedPath) return;
+
+    const item: FileItem = {
+      id: normalizedPath,
+      name: basenameFromMarkdownPath(normalizedPath) || 'File',
+      path: normalizedPath,
+      type: 'file',
+    };
+    void filePreview.openPreview(item);
+  };
+
+  const handleClick = (event: MouseEvent) => {
+    if (rendererVariant() !== 'codex' || !filePreview) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const anchor = target.closest('a.chat-md-link');
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+
+    const rawHref = anchor.getAttribute('href') ?? anchor.href;
+    const localHref = parseMarkdownLocalFileHref(rawHref);
+    if (!localHref) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    openLocalFilePreview(localHref.path);
+  };
+
   return (
-    <div class={cn('chat-markdown-block', props.class)}>
+    <div class={cn('chat-markdown-block', props.class)} onClick={handleClick}>
       <Show
         when={!isEmptyStreaming()}
         fallback={
