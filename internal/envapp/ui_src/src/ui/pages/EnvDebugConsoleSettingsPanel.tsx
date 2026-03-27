@@ -22,19 +22,12 @@ function DebugConsoleSwitch(props: Readonly<{ checked: boolean; disabled?: boole
       type="button"
       role="switch"
       aria-checked={props.checked}
+      data-state={props.checked ? 'checked' : 'unchecked'}
       disabled={props.disabled}
-      class={`inline-flex h-6 w-11 shrink-0 flex-none cursor-pointer items-center rounded-full border transition-colors ${
-        props.checked
-          ? 'border-primary/30 bg-primary/15 text-primary'
-          : 'border-border bg-muted/60 text-muted-foreground'
-      } disabled:cursor-not-allowed disabled:opacity-50`}
+      class="env-debug-console-switch inline-flex h-6 w-11 shrink-0 flex-none cursor-pointer items-center rounded-full border transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
       onClick={() => props.onChange(!props.checked)}
     >
-      <span
-        class={`h-4 w-4 rounded-full bg-background shadow-sm transition-transform ${
-          props.checked ? 'translate-x-[1.3rem]' : 'translate-x-1'
-        }`}
-      />
+      <span class="env-debug-console-switch__thumb h-4 w-4 rounded-full transition-transform duration-150" />
       <span class="sr-only">{props.checked ? 'Disable debug console' : 'Enable debug console'}</span>
     </button>
   );
