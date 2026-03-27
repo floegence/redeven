@@ -11,6 +11,11 @@ import {
   type DiagnosticsStats,
   type DiagnosticsSummaryItem,
 } from '../services/diagnosticsApi';
+import {
+  installDebugConsoleBrowserCapture,
+  setDebugConsoleCaptureEnabled,
+  subscribeDebugConsoleClientEvents,
+} from '../services/debugConsoleCapture';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { createUIPerformanceTracker, type UIPerformanceSnapshot } from './createUIPerformanceTracker';
@@ -65,7 +70,10 @@ type CreateDebugConsoleControllerArgs = Readonly<{
   fetchSnapshot?: (limit?: number) => Promise<Awaited<ReturnType<typeof getDiagnostics>>>;
   exportSnapshot?: (limit?: number) => Promise<DiagnosticsExportView>;
   connectStream?: typeof connectDiagnosticsStream;
-  createPerformanceTracker?: (args: Readonly<{ enabled: Accessor<boolean> }>) => UIPerformanceTrackerHandle;
+  createPerformanceTracker?: (args: Readonly<{ enabled: Accessor<boolean>; detailed: Accessor<boolean> }>) => UIPerformanceTrackerHandle;
+  installClientCapture?: () => void;
+  setClientCaptureEnabled?: (enabled: boolean) => void;
+  subscribeClientEvents?: (listener: (event: DiagnosticsEvent) => void) => () => void;
 }>;
 
 function compact(value: unknown): string {
@@ -311,6 +319,9 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const exportSnapshot = args.exportSnapshot ?? exportDiagnostics;
   const connectStream = args.connectStream ?? connectDiagnosticsStream;
   const performanceTrackerFactory = args.createPerformanceTracker ?? createUIPerformanceTracker;
+  const installClientCapture = args.installClientCapture ?? installDebugConsoleBrowserCapture;
+  const setClientCaptureEnabled = args.setClientCaptureEnabled ?? setDebugConsoleCaptureEnabled;
+  const subscribeClientEvents = args.subscribeClientEvents ?? subscribeDebugConsoleClientEvents;
 
   const [settingsLoaded, setSettingsLoaded] = createSignal(false);
   const [settingsError, setSettingsError] = createSignal<string | null>(null);
@@ -332,7 +343,8 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const [captureCutoffAt, setCaptureCutoffAt] = createSignal('');
 
   const enabled = createMemo(() => configured().enabled);
-  const collectUIMetrics = createMemo(() => configured().enabled && configured().collect_ui_metrics);
+  const collectUIMetrics = createMemo(() => configured().collect_ui_metrics);
+  const uiMetricsCollecting = createMemo(() => enabled());
   const open = createMemo(() => enabled() && !minimized());
   const stats = createMemo(() => buildStats(serverEvents()));
   const slowSummary = createMemo(() => buildSlowSummary(serverEvents()));
@@ -340,9 +352,34 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const lastEventAt = createMemo(() => compact(serverEvents()[0]?.created_at));
 
   const performanceTracker = performanceTrackerFactory({
-    enabled: () => collectUIMetrics(),
+    enabled: () => uiMetricsCollecting(),
+    detailed: () => uiMetricsCollecting() && collectUIMetrics(),
   });
   let refreshGeneration = 0;
+
+  installClientCapture();
+
+  createEffect(() => {
+    setClientCaptureEnabled(enabled());
+  });
+
+  onCleanup(() => {
+    setClientCaptureEnabled(false);
+  });
+
+  createEffect(() => {
+    const unsubscribe = subscribeClientEvents((event) => {
+      if (!enabled()) {
+        return;
+      }
+      const cutoffMs = captureCutoffMs();
+      if (cutoffMs > 0 && toUnixMs(event.created_at) < cutoffMs) {
+        return;
+      }
+      setServerEvents((current) => mergeServerEvents(current, [event]));
+    });
+    onCleanup(unsubscribe);
+  });
 
   createEffect(() => {
     writeUIStorageItem(DEBUG_CONSOLE_MINIMIZED_STORAGE_KEY, minimized() ? 'true' : 'false');
@@ -640,6 +677,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     settingsError,
     enabled,
     collectUIMetrics,
+    uiMetricsCollecting,
     configured,
     open,
     minimized,

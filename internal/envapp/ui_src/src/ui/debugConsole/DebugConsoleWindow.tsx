@@ -88,6 +88,9 @@ function prettyJSON(value: unknown): string {
   if (value == null) {
     return '{}';
   }
+  if (typeof value === 'string') {
+    return value;
+  }
   try {
     return JSON.stringify(value, null, 2);
   } catch {
@@ -95,9 +98,89 @@ function prettyJSON(value: unknown): string {
   }
 }
 
+type EventDebugDetail = Readonly<{
+  transport?: string;
+  operation?: string;
+  type_id?: number;
+  request?: Readonly<{
+    url?: string;
+    path?: string;
+    query?: string;
+    headers?: Record<string, unknown>;
+    payload?: unknown;
+    payload_kind?: string;
+    payload_summary?: string;
+    content_type?: string;
+    truncated?: boolean;
+    size_bytes?: number;
+  }>;
+  response?: Readonly<{
+    ok?: boolean;
+    status?: number;
+    status_text?: string;
+    headers?: Record<string, unknown>;
+    payload?: unknown;
+    payload_kind?: string;
+    payload_summary?: string;
+    content_type?: string;
+    truncated?: boolean;
+    size_bytes?: number;
+    error_message?: string;
+  }>;
+}>;
+
+function eventDebugDetail(event: DiagnosticsEvent): EventDebugDetail {
+  if (!event.detail || typeof event.detail !== 'object') {
+    return {};
+  }
+  return event.detail as EventDebugDetail;
+}
+
+function eventRequestDetail(event: DiagnosticsEvent): EventDebugDetail['request'] {
+  return eventDebugDetail(event).request;
+}
+
+function eventResponseDetail(event: DiagnosticsEvent): EventDebugDetail['response'] {
+  return eventDebugDetail(event).response;
+}
+
+function eventTransport(event: DiagnosticsEvent): string {
+  return compact(eventDebugDetail(event).transport);
+}
+
+function eventOperation(event: DiagnosticsEvent): string {
+  return compact(eventDebugDetail(event).operation);
+}
+
+function eventRequestURL(event: DiagnosticsEvent): string {
+  return compact(eventRequestDetail(event)?.url)
+    || compact(event.path)
+    || compact(eventRequestDetail(event)?.path)
+    || eventOperation(event)
+    || compact(event.kind)
+    || compact(event.scope);
+}
+
+function eventFailureMessage(event: DiagnosticsEvent): string {
+  return compact(eventResponseDetail(event)?.error_message) || compact(event.message);
+}
+
+function eventFailed(event: DiagnosticsEvent): boolean {
+  return (typeof event.status_code === 'number' && event.status_code >= 400)
+    || compact(event.kind).toLowerCase().includes('failed')
+    || compact(eventResponseDetail(event)?.error_message).length > 0;
+}
+
+function eventStatusLabel(event: DiagnosticsEvent): string {
+  if (typeof event.status_code === 'number' && event.status_code > 0) {
+    return String(event.status_code);
+  }
+  return eventFailed(event) ? 'Failed' : '-';
+}
+
 function eventTitle(event: DiagnosticsEvent): string {
   const method = compact(event.method);
-  const path = compact(event.path);
+  const path = eventRequestURL(event);
   const kind = compact(event.kind);
   const scope = compact(event.scope);
   return [method, path || kind || scope].filter(Boolean).join(' ');
@@ -187,6 +270,23 @@ function semanticInteractiveStyle(tone: SemanticTone, emphasis: 'soft' | 'strong
   };
 }
 
+function dangerTextStyle(): JSX.CSSProperties {
+  return {
+    color: 'color-mix(in srgb, var(--error) 82%, rgb(76 5 25))',
+  };
+}
+
+function mergeStyles(...styles: Array<JSX.CSSProperties | undefined>): JSX.CSSProperties | undefined {
+  const next: JSX.CSSProperties = {};
+  for (const style of styles) {
+    if (!style) {
+      continue;
+    }
+    Object.assign(next, style);
+  }
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 function semanticBadgeStyle(tone: SemanticTone, active = false): JSX.CSSProperties {
   const accent = semanticAccent(tone);
   return {
@@ -200,13 +300,20 @@ function detailItemsForEvent(event: DiagnosticsEvent | null): KeyValueItem[] {
   if (!event) {
     return [];
   }
+  const request = eventRequestDetail(event);
+  const response = eventResponseDetail(event);
   return [
+    { label: 'URL / Operation', value: eventRequestURL(event) || '-', mono: true },
+    { label: 'Transport', value: eventTransport(event) || compact(event.scope) || '-' },
     { label: 'Source', value: compact(event.source) || 'unknown' },
     { label: 'Scope', value: compact(event.scope) || '-' },
     { label: 'Kind', value: compact(event.kind) || '-' },
     { label: 'Trace ID', value: compact(event.trace_id) || '-', mono: true },
-    { label: 'Status', value: typeof event.status_code === 'number' ? String(event.status_code) : '-' },
+    { label: 'Status', value: eventStatusLabel(event) },
+    { label: 'Status text', value: compact(response?.status_text) || '-' },
     { label: 'Duration', value: formatDuration(event.duration_ms) },
+    { label: 'Request type', value: compact(request?.payload_kind) || '-' },
+    { label: 'Response type', value: compact(response?.payload_kind) || '-' },
     { label: 'When', value: formatTimestamp(event.created_at) },
   ];
 }
@@ -224,6 +331,47 @@ function detailItemsForTrace(trace: DebugConsoleTrace | null): KeyValueItem[] {
     { label: 'First seen', value: formatTimestamp(trace.first_seen_at) },
     { label: 'Last seen', value: formatTimestamp(trace.last_seen_at) },
   ];
+}
+
+function hasValue(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    return compact(value).length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>).length > 0;
+  }
+  return true;
+}
+
+function requestPayloadPreview(event: DiagnosticsEvent): unknown {
+  const request = eventRequestDetail(event);
+  if (hasValue(request?.payload)) {
+    return request?.payload;
+  }
+  if (hasValue(request?.payload_summary)) {
+    return request?.payload_summary;
+  }
+  return null;
+}
+
+function responsePayloadPreview(event: DiagnosticsEvent): unknown {
+  const response = eventResponseDetail(event);
+  if (hasValue(response?.payload)) {
+    return response?.payload;
+  }
+  if (hasValue(response?.payload_summary)) {
+    return response?.payload_summary;
+  }
+  if (hasValue(response?.error_message)) {
+    return { error_message: response?.error_message };
+  }
+  return null;
 }
 
 function StatusDot(props: Readonly<{ tone: 'default' | 'success' | 'warning' | 'danger' }>) {
@@ -332,11 +480,14 @@ function MonoBlock(props: Readonly<{ value: string }>) {
 }
 
 function renderEventBadge(event: DiagnosticsEvent) {
+  if (eventFailed(event)) {
+    return <SettingsPill tone="danger">{eventStatusLabel(event)}</SettingsPill>;
+  }
   if (event.slow) {
     return <SettingsPill tone="warning">Slow</SettingsPill>;
   }
-  if (typeof event.status_code === 'number' && event.status_code >= 400) {
-    return <SettingsPill tone="danger">HTTP {event.status_code}</SettingsPill>;
+  if (compact(event.source) === 'browser') {
+    return <SettingsPill tone="success">Browser</SettingsPill>;
   }
   return <SettingsPill>{compact(event.source) || 'event'}</SettingsPill>;
 }
@@ -346,11 +497,14 @@ function slowSummaryTitle(item: DiagnosticsSummaryItem): string {
 }
 
 function eventTone(event: DiagnosticsEvent): SemanticTone {
-  if (typeof event.status_code === 'number' && event.status_code >= 400) {
+  if (eventFailed(event)) {
     return 'error';
   }
   if (event.slow) {
     return 'warning';
+  }
+  if (compact(event.source) === 'browser') {
+    return 'success';
   }
   if (compact(event.source) === 'desktop') {
     return 'info';
@@ -359,6 +513,9 @@ function eventTone(event: DiagnosticsEvent): SemanticTone {
 }
 
 function traceTone(trace: DebugConsoleTrace): SemanticTone {
+  if (trace.events.some((event) => eventFailed(event))) {
+    return 'error';
+  }
   if (trace.slow) {
     return 'warning';
   }
@@ -509,8 +666,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                   {props.controller.streamConnected() ? 'Streaming updates' : 'Snapshot only'}
                 </span>
                 <span class="inline-flex items-center gap-1.5">
-                  <StatusDot tone={props.controller.collectUIMetrics() ? 'success' : 'default'} />
-                  {props.controller.collectUIMetrics() ? 'UI metrics collecting' : 'UI metrics paused'}
+                  <StatusDot tone={props.controller.uiMetricsCollecting() ? 'success' : 'default'} />
+                  {props.controller.uiMetricsCollecting() ? 'UI probes active' : 'UI probes paused'}
                 </span>
                 <span>Last snapshot: {formatTimestamp(props.controller.lastSnapshotAt())}</span>
               </div>
@@ -622,30 +779,37 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                 <For each={filteredEvents()}>
                                   {(event) => {
                                     const key = diagnosticsEventKey(event);
+                                    const selected = () => selectedEventKey() === key;
                                     return (
                                       <button
                                         type="button"
-                                        class={listRowClass(selectedEventKey() === key)}
+                                        class={listRowClass(selected())}
                                         onClick={() => setSelectedEventKey(key)}
-                                        style={selectedEventKey() === key ? semanticInteractiveStyle(eventTone(event), 'strong') : undefined}
+                                        style={mergeStyles(
+                                          selected() ? semanticInteractiveStyle(eventTone(event), 'strong') : undefined,
+                                          eventFailed(event) ? dangerTextStyle() : undefined,
+                                        )}
                                       >
                                         <div class="grid grid-cols-[minmax(0,2.2fr)_7rem_8rem_5rem_6rem] gap-3 px-3 py-2.5 text-[10px]">
                                           <div class="min-w-0">
-                                            <div class="truncate font-medium text-foreground">{eventTitle(event)}</div>
+                                            <div class="whitespace-normal break-all font-medium leading-[1rem]">{eventTitle(event)}</div>
                                             <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-muted-foreground">
                                               <span>{formatTimestamp(event.created_at)}</span>
-                                              <span>{compact(event.scope) || '-'}</span>
+                                              <span>{eventTransport(event) || compact(event.scope) || '-'}</span>
+                                              <Show when={compact(eventOperation(event))}>
+                                                <span class="font-mono">{eventOperation(event)}</span>
+                                              </Show>
                                               <Show when={compact(event.message)}>
-                                                <span class="truncate">{compact(event.message)}</span>
+                                                <span class={`${eventFailed(event) ? 'font-medium' : ''} whitespace-normal break-words`}>{eventFailureMessage(event)}</span>
                                               </Show>
                                             </div>
                                           </div>
-                                            <div class="flex items-start pt-0.5">
-                                              {renderEventBadge(event)}
-                                            </div>
+                                          <div class="flex items-start pt-0.5">
+                                            {renderEventBadge(event)}
+                                          </div>
                                           <div class="truncate font-mono text-[9px] text-muted-foreground">{compact(event.trace_id) || '-'}</div>
-                                          <div class="tabular-nums text-foreground">{typeof event.status_code === 'number' ? event.status_code : '-'}</div>
-                                          <div class="tabular-nums text-foreground">{formatDuration(event.duration_ms)}</div>
+                                          <div class={`tabular-nums ${eventFailed(event) ? 'font-semibold' : ''}`}>{eventStatusLabel(event)}</div>
+                                          <div class={`tabular-nums ${eventFailed(event) ? 'font-semibold' : ''}`}>{formatDuration(event.duration_ms)}</div>
                                         </div>
                                       </button>
                                     );
@@ -662,17 +826,56 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                           <Show when={selectedEvent()} fallback={<EmptyState title="Select a request" message="Choose a request row to inspect its trace id, message, and payload details." />}>
                             {(event) => (
                               <div class="space-y-4">
-                                <SectionShell title="Overview" description={compact(event().message) || 'No extra message was attached to this event.'}>
+                                <SectionShell title="Overview" description={eventFailureMessage(event()) || 'No extra message was attached to this event.'}>
                                   <div class="space-y-3">
                                     <div class="flex flex-wrap items-center gap-2">
-                                      <div class="text-[11px] font-semibold text-foreground">{eventTitle(event())}</div>
+                                      <div class={`text-[11px] font-semibold ${eventFailed(event()) ? '' : 'text-foreground'}`} style={eventFailed(event()) ? dangerTextStyle() : undefined}>
+                                        {eventTitle(event())}
+                                      </div>
                                       {renderEventBadge(event())}
                                     </div>
                                     <DefinitionList items={detailItemsForEvent(event())} />
                                   </div>
                                 </SectionShell>
 
-                                <SectionShell title="Detail JSON" description="Structured payload captured for this event.">
+                                <SectionShell title="Request payload" description="Captured request URL, headers, and payload sent from the browser or RPC layer.">
+                                  <Show
+                                    when={requestPayloadPreview(event()) != null}
+                                    fallback={<EmptyState title="No request payload" message="This event did not carry a request body, or the payload was not serializable." />}
+                                  >
+                                    <div class="space-y-3">
+                                      <DefinitionList
+                                        items={[
+                                          { label: 'URL', value: eventRequestURL(event()) || '-', mono: true },
+                                          { label: 'Content type', value: compact(eventRequestDetail(event())?.content_type) || '-' },
+                                          { label: 'Body type', value: compact(eventRequestDetail(event())?.payload_kind) || '-' },
+                                        ]}
+                                      />
+                                      <MonoBlock value={prettyJSON(requestPayloadPreview(event()))} />
+                                    </div>
+                                  </Show>
+                                </SectionShell>
+
+                                <SectionShell title="Response payload" description="Captured response body, status, and any client-side failure message.">
+                                  <Show
+                                    when={responsePayloadPreview(event()) != null}
+                                    fallback={<EmptyState title="No response payload" message="This event did not return a body, or the response was streamed without a terminal payload." />}
+                                  >
+                                    <div class="space-y-3">
+                                      <DefinitionList
+                                        items={[
+                                          { label: 'Status', value: eventStatusLabel(event()) },
+                                          { label: 'Status text', value: compact(eventResponseDetail(event())?.status_text) || '-' },
+                                          { label: 'Content type', value: compact(eventResponseDetail(event())?.content_type) || '-' },
+                                          { label: 'Body type', value: compact(eventResponseDetail(event())?.payload_kind) || '-' },
+                                        ]}
+                                      />
+                                      <MonoBlock value={prettyJSON(responsePayloadPreview(event()))} />
+                                    </div>
+                                  </Show>
+                                </SectionShell>
+
+                                <SectionShell title="Raw event detail" description="Full normalized event detail for low-level inspection and copy/paste debugging.">
                                   <MonoBlock value={prettyJSON(event().detail)} />
                                 </SectionShell>
                               </div>
@@ -709,9 +912,9 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                       onClick={() => setSelectedTraceKey(trace.key)}
                                       style={selectedTraceKey() === trace.key ? semanticInteractiveStyle(traceTone(trace), 'strong') : undefined}
                                     >
-                                      <div class="grid grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem] gap-3 px-3 py-2.5 text-[10px]">
-                                        <div class="min-w-0">
-                                          <div class="truncate font-medium text-foreground">{trace.title}</div>
+                                        <div class="grid grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem] gap-3 px-3 py-2.5 text-[10px]">
+                                          <div class="min-w-0">
+                                          <div class="whitespace-normal break-all font-medium text-foreground">{trace.title}</div>
                                           <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-muted-foreground">
                                             <span class="font-mono">{compact(trace.trace_id) || 'generated group'}</span>
                                             <span>{trace.scopes.join(', ') || '-'}</span>
@@ -758,14 +961,18 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                         <div class={`px-3 py-3 ${index() === 0 ? '' : 'border-t border-border/60'}`}>
                                           <div class="flex items-start justify-between gap-3">
                                             <div class="min-w-0">
-                                              <div class="truncate text-[10px] font-medium text-foreground">{eventTitle(event)}</div>
+                                              <div class={`whitespace-normal break-all text-[10px] font-medium ${eventFailed(event) ? '' : 'text-foreground'}`} style={eventFailed(event) ? dangerTextStyle() : undefined}>
+                                                {eventTitle(event)}
+                                              </div>
                                               <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-muted-foreground">
                                                 <span>{formatTimestamp(event.created_at)}</span>
                                                 <span>{compact(event.scope) || '-'}</span>
                                                 <span>{formatDuration(event.duration_ms)}</span>
                                               </div>
                                               <Show when={compact(event.message)}>
-                                                <div class="mt-2 text-[9px] leading-5 text-muted-foreground">{compact(event.message)}</div>
+                                                <div class={`mt-2 text-[9px] leading-5 ${eventFailed(event) ? '' : 'text-muted-foreground'}`} style={eventFailed(event) ? dangerTextStyle() : undefined}>
+                                                  {eventFailureMessage(event)}
+                                                </div>
                                               </Show>
                                             </div>
                                             <div class="shrink-0">{renderEventBadge(event)}</div>
@@ -786,8 +993,14 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                   <Show when={tab() === 'ui'}>
                     <div class="h-full overflow-auto px-4 py-4">
                       <div class="space-y-4">
+                        <Show when={!props.controller.collectUIMetrics()}>
+                          <div class="rounded-md border border-border/70 bg-muted/[0.08] px-3 py-2.5 text-[9px] leading-5 text-muted-foreground">
+                            Core renderer probes stay live while Debug Console is open. Enable <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">collect_ui_metrics</code> in Settings to add browser-native long-task, layout-shift, paint, navigation, and memory capture to this panel and exported bundles.
+                          </div>
+                        </Show>
+
                         <MetricStrip
-                          columnsClass="sm:grid-cols-2 xl:grid-cols-4"
+                          columnsClass="sm:grid-cols-2 xl:grid-cols-5"
                           items={[
                             {
                               label: 'FPS',
@@ -795,41 +1008,77 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                               note: `Avg ${props.controller.performanceSnapshot().fps.average || 0} · Low ${props.controller.performanceSnapshot().fps.low || 0}`,
                             },
                             {
+                              label: 'Long Frames',
+                              value: String(props.controller.performanceSnapshot().frame_timing.long_frame_count),
+                              note: `Max gap ${formatDuration(props.controller.performanceSnapshot().frame_timing.max_frame_ms)}`,
+                            },
+                            {
+                              label: 'Input Delay',
+                              value: formatDuration(props.controller.performanceSnapshot().interactions.last_paint_delay_ms),
+                              note: `Max ${formatDuration(props.controller.performanceSnapshot().interactions.max_paint_delay_ms)}`,
+                            },
+                            {
+                              label: 'DOM Mutations',
+                              value: String(props.controller.performanceSnapshot().dom_activity.mutation_records),
+                              note: `Batches ${props.controller.performanceSnapshot().dom_activity.mutation_batches}`,
+                            },
+                            {
                               label: 'Long Tasks',
-                              value: String(props.controller.performanceSnapshot().long_tasks.count),
-                              note: `Max ${formatDuration(props.controller.performanceSnapshot().long_tasks.max_duration_ms)}`,
-                            },
-                            {
-                              label: 'Layout Shift',
-                              value: String(props.controller.performanceSnapshot().layout_shift.total_score || 0),
-                              note: `Peaks ${props.controller.performanceSnapshot().layout_shift.max_score || 0}`,
-                            },
-                            {
-                              label: 'JS Heap',
-                              value: formatBytes(props.controller.performanceSnapshot().memory?.used_js_heap_size),
-                              note: `Total ${formatBytes(props.controller.performanceSnapshot().memory?.total_js_heap_size)}`,
+                              value: props.controller.collectUIMetrics() ? String(props.controller.performanceSnapshot().long_tasks.count) : 'Off',
+                              note: props.controller.collectUIMetrics()
+                                ? `Max ${formatDuration(props.controller.performanceSnapshot().long_tasks.max_duration_ms)}`
+                                : 'Advanced browser metrics optional',
                             },
                           ]}
                         />
 
                         <div class="grid gap-4 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
                           <div class="space-y-4">
-                            <SectionShell title="Navigation and paints" description="Browser timing data captured from the current renderer session.">
+                            <SectionShell title="Renderer probes" description="Always-on local probes for frame timing, interaction-to-paint delay, and DOM churn.">
                               <DefinitionList
                                 items={[
                                   { label: 'Collecting', value: props.controller.performanceSnapshot().collecting ? 'Yes' : 'No' },
                                   { label: 'FPS samples', value: String(props.controller.performanceSnapshot().fps.samples) },
-                                  { label: 'First paint', value: formatDuration(props.controller.performanceSnapshot().paints.first_paint_ms) },
-                                  { label: 'First contentful paint', value: formatDuration(props.controller.performanceSnapshot().paints.first_contentful_paint_ms) },
-                                  { label: 'Navigation type', value: compact(props.controller.performanceSnapshot().navigation.type) || '-' },
-                                  { label: 'DOMContentLoaded', value: formatDuration(props.controller.performanceSnapshot().navigation.dom_content_loaded_ms) },
-                                  { label: 'Load event', value: formatDuration(props.controller.performanceSnapshot().navigation.load_event_ms) },
-                                  { label: 'Response end', value: formatDuration(props.controller.performanceSnapshot().navigation.response_end_ms) },
+                                  { label: 'Last frame gap', value: formatDuration(props.controller.performanceSnapshot().frame_timing.last_frame_ms) },
+                                  { label: 'Max frame gap', value: formatDuration(props.controller.performanceSnapshot().frame_timing.max_frame_ms) },
+                                  { label: 'Interactions', value: String(props.controller.performanceSnapshot().interactions.count) },
+                                  { label: 'Last input', value: compact(props.controller.performanceSnapshot().interactions.last_type) || '-' },
+                                  { label: 'Last input delay', value: formatDuration(props.controller.performanceSnapshot().interactions.last_paint_delay_ms) },
+                                  { label: 'Mutation batches', value: String(props.controller.performanceSnapshot().dom_activity.mutation_batches) },
+                                  { label: 'Mutation records', value: String(props.controller.performanceSnapshot().dom_activity.mutation_records) },
+                                  { label: 'Nodes added', value: String(props.controller.performanceSnapshot().dom_activity.nodes_added) },
+                                  { label: 'Nodes removed', value: String(props.controller.performanceSnapshot().dom_activity.nodes_removed) },
+                                  { label: 'Last mutation', value: formatTimestamp(props.controller.performanceSnapshot().dom_activity.last_mutation_at) },
                                 ]}
                               />
                             </SectionShell>
 
-                            <SectionShell title="Instrumentation support" description="Capabilities currently available in this browser process.">
+                            <SectionShell
+                              title="Navigation and paints"
+                              description={props.controller.collectUIMetrics()
+                                ? 'Browser timing data captured from the current renderer session.'
+                                : 'Enable collect_ui_metrics to capture browser-native paint, navigation, and memory timing in this panel.'}
+                            >
+                              <DefinitionList
+                                items={[
+                                  { label: 'First paint', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().paints.first_paint_ms) : 'Off' },
+                                  { label: 'First contentful paint', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().paints.first_contentful_paint_ms) : 'Off' },
+                                  { label: 'Navigation type', value: props.controller.collectUIMetrics() ? (compact(props.controller.performanceSnapshot().navigation.type) || '-') : 'Off' },
+                                  { label: 'DOMContentLoaded', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.dom_content_loaded_ms) : 'Off' },
+                                  { label: 'Load event', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.load_event_ms) : 'Off' },
+                                  { label: 'Response end', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.response_end_ms) : 'Off' },
+                                  { label: 'JS heap used', value: props.controller.collectUIMetrics() ? formatBytes(props.controller.performanceSnapshot().memory?.used_js_heap_size) : 'Off' },
+                                  { label: 'JS heap total', value: props.controller.collectUIMetrics() ? formatBytes(props.controller.performanceSnapshot().memory?.total_js_heap_size) : 'Off' },
+                                ]}
+                              />
+                            </SectionShell>
+
+                            <SectionShell
+                              title="Instrumentation support"
+                              description={props.controller.collectUIMetrics()
+                                ? 'Capabilities currently available in this browser process.'
+                                : 'Capabilities shown below are available in this browser, but advanced capture is currently optional.'}
+                            >
                               <DefinitionList
                                 items={[
                                   { label: 'Long tasks', value: props.controller.performanceSnapshot().supported.longtask ? 'Supported' : 'Unavailable' },
@@ -837,6 +1086,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                   { label: 'Paint timing', value: props.controller.performanceSnapshot().supported.paint ? 'Supported' : 'Unavailable' },
                                   { label: 'Navigation timing', value: props.controller.performanceSnapshot().supported.navigation ? 'Supported' : 'Unavailable' },
                                   { label: 'Memory', value: props.controller.performanceSnapshot().supported.memory ? 'Supported' : 'Unavailable' },
+                                  { label: 'Mutation observer', value: props.controller.performanceSnapshot().supported.mutation_observer ? 'Supported' : 'Unavailable' },
+                                  { label: 'Interaction latency', value: props.controller.performanceSnapshot().supported.interaction_latency ? 'Supported' : 'Unavailable' },
                                 ]}
                               />
                             </SectionShell>
@@ -853,7 +1104,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                     <div class={`px-3 py-3 ${index() === 0 ? '' : 'border-t border-border/60'}`}>
                                       <div class="flex items-start justify-between gap-3">
                                         <div class="min-w-0">
-                                          <div class="truncate text-[10px] font-medium text-foreground">{eventTitle(event)}</div>
+                                          <div class="whitespace-normal break-all text-[10px] font-medium text-foreground">{eventTitle(event)}</div>
                                           <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-muted-foreground">
                                             <span>{formatTimestamp(event.created_at)}</span>
                                             <span>{formatDuration(event.duration_ms)}</span>
@@ -894,7 +1145,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                 { label: 'Configured', value: props.controller.enabled() ? 'Enabled' : 'Disabled' },
                                 { label: 'Runtime collector', value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive' },
                                 { label: 'Stream', value: props.controller.streamConnected() ? 'Connected' : 'Disconnected' },
-                                { label: 'UI metrics', value: props.controller.collectUIMetrics() ? 'Enabled' : 'Disabled' },
+                                { label: 'UI probes', value: props.controller.uiMetricsCollecting() ? 'Active' : 'Inactive' },
+                                { label: 'Advanced UI metrics', value: props.controller.collectUIMetrics() ? 'Enabled' : 'Optional' },
                                 { label: 'State dir', value: compact(props.controller.stateDir()) || '-', mono: true },
                                 { label: 'Last snapshot', value: formatTimestamp(props.controller.lastSnapshotAt()) },
                               ]}
@@ -954,7 +1206,12 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                               />
                             </SectionShell>
 
-                            <SectionShell title="Included sources" description="The export merges persisted diagnostics with browser-local performance data.">
+                            <SectionShell
+                              title="Included sources"
+                              description={props.controller.collectUIMetrics()
+                                ? 'The export merges persisted diagnostics with browser-local performance data.'
+                                : 'Core request diagnostics are always exported. Advanced browser-native UI timings join the bundle only when collect_ui_metrics is enabled.'}
+                            >
                               <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
                                   <div class="font-medium text-foreground">Backend diagnostics</div>

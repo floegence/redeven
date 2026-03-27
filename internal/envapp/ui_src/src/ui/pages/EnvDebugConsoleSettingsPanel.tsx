@@ -81,11 +81,11 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
                     onChange={(value) => props.onCollectUIMetricsChange(value)}
                     disabled={!props.canInteract}
                   />
-                  <span>Sample browser rendering metrics such as FPS, long tasks, layout shifts, and memory.</span>
+                  <span>Capture advanced browser-native timing such as long tasks, layout shifts, paint timing, navigation, and memory.</span>
                 </label>
               </SettingsTableCell>
               <SettingsTableCell class="text-[11px] text-muted-foreground">
-                UI performance data stays local to this browser session and is appended to the exported debug bundle only when this option is enabled.
+                Core renderer probes stay visible in the floating console while Debug Console is open. Enable this option to add richer browser-native timings and include them in exported debug bundles.
               </SettingsTableCell>
             </SettingsTableRow>
           </SettingsTableBody>
@@ -98,7 +98,7 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
                 {props.enabled ? 'Console enabled' : 'Console disabled'}
               </SettingsPill>
               <SettingsPill tone={props.collectUIMetrics ? 'success' : 'default'}>
-                {props.collectUIMetrics ? 'UI metrics enabled' : 'UI metrics optional'}
+                {props.collectUIMetrics ? 'Advanced UI metrics enabled' : 'Advanced UI metrics optional'}
               </SettingsPill>
             </div>
             <div class="text-[11px] leading-5 text-muted-foreground">

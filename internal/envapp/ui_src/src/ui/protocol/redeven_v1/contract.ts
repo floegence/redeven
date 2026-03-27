@@ -1,4 +1,5 @@
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
+import { captureDebugConsoleProtocolCall, captureDebugConsoleProtocolNotify } from '../../services/debugConsoleCapture';
 import { redevenV1TypeIds } from './typeIds';
 import type {
   AIRealtimeEvent,
@@ -377,8 +378,18 @@ function encodeUtf8(text: string): Uint8Array {
 }
 
 export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
-  const call = helpers.call;
-  const notify = helpers.notify;
+  const call = <Req, Resp>(typeID: number, payload: Req) =>
+    captureDebugConsoleProtocolCall<Req, Resp>({
+      typeID,
+      payload,
+      execute: () => helpers.call<Req, Resp>(typeID, payload),
+    });
+  const notify = <Payload>(typeID: number, payload: Payload) =>
+    captureDebugConsoleProtocolNotify<Payload>({
+      typeID,
+      payload,
+      execute: () => helpers.notify<Payload>(typeID, payload),
+    });
   const onNotify = helpers.onNotify;
 
   return {

@@ -43,7 +43,32 @@ function createController(overrides: Record<string, unknown> = {}) {
       status_code: 200,
       duration_ms: 16,
       message: 'gateway request completed',
-      detail: { local_ui: true },
+      detail: {
+        transport: 'browser_fetch',
+        request: {
+          url: 'http://localhost/_redeven_proxy/api/settings?tab=debug',
+          content_type: 'application/json',
+          payload_kind: 'json',
+          payload: {
+            debug_console: {
+              enabled: true,
+            },
+          },
+        },
+        response: {
+          status: 200,
+          status_text: 'OK',
+          content_type: 'application/json',
+          payload_kind: 'json',
+          payload: {
+            settings: {
+              debug_console: {
+                enabled: true,
+              },
+            },
+          },
+        },
+      },
     },
   ]);
   const [traces] = createSignal([
@@ -64,13 +89,25 @@ function createController(overrides: Record<string, unknown> = {}) {
   ]);
   const [performanceSnapshot] = createSignal({
     collecting: true,
+    supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false, mutation_observer: true, interaction_latency: true },
     fps: { current: 60, average: 58, low: 48, samples: 3 },
+    frame_timing: { long_frame_count: 2, max_frame_ms: 78, last_frame_ms: 22 },
+    interactions: { count: 3, last_type: 'pointerdown', last_paint_delay_ms: 18, max_paint_delay_ms: 42 },
+    dom_activity: {
+      mutation_batches: 4,
+      mutation_records: 27,
+      nodes_added: 6,
+      nodes_removed: 2,
+      attributes_changed: 11,
+      text_changed: 8,
+      max_batch_records: 14,
+      last_mutation_at: '2026-03-27T10:00:03Z',
+    },
     long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
     layout_shift: { count: 0, total_score: 0, max_score: 0 },
     paints: {},
     navigation: {},
     recent_events: [],
-    supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false },
   });
 
   return {
@@ -85,6 +122,7 @@ function createController(overrides: Record<string, unknown> = {}) {
     refreshing: () => false,
     runtimeEnabled: () => true,
     collectUIMetrics: () => true,
+    uiMetricsCollecting: () => true,
     settingsError: () => null,
     snapshotError: () => null,
     streamConnected: () => true,
@@ -128,13 +166,25 @@ function createController(overrides: Record<string, unknown> = {}) {
       },
       ui_performance: {
         collecting: true,
+        supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false, mutation_observer: true, interaction_latency: true },
         fps: { current: 60, average: 58, low: 48, samples: 3 },
+        frame_timing: { long_frame_count: 2, max_frame_ms: 78, last_frame_ms: 22 },
+        interactions: { count: 3, last_type: 'pointerdown', last_paint_delay_ms: 18, max_paint_delay_ms: 42 },
+        dom_activity: {
+          mutation_batches: 4,
+          mutation_records: 27,
+          nodes_added: 6,
+          nodes_removed: 2,
+          attributes_changed: 11,
+          text_changed: 8,
+          max_batch_records: 14,
+          last_mutation_at: '2026-03-27T10:00:03Z',
+        },
         long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
         layout_shift: { count: 0, total_score: 0, max_score: 0 },
         paints: {},
         navigation: {},
         recent_events: [],
-        supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false },
       },
     })),
     ...overrides,
@@ -154,14 +204,20 @@ describe('DebugConsoleWindow', () => {
     render(() => <DebugConsoleWindow controller={controller} />, host);
 
     expect(host.textContent).toContain('Debug Console');
-    expect(host.textContent).toContain('GET /_redeven_proxy/api/settings');
+    expect(host.textContent).toContain('GET http://localhost/_redeven_proxy/api/settings?tab=debug');
     expect(host.textContent).toContain('gateway request completed');
-    expect(host.textContent).toContain('Detail JSON');
+    expect(host.textContent).toContain('Request payload');
+    expect(host.textContent).toContain('Response payload');
     expect(host.textContent).toContain('Clear');
     expect(host.textContent).not.toContain('Refresh');
     expect(host.textContent).toContain('Exit Debug Mode');
     expect(host.textContent).toContain('Static CSS, JS, document loads, and diagnostics self-requests are excluded');
-    expect(host.textContent).not.toContain('Continuous');
+
+    const uiTab = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('UI Performance'));
+    expect(uiTab).toBeTruthy();
+    uiTab?.click();
+
+    expect(host.textContent).toContain('Renderer probes');
   });
 
   it('invokes clear from the header action', () => {

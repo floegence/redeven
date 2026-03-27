@@ -45,6 +45,39 @@ function buildSettings(enabled: boolean, collectUIMetrics = false) {
   } as const;
 }
 
+function buildPerformanceSnapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    collecting: false,
+    supported: {
+      longtask: false,
+      layout_shift: false,
+      paint: false,
+      navigation: false,
+      memory: false,
+      mutation_observer: true,
+      interaction_latency: true,
+    },
+    fps: { current: 0, average: 0, low: 0, samples: 0 },
+    frame_timing: { long_frame_count: 0, max_frame_ms: 0, last_frame_ms: 0 },
+    interactions: { count: 0, max_paint_delay_ms: 0 },
+    dom_activity: {
+      mutation_batches: 0,
+      mutation_records: 0,
+      nodes_added: 0,
+      nodes_removed: 0,
+      attributes_changed: 0,
+      text_changed: 0,
+      max_batch_records: 0,
+    },
+    long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
+    layout_shift: { count: 0, total_score: 0, max_score: 0 },
+    paints: {},
+    navigation: {},
+    recent_events: [],
+    ...overrides,
+  };
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.useRealTimers();
@@ -101,15 +134,18 @@ describe('createDebugConsoleController', () => {
         })),
         connectStream,
         createPerformanceTracker: () => ({
-          snapshot: () => ({
+          snapshot: () => buildPerformanceSnapshot({
             collecting: true,
             fps: { current: 60, average: 58, low: 48, samples: 3 },
-            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
-            layout_shift: { count: 0, total_score: 0, max_score: 0 },
-            paints: {},
-            navigation: {},
-            recent_events: [],
-            supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false },
+            supported: {
+              longtask: true,
+              layout_shift: true,
+              paint: true,
+              navigation: true,
+              memory: false,
+              mutation_observer: true,
+              interaction_latency: true,
+            },
           }),
           clear: trackerClear,
         }),
@@ -122,6 +158,7 @@ describe('createDebugConsoleController', () => {
 
     expect(controller.enabled()).toBe(true);
     expect(controller.collectUIMetrics()).toBe(true);
+    expect(controller.uiMetricsCollecting()).toBe(true);
     expect(controller.open()).toBe(true);
     expect(controller.runtimeEnabled()).toBe(true);
     expect(controller.streamConnected()).toBe(true);
@@ -130,6 +167,57 @@ describe('createDebugConsoleController', () => {
     expect(controller.traces()[0]?.events).toHaveLength(2);
     expect(controller.stats().trace_count).toBe(1);
     expect(controller.stateDir()).toBe('/tmp/redeven');
+
+    dispose();
+    expect(connectStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps lightweight ui probes active even when advanced ui metrics stay optional', async () => {
+    const [settingsKey] = createSignal<number | null>(1);
+    const [protocolStatus] = createSignal('connected');
+    const connectStream = vi.fn(async ({ signal }) => {
+      await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+    });
+
+    let trackerArgs!: Readonly<{
+      enabled: () => boolean;
+      detailed: () => boolean;
+    }>;
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        settingsKey,
+        protocolStatus,
+        fetchSettings: vi.fn(async () => buildSettings(true, false)),
+        fetchSnapshot: vi.fn(async () => ({
+          enabled: true,
+          state_dir: '/tmp/redeven',
+          recent_events: [],
+          slow_summary: [],
+          stats: { total_events: 0, agent_events: 0, desktop_events: 0, slow_events: 0, trace_count: 0 },
+        })),
+        connectStream,
+        createPerformanceTracker: (args) => {
+          trackerArgs = args;
+          return {
+            snapshot: () => buildPerformanceSnapshot({
+              collecting: args.enabled(),
+            }),
+            clear: vi.fn(),
+          };
+        },
+      });
+      return disposeRoot;
+    });
+
+    await tick();
+    await tick();
+
+    expect(controller.enabled()).toBe(true);
+    expect(controller.collectUIMetrics()).toBe(false);
+    expect(controller.uiMetricsCollecting()).toBe(true);
+    expect(trackerArgs.enabled()).toBe(true);
+    expect(trackerArgs.detailed()).toBe(false);
 
     dispose();
     expect(connectStream).toHaveBeenCalledTimes(1);
@@ -204,16 +292,7 @@ describe('createDebugConsoleController', () => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         }),
         createPerformanceTracker: () => ({
-          snapshot: () => ({
-            collecting: false,
-            fps: { current: 0, average: 0, low: 0, samples: 0 },
-            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
-            layout_shift: { count: 0, total_score: 0, max_score: 0 },
-            paints: {},
-            navigation: {},
-            recent_events: [],
-            supported: { longtask: false, layout_shift: false, paint: false, navigation: false, memory: false },
-          }),
+          snapshot: () => buildPerformanceSnapshot(),
           clear: vi.fn(),
         }),
       });
@@ -230,6 +309,90 @@ describe('createDebugConsoleController', () => {
     expect(controller.serverEvents()).toHaveLength(2);
     expect(controller.serverEvents()[0]?.path).toBe('/_redeven_proxy/api/chat/send');
     expect(controller.stats().desktop_events).toBe(1);
+
+    dispose();
+  });
+
+  it('merges browser-captured request events in real time', async () => {
+    const [settingsKey] = createSignal<number | null>(1);
+    const [protocolStatus] = createSignal('connected');
+    const listeners = new Set<(event: any) => void>();
+
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        settingsKey,
+        protocolStatus,
+        fetchSettings: vi.fn(async () => buildSettings(true, true)),
+        fetchSnapshot: vi.fn(async () => ({
+          enabled: true,
+          state_dir: '/tmp/redeven',
+          recent_events: [],
+          slow_summary: [],
+          stats: { total_events: 0, agent_events: 0, desktop_events: 0, slow_events: 0, trace_count: 0 },
+        })),
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
+        createPerformanceTracker: () => ({
+          snapshot: () => buildPerformanceSnapshot({ collecting: true }),
+          clear: vi.fn(),
+        }),
+        installClientCapture: vi.fn(),
+        setClientCaptureEnabled: vi.fn(),
+        subscribeClientEvents: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      });
+      return disposeRoot;
+    });
+
+    await tick();
+    await tick();
+
+    expect(controller.serverEvents()).toHaveLength(0);
+
+    const emit = [...listeners][0];
+    expect(emit).toBeTruthy();
+    emit?.({
+      created_at: '2026-03-27T10:00:05Z',
+      source: 'browser',
+      scope: 'gateway_api',
+      kind: 'completed',
+      trace_id: 'http-000001',
+      method: 'POST',
+      path: 'http://localhost/_redeven_proxy/api/ai/threads',
+      status_code: 200,
+      duration_ms: 26,
+      detail: {
+        transport: 'browser_fetch',
+        request: {
+          url: 'http://localhost/_redeven_proxy/api/ai/threads',
+          content_type: 'application/json',
+          payload_kind: 'json',
+          payload: {
+            title: 'Investigate diagnostics',
+          },
+        },
+        response: {
+          status: 200,
+          status_text: 'OK',
+          content_type: 'application/json',
+          payload_kind: 'json',
+          payload: {
+            thread: {
+              id: 'thread_1',
+            },
+          },
+        },
+      },
+    });
+
+    expect(controller.serverEvents()).toHaveLength(1);
+    expect(controller.serverEvents()[0]?.source).toBe('browser');
+    expect((controller.serverEvents()[0]?.detail as any)?.request?.payload?.title).toBe('Investigate diagnostics');
+    expect((controller.serverEvents()[0]?.detail as any)?.response?.payload?.thread?.id).toBe('thread_1');
 
     dispose();
   });
@@ -323,15 +486,18 @@ describe('createDebugConsoleController', () => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         }),
         createPerformanceTracker: () => ({
-          snapshot: () => ({
+          snapshot: () => buildPerformanceSnapshot({
             collecting: true,
             fps: { current: 60, average: 58, low: 48, samples: 3 },
-            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
-            layout_shift: { count: 0, total_score: 0, max_score: 0 },
-            paints: {},
-            navigation: {},
-            recent_events: [],
-            supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false },
+            supported: {
+              longtask: true,
+              layout_shift: true,
+              paint: true,
+              navigation: true,
+              memory: false,
+              mutation_observer: true,
+              interaction_latency: true,
+            },
           }),
           clear: trackerClear,
         }),
@@ -391,15 +557,18 @@ describe('createDebugConsoleController', () => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         }),
         createPerformanceTracker: () => ({
-          snapshot: () => ({
+          snapshot: () => buildPerformanceSnapshot({
             collecting: true,
             fps: { current: 60, average: 58, low: 48, samples: 3 },
-            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
-            layout_shift: { count: 0, total_score: 0, max_score: 0 },
-            paints: {},
-            navigation: {},
-            recent_events: [],
-            supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false },
+            supported: {
+              longtask: true,
+              layout_shift: true,
+              paint: true,
+              navigation: true,
+              memory: false,
+              mutation_observer: true,
+              interaction_latency: true,
+            },
           }),
           clear: trackerClear,
         }),
@@ -465,16 +634,7 @@ describe('createDebugConsoleController', () => {
           await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
         }),
         createPerformanceTracker: () => ({
-          snapshot: () => ({
-            collecting: false,
-            fps: { current: 0, average: 0, low: 0, samples: 0 },
-            long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
-            layout_shift: { count: 0, total_score: 0, max_score: 0 },
-            paints: {},
-            navigation: {},
-            recent_events: [],
-            supported: { longtask: false, layout_shift: false, paint: false, navigation: false, memory: false },
-          }),
+          snapshot: () => buildPerformanceSnapshot(),
           clear: trackerClear,
         }),
       });
