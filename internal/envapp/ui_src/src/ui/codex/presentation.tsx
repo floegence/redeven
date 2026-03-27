@@ -34,6 +34,8 @@ export function itemTitle(item: CodexItem): string {
       return 'Command evidence';
     case 'fileChange':
       return 'Artifact changes';
+    case 'webSearch':
+      return 'Web search';
     case 'reasoning':
       return 'Reasoning note';
     case 'plan':
@@ -45,8 +47,43 @@ export function itemTitle(item: CodexItem): string {
 
 export function itemText(item: CodexTranscriptItem): string {
   if (String(item.text ?? '').trim()) return String(item.text);
+  if (item.type === 'webSearch') {
+    const query = String(item.query ?? '').trim();
+    const actionType = String(item.action?.type ?? '').trim();
+    const queries = Array.isArray(item.action?.queries)
+      ? item.action?.queries?.map((entry) => String(entry ?? '').trim()).filter(Boolean) ?? []
+      : [];
+    const url = String(item.action?.url ?? '').trim();
+    const pattern = String(item.action?.pattern ?? '').trim();
+
+    if (actionType === 'search') {
+      const lines = [
+        query ? `Query: ${query}` : '',
+        queries.length > 0 ? `Queries:\n${queries.map((entry) => `- ${entry}`).join('\n')}` : '',
+      ].filter(Boolean);
+      return lines.join('\n\n');
+    }
+    if (actionType === 'openPage') {
+      return [query ? `Query: ${query}` : '', url ? `Opened page: ${url}` : ''].filter(Boolean).join('\n\n');
+    }
+    if (actionType === 'findInPage') {
+      return [
+        query ? `Query: ${query}` : '',
+        pattern ? `Pattern: ${pattern}` : '',
+        url ? `Page: ${url}` : '',
+      ].filter(Boolean).join('\n\n');
+    }
+    if (query) return query;
+  }
   if ((item.content?.length ?? 0) > 0) return (item.content ?? []).join('\n');
-  return 'No content.';
+  if ((item.inputs?.length ?? 0) > 0) {
+    return (item.inputs ?? [])
+      .map((entry) => String(entry.text ?? entry.path ?? entry.name ?? '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+  if (String(item.query ?? '').trim()) return String(item.query);
+  return '';
 }
 
 export function displayStatus(value: string | null | undefined, fallback = 'Idle'): string {

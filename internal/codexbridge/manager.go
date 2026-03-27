@@ -173,8 +173,8 @@ func (m *Manager) StartThread(ctx context.Context, req StartThreadRequest) (*Thr
 	var params wireThreadStartParams
 	params.CWD = stringPtr(cwd)
 	params.ServiceName = stringPtr("redeven_envapp")
-	params.ExperimentalRawEvents = false
-	params.PersistExtendedHistory = false
+	params.ExperimentalRawEvents = true
+	params.PersistExtendedHistory = true
 	if model != "" {
 		params.Model = stringPtr(model)
 	}
@@ -227,7 +227,7 @@ func (m *Manager) ensureThreadLoaded(ctx context.Context, threadID string) error
 	var resp wireThreadResumeResponse
 	if err := m.call(ctx, "thread/resume", wireThreadResumeParams{
 		ThreadID:               threadID,
-		PersistExtendedHistory: false,
+		PersistExtendedHistory: true,
 	}, &resp); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			return ErrThreadNotFound
@@ -575,7 +575,7 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 			Version: "1",
 		},
 		Capabilities: &initializeCapabilities{
-			ExperimentalAPI: false,
+			ExperimentalAPI: true,
 		},
 	}
 	var initResp map[string]any
@@ -717,6 +717,8 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 		m.handleReasoningTextDelta(env.Params)
 	case "item/reasoning/delta":
 		m.handleDeltaEvent(env.Params, "reasoning_delta", "reasoning")
+	case "rawResponseItem/completed":
+		m.handleRawResponseItemCompleted(env.Params)
 	case "thread/status/changed":
 		var msg wireThreadStatusChangedNotification
 		if json.Unmarshal(env.Params, &msg) == nil {
@@ -983,6 +985,38 @@ func (m *Manager) handleReasoningTextDelta(raw json.RawMessage) {
 		ItemID:       itemID,
 		Delta:        msg.Delta,
 		ContentIndex: &contentIndex,
+	})
+	m.mu.Unlock()
+}
+
+func (m *Manager) handleRawResponseItemCompleted(raw json.RawMessage) {
+	var msg wireRawResponseItemCompletedNotification
+	if json.Unmarshal(raw, &msg) != nil {
+		return
+	}
+	threadID := strings.TrimSpace(msg.ThreadID)
+	turnID := strings.TrimSpace(msg.TurnID)
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	item, ok := normalizeRawResponseItem(
+		msg.Item,
+		turnID+":raw:"+strconv.FormatInt(state.lastAppliedSeq+1, 10),
+	)
+	if !ok {
+		m.mu.Unlock()
+		return
+	}
+	thread := ensureProjectedThread(state, threadID)
+	turn := ensureProjectedTurn(thread, turnID)
+	upsertProjectedItem(turn, item)
+	thread.UpdatedAtUnixS = time.Now().Unix()
+	itemCopy := cloneItem(item)
+	m.appendEventLocked(state, Event{
+		Type:     "item_completed",
+		ThreadID: threadID,
+		TurnID:   turnID,
+		ItemID:   item.ID,
+		Item:     &itemCopy,
 	})
 	m.mu.Unlock()
 }

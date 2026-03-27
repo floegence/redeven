@@ -130,6 +130,7 @@ type Item struct {
 	DurationMs       *int64           `json:"duration_ms,omitempty"`
 	Changes          []FileChange     `json:"changes,omitempty"`
 	Query            string           `json:"query,omitempty"`
+	Action           *WebSearchAction `json:"action,omitempty"`
 	Inputs           []UserInputEntry `json:"inputs,omitempty"`
 }
 
@@ -146,6 +147,14 @@ type UserInputEntry struct {
 	URL  string `json:"url,omitempty"`
 	Path string `json:"path,omitempty"`
 	Name string `json:"name,omitempty"`
+}
+
+type WebSearchAction struct {
+	Type    string   `json:"type"`
+	Query   string   `json:"query,omitempty"`
+	Queries []string `json:"queries,omitempty"`
+	URL     string   `json:"url,omitempty"`
+	Pattern string   `json:"pattern,omitempty"`
 }
 
 type PermissionProfile struct {

@@ -17,9 +17,11 @@ High-level design:
 - The browser talks only to Redeven Agent gateway routes.
 - The Go agent owns the Codex process boundary and spawns `codex app-server` from the host's `codex` binary as a child process.
 - Transport between Redeven Agent and Codex uses stdio (`codex app-server --listen stdio://`).
-- The bridge keeps `experimentalApi=false` and targets the stable app-server surface only.
+- The bridge initializes the app-server with `experimentalApi=true` so it can consume upstream raw response notifications and extended-history controls that are required for refresh-safe transcript projection.
 - The bridge keeps a per-thread projected state so browser bootstrap and SSE replay always agree on the same applied event cursor.
 - Thread bootstrap uses `thread/read(includeTurns=true)` semantics, while live work uses `thread/resume` only when a thread must become active for `turn/start`.
+- `thread/start` enables `experimentalRawEvents=true` and `persistExtendedHistory=true`, while `thread/resume` also enables `persistExtendedHistory=true`, so refreshes can reconstruct the full Codex-side thread state instead of only the stable transcript subset.
+- The bridge normalizes upstream `rawResponseItem/completed` notifications such as `web_search_call` into browser-facing `webSearch` transcript items, which keeps live SSE, refresh bootstrap, and replay behavior consistent.
 - `thread/start` only forwards explicitly user-supplied fields such as `cwd` and optional `model`; host Codex defaults stay owned by Codex itself.
 - The gateway also aggregates a Codex-only capability snapshot for the browser by combining `model/list`, `config/read`, and `configRequirements/read`.
 
@@ -122,6 +124,9 @@ Current Env App behavior:
 - New threads can override working directory, model, approval policy, and sandbox before the first turn, and later turns can keep those settings sticky through explicit `turn/start` overrides.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
+- The live working row uses a Codex-local Flower-like dots indicator with a streaming cursor, and it intentionally stays avatar-free so assistant identity is anchored to real assistant messages instead of floating with the tail state.
+- Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
+- Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.
 - Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
 

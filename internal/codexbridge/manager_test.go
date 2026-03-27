@@ -68,6 +68,25 @@ func TestHandleEnvelope_ProjectsLiveThreadState(t *testing.T) {
 		}),
 	})
 	manager.handleEnvelope(rpcEnvelope{
+		Method: "rawResponseItem/completed",
+		Params: mustMarshalParams(t, wireRawResponseItemCompletedNotification{
+			ThreadID: "thread_1",
+			TurnID:   "turn_1",
+			Item: wireResponseItem{
+				Type:   "web_search_call",
+				Status: stringPtr("completed"),
+				Action: &wireWebSearchAction{
+					Type:  "search",
+					Query: stringPtr("site:nmc.cn changsha weather"),
+					Queries: []string{
+						"site:nmc.cn changsha weather",
+						"site:weather.com changsha weather",
+					},
+				},
+			},
+		}),
+	})
+	manager.handleEnvelope(rpcEnvelope{
 		Method: "thread/name/updated",
 		Params: mustMarshalParams(t, wireThreadNameUpdatedNotification{
 			ThreadID:   "thread_1",
@@ -124,10 +143,10 @@ func TestHandleEnvelope_ProjectsLiveThreadState(t *testing.T) {
 	if detail.TokenUsage == nil || detail.TokenUsage.Total.TotalTokens != 6400 {
 		t.Fatalf("unexpected token usage: %+v", detail.TokenUsage)
 	}
-	if detail.LastAppliedSeq != 7 {
+	if detail.LastAppliedSeq != 8 {
 		t.Fatalf("LastAppliedSeq=%d", detail.LastAppliedSeq)
 	}
-	if len(detail.Thread.Turns) != 1 || len(detail.Thread.Turns[0].Items) != 1 {
+	if len(detail.Thread.Turns) != 1 || len(detail.Thread.Turns[0].Items) != 2 {
 		t.Fatalf("unexpected projected turns: %+v", detail.Thread.Turns)
 	}
 	item := detail.Thread.Turns[0].Items[0]
@@ -136,5 +155,15 @@ func TestHandleEnvelope_ProjectsLiveThreadState(t *testing.T) {
 	}
 	if item.Text != "Streaming the replay-safe projection." {
 		t.Fatalf("unexpected item text: %q", item.Text)
+	}
+	webSearch := detail.Thread.Turns[0].Items[1]
+	if webSearch.Type != "webSearch" {
+		t.Fatalf("unexpected web search item type: %q", webSearch.Type)
+	}
+	if webSearch.Query != "site:nmc.cn changsha weather" {
+		t.Fatalf("unexpected web search query: %q", webSearch.Query)
+	}
+	if webSearch.Action == nil || webSearch.Action.Type != "search" {
+		t.Fatalf("unexpected web search action: %+v", webSearch.Action)
 	}
 }

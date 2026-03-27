@@ -26,6 +26,68 @@ func TestNormalizeItem_UsesContentTextWhenDirectTextMissing(t *testing.T) {
 	}
 }
 
+func TestNormalizeItem_MapsWebSearchActionAndQuery(t *testing.T) {
+	t.Parallel()
+
+	item := normalizeItem(wireThreadItem{
+		ID:    "item_ws_1",
+		Type:  "webSearch",
+		Query: "",
+		Action: &wireWebSearchAction{
+			Type:  "openPage",
+			URL:   stringPtr("https://nmc.cn/publish/forecast/AHN/changsha.html"),
+			Query: stringPtr("site:nmc.cn changsha weather"),
+		},
+	})
+
+	if item.Type != "webSearch" {
+		t.Fatalf("Type=%q", item.Type)
+	}
+	if item.Query != "site:nmc.cn changsha weather" {
+		t.Fatalf("Query=%q", item.Query)
+	}
+	if item.Action == nil || item.Action.Type != "openPage" {
+		t.Fatalf("Action=%+v", item.Action)
+	}
+	if item.Action.URL != "https://nmc.cn/publish/forecast/AHN/changsha.html" {
+		t.Fatalf("Action.URL=%q", item.Action.URL)
+	}
+}
+
+func TestNormalizeRawResponseItem_MapsOpenPageWebSearchAction(t *testing.T) {
+	t.Parallel()
+
+	item, ok := normalizeRawResponseItem(wireResponseItem{
+		Type:   "web_search_call",
+		Status: stringPtr("completed"),
+		Action: &wireWebSearchAction{
+			Type: "open_page",
+			URL:  stringPtr("https://nmc.cn/publish/forecast/AHN/changsha.html"),
+		},
+	}, "turn_1:raw:9")
+	if !ok {
+		t.Fatalf("expected raw response item to normalize")
+	}
+	if item.ID != "turn_1:raw:9" {
+		t.Fatalf("ID=%q", item.ID)
+	}
+	if item.Type != "webSearch" {
+		t.Fatalf("Type=%q", item.Type)
+	}
+	if item.Status != "completed" {
+		t.Fatalf("Status=%q", item.Status)
+	}
+	if item.Query != "https://nmc.cn/publish/forecast/AHN/changsha.html" {
+		t.Fatalf("Query=%q", item.Query)
+	}
+	if item.Action == nil || item.Action.Type != "openPage" {
+		t.Fatalf("Action=%+v", item.Action)
+	}
+	if item.Action.URL != "https://nmc.cn/publish/forecast/AHN/changsha.html" {
+		t.Fatalf("Action.URL=%q", item.Action.URL)
+	}
+}
+
 func TestNormalizeAvailableDecisions_DeduplicatesAndNormalizesValues(t *testing.T) {
 	t.Parallel()
 

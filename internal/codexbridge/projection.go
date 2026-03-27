@@ -47,6 +47,7 @@ func cloneItem(item Item) Item {
 	cloned.Content = cloneStringList(item.Content)
 	cloned.Changes = cloneFileChanges(item.Changes)
 	cloned.Inputs = cloneUserInputs(item.Inputs)
+	cloned.Action = cloneWebSearchAction(item.Action)
 	if item.ExitCode != nil {
 		exitCode := *item.ExitCode
 		cloned.ExitCode = &exitCode
@@ -74,6 +75,15 @@ func cloneUserInputs(inputs []UserInputEntry) []UserInputEntry {
 	out := make([]UserInputEntry, 0, len(inputs))
 	out = append(out, inputs...)
 	return out
+}
+
+func cloneWebSearchAction(action *WebSearchAction) *WebSearchAction {
+	if action == nil {
+		return nil
+	}
+	cloned := *action
+	cloned.Queries = cloneStringList(action.Queries)
+	return &cloned
 }
 
 func cloneStringList(values []string) []string {

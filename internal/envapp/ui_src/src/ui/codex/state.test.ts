@@ -209,4 +209,32 @@ describe('applyCodexEvent', () => {
     expect(next?.thread.status).toBe('running');
     expect(next?.last_applied_seq).toBe(5);
   });
+
+  it('projects completed web search items from bridge-normalized events', () => {
+    const initial = buildCodexThreadSession(sampleDetail());
+
+    const next = applyCodexEvent(initial, {
+      seq: 5,
+      type: 'item_completed',
+      thread_id: 'thread_1',
+      item: {
+        id: 'item_web_search',
+        type: 'webSearch',
+        query: 'site:nmc.cn changsha weather',
+        action: {
+          type: 'search',
+          queries: [
+            'site:nmc.cn changsha weather',
+            'site:weather.com changsha weather',
+          ],
+        },
+        status: 'completed',
+      },
+    });
+
+    expect(next?.items_by_id.item_web_search.type).toBe('webSearch');
+    expect(next?.items_by_id.item_web_search.query).toBe('site:nmc.cn changsha weather');
+    expect(next?.items_by_id.item_web_search.action?.type).toBe('search');
+    expect(next?.last_applied_seq).toBe(5);
+  });
 });
