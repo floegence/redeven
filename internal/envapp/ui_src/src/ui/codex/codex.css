@@ -115,6 +115,9 @@
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
+  overflow-anchor: none;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
   --flower-chat-transcript-overlay-edge-gap: 12px;
   --flower-chat-transcript-overlay-bottom-inset: calc(5rem + env(safe-area-inset-bottom, 0px));
 }
@@ -620,11 +623,13 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  overflow-anchor: none;
   padding: 0.5rem 0 0.875rem;
 }
 
 .codex-transcript-row {
   width: 100%;
+  overflow-anchor: none;
   padding: 0.4375rem clamp(0.625rem, 1.8vw, 1rem);
 }
 
@@ -637,6 +642,7 @@
 .codex-chat-message-avatar {
   width: 2.25rem;
   height: 2.25rem;
+  margin-top: 0.125rem;
 }
 
 .codex-chat-message-bubble-assistant {
@@ -668,6 +674,7 @@
 .codex-working-indicator-card {
   display: flex;
   width: min(100%, 42rem);
+  min-width: 0;
   padding: 0.125rem 0;
 }
 
@@ -732,10 +739,10 @@
   display: flex;
   align-items: center;
   --codex-message-run-gap: 0.3125rem;
-  --codex-message-run-min-height: 1.25rem;
+  --codex-message-run-min-height: 1rem;
   --codex-message-run-icon-size: 0.875rem;
-  --codex-message-run-label-size: 0.625rem;
-  --codex-message-run-label-line-height: 0.8rem;
+  --codex-message-run-label-size: 0.59375rem;
+  --codex-message-run-label-line-height: 0.75rem;
   --codex-message-run-bars-height: 0.625rem;
   --codex-message-run-bar-width: 0.125rem;
   --codex-message-run-bar-gap: 0.09375rem;
@@ -745,28 +752,20 @@
 
 .codex-message-run-indicator-surface {
   display: inline-flex;
-  min-height: var(--codex-message-run-min-height);
-  max-width: 100%;
   align-items: center;
   gap: var(--codex-message-run-gap);
-  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
-  border-radius: 9999px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--card) 96%, var(--background)),
-      color-mix(in srgb, var(--muted) 22%, var(--background))
-    );
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 38%, transparent),
-    0 10px 28px -26px color-mix(in srgb, var(--foreground) 22%, transparent);
-  padding: 0.3125rem 0.5rem;
+  min-height: var(--codex-message-run-min-height);
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .codex-message-run-indicator-graph {
   width: var(--codex-message-run-icon-size);
   height: var(--codex-message-run-icon-size);
-  flex: 0 0 auto;
+  flex-shrink: 0;
   overflow: visible;
 }
 
@@ -796,18 +795,12 @@
   animation: codex-message-run-label 1.6s ease-in-out infinite;
 }
 
-.codex-message-run-indicator-cursor {
-  display: inline-flex;
-  flex: 0 0 auto;
-  color: color-mix(in srgb, var(--primary) 82%, transparent);
-}
-
 .codex-message-run-indicator-bars {
   display: inline-flex;
-  flex: 0 0 auto;
   align-items: flex-end;
   gap: var(--codex-message-run-bar-gap);
   height: var(--codex-message-run-bars-height);
+  flex-shrink: 0;
 }
 
 .codex-message-run-indicator-bar {
@@ -816,6 +809,16 @@
   border-radius: 9999px;
   background: color-mix(in srgb, var(--primary) 70%, transparent);
   animation: codex-message-run-bar 0.95s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .codex-message-run-indicator-center-line,
+  .codex-message-run-indicator-side-line,
+  .codex-message-run-indicator-node,
+  .codex-message-run-indicator-label,
+  .codex-message-run-indicator-bar {
+    animation: none !important;
+  }
 }
 
 .codex-chat-evidence-card {

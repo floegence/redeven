@@ -1,8 +1,6 @@
 import { For, createUniqueId, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
-import { StreamingCursor } from '../chat/status/StreamingCursor';
-
 const RUN_INDICATOR_NODES = [
   { x: 20.64, y: 8.04 },
   { x: 10.18, y: 22.6 },
@@ -119,9 +117,6 @@ export const CodexMessageRunIndicator: Component<CodexMessageRunIndicatorProps> 
         </svg>
 
         <span class="codex-message-run-indicator-label">{label()}</span>
-        <span class="codex-message-run-indicator-cursor">
-          <StreamingCursor />
-        </span>
 
         <div class="codex-message-run-indicator-bars" aria-hidden="true">
           <span class="codex-message-run-indicator-bar" style={{ 'animation-delay': '0ms' }} />

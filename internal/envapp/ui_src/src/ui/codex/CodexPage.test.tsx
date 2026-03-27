@@ -182,6 +182,7 @@ function renderPage(host: HTMLDivElement) {
 afterEach(() => {
   document.body.innerHTML = '';
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('CodexPage', () => {
@@ -547,6 +548,159 @@ describe('CodexPage', () => {
       }),
     );
     expect(host.textContent).toContain('Stream update');
+  });
+
+  it('keeps the transcript pinned to the bottom while live Codex output appends', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+
+    let transcriptScrollHeight = 240;
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+    const originalClientHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientHeight');
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('data-codex-transcript-scroll-region') === 'true'
+          ? transcriptScrollHeight
+          : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('data-codex-transcript-scroll-region') === 'true'
+          ? 120
+          : 0;
+      },
+    });
+
+    try {
+      fetchCodexStatusMock.mockResolvedValue({
+        available: true,
+        ready: true,
+        binary_path: '/usr/local/bin/codex',
+        agent_home_dir: '/workspace',
+      });
+      fetchCodexCapabilitiesMock.mockResolvedValue({
+        models: [
+          {
+            id: 'gpt-5.4',
+            display_name: 'GPT-5.4',
+            supports_image_input: true,
+            supported_reasoning_efforts: ['medium'],
+          },
+        ],
+        effective_config: {
+          cwd: '/workspace/ui',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        requirements: {
+          allowed_approval_policies: ['on-request'],
+          allowed_sandbox_modes: ['workspace-write'],
+        },
+      });
+      listCodexThreadsMock.mockResolvedValue([
+        {
+          id: 'thread_1',
+          name: 'Pinned transcript',
+          preview: 'Keep Codex transcript pinned while streaming',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 1,
+          updated_at_unix_s: 10,
+          status: 'running',
+          cwd: '/workspace/ui',
+        },
+      ]);
+      openCodexThreadMock.mockResolvedValue({
+        thread: {
+          id: 'thread_1',
+          name: 'Pinned transcript',
+          preview: 'Keep Codex transcript pinned while streaming',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 1,
+          updated_at_unix_s: 10,
+          status: 'running',
+          cwd: '/workspace/ui',
+          turns: [
+            {
+              id: 'turn_1',
+              status: 'running',
+              items: [
+                {
+                  id: 'item_live',
+                  type: 'agentMessage',
+                  text: 'Streaming output',
+                  status: 'inProgress',
+                },
+              ],
+            },
+          ],
+        },
+        runtime_config: {
+          cwd: '/workspace/ui',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        pending_requests: [],
+        last_applied_seq: 4,
+        active_status: 'running',
+        active_status_flags: ['planning'],
+      });
+
+      let streamOnEvent: (event: unknown) => void = () => {
+        throw new Error('expected event stream subscription to be registered');
+      };
+      connectCodexEventStreamMock.mockImplementation(async (args: { onEvent: (event: unknown) => void }) => {
+        streamOnEvent = args.onEvent;
+      });
+
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      renderPage(host);
+
+      await flushAsync();
+      await flushAsync();
+
+      const scrollRegion = host.querySelector('[data-codex-transcript-scroll-region="true"]') as HTMLDivElement | null;
+      expect(scrollRegion).not.toBeNull();
+      expect(scrollRegion?.scrollTop).toBe(transcriptScrollHeight);
+
+      transcriptScrollHeight = 360;
+      streamOnEvent({
+        seq: 5,
+        type: 'agent_message_delta',
+        thread_id: 'thread_1',
+        item_id: 'item_live',
+        delta: ' keeps growing',
+      });
+
+      await flushAsync();
+      await flushAsync();
+
+      expect(scrollRegion?.scrollTop).toBe(transcriptScrollHeight);
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      } else {
+        delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+      }
+      if (originalClientHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      } else {
+        delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
+      }
+    }
   });
 
   it('sends image attachments through the Codex-only turn contract', async () => {
