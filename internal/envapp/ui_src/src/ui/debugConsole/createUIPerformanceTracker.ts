@@ -5,6 +5,7 @@ import type { DiagnosticsEvent } from '../services/diagnosticsApi';
 const FPS_SAMPLE_WINDOW_MS = 1000;
 const MEMORY_SAMPLE_INTERVAL_MS = 5000;
 const MAX_UI_EVENTS = 80;
+const DEBUG_CONSOLE_ROOT_SELECTOR = '.debug-console-window, [data-redeven-debug-console-root="true"]';
 
 type PerformanceMemory = Readonly<{
   used_js_heap_size: number;
@@ -93,6 +94,31 @@ function round2(value: number): number {
 
 function clampRecentEvents(events: DiagnosticsEvent[]): DiagnosticsEvent[] {
   return events.slice(0, MAX_UI_EVENTS);
+}
+
+function debugConsoleHostForNode(node: Node | null): Element | null {
+  if (!node || typeof Element === 'undefined') {
+    return null;
+  }
+  if (node instanceof Element) {
+    return node.closest(DEBUG_CONSOLE_ROOT_SELECTOR);
+  }
+  return node.parentElement?.closest(DEBUG_CONSOLE_ROOT_SELECTOR) ?? null;
+}
+
+function filterDebugConsoleMutations(records: readonly MutationRecord[]): MutationRecord[] {
+  return records.filter((record) => {
+    if (debugConsoleHostForNode(record.target)) {
+      return false;
+    }
+
+    const affectedNodes = [...record.addedNodes, ...record.removedNodes];
+    if (affectedNodes.length === 0) {
+      return true;
+    }
+
+    return affectedNodes.some((node) => !debugConsoleHostForNode(node));
+  });
 }
 
 function readSupportedEntryTypes(): string[] {
@@ -499,11 +525,15 @@ export function createUIPerformanceTracker(args: CreateUIPerformanceTrackerArgs)
     const mutationTarget = document.body ?? document.documentElement;
     const mutationObserver = typeof MutationObserver !== 'undefined' && mutationTarget
       ? new MutationObserver((records) => {
+          const filteredRecords = filterDebugConsoleMutations(records);
+          if (filteredRecords.length === 0) {
+            return;
+          }
           let nodesAdded = 0;
           let nodesRemoved = 0;
           let attributesChanged = 0;
           let textChanged = 0;
-          for (const record of records) {
+          for (const record of filteredRecords) {
             nodesAdded += record.addedNodes?.length ?? 0;
             nodesRemoved += record.removedNodes?.length ?? 0;
             if (record.type === 'attributes') {
@@ -517,21 +547,21 @@ export function createUIPerformanceTracker(args: CreateUIPerformanceTrackerArgs)
             ...current,
             dom_activity: {
               mutation_batches: current.dom_activity.mutation_batches + 1,
-              mutation_records: current.dom_activity.mutation_records + records.length,
+              mutation_records: current.dom_activity.mutation_records + filteredRecords.length,
               nodes_added: current.dom_activity.nodes_added + nodesAdded,
               nodes_removed: current.dom_activity.nodes_removed + nodesRemoved,
               attributes_changed: current.dom_activity.attributes_changed + attributesChanged,
               text_changed: current.dom_activity.text_changed + textChanged,
-              max_batch_records: Math.max(current.dom_activity.max_batch_records, records.length),
+              max_batch_records: Math.max(current.dom_activity.max_batch_records, filteredRecords.length),
               last_mutation_at: new Date().toISOString(),
             },
           }));
-          if (records.length >= 24 || nodesAdded + nodesRemoved >= 32) {
+          if (filteredRecords.length >= 24 || nodesAdded + nodesRemoved >= 32) {
             appendEvent(createUIEvent({
               kind: 'dom_burst',
-              message: `DOM activity spiked with ${records.length} mutation records.`,
+              message: `DOM activity spiked with ${filteredRecords.length} mutation records.`,
               detail: {
-                mutation_records: records.length,
+                mutation_records: filteredRecords.length,
                 nodes_added: nodesAdded,
                 nodes_removed: nodesRemoved,
                 attributes_changed: attributesChanged,
