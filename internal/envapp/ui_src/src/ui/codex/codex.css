@@ -826,6 +826,17 @@
   font-weight: 600;
 }
 
+.codex-chat-markdown-block .chat-md-file-ref-prefix {
+  flex: 0 1 auto;
+  max-width: 7.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
+  font-size: 0.65625rem;
+  line-height: 1.2;
+}
+
 .codex-chat-markdown-block .chat-md-file-ref-line {
   flex: 0 0 auto;
   padding: 0.0625rem 0.3125rem;
