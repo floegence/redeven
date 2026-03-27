@@ -157,6 +157,8 @@ describe('DebugConsoleWindow', () => {
     expect(host.textContent).toContain('Detail JSON');
     expect(host.textContent).toContain('Clear');
     expect(host.textContent).not.toContain('Refresh');
+    expect(host.textContent).toContain('Static CSS, JS, document loads, and diagnostics self-requests are excluded');
+    expect(host.textContent).not.toContain('Continuous');
   });
 
   it('invokes clear from the header action', () => {

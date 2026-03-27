@@ -72,12 +72,29 @@ function normalizeOrigin(rawURL: string): string {
   }
 }
 
+function isDiagnosticsAPIPath(path: string): boolean {
+  return path.startsWith('/_redeven_proxy/api/debug/diagnostics');
+}
+
+function isTrackedRPCPath(path: string): boolean {
+  const cleanPath = String(path ?? '').trim();
+  if (!cleanPath) {
+    return false;
+  }
+  if (cleanPath.startsWith('/_redeven_proxy/api/')) {
+    return !isDiagnosticsAPIPath(cleanPath);
+  }
+  return cleanPath.startsWith('/api/local/');
+}
+
 function shouldTrackRequest(rawURL: string, allowedOrigin: string): boolean {
   if (normalizeOrigin(rawURL) !== allowedOrigin) {
     return false;
   }
   const path = normalizeURLPath(rawURL);
-  return !path.startsWith('/_redeven_proxy/api/debug/diagnostics');
+  // Only capture operator-meaningful API/RPC traffic.
+  // Static assets, document loads, and other shell resources stay out of the debug console.
+  return isTrackedRPCPath(path);
 }
 
 function headerValue(headers: DiagnosticsHeaders | null | undefined, name: string): string {

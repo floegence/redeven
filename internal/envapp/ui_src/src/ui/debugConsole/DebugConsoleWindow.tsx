@@ -417,72 +417,18 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       .join(' · ');
   });
 
-  const captureStatus = createMemo(() => {
-    const cutoff = compact(props.controller.captureCutoffAt());
-    if (cutoff) {
-      return {
-        value: formatTimestamp(cutoff),
-        note: 'Counters and buffers were reset by Clear',
-      };
-    }
-    return {
-      value: 'Continuous',
-      note: 'Clear starts a new local capture window',
-    };
-  });
-
-  const headerMetrics = createMemo<MetricItem[]>(() => [
-    {
-      label: 'Events',
-      value: String(props.controller.stats().total_events),
-      note: `${props.controller.stats().agent_events} agent · ${props.controller.stats().desktop_events} desktop`,
-      tone: 'info',
-    },
-    {
-      label: 'Traces',
-      value: String(props.controller.stats().trace_count),
-      note: `${props.controller.stats().slow_events} slow markers`,
-      tone: 'primary',
-    },
-    {
-      label: 'Runtime',
-      value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive',
-      note: props.controller.streamConnected() ? 'Streaming + auto-sync' : 'Auto-sync snapshot mode',
-      tone: props.controller.runtimeEnabled() ? 'success' : 'warning',
-      emphasized: true,
-    },
-    {
-      label: 'UI Metrics',
-      value: props.controller.collectUIMetrics() ? 'On' : 'Off',
-      note: props.controller.collectUIMetrics() ? 'Renderer instrumentation enabled' : 'Local probes paused',
-      tone: props.controller.collectUIMetrics() ? 'success' : 'neutral',
-    },
-    {
-      label: 'Last Event',
-      value: formatTimestamp(props.controller.lastEventAt()),
-      note: compact(props.controller.stateDir()) || 'State directory unavailable',
-      tone: compact(props.controller.lastEventAt()) ? 'primary' : 'neutral',
-    },
-    {
-      label: 'Capture',
-      value: captureStatus().value,
-      note: captureStatus().note,
-      tone: compact(props.controller.captureCutoffAt()) ? 'warning' : 'neutral',
-    },
-  ]);
-
   const tabDescriptors = createMemo<TabDescriptor[]>(() => [
     {
       value: 'requests',
       label: 'Requests',
-      description: 'Gateway and desktop request activity',
+      description: 'Redeven API and RPC activity',
       count: String(filteredEvents().length),
       tone: 'info',
     },
     {
       value: 'traces',
       label: 'Traces',
-      description: 'Grouped request timelines',
+      description: 'Grouped API and RPC timelines',
       count: String(filteredTraces().length),
       tone: 'primary',
     },
@@ -567,9 +513,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                   {props.controller.collectUIMetrics() ? 'UI metrics collecting' : 'UI metrics paused'}
                 </span>
                 <span>Last snapshot: {formatTimestamp(props.controller.lastSnapshotAt())}</span>
-                <span>Capture: {captureStatus().value}</span>
               </div>
-              <div class="text-[9px] text-muted-foreground">Live requests refresh automatically. Use Clear to start a fresh local capture window.</div>
+              <div class="text-[9px] text-muted-foreground">Focused on Redeven API/RPC traffic. Static assets are excluded. Clear resets the current local capture window.</div>
             </div>
           )}
         >
@@ -582,11 +527,11 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                     <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'default'}>
                       {props.controller.streamConnected() ? 'Streaming' : 'Snapshot'}
                     </SettingsPill>
-                    <SettingsPill>{'Auto-sync 1s'}</SettingsPill>
+                    <SettingsPill>{'RPC / API only'}</SettingsPill>
                   </div>
-                  <div class="mt-1 text-[12px] font-semibold text-foreground">Gateway requests, desktop transport, and UI rendering signals in one persistent operator console</div>
+                  <div class="mt-1 text-[12px] font-semibold text-foreground">Track Redeven API and RPC request chains without mixing in browser asset noise</div>
                   <div class="mt-1 max-w-3xl text-[10px] leading-5 text-muted-foreground">
-                    Mounted above page-level loading so diagnostics stay readable while the rest of the app is reconnecting or rerendering.
+                    Static CSS, JS, document loads, and diagnostics self-requests are excluded so the console stays focused on real operations and their request / response timing.
                   </div>
                 </div>
 
@@ -613,10 +558,6 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                     </Button>
                   </div>
                 </div>
-              </div>
-
-              <div class="mt-3">
-                <MetricStrip items={headerMetrics()} />
               </div>
 
               <Show when={combinedError()}>
@@ -663,7 +604,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                         <TableShell>
                           <div class="border-b border-border/70 px-4 py-3">
                             <div class="text-[11px] font-semibold text-foreground">Request stream</div>
-                            <div class="mt-1 text-[9px] leading-[1rem] text-muted-foreground">A dense chronological view of gateway and desktop requests with trace correlation and live updates.</div>
+                            <div class="mt-1 text-[9px] leading-[1rem] text-muted-foreground">A chronological view of Redeven API and RPC calls with trace correlation, request timing, and live updates. Static assets are filtered out.</div>
                           </div>
                           <Show
                             when={filteredEvents().length > 0}
