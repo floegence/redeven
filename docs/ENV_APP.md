@@ -206,7 +206,7 @@ There are **two** audit log sources:
 
 Diagnostics mode is enabled implicitly when the agent config uses:
 
-- `logging.log_level = "debug"`
+- `debug_console.enabled = true`
 
 Behavior:
 
@@ -216,9 +216,13 @@ Behavior:
   - `<state_dir>/diagnostics/desktop-events.jsonl`
 - Local UI and gateway share a single trace header:
   - `X-Redeven-Debug-Trace-ID`
-- Agent Settings exposes a Diagnostics panel under Logging and reads data through:
+- Local UI and gateway also expose the runtime collector state through:
+  - `X-Redeven-Debug-Console-Enabled`
+- Agent Settings exposes a Debug Console subsection under Logging, and the floating console reads data through:
   - `GET /_redeven_proxy/api/debug/diagnostics`
   - `GET /_redeven_proxy/api/debug/diagnostics/export`
+  - `GET /_redeven_proxy/api/debug/diagnostics/stream`
+- Browser-local rendering telemetry such as FPS, long tasks, layout shifts, and heap usage stays in the Env App shell and is merged into the exported debug bundle without being persisted back into the agent state directory.
 
 The diagnostics stream is timing-focused and must remain separate from the audit log because it is intended for troubleshooting performance and startup issues rather than user-operation auditing.
 

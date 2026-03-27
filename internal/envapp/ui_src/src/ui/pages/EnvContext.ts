@@ -45,6 +45,7 @@ export type EnvContextValue = {
   settingsSeq: () => number;
   bumpSettingsSeq: () => void;
   openSettings: (section?: EnvSettingsSection) => void;
+  openDebugConsole: () => void;
   settingsFocusSeq: () => number;
   settingsFocusSection: () => EnvSettingsSection | null;
 

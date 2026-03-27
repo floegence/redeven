@@ -11,7 +11,8 @@ const (
 	SourceAgent   = "agent"
 	SourceDesktop = "desktop"
 
-	TraceHeader = "X-Redeven-Debug-Trace-ID"
+	TraceHeader   = "X-Redeven-Debug-Trace-ID"
+	EnabledHeader = "X-Redeven-Debug-Console-Enabled"
 
 	ScopeDesktopHTTP      = "desktop_http"
 	ScopeDesktopLifecycle = "desktop_lifecycle"

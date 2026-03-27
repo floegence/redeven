@@ -168,8 +168,8 @@ Notes:
 - `~/.redeven/agent.lock`
 - `~/.redeven/secrets.json`
 - `~/.redeven/audit/events.jsonl`
-- `~/.redeven/diagnostics/agent-events.jsonl` when `log_level=debug`
-- `~/.redeven/diagnostics/desktop-events.jsonl` for desktop-managed runs with diagnostics mode
+- `~/.redeven/diagnostics/agent-events.jsonl` when Agent Settings -> Logging -> Debug Console is enabled
+- `~/.redeven/diagnostics/desktop-events.jsonl` when the same runtime is attached by Redeven Desktop while the debug console is enabled
 - `~/.redeven/apps/code/...`
 
 Multi-environment mode uses isolated state per environment:
@@ -190,7 +190,7 @@ Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 - `code-server binary not found`: install `code-server`, or set `REDEVEN_CODE_SERVER_BIN` to an absolute path.
 - `Missing init payload` in Codespaces: reopen the codespace from Env App so a new entry ticket can be minted.
 - Desktop lock conflict: if another agent already owns `~/.redeven`, stop it or restart it with a Local UI mode, then retry.
-- Requests feel slow: set `log_level=debug`, then use the diagnostics panel to compare desktop and agent timing.
+- Requests feel slow: enable Agent Settings -> Logging -> Debug Console, then inspect the floating console to compare desktop, gateway, and UI timing.
 
 </details>
 

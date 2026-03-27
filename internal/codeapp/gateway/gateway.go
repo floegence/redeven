@@ -412,10 +412,11 @@ type apiResp struct {
 type settingsView struct {
 	ConfigPath string `json:"config_path"`
 
-	Connection settingsConnectionView `json:"connection"`
-	Runtime    settingsRuntimeView    `json:"runtime"`
-	Logging    settingsLoggingView    `json:"logging"`
-	Codespaces settingsCodespacesView `json:"codespaces"`
+	Connection   settingsConnectionView   `json:"connection"`
+	Runtime      settingsRuntimeView      `json:"runtime"`
+	Logging      settingsLoggingView      `json:"logging"`
+	DebugConsole settingsDebugConsoleView `json:"debug_console"`
+	Codespaces   settingsCodespacesView   `json:"codespaces"`
 
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
@@ -461,6 +462,11 @@ type settingsLoggingView struct {
 	LogLevel  string `json:"log_level"`
 }
 
+type settingsDebugConsoleView struct {
+	Enabled          bool `json:"enabled"`
+	CollectUIMetrics bool `json:"collect_ui_metrics"`
+}
+
 type settingsCodespacesView struct {
 	CodeServerPortMin int `json:"code_server_port_min"`
 	CodeServerPortMax int `json:"code_server_port_max"`
@@ -473,7 +479,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (g *Gateway) handleAPIWithDiagnostics(w http.ResponseWriter, r *http.Request, localUI bool) {
-	if g == nil || g.diag == nil || shouldSkipDiagnosticsPath(r) {
+	if g != nil && g.diag != nil {
+		w.Header().Set(diagnostics.EnabledHeader, strconv.FormatBool(g.diag.Enabled()))
+	}
+	if g == nil || g.diag == nil || !g.diag.Enabled() || shouldSkipDiagnosticsPath(r) {
 		g.handleAPI(w, r)
 		return
 	}
@@ -556,6 +565,13 @@ type diagnosticsExportView struct {
 	DesktopEvents []diagnostics.Event  `json:"desktop_events"`
 }
 
+type diagnosticsStreamEvent struct {
+	Key   string            `json:"key"`
+	Event diagnostics.Event `json:"event"`
+}
+
+var diagnosticsStreamPollInterval = 750 * time.Millisecond
+
 func parseDiagnosticsLimit(r *http.Request, key string, defaultValue int, maxValue int) int {
 	if defaultValue <= 0 {
 		defaultValue = 100
@@ -587,8 +603,38 @@ func (g *Gateway) loadDiagnosticsSource(source string, limit int) ([]diagnostics
 	return diagnostics.ListSource(g.stateDir, source, limit)
 }
 
+func (g *Gateway) loadDiagnosticsRecentEvents(sourceLimit int) ([]diagnostics.Event, error) {
+	agentEvents, err := g.loadDiagnosticsSource(diagnostics.SourceAgent, sourceLimit)
+	if err != nil {
+		return nil, err
+	}
+	desktopEvents, err := g.loadDiagnosticsSource(diagnostics.SourceDesktop, sourceLimit)
+	if err != nil {
+		return nil, err
+	}
+	return diagnostics.MergeEvents(sourceLimit, agentEvents, desktopEvents), nil
+}
+
+func writeDiagnosticsSSEEvent(w io.Writer, ev diagnosticsStreamEvent) error {
+	body, err := json.Marshal(ev)
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "event: diagnostics_event\n"); err != nil {
+		return err
+	}
+	if _, err := io.WriteString(w, "data: "); err != nil {
+		return err
+	}
+	if _, err := w.Write(body); err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, "\n\n")
+	return err
+}
+
 func (g *Gateway) buildDiagnosticsView(recentLimit int, sourceLimit int, summaryLimit int) (diagnosticsView, error) {
-	view := diagnosticsView{Enabled: g != nil && g.diag != nil, StateDir: strings.TrimSpace(g.stateDir)}
+	view := diagnosticsView{Enabled: g != nil && g.diag != nil && g.diag.Enabled(), StateDir: strings.TrimSpace(g.stateDir)}
 	if !view.Enabled {
 		return view, nil
 	}
@@ -609,7 +655,7 @@ func (g *Gateway) buildDiagnosticsView(recentLimit int, sourceLimit int, summary
 
 func (g *Gateway) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) (diagnosticsExportView, error) {
 	view := diagnosticsExportView{
-		Enabled:    g != nil && g.diag != nil,
+		Enabled:    g != nil && g.diag != nil && g.diag.Enabled(),
 		StateDir:   strings.TrimSpace(g.stateDir),
 		ExportedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
@@ -735,6 +781,12 @@ func toSettingsView(cfg *config.Config, configPath string, secrets *settings.Sec
 		out.Logging = settingsLoggingView{
 			LogFormat: strings.TrimSpace(cfg.LogFormat),
 			LogLevel:  strings.TrimSpace(cfg.LogLevel),
+		}
+		if cfg.DebugConsole != nil {
+			out.DebugConsole = settingsDebugConsoleView{
+				Enabled:          cfg.DebugConsole.Enabled,
+				CollectUIMetrics: cfg.DebugConsole.CollectUIMetrics,
+			}
 		}
 		out.Codespaces = settingsCodespacesView{
 			CodeServerPortMin: cfg.CodeServerPortMin,
@@ -1072,6 +1124,78 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/debug/diagnostics/stream":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming not supported"})
+			return
+		}
+		limit := parseDiagnosticsLimit(r, "limit", 200, 400)
+		baseline, err := g.loadDiagnosticsRecentEvents(limit)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to load diagnostics stream baseline"})
+			return
+		}
+		seen := make(map[string]struct{}, len(baseline))
+		order := make([]string, 0, len(baseline))
+		for _, event := range baseline {
+			key := diagnostics.EventKey(event)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			order = append(order, key)
+		}
+		trimSeen := func() {
+			for len(order) > limit*4 {
+				delete(seen, order[0])
+				order = order[1:]
+			}
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Connection", "keep-alive")
+
+		keepAlive := time.NewTicker(20 * time.Second)
+		poll := time.NewTicker(diagnosticsStreamPollInterval)
+		defer keepAlive.Stop()
+		defer poll.Stop()
+
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-keepAlive.C:
+				if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
+					return
+				}
+				flusher.Flush()
+			case <-poll.C:
+				events, err := g.loadDiagnosticsRecentEvents(limit)
+				if err != nil {
+					continue
+				}
+				for i := len(events) - 1; i >= 0; i-- {
+					event := events[i]
+					key := diagnostics.EventKey(event)
+					if _, ok := seen[key]; ok {
+						continue
+					}
+					if err := writeDiagnosticsSSEEvent(w, diagnosticsStreamEvent{Key: key, Event: event}); err != nil {
+						return
+					}
+					flusher.Flush()
+					seen[key] = struct{}{}
+					order = append(order, key)
+					trimSeen()
+				}
+			}
+		}
+
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/settings":
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
@@ -1095,6 +1219,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 			LogFormat *string `json:"log_format,omitempty"`
 			LogLevel  *string `json:"log_level,omitempty"`
+
+			DebugConsole json.RawMessage `json:"debug_console,omitempty"`
 
 			CodeServerPortMin *int `json:"code_server_port_min,omitempty"`
 			CodeServerPortMax *int `json:"code_server_port_max,omitempty"`
@@ -1125,10 +1251,30 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 		if body.AgentHomeDir == nil && body.Shell == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
+			len(body.DebugConsole) == 0 &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
 			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 			return
+		}
+
+		var nextDebugConsole *config.DebugConsoleConfig
+		if len(body.DebugConsole) > 0 {
+			raw := bytes.TrimSpace(body.DebugConsole)
+			if !bytes.Equal(raw, []byte("null")) {
+				var debugConsole config.DebugConsoleConfig
+				debugDec := json.NewDecoder(bytes.NewReader(raw))
+				debugDec.DisallowUnknownFields()
+				if err := debugDec.Decode(&debugConsole); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid debug_console json"})
+					return
+				}
+				if err := debugDec.Decode(&struct{}{}); err != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid debug_console json"})
+					return
+				}
+				nextDebugConsole = &debugConsole
+			}
 		}
 
 		var nextPolicy *config.PermissionPolicy
@@ -1191,6 +1337,11 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if body.LogLevel != nil {
 			auditDetail["log_level"] = strings.TrimSpace(*body.LogLevel)
 		}
+		if len(body.DebugConsole) > 0 {
+			auditDetail["debug_console_updated"] = true
+			auditDetail["debug_console_enabled"] = nextDebugConsole != nil && nextDebugConsole.Enabled
+			auditDetail["debug_console_collect_ui_metrics"] = nextDebugConsole != nil && nextDebugConsole.CollectUIMetrics
+		}
 		if body.CodeServerPortMin != nil {
 			auditDetail["code_server_port_min"] = *body.CodeServerPortMin
 		}
@@ -1237,6 +1388,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				if body.LogLevel != nil {
 					c.LogLevel = strings.TrimSpace(*body.LogLevel)
 				}
+				if len(body.DebugConsole) > 0 {
+					c.DebugConsole = nextDebugConsole
+				}
 				if body.CodeServerPortMin != nil {
 					c.CodeServerPortMin = *body.CodeServerPortMin
 				}
@@ -1273,6 +1427,9 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
+		}
+		if g.diag != nil {
+			g.diag.SetEnabled(updated.DebugConsoleEnabled())
 		}
 
 		g.appendAudit(meta, "settings_update", "success", auditDetail, nil)

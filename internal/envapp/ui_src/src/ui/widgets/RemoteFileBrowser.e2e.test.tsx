@@ -516,6 +516,7 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     settingsSeq: () => 0,
     bumpSettingsSeq: () => {},
     openSettings: () => {},
+    openDebugConsole: () => {},
     settingsFocusSeq: () => 0,
     settingsFocusSection: () => null,
     askFlowerIntentSeq: () => 0,

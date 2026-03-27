@@ -216,13 +216,16 @@ func New(opts Options) (*Agent, error) {
 	} else {
 		a.audit = auditStore
 	}
-	if diagnostics.EnabledForLogLevel(opts.Config.LogLevel) {
-		diagnosticsStore, err := diagnostics.New(diagnostics.Options{Logger: logger, StateDir: stateDir, Source: diagnostics.SourceAgent})
-		if err != nil {
-			logger.Warn("diagnostics init failed", "error", err)
-		} else {
-			a.diag = diagnosticsStore
-		}
+	diagnosticsStore, err := diagnostics.New(diagnostics.Options{
+		Logger:   logger,
+		StateDir: stateDir,
+		Source:   diagnostics.SourceAgent,
+		Disabled: !opts.Config.DebugConsoleEnabled(),
+	})
+	if err != nil {
+		logger.Warn("diagnostics init failed", "error", err)
+	} else {
+		a.diag = diagnosticsStore
 	}
 	var upgrader syssvc.Upgrader
 	if !a.desktopManaged {

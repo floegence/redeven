@@ -18,3 +18,7 @@ func (a *Agent) DiagnosticsStore() *diagnostics.Store {
 	}
 	return a.diag
 }
+
+func (a *Agent) DiagnosticsEnabled() bool {
+	return a != nil && a.diag != nil && a.diag.Enabled()
+}

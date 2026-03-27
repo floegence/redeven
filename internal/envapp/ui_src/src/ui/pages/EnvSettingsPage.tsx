@@ -21,11 +21,10 @@ import { resolveAgentUpgradeState } from '../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { fetchGatewayJSON } from '../services/gatewayApi';
-import { diagnosticsExportFilename, exportDiagnostics, getDiagnostics, type DiagnosticsView } from '../services/diagnosticsApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { CodexIcon, CodexNavigationIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
-import { EnvDiagnosticsPanel } from './EnvDiagnosticsPanel';
+import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 import { AIProviderDialog } from './settings/AIProviderDialog';
 import {
   DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
@@ -66,6 +65,7 @@ import {
 } from './settings/SettingsPrimitives';
 import { SkillsCatalogTable } from './settings/SkillsCatalogTable';
 import type {
+  AgentSettingsResponse,
   AIConfig,
   AIProvider,
   AIProviderDialogMode,
@@ -74,12 +74,14 @@ import type {
   AIProviderModelRow,
   AIProviderRow,
   AIProviderType,
-  AISecretsView,
   AIPreservedUIFields,
   CodexHostStatus,
+  DebugConsoleSettings,
   PermissionPolicy,
   PermissionRow,
   PermissionSet,
+  SettingsAIUpdateMeta,
+  SettingsUpdateResponse,
   SkillBrowseFileResponse,
   SkillBrowseTreeResponse,
   SkillCatalogEntry,
@@ -92,38 +94,6 @@ import type {
   SkillSourceItem,
   SkillSourcesResponse,
 } from './settings/types';
-
-type SettingsResponse = Readonly<{
-  config_path: string;
-  connection: Readonly<{
-    controlplane_base_url: string;
-    environment_id: string;
-    agent_instance_id: string;
-    direct: Readonly<{
-      ws_url: string;
-      channel_id: string;
-      channel_init_expire_at_unix_s: number;
-      default_suite: number;
-      e2ee_psk_set: boolean;
-    }>;
-  }>;
-  runtime: Readonly<{ agent_home_dir: string; shell: string }>;
-  logging: Readonly<{ log_format: string; log_level: string }>;
-  codespaces: Readonly<{ code_server_port_min: number; code_server_port_max: number }>;
-  permission_policy: PermissionPolicy | null;
-  ai: AIConfig | null;
-  ai_secrets?: AISecretsView | null;
-}>;
-
-type SettingsAIUpdateMeta = Readonly<{
-  apply_scope?: string;
-  active_run_count?: number;
-}>;
-
-type SettingsUpdateResponse = Readonly<{
-  settings: SettingsResponse;
-  ai_update?: SettingsAIUpdateMeta | null;
-}>;
 
 // ============================================================================
 // Constants & Helpers
@@ -174,13 +144,13 @@ function autoSaveRestartRequiredMessage(label: string, unixMs: number): string {
   return `${autoSaveMessage(label, unixMs)} Restart manually to apply.`;
 }
 
-function isSettingsResponseLike(raw: unknown): raw is SettingsResponse {
+function isSettingsResponseLike(raw: unknown): raw is AgentSettingsResponse {
   if (!raw || typeof raw !== 'object') return false;
   const v = raw as any;
   return typeof v.config_path === 'string' && typeof v.connection === 'object' && typeof v.runtime === 'object';
 }
 
-function normalizeSettingsUpdateResponse(raw: unknown): { settings: SettingsResponse | null; aiUpdate: SettingsAIUpdateMeta | null } {
+function normalizeSettingsUpdateResponse(raw: unknown): { settings: AgentSettingsResponse | null; aiUpdate: SettingsAIUpdateMeta | null } {
   if (isSettingsResponseLike(raw)) {
     return { settings: raw, aiUpdate: null };
   }
@@ -188,9 +158,17 @@ function normalizeSettingsUpdateResponse(raw: unknown): { settings: SettingsResp
     return { settings: null, aiUpdate: null };
   }
   const v = raw as any;
-  const settings = isSettingsResponseLike(v.settings) ? (v.settings as SettingsResponse) : null;
+  const settings = isSettingsResponseLike(v.settings) ? (v.settings as AgentSettingsResponse) : null;
   const aiUpdate = v.ai_update && typeof v.ai_update === 'object' ? (v.ai_update as SettingsAIUpdateMeta) : null;
   return { settings, aiUpdate };
+}
+
+function normalizeDebugConsoleSettings(raw: unknown): DebugConsoleSettings {
+  const candidate = raw && typeof raw === 'object' ? (raw as Partial<DebugConsoleSettings>) : {};
+  return {
+    enabled: candidate.enabled === true,
+    collect_ui_metrics: candidate.collect_ui_metrics === true,
+  };
 }
 
 function newProviderID(): string {
@@ -343,13 +321,9 @@ export function EnvSettingsPage() {
 
   const key = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.settingsSeq() : null));
 
-  const [settings, { mutate: mutateSettings, refetch }] = createResource<SettingsResponse | null, number | null>(
+  const [settings, { mutate: mutateSettings, refetch }] = createResource<AgentSettingsResponse | null, number | null>(
     () => key(),
-    async (k) => (k == null ? null : await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
-  );
-  const [diagnosticsData, { refetch: refetchDiagnostics }] = createResource<DiagnosticsView | null, number | null>(
-    () => key(),
-    async (k) => (k == null ? null : await getDiagnostics()),
+    async (k) => (k == null ? null : await fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
   );
   const [codexStatus, { refetch: refetchCodexStatus }] = createResource<CodexHostStatus | null, number | null>(
     () => key(),
@@ -503,41 +477,6 @@ export function EnvSettingsPage() {
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
   const [loggingDirty, setLoggingDirty] = createSignal(false);
   const [codespacesDirty, setCodespacesDirty] = createSignal(false);
-  const [diagnosticsRefreshing, setDiagnosticsRefreshing] = createSignal(false);
-  const [diagnosticsExporting, setDiagnosticsExporting] = createSignal(false);
-
-  const diagnosticsRuntimeEnabled = createMemo(() => !!diagnosticsData()?.enabled);
-  const refreshDiagnostics = async () => {
-    setDiagnosticsRefreshing(true);
-    try {
-      await refetchDiagnostics();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Diagnostics refresh failed', msg || 'Request failed.');
-    } finally {
-      setDiagnosticsRefreshing(false);
-    }
-  };
-
-  const exportDiagnosticsBundle = async () => {
-    setDiagnosticsExporting(true);
-    try {
-      const data = await exportDiagnostics();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const href = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = href;
-      a.download = diagnosticsExportFilename(data.exported_at);
-      a.click();
-      URL.revokeObjectURL(href);
-      notify.success('Diagnostics exported', a.download);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Diagnostics export failed', msg || 'Request failed.');
-    } finally {
-      setDiagnosticsExporting(false);
-    }
-  };
   const refreshCodexHostStatus = async () => {
     try {
       await refetchCodexStatus();
@@ -548,6 +487,7 @@ export function EnvSettingsPage() {
   };
   const [policyDirty, setPolicyDirty] = createSignal(false);
   const [aiDirty, setAiDirty] = createSignal(false);
+  const [debugConsoleDirty, setDebugConsoleDirty] = createSignal(false);
 
   // Runtime fields
   const [agentHomeDir, setAgentHomeDir] = createSignal('');
@@ -556,7 +496,8 @@ export function EnvSettingsPage() {
   // Logging fields
   const [logFormat, setLogFormat] = createSignal('');
   const [logLevel, setLogLevel] = createSignal('');
-  const diagnosticsConfiguredDebug = createMemo(() => String(logLevel() ?? settings()?.logging?.log_level ?? '').trim() === 'debug');
+  const [debugConsoleEnabled, setDebugConsoleEnabled] = createSignal(false);
+  const [debugConsoleCollectUIMetrics, setDebugConsoleCollectUIMetrics] = createSignal(false);
 
   // Codespaces fields
   const [useDefaultCodePorts, setUseDefaultCodePorts] = createSignal(true);
@@ -655,11 +596,13 @@ export function EnvSettingsPage() {
   const [codespacesSaving, setCodespacesSaving] = createSignal(false);
   const [policySaving, setPolicySaving] = createSignal(false);
   const [aiSaving, setAiSaving] = createSignal(false);
+  const [debugConsoleSaving, setDebugConsoleSaving] = createSignal(false);
   const [runtimeSavedAt, setRuntimeSavedAt] = createSignal<number | null>(null);
   const [loggingSavedAt, setLoggingSavedAt] = createSignal<number | null>(null);
   const [codespacesSavedAt, setCodespacesSavedAt] = createSignal<number | null>(null);
   const [policySavedAt, setPolicySavedAt] = createSignal<number | null>(null);
   const [aiSavedAt, setAiSavedAt] = createSignal<number | null>(null);
+  const [debugConsoleSavedAt, setDebugConsoleSavedAt] = createSignal<number | null>(null);
   const [disableAIOpen, setDisableAIOpen] = createSignal(false);
   const [disableAISaving, setDisableAISaving] = createSignal(false);
 
@@ -669,6 +612,7 @@ export function EnvSettingsPage() {
   const [codespacesError, setCodespacesError] = createSignal<string | null>(null);
   const [policyError, setPolicyError] = createSignal<string | null>(null);
   const [aiError, setAiError] = createSignal<string | null>(null);
+  const [debugConsoleError, setDebugConsoleError] = createSignal<string | null>(null);
 
   const aiEnabled = createMemo(() => !!settings()?.ai);
   const codexStatusError = createMemo(() => {
@@ -735,6 +679,12 @@ export function EnvSettingsPage() {
 
   const buildRuntimePatch = () => ({ agent_home_dir: String(agentHomeDir() ?? ''), shell: String(shell() ?? '') });
   const buildLoggingPatch = () => ({ log_format: String(logFormat() ?? ''), log_level: String(logLevel() ?? '') });
+  const buildDebugConsolePatch = (): { debug_console: DebugConsoleSettings } => ({
+    debug_console: {
+      enabled: !!debugConsoleEnabled(),
+      collect_ui_metrics: !!debugConsoleCollectUIMetrics(),
+    },
+  });
   const buildCodespacesPatch = () => {
     if (useDefaultCodePorts()) return { code_server_port_min: 0, code_server_port_max: 0 };
     const min = codePortMin();
@@ -1669,6 +1619,12 @@ export function EnvSettingsPage() {
       setLoggingJSON(JSON.stringify({ log_format: String(l?.log_format ?? ''), log_level: String(l?.log_level ?? '') }, null, 2));
     }
 
+    if (!debugConsoleDirty()) {
+      const debugConsole = normalizeDebugConsoleSettings(s.debug_console);
+      setDebugConsoleEnabled(debugConsole.enabled);
+      setDebugConsoleCollectUIMetrics(debugConsole.collect_ui_metrics);
+    }
+
     if (!codespacesDirty()) {
       const c = s.codespaces;
       const min = Number(c?.code_server_port_min ?? 0);
@@ -1775,8 +1731,8 @@ export function EnvSettingsPage() {
     requestAnimationFrame(() => scrollToSection(section));
   });
 
-  const saveSettings = async (body: any): Promise<{ settings: SettingsResponse | null; aiUpdate: SettingsAIUpdateMeta | null }> => {
-    const data = await fetchGatewayJSON<SettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
+  const saveSettings = async (body: any): Promise<{ settings: AgentSettingsResponse | null; aiUpdate: SettingsAIUpdateMeta | null }> => {
+    const data = await fetchGatewayJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
       method: 'PUT',
       body: JSON.stringify(body),
     });
@@ -1968,6 +1924,11 @@ export function EnvSettingsPage() {
     return { body, signature: JSON.stringify(body) };
   };
 
+  const buildDebugConsoleDraft = () => {
+    const body = buildDebugConsolePatch();
+    return { body, signature: JSON.stringify(body) };
+  };
+
   const buildCodespacesDraft = () => {
     let body: any = null;
     if (codespacesView() === 'json') {
@@ -2098,6 +2059,38 @@ export function EnvSettingsPage() {
       notifyAutoSaveFailed('Logging settings', e);
     } finally {
       setLoggingSaving(false);
+    }
+  };
+
+  const saveDebugConsole = async () => {
+    let draft: { body: { debug_console: DebugConsoleSettings }; signature: string };
+    try {
+      draft = buildDebugConsoleDraft();
+      setDebugConsoleError(null);
+    } catch (e) {
+      setDebugConsoleError(formatUnknownError(e) || 'Save failed.');
+      return;
+    }
+    setDebugConsoleSaving(true);
+    try {
+      await saveSettings(draft.body);
+      const now = Date.now();
+      setDebugConsoleSavedAt(now);
+      setDebugConsoleError(null);
+      notifyAutoSaveSuccess('Debug console settings', now);
+      let unchanged = false;
+      try {
+        unchanged = buildDebugConsoleDraft().signature === draft.signature;
+      } catch {
+        unchanged = false;
+      }
+      setDebugConsoleDirty(!unchanged);
+    } catch (e) {
+      const msg = formatUnknownError(e) || 'Save failed.';
+      setDebugConsoleError(msg);
+      notifyAutoSaveFailed('Debug console settings', e);
+    } finally {
+      setDebugConsoleSaving(false);
     }
   };
 
@@ -2244,6 +2237,7 @@ export function EnvSettingsPage() {
 
   let runtimeAutoSaveTimer: number | null = null;
   let loggingAutoSaveTimer: number | null = null;
+  let debugConsoleAutoSaveTimer: number | null = null;
   let codespacesAutoSaveTimer: number | null = null;
   let policyAutoSaveTimer: number | null = null;
   let aiAutoSaveTimer: number | null = null;
@@ -2296,6 +2290,29 @@ export function EnvSettingsPage() {
       loggingAutoSaveTimer = null;
       if (!loggingDirty() || loggingSaving() || !canInteract()) return;
       void saveLogging();
+    }, AUTO_SAVE_DELAY_MS);
+  });
+
+  createEffect(() => {
+    const dirty = debugConsoleDirty();
+    const canAutoSave = canInteract() && !debugConsoleSaving();
+    if (!dirty || !canAutoSave) {
+      debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
+      return;
+    }
+    try {
+      buildDebugConsoleDraft();
+      setDebugConsoleError(null);
+    } catch (e) {
+      debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
+      setDebugConsoleError(formatUnknownError(e) || 'Save failed.');
+      return;
+    }
+    debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
+    debugConsoleAutoSaveTimer = window.setTimeout(() => {
+      debugConsoleAutoSaveTimer = null;
+      if (!debugConsoleDirty() || debugConsoleSaving() || !canInteract()) return;
+      void saveDebugConsole();
     }, AUTO_SAVE_DELAY_MS);
   });
 
@@ -2371,6 +2388,7 @@ export function EnvSettingsPage() {
   onCleanup(() => {
     runtimeAutoSaveTimer = clearAutoSaveTimer(runtimeAutoSaveTimer);
     loggingAutoSaveTimer = clearAutoSaveTimer(loggingAutoSaveTimer);
+    debugConsoleAutoSaveTimer = clearAutoSaveTimer(debugConsoleAutoSaveTimer);
     codespacesAutoSaveTimer = clearAutoSaveTimer(codespacesAutoSaveTimer);
     policyAutoSaveTimer = clearAutoSaveTimer(policyAutoSaveTimer);
     aiAutoSaveTimer = clearAutoSaveTimer(aiAutoSaveTimer);
@@ -2776,8 +2794,8 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={Database}
               title="Logging"
-              description="Log format and verbosity level."
-              badge="Manual restart required"
+              description="Log format, verbosity, and the live debug-console toggle."
+              badge="Log changes require restart"
               badgeVariant="warning"
               error={loggingError()}
               actions={
@@ -2857,30 +2875,29 @@ export function EnvSettingsPage() {
                             class="w-full"
                           />
                         </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">Use `debug` to enable detailed diagnostics collection.</SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Controls agent log verbosity only. The floating debug console is configured separately below.</SettingsTableCell>
                       </SettingsTableRow>
                     </SettingsTableBody>
                   </SettingsTable>
 
-                  <div class="border-t border-border/70 pt-4">
-                    <SubSectionHeader
-                      title="Diagnostics"
-                      description="Correlate desktop and agent timing when debug logging is enabled."
-                    />
-                    <div class="mt-3">
-                      <EnvDiagnosticsPanel
-                        configuredDebug={diagnosticsConfiguredDebug()}
-                        runtimeEnabled={diagnosticsRuntimeEnabled()}
-                        loading={diagnosticsData.loading}
-                        refreshing={diagnosticsRefreshing()}
-                        exporting={diagnosticsExporting()}
-                        error={diagnosticsData.error ? formatUnknownError(diagnosticsData.error) : ''}
-                        diagnostics={diagnosticsData()}
-                        onRefresh={() => void refreshDiagnostics()}
-                        onExport={() => void exportDiagnosticsBundle()}
-                      />
-                    </div>
-                  </div>
+                  <EnvDebugConsoleSettingsPanel
+                    enabled={debugConsoleEnabled()}
+                    collectUIMetrics={debugConsoleCollectUIMetrics()}
+                    dirty={debugConsoleDirty()}
+                    saving={debugConsoleSaving()}
+                    error={debugConsoleError()}
+                    savedAt={debugConsoleSavedAt()}
+                    canInteract={canInteract()}
+                    onEnabledChange={(value) => {
+                      setDebugConsoleEnabled(value);
+                      setDebugConsoleDirty(true);
+                    }}
+                    onCollectUIMetricsChange={(value) => {
+                      setDebugConsoleCollectUIMetrics(value);
+                      setDebugConsoleDirty(true);
+                    }}
+                    onOpenConsole={env.openDebugConsole}
+                  />
                 </div>
               </Show>
             </SettingsCard>

@@ -1,7 +1,9 @@
 package diagnostics
 
 import (
+	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -30,6 +32,25 @@ type Snapshot struct {
 	RecentEvents []Event       `json:"recent_events"`
 	SlowSummary  []SummaryItem `json:"slow_summary"`
 	Stats        Stats         `json:"stats"`
+}
+
+func EventKey(event Event) string {
+	body, err := json.Marshal(event)
+	if err != nil {
+		return strings.Join([]string{
+			strings.TrimSpace(event.CreatedAt),
+			strings.TrimSpace(event.Source),
+			strings.TrimSpace(event.Scope),
+			strings.TrimSpace(event.Kind),
+			strings.TrimSpace(event.TraceID),
+			strings.TrimSpace(event.Method),
+			strings.TrimSpace(event.Path),
+			strconv.Itoa(event.StatusCode),
+			strconv.FormatInt(event.DurationMs, 10),
+			strings.TrimSpace(event.Message),
+		}, "\x00")
+	}
+	return string(body)
 }
 
 func BuildSnapshot(recentLimit int, summaryLimit int, sources ...[]Event) Snapshot {

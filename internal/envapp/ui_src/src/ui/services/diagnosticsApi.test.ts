@@ -46,4 +46,57 @@ describe('diagnosticsApi', () => {
     const mod = await import('./diagnosticsApi');
     expect(mod.diagnosticsExportFilename('2026-03-18T14:15:16.123Z')).toBe('redeven-diagnostics-2026-03-18T14-15-16-123Z.json');
   });
+
+  it('builds a stable diagnostics event key', async () => {
+    const mod = await import('./diagnosticsApi');
+    expect(mod.diagnosticsEventKey({
+      created_at: '2026-03-18T14:15:16Z',
+      source: 'desktop',
+      scope: 'desktop_http',
+      kind: 'completed',
+      trace_id: 'trace-1',
+      method: 'GET',
+      path: '/api/local/runtime',
+      status_code: 200,
+      duration_ms: 24,
+    })).toBe('{"created_at":"2026-03-18T14:15:16Z","source":"desktop","scope":"desktop_http","kind":"completed","trace_id":"trace-1","method":"GET","path":"/api/local/runtime","status_code":200,"duration_ms":24}');
+  });
+
+  it('reads diagnostics events from the streaming endpoint', async () => {
+    vi.doMock('./controlplaneApi', () => ({
+      getLocalRuntime: vi.fn(async () => null),
+    }));
+
+    const encoder = new TextEncoder();
+    const fetchMock = vi.fn(async () => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode('event: diagnostics_event\n'));
+          controller.enqueue(encoder.encode('data: {"key":"evt-1","event":{"created_at":"2026-03-18T14:15:16Z","source":"agent","scope":"gateway_api","kind":"request","trace_id":"trace-1","method":"GET","path":"/_redeven_proxy/api/settings","status_code":200,"duration_ms":16}}\n\n'));
+          controller.close();
+        },
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./diagnosticsApi');
+    const events: any[] = [];
+    await mod.connectDiagnosticsStream({
+      signal: new AbortController().signal,
+      onEvent: (event) => events.push(event),
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      key: 'evt-1',
+      event: {
+        trace_id: 'trace-1',
+        path: '/_redeven_proxy/api/settings',
+      },
+    });
+  });
 });
