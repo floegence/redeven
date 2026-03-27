@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { SettingsPill } from '../pages/settings/SettingsPrimitives';
@@ -28,13 +28,50 @@ type MetricItem = Readonly<{
   emphasized?: boolean;
 }>;
 
-type TabDescriptor = Readonly<{
+type DebugConsoleTabDefinition = Readonly<{
   value: DebugConsoleTab;
   label: string;
   description: string;
-  count?: string;
   tone?: SemanticTone;
+  hasCount?: boolean;
 }>;
+
+const DEBUG_CONSOLE_TABS: readonly DebugConsoleTabDefinition[] = [
+  {
+    value: 'requests',
+    label: 'Requests',
+    description: 'Redeven API and RPC activity',
+    tone: 'info',
+    hasCount: true,
+  },
+  {
+    value: 'traces',
+    label: 'Traces',
+    description: 'Grouped API and RPC timelines',
+    tone: 'primary',
+    hasCount: true,
+  },
+  {
+    value: 'ui',
+    label: 'UI Performance',
+    description: 'Renderer-only frame and layout signals',
+    tone: 'success',
+    hasCount: true,
+  },
+  {
+    value: 'runtime',
+    label: 'Runtime',
+    description: 'Collector state and slow summary',
+    tone: 'warning',
+    hasCount: true,
+  },
+  {
+    value: 'export',
+    label: 'Export',
+    description: 'Portable debug bundle preview',
+    tone: 'neutral',
+  },
+] as const;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -566,6 +603,10 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
 
   const selectedEvent = createMemo(() => filteredEvents().find((event) => diagnosticsEventKey(event) === compact(selectedEventKey())) ?? null);
   const selectedTrace = createMemo(() => filteredTraces().find((trace) => trace.key === compact(selectedTraceKey())) ?? null);
+  const requestTabCount = createMemo(() => filteredEvents().length);
+  const traceTabCount = createMemo(() => filteredTraces().length);
+  const uiEventTabCount = createMemo(() => props.controller.performanceSnapshot().recent_events.length);
+  const runtimeTabCount = createMemo(() => props.controller.stats().slow_events);
 
   const combinedError = createMemo(() => {
     return [props.controller.snapshotError(), props.controller.streamError()]
@@ -574,42 +615,21 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       .join(' · ');
   });
 
-  const tabDescriptors = createMemo<TabDescriptor[]>(() => [
-    {
-      value: 'requests',
-      label: 'Requests',
-      description: 'Redeven API and RPC activity',
-      count: String(filteredEvents().length),
-      tone: 'info',
-    },
-    {
-      value: 'traces',
-      label: 'Traces',
-      description: 'Grouped API and RPC timelines',
-      count: String(filteredTraces().length),
-      tone: 'primary',
-    },
-    {
-      value: 'ui',
-      label: 'UI Performance',
-      description: 'Renderer-only frame and layout signals',
-      count: String(props.controller.performanceSnapshot().recent_events.length),
-      tone: 'success',
-    },
-    {
-      value: 'runtime',
-      label: 'Runtime',
-      description: 'Collector state and slow summary',
-      count: String(props.controller.stats().slow_events),
-      tone: 'warning',
-    },
-    {
-      value: 'export',
-      label: 'Export',
-      description: 'Portable debug bundle preview',
-      tone: 'neutral',
-    },
-  ]);
+  const tabCountLabel = (value: DebugConsoleTab): string | undefined => {
+    switch (value) {
+      case 'requests':
+        return String(requestTabCount());
+      case 'traces':
+        return String(traceTabCount());
+      case 'ui':
+        return String(uiEventTabCount());
+      case 'runtime':
+        return String(runtimeTabCount());
+      case 'export':
+      default:
+        return undefined;
+    }
+  };
 
   const exportBundle = async () => {
     const bundle = await props.controller.exportBundle();
@@ -729,30 +749,30 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
 
             <div class="border-b border-border/70 bg-background px-4 py-2.5">
               <div class="flex flex-wrap gap-2" role="tablist" aria-orientation="horizontal">
-                <For each={tabDescriptors()}>
+                <Index each={DEBUG_CONSOLE_TABS}>
                   {(descriptor) => (
                     <button
                       type="button"
                       role="tab"
-                      aria-selected={tab() === descriptor.value}
-                      class={tabButtonClass(tab() === descriptor.value)}
-                      onClick={() => setTab(descriptor.value)}
-                      style={tab() === descriptor.value ? semanticInteractiveStyle(descriptor.tone ?? 'primary', 'strong') : undefined}
+                      aria-selected={tab() === descriptor().value}
+                      class={tabButtonClass(tab() === descriptor().value)}
+                      onClick={() => setTab(descriptor().value)}
+                      style={tab() === descriptor().value ? semanticInteractiveStyle(descriptor().tone ?? 'primary', 'strong') : undefined}
                     >
                       <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
-                          <div class={`text-[10px] font-semibold ${tab() === descriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{descriptor.label}</div>
-                          <div class="mt-0.5 text-[9px] leading-[1rem] text-muted-foreground">{descriptor.description}</div>
+                          <div class={`text-[10px] font-semibold ${tab() === descriptor().value ? 'text-foreground' : 'text-foreground/90'}`}>{descriptor().label}</div>
+                          <div class="mt-0.5 text-[9px] leading-[1rem] text-muted-foreground">{descriptor().description}</div>
                         </div>
-                        <Show when={compact(descriptor.count)}>
-                          <span class="rounded-md border px-1.5 py-0.5 text-[8px] font-semibold tabular-nums" style={semanticBadgeStyle(descriptor.tone ?? 'neutral', tab() === descriptor.value)}>
-                            {descriptor.count}
+                        <Show when={descriptor().hasCount}>
+                          <span class="rounded-md border px-1.5 py-0.5 text-[8px] font-semibold tabular-nums" style={semanticBadgeStyle(descriptor().tone ?? 'neutral', tab() === descriptor().value)}>
+                            {tabCountLabel(descriptor().value)}
                           </span>
                         </Show>
                       </div>
                     </button>
                   )}
-                </For>
+                </Index>
               </div>
             </div>
 

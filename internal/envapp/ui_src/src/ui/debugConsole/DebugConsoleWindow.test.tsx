@@ -87,7 +87,7 @@ function createController(overrides: Record<string, unknown> = {}) {
       events: serverEvents(),
     },
   ]);
-  const [performanceSnapshot] = createSignal({
+  const [performanceSnapshot, setPerformanceSnapshot] = createSignal({
     collecting: true,
     supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false, mutation_observer: true, interaction_latency: true },
     fps: { current: 60, average: 58, low: 48, samples: 3 },
@@ -110,7 +110,7 @@ function createController(overrides: Record<string, unknown> = {}) {
     recent_events: [],
   });
 
-  return {
+  const controller = {
     enabled: () => true,
     open: () => true,
     minimized: () => false,
@@ -186,6 +186,11 @@ function createController(overrides: Record<string, unknown> = {}) {
     })),
     ...overrides,
   };
+
+  return {
+    controller,
+    setPerformanceSnapshot,
+  };
 }
 
 afterEach(() => {
@@ -196,7 +201,7 @@ describe('DebugConsoleWindow', () => {
   it('renders the request details inside the floating window', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const controller = createController();
+    const { controller } = createController();
 
     render(() => <DebugConsoleWindow controller={controller} />, host);
 
@@ -221,7 +226,7 @@ describe('DebugConsoleWindow', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const clear = vi.fn(async () => undefined);
-    const controller = createController({ clear });
+    const { controller } = createController({ clear });
 
     render(() => <DebugConsoleWindow controller={controller} />, host);
 
@@ -236,7 +241,7 @@ describe('DebugConsoleWindow', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const closeConsole = vi.fn(async () => undefined);
-    const controller = createController({ closeConsole });
+    const { controller } = createController({ closeConsole });
 
     render(() => <DebugConsoleWindow controller={controller} />, host);
 
@@ -250,11 +255,54 @@ describe('DebugConsoleWindow', () => {
   it('shows a restore pill when minimized', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const controller = createController({ open: () => false, minimized: () => true });
+    const { controller } = createController({ open: () => false, minimized: () => true });
 
     render(() => <DebugConsoleWindow controller={controller} />, host);
 
     expect(host.textContent).toContain('Debug Console');
     expect(host.textContent).toContain('Live');
+  });
+
+  it('keeps tab nodes stable across unrelated UI performance updates', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { controller, setPerformanceSnapshot } = createController();
+
+    render(() => <DebugConsoleWindow controller={controller} />, host);
+
+    const uiTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent?.includes('UI Performance'));
+    const tracesTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent?.includes('Traces'));
+    expect(uiTab).toBeTruthy();
+    expect(tracesTab).toBeTruthy();
+
+    uiTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(uiTab?.getAttribute('aria-selected')).toBe('true');
+    expect(host.textContent).toContain('Renderer probes');
+
+    const tracesTabBefore = tracesTab;
+    const uiTabBefore = uiTab;
+
+    setPerformanceSnapshot((current) => ({
+      ...current,
+      fps: {
+        ...current.fps,
+        current: 57,
+        average: 57,
+      },
+      frame_timing: {
+        ...current.frame_timing,
+        last_frame_ms: 19,
+      },
+    }));
+
+    await Promise.resolve();
+
+    const uiTabAfter = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent?.includes('UI Performance'));
+    const tracesTabAfter = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent?.includes('Traces'));
+
+    expect(uiTabAfter).toBe(uiTabBefore);
+    expect(tracesTabAfter).toBe(tracesTabBefore);
+    expect(uiTabAfter?.getAttribute('aria-selected')).toBe('true');
+    expect(host.textContent).toContain('Renderer probes');
   });
 });
