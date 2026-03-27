@@ -218,8 +218,6 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
       >
         <GitVirtualTable
           items={props.items}
-          colSpan={4}
-          rowHeight={54}
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[46rem] md:min-w-0`}
           header={(
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
@@ -278,8 +276,6 @@ interface BranchStatusTableProps {
 }
 
 function BranchStatusTable(props: BranchStatusTableProps) {
-  const [renderedCount, setRenderedCount] = createSignal(0);
-
   return (
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
       <Show
@@ -292,10 +288,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
       >
         <GitVirtualTable
           items={props.items}
-          colSpan={5}
-          rowHeight={54}
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[52rem] md:min-w-0`}
-          onRenderedItemsChange={setRenderedCount}
           header={(
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
               <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
@@ -339,10 +332,10 @@ function BranchStatusTable(props: BranchStatusTableProps) {
             );
           }}
         />
-        <Show when={(props.hasMore || props.loadingMore) && renderedCount() > 0}>
+        <Show when={(props.hasMore || props.loadingMore) && props.items.length > 0}>
           <div class="flex items-center justify-between gap-3 border-t border-border/55 bg-background/70 px-3 py-2">
             <GitSubtleNote>
-              Showing {renderedCount()} of {props.totalCount} file{props.totalCount === 1 ? '' : 's'}.
+              Showing {props.items.length} of {props.totalCount} file{props.totalCount === 1 ? '' : 's'}.
             </GitSubtleNote>
             <Button
               size="sm"
