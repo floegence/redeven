@@ -37,6 +37,26 @@ function EmptyTranscriptState(props: {
   );
 }
 
+function LoadingTranscriptState(props: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div data-codex-surface="loading-state" class="codex-empty-state">
+      <div class="codex-empty-hero">
+        <div class="relative mb-4 inline-flex items-center justify-center">
+          <div class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary/14 to-primary/8 shadow-sm">
+            <CodexIcon class="h-10 w-10 text-primary" />
+          </div>
+        </div>
+
+        <h2 class="mb-2 text-lg font-semibold text-foreground">{props.title}</h2>
+        <p class="text-sm leading-relaxed text-muted-foreground">{props.body}</p>
+      </div>
+    </div>
+  );
+}
+
 function CodexMessageLane(props: {
   role: 'assistant' | 'user';
   showAvatar?: boolean;
@@ -508,6 +528,9 @@ export function CodexTranscript(props: {
   showWorkingState?: boolean;
   workingLabel?: string;
   workingFlags?: readonly string[];
+  loading?: boolean;
+  loadingTitle?: string;
+  loadingBody?: string;
   emptyTitle: string;
   emptyBody: string;
 }) {
@@ -518,10 +541,20 @@ export function CodexTranscript(props: {
       <Show
         when={hasRows()}
         fallback={(
-          <EmptyTranscriptState
-            title={props.emptyTitle}
-            body={props.emptyBody}
-          />
+          <Show
+            when={props.loading}
+            fallback={(
+              <EmptyTranscriptState
+                title={props.emptyTitle}
+                body={props.emptyBody}
+              />
+            )}
+          >
+            <LoadingTranscriptState
+              title={String(props.loadingTitle ?? '').trim() || 'Loading conversation'}
+              body={String(props.loadingBody ?? '').trim() || 'Fetching the selected Codex thread.'}
+            />
+          </Show>
         )}
       >
         <div class="codex-transcript-feed">

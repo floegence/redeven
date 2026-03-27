@@ -117,7 +117,7 @@ export function CodexPageShell() {
   }));
 
   const showBannerStack = createMemo(() =>
-    Boolean(codex.statusError() || codex.streamError() || !summary().hostReady),
+    Boolean(codex.statusError() || codex.activeThreadError() || codex.streamError() || !summary().hostReady),
   );
 
   const emptyStateTitle = () => (
@@ -221,6 +221,7 @@ export function CodexPageShell() {
             <div class="codex-page-status-stack">
               <CodexStatusBannerStack
                 statusError={codex.statusError()}
+                threadError={codex.activeThreadError()}
                 streamError={codex.streamError()}
                 hostAvailable={summary().hostReady}
               />
@@ -244,6 +245,9 @@ export function CodexPageShell() {
                 showWorkingState={shouldShowWorkingState()}
                 workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
                 workingFlags={summary().statusFlags}
+                loading={codex.threadLoading()}
+                loadingTitle={codex.threadTitle()}
+                loadingBody="Loading the selected Codex thread."
                 emptyTitle={emptyStateTitle()}
                 emptyBody={emptyStateBody()}
               />
