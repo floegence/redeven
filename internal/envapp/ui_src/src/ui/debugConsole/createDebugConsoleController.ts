@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 
-import type { AgentSettingsResponse, DebugConsoleSettings } from '../pages/settings/types';
+import type { AgentSettingsResponse, DebugConsoleSettings, SettingsUpdateResponse } from '../pages/settings/types';
 import {
   connectDiagnosticsStream,
   diagnosticsEventKey,
@@ -61,6 +61,7 @@ type CreateDebugConsoleControllerArgs = Readonly<{
   settingsKey: Accessor<number | null>;
   protocolStatus: Accessor<string>;
   fetchSettings?: () => Promise<AgentSettingsResponse>;
+  saveSettings?: (body: { debug_console: DebugConsoleSettings }) => Promise<AgentSettingsResponse | SettingsUpdateResponse>;
   fetchSnapshot?: (limit?: number) => Promise<Awaited<ReturnType<typeof getDiagnostics>>>;
   exportSnapshot?: (limit?: number) => Promise<DiagnosticsExportView>;
   connectStream?: typeof connectDiagnosticsStream;
@@ -86,6 +87,20 @@ function normalizeDebugConsoleSettings(raw: unknown): DebugConsoleSettings {
     enabled: candidate.enabled === true,
     collect_ui_metrics: candidate.collect_ui_metrics === true,
   };
+}
+
+function normalizeSettingsSaveResponse(raw: unknown): AgentSettingsResponse | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const candidate = raw as Partial<SettingsUpdateResponse & AgentSettingsResponse>;
+  if (candidate.settings && typeof candidate.settings === 'object') {
+    return candidate.settings as AgentSettingsResponse;
+  }
+  if (candidate.debug_console && typeof candidate.debug_console === 'object') {
+    return candidate as AgentSettingsResponse;
+  }
+  return null;
 }
 
 function sortEventsNewestFirst(events: readonly DiagnosticsEvent[]): DiagnosticsEvent[] {
@@ -288,6 +303,10 @@ function waitBeforeRetry(signal: AbortSignal): Promise<void> {
 
 export function createDebugConsoleController(args: CreateDebugConsoleControllerArgs) {
   const fetchSettings = args.fetchSettings ?? (() => fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' }));
+  const saveSettings = args.saveSettings ?? ((body: { debug_console: DebugConsoleSettings }) => fetchGatewayJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  }));
   const fetchSnapshot = args.fetchSnapshot ?? getDiagnostics;
   const exportSnapshot = args.exportSnapshot ?? exportDiagnostics;
   const connectStream = args.connectStream ?? connectDiagnosticsStream;
@@ -307,6 +326,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const [streamError, setStreamError] = createSignal<string | null>(null);
   const [exporting, setExporting] = createSignal(false);
   const [lastExportAt, setLastExportAt] = createSignal('');
+  const [exiting, setExiting] = createSignal(false);
   const [minimized, setMinimized] = createSignal(readStoredMinimized());
   const [captureCutoffMs, setCaptureCutoffMs] = createSignal(0);
   const [captureCutoffAt, setCaptureCutoffAt] = createSignal('');
@@ -543,6 +563,35 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     await refresh({ silent: true });
   };
 
+  const exitConsole = async (): Promise<void> => {
+    if (!enabled()) {
+      return;
+    }
+    setExiting(true);
+    setSettingsError(null);
+    try {
+      const response = await saveSettings({
+        debug_console: {
+          enabled: false,
+          collect_ui_metrics: configured().collect_ui_metrics,
+        },
+      });
+      const savedSettings = normalizeSettingsSaveResponse(response);
+      const nextConfigured = normalizeDebugConsoleSettings(savedSettings?.debug_console ?? {
+        enabled: false,
+        collect_ui_metrics: configured().collect_ui_metrics,
+      });
+      setConfigured(nextConfigured);
+      setSettingsLoaded(true);
+      setMinimized(false);
+      clearRuntimeState({ preserveSettings: true });
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setExiting(false);
+    }
+  };
+
   const exportBundle = async (): Promise<DebugConsoleExportBundle> => {
     setExporting(true);
     try {
@@ -610,11 +659,13 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     traces,
     lastEventAt,
     performanceSnapshot: performanceTracker.snapshot,
+    exiting,
     exporting,
     lastExportAt,
     captureCutoffAt,
     refresh,
     clear,
+    exitConsole,
     exportBundle,
   };
 }

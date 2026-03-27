@@ -102,6 +102,8 @@ function createController(overrides: Record<string, unknown> = {}) {
     lastExportAt: () => '',
     refresh: vi.fn(async () => undefined),
     clear: vi.fn(async () => undefined),
+    exiting: () => false,
+    exitConsole: vi.fn(async () => undefined),
     exportBundle: vi.fn(async () => ({
       exported_at: '2026-03-27T10:00:05Z',
       settings: { enabled: true, collect_ui_metrics: true },
@@ -157,6 +159,7 @@ describe('DebugConsoleWindow', () => {
     expect(host.textContent).toContain('Detail JSON');
     expect(host.textContent).toContain('Clear');
     expect(host.textContent).not.toContain('Refresh');
+    expect(host.textContent).toContain('Exit Debug Mode');
     expect(host.textContent).toContain('Static CSS, JS, document loads, and diagnostics self-requests are excluded');
     expect(host.textContent).not.toContain('Continuous');
   });
@@ -174,6 +177,21 @@ describe('DebugConsoleWindow', () => {
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes exit debug mode from the header action', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const exitConsole = vi.fn(async () => undefined);
+    const controller = createController({ exitConsole });
+
+    render(() => <DebugConsoleWindow controller={controller} />, host);
+
+    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Exit Debug Mode'));
+    expect(button).toBeTruthy();
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(exitConsole).toHaveBeenCalledTimes(1);
   });
 
   it('shows a restore pill when minimized', () => {
