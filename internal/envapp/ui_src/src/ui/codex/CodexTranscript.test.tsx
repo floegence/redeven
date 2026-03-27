@@ -25,7 +25,12 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 vi.mock('../chat/blocks/MarkdownBlock', () => ({
-  MarkdownBlock: (props: any) => <div class={props.class}>{props.content}</div>,
+  MarkdownBlock: (props: any) => (
+    <div class={props.class} data-markdown-streaming={props.streaming ? 'true' : 'false'}>
+      {props.content}
+      {props.streaming ? <span data-testid="streaming-cursor">{'\u258B'}</span> : null}
+    </div>
+  ),
 }));
 
 vi.mock('../chat/blocks/ShellBlock', () => ({
@@ -69,7 +74,7 @@ afterEach(() => {
 });
 
 describe('CodexTranscript', () => {
-  it('renders the compact working indicator without a trailing assistant avatar and keeps a cursor visible', () => {
+  it('renders the compact working indicator without a trailing assistant avatar or cursor inside the rail', () => {
     const { host, dispose } = renderTranscript([], {
       showWorkingState: true,
       workingLabel: 'working',
@@ -81,8 +86,29 @@ describe('CodexTranscript', () => {
     expect(host.textContent).not.toContain('Codex is');
     expect(host.textContent).not.toContain('web search');
     expect(host.querySelector('.codex-message-run-indicator-graph')).toBeTruthy();
-    expect(host.querySelector('[data-testid="streaming-cursor"]')).toBeTruthy();
+    expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
     expect(host.querySelector('[data-codex-working-state="true"] .chat-message-avatar')).toBeNull();
+
+    dispose();
+  });
+
+  it('streams the cursor inside the active agent message instead of the working indicator rail', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_agent_live',
+        type: 'agentMessage',
+        text: 'Streaming response',
+        status: 'inProgress',
+        order: 0,
+      },
+    ], {
+      showWorkingState: true,
+      workingLabel: 'working',
+    });
+
+    expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-markdown-streaming="true"]')).toBeTruthy();
+    expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-testid="streaming-cursor"]')).toBeTruthy();
+    expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
 
     dispose();
   });

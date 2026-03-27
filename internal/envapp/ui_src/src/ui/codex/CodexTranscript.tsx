@@ -53,7 +53,7 @@ function CodexMessageLane(props: {
       <Show when={props.showAvatar}>
         <div class="chat-message-avatar chat-message-avatar-assistant codex-chat-message-avatar">
           <div class="chat-message-avatar-custom-wrapper">
-            <CodexIcon class="h-10 w-10" />
+            <CodexIcon class="block h-full w-full" />
           </div>
         </div>
       </Show>
@@ -346,11 +346,17 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
 }
 
 function AgentMessageRow(props: { item: CodexTranscriptItem; showAvatar?: boolean }) {
+  const streaming = () => isWorkingStatus(props.item.status);
   return (
     <CodexMessageLane role="assistant" showAvatar={props.showAvatar}>
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
-          <MarkdownBlock content={itemText(props.item)} class="codex-chat-markdown-block" rendererVariant="codex" />
+          <MarkdownBlock
+            content={itemText(props.item)}
+            streaming={streaming()}
+            class="codex-chat-markdown-block"
+            rendererVariant="codex"
+          />
         </div>
       </div>
     </CodexMessageLane>
