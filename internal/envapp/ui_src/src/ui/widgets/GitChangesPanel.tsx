@@ -127,6 +127,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
       >
         <GitVirtualTable
           items={props.items}
+          totalCount={props.totalCount}
           colSpan={4}
           rowHeight={54}
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[42rem] md:min-w-0`}

@@ -290,6 +290,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
       >
         <GitVirtualTable
           items={props.items}
+          totalCount={props.totalCount}
           colSpan={5}
           rowHeight={54}
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[52rem] md:min-w-0`}
