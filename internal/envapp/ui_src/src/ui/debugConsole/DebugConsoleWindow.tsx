@@ -12,6 +12,7 @@ import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
 import type { DebugConsoleController, DebugConsoleTrace } from './createDebugConsoleController';
 
 type DebugConsoleTab = 'requests' | 'traces' | 'ui' | 'runtime' | 'export';
+type SemanticTone = 'neutral' | 'primary' | 'success' | 'warning' | 'error' | 'info';
 
 type KeyValueItem = Readonly<{
   label: string;
@@ -23,6 +24,8 @@ type MetricItem = Readonly<{
   label: string;
   value: string;
   note?: string;
+  tone?: SemanticTone;
+  emphasized?: boolean;
 }>;
 
 type TabDescriptor = Readonly<{
@@ -30,6 +33,7 @@ type TabDescriptor = Readonly<{
   label: string;
   description: string;
   count?: string;
+  tone?: SemanticTone;
 }>;
 
 function compact(value: unknown): string {
@@ -133,14 +137,52 @@ function traceMatchesQuery(trace: DebugConsoleTrace, query: string): boolean {
 
 function tabButtonClass(active: boolean): string {
   return active
-    ? 'w-full rounded-md border border-primary/20 bg-primary/[0.08] px-3 py-2 text-left shadow-sm'
-    : 'w-full rounded-md border border-transparent px-3 py-2 text-left transition-colors hover:border-border/70 hover:bg-background/80';
+    ? 'w-full cursor-pointer rounded-md border px-3 py-2 text-left shadow-sm transition-colors'
+    : 'w-full cursor-pointer rounded-md border border-transparent px-3 py-2 text-left transition-colors hover:border-border/70 hover:bg-background/80';
 }
 
 function listRowClass(active: boolean): string {
   return active
-    ? 'w-full border-b border-border/60 bg-primary/[0.06] text-left transition-colors'
-    : 'w-full border-b border-border/50 text-left transition-colors hover:bg-muted/[0.16]';
+    ? 'w-full cursor-pointer border-b border-border/60 text-left transition-colors'
+    : 'w-full cursor-pointer border-b border-border/50 text-left transition-colors hover:bg-muted/[0.16]';
+}
+
+function semanticAccent(tone: SemanticTone): string {
+  switch (tone) {
+    case 'primary':
+      return 'var(--primary)';
+    case 'success':
+      return 'var(--success)';
+    case 'warning':
+      return 'var(--warning)';
+    case 'error':
+      return 'var(--error)';
+    case 'info':
+      return 'var(--info)';
+    case 'neutral':
+    default:
+      return 'var(--muted-foreground)';
+  }
+}
+
+function semanticSurfaceStyle(tone: SemanticTone, emphasis: 'soft' | 'strong' = 'soft'): JSX.CSSProperties {
+  const accent = semanticAccent(tone);
+  const borderMix = emphasis === 'strong' ? '26%' : '20%';
+  const bgMix = emphasis === 'strong' ? '12%' : '7%';
+  return {
+    'border-color': `color-mix(in srgb, ${accent} ${borderMix}, var(--border))`,
+    'background-color': `color-mix(in srgb, ${accent} ${bgMix}, var(--card))`,
+    'box-shadow': `inset 3px 0 0 0 ${accent}`,
+  };
+}
+
+function semanticBadgeStyle(tone: SemanticTone, active = false): JSX.CSSProperties {
+  const accent = semanticAccent(tone);
+  return {
+    'border-color': `color-mix(in srgb, ${accent} ${active ? '30%' : '18%'}, var(--border))`,
+    'background-color': `color-mix(in srgb, ${accent} ${active ? '16%' : '8%'}, var(--card))`,
+    color: `color-mix(in srgb, ${accent} 72%, var(--foreground))`,
+  };
 }
 
 function detailItemsForEvent(event: DiagnosticsEvent | null): KeyValueItem[] {
@@ -196,11 +238,11 @@ function MetricStrip(props: Readonly<{ items: readonly MetricItem[]; columnsClas
     <div class={`grid gap-2 ${props.columnsClass ?? 'sm:grid-cols-2 xl:grid-cols-5'}`}>
       <For each={props.items}>
         {(item) => (
-          <div class="rounded-md border border-border/70 bg-background/90 px-3 py-2.5 shadow-sm">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{item.label}</div>
-            <div class="mt-1 text-sm font-semibold tabular-nums text-foreground">{item.value}</div>
+          <div class="rounded-md border px-2.5 py-2 shadow-sm" style={semanticSurfaceStyle(item.tone ?? 'neutral', item.emphasized ? 'strong' : 'soft')}>
+            <div class="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{item.label}</div>
+            <div class="mt-1 text-[13px] font-semibold tabular-nums text-foreground">{item.value}</div>
             <Show when={compact(item.note)}>
-              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{item.note}</div>
+              <div class="mt-1 text-[10px] leading-4 text-muted-foreground">{item.note}</div>
             </Show>
           </div>
         )}
@@ -214,9 +256,9 @@ function DefinitionList(props: Readonly<{ items: readonly KeyValueItem[] }>) {
     <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
       <For each={props.items}>
         {(item, index) => (
-          <div class={`grid grid-cols-[8rem_minmax(0,1fr)] gap-3 px-3 py-2.5 text-xs ${index() === 0 ? '' : 'border-t border-border/60'}`}>
-            <div class="text-[11px] font-medium text-muted-foreground">{item.label}</div>
-            <div class={`${item.mono ? 'font-mono text-[11px] break-all' : 'break-words'} text-foreground`}>{item.value}</div>
+          <div class={`grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 px-3 py-2 text-[11px] ${index() === 0 ? '' : 'border-t border-border/60'}`}>
+            <div class="text-[10px] font-medium text-muted-foreground">{item.label}</div>
+            <div class={`${item.mono ? 'font-mono text-[10px] break-all' : 'break-words'} text-foreground`}>{item.value}</div>
           </div>
         )}
       </For>
@@ -229,9 +271,9 @@ function SectionShell(props: Readonly<{ title: string; description?: string; act
     <section class="space-y-2.5">
       <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div class="text-sm font-semibold text-foreground">{props.title}</div>
+          <div class="text-[12px] font-semibold text-foreground">{props.title}</div>
           <Show when={props.description}>
-            <div class="mt-0.5 text-[11px] leading-5 text-muted-foreground">{props.description}</div>
+            <div class="mt-0.5 text-[10px] leading-[1.15rem] text-muted-foreground">{props.description}</div>
           </Show>
         </div>
         <Show when={props.action}>
@@ -247,8 +289,8 @@ function EmptyState(props: Readonly<{ title: string; message: string }>) {
   return (
     <div class="flex h-full min-h-[12rem] flex-1 items-center justify-center px-6 py-10">
       <div class="max-w-sm text-center">
-        <div class="text-sm font-semibold text-foreground">{props.title}</div>
-        <div class="mt-2 text-xs leading-5 text-muted-foreground">{props.message}</div>
+        <div class="text-[12px] font-semibold text-foreground">{props.title}</div>
+        <div class="mt-2 text-[11px] leading-5 text-muted-foreground">{props.message}</div>
       </div>
     </div>
   );
@@ -273,7 +315,7 @@ function InspectorShell(props: Readonly<{ children: JSX.Element }>) {
 function MonoBlock(props: Readonly<{ value: string }>) {
   return (
     <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
-      <pre class="max-h-[20rem] overflow-auto px-3 py-3 font-mono text-[11px] leading-5 text-foreground">{props.value}</pre>
+      <pre class="max-h-[20rem] overflow-auto px-3 py-3 font-mono text-[10px] leading-5 text-foreground">{props.value}</pre>
     </div>
   );
 }
@@ -290,6 +332,29 @@ function renderEventBadge(event: DiagnosticsEvent) {
 
 function slowSummaryTitle(item: DiagnosticsSummaryItem): string {
   return [compact(item.method), compact(item.path) || compact(item.kind) || compact(item.scope)].filter(Boolean).join(' ');
+}
+
+function eventTone(event: DiagnosticsEvent): SemanticTone {
+  if (typeof event.status_code === 'number' && event.status_code >= 400) {
+    return 'error';
+  }
+  if (event.slow) {
+    return 'warning';
+  }
+  if (compact(event.source) === 'desktop') {
+    return 'info';
+  }
+  return 'primary';
+}
+
+function traceTone(trace: DebugConsoleTrace): SemanticTone {
+  if (trace.slow) {
+    return 'warning';
+  }
+  if (trace.sources.includes('desktop')) {
+    return 'info';
+  }
+  return 'primary';
 }
 
 export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleController }>) {
@@ -346,26 +411,32 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       label: 'Events',
       value: String(props.controller.stats().total_events),
       note: `${props.controller.stats().agent_events} agent · ${props.controller.stats().desktop_events} desktop`,
+      tone: 'info',
     },
     {
       label: 'Traces',
       value: String(props.controller.stats().trace_count),
       note: `${props.controller.stats().slow_events} slow markers`,
+      tone: 'primary',
     },
     {
       label: 'Runtime',
       value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive',
       note: props.controller.streamConnected() ? 'Streaming live updates' : 'Snapshot mode',
+      tone: props.controller.runtimeEnabled() ? 'success' : 'warning',
+      emphasized: true,
     },
     {
       label: 'UI Metrics',
       value: props.controller.collectUIMetrics() ? 'On' : 'Off',
       note: props.controller.collectUIMetrics() ? 'Renderer instrumentation enabled' : 'Local probes paused',
+      tone: props.controller.collectUIMetrics() ? 'success' : 'neutral',
     },
     {
       label: 'Last Event',
       value: formatTimestamp(props.controller.lastEventAt()),
       note: compact(props.controller.stateDir()) || 'State directory unavailable',
+      tone: compact(props.controller.lastEventAt()) ? 'primary' : 'neutral',
     },
   ]);
 
@@ -375,29 +446,34 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       label: 'Requests',
       description: 'Gateway and desktop request activity',
       count: String(filteredEvents().length),
+      tone: 'info',
     },
     {
       value: 'traces',
       label: 'Traces',
       description: 'Grouped request timelines',
       count: String(filteredTraces().length),
+      tone: 'primary',
     },
     {
       value: 'ui',
       label: 'UI Performance',
       description: 'Renderer-only frame and layout signals',
       count: String(props.controller.performanceSnapshot().recent_events.length),
+      tone: 'success',
     },
     {
       value: 'runtime',
       label: 'Runtime',
       description: 'Collector state and slow summary',
       count: String(props.controller.stats().slow_events),
+      tone: 'warning',
     },
     {
       value: 'export',
       label: 'Export',
       description: 'Portable debug bundle preview',
+      tone: 'neutral',
     },
   ]);
 
@@ -416,11 +492,12 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       <Show when={props.controller.enabled() && props.controller.minimized()}>
         <button
           type="button"
-          class="fixed bottom-4 right-4 z-[145] inline-flex items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25"
+          class="fixed bottom-4 right-4 z-[145] inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25"
           onClick={props.controller.restore}
+          style={semanticSurfaceStyle(props.controller.streamConnected() ? 'success' : 'warning')}
         >
           <StatusDot tone={props.controller.streamConnected() ? 'success' : 'warning'} />
-          <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground">Debug Console</span>
+          <span class="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">Debug Console</span>
           <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'warning'}>
             {props.controller.streamConnected() ? 'Live' : 'Idle'}
           </SettingsPill>
@@ -445,7 +522,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
           zIndex={145}
           footer={(
             <div class="flex w-full min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground">
+              <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-[10px] text-muted-foreground">
                 <span class="inline-flex items-center gap-1.5">
                   <StatusDot tone={props.controller.runtimeEnabled() ? 'success' : 'warning'} />
                   {props.controller.runtimeEnabled() ? 'Runtime collector active' : 'Runtime collector inactive'}
@@ -474,27 +551,27 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
             </div>
           )}
         >
-          <div class="flex h-full min-h-0 flex-col bg-background">
+          <div class="flex h-full min-h-0 flex-col bg-background text-[11px]">
             <div class="border-b border-border/70 bg-muted/[0.14] px-4 py-3">
               <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live Diagnostics Inspector</span>
+                    <span class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Live Diagnostics Inspector</span>
                     <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'default'}>
                       {props.controller.streamConnected() ? 'Streaming' : 'Snapshot'}
                     </SettingsPill>
                   </div>
-                  <div class="mt-1 text-sm font-semibold text-foreground">Gateway requests, desktop transport, and local rendering metrics in one operator surface</div>
-                  <div class="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">
+                  <div class="mt-1 text-[13px] font-semibold text-foreground">Gateway requests, desktop transport, and local rendering metrics in one operator surface</div>
+                  <div class="mt-1 max-w-3xl text-[11px] leading-5 text-muted-foreground">
                     Mounted at the app-shell level so the console stays usable even while individual pages are loading or reconnecting.
                   </div>
                 </div>
                 <div class="w-full xl:w-[20rem]">
-                  <label class="mb-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Search</label>
+                  <label class="mb-1 block text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Search</label>
                   <input
                     value={query()}
                     onInput={(event) => setQuery(event.currentTarget.value)}
-                    class="w-full rounded-md border border-border/70 bg-background px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-primary/35 focus:ring-2 focus:ring-primary/10"
+                    class="w-full rounded-md border border-border/70 bg-background px-3 py-2 text-[11px] text-foreground outline-none transition-colors focus:border-primary/35 focus:ring-2 focus:ring-primary/10"
                     placeholder="Filter by path, trace id, message, source..."
                     aria-label="Search diagnostics"
                   />
@@ -506,7 +583,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
               </div>
 
               <Show when={combinedError()}>
-                <div class="mt-3 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800">
+                <div class="mt-3 rounded-md border px-3 py-2 text-[10px] leading-5 text-amber-900" style={semanticSurfaceStyle('warning', 'strong')}>
                   {combinedError()}
                 </div>
               </Show>
@@ -514,9 +591,9 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
 
             <div class="grid flex-1 min-h-0 lg:grid-cols-[14rem_minmax(0,1fr)]">
               <aside class="border-b border-border/70 bg-muted/[0.1] p-3 lg:min-h-0 lg:border-b-0 lg:border-r">
-                <div class="rounded-md border border-border/70 bg-background px-3 py-3 shadow-sm">
-                  <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Session</div>
-                  <div class="mt-2 space-y-2 text-[11px] text-muted-foreground">
+                <div class="rounded-md border px-3 py-3 shadow-sm" style={semanticSurfaceStyle('neutral')}>
+                  <div class="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Session</div>
+                  <div class="mt-2 space-y-2 text-[10px] text-muted-foreground">
                     <div class="flex items-center justify-between gap-3">
                       <span>State dir</span>
                       <span class="max-w-[7rem] truncate font-mono text-[10px] text-foreground">{compact(props.controller.stateDir()) || '-'}</span>
@@ -547,14 +624,15 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                         aria-selected={tab() === descriptor.value}
                         class={tabButtonClass(tab() === descriptor.value)}
                         onClick={() => setTab(descriptor.value)}
+                        style={tab() === descriptor.value ? semanticSurfaceStyle(descriptor.tone ?? 'primary', 'strong') : undefined}
                       >
                         <div class="flex items-start justify-between gap-3">
                           <div class="min-w-0">
-                            <div class={`text-xs font-semibold ${tab() === descriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{descriptor.label}</div>
-                            <div class="mt-0.5 text-[11px] leading-5 text-muted-foreground">{descriptor.description}</div>
+                            <div class={`text-[11px] font-semibold ${tab() === descriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{descriptor.label}</div>
+                            <div class="mt-0.5 text-[10px] leading-[1.15rem] text-muted-foreground">{descriptor.description}</div>
                           </div>
                           <Show when={compact(descriptor.count)}>
-                            <span class="rounded-md border border-border/70 bg-background px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                            <span class="rounded-md border px-1.5 py-0.5 text-[9px] font-semibold tabular-nums" style={semanticBadgeStyle(descriptor.tone ?? 'neutral', tab() === descriptor.value)}>
                               {descriptor.count}
                             </span>
                           </Show>
@@ -572,8 +650,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                       <section class="min-h-0 flex-1">
                         <TableShell>
                           <div class="border-b border-border/70 px-4 py-3">
-                            <div class="text-sm font-semibold text-foreground">Request stream</div>
-                            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">A dense, chronological view of recent gateway and desktop requests with trace correlation.</div>
+                            <div class="text-[12px] font-semibold text-foreground">Request stream</div>
+                            <div class="mt-1 text-[10px] leading-[1.15rem] text-muted-foreground">A dense, chronological view of recent gateway and desktop requests with trace correlation.</div>
                           </div>
                           <Show
                             when={filteredEvents().length > 0}
@@ -589,11 +667,16 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                   {(event) => {
                                     const key = diagnosticsEventKey(event);
                                     return (
-                                      <button type="button" class={listRowClass(selectedEventKey() === key)} onClick={() => setSelectedEventKey(key)}>
-                                        <div class="grid grid-cols-[minmax(0,2.2fr)_7rem_8rem_5rem_6rem] gap-3 px-3 py-2.5 text-xs">
+                                      <button
+                                        type="button"
+                                        class={listRowClass(selectedEventKey() === key)}
+                                        onClick={() => setSelectedEventKey(key)}
+                                        style={selectedEventKey() === key ? semanticSurfaceStyle(eventTone(event), 'strong') : undefined}
+                                      >
+                                        <div class="grid grid-cols-[minmax(0,2.2fr)_7rem_8rem_5rem_6rem] gap-3 px-3 py-2.5 text-[11px]">
                                           <div class="min-w-0">
                                             <div class="truncate font-medium text-foreground">{eventTitle(event)}</div>
-                                            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                                               <span>{formatTimestamp(event.created_at)}</span>
                                               <span>{compact(event.scope) || '-'}</span>
                                               <Show when={compact(event.message)}>
@@ -604,7 +687,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                           <div class="flex items-start pt-0.5">
                                             {renderEventBadge(event)}
                                           </div>
-                                          <div class="truncate font-mono text-[11px] text-muted-foreground">{compact(event.trace_id) || '-'}</div>
+                                          <div class="truncate font-mono text-[10px] text-muted-foreground">{compact(event.trace_id) || '-'}</div>
                                           <div class="tabular-nums text-foreground">{typeof event.status_code === 'number' ? event.status_code : '-'}</div>
                                           <div class="tabular-nums text-foreground">{formatDuration(event.duration_ms)}</div>
                                         </div>
@@ -626,7 +709,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                 <SectionShell title="Overview" description={compact(event().message) || 'No extra message was attached to this event.'}>
                                   <div class="space-y-3">
                                     <div class="flex flex-wrap items-center gap-2">
-                                      <div class="text-sm font-semibold text-foreground">{eventTitle(event())}</div>
+                                      <div class="text-[12px] font-semibold text-foreground">{eventTitle(event())}</div>
                                       {renderEventBadge(event())}
                                     </div>
                                     <DefinitionList items={detailItemsForEvent(event())} />
@@ -649,8 +732,8 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                       <section class="min-h-0 flex-1">
                         <TableShell>
                           <div class="border-b border-border/70 px-4 py-3">
-                            <div class="text-sm font-semibold text-foreground">Trace groups</div>
-                            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Events grouped by trace id so you can follow a request across scopes without scanning the whole stream.</div>
+                            <div class="text-[12px] font-semibold text-foreground">Trace groups</div>
+                            <div class="mt-1 text-[10px] leading-[1.15rem] text-muted-foreground">Events grouped by trace id so you can follow a request across scopes without scanning the whole stream.</div>
                           </div>
                           <Show
                             when={filteredTraces().length > 0}
@@ -664,11 +747,16 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                 />
                                 <For each={filteredTraces()}>
                                   {(trace) => (
-                                    <button type="button" class={listRowClass(selectedTraceKey() === trace.key)} onClick={() => setSelectedTraceKey(trace.key)}>
-                                      <div class="grid grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem] gap-3 px-3 py-2.5 text-xs">
+                                    <button
+                                      type="button"
+                                      class={listRowClass(selectedTraceKey() === trace.key)}
+                                      onClick={() => setSelectedTraceKey(trace.key)}
+                                      style={selectedTraceKey() === trace.key ? semanticSurfaceStyle(traceTone(trace), 'strong') : undefined}
+                                    >
+                                      <div class="grid grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem] gap-3 px-3 py-2.5 text-[11px]">
                                         <div class="min-w-0">
                                           <div class="truncate font-medium text-foreground">{trace.title}</div>
-                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                                             <span class="font-mono">{compact(trace.trace_id) || 'generated group'}</span>
                                             <span>{trace.scopes.join(', ') || '-'}</span>
                                           </div>
@@ -698,7 +786,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                 >
                                   <div class="space-y-3">
                                     <div class="flex flex-wrap items-center gap-2">
-                                      <div class="text-sm font-semibold text-foreground">{trace().title}</div>
+                                      <div class="text-[12px] font-semibold text-foreground">{trace().title}</div>
                                       <SettingsPill tone={trace().slow ? 'warning' : 'default'}>
                                         {trace().slow ? 'Slow trace' : 'Trace'}
                                       </SettingsPill>
@@ -714,14 +802,14 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                         <div class={`px-3 py-3 ${index() === 0 ? '' : 'border-t border-border/60'}`}>
                                           <div class="flex items-start justify-between gap-3">
                                             <div class="min-w-0">
-                                              <div class="truncate text-sm font-medium text-foreground">{eventTitle(event)}</div>
-                                              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                              <div class="truncate text-[11px] font-medium text-foreground">{eventTitle(event)}</div>
+                                              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                                                 <span>{formatTimestamp(event.created_at)}</span>
                                                 <span>{compact(event.scope) || '-'}</span>
                                                 <span>{formatDuration(event.duration_ms)}</span>
                                               </div>
                                               <Show when={compact(event.message)}>
-                                                <div class="mt-2 text-[11px] leading-5 text-muted-foreground">{compact(event.message)}</div>
+                                                <div class="mt-2 text-[10px] leading-5 text-muted-foreground">{compact(event.message)}</div>
                                               </Show>
                                             </div>
                                             <div class="shrink-0">{renderEventBadge(event)}</div>
@@ -809,12 +897,12 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                     <div class={`px-3 py-3 ${index() === 0 ? '' : 'border-t border-border/60'}`}>
                                       <div class="flex items-start justify-between gap-3">
                                         <div class="min-w-0">
-                                          <div class="truncate text-sm font-medium text-foreground">{eventTitle(event)}</div>
-                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                          <div class="truncate text-[11px] font-medium text-foreground">{eventTitle(event)}</div>
+                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                                             <span>{formatTimestamp(event.created_at)}</span>
                                             <span>{formatDuration(event.duration_ms)}</span>
                                           </div>
-                                          <div class="mt-2 text-[11px] leading-5 text-muted-foreground">{compact(event.message) || '-'}</div>
+                                          <div class="mt-2 text-[10px] leading-5 text-muted-foreground">{compact(event.message) || '-'}</div>
                                         </div>
                                         <div class="shrink-0">{renderEventBadge(event)}</div>
                                       </div>
@@ -870,10 +958,10 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                 <For each={props.controller.slowSummary()}>
                                   {(item) => (
                                     <div class="border-b border-border/50 px-3 py-2.5 last:border-b-0">
-                                      <div class="grid grid-cols-[minmax(0,2fr)_4rem_4rem_6rem_6rem] gap-3 text-xs">
+                                      <div class="grid grid-cols-[minmax(0,2fr)_4rem_4rem_6rem_6rem] gap-3 text-[11px]">
                                         <div class="min-w-0">
                                           <div class="truncate font-medium text-foreground">{slowSummaryTitle(item)}</div>
-                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                                          <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                                             <span>{compact(item.scope) || '-'}</span>
                                             <span>{formatTimestamp(item.last_seen_at)}</span>
                                           </div>
@@ -914,11 +1002,11 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                               <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
                                   <div class="font-medium text-foreground">Backend diagnostics</div>
-                                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Snapshot summary, agent event list, desktop event list, and runtime state directory.</div>
+                                  <div class="mt-1 text-[10px] leading-5 text-muted-foreground">Snapshot summary, agent event list, desktop event list, and runtime state directory.</div>
                                 </div>
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
                                   <div class="font-medium text-foreground">Current settings</div>
-                                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                                  <div class="mt-1 text-[10px] leading-5 text-muted-foreground">
                                     <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">debug_console.enabled</code>
                                     {' and '}
                                     <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">collect_ui_metrics</code>
@@ -927,7 +1015,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                                 </div>
                                 <div class="px-3 py-2.5 text-xs">
                                   <div class="font-medium text-foreground">UI performance snapshot</div>
-                                  <div class="mt-1 text-[11px] leading-5 text-muted-foreground">Renderer-local FPS, long-task, layout-shift, paint, navigation, memory, and recent UI event data.</div>
+                                  <div class="mt-1 text-[10px] leading-5 text-muted-foreground">Renderer-local FPS, long-task, layout-shift, paint, navigation, memory, and recent UI event data.</div>
                                 </div>
                               </div>
                             </SectionShell>
