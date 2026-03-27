@@ -256,6 +256,25 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
   };
 }
 
+export function buildEmptyCodexThreadSession(args: {
+  thread: CodexThread;
+  runtime_config?: CodexThreadSession['runtime_config'] | null | undefined;
+  active_status?: string | null | undefined;
+  active_status_flags?: readonly string[] | null | undefined;
+}): CodexThreadSession {
+  return {
+    thread: { ...args.thread, turns: [...(args.thread.turns ?? [])] },
+    runtime_config: { ...(args.runtime_config ?? {}) },
+    items_by_id: {},
+    item_order: [],
+    pending_requests: {},
+    token_usage: null,
+    last_applied_seq: 0,
+    active_status: String(args.active_status ?? args.thread.status ?? '').trim(),
+    active_status_flags: [...(args.active_status_flags ?? args.thread.active_flags ?? [])],
+  };
+}
+
 export function applyCodexEvent(session: CodexThreadSession | null, event: CodexEvent): CodexThreadSession | null {
   if (!session) return session;
   if (String(event.thread_id ?? '').trim() !== String(session.thread.id ?? '').trim()) return session;
