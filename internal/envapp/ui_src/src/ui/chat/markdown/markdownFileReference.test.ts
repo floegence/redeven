@@ -23,6 +23,21 @@ describe('parseMarkdownFileReference', () => {
     });
   });
 
+  it('parses hash-style line labels from local file links', () => {
+    const reference = parseMarkdownFileReference(
+      '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121',
+      'CODEX_UI.md#L121',
+    );
+
+    expect(reference).toEqual({
+      href: '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121',
+      path: '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md',
+      displayName: 'CODEX_UI.md',
+      lineLabel: 'L121',
+      title: '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121',
+    });
+  });
+
   it('ignores non-file web links', () => {
     expect(parseMarkdownFileReference(
       'https://bugs.webkit.org/show_bug.cgi?id=298616',

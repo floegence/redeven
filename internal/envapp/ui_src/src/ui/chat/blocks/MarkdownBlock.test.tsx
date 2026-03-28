@@ -348,6 +348,32 @@ describe('MarkdownBlock', () => {
     expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L1113');
   });
 
+  it('renders codex file links with hash-style line labels without splitting them into headings', async () => {
+    const content = [
+      'Evidence in',
+      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121)',
+      'stays a file reference.',
+    ].join(' ');
+    const normalized = normalizeMarkdownForDisplay(content);
+    renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <MarkdownBlock content={content} class="codex-chat-markdown-block" rendererVariant="codex" />, host);
+
+    await waitFor(() => {
+      expect(host.querySelectorAll('.chat-md-file-ref')).toHaveLength(1);
+    });
+
+    const fileRef = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
+    expect(fileRef?.getAttribute('href')).toContain('#L121');
+    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('CODEX_UI.md');
+    expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L121');
+    expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L121');
+    expect(host.querySelector('h2')?.textContent ?? '').not.toContain('L121');
+  });
+
   it('renders compact file-reference chips for codex markdown links', async () => {
     const content = [
       'Current path is',

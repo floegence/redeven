@@ -13,6 +13,13 @@ const LIKELY_SENTENCE_START_RE =
 const LIKELY_BODY_PUNCTUATION_RE = /[，。！？,.!?]/u;
 const HORIZONTAL_WHITESPACE_RE = /[ \t]/;
 
+type InlineProtectionState = {
+  inlineCodeFenceLength: number;
+  linkLabelDepth: number;
+  pendingLinkDestination: boolean;
+  linkDestinationDepth: number;
+};
+
 function countRepeatedCharacter(input: string, start: number, character: string): number {
   let index = start;
   while (input[index] === character) index += 1;
@@ -35,9 +42,12 @@ function shouldInsertInlineHeadingBoundary(segment: string, index: number): bool
 function repairInlineHeadingBoundaries(segment: string): string {
   let output = '';
   let index = 0;
-  let inlineCodeFenceLength = 0;
-  let pendingLinkDestination = false;
-  let linkDestinationDepth = 0;
+  const state: InlineProtectionState = {
+    inlineCodeFenceLength: 0,
+    linkLabelDepth: 0,
+    pendingLinkDestination: false,
+    linkDestinationDepth: 0,
+  };
 
   while (index < segment.length) {
     const character = segment[index];
@@ -52,49 +62,63 @@ function repairInlineHeadingBoundaries(segment: string): string {
 
     if (backtickRunLength > 0) {
       output += segment.slice(index, index + backtickRunLength);
-      if (inlineCodeFenceLength === 0) {
-        inlineCodeFenceLength = backtickRunLength;
-      } else if (inlineCodeFenceLength === backtickRunLength) {
-        inlineCodeFenceLength = 0;
+      if (state.inlineCodeFenceLength === 0) {
+        state.inlineCodeFenceLength = backtickRunLength;
+      } else if (state.inlineCodeFenceLength === backtickRunLength) {
+        state.inlineCodeFenceLength = 0;
       }
       index += backtickRunLength;
       continue;
     }
 
-    if (inlineCodeFenceLength > 0) {
+    if (state.inlineCodeFenceLength > 0) {
       output += character;
       index += 1;
       continue;
     }
 
-    if (linkDestinationDepth > 0) {
+    if (state.linkLabelDepth > 0) {
       output += character;
-      if (character === '(') {
-        linkDestinationDepth += 1;
-      } else if (character === ')') {
-        linkDestinationDepth -= 1;
+      if (character === '[') {
+        state.linkLabelDepth += 1;
+      } else if (character === ']') {
+        state.linkLabelDepth -= 1;
+        if (state.linkLabelDepth === 0) {
+          state.pendingLinkDestination = true;
+        }
       }
       index += 1;
       continue;
     }
 
-    if (pendingLinkDestination) {
+    if (state.linkDestinationDepth > 0) {
+      output += character;
+      if (character === '(') {
+        state.linkDestinationDepth += 1;
+      } else if (character === ')') {
+        state.linkDestinationDepth -= 1;
+      }
+      index += 1;
+      continue;
+    }
+
+    if (state.pendingLinkDestination) {
       if (HORIZONTAL_WHITESPACE_RE.test(character)) {
         output += character;
         index += 1;
         continue;
       }
-      pendingLinkDestination = false;
+      state.pendingLinkDestination = false;
       if (character === '(') {
-        linkDestinationDepth = 1;
+        state.linkDestinationDepth = 1;
         output += character;
         index += 1;
         continue;
       }
     }
 
-    if (character === ']') {
-      pendingLinkDestination = true;
+    if (character === '[') {
+      state.linkLabelDepth = 1;
       output += character;
       index += 1;
       continue;

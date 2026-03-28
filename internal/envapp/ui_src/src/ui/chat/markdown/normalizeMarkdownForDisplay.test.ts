@@ -77,4 +77,15 @@ describe('normalizeMarkdownForDisplay', () => {
 
     expect(normalizeMarkdownForDisplay(input)).toBe(input);
   });
+
+  it('keeps markdown file links with hash-style line labels intact', () => {
+    const input = [
+      'Evidence lives at',
+      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121)',
+      'and',
+      '[CodexTranscript.tsx#L248](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/codex/CodexTranscript.tsx#L248).',
+    ].join(' ');
+
+    expect(normalizeMarkdownForDisplay(input)).toBe(input);
+  });
 });
