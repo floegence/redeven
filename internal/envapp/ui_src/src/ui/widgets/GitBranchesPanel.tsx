@@ -1210,7 +1210,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
   const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
-  const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5';
+  const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between';
   const branchHeaderControlRailClass = 'flex flex-col gap-2 md:gap-2.5 lg:flex-row lg:items-center';
   const branchHeaderControlGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5';
   const branchHeaderActionsGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5 lg:ml-auto';
@@ -1543,7 +1543,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <div class={cn('rounded-md px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
                   <div class={branchHeaderSummaryBandClass}>
-                    <div class="min-w-0">
+                    <div class="min-w-0 flex-1">
                       <GitLabelBlock
                         class="min-w-0 flex-1"
                         label="Branch"
@@ -1568,9 +1568,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </GitLabelBlock>
                     </div>
 
-                    <div class="flex w-full xl:justify-end">
+                    <div class="flex w-full lg:w-auto lg:justify-end">
                       <div
-                        class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 xl:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
+                        class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 lg:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
                         role="tablist"
                         aria-label="Branch detail tabs"
                         aria-orientation="horizontal"
