@@ -60,6 +60,8 @@ function LoadingTranscriptState(props: {
 function CodexMessageLane(props: {
   role: 'assistant' | 'user';
   showAvatar?: boolean;
+  class?: string;
+  contentClass?: string;
   children: JSX.Element;
 }) {
   return (
@@ -68,6 +70,7 @@ function CodexMessageLane(props: {
         'chat-message-item codex-chat-message-item',
         props.role === 'assistant' ? 'chat-message-item-assistant codex-chat-message-item-assistant' : 'chat-message-item-user codex-chat-message-item-user',
         props.showAvatar ? 'chat-message-item-with-avatar' : 'chat-message-item-without-avatar',
+        props.class,
       )}
     >
       <Show when={props.showAvatar}>
@@ -77,7 +80,7 @@ function CodexMessageLane(props: {
           </div>
         </div>
       </Show>
-      <div class="chat-message-content-wrapper">
+      <div class={cn('chat-message-content-wrapper', props.contentClass)}>
         {props.children}
       </div>
     </div>
@@ -452,41 +455,68 @@ function OptimisticUserMessageRow(props: { turn: CodexOptimisticUserTurn }) {
   );
 }
 
-function AssistantPreludeRow(props: { showAvatar?: boolean }) {
+interface PendingAssistantVisualState {
+  show: boolean;
+  showAvatar: boolean;
+  showPrelude: boolean;
+  showWorkingRail: boolean;
+  phaseLabel: string;
+}
+
+function PendingAssistantPrelude() {
   return (
-    <CodexMessageLane role="assistant" showAvatar={props.showAvatar}>
-      <div
-        data-codex-pre-output="true"
-        class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
-      >
-        <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
-          <div class="chat-markdown-block codex-chat-markdown-block">
-            <div class="chat-markdown-empty-streaming" aria-label="Codex is preparing to respond">
-              <StreamingCursor />
-            </div>
+    <div
+      data-codex-pre-output="true"
+      class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant codex-pending-assistant-prelude"
+    >
+      <div class="codex-chat-message-surface codex-chat-message-surface-assistant codex-pending-assistant-prelude-surface">
+        <div class="chat-markdown-block codex-chat-markdown-block">
+          <div class="chat-markdown-empty-streaming" aria-label="Codex is preparing to respond">
+            <StreamingCursor />
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WorkingStatusRail(props: { phaseLabel: string; class?: string }) {
+  return (
+    <div data-codex-working-state="true" class={cn('chat-message-status-rail codex-working-status-rail', props.class)}>
+      <div class="chat-message-ornament">
+        <div class="codex-working-indicator-card">
+          <CodexMessageRunIndicator phaseLabel={props.phaseLabel} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PendingAssistantRow(props: { state: PendingAssistantVisualState }) {
+  return (
+    <CodexMessageLane
+      role="assistant"
+      showAvatar={props.state.showAvatar}
+      class="codex-pending-assistant-row"
+      contentClass="codex-pending-assistant-content"
+    >
+      <Show when={props.state.showPrelude}>
+        <PendingAssistantPrelude />
+      </Show>
+      <Show when={props.state.showWorkingRail}>
+        <WorkingStatusRail phaseLabel={props.state.phaseLabel} class="codex-pending-assistant-status-rail" />
+      </Show>
     </CodexMessageLane>
   );
 }
 
 function WorkingStateRow(props: {
-  label: string;
-  flags: readonly string[];
+  phaseLabel: string;
   showAvatar?: boolean;
 }) {
-  const phaseLabel = () => workingPhaseLabel(props.label, props.flags);
   return (
-    <CodexMessageLane role="assistant" showAvatar={props.showAvatar}>
-      <div
-        data-codex-working-state="true"
-        class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
-      >
-        <div class="codex-working-indicator-card">
-          <CodexMessageRunIndicator phaseLabel={phaseLabel()} />
-        </div>
-      </div>
+    <CodexMessageLane role="assistant" showAvatar={props.showAvatar} class="codex-working-state-row">
+      <WorkingStatusRail phaseLabel={props.phaseLabel} />
     </CodexMessageLane>
   );
 }
@@ -561,14 +591,23 @@ export function CodexTranscript(props: {
   emptyTitle: string;
   emptyBody: string;
 }) {
-  const optimisticUserTurns = () => [...(props.optimisticUserTurns ?? [])];
+  const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
   const hasRows = () => props.items.length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
-  const showAssistantPrelude = createMemo(() => (
-    Boolean(props.showWorkingState) && (
+  const pendingAssistantState = createMemo<PendingAssistantVisualState>(() => {
+    const showWorkingRail = Boolean(props.showWorkingState);
+    const showPrelude = showWorkingRail && (
       optimisticUserTurns().length > 0 ||
       !hasAssistantMessageInCurrentRun(props.items, props.items.length)
-    )
-  ));
+    );
+    return {
+      show: showPrelude,
+      showAvatar: showPrelude,
+      showPrelude,
+      showWorkingRail: showPrelude && showWorkingRail,
+      phaseLabel: workingPhaseLabel(String(props.workingLabel ?? '').trim() || 'working', props.workingFlags ?? []),
+    };
+  });
+  const showStandaloneWorkingRow = createMemo(() => Boolean(props.showWorkingState) && !pendingAssistantState().show);
   return (
     <div data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
       <Show
@@ -605,17 +644,16 @@ export function CodexTranscript(props: {
               </div>
             )}
           </For>
-          <Show when={showAssistantPrelude()}>
+          <Show when={pendingAssistantState().show}>
             <div class="codex-transcript-row">
-              <AssistantPreludeRow showAvatar />
+              <PendingAssistantRow state={pendingAssistantState()} />
             </div>
           </Show>
-          <Show when={props.showWorkingState}>
+          <Show when={showStandaloneWorkingRow()}>
             <div class="codex-transcript-row">
               <WorkingStateRow
-                label={String(props.workingLabel ?? '').trim() || 'working'}
-                flags={props.workingFlags ?? []}
-                showAvatar={!showAssistantPrelude() && shouldShowWorkingAvatar(props.items)}
+                phaseLabel={pendingAssistantState().phaseLabel}
+                showAvatar={shouldShowWorkingAvatar(props.items)}
               />
             </div>
           </Show>

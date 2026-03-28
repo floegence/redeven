@@ -148,7 +148,8 @@ Current Env App behavior:
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
 - Codex markdown keeps the existing renderer DOM contract for standard links and local file references, but local file references are styled as flat outline tokens rather than filled tinted pills so transcript links read like workstation metadata instead of promotional chips.
-- The live working row uses a Codex-local Flower-like dots indicator with a streaming cursor, and it intentionally stays avatar-free so assistant identity is anchored to real assistant messages instead of floating with the tail state.
+- Before the first real assistant transcript message lands, the transcript renders a single pending assistant lane that owns the Codex avatar, shows a pre-output streaming cursor bubble, and places the compact working indicator directly underneath in the same lane.
+- Once a real assistant message starts streaming, that pending lane disappears; the real assistant message takes over avatar ownership and the remaining working indicator stays avatar-free.
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.

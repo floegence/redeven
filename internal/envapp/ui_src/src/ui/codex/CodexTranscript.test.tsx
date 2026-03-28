@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe('CodexTranscript', () => {
-  it('renders a pre-output cursor row above the compact working indicator', () => {
+  it('renders a single pending assistant lane with the pre-output cursor above the compact working indicator', () => {
     const { host, dispose } = renderTranscript([], {
       showWorkingState: true,
       workingLabel: 'working',
@@ -86,10 +86,11 @@ describe('CodexTranscript', () => {
     const preOutputRow = host.querySelector('[data-codex-pre-output="true"]')?.closest('.chat-message-item');
     const workingRow = host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item');
 
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
     expect(rows[0]?.querySelector('[data-codex-pre-output="true"]')).toBeTruthy();
-    expect(rows[1]?.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
+    expect(rows[0]?.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-pre-output="true"] [data-testid="streaming-cursor"]')).toBeTruthy();
+    expect(preOutputRow).toBe(workingRow);
     expect(preOutputRow?.querySelector('.chat-message-avatar')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
     expect(host.textContent).toContain('Working...');
@@ -97,7 +98,7 @@ describe('CodexTranscript', () => {
     expect(host.textContent).not.toContain('web search');
     expect(host.querySelector('.codex-message-run-indicator-graph')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
-    expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(workingRow?.querySelector('.chat-message-avatar')).toBeTruthy();
 
     dispose();
   });
@@ -155,7 +156,10 @@ describe('CodexTranscript', () => {
 
     expect(host.querySelector('[data-codex-pre-output="true"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-pre-output="true"] [data-testid="streaming-cursor"]')).toBeTruthy();
-    expect(host.querySelector('[data-codex-working-state="true"] .chat-message-avatar')).toBeNull();
+    expect(host.querySelector('[data-codex-pre-output="true"]')?.closest('.chat-message-item')).toBe(
+      host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item'),
+    );
+    expect(host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item')?.querySelector('.chat-message-avatar')).toBeTruthy();
 
     dispose();
   });
