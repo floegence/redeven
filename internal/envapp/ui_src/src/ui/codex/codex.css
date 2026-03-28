@@ -670,6 +670,28 @@
   gap: 0.25rem;
 }
 
+.codex-pending-assistant-row {
+  --codex-pending-prelude-line-height: 1.1rem;
+}
+
+.codex-pending-assistant-row .codex-chat-message-avatar {
+  margin-top: 0;
+}
+
+.codex-pending-assistant-content {
+  gap: 0.1875rem;
+  padding-top: calc((var(--chat-transcript-avatar-size) - var(--codex-pending-prelude-line-height)) / 2);
+}
+
+.codex-pending-assistant-prelude-surface {
+  min-height: var(--codex-pending-prelude-line-height);
+  justify-content: center;
+}
+
+.codex-working-status-rail .chat-message-ornament {
+  width: min(100%, 42rem);
+}
+
 .codex-chat-message-surface-user {
   min-width: 0;
   display: flex;
