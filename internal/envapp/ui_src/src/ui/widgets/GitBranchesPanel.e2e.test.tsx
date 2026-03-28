@@ -1206,13 +1206,14 @@ describe('GitBranchesPanel interactions', () => {
       expect(deleteButton?.className).not.toContain('w-full');
       expect(tablistRow?.className).toContain('flex');
       expect(tablistRow?.className).toContain('w-full');
-      expect(tablistRow?.className).toContain('xl:justify-end');
+      expect(tablistRow?.className).toContain('lg:w-auto');
+      expect(tablistRow?.className).toContain('lg:justify-end');
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
       expect(tablist?.className).toContain('rounded-lg');
       expect(tablist?.className).toContain('redeven-surface-segmented');
-      expect(tablist?.className).toContain('xl:w-[15rem]');
+      expect(tablist?.className).toContain('lg:w-[15rem]');
       expect(tablist?.className).not.toContain('sm:w-[15rem]');
       const activeTab = host.querySelector('#git-branch-subview-tab-status') as HTMLButtonElement | null;
       const historyTab = host.querySelector('#git-branch-subview-tab-history') as HTMLButtonElement | null;
