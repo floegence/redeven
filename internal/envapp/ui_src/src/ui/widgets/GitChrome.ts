@@ -43,23 +43,8 @@ export function gitToneBadgeClass(tone?: GitChromeTone): string {
 }
 
 export function gitToneDotClass(tone?: GitChromeTone): string {
-  switch (normalizeTone(tone)) {
-    case 'info':
-      return 'bg-sky-500/75';
-    case 'brand':
-      return 'bg-blue-600/80 dark:bg-sky-400/85';
-    case 'success':
-      return 'bg-success/75';
-    case 'warning':
-      return 'bg-warning/75';
-    case 'danger':
-      return 'bg-error/75';
-    case 'violet':
-      return 'bg-violet-500/75';
-    case 'neutral':
-    default:
-      return 'bg-muted-foreground/55 dark:bg-muted-foreground/70';
-  }
+  const normalized = normalizeTone(tone);
+  return cn('git-tone-dot', `git-tone-dot--${normalized}`);
 }
 
 export function gitToneSurfaceClass(tone?: GitChromeTone): string {

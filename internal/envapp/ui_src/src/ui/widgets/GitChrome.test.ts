@@ -76,8 +76,13 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneBadgeClass('brand')).toContain('text-primary');
     expect(gitToneBadgeClass('brand')).toContain('border-primary/20');
 
-    expect(gitToneDotClass('brand')).toContain('bg-blue-600/80');
-    expect(gitToneDotClass('neutral')).toContain('bg-muted-foreground/55');
+    expect(gitToneDotClass('brand')).toContain('git-tone-dot');
+    expect(gitToneDotClass('brand')).toContain('git-tone-dot--brand');
+    expect(gitToneDotClass('neutral')).toContain('git-tone-dot');
+    expect(gitToneDotClass('neutral')).toContain('git-tone-dot--neutral');
+    expect(gitToneDotClass('warning')).toContain('git-tone-dot--warning');
+    expect(gitToneDotClass('brand')).not.toContain('bg-blue-600/80');
+    expect(gitToneDotClass('neutral')).not.toContain('bg-muted-foreground/55');
 
     expect(gitToneSurfaceClass('brand')).toContain('border-l-[3px]');
     expect(gitToneSurfaceClass('brand')).toContain('border-l-primary/60');

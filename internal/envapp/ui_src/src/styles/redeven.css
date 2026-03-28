@@ -23,6 +23,13 @@
   --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);
   --card: var(--redeven-surface-panel);
   --popover: var(--redeven-surface-panel);
+  --git-title-dot-neutral: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+  --git-title-dot-info: color-mix(in srgb, var(--info) 75%, transparent);
+  --git-title-dot-brand: color-mix(in srgb, var(--color-blue-600) 80%, transparent);
+  --git-title-dot-success: color-mix(in srgb, var(--success) 75%, transparent);
+  --git-title-dot-warning: color-mix(in srgb, var(--warning) 75%, transparent);
+  --git-title-dot-danger: color-mix(in srgb, var(--error) 75%, transparent);
+  --git-title-dot-violet: color-mix(in srgb, var(--color-violet-500) 75%, transparent);
   --git-browser-selection-bg:
     linear-gradient(
       135deg,
@@ -53,6 +60,13 @@ html.dark {
   --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);
   --card: var(--redeven-surface-panel);
   --popover: var(--redeven-surface-panel);
+  --git-title-dot-neutral: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+  --git-title-dot-info: color-mix(in srgb, var(--info) 75%, transparent);
+  --git-title-dot-brand: color-mix(in srgb, var(--color-sky-400) 85%, transparent);
+  --git-title-dot-success: color-mix(in srgb, var(--success) 75%, transparent);
+  --git-title-dot-warning: color-mix(in srgb, var(--warning) 75%, transparent);
+  --git-title-dot-danger: color-mix(in srgb, var(--error) 75%, transparent);
+  --git-title-dot-violet: color-mix(in srgb, var(--color-violet-500) 75%, transparent);
   --git-browser-selection-bg:
     linear-gradient(
       135deg,
@@ -139,6 +153,38 @@ html.dark {
   background: var(--git-browser-selection-bg);
   color: var(--git-browser-selection-fg);
   box-shadow: var(--git-browser-selection-shadow);
+}
+
+.git-tone-dot {
+  background-color: var(--git-title-dot-neutral);
+}
+
+.git-tone-dot--neutral {
+  background-color: var(--git-title-dot-neutral);
+}
+
+.git-tone-dot--info {
+  background-color: var(--git-title-dot-info);
+}
+
+.git-tone-dot--brand {
+  background-color: var(--git-title-dot-brand);
+}
+
+.git-tone-dot--success {
+  background-color: var(--git-title-dot-success);
+}
+
+.git-tone-dot--warning {
+  background-color: var(--git-title-dot-warning);
+}
+
+.git-tone-dot--danger {
+  background-color: var(--git-title-dot-danger);
+}
+
+.git-tone-dot--violet {
+  background-color: var(--git-title-dot-violet);
 }
 
 .settings-policy-toggle-row {

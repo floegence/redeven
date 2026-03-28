@@ -119,6 +119,15 @@ async function revealTooltipForButton(button: HTMLButtonElement | undefined): Pr
   return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
 }
 
+function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement | null {
+  const labelNode = Array.from(container.querySelectorAll('div')).find((node) => (
+    node.textContent?.trim() === label
+    && node.className.includes('tracking-[0.16em]')
+  )) as HTMLDivElement | undefined;
+  expect(labelNode).toBeTruthy();
+  return labelNode?.parentElement?.querySelector('span[aria-hidden="true"]') as HTMLSpanElement | null;
+}
+
 describe('GitBranchesPanel interactions', () => {
   it('loads current branch status from the active worktree root', async () => {
     let checkoutCount = 0;
@@ -301,6 +310,76 @@ describe('GitBranchesPanel interactions', () => {
       expect(host.textContent).toContain('src/linked.ts');
       expect(host.textContent).toContain('notes.txt');
       expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(0);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders semantic title dots for the branch summary and status headers', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo-linked',
+      section: 'changes',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/linked.ts', displayPath: 'src/linked.ts', additions: 2, deletions: 1, patchText: '@@ -1 +1 @@' },
+      ],
+    });
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo-linked"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo-linked',
+                  headRef: 'feature/demo',
+                  headCommit: 'abc1234',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                selectedBranch={{
+                  name: 'feature/demo',
+                  fullName: 'refs/heads/feature/demo',
+                  kind: 'local',
+                  current: true,
+                  upstreamRef: 'origin/feature/demo',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo-linked',
+                  currentRef: 'feature/demo',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local' },
+                    { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local', current: true },
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const branchDot = findGitTitleDot(host, 'Branch');
+      const statusDot = findGitTitleDot(host, 'Status');
+
+      expect(branchDot?.className).toContain('git-tone-dot');
+      expect(branchDot?.className).toContain('git-tone-dot--brand');
+      expect(branchDot?.className).not.toContain('bg-blue-600/80');
+      expect(statusDot?.className).toContain('git-tone-dot');
+      expect(statusDot?.className).toContain('git-tone-dot--neutral');
+      expect(statusDot?.className).not.toContain('bg-muted-foreground/55');
     } finally {
       dispose();
     }

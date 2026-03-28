@@ -37,6 +37,15 @@ async function revealTooltipForButton(button: HTMLButtonElement | null | undefin
   return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
 }
 
+function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement | null {
+  const labelNode = Array.from(container.querySelectorAll('div')).find((node) => (
+    node.textContent?.trim() === label
+    && node.className.includes('tracking-[0.16em]')
+  )) as HTMLDivElement | undefined;
+  expect(labelNode).toBeTruthy();
+  return labelNode?.parentElement?.querySelector('span[aria-hidden="true"]') as HTMLSpanElement | null;
+}
+
 describe('GitChangesPanel interactions', () => {
   it('renders only the selected section as a compact file table', () => {
     const host = document.createElement('div');
@@ -134,6 +143,47 @@ describe('GitChangesPanel interactions', () => {
       expect(stageAllButton?.className).toContain('w-full');
       expect(commitButton).toBeTruthy();
       expect(commitButton?.className).toContain('w-full');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders a semantic warning dot for the workspace title block', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="changes"
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const workspaceDot = findGitTitleDot(host, 'Workspace');
+      expect(workspaceDot?.className).toContain('git-tone-dot');
+      expect(workspaceDot?.className).toContain('git-tone-dot--warning');
+      expect(workspaceDot?.className).not.toContain('bg-warning/75');
     } finally {
       dispose();
     }

@@ -8,6 +8,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitWorkbench } from './GitWorkbench';
 
+function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement | null {
+  const labelNode = Array.from(container.querySelectorAll('div')).find((node) => (
+    node.textContent?.trim() === label
+    && node.className.includes('tracking-[0.16em]')
+  )) as HTMLDivElement | undefined;
+  expect(labelNode).toBeTruthy();
+  return labelNode?.parentElement?.querySelector('span[aria-hidden="true"]') as HTMLSpanElement | null;
+}
+
 describe('GitWorkbench interactions', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
@@ -119,6 +128,10 @@ describe('GitWorkbench interactions', () => {
       expect(host.textContent).toContain('Status');
       expect(host.textContent).toContain('Branch is not checked out');
       expect(host.textContent).toContain('Status is only available for checked-out local worktrees.');
+      const branchesDot = findGitTitleDot(host, 'Branches');
+      expect(branchesDot?.className).toContain('git-tone-dot');
+      expect(branchesDot?.className).toContain('git-tone-dot--violet');
+      expect(branchesDot?.className).not.toContain('bg-violet-500/75');
     } finally {
       dispose();
     }
@@ -213,6 +226,8 @@ describe('GitWorkbench interactions', () => {
       expect(host.textContent).toContain('Viewing def56789 without a branch.');
       expect(pullButton?.disabled).toBe(true);
       expect(pushButton?.disabled).toBe(true);
+      const graphDot = findGitTitleDot(host, 'Graph');
+      expect(graphDot?.className).toContain('git-tone-dot--brand');
     } finally {
       dispose();
     }
