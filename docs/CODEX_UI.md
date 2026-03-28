@@ -127,6 +127,8 @@ Current Env App behavior:
 - The Codex surface uses floe-webapp cards/forms/tags for a consistent Env App look while keeping Codex-specific state and request handling separate.
 - The Codex transcript and send bar intentionally mirror Flower's message lane geometry, bubble cadence, and editor chrome through Codex-local components and selectors only; Flower files and selectors are not changed.
 - Codex UI structure stays isolated under `src/ui/codex/*`, including its own namespaced `codex.css` layer, so Flower selectors and component contracts do not change when Codex layout evolves.
+- Codex visual styling uses a Codex-local semantic surface token family on `.codex-page-shell` (`--codex-surface-*`, `--codex-border-*`, `--codex-text-secondary`) so page, dock, transcript, reasoning, and markdown surfaces share one flat presentation contract instead of per-selector decorative gradients.
+- Codex intentionally excludes decorative `linear-gradient(...)` / `radial-gradient(...)` treatments from its page shell; when Codex needs to neutralize shared chat styling such as user bubbles or the send button, it does so through `.codex-page-shell .chat-*` overrides instead of mutating Flower-owned selectors.
 - The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
 - Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
@@ -142,6 +144,7 @@ Current Env App behavior:
 - New threads can override working directory, model, approval policy, and sandbox before the first turn, and later turns can keep those settings sticky through explicit `turn/start` overrides.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
+- Codex markdown keeps the existing renderer DOM contract for standard links and local file references, but local file references are styled as flat outline tokens rather than filled tinted pills so transcript links read like workstation metadata instead of promotional chips.
 - The live working row uses a Codex-local Flower-like dots indicator with a streaming cursor, and it intentionally stays avatar-free so assistant identity is anchored to real assistant messages instead of floating with the tail state.
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.

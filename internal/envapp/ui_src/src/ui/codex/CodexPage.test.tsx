@@ -207,6 +207,7 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Install Codex on the host');
     expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
     expect(host.textContent).toContain('Redeven does not install Codex for you');
+    expect(host.querySelector('.codex-empty-ornament')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-input-controls')).toBeNull();
     expect(host.querySelector('.codex-chat-input-meta')).not.toBeNull();

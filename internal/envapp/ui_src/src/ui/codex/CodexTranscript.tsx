@@ -25,7 +25,7 @@ function EmptyTranscriptState(props: {
     <div data-codex-surface="empty-state" class="codex-empty-state">
       <div class="codex-empty-hero">
         <div class="relative mb-4 inline-flex items-center justify-center">
-          <div class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary/14 to-primary/8 shadow-sm">
+          <div class="codex-empty-ornament">
             <CodexIcon class="h-10 w-10 text-primary" />
           </div>
         </div>
@@ -45,7 +45,7 @@ function LoadingTranscriptState(props: {
     <div data-codex-surface="loading-state" class="codex-empty-state">
       <div class="codex-empty-hero">
         <div class="relative mb-4 inline-flex items-center justify-center">
-          <div class="relative flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-primary/14 to-primary/8 shadow-sm">
+          <div class="codex-empty-ornament">
             <CodexIcon class="h-10 w-10 text-primary" />
           </div>
         </div>
