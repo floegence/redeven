@@ -36,6 +36,14 @@ describe('Codex visual contract', () => {
     expect(src).not.toContain('radial-gradient(');
   });
 
+  it('keeps Codex markdown blockquotes aligned with the floe-webapp quote block shape', () => {
+    const src = readCodexCss();
+
+    expect(src).toMatch(
+      /\.codex-chat-markdown-block \.chat-md-blockquote \{[\s\S]*margin: 0\.5rem 0;[\s\S]*border-left-width: 2px;[\s\S]*border-left-color: color-mix\(in srgb, var\(--primary\) 70%, transparent\);[\s\S]*border-radius: 0 0\.375rem 0\.375rem 0;[\s\S]*background: color-mix\(in srgb, var\(--muted\) 50%, transparent\);[\s\S]*color: color-mix\(in srgb, var\(--foreground\) 80%, transparent\);[\s\S]*font-style: normal;[\s\S]*padding: 0\.5rem 0\.75rem;[\s\S]*\}/
+    );
+  });
+
   it('keeps empty and loading ornaments on the neutral Codex shell class', () => {
     const src = readCodexTranscript();
 

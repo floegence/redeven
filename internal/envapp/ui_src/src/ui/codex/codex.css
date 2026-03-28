@@ -1135,14 +1135,14 @@
 }
 
 .codex-chat-markdown-block .chat-md-blockquote {
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
   border-left-width: 2px;
-  border-left-color: var(--codex-border-accent);
-  border-radius: 0.75rem;
-  background: var(--codex-surface-panel-subtle);
-  color: var(--codex-text-secondary);
+  border-left-color: color-mix(in srgb, var(--primary) 70%, transparent);
+  border-radius: 0 0.375rem 0.375rem 0;
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+  color: color-mix(in srgb, var(--foreground) 80%, transparent);
   font-style: normal;
-  padding: 0.75rem 0.875rem 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
 }
 
 .codex-chat-markdown-block table {
