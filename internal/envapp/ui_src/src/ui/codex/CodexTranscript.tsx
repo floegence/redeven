@@ -452,6 +452,25 @@ function OptimisticUserMessageRow(props: { turn: CodexOptimisticUserTurn }) {
   );
 }
 
+function AssistantPreludeRow(props: { showAvatar?: boolean }) {
+  return (
+    <CodexMessageLane role="assistant" showAvatar={props.showAvatar}>
+      <div
+        data-codex-pre-output="true"
+        class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
+      >
+        <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
+          <div class="chat-markdown-block codex-chat-markdown-block">
+            <div class="chat-markdown-empty-streaming" aria-label="Codex is preparing to respond">
+              <StreamingCursor />
+            </div>
+          </div>
+        </div>
+      </div>
+    </CodexMessageLane>
+  );
+}
+
 function WorkingStateRow(props: {
   label: string;
   flags: readonly string[];
@@ -544,6 +563,12 @@ export function CodexTranscript(props: {
 }) {
   const optimisticUserTurns = () => [...(props.optimisticUserTurns ?? [])];
   const hasRows = () => props.items.length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
+  const showAssistantPrelude = createMemo(() => (
+    Boolean(props.showWorkingState) && (
+      optimisticUserTurns().length > 0 ||
+      !hasAssistantMessageInCurrentRun(props.items, props.items.length)
+    )
+  ));
   return (
     <div data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
       <Show
@@ -580,12 +605,17 @@ export function CodexTranscript(props: {
               </div>
             )}
           </For>
+          <Show when={showAssistantPrelude()}>
+            <div class="codex-transcript-row">
+              <AssistantPreludeRow showAvatar />
+            </div>
+          </Show>
           <Show when={props.showWorkingState}>
             <div class="codex-transcript-row">
               <WorkingStateRow
                 label={String(props.workingLabel ?? '').trim() || 'working'}
                 flags={props.workingFlags ?? []}
-                showAvatar={shouldShowWorkingAvatar(props.items)}
+                showAvatar={!showAssistantPrelude() && shouldShowWorkingAvatar(props.items)}
               />
             </div>
           </Show>

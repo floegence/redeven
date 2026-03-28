@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CodexTranscript } from './CodexTranscript';
-import type { CodexTranscriptItem } from './types';
+import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
@@ -50,6 +50,7 @@ vi.mock('../icons/CodexIcon', () => ({
 }));
 
 function renderTranscript(items: CodexTranscriptItem[], options?: {
+  optimisticUserTurns?: CodexOptimisticUserTurn[];
   showWorkingState?: boolean;
   workingLabel?: string;
   workingFlags?: string[];
@@ -59,6 +60,7 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   const dispose = render(() => (
     <CodexTranscript
       items={items}
+      optimisticUserTurns={options?.optimisticUserTurns}
       showWorkingState={options?.showWorkingState}
       workingLabel={options?.workingLabel}
       workingFlags={options?.workingFlags}
@@ -74,26 +76,33 @@ afterEach(() => {
 });
 
 describe('CodexTranscript', () => {
-  it('renders the compact working indicator with an immediate assistant avatar but no cursor inside the rail', () => {
+  it('renders a pre-output cursor row above the compact working indicator', () => {
     const { host, dispose } = renderTranscript([], {
       showWorkingState: true,
       workingLabel: 'working',
       workingFlags: ['web search'],
     });
+    const rows = Array.from(host.querySelectorAll('.codex-transcript-row'));
+    const preOutputRow = host.querySelector('[data-codex-pre-output="true"]')?.closest('.chat-message-item');
     const workingRow = host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item');
 
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelector('[data-codex-pre-output="true"]')).toBeTruthy();
+    expect(rows[1]?.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
+    expect(host.querySelector('[data-codex-pre-output="true"] [data-testid="streaming-cursor"]')).toBeTruthy();
+    expect(preOutputRow?.querySelector('.chat-message-avatar')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
     expect(host.textContent).toContain('Working...');
     expect(host.textContent).not.toContain('Codex is');
     expect(host.textContent).not.toContain('web search');
     expect(host.querySelector('.codex-message-run-indicator-graph')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
-    expect(workingRow?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
 
     dispose();
   });
 
-  it('streams the cursor inside the active agent message instead of the working indicator rail', () => {
+  it('hands the streaming cursor over to the real agent message once output starts', () => {
     const { host, dispose } = renderTranscript([
       {
         id: 'item_agent_live',
@@ -108,10 +117,45 @@ describe('CodexTranscript', () => {
     });
     const workingRow = host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item');
 
+    expect(host.querySelector('[data-codex-pre-output="true"]')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-markdown-streaming="true"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-testid="streaming-cursor"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
     expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
+
+    dispose();
+  });
+
+  it('keeps the pre-output cursor visible for a new optimistic turn even when the previous run already has assistant output', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_user_previous',
+        type: 'userMessage',
+        text: 'Review the previous answer.',
+        order: 0,
+      },
+      {
+        id: 'item_agent_previous',
+        type: 'agentMessage',
+        text: 'Previous assistant answer.',
+        order: 1,
+      },
+    ], {
+      optimisticUserTurns: [
+        {
+          id: 'optimistic_turn_1',
+          thread_id: 'thread_1',
+          text: 'Please continue.',
+          inputs: [],
+        },
+      ],
+      showWorkingState: true,
+      workingLabel: 'working',
+    });
+
+    expect(host.querySelector('[data-codex-pre-output="true"]')).toBeTruthy();
+    expect(host.querySelector('[data-codex-pre-output="true"] [data-testid="streaming-cursor"]')).toBeTruthy();
+    expect(host.querySelector('[data-codex-working-state="true"] .chat-message-avatar')).toBeNull();
 
     dispose();
   });
