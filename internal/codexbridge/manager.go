@@ -88,6 +88,29 @@ func isThreadNotFoundError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "thread not found")
 }
 
+func isThreadNotMaterializedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lowerMessage := strings.ToLower(strings.TrimSpace(err.Error()))
+	if strings.Contains(lowerMessage, "not materialized yet") &&
+		strings.Contains(lowerMessage, "before first user message") {
+		return true
+	}
+	rpcErr, ok := asRPCMethodError(err)
+	if !ok {
+		return false
+	}
+	method := strings.ToLower(strings.TrimSpace(rpcErr.Method))
+	if method != "thread/read" {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(rpcErr.Message))
+	return strings.Contains(message, "not materialized yet") &&
+		(strings.Contains(message, "includeturns is unavailable") ||
+			strings.Contains(message, "before first user message"))
+}
+
 func NewManager(opts Options) (*Manager, error) {
 	agentHomeDir := strings.TrimSpace(opts.AgentHomeDir)
 	if agentHomeDir == "" {
@@ -161,22 +184,38 @@ func (m *Manager) ListThreads(ctx context.Context, limit int) ([]Thread, error) 
 	return out, nil
 }
 
+func (m *Manager) readThreadSnapshot(ctx context.Context, threadID string, includeTurns bool) (Thread, error) {
+	var resp wireThreadReadResponse
+	if err := m.call(ctx, "thread/read", wireThreadReadParams{
+		ThreadID:     threadID,
+		IncludeTurns: includeTurns,
+	}, &resp); err != nil {
+		return Thread{}, err
+	}
+	return normalizeThread(resp.Thread), nil
+}
+
 func (m *Manager) ReadThread(ctx context.Context, threadID string) (*ThreadDetail, error) {
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
 		return nil, ErrThreadNotFound
 	}
-	var resp wireThreadReadResponse
-	if err := m.call(ctx, "thread/read", wireThreadReadParams{
-		ThreadID:     threadID,
-		IncludeTurns: true,
-	}, &resp); err != nil {
+	thread, err := m.readThreadSnapshot(ctx, threadID, true)
+	if err != nil {
 		if isThreadNotFoundError(err) {
 			return nil, ErrThreadNotFound
 		}
-		return nil, err
+		if !isThreadNotMaterializedError(err) {
+			return nil, err
+		}
+		thread, err = m.readThreadSnapshot(ctx, threadID, false)
+		if err != nil {
+			if isThreadNotFoundError(err) {
+				return nil, ErrThreadNotFound
+			}
+			return nil, err
+		}
 	}
-	thread := normalizeThread(resp.Thread)
 	m.mu.Lock()
 	state := m.ensureThreadStateLocked(thread.ID)
 	projectedThread := mergeProjectedThread(state, thread)

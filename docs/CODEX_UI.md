@@ -21,6 +21,7 @@ High-level design:
 - The bridge keeps a per-thread projected state so browser bootstrap and SSE replay always agree on the same applied event cursor.
 - Thread bootstrap uses `thread/read(includeTurns=true)` semantics, while live work uses `thread/resume` only when a thread must become active for `turn/start`.
 - Read/bootstrap stays recency-neutral: selecting an existing thread may cache transcript/runtime state locally, but it must not fabricate a newer `updated_at` or reorder the sidebar on its own.
+- When a freshly started upstream thread has not materialized its first-user-message rollout yet, the bridge falls back from `thread/read(includeTurns=true)` to a summary-only `thread/read(includeTurns=false)` and merges the result with projected state, so the browser does not see the transient upstream error.
 - `thread/start` enables `experimentalRawEvents=true` and `persistExtendedHistory=true`, while `thread/resume` also enables `persistExtendedHistory=true`, so refreshes can reconstruct the full Codex-side thread state instead of only the stable transcript subset.
 - The bridge normalizes upstream `rawResponseItem/completed` notifications such as `web_search_call` into browser-facing `webSearch` transcript items, which keeps live SSE, refresh bootstrap, and replay behavior consistent.
 - `thread/start` only forwards explicitly user-supplied fields such as `cwd` and optional `model`; host Codex defaults stay owned by Codex itself.
