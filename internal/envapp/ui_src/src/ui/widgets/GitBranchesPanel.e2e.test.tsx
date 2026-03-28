@@ -1142,7 +1142,7 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('stacks branch actions into full-width rows for narrow layouts', () => {
+  it('keeps branch controls in a compact wrap rail for narrow layouts', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1170,6 +1170,8 @@ describe('GitBranchesPanel interactions', () => {
                 }}
                 onCheckoutBranch={() => {}}
                 onDeleteBranch={() => {}}
+                onOpenInTerminal={() => {}}
+                onBrowseFiles={() => {}}
               />
             </div>
           </ProtocolProvider>
@@ -1178,19 +1180,23 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('xl:flex-row xl:items-start xl:justify-between')) as HTMLDivElement | undefined;
+      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('sm:grid-cols-[minmax(0,1fr)_auto]')) as HTMLDivElement | undefined;
       const controlBar = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('rounded-xl') && node.className.includes('redeven-surface-control') && node.className.includes('bg-muted/[0.12]')) as HTMLDivElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
+      const shortcutDock = host.querySelector('[data-git-shortcut-dock]') as HTMLDivElement | null;
 
       expect(branchHeader).toBeTruthy();
       expect(controlBar).toBeTruthy();
+      expect(shortcutDock).toBeTruthy();
       expect(controlBar?.textContent).toContain('Actions');
       expect(checkoutButton?.className).toContain('rounded-md');
       expect(deleteButton?.className).toContain('rounded-md');
       expect(checkoutButton?.className).toContain('cursor-pointer');
       expect(deleteButton?.className).toContain('bg-destructive/[0.08]');
+      expect(checkoutButton?.className).not.toContain('w-full');
+      expect(deleteButton?.className).not.toContain('w-full');
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
@@ -1205,6 +1211,49 @@ describe('GitBranchesPanel interactions', () => {
       expect(activeTab?.className).toContain('text-foreground');
       expect(activeTab?.className).not.toContain('git-browser-selection-chip');
       expect(historyTab?.className).toContain('text-muted-foreground');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('hides the empty branch summary instead of rendering no extra status copy', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px] w-[320px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'feature/clean',
+                  fullName: 'refs/heads/feature/clean',
+                  kind: 'local',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    { name: 'feature/clean', fullName: 'refs/heads/feature/clean', kind: 'local' },
+                  ],
+                  remote: [],
+                }}
+                onCheckoutBranch={() => {}}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      expect(host.textContent).toContain('feature/clean');
+      expect(host.textContent).not.toContain('No extra status');
     } finally {
       dispose();
     }

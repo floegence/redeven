@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type Component } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { ChevronRight, Folder, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
@@ -19,6 +19,7 @@ import {
   detachedHeadCheckoutActionLabel,
   detachedHeadReattachSummary,
   detachedHeadViewingSummary,
+  EMPTY_BRANCH_CONTEXT_SUMMARY,
   gitDiffEntryIdentity,
   pickDefaultWorkspaceViewSectionFromSummary,
   reattachBranchFromRepoSummary,
@@ -39,7 +40,7 @@ import {
 import { resolveRovingTabTargetId } from '../utils/tabNavigation';
 import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
-import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass } from './GitChrome';
+import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass, gitToneDotClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitVirtualTable } from './GitVirtualTable';
 import {
@@ -60,6 +61,7 @@ import {
   GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
+  type GitShortcutOrbTone,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
@@ -155,6 +157,44 @@ function defaultCompareTarget(branches: GitListBranchesResponse | null | undefin
 }
 
 const GIT_BRANCH_SUBVIEW_IDS = ['status', 'history'] as const satisfies readonly GitBranchSubview[];
+
+type BranchSummaryPresentation = {
+  text: string;
+  title: string;
+  visible: boolean;
+};
+
+type BranchPrimaryActionPresentation = {
+  key: string;
+  label: string;
+  emphasis: 'neutral' | 'accent' | 'danger';
+  disabled: boolean;
+  onPress: () => void;
+};
+
+type BranchShortcutPresentation = {
+  key: string;
+  label: string;
+  tone: GitShortcutOrbTone;
+  icon: Component<{ class?: string }>;
+  disabled: boolean;
+  disabledReason?: string;
+  onPress: () => void;
+};
+
+type BranchHeaderControlGroups = {
+  primaryActions: BranchPrimaryActionPresentation[];
+  secondaryShortcuts: BranchShortcutPresentation[];
+};
+
+type BranchStatusSectionPresentation = {
+  section: GitWorkspaceViewSection;
+  label: string;
+  count: number;
+  active: boolean;
+  compactCaption: string;
+  verboseCaption: string;
+};
 
 function gitBranchSubviewTabId(view: GitBranchSubview): string {
   return `git-branch-subview-tab-${view}`;
@@ -1023,13 +1063,156 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (branchDirectoryRequest()) return '';
     return branchWorkspaceDisabledReason() || 'Repository path is unavailable.';
   };
-  const showWorkspaceHelpers = () => Boolean(props.onOpenInTerminal || props.onBrowseFiles);
-  const branchActionGridClass = () => 'grid-cols-1';
+  const branchSummary = createMemo<BranchSummaryPresentation>(() => {
+    const text = branchContextSummary(props.selectedBranch);
+    return {
+      text,
+      title: branchStatusSummary(props.selectedBranch),
+      visible: text !== EMPTY_BRANCH_CONTEXT_SUMMARY,
+    };
+  });
+  const branchHeaderControls = createMemo<BranchHeaderControlGroups>(() => {
+    const primaryActions: BranchPrimaryActionPresentation[] = [];
+    const secondaryShortcuts: BranchShortcutPresentation[] = [];
+
+    if (props.onCheckoutBranch && props.selectedBranch) {
+      const branch = props.selectedBranch;
+      primaryActions.push({
+        key: 'checkout',
+        label: checkoutLabel(),
+        emphasis: 'neutral',
+        disabled: checkoutDisabled(),
+        onPress: () => props.onCheckoutBranch?.(branch),
+      });
+    }
+
+    if (mergeAvailable() && props.selectedBranch) {
+      const branch = props.selectedBranch;
+      primaryActions.push({
+        key: 'merge',
+        label: mergeLabel(),
+        emphasis: mergeDisabled() ? 'neutral' : 'accent',
+        disabled: mergeDisabled(),
+        onPress: () => props.onMergeBranch?.(branch),
+      });
+    }
+
+    if (deleteAvailable() && props.selectedBranch) {
+      const branch = props.selectedBranch;
+      primaryActions.push({
+        key: 'delete',
+        label: deleteLabel(),
+        emphasis: 'danger',
+        disabled: deleteDisabled(),
+        onPress: () => props.onDeleteBranch?.(branch),
+      });
+    }
+
+    if (props.onOpenInTerminal) {
+      secondaryShortcuts.push({
+        key: 'terminal',
+        label: 'Terminal',
+        tone: 'terminal',
+        icon: Terminal,
+        disabled: !canOpenInTerminal(),
+        disabledReason: branchWorkspaceShortcutDisabledReason(),
+        onPress: () => {
+          const request = branchDirectoryRequest();
+          if (!request) return;
+          props.onOpenInTerminal?.(request);
+        },
+      });
+    }
+
+    if (props.onBrowseFiles) {
+      secondaryShortcuts.push({
+        key: 'files',
+        label: 'Files',
+        tone: 'files',
+        icon: Folder,
+        disabled: !canBrowseFiles(),
+        disabledReason: branchWorkspaceShortcutDisabledReason(),
+        onPress: () => {
+          const request = branchDirectoryRequest();
+          if (!request) return;
+          void props.onBrowseFiles?.(request);
+        },
+      });
+    }
+
+    return { primaryActions, secondaryShortcuts };
+  });
+  const statusToolbarActions = createMemo<BranchPrimaryActionPresentation[]>(() => {
+    const items: BranchPrimaryActionPresentation[] = [{
+      key: 'compare',
+      label: 'Compare',
+      emphasis: 'neutral',
+      disabled: false,
+      onPress: () => setCompareDialogOpen(true),
+    }];
+
+    if (props.onOpenStash) {
+      items.push({
+        key: 'stash',
+        label: 'Stash...',
+        emphasis: 'neutral',
+        disabled: !canOpenStash(),
+        onPress: () => {
+          const repoRoot = statusRepoRootPath();
+          if (!repoRoot) return;
+          props.onOpenStash?.({
+            tab: 'save',
+            repoRootPath: repoRoot,
+            source: 'branch_status',
+          });
+        },
+      });
+    }
+
+    return items;
+  });
+  const statusToolbarShortcut = createMemo<BranchShortcutPresentation | null>(() => {
+    if (!props.onAskFlower) return null;
+    return {
+      key: 'ask-flower',
+      label: 'Ask Flower',
+      tone: 'flower',
+      icon: FlowerIcon,
+      disabled: !canAskFlowerStatus(),
+      disabledReason: askFlowerStatusDisabledReason(),
+      onPress: () => {
+        if (!props.selectedBranch || !canAskFlowerStatus()) return;
+        props.onAskFlower?.({
+          kind: 'branch_status',
+          repoRootPath: activeRepoRootPath(),
+          worktreePath: statusRepoRootPath(),
+          branch: props.selectedBranch,
+          section: selectedStatusSection(),
+          items: visibleStatusItems(),
+        });
+      },
+    };
+  });
+  const statusSectionCards = createMemo<BranchStatusSectionPresentation[]>(() => {
+    const summary = visibleStatusSummary();
+    return WORKSPACE_VIEW_SECTIONS.map((section) => {
+      const count = workspaceViewSectionCount(summary, section);
+      const countLabel = `${count} file${count === 1 ? '' : 's'}`;
+      return {
+        section,
+        label: workspaceViewSectionLabel(section),
+        count,
+        active: selectedStatusSection() === section,
+        compactCaption: count === 0 ? 'No files' : countLabel,
+        verboseCaption: count === 0 ? 'No files to review.' : `${countLabel} ready.`,
+      };
+    });
+  });
   const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
-  const secondaryActionButtonClass = cn('w-full cursor-pointer rounded-md bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto', redevenSurfaceRoleClass('control'));
-  const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';
-  const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';
+  const secondaryActionButtonClass = cn('cursor-pointer rounded-md bg-background/88 px-3 shadow-sm shadow-black/5 hover:bg-background', redevenSurfaceRoleClass('control'));
+  const primaryActionButtonClass = 'cursor-pointer rounded-md px-3 shadow-sm shadow-black/10';
+  const dangerActionButtonClass = 'cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-3 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive';
   const branchStatusSectionCardClass = (active: boolean) =>
     cn(
       'w-full rounded-md bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
@@ -1042,6 +1225,17 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       redevenSegmentedItemClass(active),
       active ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
     );
+  const branchActionButtonClass = (emphasis: BranchPrimaryActionPresentation['emphasis']) => {
+    switch (emphasis) {
+      case 'accent':
+        return primaryActionButtonClass;
+      case 'danger':
+        return dangerActionButtonClass;
+      case 'neutral':
+      default:
+        return secondaryActionButtonClass;
+    }
+  };
   const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
     const nextView = resolveRovingTabTargetId(GIT_BRANCH_SUBVIEW_IDS, currentView, event.key, 'horizontal');
     if (!nextView || nextView === currentView) return;
@@ -1214,59 +1408,45 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
             <section class={cn('rounded-md px-3 py-2.5', redevenSurfaceRoleClass('panelStrong'))}>
-              <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
-                <GitLabelBlock class="min-w-0" label="Status" tone="neutral" />
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex min-h-5 items-center gap-2">
+                  <span class={cn('h-2 w-2 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.04)]', gitToneDotClass('neutral'))} aria-hidden="true" />
+                  <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">Status</div>
+                </div>
 
-                <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start sm:justify-end">
-                  <Show when={props.onAskFlower}>
-                    <GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">
-                      <GitShortcutOrbButton
-                        label="Ask Flower"
-                        tone="flower"
-                        icon={FlowerIcon}
+                <div class="flex flex-wrap items-center justify-end gap-1.5">
+                  <Show when={statusToolbarShortcut()}>
+                    {(shortcut) => (
+                      <GitShortcutOrbDock>
+                        <GitShortcutOrbButton
+                          label={shortcut().label}
+                          tone={shortcut().tone}
+                          icon={shortcut().icon}
+                          size="sm"
+                          disabled={shortcut().disabled}
+                          disabledReason={shortcut().disabledReason}
+                          onClick={shortcut().onPress}
+                        />
+                      </GitShortcutOrbDock>
+                    )}
+                  </Show>
+                  <For each={statusToolbarActions()}>
+                    {(action) => (
+                      <Button
                         size="sm"
-                        disabled={!canAskFlowerStatus()}
-                        disabledReason={askFlowerStatusDisabledReason()}
-                        onClick={() => {
-                          if (!props.selectedBranch || !canAskFlowerStatus()) return;
-                          props.onAskFlower?.({
-                            kind: 'branch_status',
-                            repoRootPath: activeRepoRootPath(),
-                            worktreePath: statusRepoRootPath(),
-                            branch: props.selectedBranch,
-                            section: selectedStatusSection(),
-                            items: visibleStatusItems(),
-                          });
-                        }}
-                      />
-                    </GitShortcutOrbDock>
-                  </Show>
-                  <Button size="sm" variant="outline" class={cn('w-full rounded-md bg-background/80 sm:w-auto', redevenSurfaceRoleClass('control'))} onClick={() => setCompareDialogOpen(true)}>
-                    Compare
-                  </Button>
-                  <Show when={props.onOpenStash}>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      class={cn('w-full rounded-md bg-background/80 sm:w-auto', redevenSurfaceRoleClass('control'))}
-                      disabled={!canOpenStash()}
-                      onClick={() => {
-                        const repoRoot = statusRepoRootPath();
-                        if (!repoRoot) return;
-                        props.onOpenStash?.({
-                          tab: 'save',
-                          repoRootPath: repoRoot,
-                          source: 'branch_status',
-                        });
-                      }}
-                    >
-                      Stash...
-                    </Button>
-                  </Show>
+                        variant={action.emphasis === 'accent' ? 'default' : 'outline'}
+                        class={branchActionButtonClass(action.emphasis)}
+                        disabled={action.disabled}
+                        onClick={action.onPress}
+                      >
+                        {action.label}
+                      </Button>
+                    )}
+                  </For>
                 </div>
               </div>
 
-              <div class="mt-1.5 pl-3">
+              <div class="mt-2">
                 <Show
                   when={!visibleStatusLoading()}
                   fallback={<GitStatePane loading message="Loading branch status..." surface class="py-2" />}
@@ -1289,43 +1469,37 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         </div>
                       )}
                     >
-                      {(workspaceAccessor) => (
-                        <div class={cn('grid grid-cols-1 gap-0.5 rounded-md p-0.5 text-[11px] sm:grid-cols-3', redevenSurfaceRoleClass('segmented'))}>
-                          <For each={WORKSPACE_VIEW_SECTIONS}>
-                            {(section) => {
-                              const active = () => selectedStatusSection() === section;
-                              const count = () => workspaceViewSectionCount(workspaceAccessor().summary, section);
-                              return (
-                                <button
-                                  type="button"
-                                  class={branchStatusSectionCardClass(active())}
-                                  onClick={() => selectStatusSection(section)}
+                      <div class={cn('grid grid-cols-3 gap-0.5 rounded-md p-0.5 text-[11px]', redevenSurfaceRoleClass('segmented'))}>
+                        <For each={statusSectionCards()}>
+                          {(item) => (
+                            <button
+                              type="button"
+                              class={branchStatusSectionCardClass(item.active)}
+                              aria-label={`${item.label}: ${item.compactCaption}`}
+                              title={item.verboseCaption}
+                              onClick={() => selectStatusSection(item.section)}
+                            >
+                              <div class="flex min-h-[1.7rem] items-center justify-between gap-1.5">
+                                <div class={cn('min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.14em]', item.active ? 'text-current opacity-80' : 'text-muted-foreground/80')}>
+                                  {item.label}
+                                </div>
+                                <div
+                                  class={cn(
+                                    'shrink-0 text-[12px] font-semibold tabular-nums leading-none',
+                                    item.active ? 'text-current' : 'text-foreground'
+                                  )}
                                 >
-                                  <div class="flex min-h-[1.85rem] flex-col justify-center gap-0.5">
-                                    <div class="flex items-center justify-between gap-1.5">
-                                      <div class={cn('min-w-0 truncate text-[10px] font-semibold uppercase tracking-[0.14em]', active() ? 'text-current opacity-80' : 'text-muted-foreground/80')}>
-                                        {workspaceViewSectionLabel(section)}
-                                      </div>
-                                      <div
-                                        class={cn(
-                                          'shrink-0 text-[12px] font-semibold tabular-nums leading-none',
-                                          active() ? 'text-current' : 'text-foreground'
-                                        )}
-                                      >
-                                        {count()}
-                                      </div>
-                                    </div>
+                                  {item.count}
+                                </div>
+                              </div>
 
-                                    <div class={cn('truncate text-[10px] leading-tight', active() ? 'text-current opacity-70' : 'text-muted-foreground')}>
-                                      {count() === 0 ? 'No files to review.' : `${count()} file${count() === 1 ? '' : 's'} ready.`}
-                                    </div>
-                                  </div>
-                                </button>
-                              );
-                            }}
-                          </For>
-                        </div>
-                      )}
+                              <div class={cn('mt-0.5 hidden truncate text-[10px] leading-tight sm:block', item.active ? 'text-current opacity-70' : 'text-muted-foreground')}>
+                                {item.verboseCaption}
+                              </div>
+                            </button>
+                          )}
+                        </For>
+                      </div>
                     </Show>
                   </Show>
                 </Show>
@@ -1364,8 +1538,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <div class={cn('rounded-md px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
-                  <div class="flex flex-col gap-3">
-                    <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div class="flex flex-col gap-2.5">
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
                       <GitLabelBlock
                         class="min-w-0 flex-1"
                         label="Branch"
@@ -1382,12 +1556,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         }
                       >
                         <GitPrimaryTitle>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
-                        <div class="min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground" title={branchStatusSummary(props.selectedBranch)}>
-                          {branchContextSummary(props.selectedBranch)}
-                        </div>
+                        <Show when={branchSummary().visible}>
+                          <div class="text-[11px] leading-relaxed line-clamp-1 text-muted-foreground sm:line-clamp-2" title={branchSummary().title}>
+                            {branchSummary().text}
+                          </div>
+                        </Show>
                       </GitLabelBlock>
 
-                      <div class="flex w-full xl:w-auto xl:justify-end">
+                      <div class="flex w-full sm:w-auto sm:justify-end">
                         <div
                           class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
                           role="tablist"
@@ -1422,84 +1598,47 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     </div>
 
                     <div class={headerControlBarClass}>
-                      <div class="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                        <Show when={showWorkspaceHelpers()}>
-                          <div class="flex flex-col gap-1.5">
-                            <div class={headerControlGroupLabelClass}>Workspace</div>
-                            <GitShortcutOrbDock class="w-full">
-                              <Show when={props.onOpenInTerminal}>
+                      <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                        <Show when={branchHeaderControls().secondaryShortcuts.length > 0}>
+                          <div class={cn('hidden sm:block', headerControlGroupLabelClass)}>Workspace</div>
+                          <GitShortcutOrbDock>
+                            <For each={branchHeaderControls().secondaryShortcuts}>
+                              {(shortcut) => (
                                 <GitShortcutOrbButton
-                                  label="Terminal"
-                                  tone="terminal"
-                                  icon={Terminal}
-                                  disabled={!canOpenInTerminal()}
-                                  disabledReason={branchWorkspaceShortcutDisabledReason()}
-                                  onClick={() => {
-                                    const request = branchDirectoryRequest();
-                                    if (!request) return;
-                                    props.onOpenInTerminal?.(request);
-                                  }}
+                                  label={shortcut.label}
+                                  tone={shortcut.tone}
+                                  icon={shortcut.icon}
+                                  disabled={shortcut.disabled}
+                                  disabledReason={shortcut.disabledReason}
+                                  onClick={shortcut.onPress}
                                 />
-                              </Show>
-
-                              <Show when={props.onBrowseFiles}>
-                                <GitShortcutOrbButton
-                                  label="Files"
-                                  tone="files"
-                                  icon={Folder}
-                                  disabled={!canBrowseFiles()}
-                                  disabledReason={branchWorkspaceShortcutDisabledReason()}
-                                  onClick={() => {
-                                    const request = branchDirectoryRequest();
-                                    if (!request) return;
-                                    void props.onBrowseFiles?.(request);
-                                  }}
-                                />
-                              </Show>
-                            </GitShortcutOrbDock>
-                          </div>
+                              )}
+                            </For>
+                          </GitShortcutOrbDock>
                         </Show>
 
-                        <div class="flex flex-col gap-1.5 lg:ml-auto lg:flex-row lg:flex-wrap lg:items-center lg:justify-end">
-                          <div class={headerControlGroupLabelClass}>Actions</div>
-                          <div class={cn('grid gap-1.5 sm:flex sm:flex-wrap sm:justify-end', branchActionGridClass())}>
-                            <Show when={props.onCheckoutBranch}>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                class={secondaryActionButtonClass}
-                                disabled={checkoutDisabled()}
-                                onClick={() => props.selectedBranch && props.onCheckoutBranch?.(props.selectedBranch)}
-                              >
-                                {checkoutLabel()}
-                              </Button>
-                            </Show>
+                        <Show when={branchHeaderControls().secondaryShortcuts.length > 0 && branchHeaderControls().primaryActions.length > 0}>
+                          <div class={cn('hidden h-4 w-px sm:block', redevenDividerRoleClass())} aria-hidden="true" />
+                        </Show>
 
-                            <Show when={mergeAvailable()}>
-                              <Button
-                                size="sm"
-                                variant={mergeDisabled() ? 'outline' : 'default'}
-                                class={mergeDisabled() ? secondaryActionButtonClass : primaryActionButtonClass}
-                                disabled={mergeDisabled()}
-                                onClick={() => props.selectedBranch && props.onMergeBranch?.(props.selectedBranch)}
-                              >
-                                {mergeLabel()}
-                              </Button>
-                            </Show>
-
-                            <Show when={deleteAvailable()}>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                class={dangerActionButtonClass}
-                                disabled={deleteDisabled()}
-                                onClick={() => props.selectedBranch && props.onDeleteBranch?.(props.selectedBranch)}
-                              >
-                                {deleteLabel()}
-                              </Button>
-                            </Show>
+                        <Show when={branchHeaderControls().primaryActions.length > 0}>
+                          <div class={cn('hidden sm:block', headerControlGroupLabelClass)}>Actions</div>
+                          <div class="flex flex-wrap items-center gap-1.5 sm:ml-auto">
+                            <For each={branchHeaderControls().primaryActions}>
+                              {(action) => (
+                                <Button
+                                  size="sm"
+                                  variant={action.emphasis === 'accent' ? 'default' : action.emphasis === 'danger' ? 'ghost' : 'outline'}
+                                  class={branchActionButtonClass(action.emphasis)}
+                                  disabled={action.disabled}
+                                  onClick={action.onPress}
+                                >
+                                  {action.label}
+                                </Button>
+                              )}
+                            </For>
                           </div>
-                        </div>
+                        </Show>
                       </div>
                     </div>
 

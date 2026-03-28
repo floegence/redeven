@@ -485,6 +485,8 @@ export function branchDisplayName(branch: GitBranchSummary | null | undefined): 
   return String(branch?.name ?? '').trim() || '(unknown branch)';
 }
 
+export const EMPTY_BRANCH_CONTEXT_SUMMARY = 'No extra status';
+
 export function branchContextSummary(branch: GitBranchSummary | null | undefined): string {
   if (!branch) return 'No branch selected';
   const parts: string[] = [];
@@ -494,7 +496,7 @@ export function branchContextSummary(branch: GitBranchSummary | null | undefined
     parts.push(`↑${branch.aheadCount ?? 0} ↓${branch.behindCount ?? 0}`);
   }
   if (branch.worktreePath) parts.push('Linked worktree');
-  return parts.join(' · ') || 'No extra status';
+  return parts.join(' · ') || EMPTY_BRANCH_CONTEXT_SUMMARY;
 }
 
 export function branchStatusSummary(branch: GitBranchSummary | null | undefined): string {
@@ -503,8 +505,8 @@ export function branchStatusSummary(branch: GitBranchSummary | null | undefined)
   if (branch.current) parts.push('Current');
   if (branch.kind === 'remote') parts.push('Remote');
   const context = branchContextSummary(branch);
-  if (context !== 'No extra status') parts.push(context);
-  return parts.join(' · ') || 'No extra status';
+  if (context !== EMPTY_BRANCH_CONTEXT_SUMMARY) parts.push(context);
+  return parts.join(' · ') || EMPTY_BRANCH_CONTEXT_SUMMARY;
 }
 
 export function resolveGitBranchWorktreePath(
