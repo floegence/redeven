@@ -58,7 +58,7 @@ export function gitToneDotClass(tone?: GitChromeTone): string {
       return 'bg-violet-500/75';
     case 'neutral':
     default:
-      return 'bg-muted-foreground/35';
+      return 'bg-muted-foreground/55 dark:bg-muted-foreground/70';
   }
 }
 
@@ -217,7 +217,7 @@ export function gitChangeLabel(change: string | undefined): string {
 
 export function gitBranchTone(branch: GitBranchSummary | null | undefined): GitChromeTone {
   if (branch?.current) return 'brand';
-  if (branch?.kind === 'remote') return 'violet';
+  if (branch?.kind === 'remote' || branch?.kind === 'local') return 'violet';
   return 'neutral';
 }
 

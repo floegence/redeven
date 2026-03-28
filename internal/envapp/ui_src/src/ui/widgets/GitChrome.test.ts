@@ -12,6 +12,7 @@ import {
   gitToneAccentColor,
   gitToneActionButtonClass,
   gitToneBadgeClass,
+  gitToneDotClass,
   gitToneHeaderActionButtonClass,
   gitToneInsetClass,
   gitToneSelectableCardClass,
@@ -53,7 +54,7 @@ describe('GitChrome semantic tone helpers', () => {
 
     expect(gitBranchTone({ current: true, kind: 'local' } as any)).toBe('brand');
     expect(gitBranchTone({ current: false, kind: 'remote' } as any)).toBe('violet');
-    expect(gitBranchTone({ current: false, kind: 'local' } as any)).toBe('neutral');
+    expect(gitBranchTone({ current: false, kind: 'local' } as any)).toBe('violet');
 
     expect(gitChangePathClass('modified')).toBe('text-blue-700 dark:text-sky-300');
     expect(gitChangePathClass('conflicted')).toBe('text-red-700 dark:text-red-300');
@@ -74,6 +75,9 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneBadgeClass('brand')).toContain('bg-primary/[0.08]');
     expect(gitToneBadgeClass('brand')).toContain('text-primary');
     expect(gitToneBadgeClass('brand')).toContain('border-primary/20');
+
+    expect(gitToneDotClass('brand')).toContain('bg-blue-600/80');
+    expect(gitToneDotClass('neutral')).toContain('bg-muted-foreground/55');
 
     expect(gitToneSurfaceClass('brand')).toContain('border-l-[3px]');
     expect(gitToneSurfaceClass('brand')).toContain('border-l-primary/60');

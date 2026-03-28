@@ -775,7 +775,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           <div class="flex shrink-0 flex-col gap-2 px-4 pb-1">
             <div class="grid gap-3 md:grid-cols-2">
               <label class="block">
-                <GitLabelBlock class="min-w-0" label="Source" tone="neutral">
+                <GitLabelBlock class="min-w-0" label="Source" tone="violet">
                   <select
                     class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
                     value={sourceRef()}
@@ -791,7 +791,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
               </label>
 
               <label class="block">
-                <GitLabelBlock class="min-w-0" label="Target" tone="neutral">
+                <GitLabelBlock class="min-w-0" label="Target" tone="violet">
                   <select
                     class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
                     value={targetRef()}
