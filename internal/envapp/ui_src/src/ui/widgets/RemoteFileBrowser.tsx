@@ -44,6 +44,7 @@ import { FileBrowserWorkspace } from './FileBrowserWorkspace';
 import { GitStashWindow, type GitStashReviewState } from './GitStashWindow';
 import { GitWorkspace } from './GitWorkspace';
 import {
+  WORKSPACE_VIEW_SECTIONS,
   applyWorkspaceViewPageSnapshot,
   branchIdentity,
   clearWorkspaceViewSections,
@@ -401,7 +402,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitRepoSummaryError, setGitRepoSummaryError] = createSignal('');
   const [gitWorkspace, setGitWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
   const [gitWorkspacePages, setGitWorkspacePages] = createSignal<Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>>(createEmptyWorkspaceViewPageStateRecord());
-  const [gitWorkspaceLoading, setGitWorkspaceLoading] = createSignal(false);
   const [gitWorkspaceError, setGitWorkspaceError] = createSignal('');
   const [selectedGitWorkspaceSection, setSelectedGitWorkspaceSection] = createSignal<GitWorkspaceViewSection>('changes');
   const [selectedGitWorkspaceKey, setSelectedGitWorkspaceKey] = createSignal('');
@@ -886,6 +886,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const gitWorkspacePageState = (section: GitWorkspaceViewSection) => gitWorkspacePages()[section];
+  const selectedGitWorkspacePageState = createMemo(() => gitWorkspacePageState(selectedGitWorkspaceSection()));
+  // Keep blocking `Changes` loading derived from the selected page state so late requests cannot strand a global flag.
+  const gitWorkspaceLoading = createMemo(() => {
+    const state = selectedGitWorkspacePageState();
+    return state.loading && !state.initialized;
+  });
 
   const syncGitWorkspaceSelection = (nextWorkspace: GitListWorkspaceChangesResponse | null | undefined) => {
     if (!nextWorkspace) {
@@ -943,6 +949,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
+  const invalidateInactiveGitWorkspaceSections = (
+    sections: GitWorkspaceViewSection[],
+    activeSection = selectedGitWorkspaceSection(),
+  ) => {
+    const staleSections = Array.from(new Set(sections)).filter((section) => section !== activeSection);
+    if (staleSections.length > 0) {
+      invalidateGitWorkspaceSections(staleSections);
+    }
+  };
+
   const resetGitWorkbenchData = () => {
     gitRepoSummaryReqSeq += 1;
     gitBranchesReqSeq += 1;
@@ -954,7 +970,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitRepoSummaryError('');
     setGitWorkspace(null);
     resetGitWorkspacePages();
-    setGitWorkspaceLoading(false);
     setGitWorkspaceError('');
     setSelectedGitWorkspaceSection('changes');
     setSelectedGitWorkspaceKey('');
@@ -1062,12 +1077,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const refreshGitWorkspaceSectionsAfterMutation = async (repoRootPath: string, sections: GitWorkspaceViewSection[]) => {
     const wanted = Array.from(new Set(sections));
-    invalidateGitWorkspaceSections(wanted);
     await loadGitRepoSummary({ silent: true, repoRootPath });
     const activeSection = selectedGitWorkspaceSection();
     if (gitSubview() === 'changes' && wanted.includes(activeSection)) {
+      invalidateInactiveGitWorkspaceSections(wanted, activeSection);
       await loadGitWorkspaceSection(activeSection, { silent: true, repoRootPath, force: true });
+      return;
     }
+    invalidateGitWorkspaceSections(wanted);
   };
 
   const runGitMutation = async <T,>(
@@ -2069,7 +2086,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       error: options.silent ? state.error : '',
     }));
     if (!options.silent && selectedGitWorkspaceSection() === section && !append) {
-      setGitWorkspaceLoading(true);
       setGitWorkspaceError('');
     }
 
@@ -2106,9 +2122,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           ...state,
           loading: false,
         }));
-      }
-      if (!options.silent && selectedGitWorkspaceSection() === section && !append && seq === gitWorkspaceReqSeqBySection[section]) {
-        setGitWorkspaceLoading(false);
       }
     }
   };
@@ -2167,12 +2180,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       resetGitWorkbenchData();
       return;
     }
-    lastGitRepoKey = '';
-    lastGitCommitContextKey = '';
     void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
     if (gitSubview() === 'changes') {
-      invalidateGitWorkspaceSections(['changes', 'conflicted', 'staged']);
-      void loadCurrentGitWorkspaceSection({ silent: Boolean(gitWorkspace()), force: true });
+      const activeSection = selectedGitWorkspaceSection();
+      invalidateInactiveGitWorkspaceSections(WORKSPACE_VIEW_SECTIONS, activeSection);
+      void loadGitWorkspaceSection(activeSection, {
+        repoRootPath: String(nextInfo.repoRootPath ?? '').trim() || undefined,
+        silent: false,
+        force: true,
+      });
     }
     if (gitSubview() === 'branches') {
       void loadGitBranches({ silent: Boolean(gitBranches()) });
@@ -2926,7 +2942,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (subview === 'changes') {
       const section = selectedGitWorkspaceSection();
       const sectionState = gitWorkspacePageState(section);
-      if (!sectionState.initialized && !sectionState.loading && !gitWorkspaceLoading()) {
+      if (!sectionState.initialized && !sectionState.loading) {
         void loadGitWorkspaceSection(section);
       }
     }

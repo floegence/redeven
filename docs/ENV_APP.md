@@ -77,6 +77,7 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - Workspace rows are now fetched through section-scoped pagination rather than one eager full-workspace snapshot:
   `Changes` pages over `unstaged + untracked`, `Staged` pages over the index snapshot, and `Conflicted` pages over merge-conflict entries.
 - Repository summary remains the lightweight source of truth for workspace counts, while each visible section loads only its current page window and can append more rows on demand.
+- Manual `Changes` refresh now reloads the visible section in place while invalidating the hidden section caches, so the current table does not fall into a duplicate reload race and later section switches still fetch fresh data.
 - For the current branch, branch status uses the active repository root.
 - For a linked local branch, branch status uses the branch `worktreePath`.
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.
