@@ -62,6 +62,10 @@ vi.mock('../chat/blocks/ThinkingBlock', () => ({
   ThinkingBlock: (props: any) => <div class={props.class}>{props.content}</div>,
 }));
 
+vi.mock('../primitives/Tooltip', () => ({
+  Tooltip: (props: any) => <div data-testid="tooltip" data-content={String(props.content ?? '')}>{props.children}</div>,
+}));
+
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
   SidebarContent: (props: any) => <div data-testid="sidebar-content" class={props.class}>{props.children}</div>,
   SidebarItemList: (props: any) => <div class={props.class}>{props.children}</div>,
@@ -98,6 +102,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       type={props.type}
       class={props.class}
       value={props.value ?? ''}
+      disabled={props.disabled}
       placeholder={props.placeholder}
       onInput={(event) => props.onInput?.(event)}
     />
@@ -223,6 +228,28 @@ afterEach(() => {
 });
 
 describe('CodexSidebar', () => {
+  it('disables New Chat with a host diagnostics reason when the host binary is missing', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: false,
+      ready: false,
+      error: 'host codex binary not found on PATH',
+      agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+    await flushAsync();
+
+    const newChatButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('New Chat'));
+    expect(newChatButton).toBeTruthy();
+    expect(newChatButton?.hasAttribute('disabled')).toBe(true);
+    expect(newChatButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toContain('host codex binary not found on PATH');
+  });
+
   it('keeps the existing sidebar threads visible during a background refresh', async () => {
     const refreshThreads = deferred<any[]>();
     const thread1 = {

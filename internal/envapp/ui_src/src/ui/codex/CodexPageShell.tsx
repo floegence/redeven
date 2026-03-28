@@ -211,7 +211,8 @@ export function CodexPageShell() {
     <div data-codex-surface="page-shell" class="codex-page-shell">
       <CodexHeaderBar
         summary={summary()}
-        canArchive={Boolean(codex.activeThreadID())}
+        canArchive={Boolean(codex.activeThreadID()) && codex.hasHostBinary()}
+        archiveDisabledReason={codex.activeThreadID() && !codex.hasHostBinary() ? codex.hostDisabledReason() : ''}
         onArchive={() => void codex.archiveActiveThread()}
       />
 
@@ -282,6 +283,7 @@ export function CodexPageShell() {
               composerText={codex.composerText()}
               submitting={codex.submitting()}
               hostAvailable={summary().hostReady}
+              hostDisabledReason={codex.hostDisabledReason()}
               onWorkspaceInput={codex.setWorkingDirDraft}
               onModelChange={codex.setModelDraft}
               onEffortChange={codex.setEffortDraft}

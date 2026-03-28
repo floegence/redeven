@@ -86,6 +86,7 @@ export function CodexComposerShell(props: {
   composerText: string;
   submitting: boolean;
   hostAvailable: boolean;
+  hostDisabledReason: string;
   onWorkspaceInput: (value: string) => void;
   onModelChange: (value: string) => void;
   onEffortChange: (value: string) => void;
@@ -140,7 +141,7 @@ export function CodexComposerShell(props: {
   };
   const statusNote = () => {
     if (!props.hostAvailable) {
-      return 'Install `codex` on the host to enable Codex chat.';
+      return String(props.hostDisabledReason ?? '').trim() || 'Install `codex` on the host to enable Codex chat.';
     }
     if (props.attachments.length > 0 && !props.supportsImages) {
       return 'The selected model does not currently accept image input.';
@@ -168,6 +169,7 @@ export function CodexComposerShell(props: {
           <textarea
             ref={textareaRef}
             value={props.composerText}
+            disabled={!props.hostAvailable}
             onInput={(event) => {
               props.onComposerInput(event.currentTarget.value);
               scheduleAdjustHeight();
@@ -214,8 +216,9 @@ export function CodexComposerShell(props: {
               class={cn(
                 'codex-chat-chip codex-chat-working-dir-chip codex-chat-chip-actionable',
               )}
+              disabled={!props.hostAvailable}
               onClick={() => setShowWorkspaceEditor((value) => !value)}
-              title={workspaceTitle()}
+              title={props.hostAvailable ? workspaceTitle() : statusNote() || workspaceTitle()}
               aria-label="Edit working directory"
               aria-expanded={showWorkspaceEditor()}
             >
@@ -288,6 +291,7 @@ export function CodexComposerShell(props: {
             <div class="codex-chat-input-workspace-editor">
               <Input
                 value={props.workspaceLabel}
+                disabled={!props.hostAvailable}
                 onInput={(event) => props.onWorkspaceInput(event.currentTarget.value)}
                 placeholder="Use host default working directory"
                 aria-label="Working directory"

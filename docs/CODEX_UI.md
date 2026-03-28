@@ -124,6 +124,7 @@ Current Env App behavior:
 
 - Codex shows as a separate activity-bar item, not inside Flower.
 - If host `codex` is unavailable, the entry point still stays visible and the Codex surface shows inline host diagnostics instead of a separate disabled/settings-jump flow.
+- When host `codex` is unavailable, Codex keeps the page-level diagnostics visible but disables host-backed actions such as `New Chat`, archive, send, attachments, and working-directory editing rather than leaving a half-interactive shell.
 - The Codex sidebar is a dedicated conversation navigator for Codex threads plus compact host/runtime context; it mirrors the same overall layout rhythm as Flower without reusing Flower-owned UI modules.
 - The main Codex page is a Codex-owned chat shell with a single-row compact header, a Flower-aligned transcript lane for user/assistant/evidence rows, inline approvals, a Flower-aligned bottom dock, and a dedicated composer surface.
 - The Codex surface uses floe-webapp cards/forms/tags for a consistent Env App look while keeping Codex-specific state and request handling separate.
@@ -153,6 +154,7 @@ Current Env App behavior:
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.
+- Codex icon rendering prefers a bundled official artwork asset, but it now also keeps an inline fallback glyph so embedded builds never surface the browser's broken-image placeholder if artwork loading fails.
 - Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
 
 ## Permissions

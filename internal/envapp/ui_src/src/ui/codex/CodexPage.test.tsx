@@ -60,6 +60,10 @@ vi.mock('../chat/blocks/ThinkingBlock', () => ({
   ThinkingBlock: (props: any) => <div class={props.class}>{props.content}</div>,
 }));
 
+vi.mock('../primitives/Tooltip', () => ({
+  Tooltip: (props: any) => <div data-testid="tooltip" data-content={String(props.content ?? '')}>{props.children}</div>,
+}));
+
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button
@@ -84,6 +88,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       type={props.type}
       class={props.class}
       value={props.value ?? ''}
+      disabled={props.disabled}
       placeholder={props.placeholder}
       onInput={(event) => props.onInput?.(event)}
     />
@@ -213,6 +218,34 @@ describe('CodexPage', () => {
     expect(host.querySelector('.codex-chat-input-meta')).not.toBeNull();
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
+  });
+
+  it('disables host-backed composer controls while Codex is unavailable', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: false,
+      ready: false,
+      error: 'host codex binary not found on PATH',
+      agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+    await flushAsync();
+
+    const textarea = host.querySelector('textarea');
+    const workingDirButton = host.querySelector('button[aria-label="Edit working directory"]');
+    const attachmentButton = host.querySelector('button[title="Add attachments"]');
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]');
+
+    expect(textarea?.hasAttribute('disabled')).toBe(true);
+    expect(workingDirButton?.hasAttribute('disabled')).toBe(true);
+    expect(attachmentButton?.hasAttribute('disabled')).toBe(true);
+    expect(sendButton?.hasAttribute('disabled')).toBe(true);
+    expect(host.textContent).toContain('host codex binary not found on PATH');
   });
 
   it('renders the conversation shell, transcript rows, and runtime flags for the active Codex thread', async () => {
