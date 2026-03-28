@@ -47,7 +47,7 @@ export function gitToneDotClass(tone?: GitChromeTone): string {
     case 'info':
       return 'bg-sky-500/75';
     case 'brand':
-      return 'bg-primary/75';
+      return 'bg-blue-600/80 dark:bg-sky-400/85';
     case 'success':
       return 'bg-success/75';
     case 'warning':

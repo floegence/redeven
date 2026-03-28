@@ -553,15 +553,21 @@ function HistoryList(props: Pick<
                                                   fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}
                                                 >
                                                   <div class="space-y-2">
-                                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                                      <div class="flex flex-wrap items-center gap-2">
-                                                        <div class="text-xs font-medium text-foreground">Files in Commit</div>
-                                                        <GitMetaPill tone="neutral">{files().length} file{files().length === 1 ? '' : 's'}</GitMetaPill>
-                                                        <div class="text-[11px] text-muted-foreground">
-                                                          <GitChangeMetrics additions={fileTotals().additions} deletions={fileTotals().deletions} />
-                                                        </div>
-                                                      </div>
-                                                      <div class="flex items-center gap-2">
+                                                    <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                                                      <GitLabelBlock
+                                                        class="min-w-0 flex-1"
+                                                        label="Files in Commit"
+                                                        tone="info"
+                                                        meta={
+                                                          <>
+                                                            <GitMetaPill tone="neutral">{files().length} file{files().length === 1 ? '' : 's'}</GitMetaPill>
+                                                            <div class="text-[11px] text-muted-foreground">
+                                                              <GitChangeMetrics additions={fileTotals().additions} deletions={fileTotals().deletions} />
+                                                            </div>
+                                                          </>
+                                                        }
+                                                      />
+                                                      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
                                                         <Show when={props.onSwitchDetached}>
                                                           <Button
                                                             size="sm"
@@ -768,34 +774,36 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         <div class="flex min-h-0 flex-1 flex-col">
           <div class="flex shrink-0 flex-col gap-2 px-4 pb-1">
             <div class="grid gap-3 md:grid-cols-2">
-              <label class="space-y-1">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">Source</div>
-                <select
-                  class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
-                  value={sourceRef()}
-                  onInput={(event) => setSourceRef(event.currentTarget.value)}
-                >
-                  <For each={branchOptions()}>
-                    {(branch) => (
-                      <option value={String(branch.name ?? '').trim()}>{compareOptionLabel(branch)}</option>
-                    )}
-                  </For>
-                </select>
+              <label class="block">
+                <GitLabelBlock class="min-w-0" label="Source" tone="neutral">
+                  <select
+                    class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
+                    value={sourceRef()}
+                    onInput={(event) => setSourceRef(event.currentTarget.value)}
+                  >
+                    <For each={branchOptions()}>
+                      {(branch) => (
+                        <option value={String(branch.name ?? '').trim()}>{compareOptionLabel(branch)}</option>
+                      )}
+                    </For>
+                  </select>
+                </GitLabelBlock>
               </label>
 
-              <label class="space-y-1">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">Target</div>
-                <select
-                  class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
-                  value={targetRef()}
-                  onInput={(event) => setTargetRef(event.currentTarget.value)}
-                >
-                  <For each={branchOptions()}>
-                    {(branch) => (
-                      <option value={String(branch.name ?? '').trim()}>{compareOptionLabel(branch)}</option>
-                    )}
-                  </For>
-                </select>
+              <label class="block">
+                <GitLabelBlock class="min-w-0" label="Target" tone="neutral">
+                  <select
+                    class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
+                    value={targetRef()}
+                    onInput={(event) => setTargetRef(event.currentTarget.value)}
+                  >
+                    <For each={branchOptions()}>
+                      {(branch) => (
+                        <option value={String(branch.name ?? '').trim()}>{compareOptionLabel(branch)}</option>
+                      )}
+                    </For>
+                  </select>
+                </GitLabelBlock>
               </label>
             </div>
           </div>
@@ -810,14 +818,20 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                   {(compareAccessor) => (
                     <div class="flex min-h-0 flex-1 flex-col gap-3">
                       <div class="flex min-h-0 flex-1 flex-col gap-2">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <div class="text-xs font-medium text-foreground">Changed Files</div>
-                            <GitMetaPill tone="neutral">{compareAccessor().targetRef}</GitMetaPill>
-                            <GitMetaPill tone="neutral">vs {compareAccessor().baseRef}</GitMetaPill>
-                            <GitMetaPill tone="warning">{compareFiles().length} file{compareFiles().length === 1 ? '' : 's'}</GitMetaPill>
-                          </div>
-                          <div class="text-[11px] text-muted-foreground">Open any file to inspect the diff.</div>
+                        <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                          <GitLabelBlock
+                            class="min-w-0 flex-1"
+                            label="Changed Files"
+                            tone="warning"
+                            meta={
+                              <>
+                                <GitMetaPill tone="neutral">{compareAccessor().targetRef}</GitMetaPill>
+                                <GitMetaPill tone="neutral">vs {compareAccessor().baseRef}</GitMetaPill>
+                                <GitMetaPill tone="warning">{compareFiles().length} file{compareFiles().length === 1 ? '' : 's'}</GitMetaPill>
+                              </>
+                            }
+                          />
+                          <div class="text-[11px] text-muted-foreground sm:text-right">Open any file to inspect the diff.</div>
                         </div>
 
                         <div class="flex min-h-0 flex-1 overflow-hidden">
