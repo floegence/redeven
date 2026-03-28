@@ -81,23 +81,38 @@ function threadSortTime(thread: CodexThread): number {
   return 0;
 }
 
+type ThreadSortRecord = Readonly<{
+  thread: CodexThread;
+  canonicalIndex: number;
+  sortTime: number;
+}>;
+
 function sortThreads(threads: readonly CodexThread[]): CodexThread[] {
-  return [...threads].sort((left, right) => threadSortTime(right) - threadSortTime(left));
+  return threads
+    .map<ThreadSortRecord>((thread, canonicalIndex) => ({
+      thread,
+      canonicalIndex,
+      sortTime: threadSortTime(thread),
+    }))
+    .sort((left, right) => {
+      const sortDelta = right.sortTime - left.sortTime;
+      if (sortDelta !== 0) return sortDelta;
+      return left.canonicalIndex - right.canonicalIndex;
+    })
+    .map((entry) => entry.thread);
 }
 
-function normalizeOptimisticThread(
+function patchThreadDisplayFallbacks(
   thread: CodexThread,
   fallbackPreview?: string,
   fallbackCWD?: string,
 ): CodexThread {
   const normalizedPreview = String(thread.preview ?? '').trim() || String(fallbackPreview ?? '').trim();
   const normalizedCWD = String(thread.cwd ?? '').trim() || String(fallbackCWD ?? '').trim();
-  const nowUnixSeconds = Math.floor(Date.now() / 1000);
   return {
     ...thread,
     preview: normalizedPreview,
     cwd: normalizedCWD,
-    updated_at_unix_s: Math.max(Number(thread.updated_at_unix_s ?? 0) || 0, nowUnixSeconds),
   };
 }
 
@@ -297,7 +312,7 @@ export function CodexProvider(props: ParentProps) {
       const thread = entry.session.thread;
       const threadID = String(thread.id ?? '').trim();
       if (!threadID) continue;
-      merged.set(threadID, normalizeOptimisticThread(thread));
+      merged.set(threadID, patchThreadDisplayFallbacks(thread));
     }
     return sortThreads(Array.from(merged.values()));
   });
@@ -438,7 +453,7 @@ export function CodexProvider(props: ParentProps) {
   const upsertOptimisticThread = (thread: CodexThread | null | undefined, fallbackPreview?: string, fallbackCWD?: string) => {
     const normalizedThreadID = String(thread?.id ?? '').trim();
     if (!normalizedThreadID || !thread) return;
-    const normalizedThread = normalizeOptimisticThread(thread, fallbackPreview, fallbackCWD);
+    const normalizedThread = patchThreadDisplayFallbacks(thread, fallbackPreview, fallbackCWD);
     setOptimisticThreadsByID((current) => ({
       ...current,
       [normalizedThreadID]: normalizedThread,

@@ -158,6 +158,12 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function sidebarThreadIDs(host: ParentNode): string[] {
+  return Array.from(host.querySelectorAll<HTMLElement>('[data-codex-surface="thread-card"]'))
+    .map((node) => String(node.dataset.threadId ?? '').trim())
+    .filter(Boolean);
+}
+
 function renderSurface(host: HTMLDivElement) {
   render(() => (
     <EnvContext.Provider
@@ -335,6 +341,7 @@ describe('CodexSidebar', () => {
     expect(host.textContent).toContain('Host ready');
     expect(host.textContent).toContain('Backend audit');
     expect(host.textContent).toContain('Review the gateway wiring');
+    expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
     expect(host.textContent).not.toContain('Dedicated Codex chat shell with host-native runtime and independent thread state');
     expect(host.textContent).not.toContain('/usr/local/bin/codex');
 
@@ -356,6 +363,126 @@ describe('CodexSidebar', () => {
     expect(host.textContent).toContain('GPT-5.4');
     expect(host.querySelector('.codex-page-header-context')).toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
+    expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
+  });
+
+  it('moves a thread to the top only after a real send updates the active session', async () => {
+    const threadList = [
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'idle',
+        cwd: '/workspace',
+      },
+      {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'idle',
+        cwd: '/workspace/ui',
+      },
+    ];
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request', 'never'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue(threadList);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: {
+        ...(threadList.find((thread) => thread.id === threadID) ?? threadList[0]!),
+        turns: [],
+      },
+      runtime_config: {
+        cwd: threadID === 'thread_2' ? '/workspace/ui' : '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'idle',
+      active_status_flags: [],
+    }));
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
+
+    const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
+    if (!target) {
+      throw new Error('UI polish thread button not found');
+    }
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
+
+    const composer = host.querySelector('textarea[placeholder^="Ask Codex"]') as HTMLTextAreaElement | null;
+    if (!composer) {
+      throw new Error('composer textarea not found');
+    }
+    composer.value = 'Keep the selected thread at the top after a real send';
+    composer.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!sendButton) {
+      throw new Error('send button not found');
+    }
+    sendButton.click();
+
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadID: 'thread_2',
+      inputText: 'Keep the selected thread at the top after a real send',
+    }));
+    expect(sidebarThreadIDs(host)).toEqual(['thread_2', 'thread_1']);
     expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
   });
 
