@@ -342,6 +342,31 @@ describe('EnvAppShell top bar affordances', () => {
     }
   });
 
+  it('keeps desktop top bar tooltips enabled for the shared icon actions', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const commandPaletteButton = host.querySelector('button[aria-label="Command palette"]');
+      const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
+
+      expect(commandPaletteButton).toBeTruthy();
+      expect(commandPaletteButton?.getAttribute('data-tooltip')).toBe('Command palette');
+      expect(toggleThemeButton).toBeTruthy();
+      expect(toggleThemeButton?.getAttribute('data-tooltip')).toBe('Toggle theme');
+    } finally {
+      dispose();
+    }
+  });
+
   it('disables top bar tooltips on mobile layouts to avoid sticky touch overlays', async () => {
     layoutIsMobile = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

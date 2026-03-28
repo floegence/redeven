@@ -40,6 +40,7 @@ Notes:
 
 - Tooltips and other anchored floating affordances must not rely on inline absolute positioning inside dialog bodies, cards, or other `overflow-hidden` containers.
 - The shared Env App tooltip primitive renders through a body-level portal and resolves viewport-safe anchor geometry so dialogs can keep their clipping and scroll boundaries intact.
+- `EnvAppShell` top-bar icon actions intentionally pass `tooltip={false}` on mobile while keeping desktop labels enabled through the shared upstream `TopBarIconButton`, so any structural fix for that toggle path belongs in `floe-webapp` first and then flows back here through a released semver upgrade.
 - New anchored overlays should reuse the shared positioning helper instead of weakening dialog/container overflow rules just to make a floating layer visible.
 
 ## Flower Chat Render Contract

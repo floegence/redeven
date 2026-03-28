@@ -62,6 +62,15 @@ function expectedTarballUrl(packageName: string, version: string): string {
 }
 
 describe('floe-webapp dependency policy', () => {
+  it('keeps floe-webapp core and protocol aligned to the same released version', () => {
+    const dependencies = readDependencySpecifiers();
+    const versions = FLOE_WEBAPP_DEPENDENCIES.map((dependencyName) =>
+      extractVersionSpecifier(getDependencySpecifier(dependencies, dependencyName)),
+    );
+
+    expect(new Set(versions).size, 'floe-webapp packages must be upgraded together').toBe(1);
+  });
+
   it('keeps floe-webapp dependencies on released semver ranges instead of local references', () => {
     const dependencies = readDependencySpecifiers();
 
