@@ -1,10 +1,19 @@
 .codex-page-shell {
+  --codex-surface-page: color-mix(in srgb, var(--muted) 5%, var(--background));
+  --codex-surface-panel: color-mix(in srgb, var(--card) 98%, var(--background));
+  --codex-surface-panel-subtle: color-mix(in srgb, var(--muted) 14%, var(--background));
+  --codex-surface-panel-strong: color-mix(in srgb, var(--muted) 20%, var(--background));
+  --codex-surface-accent-subtle: color-mix(in srgb, var(--primary) 8%, transparent);
+  --codex-surface-warning-subtle: color-mix(in srgb, var(--warning) 8%, transparent);
+  --codex-border-default: color-mix(in srgb, var(--border) 72%, transparent);
+  --codex-border-accent: color-mix(in srgb, var(--primary) 28%, var(--border));
+  --codex-text-secondary: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
   display: flex;
   min-width: 0;
   min-height: 0;
   height: 100%;
   flex-direction: column;
-  background: color-mix(in srgb, var(--muted) 6%, var(--background));
+  background: var(--codex-surface-page);
 }
 
 .codex-page-header {
@@ -127,13 +136,8 @@
   min-width: 0;
   flex-shrink: 0;
   flex-direction: column;
-  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--background) 92%, transparent),
-      color-mix(in srgb, var(--card) 96%, transparent)
-    );
+  border-top: 1px solid var(--codex-border-default);
+  background: var(--codex-surface-panel);
 }
 
 .codex-page-toolbar {
@@ -187,12 +191,12 @@
 }
 
 .codex-page-chip--neutral {
-  background: color-mix(in srgb, var(--muted) 38%, var(--background));
+  background: var(--codex-surface-panel-subtle);
   color: var(--muted-foreground);
 }
 
 .codex-page-chip--accent {
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  background: var(--codex-surface-accent-subtle);
   color: color-mix(in srgb, var(--primary) 82%, var(--foreground));
 }
 
@@ -229,26 +233,24 @@
 
 .codex-status-banner {
   border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border: 1px solid var(--codex-border-default);
   padding: 0.75rem 0.875rem;
-  box-shadow: 0 14px 34px -30px color-mix(in srgb, var(--foreground) 22%, transparent);
 }
 
 .codex-status-banner--neutral {
-  background: color-mix(in srgb, var(--card) 82%, transparent);
+  background: var(--codex-surface-panel);
 }
 
 .codex-status-banner--warning {
   border-color: color-mix(in srgb, var(--warning) 26%, transparent);
-  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  background: var(--codex-surface-warning-subtle);
 }
 
 .codex-request-panel {
   border: 1px solid color-mix(in srgb, var(--warning) 24%, transparent);
   border-radius: 1rem;
-  background: color-mix(in srgb, var(--warning) 7%, transparent);
+  background: var(--codex-surface-warning-subtle);
   padding: 0.8125rem;
-  box-shadow: 0 18px 40px -34px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
 .codex-request-list {
@@ -262,17 +264,17 @@
 }
 
 .codex-request-card {
-  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 1rem;
-  background: color-mix(in srgb, var(--background) 86%, var(--card));
+  background: var(--codex-surface-panel);
   padding: 0.8125rem;
 }
 
 .codex-request-command {
   margin-top: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 0.85rem;
-  background: color-mix(in srgb, var(--muted) 16%, var(--background));
+  background: var(--codex-surface-panel-subtle);
   padding: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.75rem;
@@ -281,22 +283,14 @@
 
 .codex-chat-input.chat-input-container {
   margin: 0.5rem 0;
-  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 0.875rem;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--card) 98%, var(--background)),
-      color-mix(in srgb, var(--card) 95%, var(--muted) 5%)
-    );
-  box-shadow: 0 8px 24px -24px color-mix(in srgb, var(--foreground) 24%, transparent);
+  background: var(--codex-surface-panel);
 }
 
 .codex-chat-input.chat-input-container-focused {
-  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent),
-    0 12px 32px -26px color-mix(in srgb, var(--primary) 24%, transparent);
+  border-color: var(--codex-border-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 .codex-chat-input-body {
@@ -366,9 +360,9 @@
   max-width: min(100%, 13rem);
   align-items: center;
   gap: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--muted) 22%, var(--background));
+  background: var(--codex-surface-panel-subtle);
   padding: 0.3125rem 0.4375rem 0.3125rem 0.3125rem;
 }
 
@@ -426,7 +420,7 @@
   gap: 0.5rem;
   flex-wrap: wrap;
   padding-top: 0.625rem;
-  border-top: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+  border-top: 1px solid var(--codex-border-default);
 }
 
 .codex-chat-chip {
@@ -439,7 +433,7 @@
   padding: 0 0.75rem;
   border: 1px solid transparent;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 38%, var(--background));
+  background: var(--codex-surface-panel-subtle);
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--muted-foreground);
@@ -456,7 +450,7 @@
 
 .codex-chat-chip-actionable:hover,
 .codex-chat-chip-actionable:focus-visible {
-  background: color-mix(in srgb, var(--muted) 56%, var(--background));
+  background: var(--codex-surface-panel-strong);
   color: var(--foreground);
 }
 
@@ -481,7 +475,7 @@
   justify-content: center;
   border: none;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 36%, var(--background));
+  background: var(--codex-surface-panel-subtle);
   color: var(--muted-foreground);
   cursor: pointer;
   transition:
@@ -492,7 +486,7 @@
 
 .codex-chat-meta-btn:hover:not(:disabled),
 .codex-chat-meta-btn:focus-visible:not(:disabled) {
-  background: color-mix(in srgb, var(--muted) 54%, var(--background));
+  background: var(--codex-surface-panel-strong);
   color: var(--foreground);
 }
 
@@ -509,9 +503,9 @@
   gap: 0.5rem;
   height: 2rem;
   padding: 0 0.25rem 0 0.6875rem;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--card) 92%, var(--background));
+  background: var(--codex-surface-panel);
   color: var(--foreground);
 }
 
@@ -555,8 +549,8 @@
 .codex-chat-input-workspace-input {
   min-width: 0;
   border-radius: 0.75rem;
-  border-color: color-mix(in srgb, var(--border) 68%, transparent);
-  background: color-mix(in srgb, var(--background) 96%, transparent);
+  border-color: var(--codex-border-default);
+  background: var(--codex-surface-panel);
   font-size: 0.75rem;
 }
 
@@ -598,6 +592,18 @@
   max-width: 32rem;
   margin-bottom: 2rem;
   text-align: center;
+}
+
+.codex-empty-ornament {
+  display: inline-flex;
+  width: 3.5rem;
+  height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--codex-border-default);
+  border-radius: 9999px;
+  background: var(--codex-surface-panel);
+  color: var(--primary);
 }
 
 .codex-empty-suggestions {
@@ -669,6 +675,32 @@
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
+}
+
+.codex-page-shell .chat-message-bubble-user {
+  background: var(--primary);
+  box-shadow: none;
+}
+
+.codex-page-shell .chat-input-send-btn-active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.codex-page-shell .chat-input-send-btn-active:hover {
+  background: color-mix(in srgb, var(--primary) 92%, black 8%);
+  box-shadow: none;
+  transform: none;
+}
+
+.codex-page-shell .chat-shell-block {
+  background: #0d1117;
+  box-shadow: none;
+}
+
+.codex-page-shell .chat-shell-block-running,
+.codex-page-shell .chat-shell-block-error {
+  box-shadow: none;
 }
 
 .codex-working-indicator-card {
@@ -825,13 +857,10 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 1rem;
-  background:
-    radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 56%),
-    color-mix(in srgb, var(--card) 96%, transparent);
+  background: var(--codex-surface-panel);
   padding: 0.75rem 0.875rem;
-  box-shadow: 0 10px 28px -24px color-mix(in srgb, var(--foreground) 18%, transparent);
 }
 
 .codex-chat-evidence-header {
@@ -848,7 +877,7 @@
   width: 1.375rem;
   height: 1.375rem;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 46%, transparent);
+  background: var(--codex-surface-panel-subtle);
   color: var(--foreground);
 }
 
@@ -860,9 +889,10 @@
   display: flex;
   width: min(100%, 42rem);
   flex-direction: column;
-  border-left: 2px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border: 1px solid var(--codex-border-default);
+  border-left: 2px solid var(--codex-border-accent);
   border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--muted) 26%, transparent);
+  background: var(--codex-surface-page);
   padding: 0.5rem 0.625rem 0.5rem 0.75rem;
 }
 
@@ -887,7 +917,7 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  color: color-mix(in srgb, var(--primary) 78%, var(--foreground));
+  color: color-mix(in srgb, var(--foreground) 74%, var(--muted-foreground));
 }
 
 .codex-chat-reasoning-preview {
@@ -898,7 +928,7 @@
   white-space: nowrap;
   font-size: 0.71875rem;
   line-height: 1.25;
-  color: color-mix(in srgb, var(--muted-foreground) 92%, var(--foreground) 8%);
+  color: var(--codex-text-secondary);
 }
 
 .codex-chat-reasoning-cursor {
@@ -933,7 +963,7 @@
 }
 
 .codex-chat-reasoning-markdown {
-  color: color-mix(in srgb, var(--muted-foreground) 92%, var(--foreground) 8%);
+  color: var(--codex-text-secondary);
 }
 
 .codex-chat-shell-block {
@@ -1036,20 +1066,23 @@
 }
 
 .codex-chat-markdown-block .chat-md-inline-code {
-  border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
-  background: color-mix(in srgb, var(--muted) 55%, transparent);
-  color: color-mix(in srgb, var(--primary) 82%, var(--foreground));
+  border: 1px solid var(--codex-border-default);
+  background: var(--codex-surface-panel-subtle);
+  color: var(--foreground);
 }
 
 .codex-chat-markdown-block .chat-md-link {
   color: color-mix(in srgb, var(--primary) 84%, var(--foreground));
-  border-bottom-color: color-mix(in srgb, var(--primary) 24%, transparent);
+  border-bottom: none;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  text-decoration-thickness: 1px;
   text-underline-offset: 0.12em;
   overflow-wrap: anywhere;
 }
 
 .codex-chat-markdown-block .chat-md-link:hover {
-  border-bottom-color: color-mix(in srgb, var(--primary) 58%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--primary) 58%, transparent);
 }
 
 .codex-chat-markdown-block .chat-md-file-ref {
@@ -1060,21 +1093,18 @@
   gap: 0.3125rem;
   padding: 0.125rem 0.375rem 0.125rem 0.4375rem;
   margin-inline: 0.0625rem;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--muted) 66%, var(--background));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 42%, transparent);
+  background: transparent;
   vertical-align: baseline;
   overflow: hidden;
   overflow-wrap: normal;
-  border-bottom-color: transparent;
   text-decoration: none;
 }
 
 .codex-chat-markdown-block .chat-md-file-ref:hover {
-  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
-  border-bottom-color: transparent;
-  background: color-mix(in srgb, var(--accent) 70%, var(--background));
+  border-color: var(--codex-border-accent);
+  color: color-mix(in srgb, var(--primary) 84%, var(--foreground));
 }
 
 .codex-chat-markdown-block .chat-md-file-ref-name {
@@ -1091,17 +1121,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
+  color: var(--codex-text-secondary);
   font-size: 0.65625rem;
   line-height: 1.2;
 }
 
 .codex-chat-markdown-block .chat-md-file-ref-line {
   flex: 0 0 auto;
-  padding: 0.0625rem 0.3125rem;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: color-mix(in srgb, var(--primary) 84%, var(--foreground));
+  color: var(--codex-text-secondary);
   font-size: 0.65625rem;
   font-weight: 650;
   line-height: 1.2;
@@ -1110,7 +1137,6 @@
 .codex-chat-markdown-block pre.chat-md-code-block {
   margin: 0.875rem 0;
   border-radius: 0.75rem;
-  box-shadow: 0 18px 36px -32px rgb(15 23 42 / 0.65);
 }
 
 .codex-chat-markdown-block pre.chat-md-code-block code {
@@ -1120,10 +1146,10 @@
 .codex-chat-markdown-block .chat-md-blockquote {
   margin: 0.75rem 0;
   border-left-width: 2px;
-  border-left-color: color-mix(in srgb, var(--primary) 30%, transparent);
+  border-left-color: var(--codex-border-accent);
   border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--muted) 26%, transparent);
-  color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
+  background: var(--codex-surface-panel-subtle);
+  color: var(--codex-text-secondary);
   font-style: normal;
   padding: 0.75rem 0.875rem 0.75rem 1rem;
 }
@@ -1133,21 +1159,21 @@
   overflow: hidden;
   border-collapse: separate;
   border-spacing: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--card) 94%, transparent);
+  background: var(--codex-surface-panel);
 }
 
 .codex-chat-markdown-block :is(th, td) {
-  border-color: color-mix(in srgb, var(--border) 58%, transparent);
+  border-color: var(--codex-border-default);
 }
 
 .codex-chat-markdown-block th {
-  background: color-mix(in srgb, var(--muted) 52%, transparent);
+  background: var(--codex-surface-panel-subtle);
 }
 
 .codex-chat-markdown-block tr:nth-child(even) td {
-  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
 }
 
 .codex-chat-user-markdown-block,
@@ -1179,16 +1205,18 @@
 
 .codex-chat-user-markdown-block .chat-md-inline-code {
   color: inherit;
-  background-color: color-mix(in srgb, var(--background) 18%, transparent);
+  background-color: color-mix(in srgb, var(--background) 12%, transparent);
 }
 
 .codex-chat-user-markdown-block .chat-md-link {
   color: inherit;
-  border-bottom-color: color-mix(in srgb, var(--primary-foreground) 32%, transparent);
+  border-bottom: none;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--primary-foreground) 32%, transparent);
 }
 
 .codex-chat-user-markdown-block .chat-md-link:hover {
-  border-bottom-color: color-mix(in srgb, var(--primary-foreground) 56%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--primary-foreground) 56%, transparent);
 }
 
 .codex-chat-user-markdown-block li::marker {
@@ -1221,9 +1249,9 @@
   display: inline-flex;
   max-width: 100%;
   align-items: center;
-  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 24%, transparent);
+  background: var(--codex-surface-panel-subtle);
   padding: 0.1875rem 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1247,11 +1275,10 @@
 
 .codex-sidebar-summary {
   margin: 0 0.25rem 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border: 1px solid var(--codex-border-default);
   border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--card) 72%, transparent);
+  background: var(--codex-surface-panel);
   padding: 0.625rem;
-  box-shadow: 0 18px 42px -38px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
 .codex-sidebar-summary-copy {
@@ -1265,7 +1292,7 @@
   margin: 0 0.25rem 0.5rem;
   border: 1px solid color-mix(in srgb, var(--warning) 26%, transparent);
   border-radius: 1rem;
-  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  background: var(--codex-surface-warning-subtle);
   padding: 0.75rem;
   font-size: 0.75rem;
   line-height: 1.5;
