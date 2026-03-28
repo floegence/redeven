@@ -326,6 +326,11 @@
   box-shadow: none !important;
 }
 
+.codex-chat-input-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .codex-chat-input-send-slot {
   display: flex;
   flex-shrink: 0;
@@ -452,6 +457,11 @@
 .codex-chat-chip-actionable:focus-visible {
   background: var(--codex-surface-panel-strong);
   color: var(--foreground);
+}
+
+.codex-chat-chip-actionable:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .codex-chat-working-dir-chip {

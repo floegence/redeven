@@ -221,6 +221,7 @@ export type CodexContextValue = Readonly<{
   statusLoading: Accessor<boolean>;
   statusError: Accessor<string | null>;
   hasHostBinary: Accessor<boolean>;
+  hostDisabledReason: Accessor<string>;
   capabilities: Accessor<CodexCapabilitiesSnapshot | null | undefined>;
   capabilitiesLoading: Accessor<boolean>;
   activeThreadID: Accessor<string | null>;
@@ -603,7 +604,11 @@ export function CodexProvider(props: ParentProps) {
   });
 
   const statusError = createMemo(() => statusErrorMessage(status));
-  const hasHostBinary = createMemo(() => !!status()?.available);
+  const hostDisabledReason = createMemo(() => {
+    if (status()?.available) return '';
+    return statusError() || 'Install `codex` on the host machine and refresh diagnostics.';
+  });
+  const hasHostBinary = createMemo(() => Boolean(status()?.available));
 
   const activeThread = createMemo<CodexThread | null>(() => (
     selectedSession()?.thread ??
@@ -787,6 +792,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const startNewThreadDraft = () => {
+    if (!hasHostBinary()) return;
     threadController.startNewThreadDraft();
     setStreamError(null);
   };
@@ -817,7 +823,7 @@ export function CodexProvider(props: ParentProps) {
     }));
     if ((!message.trim() && attachmentInputs.length === 0) || submitting()) return;
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', 'Install `codex` on the host machine and refresh diagnostics.');
+      notify.error('Host Codex not detected', hostDisabledReason());
       return;
     }
 
@@ -933,6 +939,10 @@ export function CodexProvider(props: ParentProps) {
   const archiveThread = async (threadID: string) => {
     const normalizedThreadID = String(threadID ?? '').trim();
     if (!normalizedThreadID) return;
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', hostDisabledReason());
+      return;
+    }
     try {
       await archiveCodexThread(normalizedThreadID);
       removeOptimisticThread(normalizedThreadID);
@@ -973,6 +983,7 @@ export function CodexProvider(props: ParentProps) {
     statusLoading: () => status.loading,
     statusError,
     hasHostBinary,
+    hostDisabledReason,
     capabilities,
     capabilitiesLoading: () => capabilities.loading,
     activeThreadID: selectedThreadID,

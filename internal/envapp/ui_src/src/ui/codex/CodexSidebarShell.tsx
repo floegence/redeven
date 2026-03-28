@@ -4,6 +4,7 @@ import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layo
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
+import { Tooltip } from '../primitives/Tooltip';
 import { useCodexContext } from './CodexProvider';
 import {
   displayStatus,
@@ -155,18 +156,29 @@ export function CodexSidebarShell() {
   const groupedThreads = createMemo(() => groupThreadsByDate(codex.threads()));
   const showGroupHeaders = createMemo(() => codex.threads().length >= 5);
   const showInitialLoading = createMemo(() => codex.threadsLoading() && !hasThreads());
+  const newChatDisabledReason = createMemo(() => codex.hostDisabledReason());
+  const renderNewChatButton = () => (
+    <Button
+      variant="primary"
+      size="sm"
+      class="h-8 flex-1 justify-start gap-2 shadow-sm"
+      disabled={!codex.hasHostBinary()}
+      onClick={codex.startNewThreadDraft}
+    >
+      New Chat
+    </Button>
+  );
 
   return (
     <SidebarContent class="codex-sidebar-shell">
       <div class="codex-sidebar-toolbar">
-        <Button
-          variant="primary"
-          size="sm"
-          class="h-8 flex-1 justify-start gap-2 shadow-sm"
-          onClick={codex.startNewThreadDraft}
-        >
-          New Chat
-        </Button>
+        <Show when={!codex.hasHostBinary() && newChatDisabledReason()} fallback={renderNewChatButton()}>
+          <Tooltip content={newChatDisabledReason()} placement="top" delay={0}>
+            <span class="flex w-full">
+              {renderNewChatButton()}
+            </span>
+          </Tooltip>
+        </Show>
       </div>
 
       <RuntimeSummary />
