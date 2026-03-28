@@ -1185,6 +1185,7 @@ describe('GitBranchesPanel interactions', () => {
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
       const tablistRow = tablist?.parentElement as HTMLDivElement | null;
+      const branchHeaderTopRow = tablistRow?.parentElement as HTMLDivElement | null;
       const shortcutDock = host.querySelector('[data-git-shortcut-dock]') as HTMLDivElement | null;
       const actionsGroup = Array.from(controlBar?.querySelectorAll('div') ?? []).find((node) =>
         node.className.includes('lg:ml-auto') &&
@@ -1208,6 +1209,10 @@ describe('GitBranchesPanel interactions', () => {
       expect(tablistRow?.className).toContain('w-full');
       expect(tablistRow?.className).toContain('lg:w-auto');
       expect(tablistRow?.className).toContain('lg:justify-end');
+      expect(branchHeaderTopRow?.className).toContain('grid');
+      expect(branchHeaderTopRow?.className).toContain('grid-cols-1');
+      expect(branchHeaderTopRow?.className).toContain('lg:grid-cols-[minmax(0,1fr)_auto]');
+      expect(branchHeaderTopRow?.textContent).not.toContain('Checkout');
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
