@@ -222,6 +222,9 @@ describe('GitBranchesPanel interactions', () => {
       const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       expect(changesButton).toBeTruthy();
+      expect(changesButton?.className).toContain('redeven-surface-segmented__item--active');
+      expect(changesButton?.className).toContain('text-foreground');
+      expect(changesButton?.className).not.toContain('git-browser-selection-surface');
       expect(unstagedButton).toBeFalsy();
       expect(untrackedButton).toBeFalsy();
       expect(checkoutButton).toBeTruthy();
@@ -1115,9 +1118,14 @@ describe('GitBranchesPanel interactions', () => {
       expect(tablist?.className).toContain('rounded-lg');
       expect(tablist?.className).toContain('redeven-surface-segmented');
       expect(tablist?.className).toContain('sm:w-[15rem]');
-      const activeTab = Array.from(host.querySelectorAll('button')).find((node) => node.getAttribute('role') === 'tab' && node.getAttribute('aria-selected') === 'false') as HTMLButtonElement | undefined;
+      const activeTab = host.querySelector('#git-branch-subview-tab-status') as HTMLButtonElement | null;
+      const historyTab = host.querySelector('#git-branch-subview-tab-history') as HTMLButtonElement | null;
       expect(activeTab?.className).toContain('cursor-pointer');
       expect(activeTab?.className).toContain('redeven-surface-segmented__item');
+      expect(activeTab?.className).toContain('redeven-surface-segmented__item--active');
+      expect(activeTab?.className).toContain('text-foreground');
+      expect(activeTab?.className).not.toContain('git-browser-selection-chip');
+      expect(historyTab?.className).toContain('text-muted-foreground');
     } finally {
       dispose();
     }

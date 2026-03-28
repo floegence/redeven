@@ -300,6 +300,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 .redeven-surface-segmented__item--active {
   border-color: var(--redeven-stroke-control-strong) !important;
   background: var(--redeven-surface-control) !important;
+  color: var(--foreground) !important;
 }
 
 .redeven-surface-inset {

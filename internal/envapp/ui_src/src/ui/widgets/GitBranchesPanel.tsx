@@ -39,7 +39,7 @@ import {
 import { resolveRovingTabTargetId } from '../utils/tabNavigation';
 import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
-import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
+import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitVirtualTable } from './GitVirtualTable';
 import {
@@ -1016,6 +1016,18 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const secondaryActionButtonClass = cn('w-full cursor-pointer rounded-md bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto', redevenSurfaceRoleClass('control'));
   const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';
   const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';
+  const branchStatusSectionCardClass = (active: boolean) =>
+    cn(
+      'w-full rounded-md bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
+      redevenSegmentedItemClass(active),
+      active ? 'text-foreground shadow-sm' : 'text-foreground',
+    );
+  const branchSubviewTabClass = (active: boolean) =>
+    cn(
+      'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
+      redevenSegmentedItemClass(active),
+      active ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+    );
   const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
     const nextView = resolveRovingTabTargetId(GIT_BRANCH_SUBVIEW_IDS, currentView, event.key, 'horizontal');
     if (!nextView || nextView === currentView) return;
@@ -1272,11 +1284,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                               return (
                                 <button
                                   type="button"
-                                  class={cn(
-                                    'w-full rounded-md bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
-                                    redevenSegmentedItemClass(active()),
-                                    gitToneSelectableCardClass(workspaceSectionTone(section), active())
-                                  )}
+                                  class={branchStatusSectionCardClass(active())}
                                   onClick={() => selectStatusSection(section)}
                                 >
                                   <div class="flex min-h-[1.85rem] flex-col justify-center gap-0.5">
@@ -1386,11 +1394,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   aria-selected={active()}
                                   aria-controls={gitBranchSubviewPanelId(view)}
                                   tabIndex={active() ? 0 : -1}
-                                  class={cn(
-                                    'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
-                                    redevenSegmentedItemClass(active()),
-                                    active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:text-foreground'
-                                  )}
+                                  class={branchSubviewTabClass(active())}
                                   onClick={() => props.onSelectBranchSubview?.(view)}
                                   onKeyDown={(event) => handleBranchSubviewKeyDown(event, view)}
                                 >
