@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Refresh } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import type {
   GitDiffFileContent,
   GitPreviewApplyStashResponse,
@@ -24,7 +24,7 @@ import {
   type GitStashWindowSource,
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
-import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitPatchViewer } from './GitPatchViewer';
 import {
@@ -86,14 +86,6 @@ export interface GitStashWindowProps {
   onRequestDrop?: () => void;
   onConfirmReview?: () => void;
   onCancelReview?: () => void;
-}
-
-function tabButtonClass(active: boolean): string {
-  return cn(
-    'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150',
-    redevenSegmentedItemClass(active),
-    active ? 'git-browser-selection-chip' : 'text-muted-foreground hover:text-foreground',
-  );
 }
 
 function formatStashTime(value?: number): string {
@@ -188,6 +180,13 @@ export function GitStashWindow(props: GitStashWindowProps) {
     }
     return !props.dropBusy;
   });
+  const stashTabOptions = createMemo(() => [
+    { value: 'save', label: 'Save Changes' },
+    { value: 'stashes', label: 'Saved Stashes' },
+  ]);
+  const handleTabChange = (value: string) => {
+    props.onTabChange(value === 'stashes' ? 'stashes' : 'save');
+  };
 
   createEffect(() => {
     const files = detailFiles();
@@ -269,18 +268,17 @@ export function GitStashWindow(props: GitStashWindowProps) {
               <div class="min-w-0 truncate text-[11px] text-muted-foreground">{repoPath() || 'Repository path unavailable'}</div>
             </GitLabelBlock>
 
-            <div
-              class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 sm:w-[16rem]', redevenSurfaceRoleClass('segmented'))}
-              role="tablist"
+            <SegmentedControl
+              value={props.tab}
+              onChange={handleTabChange}
+              size="md"
               aria-label="Stash tabs"
-            >
-              <button type="button" role="tab" aria-selected={props.tab === 'save'} class={tabButtonClass(props.tab === 'save')} onClick={() => props.onTabChange('save')}>
-                Save Changes
-              </button>
-              <button type="button" role="tab" aria-selected={props.tab === 'stashes'} class={tabButtonClass(props.tab === 'stashes')} onClick={() => props.onTabChange('stashes')}>
-                Saved Stashes
-              </button>
-            </div>
+              class={cn(
+                'grid w-full grid-cols-2 rounded-lg shadow-sm shadow-black/5 sm:w-[16rem] [&_button]:w-full',
+                redevenSurfaceRoleClass('segmented'),
+              )}
+              options={stashTabOptions()}
+            />
           </div>
         </div>
 

@@ -96,6 +96,12 @@ describe('GitStashWindow', () => {
     try {
       expect(host.textContent).toContain('Target Workspace');
       expect(host.textContent).toContain('Stash Changes');
+      const stashTabs = host.querySelector('[role="group"][aria-label="Stash tabs"]') as HTMLDivElement | null;
+      expect(stashTabs).toBeTruthy();
+      expect(stashTabs?.className).toContain('redeven-surface-segmented');
+      const activeRadio = host.querySelector('[role="radio"][aria-checked="true"]') as HTMLButtonElement | null;
+      expect(activeRadio?.textContent).toContain('Save Changes');
+      expect(activeRadio?.className).not.toContain('git-browser-selection-chip');
 
       const stashesTab = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Saved Stashes')) as HTMLButtonElement | undefined;
       expect(stashesTab).toBeTruthy();
