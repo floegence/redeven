@@ -1210,7 +1210,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
   const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
-  const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between';
+  const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5';
+  const branchHeaderTopRowClass = 'grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-x-3 lg:gap-y-1.5';
   const branchHeaderControlRailClass = 'flex flex-col gap-2 md:gap-2.5 lg:flex-row lg:items-center';
   const branchHeaderControlGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5';
   const branchHeaderActionsGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5 lg:ml-auto';
@@ -1543,61 +1544,63 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <div class={cn('rounded-md px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
                   <div class={branchHeaderSummaryBandClass}>
-                    <div class="min-w-0 flex-1">
-                      <GitLabelBlock
-                        class="min-w-0 flex-1"
-                        label="Branch"
-                        tone={gitBranchTone(props.selectedBranch)}
-                        meta={
-                          <div class="flex min-h-5 items-center gap-1.5">
-                            <Show when={props.selectedBranch?.current}>
-                              <GitMetaPill tone="success">Current</GitMetaPill>
-                            </Show>
-                            <Show when={props.selectedBranch?.kind === 'remote'}>
-                              <GitMetaPill tone="violet">Remote</GitMetaPill>
-                            </Show>
-                          </div>
-                        }
-                      >
-                        <GitPrimaryTitle>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
-                        <Show when={branchSummary().visible}>
-                          <div class="text-[11px] leading-relaxed line-clamp-1 text-muted-foreground sm:line-clamp-2" title={branchSummary().title}>
-                            {branchSummary().text}
-                          </div>
-                        </Show>
-                      </GitLabelBlock>
-                    </div>
+                    <div class={branchHeaderTopRowClass}>
+                      <div class="min-w-0 flex-1">
+                        <GitLabelBlock
+                          class="min-w-0 flex-1"
+                          label="Branch"
+                          tone={gitBranchTone(props.selectedBranch)}
+                          meta={
+                            <div class="flex min-h-5 items-center gap-1.5">
+                              <Show when={props.selectedBranch?.current}>
+                                <GitMetaPill tone="success">Current</GitMetaPill>
+                              </Show>
+                              <Show when={props.selectedBranch?.kind === 'remote'}>
+                                <GitMetaPill tone="violet">Remote</GitMetaPill>
+                              </Show>
+                            </div>
+                          }
+                        >
+                          <GitPrimaryTitle>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
+                          <Show when={branchSummary().visible}>
+                            <div class="text-[11px] leading-relaxed line-clamp-1 text-muted-foreground sm:line-clamp-2" title={branchSummary().title}>
+                              {branchSummary().text}
+                            </div>
+                          </Show>
+                        </GitLabelBlock>
+                      </div>
 
-                    <div class="flex w-full lg:w-auto lg:justify-end">
-                      <div
-                        class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 lg:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
-                        role="tablist"
-                        aria-label="Branch detail tabs"
-                        aria-orientation="horizontal"
-                      >
-                        <For each={GIT_BRANCH_SUBVIEW_IDS}>
-                          {(view) => {
-                            const active = () => branchSubview() === view;
-                            return (
-                              <button
-                                ref={(el) => {
-                                  branchSubviewTabRefs.set(view, el);
-                                }}
-                                type="button"
-                                role="tab"
-                                id={gitBranchSubviewTabId(view)}
-                                aria-selected={active()}
-                                aria-controls={gitBranchSubviewPanelId(view)}
-                                tabIndex={active() ? 0 : -1}
-                                class={branchSubviewTabClass(active())}
-                                onClick={() => props.onSelectBranchSubview?.(view)}
-                                onKeyDown={(event) => handleBranchSubviewKeyDown(event, view)}
-                              >
-                                {branchSubviewLabel(view)}
-                              </button>
-                            );
-                          }}
-                        </For>
+                      <div class="flex w-full lg:w-auto lg:justify-end">
+                        <div
+                          class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 lg:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
+                          role="tablist"
+                          aria-label="Branch detail tabs"
+                          aria-orientation="horizontal"
+                        >
+                          <For each={GIT_BRANCH_SUBVIEW_IDS}>
+                            {(view) => {
+                              const active = () => branchSubview() === view;
+                              return (
+                                <button
+                                  ref={(el) => {
+                                    branchSubviewTabRefs.set(view, el);
+                                  }}
+                                  type="button"
+                                  role="tab"
+                                  id={gitBranchSubviewTabId(view)}
+                                  aria-selected={active()}
+                                  aria-controls={gitBranchSubviewPanelId(view)}
+                                  tabIndex={active() ? 0 : -1}
+                                  class={branchSubviewTabClass(active())}
+                                  onClick={() => props.onSelectBranchSubview?.(view)}
+                                  onKeyDown={(event) => handleBranchSubviewKeyDown(event, view)}
+                                >
+                                  {branchSubviewLabel(view)}
+                                </button>
+                              );
+                            }}
+                          </For>
+                        </div>
                       </div>
                     </div>
 

@@ -201,7 +201,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('flex min-h-0 flex-1 overflow-hidden');
     expect(branchesSrc).toContain('flex min-h-5 items-center gap-1.5');
     expect(branchesSrc).toContain('text-[11px] leading-relaxed line-clamp-1 text-muted-foreground sm:line-clamp-2');
-    expect(branchesSrc).toContain("const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5 lg:flex-row lg:items-start lg:justify-between';");
+    expect(branchesSrc).toContain("const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5';");
+    expect(branchesSrc).toContain("const branchHeaderTopRowClass = 'grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-x-3 lg:gap-y-1.5';");
     expect(branchesSrc).toContain('min-w-0');
     expect(branchesSrc).toContain('flex w-full lg:w-auto lg:justify-end');
     expect(branchesSrc).toContain("const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));");
@@ -224,6 +225,7 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('statusSectionCards');
     expect(branchesSrc).toContain('flex flex-wrap items-center justify-between gap-2');
     expect(branchesSrc).toContain("class={cn('grid grid-cols-3 gap-0.5 rounded-md p-0.5 text-[11px]', redevenSurfaceRoleClass('segmented'))}");
+    expect(branchesSrc).not.toContain('lg:flex-row lg:items-start lg:justify-between');
     expect(branchesSrc).not.toContain('sm:grid-cols-[minmax(0,1fr)_auto]');
     expect(branchesSrc).not.toContain('sm:w-[15rem]');
     expect(branchesSrc).not.toContain('w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right');
