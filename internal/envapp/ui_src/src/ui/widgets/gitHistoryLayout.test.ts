@@ -346,7 +346,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).not.toContain('Clean workspace');
     expect(src).toContain('GitMetaPill');
     expect(src).toContain('GitLabelBlock');
-    expect(src).toContain('gitToneActionButtonClass()');
+    expect(src).toContain('gitToneHeaderActionButtonClass()');
     expect(src).toContain('variant="ghost"');
     expect(src).toContain("redevenDividerRoleClass()");
     expect(src).toContain("redevenSurfaceRoleClass('inset')");
