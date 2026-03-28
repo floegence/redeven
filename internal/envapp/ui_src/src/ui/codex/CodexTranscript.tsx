@@ -368,10 +368,39 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   );
 }
 
+type CodexAssistantLeadAlignmentVariant = 'markdown' | 'prelude';
+
+interface CodexAssistantLeadAlignment {
+  rowClass?: string;
+  contentClass?: string;
+}
+
+function assistantLeadAlignment(
+  variant: CodexAssistantLeadAlignmentVariant,
+  enabled: boolean,
+): CodexAssistantLeadAlignment {
+  if (!enabled) return {};
+  return {
+    rowClass: 'codex-assistant-lead-aligned-row',
+    contentClass: cn(
+      'codex-assistant-lead-aligned-content',
+      variant === 'markdown'
+        ? 'codex-assistant-lead-aligned-content-markdown'
+        : 'codex-assistant-lead-aligned-content-prelude',
+    ),
+  };
+}
+
 function AgentMessageRow(props: { item: CodexTranscriptItem; showAvatar?: boolean }) {
   const streaming = () => isWorkingStatus(props.item.status);
+  const alignment = assistantLeadAlignment('markdown', Boolean(props.showAvatar));
   return (
-    <CodexMessageLane role="assistant" showAvatar={props.showAvatar}>
+    <CodexMessageLane
+      role="assistant"
+      showAvatar={props.showAvatar}
+      class={alignment.rowClass}
+      contentClass={alignment.contentClass}
+    >
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
           <MarkdownBlock
@@ -493,12 +522,13 @@ function WorkingStatusRail(props: { phaseLabel: string; class?: string }) {
 }
 
 function PendingAssistantRow(props: { state: PendingAssistantVisualState }) {
+  const alignment = assistantLeadAlignment('prelude', Boolean(props.state.showAvatar));
   return (
     <CodexMessageLane
       role="assistant"
       showAvatar={props.state.showAvatar}
-      class="codex-pending-assistant-row"
-      contentClass="codex-pending-assistant-content"
+      class={alignment.rowClass}
+      contentClass={alignment.contentClass}
     >
       <Show when={props.state.showPrelude}>
         <PendingAssistantPrelude />

@@ -91,6 +91,8 @@ describe('CodexTranscript', () => {
     expect(rows[0]?.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-pre-output="true"] [data-testid="streaming-cursor"]')).toBeTruthy();
     expect(preOutputRow).toBe(workingRow);
+    expect(preOutputRow?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
+    expect(preOutputRow?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-prelude')).toBe(true);
     expect(preOutputRow?.querySelector('.chat-message-avatar')).toBeTruthy();
     expect(host.querySelector('[data-codex-working-state="true"]')).toBeTruthy();
     expect(host.textContent).toContain('Working...');
@@ -117,10 +119,13 @@ describe('CodexTranscript', () => {
       workingLabel: 'working',
     });
     const workingRow = host.querySelector('[data-codex-working-state="true"]')?.closest('.chat-message-item');
+    const agentRow = host.querySelector('[data-codex-item-type="agentMessage"]')?.closest('.chat-message-item');
 
     expect(host.querySelector('[data-codex-pre-output="true"]')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-markdown-streaming="true"]')).toBeTruthy();
     expect(host.querySelector('[data-codex-item-type="agentMessage"] [data-testid="streaming-cursor"]')).toBeTruthy();
+    expect(agentRow?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
+    expect(agentRow?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-markdown')).toBe(true);
     expect(host.querySelector('[data-codex-working-state="true"] [data-testid="streaming-cursor"]')).toBeNull();
     expect(workingRow?.querySelector('.chat-message-avatar')).toBeNull();
 
@@ -214,10 +219,14 @@ describe('CodexTranscript', () => {
     expect(rows).toHaveLength(6);
     expect(rows[0]?.querySelector('.chat-message-avatar')).toBeNull();
     expect(rows[1]?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(rows[1]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
+    expect(rows[1]?.querySelector('.chat-message-content-wrapper')?.classList.contains('codex-assistant-lead-aligned-content-markdown')).toBe(true);
     expect(rows[2]?.querySelector('.chat-message-avatar')).toBeNull();
     expect(rows[3]?.querySelector('.chat-message-avatar')).toBeNull();
+    expect(rows[3]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(false);
     expect(rows[4]?.querySelector('.chat-message-avatar')).toBeNull();
     expect(rows[5]?.querySelector('.chat-message-avatar')).toBeTruthy();
+    expect(rows[5]?.querySelector('.chat-message-item')?.classList.contains('codex-assistant-lead-aligned-row')).toBe(true);
     expect(host.querySelectorAll('.chat-message-avatar')).toHaveLength(2);
 
     dispose();
