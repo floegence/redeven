@@ -1142,7 +1142,7 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('keeps branch controls in a compact wrap rail for narrow layouts', () => {
+  it('keeps branch header controls compact without squeezing branch metadata at mid widths', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1180,29 +1180,40 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
-      const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('sm:grid-cols-[minmax(0,1fr)_auto]')) as HTMLDivElement | undefined;
       const controlBar = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('rounded-xl') && node.className.includes('redeven-surface-control') && node.className.includes('bg-muted/[0.12]')) as HTMLDivElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
+      const tablistRow = tablist?.parentElement as HTMLDivElement | null;
       const shortcutDock = host.querySelector('[data-git-shortcut-dock]') as HTMLDivElement | null;
+      const actionsGroup = Array.from(controlBar?.querySelectorAll('div') ?? []).find((node) =>
+        node.className.includes('lg:ml-auto') &&
+        node.textContent?.includes('Actions') &&
+        node.textContent.includes('Checkout') &&
+        node.textContent.includes('Delete')) as HTMLDivElement | undefined;
 
-      expect(branchHeader).toBeTruthy();
       expect(controlBar).toBeTruthy();
       expect(shortcutDock).toBeTruthy();
-      expect(controlBar?.textContent).toContain('Actions');
+      expect(actionsGroup).toBeTruthy();
+      expect(actionsGroup?.className).toContain('flex');
+      expect(actionsGroup?.className).toContain('flex-wrap');
+      expect(actionsGroup?.className).toContain('lg:ml-auto');
       expect(checkoutButton?.className).toContain('rounded-md');
       expect(deleteButton?.className).toContain('rounded-md');
       expect(checkoutButton?.className).toContain('cursor-pointer');
       expect(deleteButton?.className).toContain('bg-destructive/[0.08]');
       expect(checkoutButton?.className).not.toContain('w-full');
       expect(deleteButton?.className).not.toContain('w-full');
+      expect(tablistRow?.className).toContain('flex');
+      expect(tablistRow?.className).toContain('w-full');
+      expect(tablistRow?.className).toContain('xl:justify-end');
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
       expect(tablist?.className).toContain('rounded-lg');
       expect(tablist?.className).toContain('redeven-surface-segmented');
-      expect(tablist?.className).toContain('sm:w-[15rem]');
+      expect(tablist?.className).toContain('xl:w-[15rem]');
+      expect(tablist?.className).not.toContain('sm:w-[15rem]');
       const activeTab = host.querySelector('#git-branch-subview-tab-status') as HTMLButtonElement | null;
       const historyTab = host.querySelector('#git-branch-subview-tab-history') as HTMLButtonElement | null;
       expect(activeTab?.className).toContain('cursor-pointer');
