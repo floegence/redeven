@@ -19,6 +19,8 @@ const actionButtonBaseClass =
     'cursor-pointer rounded-lg border text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-[background-color,color,box-shadow] duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
     redevenSurfaceRoleClass('controlMuted'),
   );
+const headerActionButtonBaseClass =
+  'cursor-pointer rounded-lg bg-background/72 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-[background-color,color,box-shadow] duration-200 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
@@ -124,6 +126,10 @@ export function gitChangePathClass(change: string | undefined): string {
 
 export function gitToneActionButtonClass(): string {
   return actionButtonBaseClass;
+}
+
+export function gitToneHeaderActionButtonClass(): string {
+  return headerActionButtonBaseClass;
 }
 
 export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, active: boolean): string {

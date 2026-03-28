@@ -12,6 +12,7 @@ import {
   gitToneAccentColor,
   gitToneActionButtonClass,
   gitToneBadgeClass,
+  gitToneHeaderActionButtonClass,
   gitToneInsetClass,
   gitToneSelectableCardClass,
   gitToneSurfaceClass,
@@ -111,5 +112,11 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneActionButtonClass()).toContain('redeven-surface-control--muted');
     expect(gitToneActionButtonClass()).toContain('text-muted-foreground');
     expect(gitToneActionButtonClass()).toContain('rounded-lg');
+
+    expect(gitToneHeaderActionButtonClass()).toContain('bg-background/72');
+    expect(gitToneHeaderActionButtonClass()).toContain('text-muted-foreground');
+    expect(gitToneHeaderActionButtonClass()).toContain('rounded-lg');
+    expect(gitToneHeaderActionButtonClass()).not.toContain('redeven-surface-control');
+    expect(gitToneHeaderActionButtonClass()).not.toContain(' border ');
   });
 });

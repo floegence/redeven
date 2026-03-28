@@ -31,7 +31,7 @@ import {
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
-import { gitSubviewTone, gitToneActionButtonClass } from './GitChrome';
+import { gitSubviewTone, gitToneHeaderActionButtonClass } from './GitChrome';
 import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
@@ -217,7 +217,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Button
                 size="xs"
                 variant="ghost"
-                class={cn('shrink-0', gitToneActionButtonClass())}
+                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 disabled={repoActionsDisabled() || props.checkoutBusy}
                 onClick={() => {
                   const branch = reattachBranch();
@@ -231,7 +231,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Button
                 size="xs"
                 variant="ghost"
-                class={cn('shrink-0', gitToneActionButtonClass())}
+                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 disabled={repoActionsDisabled()}
                 onClick={() => {
                   const repoRootPath = String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || '').trim();
@@ -250,7 +250,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Button
                 size="xs"
                 variant="ghost"
-                class={cn('shrink-0', gitToneActionButtonClass())}
+                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 disabled={repoActionsDisabled() || props.fetchBusy}
                 onClick={props.onFetch}
               >
@@ -261,7 +261,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Button
                 size="xs"
                 variant="ghost"
-                class={cn('shrink-0', gitToneActionButtonClass())}
+                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 disabled={repoActionsDisabled() || detachedHead() || props.pullBusy}
                 onClick={props.onPull}
               >
@@ -272,7 +272,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               <Button
                 size="xs"
                 variant="ghost"
-                class={cn('shrink-0', gitToneActionButtonClass())}
+                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 disabled={repoActionsDisabled() || detachedHead() || props.pushBusy}
                 onClick={props.onPush}
               >
@@ -284,7 +284,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 size="xs"
                 variant="ghost"
                 icon={History}
-                class={cn('shrink-0', gitToneActionButtonClass())}
+                class={cn('shrink-0', gitToneHeaderActionButtonClass())}
                 aria-label="Toggle browser sidebar"
                 onClick={props.onToggleSidebar}
               >
@@ -292,7 +292,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               </Button>
             </Show>
             <Show when={props.onRefresh}>
-              <Button size="xs" variant="ghost" class={cn('shrink-0', gitToneActionButtonClass())} icon={Refresh} onClick={props.onRefresh}>
+              <Button size="xs" variant="ghost" class={cn('shrink-0', gitToneHeaderActionButtonClass())} icon={Refresh} onClick={props.onRefresh}>
                 Refresh
               </Button>
             </Show>

@@ -99,7 +99,10 @@ describe('GitWorkbench interactions', () => {
       expect(pullButton).toBeTruthy();
       expect(pushButton).toBeTruthy();
       expect(refreshButton).toBeTruthy();
-      expect(refreshButton?.className).toContain('redeven-surface-control--muted');
+      expect(refreshButton?.className).toContain('bg-background/72');
+      expect(refreshButton?.className).not.toContain('redeven-surface-control--muted');
+      expect(refreshButton?.className).not.toContain('border-input');
+      expect(refreshButton?.className).not.toContain(' border ');
       expect(refreshButton?.className).not.toContain('border-input');
       fetchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       pullButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
