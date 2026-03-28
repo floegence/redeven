@@ -156,7 +156,7 @@ Current Env App behavior:
   - `image` user inputs render inline thumbnails;
   - `localImage` and `skill` user inputs open the existing file-preview floating window when clicked;
   - `mention` user inputs render as semantic chips and do not route into file preview.
-- Codex markdown keeps the existing renderer DOM contract for standard links and local file references, preserves file-reference labels that include embedded line anchors such as `CODEX_UI.md#L121`, and styles local file references as flat outline tokens rather than filled tinted pills so transcript links read like workstation metadata instead of promotional chips.
+- Codex markdown keeps the existing renderer DOM contract for standard links and local file references, preserves file-reference labels that include embedded line anchors such as `CODEX_UI.md#L121`, and now relies on the shared floe-webapp file-reference chip styling instead of a Codex-only outline treatment.
 - Before the first real assistant transcript message lands, the transcript renders a single pending assistant lane that owns the Codex avatar, shows a pre-output streaming cursor bubble, and places the compact working indicator directly underneath in the same lane.
 - Once a real assistant message starts streaming, that pending lane disappears; the real assistant message takes over avatar ownership, keeps the same first-line lead alignment against the avatar center, and the remaining working indicator stays avatar-free.
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.

@@ -31,7 +31,7 @@ describe('Codex visual contract', () => {
     expect(src).toContain('.codex-page-shell .chat-message-bubble-user {');
     expect(src).toContain('.codex-page-shell .chat-input-send-btn-active {');
     expect(src).toMatch(/\.codex-chat-reasoning-card \{[\s\S]*background: var\(--codex-surface-page\);/);
-    expect(src).toMatch(/\.codex-chat-markdown-block \.chat-md-file-ref \{[\s\S]*background: transparent;/);
+    expect(src).not.toContain('.codex-chat-markdown-block .chat-md-file-ref {');
     expect(src).not.toContain('linear-gradient(');
     expect(src).not.toContain('radial-gradient(');
   });
