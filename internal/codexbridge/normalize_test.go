@@ -13,7 +13,7 @@ func TestNormalizeItem_UsesContentTextWhenDirectTextMissing(t *testing.T) {
 		Type: "userMessage",
 		Content: []wireUserInput{
 			{Type: "text", Text: "first line"},
-			{Type: "local_image", Path: "/tmp/image.png"},
+			{Type: "localImage", Path: "/tmp/image.png"},
 			{Type: "text", Text: "second line"},
 		},
 	})
@@ -23,6 +23,48 @@ func TestNormalizeItem_UsesContentTextWhenDirectTextMissing(t *testing.T) {
 	}
 	if len(item.Inputs) != 3 {
 		t.Fatalf("Inputs len=%d, want=3", len(item.Inputs))
+	}
+	if item.Inputs[1].Type != "localImage" {
+		t.Fatalf("Inputs[1].Type=%q", item.Inputs[1].Type)
+	}
+}
+
+func TestNormalizeItem_PreservesStructuredUserInputMetadata(t *testing.T) {
+	t.Parallel()
+
+	item := normalizeItem(wireThreadItem{
+		ID:   "item_2",
+		Type: "userMessage",
+		Content: []wireUserInput{
+			{
+				Type: "text",
+				Text: "  <div>raw html</div>\n",
+				TextElements: []wireTextElement{
+					{Start: 0, End: 5, Placeholder: stringPtr("@repo")},
+				},
+			},
+			{
+				Type: "skill",
+				Name: "checks",
+				Path: "/Users/demo/.codex/skills/checks/SKILL.md",
+			},
+		},
+	})
+
+	if len(item.Inputs) != 2 {
+		t.Fatalf("Inputs len=%d, want=2", len(item.Inputs))
+	}
+	if item.Inputs[0].Text != "  <div>raw html</div>\n" {
+		t.Fatalf("Inputs[0].Text=%q", item.Inputs[0].Text)
+	}
+	if len(item.Inputs[0].TextElements) != 1 {
+		t.Fatalf("TextElements len=%d, want=1", len(item.Inputs[0].TextElements))
+	}
+	if item.Inputs[0].TextElements[0].Placeholder != "@repo" {
+		t.Fatalf("Placeholder=%q", item.Inputs[0].TextElements[0].Placeholder)
+	}
+	if item.Text != "  <div>raw html</div>\n\n/Users/demo/.codex/skills/checks/SKILL.md" {
+		t.Fatalf("Text=%q", item.Text)
 	}
 }
 

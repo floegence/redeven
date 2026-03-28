@@ -16,6 +16,7 @@ import {
   mimeFromExtDot,
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
+import { basenameFromPath, fileItemFromPath } from '../utils/filePreviewItem';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { syncLiveTextValue } from '../utils/liveTextValue';
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
@@ -160,29 +161,9 @@ function truncatePath(fullPath: string, maxSegments = 3): string {
   return '.../' + segments.slice(-maxSegments).join('/');
 }
 
-function basenameFromPath(path: string): string {
-  const normalized = String(path ?? '').replace(/\\/g, '/');
-  const segments = normalized.split('/').filter(Boolean);
-  return segments[segments.length - 1] || normalized || 'File';
-}
-
-function fileItemFromPath(path: string): FileItem {
-  return {
-    id: path,
-    name: basenameFromPath(path),
-    path,
-    type: 'file',
-  };
-}
-
 function fileItemForContextPreview(path: string, name?: string): FileItem {
   const normalizedPath = String(path ?? '').trim() || name || 'Context preview';
-  return {
-    id: normalizedPath,
-    name: String(name ?? '').trim() || basenameFromPath(normalizedPath),
-    path: normalizedPath,
-    type: 'file',
-  };
+  return fileItemFromPath(normalizedPath, String(name ?? '').trim() || basenameFromPath(normalizedPath));
 }
 
 function previewNoticeForMode(mode: ReturnType<typeof describeFilePreview>['mode']): string {

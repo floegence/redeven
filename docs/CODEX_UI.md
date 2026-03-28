@@ -24,6 +24,7 @@ High-level design:
 - When a freshly started upstream thread has not materialized its first-user-message rollout yet, the bridge falls back from `thread/read(includeTurns=true)` to a summary-only `thread/read(includeTurns=false)` and merges the result with projected state, so the browser does not see the transient upstream error.
 - `thread/start` enables `experimentalRawEvents=true` and `persistExtendedHistory=true`, while `thread/resume` also enables `persistExtendedHistory=true`, so refreshes can reconstruct the full Codex-side thread state instead of only the stable transcript subset.
 - The bridge normalizes upstream `rawResponseItem/completed` notifications such as `web_search_call` into browser-facing `webSearch` transcript items, which keeps live SSE, refresh bootstrap, and replay behavior consistent.
+- The bridge preserves upstream `userMessage.content: UserInput[]` structure for browser rendering, including `textElements`, instead of reducing user-authored turns to markdown-only text.
 - `thread/start` only forwards explicitly user-supplied fields such as `cwd` and optional `model`; host Codex defaults stay owned by Codex itself.
 - The gateway also aggregates a Codex-only capability snapshot for the browser by combining `model/list`, `config/read`, and `configRequirements/read`.
 
@@ -148,6 +149,13 @@ Current Env App behavior:
 - New threads can override working directory, model, approval policy, and sandbox before the first turn, and later turns can keep those settings sticky through explicit `turn/start` overrides.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
+- User-message rendering is intentionally separate from assistant/evidence markdown rendering:
+  - assistant/evidence items still use the markdown renderer;
+  - `userMessage` items render from structured `inputs[]` in original order;
+  - `text` user inputs display as raw text with preserved line breaks and no markdown/HTML interpretation;
+  - `image` user inputs render inline thumbnails;
+  - `localImage` and `skill` user inputs open the existing file-preview floating window when clicked;
+  - `mention` user inputs render as semantic chips and do not route into file preview.
 - Codex markdown keeps the existing renderer DOM contract for standard links and local file references, preserves file-reference labels that include embedded line anchors such as `CODEX_UI.md#L121`, and styles local file references as flat outline tokens rather than filled tinted pills so transcript links read like workstation metadata instead of promotional chips.
 - Before the first real assistant transcript message lands, the transcript renders a single pending assistant lane that owns the Codex avatar, shows a pre-output streaming cursor bubble, and places the compact working indicator directly underneath in the same lane.
 - Once a real assistant message starts streaming, that pending lane disappears; the real assistant message takes over avatar ownership, keeps the same first-line lead alignment against the avatar center, and the remaining working indicator stays avatar-free.

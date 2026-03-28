@@ -60,12 +60,19 @@ export type CodexFileChange = Readonly<{
   diff?: string;
 }>;
 
+export type CodexTextElement = Readonly<{
+  start: number;
+  end: number;
+  placeholder?: string;
+}>;
+
 export type CodexUserInputEntry = Readonly<{
   type: string;
   text?: string;
   url?: string;
   path?: string;
   name?: string;
+  text_elements?: CodexTextElement[];
 }>;
 
 export type CodexWebSearchAction = Readonly<{

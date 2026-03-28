@@ -56,10 +56,15 @@ func normalizeTurn(in wireTurn) Turn {
 }
 
 func normalizeItem(in wireThreadItem) Item {
+	itemType := strings.TrimSpace(in.Type)
+	text := strings.TrimSpace(in.Text)
+	if itemType == "userMessage" {
+		text = in.Text
+	}
 	out := Item{
 		ID:     strings.TrimSpace(in.ID),
-		Type:   strings.TrimSpace(in.Type),
-		Text:   strings.TrimSpace(in.Text),
+		Type:   itemType,
+		Text:   text,
 		Phase:  strings.TrimSpace(stringValue(in.Phase)),
 		Status: strings.TrimSpace(in.Status),
 	}
@@ -132,13 +137,35 @@ func normalizeRawResponseItemID(in wireResponseItem, fallbackID string) string {
 }
 
 func normalizeUserInput(in wireUserInput) UserInputEntry {
-	return UserInputEntry{
+	out := UserInputEntry{
 		Type: strings.TrimSpace(in.Type),
-		Text: strings.TrimSpace(in.Text),
+		Text: in.Text,
 		URL:  strings.TrimSpace(in.URL),
 		Path: strings.TrimSpace(in.Path),
 		Name: strings.TrimSpace(in.Name),
 	}
+	if len(in.TextElements) > 0 {
+		out.TextElements = normalizeTextElements(in.TextElements)
+	}
+	return out
+}
+
+func normalizeTextElements(in []wireTextElement) []TextElement {
+	out := make([]TextElement, 0, len(in))
+	for i := range in {
+		element := TextElement{
+			Start: in[i].Start,
+			End:   in[i].End,
+		}
+		if placeholder := strings.TrimSpace(stringValue(in[i].Placeholder)); placeholder != "" {
+			element.Placeholder = placeholder
+		}
+		out = append(out, element)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func normalizeWebSearchAction(in *wireWebSearchAction) *WebSearchAction {
@@ -494,9 +521,9 @@ func stringValue[T ~string](v *T) string {
 func userInputsToText(inputs []wireUserInput) string {
 	parts := make([]string, 0, len(inputs))
 	for i := range inputs {
-		entry := strings.TrimSpace(inputs[i].Text)
-		if entry != "" {
-			parts = append(parts, entry)
+		entry := strings.ReplaceAll(inputs[i].Text, "\r\n", "\n")
+		if strings.TrimSpace(entry) != "" {
+			parts = append(parts, strings.TrimRight(entry, "\n"))
 			continue
 		}
 		if path := strings.TrimSpace(inputs[i].Path); path != "" {

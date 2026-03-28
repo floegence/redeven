@@ -7,6 +7,7 @@ import { ShellBlock } from '../chat/blocks/ShellBlock';
 import { StreamingCursor } from '../chat/status/StreamingCursor';
 import { CodexIcon } from '../icons/CodexIcon';
 import { CodexMessageRunIndicator } from './CodexMessageRunIndicator';
+import { CodexUserMessageContent } from './CodexUserMessageContent';
 import {
   displayStatus,
   itemGlyph,
@@ -15,7 +16,7 @@ import {
   isWorkingStatus,
   statusTagVariant,
 } from './presentation';
-import type { CodexOptimisticUserTurn, CodexTranscriptItem, CodexUserInputEntry } from './types';
+import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
 function EmptyTranscriptState(props: {
   title: string;
@@ -415,54 +416,12 @@ function AgentMessageRow(props: { item: CodexTranscriptItem; showAvatar?: boolea
   );
 }
 
-function imageInputs(item: CodexTranscriptItem): CodexUserInputEntry[] {
-  return (item.inputs ?? []).filter((entry) => String(entry.type ?? '').trim() === 'image');
-}
-
-function localImageInputs(item: CodexTranscriptItem): CodexUserInputEntry[] {
-  return (item.inputs ?? []).filter((entry) => String(entry.type ?? '').trim() === 'local_image');
-}
-
 function UserMessageRow(props: { item: CodexTranscriptItem }) {
-  const images = () => imageInputs(props.item);
-  const localImages = () => localImageInputs(props.item);
-  const body = () => String(itemText(props.item) ?? '').trim();
-
   return (
     <CodexMessageLane role="user">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-user codex-chat-message-bubble-user">
         <div class="codex-chat-message-surface codex-chat-message-surface-user">
-          <Show when={images().length > 0}>
-            <div class="codex-chat-inline-attachments">
-              <For each={images()}>
-                {(entry, index) => (
-                  <img
-                    class="codex-chat-inline-image"
-                    src={entry.url}
-                    alt={entry.name || `Attachment ${index() + 1}`}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                )}
-              </For>
-            </div>
-          </Show>
-
-          <Show when={localImages().length > 0}>
-            <div class="codex-chat-inline-local-attachments">
-              <For each={localImages()}>
-                {(entry) => (
-                  <span class="codex-chat-inline-local-attachment" title={entry.path}>
-                    {entry.path}
-                  </span>
-                )}
-              </For>
-            </div>
-          </Show>
-
-          <Show when={body()}>
-            <MarkdownBlock content={body()} class="codex-chat-markdown-block codex-chat-user-markdown-block" rendererVariant="codex" />
-          </Show>
+          <CodexUserMessageContent inputs={props.item.inputs} fallbackText={props.item.text} />
         </div>
       </div>
     </CodexMessageLane>

@@ -7,8 +7,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CodexTranscript } from './CodexTranscript';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
+const openPreview = vi.fn(async () => undefined);
+const readFileBytesOnceMock = vi.fn();
+const protocolState: {
+  client: () => Record<string, never> | null;
+} = {
+  client: () => null,
+};
+
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
+}));
+
+vi.mock('@floegence/floe-webapp-protocol', () => ({
+  useProtocol: () => protocolState,
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
@@ -49,6 +61,16 @@ vi.mock('../icons/CodexIcon', () => ({
   CodexIcon: (props: any) => <span class={props.class}>Codex</span>,
 }));
 
+vi.mock('../widgets/FilePreviewContext', () => ({
+  useFilePreviewContext: () => ({
+    openPreview,
+  }),
+}));
+
+vi.mock('../utils/fileStreamReader', () => ({
+  readFileBytesOnce: (...args: unknown[]) => readFileBytesOnceMock(...args),
+}));
+
 function renderTranscript(items: CodexTranscriptItem[], options?: {
   optimisticUserTurns?: CodexOptimisticUserTurn[];
   showWorkingState?: boolean;
@@ -71,7 +93,14 @@ function renderTranscript(items: CodexTranscriptItem[], options?: {
   return { host, dispose };
 }
 
+function flushAsync(): Promise<void> {
+  return Promise.resolve().then(() => Promise.resolve());
+}
+
 afterEach(() => {
+  openPreview.mockReset();
+  readFileBytesOnceMock.mockReset();
+  protocolState.client = () => null;
   document.body.innerHTML = '';
 });
 
@@ -321,6 +350,154 @@ describe('CodexTranscript', () => {
     expect(host.textContent).toContain('Opened page: https://nmc.cn/publish/forecast/AHN/changsha.html');
     expect(host.textContent).not.toContain('No content.');
     expect(host.querySelector('[data-codex-item-type="webSearch"] .chat-message-avatar')).toBeNull();
+
+    dispose();
+  });
+
+  it('renders user-authored text as raw text instead of markdown or HTML', () => {
+    const rawText = '<div class="demo">literal html</div>\n# not a heading\n[not a link](/tmp/demo.txt)';
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_user_raw',
+        type: 'userMessage',
+        text: '',
+        inputs: [
+          {
+            type: 'text',
+            text: rawText,
+          },
+        ],
+        order: 0,
+      },
+    ]);
+
+    const userRow = host.querySelector('[data-codex-item-type="userMessage"]');
+    const rawBlock = host.querySelector('.codex-chat-user-raw-text');
+
+    expect(rawBlock?.textContent).toBe(rawText);
+    expect(userRow?.querySelector('a')).toBeNull();
+    expect(userRow?.querySelector('h1')).toBeNull();
+    expect(userRow?.querySelector('.codex-chat-markdown-block')).toBeNull();
+
+    dispose();
+  });
+
+  it('renders structured user inputs in source order and keeps remote image thumbnails inline', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_user_structured',
+        type: 'userMessage',
+        text: '',
+        inputs: [
+          { type: 'text', text: 'before image' },
+          { type: 'image', url: 'data:image/png;base64,AAAA', name: 'diagram.png' },
+          { type: 'text', text: 'after image' },
+        ],
+        order: 0,
+      },
+    ]);
+
+    const userContent = host.querySelector('.codex-chat-user-content');
+    const inputTypes = Array.from(userContent?.children ?? []).map((element) => element.getAttribute('data-codex-user-input-type'));
+    const image = host.querySelector('.codex-chat-user-image') as HTMLImageElement | null;
+
+    expect(inputTypes).toEqual(['text', 'image', 'text']);
+    expect(image?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+    expect(image?.getAttribute('alt')).toBe('diagram.png');
+
+    dispose();
+  });
+
+  it('opens the file preview when a structured local file input is clicked', async () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_user_skill',
+        type: 'userMessage',
+        text: '',
+        inputs: [
+          {
+            type: 'skill',
+            name: 'checks',
+            path: '/workspace/.codex/skills/checks/SKILL.md',
+          },
+        ],
+        order: 0,
+      },
+    ]);
+
+    const skillButton = host.querySelector('[data-codex-user-input-type="skill"]');
+    skillButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(openPreview).toHaveBeenCalledWith({
+      id: '/workspace/.codex/skills/checks/SKILL.md',
+      name: 'checks',
+      path: '/workspace/.codex/skills/checks/SKILL.md',
+      type: 'file',
+    });
+
+    dispose();
+  });
+
+  it('loads a local image thumbnail and still routes clicks into the file preview surface', async () => {
+    protocolState.client = () => ({});
+    readFileBytesOnceMock.mockResolvedValue({
+      bytes: new Uint8Array([137, 80, 78, 71]),
+      meta: {
+        ok: true,
+        content_len: 4,
+        truncated: false,
+      },
+    });
+
+    const createObjectURL = vi.fn(() => 'blob:local-image-preview');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(globalThis.URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(globalThis.URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_user_local_image',
+        type: 'userMessage',
+        text: '',
+        inputs: [
+          {
+            type: 'localImage',
+            name: 'mock.png',
+            path: '/workspace/mock.png',
+          },
+        ],
+        order: 0,
+      },
+    ]);
+
+    await flushAsync();
+
+    const image = host.querySelector('.codex-chat-user-local-image') as HTMLImageElement | null;
+    const card = host.querySelector('[data-codex-user-input-type="localImage"]');
+
+    expect(readFileBytesOnceMock).toHaveBeenCalledWith({
+      client: {},
+      path: '/workspace/mock.png',
+      maxBytes: 20 * 1024 * 1024,
+    });
+    expect(image?.getAttribute('src')).toBe('blob:local-image-preview');
+
+    card?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(openPreview).toHaveBeenCalledWith({
+      id: '/workspace/mock.png',
+      name: 'mock.png',
+      path: '/workspace/mock.png',
+      type: 'file',
+    });
 
     dispose();
   });

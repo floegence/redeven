@@ -9,7 +9,6 @@ import { batch, createEffect, createMemo, createSignal, For, onCleanup, Show, us
 import type { Component } from 'solid-js';
 import type { Marked } from 'marked';
 import { cn } from '@floegence/floe-webapp-core';
-import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import { StreamingMarkdownTail } from '../markdown/StreamingMarkdownTail';
 import { createMarkdownRenderer } from '../markdown/markedConfig';
@@ -21,6 +20,7 @@ import { buildMarkdownRenderSnapshot } from '../markdown/streamingMarkdownModel'
 import { StreamingCursor } from '../status/StreamingCursor';
 import type { MarkdownRenderSnapshot } from '../types';
 import { renderMarkdownSnapshot } from '../workers/markdownWorkerClient';
+import { fileItemFromPath } from '../../utils/filePreviewItem';
 import { FilePreviewContext } from '../../widgets/FilePreviewContext';
 
 export interface MarkdownBlockProps {
@@ -233,14 +233,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
     if (!filePreview) return;
     const normalizedPath = String(path ?? '').trim();
     if (!normalizedPath) return;
-
-    const item: FileItem = {
-      id: normalizedPath,
-      name: basenameFromMarkdownPath(normalizedPath) || 'File',
-      path: normalizedPath,
-      type: 'file',
-    };
-    void filePreview.openPreview(item);
+    void filePreview.openPreview(fileItemFromPath(normalizedPath, basenameFromMarkdownPath(normalizedPath) || 'File'));
   };
 
   const handleClick = (event: MouseEvent) => {

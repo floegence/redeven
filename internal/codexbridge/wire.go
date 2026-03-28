@@ -106,11 +106,18 @@ type wirePatchChangeKind struct {
 }
 
 type wireUserInput struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
-	URL  string `json:"url,omitempty"`
-	Path string `json:"path,omitempty"`
-	Name string `json:"name,omitempty"`
+	Type         string            `json:"type"`
+	Text         string            `json:"text,omitempty"`
+	URL          string            `json:"url,omitempty"`
+	Path         string            `json:"path,omitempty"`
+	Name         string            `json:"name,omitempty"`
+	TextElements []wireTextElement `json:"textElements,omitempty"`
+}
+
+type wireTextElement struct {
+	Start       int     `json:"start"`
+	End         int     `json:"end"`
+	Placeholder *string `json:"placeholder,omitempty"`
 }
 
 type wireSandboxPolicy struct {

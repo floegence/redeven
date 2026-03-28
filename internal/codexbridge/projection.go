@@ -73,7 +73,20 @@ func cloneUserInputs(inputs []UserInputEntry) []UserInputEntry {
 		return nil
 	}
 	out := make([]UserInputEntry, 0, len(inputs))
-	out = append(out, inputs...)
+	for _, input := range inputs {
+		cloned := input
+		cloned.TextElements = cloneTextElements(input.TextElements)
+		out = append(out, cloned)
+	}
+	return out
+}
+
+func cloneTextElements(elements []TextElement) []TextElement {
+	if len(elements) == 0 {
+		return nil
+	}
+	out := make([]TextElement, 0, len(elements))
+	out = append(out, elements...)
 	return out
 }
 
