@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -165,7 +166,8 @@ function sidebarThreadIDs(host: ParentNode): string[] {
 }
 
 function renderSurface(host: HTMLDivElement) {
-  render(() => (
+  const [settingsSeq, setSettingsSeq] = createSignal(1);
+  const dispose = render(() => (
     <EnvContext.Provider
       value={{
         env_id: () => 'env_1',
@@ -180,8 +182,8 @@ function renderSurface(host: HTMLDivElement) {
         filesSidebarOpen: () => false,
         setFilesSidebarOpen: () => undefined,
         toggleFilesSidebar: () => undefined,
-        settingsSeq: () => 1,
-        bumpSettingsSeq: () => undefined,
+        settingsSeq,
+        bumpSettingsSeq: () => setSettingsSeq((current) => current + 1),
         openSettings: () => undefined,
         debugConsoleEnabled: () => false,
         setDebugConsoleEnabled: () => undefined,
@@ -209,6 +211,10 @@ function renderSurface(host: HTMLDivElement) {
       </CodexProvider>
     </EnvContext.Provider>
   ), host);
+  return {
+    dispose,
+    bumpSettingsSeq: () => setSettingsSeq((current) => current + 1),
+  };
 }
 
 afterEach(() => {
@@ -217,6 +223,103 @@ afterEach(() => {
 });
 
 describe('CodexSidebar', () => {
+  it('keeps the existing sidebar threads visible during a background refresh', async () => {
+    const refreshThreads = deferred<any[]>();
+    const thread1 = {
+      id: 'thread_1',
+      name: 'Backend audit',
+      preview: 'Review the gateway wiring',
+      ephemeral: false,
+      model_provider: 'gpt-5.4',
+      created_at_unix_s: 1,
+      updated_at_unix_s: 10,
+      status: 'idle',
+      cwd: '/workspace',
+    };
+    const thread2 = {
+      id: 'thread_2',
+      name: 'UI polish',
+      preview: 'Align the Codex shell with floe-webapp',
+      ephemeral: false,
+      model_provider: 'gpt-5.4',
+      created_at_unix_s: 3,
+      updated_at_unix_s: 4,
+      status: 'running',
+      cwd: '/workspace/ui',
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock
+      .mockResolvedValueOnce([thread1, thread2])
+      .mockReturnValueOnce(refreshThreads.promise);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        ...thread1,
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'idle',
+      active_status_flags: [],
+    });
+
+    const host = document.createElement('div');
+    document.body.append(host);
+
+    const surface = renderSurface(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
+    expect(host.textContent).not.toContain('Loading chats...');
+
+    surface.bumpSettingsSeq();
+    await Promise.resolve();
+
+    expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
+    expect(host.textContent).not.toContain('Loading chats...');
+
+    refreshThreads.resolve([thread1, thread2]);
+    await flushAsync();
+
+    expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
+
+    surface.dispose();
+  });
+
   it('drives the active conversation shown in the Codex chat shell', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: true,

@@ -151,8 +151,10 @@ function ThreadCard(props: {
 export function CodexSidebarShell() {
   const codex = useCodexContext();
 
+  const hasThreads = createMemo(() => codex.threads().length > 0);
   const groupedThreads = createMemo(() => groupThreadsByDate(codex.threads()));
   const showGroupHeaders = createMemo(() => codex.threads().length >= 5);
+  const showInitialLoading = createMemo(() => codex.threadsLoading() && !hasThreads());
 
   return (
     <SidebarContent class="codex-sidebar-shell">
@@ -176,14 +178,14 @@ export function CodexSidebarShell() {
       </Show>
 
       <Show
-        when={!codex.threadsLoading()}
+        when={!showInitialLoading()}
         fallback={
           <div class="codex-sidebar-loading">
             Loading chats...
           </div>
         }
       >
-        <Show when={codex.threads().length > 0} fallback={<EmptyState />}>
+        <Show when={hasThreads()} fallback={<EmptyState />}>
           <SidebarSection title="Conversations">
             <div class="codex-sidebar-thread-list">
               <Index each={groupedThreads()}>

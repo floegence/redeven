@@ -455,10 +455,11 @@ function OptimisticUserMessageRow(props: { turn: CodexOptimisticUserTurn }) {
 function WorkingStateRow(props: {
   label: string;
   flags: readonly string[];
+  showAvatar?: boolean;
 }) {
   const phaseLabel = () => workingPhaseLabel(props.label, props.flags);
   return (
-    <CodexMessageLane role="assistant">
+    <CodexMessageLane role="assistant" showAvatar={props.showAvatar}>
       <div
         data-codex-working-state="true"
         class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
@@ -494,16 +495,23 @@ function shouldRenderTranscriptItem(item: CodexTranscriptItem): boolean {
   return true;
 }
 
-function shouldShowAgentAvatar(items: readonly CodexTranscriptItem[], index: number): boolean {
-  const item = items[index];
-  if (!item || item.type !== 'agentMessage') return false;
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+function hasAssistantMessageInCurrentRun(items: readonly CodexTranscriptItem[], beforeIndex: number): boolean {
+  for (let cursor = beforeIndex - 1; cursor >= 0; cursor -= 1) {
     const previous = items[cursor];
     if (!shouldRenderTranscriptItem(previous)) continue;
-    if (previous.type === 'userMessage') return true;
-    if (previous.type === 'agentMessage') return false;
+    if (previous.type === 'userMessage') return false;
+    if (previous.type === 'agentMessage') return true;
   }
-  return true;
+  return false;
+}
+
+function shouldShowAgentAvatar(items: readonly CodexTranscriptItem[], index: number): boolean {
+  const item = items[index];
+  return Boolean(item && item.type === 'agentMessage' && !hasAssistantMessageInCurrentRun(items, index));
+}
+
+function shouldShowWorkingAvatar(items: readonly CodexTranscriptItem[]): boolean {
+  return !hasAssistantMessageInCurrentRun(items, items.length);
 }
 
 function TranscriptRow(props: { item: CodexTranscriptItem; showAssistantAvatar?: boolean }) {
@@ -577,6 +585,7 @@ export function CodexTranscript(props: {
               <WorkingStateRow
                 label={String(props.workingLabel ?? '').trim() || 'working'}
                 flags={props.workingFlags ?? []}
+                showAvatar={shouldShowWorkingAvatar(props.items)}
               />
             </div>
           </Show>
