@@ -1210,6 +1210,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
   const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
+  const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5';
+  const branchHeaderControlRailClass = 'flex flex-col gap-2 md:gap-2.5 lg:flex-row lg:items-center';
+  const branchHeaderControlGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5';
+  const branchHeaderActionsGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5 lg:ml-auto';
   const secondaryActionButtonClass = cn('cursor-pointer rounded-md bg-background/88 px-3 shadow-sm shadow-black/5 hover:bg-background', redevenSurfaceRoleClass('control'));
   const primaryActionButtonClass = 'cursor-pointer rounded-md px-3 shadow-sm shadow-black/10';
   const dangerActionButtonClass = 'cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-3 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive';
@@ -1538,8 +1542,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <div class={cn('rounded-md px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
-                  <div class="flex flex-col gap-2.5">
-                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
+                  <div class={branchHeaderSummaryBandClass}>
+                    <div class="min-w-0">
                       <GitLabelBlock
                         class="min-w-0 flex-1"
                         label="Branch"
@@ -1562,81 +1566,81 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           </div>
                         </Show>
                       </GitLabelBlock>
+                    </div>
 
-                      <div class="flex w-full sm:w-auto sm:justify-end">
-                        <div
-                          class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
-                          role="tablist"
-                          aria-label="Branch detail tabs"
-                          aria-orientation="horizontal"
-                        >
-                          <For each={GIT_BRANCH_SUBVIEW_IDS}>
-                            {(view) => {
-                              const active = () => branchSubview() === view;
-                              return (
-                                <button
-                                  ref={(el) => {
-                                    branchSubviewTabRefs.set(view, el);
-                                  }}
-                                  type="button"
-                                  role="tab"
-                                  id={gitBranchSubviewTabId(view)}
-                                  aria-selected={active()}
-                                  aria-controls={gitBranchSubviewPanelId(view)}
-                                  tabIndex={active() ? 0 : -1}
-                                  class={branchSubviewTabClass(active())}
-                                  onClick={() => props.onSelectBranchSubview?.(view)}
-                                  onKeyDown={(event) => handleBranchSubviewKeyDown(event, view)}
-                                >
-                                  {branchSubviewLabel(view)}
-                                </button>
-                              );
-                            }}
-                          </For>
-                        </div>
+                    <div class="flex w-full xl:justify-end">
+                      <div
+                        class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 xl:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
+                        role="tablist"
+                        aria-label="Branch detail tabs"
+                        aria-orientation="horizontal"
+                      >
+                        <For each={GIT_BRANCH_SUBVIEW_IDS}>
+                          {(view) => {
+                            const active = () => branchSubview() === view;
+                            return (
+                              <button
+                                ref={(el) => {
+                                  branchSubviewTabRefs.set(view, el);
+                                }}
+                                type="button"
+                                role="tab"
+                                id={gitBranchSubviewTabId(view)}
+                                aria-selected={active()}
+                                aria-controls={gitBranchSubviewPanelId(view)}
+                                tabIndex={active() ? 0 : -1}
+                                class={branchSubviewTabClass(active())}
+                                onClick={() => props.onSelectBranchSubview?.(view)}
+                                onKeyDown={(event) => handleBranchSubviewKeyDown(event, view)}
+                              >
+                                {branchSubviewLabel(view)}
+                              </button>
+                            );
+                          }}
+                        </For>
                       </div>
                     </div>
 
                     <div class={headerControlBarClass}>
-                      <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                      <div class={branchHeaderControlRailClass}>
                         <Show when={branchHeaderControls().secondaryShortcuts.length > 0}>
-                          <div class={cn('hidden sm:block', headerControlGroupLabelClass)}>Workspace</div>
-                          <GitShortcutOrbDock>
-                            <For each={branchHeaderControls().secondaryShortcuts}>
-                              {(shortcut) => (
-                                <GitShortcutOrbButton
-                                  label={shortcut.label}
-                                  tone={shortcut.tone}
-                                  icon={shortcut.icon}
-                                  disabled={shortcut.disabled}
-                                  disabledReason={shortcut.disabledReason}
-                                  onClick={shortcut.onPress}
-                                />
-                              )}
-                            </For>
-                          </GitShortcutOrbDock>
-                        </Show>
-
-                        <Show when={branchHeaderControls().secondaryShortcuts.length > 0 && branchHeaderControls().primaryActions.length > 0}>
-                          <div class={cn('hidden h-4 w-px sm:block', redevenDividerRoleClass())} aria-hidden="true" />
+                          <div class={branchHeaderControlGroupClass}>
+                            <div class={cn('hidden shrink-0 md:block', headerControlGroupLabelClass)}>Workspace</div>
+                            <GitShortcutOrbDock>
+                              <For each={branchHeaderControls().secondaryShortcuts}>
+                                {(shortcut) => (
+                                  <GitShortcutOrbButton
+                                    label={shortcut.label}
+                                    tone={shortcut.tone}
+                                    icon={shortcut.icon}
+                                    disabled={shortcut.disabled}
+                                    disabledReason={shortcut.disabledReason}
+                                    onClick={shortcut.onPress}
+                                  />
+                                )}
+                              </For>
+                            </GitShortcutOrbDock>
+                          </div>
                         </Show>
 
                         <Show when={branchHeaderControls().primaryActions.length > 0}>
-                          <div class={cn('hidden sm:block', headerControlGroupLabelClass)}>Actions</div>
-                          <div class="flex flex-wrap items-center gap-1.5 sm:ml-auto">
-                            <For each={branchHeaderControls().primaryActions}>
-                              {(action) => (
-                                <Button
-                                  size="sm"
-                                  variant={action.emphasis === 'accent' ? 'default' : action.emphasis === 'danger' ? 'ghost' : 'outline'}
-                                  class={branchActionButtonClass(action.emphasis)}
-                                  disabled={action.disabled}
-                                  onClick={action.onPress}
-                                >
-                                  {action.label}
-                                </Button>
-                              )}
-                            </For>
+                          <div class={branchHeaderActionsGroupClass}>
+                            <div class={cn('hidden shrink-0 md:block', headerControlGroupLabelClass)}>Actions</div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                              <For each={branchHeaderControls().primaryActions}>
+                                {(action) => (
+                                  <Button
+                                    size="sm"
+                                    variant={action.emphasis === 'accent' ? 'default' : action.emphasis === 'danger' ? 'ghost' : 'outline'}
+                                    class={branchActionButtonClass(action.emphasis)}
+                                    disabled={action.disabled}
+                                    onClick={action.onPress}
+                                  >
+                                    {action.label}
+                                  </Button>
+                                )}
+                              </For>
+                            </div>
                           </div>
                         </Show>
                       </div>
