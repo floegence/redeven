@@ -10,20 +10,38 @@ function readRedevenCss(): string {
 }
 
 describe('Redeven Env App surface theme contract', () => {
-  it('defines the root panel surface family and aliases shared card/popover tokens to it', () => {
+  it('defines the root panel surface family, paired stroke tokens, and aliases shared card/popover tokens to it', () => {
     const src = readRedevenCss();
 
     expect(src).toContain('--redeven-surface-panel: rgb(246, 245, 244);');
     expect(src).toContain('--redeven-surface-panel-soft: #fafbfc;');
     expect(src).toContain('--redeven-surface-panel-elevated: #ffffff;');
+    expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
+    expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--background) 86%, var(--redeven-surface-panel-elevated) 14%);');
+    expect(src).toContain('--redeven-surface-control-muted: color-mix(in srgb, var(--muted) 46%, var(--background));');
     expect(src).toContain('--redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, white 18%);');
+    expect(src).toContain('--redeven-stroke-panel: var(--redeven-surface-panel-border);');
+    expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);');
+    expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 82%, var(--foreground) 18%);');
+    expect(src).toContain('--redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 76%, var(--foreground) 24%);');
+    expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 74%, var(--foreground) 26%);');
+    expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);');
     expect(src).toContain('--card: var(--redeven-surface-panel);');
     expect(src).toContain('--popover: var(--redeven-surface-panel);');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
     expect(src).toContain('--redeven-surface-panel-soft: #353942;');
     expect(src).toContain('--redeven-surface-panel-elevated: #40454f;');
+    expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
+    expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--background) 62%, var(--redeven-surface-panel-elevated) 38%);');
+    expect(src).toContain('--redeven-surface-control-muted: color-mix(in srgb, var(--muted) 56%, var(--background));');
     expect(src).toContain('--redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, #616976 18%);');
+    expect(src).toContain('--redeven-stroke-panel: var(--redeven-surface-panel-border);');
+    expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 62%, var(--foreground) 38%);');
+    expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 74%, var(--foreground) 26%);');
+    expect(src).toContain('--redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 68%, var(--foreground) 32%);');
+    expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);');
+    expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);');
   });
 
   it('keeps Flower on the shared panel surface family instead of private raw color literals', () => {
@@ -37,5 +55,22 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('--flower-chat-surface: rgb(41, 44, 51);');
     expect(src.match(/rgb\(246, 245, 244\)/g)?.length ?? 0).toBe(1);
     expect(src.match(/rgb\(41, 44, 51\)/g)?.length ?? 0).toBe(1);
+  });
+
+  it('defines reusable semantic surface and divider classes for local Env App consumers', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.redeven-surface-panel {');
+    expect(src).toContain('.redeven-surface-panel--interactive {');
+    expect(src).toContain('.redeven-surface-panel--strong {');
+    expect(src).toContain('.redeven-surface-overlay {');
+    expect(src).toContain('.redeven-surface-control {');
+    expect(src).toContain('.redeven-surface-control--muted {');
+    expect(src).toContain('.redeven-surface-segmented {');
+    expect(src).toContain('.redeven-surface-segmented__item {');
+    expect(src).toContain('.redeven-surface-segmented__item--active {');
+    expect(src).toContain('.redeven-surface-inset {');
+    expect(src).toContain('.redeven-divider {');
+    expect(src).toContain('.redeven-divider--strong {');
   });
 });

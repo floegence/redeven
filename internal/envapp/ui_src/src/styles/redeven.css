@@ -11,7 +11,16 @@
   --redeven-surface-panel: rgb(246, 245, 244);
   --redeven-surface-panel-soft: #fafbfc;
   --redeven-surface-panel-elevated: #ffffff;
+  --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
+  --redeven-surface-control: color-mix(in srgb, var(--background) 86%, var(--redeven-surface-panel-elevated) 14%);
+  --redeven-surface-control-muted: color-mix(in srgb, var(--muted) 46%, var(--background));
   --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, white 18%);
+  --redeven-stroke-panel: var(--redeven-surface-panel-border);
+  --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);
+  --redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 82%, var(--foreground) 18%);
+  --redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 76%, var(--foreground) 24%);
+  --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 74%, var(--foreground) 26%);
+  --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);
   --card: var(--redeven-surface-panel);
   --popover: var(--redeven-surface-panel);
   --git-browser-selection-bg:
@@ -32,7 +41,16 @@ html.dark {
   --redeven-surface-panel: rgb(41, 44, 51);
   --redeven-surface-panel-soft: #353942;
   --redeven-surface-panel-elevated: #40454f;
+  --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
+  --redeven-surface-control: color-mix(in srgb, var(--background) 62%, var(--redeven-surface-panel-elevated) 38%);
+  --redeven-surface-control-muted: color-mix(in srgb, var(--muted) 56%, var(--background));
   --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, #616976 18%);
+  --redeven-stroke-panel: var(--redeven-surface-panel-border);
+  --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 62%, var(--foreground) 38%);
+  --redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 74%, var(--foreground) 26%);
+  --redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 68%, var(--foreground) 32%);
+  --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);
+  --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);
   --card: var(--redeven-surface-panel);
   --popover: var(--redeven-surface-panel);
   --git-browser-selection-bg:
@@ -218,6 +236,83 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   box-shadow:
     0 2px 8px rgba(15, 23, 42, 0.22),
     0 0 0 1px color-mix(in srgb, white 36%, transparent);
+}
+
+.redeven-surface-panel {
+  border-color: var(--redeven-stroke-panel) !important;
+  background: var(--redeven-surface-panel) !important;
+}
+
+.redeven-surface-panel--interactive {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    opacity 150ms ease;
+}
+
+.redeven-surface-panel--interactive:hover {
+  border-color: var(--redeven-stroke-panel-strong) !important;
+}
+
+.redeven-surface-panel--strong {
+  border-color: var(--redeven-stroke-panel-strong) !important;
+}
+
+.redeven-surface-overlay {
+  border-color: var(--redeven-stroke-overlay) !important;
+  background: var(--redeven-surface-overlay) !important;
+}
+
+.redeven-surface-control {
+  border-color: var(--redeven-stroke-control) !important;
+}
+
+.redeven-surface-control:hover:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--redeven-stroke-control-strong) !important;
+}
+
+.redeven-surface-control--muted {
+  background: var(--redeven-surface-control-muted) !important;
+}
+
+.redeven-surface-control--muted:hover:not(:disabled):not([aria-disabled='true']) {
+  background: color-mix(in srgb, var(--redeven-surface-control-muted) 78%, var(--redeven-surface-panel-elevated) 22%) !important;
+}
+
+.redeven-surface-segmented {
+  border-color: var(--redeven-stroke-control) !important;
+  background: color-mix(in srgb, var(--redeven-surface-control-muted) 82%, transparent) !important;
+}
+
+.redeven-surface-segmented__item {
+  border: 1px solid transparent;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.redeven-surface-segmented__item:hover:not([aria-selected='true']) {
+  background: color-mix(in srgb, var(--redeven-surface-control) 84%, transparent) !important;
+}
+
+.redeven-surface-segmented__item--active {
+  border-color: var(--redeven-stroke-control-strong) !important;
+  background: var(--redeven-surface-control) !important;
+}
+
+.redeven-surface-inset {
+  border-color: var(--redeven-stroke-divider) !important;
+  background: color-mix(in srgb, var(--redeven-surface-control-muted) 72%, var(--background)) !important;
+}
+
+.redeven-divider {
+  border-color: var(--redeven-stroke-divider) !important;
+}
+
+.redeven-divider--strong {
+  border-color: var(--redeven-stroke-control) !important;
 }
 
 .ai-model-select-trigger {

@@ -2,6 +2,7 @@ import { Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, History } from '@floegence/floe-webapp-core/icons';
 import { Tooltip } from '../primitives/Tooltip';
+import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export type GitHistoryMode = 'files' | 'git';
 
@@ -27,8 +28,8 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
         buttonBaseClass,
         'flex min-w-0 w-full flex-1 items-center justify-center gap-1.5 text-center',
         props.mode === 'git'
-          ? 'border-border bg-background text-foreground shadow-sm'
-          : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+          ? `${redevenSegmentedItemClass(true)} text-foreground shadow-sm`
+          : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:bg-muted/50 hover:text-foreground`,
       )}
       onClick={() => props.onChange('git')}
     >
@@ -41,7 +42,7 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
     <div
       role="radiogroup"
       aria-label="Browser mode"
-      class={cn('inline-flex w-full items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', props.class)}
+      class={cn('inline-flex w-full items-center gap-0.5 rounded-md border bg-muted/40 p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', redevenSurfaceRoleClass('segmented'), props.class)}
     >
       <button
         type="button"
@@ -51,8 +52,8 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
           buttonBaseClass,
           'flex min-w-0 w-full flex-1 items-center justify-center gap-1.5 text-center',
           props.mode === 'files'
-            ? 'border-border bg-background text-foreground shadow-sm'
-            : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+            ? `${redevenSegmentedItemClass(true)} text-foreground shadow-sm`
+            : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:bg-muted/50 hover:text-foreground`,
         )}
         onClick={() => props.onChange('files')}
       >

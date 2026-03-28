@@ -3,6 +3,7 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitPreviewDeleteBranchResponse } from '../protocol/redeven_v1';
 import { branchDisplayName } from '../utils/gitWorkbench';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitDeleteBranchConfirmButton } from './GitDeleteBranchConfirmButton';
 import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 import { resolveDeleteBranchReview, trimDeleteBranchReason, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchReviewModel';
@@ -29,6 +30,7 @@ export interface GitDeleteBranchReviewDialogProps {
 export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogProps) {
   const layout = useLayout();
   const [confirmBranchName, setConfirmBranchName] = createSignal('');
+  const outlineControlClass = redevenSurfaceRoleClass('control');
 
   const branchName = () => branchDisplayName(props.branch);
   const preview = () => props.preview ?? null;
@@ -80,16 +82,16 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
       title="Delete Branch"
       description={props.description}
       footer={(
-        <div class="border-t border-border/60 bg-background/88 px-4 pt-3 pb-4 backdrop-blur supports-[backdrop-filter]:bg-background/78">
+        <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
           <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-            <Button size="sm" variant="outline" class="w-full sm:w-auto" disabled={loading() || deleting()} onClick={props.onClose}>
+            <Button size="sm" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={loading() || deleting()} onClick={props.onClose}>
               Cancel
             </Button>
             <Show when={props.previewError && props.branch}>
               <Button
                 size="sm"
                 variant="outline"
-                class="w-full sm:w-auto"
+                class={cn('w-full sm:w-auto', outlineControlClass)}
                 disabled={loading() || deleting()}
                 onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
               >
@@ -156,7 +158,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
                         </label>
                         <input
                           type="text"
-                          class="w-full rounded-md border border-input bg-background px-3 py-2 text-xs text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70"
+                          class={cn('w-full rounded-md border bg-background px-3 py-2 text-xs text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', outlineControlClass)}
                           value={confirmBranchName()}
                           placeholder={review().expectedBranchName || branchName()}
                           onInput={(event) => setConfirmBranchName(event.currentTarget.value)}

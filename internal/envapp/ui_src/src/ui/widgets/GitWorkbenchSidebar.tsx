@@ -29,6 +29,7 @@ import {
   gitToneSelectableCardClass,
   workspaceSectionTone,
 } from './GitChrome';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitCommitGraph } from './GitCommitGraph';
 import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 
@@ -127,7 +128,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                       fallback={<GitStatePane loading message="Loading workspace changes..." class="min-h-[4.5rem] py-3" />}
                     >
                       <Show when={!props.workspaceError} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
-                        <div class="rounded-md border border-border/65 bg-card p-2.5">
+                        <div class={cn('rounded-md border p-2.5', redevenSurfaceRoleClass('panelStrong'))}>
                           <div class="flex items-start justify-between gap-2 px-0.5">
                             <div class="min-w-0 flex-1">
                               <div class="flex flex-wrap items-center gap-1.5">

@@ -7,6 +7,7 @@ import {
   type GitGetDiffContentRequest,
 } from '../protocol/redeven_v1';
 import { seedGitDiffContent, type GitSeededCommitFileSummary, type GitSeededWorkspaceChange } from '../utils/gitWorkbench';
+import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitPatchViewer } from './GitPatchViewer';
 import { GitStatePane } from './GitWorkbenchPrimitives';
 
@@ -251,12 +252,13 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     >
       <div class="flex h-full min-h-0 flex-col">
         <div class="flex shrink-0 items-center justify-between gap-3 pb-2">
-          <div class="inline-flex items-center gap-1 rounded-md border border-border/55 bg-muted/[0.16] p-1">
+          <div class={cn('inline-flex items-center gap-1 rounded-md border p-1', redevenSurfaceRoleClass('segmented'))}>
             <button
               type="button"
               class={cn(
                 gitDiffModeButtonClass,
-                mode() === 'patch' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                redevenSegmentedItemClass(mode() === 'patch'),
+                mode() === 'patch' ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
               aria-pressed={mode() === 'patch'}
               onClick={() => setMode('patch')}
@@ -267,7 +269,8 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
               type="button"
               class={cn(
                 gitDiffModeButtonClass,
-                mode() === 'full-context' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                redevenSegmentedItemClass(mode() === 'full-context'),
+                mode() === 'full-context' ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
               aria-pressed={mode() === 'full-context'}
               disabled={!canLoadFullContext()}
@@ -338,7 +341,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
               loading
               message="Loading full-context diff..."
               class="absolute inset-0 z-10 h-full rounded-md bg-background/44 backdrop-blur-[1px]"
-              contentClass="rounded-md border border-border/45 bg-background/90 px-4 py-3 shadow-sm"
+              contentClass={cn('rounded-md border px-4 py-3 shadow-sm', redevenSurfaceRoleClass('overlay'))}
             />
           </Show>
         </div>

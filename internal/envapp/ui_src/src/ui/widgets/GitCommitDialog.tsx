@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass } from './GitChrome';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
@@ -41,6 +42,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
   const partial = createMemo(() => fileCount() > loadedCount());
   const additions = createMemo(() => props.stagedItems.reduce((sum, item) => sum + Number(item.additions ?? 0), 0));
   const deletions = createMemo(() => props.stagedItems.reduce((sum, item) => sum + Number(item.deletions ?? 0), 0));
+  const outlineControlClass = redevenSurfaceRoleClass('control');
 
   return (
     <Dialog
@@ -51,7 +53,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
       title="Commit staged changes"
       footer={(
         <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={props.onClose} disabled={props.loading}>
+          <Button size="sm" variant="outline" class={outlineControlClass} onClick={props.onClose} disabled={props.loading}>
             Cancel
           </Button>
           <Button size="sm" variant="default" onClick={() => props.onConfirm?.()} loading={props.loading} disabled={!props.canCommit}>
@@ -72,7 +74,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
           ]}
         />
 
-        <div class="overflow-hidden rounded-md border border-border/65 bg-card">
+        <div class={`overflow-hidden rounded-md border ${redevenSurfaceRoleClass('panelStrong')}`}>
           <Show
             when={!props.loadingItems || props.stagedItems.length > 0}
             fallback={(
@@ -123,7 +125,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
           <label class="mb-1 block text-xs font-medium text-foreground">Message</label>
           <textarea
             rows={4}
-            class="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-xs leading-5 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70"
+            class={`w-full resize-y rounded-md border bg-background px-3 py-2 text-xs leading-5 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70 ${outlineControlClass}`}
             value={props.message}
             placeholder="Write the commit message"
             onInput={(event) => props.onMessageChange?.(event.currentTarget.value)}

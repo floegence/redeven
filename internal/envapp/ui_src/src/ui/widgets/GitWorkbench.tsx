@@ -37,6 +37,7 @@ import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } 
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -172,7 +173,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col bg-background', props.class)}>
-      <div class="shrink-0 border-b border-border/50 bg-background/92 px-3 py-2 backdrop-blur-sm">
+      <div class={cn('shrink-0 border-b px-3 py-2 backdrop-blur-sm', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
         <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <GitLabelBlock
             class="min-w-0 flex-1"

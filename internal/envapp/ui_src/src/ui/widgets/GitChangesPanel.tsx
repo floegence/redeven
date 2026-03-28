@@ -46,6 +46,7 @@ import {
 } from './GitWorkbenchPrimitives';
 import type { GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitVirtualTable } from './GitVirtualTable';
 
 export interface GitChangesPanelProps {
@@ -117,7 +118,7 @@ interface WorkspaceTableProps {
 
 function WorkspaceTable(props: WorkspaceTableProps) {
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+    <div class={`flex h-full min-h-0 flex-col overflow-hidden rounded-md border ${redevenSurfaceRoleClass('panelStrong')}`}>
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -284,7 +285,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         <Show when={!visibleLoading()} fallback={<GitStatePane loading message="Loading workspace changes..." />}>
           <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
             <div class="flex min-h-0 flex-1 flex-col gap-3">
-              <div class="shrink-0 rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
+              <div class={`shrink-0 rounded-md border px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02] ${redevenSurfaceRoleClass('panelStrong')}`}>
                 <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <GitLabelBlock class="min-w-0 flex-1" label="Workspace" tone={selectedTone()}>
                     <div class="flex flex-wrap items-center gap-2">
@@ -358,7 +359,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         <Button
                           size="sm"
                           variant="outline"
-                          class="w-full rounded-md sm:w-auto"
+                          class={`w-full rounded-md sm:w-auto ${redevenSurfaceRoleClass('control')}`}
                           disabled={!canOpenStash()}
                           onClick={() => {
                             const repoRoot = repoRootPath();
@@ -376,7 +377,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        class="w-full rounded-md sm:w-auto"
+                        class={`w-full rounded-md sm:w-auto ${redevenSurfaceRoleClass('control')}`}
                         onClick={() => props.onBulkAction?.(selectedSection())}
                         disabled={visibleCount() === 0 || bulkActionBusy()}
                         loading={bulkActionBusy()}

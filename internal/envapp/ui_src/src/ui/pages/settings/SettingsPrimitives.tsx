@@ -1,5 +1,7 @@
 import { For, Show, createMemo, type JSX } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
 import { Card, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
+import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 
 export type ViewMode = 'ui' | 'json';
 
@@ -20,13 +22,13 @@ function settingsTagVariant(tone: 'default' | 'success' | 'warning' | 'danger' =
 export function ViewToggle(props: { value: () => ViewMode; disabled?: boolean; onChange: (v: ViewMode) => void }) {
   const btnClass = (active: boolean) => {
     const base = 'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150';
-    if (active) return `${base} bg-background text-foreground shadow-sm border border-border`;
-    return `${base} text-muted-foreground hover:text-foreground hover:bg-muted/50`;
+    if (active) return cn(base, redevenSegmentedItemClass(true), 'text-foreground shadow-sm');
+    return cn(base, redevenSegmentedItemClass(false), 'text-muted-foreground hover:text-foreground');
   };
   const disabledClass = () => (props.disabled ? 'opacity-50 pointer-events-none' : '');
 
   return (
-    <div class={`inline-flex items-center gap-0.5 rounded-lg border border-border p-0.5 bg-muted/40 ${disabledClass()}`}>
+    <div class={cn('inline-flex items-center gap-0.5 rounded-lg border p-0.5', redevenSurfaceRoleClass('segmented'), disabledClass())}>
       <button type="button" class={btnClass(props.value() === 'ui')} onClick={() => props.onChange('ui')}>
         UI
       </button>
@@ -99,8 +101,8 @@ export interface SettingsCardProps {
 
 export function SettingsCard(props: SettingsCardProps) {
   return (
-    <Card class="overflow-hidden shadow-sm">
-      <div class="border-b border-border bg-muted/20 px-4 py-3.5 sm:px-5">
+    <Card class={cn('overflow-hidden shadow-sm', redevenSurfaceRoleClass('panelStrong'))}>
+      <div class={cn('border-b bg-muted/20 px-4 py-3.5 sm:px-5', redevenDividerRoleClass('strong'))}>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-start gap-3">
             <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/15">
@@ -183,7 +185,10 @@ export function SubSectionHeader(props: { title: string; description?: string; a
 export function JSONEditor(props: { value: string; onChange: (v: string) => void; disabled?: boolean; rows?: number }) {
   return (
     <textarea
-      class="w-full resize-y rounded-lg border border-border bg-muted/30 px-3 py-2.5 font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-muted/50 disabled:opacity-50"
+      class={cn(
+        'w-full resize-y rounded-lg border px-3 py-2.5 font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-muted/50 disabled:opacity-50',
+        redevenSurfaceRoleClass('controlMuted'),
+      )}
       style={{ 'min-height': `${(props.rows ?? 6) * 1.5}rem` }}
       value={props.value}
       onInput={(event) => props.onChange(event.currentTarget.value)}
@@ -203,7 +208,7 @@ export function SettingsPill(props: { tone?: 'default' | 'success' | 'warning' |
 
 export function SettingsTable(props: { children: JSX.Element; minWidthClass?: string; class?: string; stickyHeader?: boolean }) {
   return (
-    <div class={`overflow-auto rounded-lg border border-border bg-background ${props.class ?? ''}`}>
+    <div class={cn('overflow-auto rounded-lg border bg-background', redevenSurfaceRoleClass('panel'), props.class)}>
       <table class={`w-full text-xs align-top ${props.minWidthClass ?? ''}`}>
         {props.children}
       </table>
@@ -216,7 +221,7 @@ export function SettingsTableHead(props: { children: JSX.Element; sticky?: boole
 }
 
 export function SettingsTableHeaderRow(props: { children: JSX.Element }) {
-  return <tr class="border-b border-border/70 text-left">{props.children}</tr>;
+  return <tr class={cn('border-b text-left', redevenDividerRoleClass('strong'))}>{props.children}</tr>;
 }
 
 export function SettingsTableHeaderCell(props: { children: JSX.Element; align?: 'left' | 'center' | 'right'; class?: string }) {
@@ -229,7 +234,7 @@ export function SettingsTableBody(props: { children: JSX.Element }) {
 }
 
 export function SettingsTableRow(props: { children: JSX.Element; selected?: boolean; class?: string }) {
-  return <tr class={`border-b border-border/50 last:border-b-0 ${props.selected ? 'bg-muted/30' : ''} ${props.class ?? ''}`}>{props.children}</tr>;
+  return <tr class={cn('border-b last:border-b-0', redevenDividerRoleClass(), props.selected ? 'bg-muted/30' : '', props.class)}>{props.children}</tr>;
 }
 
 export function SettingsTableCell(props: { children: JSX.Element; align?: 'left' | 'center' | 'right'; class?: string }) {

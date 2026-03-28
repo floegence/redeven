@@ -1,6 +1,7 @@
 import { For, Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitCommitSummary } from '../protocol/redeven_v1';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export type CommitGraphLane = {
   hash: string;
@@ -215,11 +216,11 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   };
 
   return (
-    <div class={cn('overflow-hidden rounded-md border border-border/55 bg-card', props.class)}>
+    <div class={cn('overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'), props.class)}>
       <div class="relative">
         <svg
           data-commit-graph-rails
-          class="pointer-events-none absolute top-0 left-0 z-10 border-r border-border/40 bg-muted/[0.14]"
+          class={cn('pointer-events-none absolute top-0 left-0 z-10 border-r', redevenSurfaceRoleClass('inset'), redevenDividerRoleClass())}
           style={railStyle()}
           width={width()}
           height={height()}
@@ -233,7 +234,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                 y1="0"
                 x2={laneX(laneIndex)}
                 y2={height()}
-                stroke="color-mix(in srgb, var(--border) 52%, transparent)"
+                stroke="var(--redeven-stroke-divider)"
                 stroke-width="1"
                 stroke-dasharray="2 4"
               />
@@ -277,7 +278,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                     class={cn(
                       'relative z-20 grid min-w-0 px-3 transition-colors duration-150',
                       selected() ? 'bg-sidebar-accent' : 'bg-transparent group-hover:bg-muted/[0.28]',
-                      rowIndex() === rowCount() - 1 ? '' : 'border-b border-border/40',
+                      rowIndex() === rowCount() - 1 ? '' : cn('border-b', redevenDividerRoleClass()),
                     )}
                   >
                     <div class="flex items-center gap-2 leading-none">

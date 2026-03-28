@@ -3,6 +3,7 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitBranchSummary, GitCommitFileSummary, GitPreviewMergeBranchResponse, GitWorkspaceSummary } from '../protocol/redeven_v1';
 import { branchDisplayName, changeSecondaryPath, gitDiffEntryIdentity, type GitStashWindowRequest } from '../utils/gitWorkbench';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -106,6 +107,7 @@ function outcomeDetail(outcome: string | undefined, currentRef: string, sourceNa
 
 export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
   const layout = useLayout();
+  const outlineControlClass = redevenSurfaceRoleClass('control');
 
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitCommitFileSummary | null>(null);
@@ -166,16 +168,16 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
         title="Merge Branch"
         description={`Merge ${branchName()} into ${currentRef()}.`}
         footer={(
-          <div class="border-t border-border/60 bg-background/88 px-4 pt-3 pb-4 backdrop-blur supports-[backdrop-filter]:bg-background/78">
+          <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
             <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
-              <Button size="sm" variant="outline" class="w-full sm:w-auto" disabled={loading() || merging()} onClick={props.onClose}>
+              <Button size="sm" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={loading() || merging()} onClick={props.onClose}>
                 Close
               </Button>
               <Show when={props.previewError && props.branch}>
                 <Button
                   size="sm"
                   variant="outline"
-                  class="w-full sm:w-auto"
+                  class={cn('w-full sm:w-auto', outlineControlClass)}
                   disabled={loading() || merging()}
                   onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
                 >
@@ -216,7 +218,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
               <Show when={props.branch && preview()} fallback={<GitStatePane message="Choose a branch to review its merge plan." class="m-4" surface />}>
                 <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-2 pb-4">
                   <div class="flex flex-col gap-3">
-                    <GitSubtleNote class="border-border/55 bg-background/72 text-foreground">
+                    <GitSubtleNote class="text-foreground">
                       <div class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                           <div class="text-xs font-semibold text-foreground">{sourceName()}</div>
@@ -226,19 +228,19 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                           {outcomeDetail(preview()?.outcome, currentRef(), sourceName())}
                         </div>
                         <div class="grid gap-1 rounded-md bg-muted/[0.12] p-1 text-[11px] sm:grid-cols-2 lg:grid-cols-4">
-                          <div class="rounded bg-background/75 px-2 py-1">
+                          <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
                             <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Target</div>
                             <div class="mt-0.5 font-medium text-foreground">{currentRef()}</div>
                           </div>
-                          <div class="rounded bg-background/75 px-2 py-1">
+                          <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
                             <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Source</div>
                             <div class="mt-0.5 font-medium text-foreground">{sourceName()}</div>
                           </div>
-                          <div class="rounded bg-background/75 px-2 py-1">
+                          <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
                             <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Ahead / Behind</div>
                             <div class="mt-0.5 font-medium text-foreground">↑{preview()?.sourceAheadCount ?? 0} ↓{preview()?.sourceBehindCount ?? 0}</div>
                           </div>
-                          <div class="rounded bg-background/75 px-2 py-1">
+                          <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
                             <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Merge base</div>
                             <div class="mt-0.5 font-medium text-foreground">{preview()?.mergeBase ? preview()?.mergeBase?.slice(0, 7) : '—'}</div>
                           </div>
@@ -247,7 +249,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                     </GitSubtleNote>
 
                     <Show when={linkedWorktreeNote()}>
-                      <GitSubtleNote class="border-border/55 bg-background/72 text-muted-foreground">
+                      <GitSubtleNote>
                         {linkedWorktreeNote()}
                       </GitSubtleNote>
                     </Show>
@@ -259,7 +261,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                             <Button
                               size="sm"
                               variant="outline"
-                              class="rounded-md"
+                              class={cn('rounded-md', outlineControlClass)}
                               disabled={loading() || merging()}
                               onClick={() => {
                                 const repoRootPath = stashBlockerPath();
@@ -291,7 +293,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                       </div>
 
                       <div class="flex min-h-0 flex-1 overflow-hidden">
-                        <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+                        <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'))}>
                           <Show
                             when={files().length > 0}
                             fallback={(

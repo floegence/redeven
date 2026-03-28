@@ -69,7 +69,10 @@ describe('browser workspace layout wiring', () => {
     expect(workspaceSrc).toContain('[-webkit-overflow-scrolling:touch]');
     expect(workspaceSrc).toContain('[touch-action:pan-y_pinch-zoom]');
     expect(workspaceSrc).toContain('redeven-file-list-compact');
-    expect(workspaceSrc).toContain('border-b border-border/60 bg-background/95 px-2.5 py-1.5');
+    expect(workspaceSrc).toContain("import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
+    expect(workspaceSrc).toContain("redevenSurfaceRoleClass('controlMuted')");
+    expect(workspaceSrc).toContain("redevenSurfaceRoleClass('segmented')");
+    expect(workspaceSrc).toContain("class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}");
     expect(workspaceSrc).toContain('text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60');
     expect(workspaceSrc).not.toContain('FileBrowserCurrentFolderCard');
     expect(workspaceSrc).toContain('<FileBrowserSidebarTree');
@@ -100,7 +103,10 @@ describe('browser workspace layout wiring', () => {
 
     expect(modeSrc).toContain('role="radiogroup"');
     expect(modeSrc).toContain('aria-label="Browser mode"');
-    expect(modeSrc).toContain('inline-flex w-full items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]');
+    expect(modeSrc).toContain("import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
+    expect(modeSrc).toContain("class={cn('inline-flex w-full items-center gap-0.5 rounded-md border bg-muted/40 p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', redevenSurfaceRoleClass('segmented'), props.class)}");
+    expect(modeSrc).toContain("redevenSegmentedItemClass(true)");
+    expect(modeSrc).toContain("redevenSegmentedItemClass(false)");
     expect(modeSrc).not.toContain('>Browse<');
     expect(modeSrc).not.toContain('>Inspect<');
 
@@ -197,15 +203,15 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('min-h-[2rem] text-[11px] leading-relaxed line-clamp-2 text-muted-foreground');
     expect(branchesSrc).toContain('flex flex-col gap-3');
     expect(branchesSrc).toContain('flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between');
-    expect(branchesSrc).toContain("const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';");
+    expect(branchesSrc).toContain("const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));");
     expect(branchesSrc).toContain("const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';");
     expect(branchesSrc).toContain("const branchActionGridClass = () => 'grid-cols-1';");
-    expect(branchesSrc).toContain("const secondaryActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto';");
+    expect(branchesSrc).toContain("const secondaryActionButtonClass = cn('w-full cursor-pointer rounded-md bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto', redevenSurfaceRoleClass('control'));");
     expect(branchesSrc).toContain("const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';");
     expect(branchesSrc).toContain("const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';");
     expect(branchesSrc).toContain('>Workspace<');
     expect(branchesSrc).toContain('>Actions<');
-    expect(branchesSrc).toContain('grid w-full grid-cols-2 rounded-lg border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]');
+    expect(branchesSrc).toContain("class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]', redevenSurfaceRoleClass('segmented'))}");
     expect(branchesSrc).toContain("'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150'");
     expect(branchesSrc).toContain('<GitShortcutOrbDock class="w-full">');
     expect(branchesSrc).toContain('<GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">');
@@ -250,10 +256,12 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:pointer-events-none disabled:opacity-45';");
     expect(primitivesSrc).toContain("grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5");
-    expect(primitivesSrc).toContain("grid grid-cols-1 gap-2 border-t border-border/55 bg-background/72 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2");
+    expect(primitivesSrc).toContain("'grid grid-cols-1 gap-2 border-t px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2'");
+    expect(primitivesSrc).toContain("redevenDividerRoleClass()");
+    expect(primitivesSrc).toContain("redevenSurfaceRoleClass('inset')");
     expect(primitivesSrc).toContain("class={cn('inline-flex max-w-full flex-wrap items-center gap-1.5', props.class)}");
     expect(primitivesSrc).toContain("return <div class={cn('break-words text-[13px] font-bold leading-5 tracking-tight text-foreground', props.class)}>{props.children}</div>;");
-    expect(primitivesSrc).toContain('sticky right-0 z-10 border-l border-border/45');
+    expect(primitivesSrc).toContain("sticky right-0 z-10 border-l bg-muted/40 px-2.5 py-1 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)]");
     expect(changesSrc).not.toContain('border-b border-border/70 px-3 py-2');
     expect(changesSrc).not.toContain('text-[24px] font-semibold tracking-tight');
   });
@@ -294,7 +302,9 @@ describe('browser workspace layout wiring', () => {
   it('keeps the commit graph rails above row selection backgrounds', () => {
     const src = read('./GitCommitGraph.tsx');
 
-    expect(src).toContain('absolute top-0 left-0 z-10 border-r border-border/40 bg-muted/[0.14]');
+    expect(src).toContain("import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
+    expect(src).toContain("class={cn('pointer-events-none absolute top-0 left-0 z-10 border-r', redevenSurfaceRoleClass('inset'), redevenDividerRoleClass())}");
+    expect(src).toContain("rowIndex() === rowCount() - 1 ? '' : cn('border-b', redevenDividerRoleClass())");
     expect(src).toContain('data-commit-graph-rails');
     expect(src).toContain('data-commit-graph-segment={row.commit.hash}');
     expect(src).toContain('data-commit-graph-node={props.row.commit.hash}');
@@ -338,7 +348,8 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('GitLabelBlock');
     expect(src).toContain('gitToneActionButtonClass()');
     expect(src).toContain('variant="ghost"');
-    expect(src).toContain('bg-background/92');
+    expect(src).toContain("redevenDividerRoleClass()");
+    expect(src).toContain("redevenSurfaceRoleClass('inset')");
     expect(src).not.toContain("gitToneSurfaceClass(subviewTone())");
     expect(src).not.toContain('variant="outline"');
     expect(src).not.toContain('GitHistoryModeSwitch');
@@ -395,15 +406,21 @@ describe('browser workspace layout wiring', () => {
     expect(dialogSrc).not.toContain('border-0');
     expect(dialogSrc).not.toContain('rounded-[20px]');
     expect(dialogSrc).not.toContain('rounded-xl');
-    expect(patchSrc).toContain('flex h-full min-h-0 flex-col gap-3 rounded-md border border-border/55 bg-card p-3');
+    expect(patchSrc).toContain("import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
+    expect(patchSrc).toContain("fallback={<div class={cn('rounded-md border px-3 py-2 text-xs leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{props.emptyMessage}</div>}");
+    expect(patchSrc).toContain("class={cn('flex h-full min-h-0 flex-col gap-3 rounded-md border p-3', redevenSurfaceRoleClass('panelStrong'))}");
     expect(patchSrc).toContain("layout.isMobile() ? 'flex-1 max-h-none' : 'max-h-[28rem]'");
-    expect(patchSrc).toContain('min-h-0 overflow-auto rounded-md border border-border/55 bg-background p-1');
+    expect(patchSrc).toContain("class={cn(");
+    expect(patchSrc).toContain("'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]'");
+    expect(patchSrc).toContain("redevenSurfaceRoleClass('control')");
     expect(patchSrc).toContain('Swipe horizontally to inspect long diff lines.');
     expect(patchSrc).toContain('[touch-action:pan-x_pan-y_pinch-zoom]');
     expect(patchSrc).toContain('inline-block min-w-full bg-muted/[0.20] p-px align-top');
     expect(patchSrc).toContain('grid w-max min-w-full');
     expect(patchSrc).toContain('minmax(max-content,1fr)');
     expect(patchSrc).toContain('grid-cols-[2.25rem_2.25rem_minmax(max-content,1fr)]');
+    expect(patchSrc).toContain("class={cn('border-r px-1.5 text-right font-mono text-[10.5px] leading-[1.6] text-muted-foreground/60', redevenDividerRoleClass())}");
+    expect(patchSrc).toContain("class={cn('cursor-pointer rounded-md border px-2.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1', redevenSurfaceRoleClass('controlMuted'))}");
     expect(patchSrc).not.toContain('chat-tool-apply-patch');
     expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-emerald-600/45 bg-emerald-500/12 dark:border-l-success/60 dark:bg-success/10';");
     expect(patchUtilSrc).toContain("return 'border-l-[2px] border-l-red-600/45 bg-red-500/12 dark:border-l-error/60 dark:bg-error/10';");

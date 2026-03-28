@@ -1,5 +1,7 @@
+import { cn } from '@floegence/floe-webapp-core';
 import type { GitBranchSummary, GitWorkspaceSection } from '../protocol/redeven_v1';
 import type { GitWorkbenchSubview } from '../utils/gitWorkbench';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export type GitChromeTone = 'neutral' | 'info' | 'brand' | 'success' | 'warning' | 'danger' | 'violet';
 
@@ -8,9 +10,15 @@ function normalizeTone(tone: GitChromeTone | undefined): GitChromeTone {
 }
 
 const badgeBaseClass = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] border';
-const insetBaseClass = 'bg-background/70 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] border border-border/30';
+const insetBaseClass = cn(
+  'border shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]',
+  redevenSurfaceRoleClass('inset'),
+);
 const actionButtonBaseClass =
-  'cursor-pointer rounded-lg bg-background/72 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-[background-color,color,box-shadow] duration-200 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
+  cn(
+    'cursor-pointer rounded-lg border text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-[background-color,color,box-shadow] duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+    redevenSurfaceRoleClass('controlMuted'),
+  );
 
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
@@ -28,7 +36,7 @@ export function gitToneBadgeClass(tone?: GitChromeTone): string {
       return `${badgeBaseClass} border-violet-500/20 bg-violet-500/[0.08] text-violet-700 dark:text-violet-300`;
     case 'neutral':
     default:
-      return `${badgeBaseClass} border-border/30 bg-background/82 text-muted-foreground`;
+      return cn(badgeBaseClass, redevenSurfaceRoleClass('controlMuted'), 'text-muted-foreground');
   }
 }
 
@@ -126,7 +134,11 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
     return `${interactiveBase} git-browser-selection-surface`;
   }
 
-  return `${interactiveBase} border-border/45 bg-transparent text-foreground hover:border-sidebar-accent/55 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground`;
+  return cn(
+    interactiveBase,
+    redevenSurfaceRoleClass('control'),
+    'bg-transparent text-foreground hover:border-sidebar-accent/55 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+  );
 }
 
 export function gitSubviewTone(view: GitWorkbenchSubview): GitChromeTone {

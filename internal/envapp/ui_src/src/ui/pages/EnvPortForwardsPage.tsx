@@ -24,6 +24,7 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { Tooltip } from '../primitives/Tooltip';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useEnvContext } from './EnvContext';
 
 // ============================================================================
@@ -225,7 +226,7 @@ function PortForwardCard(props: {
           ? 'border-emerald-500/30 bg-emerald-500/[0.02] hover:border-emerald-500/50'
           : props.forward.health?.status === 'unreachable'
             ? 'border-destructive/30 bg-destructive/[0.02] hover:border-destructive/50'
-            : 'border-border/60 hover:border-border'
+            : redevenSurfaceRoleClass('panelInteractive')
       )}
     >
       <CardHeader class="pb-2">
@@ -267,7 +268,7 @@ function PortForwardCard(props: {
         </div>
       </CardContent>
 
-      <CardFooter class="pt-2 flex items-center justify-between gap-2 border-t border-border/50">
+      <CardFooter class={cn('pt-2 flex items-center justify-between gap-2 border-t', redevenDividerRoleClass())}>
         <Tooltip content={props.busyText || 'Open in new window'} placement="top">
           <Button size="sm" variant="default" onClick={props.onOpen} disabled={props.busy} class="flex-1">
             <Show when={props.busy} fallback={<ExternalLinkIcon class="w-3.5 h-3.5 mr-1" />}>
@@ -313,6 +314,7 @@ function CreateForwardDialog(props: {
   const [name, setName] = createSignal('');
   const [description, setDescription] = createSignal('');
   const [touched, setTouched] = createSignal(false);
+  const outlineControlClass = redevenSurfaceRoleClass('control');
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -344,7 +346,7 @@ function CreateForwardDialog(props: {
       title="Create Port Forward"
       footer={
         <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading}>
+          <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading} class={outlineControlClass}>
             Cancel
           </Button>
           <Button size="sm" variant="default" onClick={handleCreate} disabled={props.loading || !isValid()}>
@@ -453,6 +455,7 @@ async function openPortForward(forwardID: string, setStatus: (s: string) => void
 export function EnvPortForwardsPage() {
   const ctx = useEnvContext();
   const notify = useNotification();
+  const outlineControlClass = redevenSurfaceRoleClass('control');
 
   // Permission checks
   const permissionReady = () => ctx.env.state === 'ready';
@@ -581,7 +584,7 @@ export function EnvPortForwardsPage() {
 
   return (
     <div class="h-full min-h-0 overflow-auto">
-      <Panel class="border border-border rounded-md overflow-hidden">
+      <Panel class={cn('border rounded-md overflow-hidden', redevenSurfaceRoleClass('panelStrong'))} data-testid="port-forwards-panel">
         <PanelContent class="p-4 space-y-4">
           {/* Page header */}
           <div class="flex items-start justify-between gap-4">
@@ -597,7 +600,7 @@ export function EnvPortForwardsPage() {
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-              <Button size="sm" variant="outline" onClick={bumpRefresh} disabled={!!busyID() || forwards.loading} aria-label="Refresh" title="Refresh">
+              <Button size="sm" variant="outline" onClick={bumpRefresh} disabled={!!busyID() || forwards.loading} aria-label="Refresh" title="Refresh" class={outlineControlClass}>
                 <RefreshIcon class="w-3.5 h-3.5 sm:mr-1" />
                 <span class="hidden sm:inline">Refresh</span>
               </Button>

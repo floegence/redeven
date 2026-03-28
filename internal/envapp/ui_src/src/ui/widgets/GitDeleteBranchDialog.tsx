@@ -63,7 +63,7 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
       safeConfirmLabel="Delete Branch and Worktree"
       forceConfirmLabel="Force Delete Branch and Worktree"
       dialogDesktopWidthClass="w-[min(34rem,94vw)]"
-      summaryNoteClass={cn('text-foreground', requiresWorktreeRemoval() ? 'border-error/20 bg-error/10' : 'border-border/55 bg-background/72')}
+      summaryNoteClass={cn('text-foreground', requiresWorktreeRemoval() ? 'border-error/20 bg-error/10' : '')}
       safeSummary={(
         <div class="space-y-2">
           <div class="text-xs font-semibold text-foreground">This action will:</div>

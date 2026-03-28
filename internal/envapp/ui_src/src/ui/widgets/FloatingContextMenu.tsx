@@ -1,4 +1,6 @@
 import { For, type Component } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export const FLOATING_CONTEXT_MENU_WIDTH_PX = 180;
 
@@ -44,14 +46,17 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   <div
     ref={props.menuRef}
     role="menu"
-    class="fixed z-50 min-w-[180px] py-1 bg-popover border border-border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100"
+    class={cn(
+      'fixed z-50 min-w-[180px] py-1 border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100',
+      redevenSurfaceRoleClass('overlay'),
+    )}
     style={{ left: `${props.x}px`, top: `${props.y}px` }}
     onContextMenu={(event) => event.preventDefault()}
   >
     <For each={props.items}>
       {(item) => {
         if (!isActionItem(item)) {
-          return <div role="separator" aria-orientation="horizontal" class="my-1 border-t border-border/70" />;
+          return <div role="separator" aria-orientation="horizontal" class={cn('my-1 border-t', redevenDividerRoleClass('strong'))} />;
         }
 
         const Icon = item.icon;

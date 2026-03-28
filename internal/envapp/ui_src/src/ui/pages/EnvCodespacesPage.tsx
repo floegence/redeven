@@ -30,6 +30,7 @@ import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
 import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
 
 type SpaceStatus = Readonly<{
@@ -258,7 +259,7 @@ function CodespaceCard(props: {
         "border transition-all duration-200",
         isRunning()
           ? "border-emerald-500/30 bg-emerald-500/[0.02] hover:border-emerald-500/50"
-          : "border-border/60 opacity-75 hover:opacity-100 hover:border-border",
+          : cn(redevenSurfaceRoleClass("panelInteractive"), "opacity-75 hover:opacity-100"),
         props.contextMenuOpen ? "ring-1 ring-primary/40" : undefined,
       )}
       onContextMenu={props.onContextMenu}
@@ -292,7 +293,7 @@ function CodespaceCard(props: {
           </Tooltip>
         </div>
       </CardContent>
-      <CardFooter class="pt-2 flex items-center justify-between gap-2 border-t border-border/50">
+      <CardFooter class={cn("pt-2 flex items-center justify-between gap-2 border-t", redevenDividerRoleClass())}>
         <Show
           when={isRunning()}
           fallback={
@@ -358,7 +359,7 @@ function CodespaceCard(props: {
         <div class="flex items-center gap-1">
           <Show when={isRunning()}>
             <Tooltip content="Stop codespace" placement="top">
-              <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} class="px-2">
+              <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} class={cn("px-2", redevenSurfaceRoleClass("control"))}>
                 <Show
                   when={props.busyAction === "stop"}
                   fallback={
@@ -412,6 +413,7 @@ function CreateCodespaceDialog(props: {
   const [selectedPath, setSelectedPath] = createSignal("");
   const [name, setName] = createSignal("");
   const [description, setDescription] = createSignal("");
+  const outlineControlClass = redevenSurfaceRoleClass("control");
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -443,7 +445,7 @@ function CreateCodespaceDialog(props: {
       title="Create Codespace"
       footer={
         <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading}>
+          <Button size="sm" variant="outline" onClick={() => handleOpenChange(false)} disabled={props.loading} class={outlineControlClass}>
             Cancel
           </Button>
           <Button size="sm" variant="default" onClick={handleCreate} disabled={props.loading || !selectedPath()}>
@@ -529,6 +531,7 @@ export function EnvCodespacesPage() {
   // File tree for directory picker
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
+  const outlineControlClass = redevenSurfaceRoleClass("control");
   type DirCache = Map<string, FileItem[]>;
   let cache: DirCache = new Map();
 
@@ -795,7 +798,7 @@ export function EnvCodespacesPage() {
 
   return (
     <div class="h-full min-h-0 overflow-auto">
-      <Panel class="border border-border rounded-md overflow-hidden">
+      <Panel class={cn("border rounded-md overflow-hidden", redevenSurfaceRoleClass("panelStrong"))} data-testid="codespaces-panel">
         <PanelContent class="p-4 space-y-4">
           {/* Page header */}
           <div class="flex items-start justify-between gap-4">
@@ -806,7 +809,7 @@ export function EnvCodespacesPage() {
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-              <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={spaces.loading} aria-label="Refresh" title="Refresh">
+              <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={spaces.loading} aria-label="Refresh" title="Refresh" class={outlineControlClass}>
                 <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path
                     stroke-linecap="round"
@@ -876,7 +879,7 @@ export function EnvCodespacesPage() {
         title="Delete Codespace"
         footer={
           <div class="flex justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading()}>
+            <Button size="sm" variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleteLoading()} class={outlineControlClass}>
               Cancel
             </Button>
             <Button size="sm" variant="destructive" onClick={handleDeleteConfirm} disabled={deleteLoading()}>

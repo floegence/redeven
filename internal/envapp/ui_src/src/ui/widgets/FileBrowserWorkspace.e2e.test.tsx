@@ -312,6 +312,7 @@ describe('FileBrowserWorkspace interactions', () => {
       const sidebarButton = host.querySelector('button[aria-label="Toggle browser sidebar"]');
       expect(sidebarButton).toBeTruthy();
       expect(sidebarButton?.textContent).toContain('Sidebar');
+      expect(sidebarButton?.className).toContain('redeven-surface-control');
       sidebarButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(toggleSidebarCount).toBe(1);
     } finally {
@@ -661,9 +662,13 @@ describe('FileBrowserWorkspace interactions', () => {
       const viewSwitcher = host.querySelector('[role="group"]');
 
       expect(upButton?.className).toContain('h-7');
+      expect(upButton?.className).toContain('redeven-surface-control');
       expect(breadcrumb?.parentElement?.className).toContain('h-7');
+      expect(breadcrumb?.parentElement?.className).toContain('redeven-surface-control--muted');
       expect(filterInput?.parentElement?.className).toContain('h-7');
+      expect(filterInput?.parentElement?.className).toContain('redeven-surface-control--muted');
       expect(viewSwitcher?.className).toContain('h-7');
+      expect(viewSwitcher?.className).toContain('redeven-surface-segmented');
     } finally {
       dispose();
     }

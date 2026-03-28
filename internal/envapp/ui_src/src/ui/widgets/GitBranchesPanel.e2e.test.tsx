@@ -1049,7 +1049,7 @@ describe('GitBranchesPanel interactions', () => {
       expect(document.body.textContent).not.toContain('Delete Confirmation');
       expect(document.body.textContent).not.toContain('Approve permanent file discard');
       expect(document.body.textContent).not.toContain('scratch.txt');
-      const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t border-border/60 bg-background/88 px-4 pt-3 pb-4')) as HTMLDivElement | undefined;
+      const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t') && node.className.includes('redeven-surface-inset') && node.className.includes('px-4') && node.className.includes('pt-3') && node.className.includes('pb-4')) as HTMLDivElement | undefined;
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch and Worktree') as HTMLButtonElement | undefined;
       expect(footer).toBeTruthy();
       expect(confirmButton).toBeTruthy();
@@ -1097,7 +1097,7 @@ describe('GitBranchesPanel interactions', () => {
 
     try {
       const branchHeader = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('xl:flex-row xl:items-start xl:justify-between')) as HTMLDivElement | undefined;
-      const controlBar = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5')) as HTMLDivElement | undefined;
+      const controlBar = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('rounded-xl') && node.className.includes('redeven-surface-control') && node.className.includes('bg-muted/[0.12]')) as HTMLDivElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
@@ -1113,9 +1113,11 @@ describe('GitBranchesPanel interactions', () => {
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
       expect(tablist?.className).toContain('rounded-lg');
+      expect(tablist?.className).toContain('redeven-surface-segmented');
       expect(tablist?.className).toContain('sm:w-[15rem]');
       const activeTab = Array.from(host.querySelectorAll('button')).find((node) => node.getAttribute('role') === 'tab' && node.getAttribute('aria-selected') === 'false') as HTMLButtonElement | undefined;
       expect(activeTab?.className).toContain('cursor-pointer');
+      expect(activeTab?.className).toContain('redeven-surface-segmented__item');
     } finally {
       dispose();
     }
@@ -1253,7 +1255,7 @@ describe('GitBranchesPanel interactions', () => {
       expect(document.body.textContent).not.toContain('Files discarded');
       expect(document.body.textContent).not.toContain('Safe delete ready');
       expect(document.body.textContent).not.toContain('Delete Confirmation');
-      const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t border-border/60 bg-background/88 px-4 pt-3 pb-4')) as HTMLDivElement | undefined;
+      const footer = Array.from(document.body.querySelectorAll('div')).find((node) => node.className.includes('border-t') && node.className.includes('redeven-surface-inset') && node.className.includes('px-4') && node.className.includes('pt-3') && node.className.includes('pb-4')) as HTMLDivElement | undefined;
       const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete Branch') as HTMLButtonElement | undefined;
       expect(footer).toBeTruthy();
       expect(confirmButton).toBeTruthy();

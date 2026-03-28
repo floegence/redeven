@@ -24,6 +24,7 @@ import {
   type GitStashWindowSource,
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
+import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitPatchViewer } from './GitPatchViewer';
 import {
@@ -90,7 +91,8 @@ export interface GitStashWindowProps {
 function tabButtonClass(active: boolean): string {
   return cn(
     'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150',
-    active ? 'git-browser-selection-chip' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground',
+    redevenSegmentedItemClass(active),
+    active ? 'git-browser-selection-chip' : 'text-muted-foreground hover:text-foreground',
   );
 }
 
@@ -252,7 +254,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
       mobileClass="bg-background"
     >
       <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-        <div class="shrink-0 border-b border-border/60 px-4 pt-3 pb-3">
+        <div class={cn('shrink-0 border-b px-4 pt-3 pb-3', redevenDividerRoleClass('strong'))}>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <GitLabelBlock
               class="min-w-0 flex-1"
@@ -268,7 +270,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
             </GitLabelBlock>
 
             <div
-              class="grid w-full grid-cols-2 rounded-lg border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[16rem]"
+              class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 sm:w-[16rem]', redevenSurfaceRoleClass('segmented'))}
               role="tablist"
               aria-label="Stash tabs"
             >
@@ -299,7 +301,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                 <Show when={!props.stashesLoading} fallback={<GitStatePane loading message="Loading stash list..." surface class="h-full" />}>
                   <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? 'Failed to load stashes.'} surface class="h-full" />}>
                     <div class="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
-                      <div class="min-h-0 overflow-auto rounded-md border border-border/65 bg-card p-2">
+                      <div class={cn('min-h-0 overflow-auto rounded-md p-2', redevenSurfaceRoleClass('panelStrong'))}>
                         <Show
                           when={props.stashes.length > 0}
                           fallback={<GitStatePane message="No stashes yet. Save a snapshot from the other tab to see it here." class="h-full" surface />}
@@ -373,7 +375,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                     </div>
                                   </GitSection>
 
-                                  <div class="rounded-md border border-border/65 bg-card p-2">
+                                  <div class={cn('rounded-md p-2', redevenSurfaceRoleClass('panelStrong'))}>
                                     <div class="mb-2 flex items-center justify-between gap-2 px-1">
                                       <div class="text-xs font-semibold text-foreground">Changed Files</div>
                                       <GitMetaPill tone="neutral">{detailFiles().length} file{detailFiles().length === 1 ? '' : 's'}</GitMetaPill>
@@ -407,7 +409,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                     <Button size="sm" variant="default" class="rounded-md" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(false)}>
                                       {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
                                     </Button>
-                                    <Button size="sm" variant="outline" class="rounded-md" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(true)}>
+                                    <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(true)}>
                                       {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
                                     </Button>
                                     <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestDrop?.()}>
@@ -431,7 +433,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                         <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.reviewError}</GitSubtleNote>
                                       </Show>
                                       <div class="flex flex-wrap gap-2">
-                                        <Button size="sm" variant="outline" class="rounded-md" onClick={() => props.onCancelReview?.()}>
+                                        <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} onClick={() => props.onCancelReview?.()}>
                                           Cancel
                                         </Button>
                                         <Button size="sm" variant="default" class="rounded-md" disabled={!canConfirmReview()} loading={Boolean(props.reviewLoading || props.applyBusy || props.dropBusy)} onClick={() => props.onConfirmReview?.()}>
@@ -498,7 +500,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                           <div class="text-[11px] font-medium text-foreground">Message</div>
                           <input
                             type="text"
-                            class="w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-ring"
+                            class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-ring', redevenSurfaceRoleClass('control'))}
                             value={props.saveMessage ?? ''}
                             placeholder="Optional stash message"
                             onInput={(event) => props.onSaveMessageChange?.(event.currentTarget.value)}
@@ -506,7 +508,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                         </label>
 
                         <div class="grid gap-2 sm:grid-cols-2">
-                          <label class="flex cursor-pointer items-start gap-2 rounded-md border border-border/55 bg-background/72 px-3 py-2">
+                          <label class={cn('flex cursor-pointer items-start gap-2 rounded-md px-3 py-2', redevenSurfaceRoleClass('controlMuted'))}>
                             <input
                               type="checkbox"
                               checked={Boolean(props.includeUntracked)}
@@ -518,7 +520,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                             </div>
                           </label>
 
-                          <label class="flex cursor-pointer items-start gap-2 rounded-md border border-border/55 bg-background/72 px-3 py-2">
+                          <label class={cn('flex cursor-pointer items-start gap-2 rounded-md px-3 py-2', redevenSurfaceRoleClass('controlMuted'))}>
                             <input
                               type="checkbox"
                               checked={Boolean(props.keepIndex)}

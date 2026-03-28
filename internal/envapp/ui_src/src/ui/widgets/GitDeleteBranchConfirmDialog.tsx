@@ -31,7 +31,7 @@ export function GitDeleteBranchConfirmDialog(props: GitDeleteBranchConfirmDialog
       safeConfirmLabel="Delete Branch"
       forceConfirmLabel="Force Delete Branch"
       dialogDesktopWidthClass="w-[min(36rem,94vw)]"
-      summaryNoteClass="border-border/55 bg-background/72 text-foreground"
+      summaryNoteClass="text-foreground"
       safeSummary={(
         <div class="space-y-2">
           <div class="text-xs font-semibold text-foreground">This action will:</div>

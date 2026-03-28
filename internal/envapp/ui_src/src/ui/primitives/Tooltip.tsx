@@ -2,6 +2,7 @@ import { Show, createEffect, createSignal, onCleanup, createMemo, type JSX } fro
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { resolveAnchoredOverlayPosition, type AnchoredOverlayPlacement, type AnchoredOverlayPosition } from './anchoredOverlay';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export interface TooltipProps {
   content: string | JSX.Element;
@@ -170,7 +171,8 @@ export function Tooltip(props: TooltipProps) {
             role="tooltip"
             data-placement={resolvedPlacement()}
             class={cn(
-              'pointer-events-none fixed z-[200] max-w-[min(24rem,calc(100vw-1rem))] rounded border border-border/70 bg-popover px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md',
+              'pointer-events-none fixed z-[200] max-w-[min(24rem,calc(100vw-1rem))] rounded border px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md',
+              redevenSurfaceRoleClass('overlay'),
               'whitespace-normal break-words',
               'animate-in fade-in zoom-in-95',
               props.class,

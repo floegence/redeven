@@ -46,7 +46,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
-  Panel: (props: any) => <div class={props.class}>{props.children}</div>,
+  Panel: (props: any) => <div class={props.class} data-testid={props['data-testid']}>{props.children}</div>,
   PanelContent: (props: any) => <div class={props.class}>{props.children}</div>,
 }));
 
@@ -299,5 +299,39 @@ describe('EnvCodespacesPage', () => {
     await flushPage();
 
     expect(Array.from(host.querySelectorAll('button')).some((button) => button.textContent?.includes('Ask Flower'))).toBe(false);
+  });
+
+  it('uses semantic panel and card surface classes for the neutral codespace shell', async () => {
+    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/spaces') {
+        return {
+          spaces: [
+            {
+              code_space_id: 'space-2',
+              name: 'Stopped Space',
+              description: 'Stopped workspace',
+              workspace_path: '/workspace/stopped',
+              code_port: 13337,
+              created_at_unix_ms: 1,
+              updated_at_unix_ms: 1,
+              last_opened_at_unix_ms: 1,
+              running: false,
+              pid: 0,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected gateway call: ${url}`);
+    });
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const panel = host.querySelector('[data-testid="codespaces-panel"]') as HTMLDivElement | null;
+    const card = host.querySelector('[data-testid="codespace-card"]') as HTMLDivElement | null;
+
+    expect(panel?.className).toContain('redeven-surface-panel--strong');
+    expect(card?.className).toContain('redeven-surface-panel--interactive');
+    expect(card?.className).toContain('opacity-75');
   });
 });

@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -81,9 +83,9 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneSurfaceClass('violet')).not.toContain('bg-');
     expect(gitToneSurfaceClass('neutral')).not.toContain('bg-');
 
-    expect(gitToneInsetClass('violet')).toContain('bg-background/70');
-    expect(gitToneInsetClass('violet')).toContain('border border-border/30');
-    expect(gitToneInsetClass('warning')).toContain('bg-background/70');
+    expect(gitToneInsetClass('violet')).toContain('redeven-surface-inset');
+    expect(gitToneInsetClass('violet')).toContain('border');
+    expect(gitToneInsetClass('warning')).toContain('redeven-surface-inset');
 
     expect(gitToneAccentColor('info')).toBe('text-sky-500');
     expect(gitToneAccentColor('brand')).toBe('text-primary');
@@ -95,7 +97,8 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneSelectableCardClass('brand', true)).toContain('cursor-pointer');
     expect(gitToneSelectableCardClass('brand', true)).toContain('focus-visible:ring-2');
 
-    expect(gitToneSelectableCardClass('info', false)).toContain('border-border/45');
+    expect(gitToneSelectableCardClass('info', false)).toContain('redeven-surface-control');
+    expect(gitToneSelectableCardClass('info', false)).toContain('bg-transparent');
     expect(gitToneSelectableCardClass('info', false)).toContain('hover:bg-sidebar-accent/70');
     expect(gitToneSelectableCardClass('info', false)).toContain('hover:text-sidebar-accent-foreground');
     expect(gitToneSelectableCardClass('info', false)).toContain('cursor-pointer');
@@ -104,8 +107,8 @@ describe('GitChrome semantic tone helpers', () => {
   });
 
   it('uses rounded action buttons for git toolbar actions', () => {
-    expect(gitToneActionButtonClass()).toContain('bg-background/72');
-    expect(gitToneActionButtonClass()).toContain('hover:bg-background');
+    expect(gitToneActionButtonClass()).toContain('redeven-surface-control');
+    expect(gitToneActionButtonClass()).toContain('redeven-surface-control--muted');
     expect(gitToneActionButtonClass()).toContain('text-muted-foreground');
     expect(gitToneActionButtonClass()).toContain('rounded-lg');
   });

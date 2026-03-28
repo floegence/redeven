@@ -6,6 +6,7 @@ import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type Gi
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { changeSecondaryPath, describeGitHead, gitDiffEntryIdentity, shortGitHash, type GitDetachedSwitchTarget } from '../utils/gitWorkbench';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
+import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -66,6 +67,7 @@ function normalizeCommitBody(detail: GitCommitDetail | null | undefined): string
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
+  const outlineControlClass = redevenSurfaceRoleClass('control');
 
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
   const [commitFiles, setCommitFiles] = createSignal<GitCommitFileSummary[]>([]);
@@ -182,7 +184,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   return (
                     <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
-                        <section class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
+                        <section class={`rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02] ${redevenSurfaceRoleClass('panelStrong')}`}>
                           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                             <GitLabelBlock
                               class="min-w-0 flex-1"
@@ -236,7 +238,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  class="w-full rounded-md bg-background/80 sm:w-auto"
+                                  class={cn('w-full rounded-md sm:w-auto', outlineControlClass)}
                                   disabled={Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
                                   onClick={() => props.onSwitchDetached?.({
                                     commitHash: detail.hash,
@@ -270,12 +272,12 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           </Show>
                         </section>
 
-                        <section class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
+                        <section class={cn('rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
                           <GitLabelBlock class="min-w-0" label="Files in Commit" tone="info" meta={<GitMetaPill tone="neutral">{String(commitFiles().length)}</GitMetaPill>}>
                             <div class="text-xs leading-relaxed text-muted-foreground">Click a file to inspect its diff in a dialog.</div>
                           </GitLabelBlock>
                           <Show when={commitFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}>
-                            <div class="mt-2.5 overflow-hidden rounded-md border border-border/65 bg-card">
+                            <div class={cn('mt-2.5 overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'))}>
                               <GitVirtualTable
                                 items={commitFiles()}
                                 tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}

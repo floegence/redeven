@@ -19,6 +19,7 @@ import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapContextMenuItemsToAbsolute,
@@ -29,12 +30,13 @@ import {
 } from '../utils/fileBrowserDisplayPath';
 
 const FILE_WORKSPACE_TOOLBAR_FIELD_CLASS =
-  'h-7 min-w-0 rounded-md border border-border/50 bg-background px-2.5 shadow-sm';
+  cn('h-7 min-w-0 rounded-md border px-2.5 shadow-sm', redevenSurfaceRoleClass('control'), redevenSurfaceRoleClass('controlMuted'));
 const FILE_WORKSPACE_TOOLBAR_SEGMENTED_CLASS =
-  'h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0';
+  cn('h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0', redevenSurfaceRoleClass('segmented'));
 const FILE_WORKSPACE_TOOLBAR_PATH_CLASS = `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center`;
 const FILE_WORKSPACE_TOOLBAR_FILTER_CLASS =
   `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center gap-1.5 text-[11px] text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring`;
+const FILE_WORKSPACE_OUTLINE_CONTROL_CLASS = cn('cursor-pointer', redevenSurfaceRoleClass('control'));
 
 export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
@@ -102,7 +104,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   });
 
   return (
-    <div class="shrink-0 border-b border-border/60 bg-background/95 px-2.5 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/90">
+    <div class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
       <div
         ref={toolbarLayoutRef}
         data-toolbar-layout={toolbarLayout()}
@@ -119,7 +121,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               size="sm"
               variant="outline"
               icon={FilesIcon}
-              class="cursor-pointer"
+              class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS}
               aria-label="Toggle browser sidebar"
               onClick={props.onToggleSidebar}
             >
@@ -127,7 +129,7 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             </Button>
           </Show>
 
-          <Button size="sm" variant="outline" icon={ArrowUp} class="cursor-pointer" onClick={browser.navigateUp} disabled={!canNavigateUp()}>
+          <Button size="sm" variant="outline" icon={ArrowUp} class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS} onClick={browser.navigateUp} disabled={!canNavigateUp()}>
             Up
           </Button>
         </div>
@@ -206,7 +208,7 @@ function FileWorkspaceStatusBar() {
   const browser = useFileBrowser();
 
   return (
-      <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-2.5 py-1 text-[10px] text-muted-foreground">
+    <div class={cn('flex flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1 text-[10px] text-muted-foreground', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
       <div class="flex flex-wrap items-center gap-1.5">
         <span>{browser.currentFiles().length} items</span>
         <Show when={browser.filterQueryApplied().trim()}>

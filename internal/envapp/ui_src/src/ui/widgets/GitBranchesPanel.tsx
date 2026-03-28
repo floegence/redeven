@@ -37,6 +37,7 @@ import {
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
 import { resolveRovingTabTargetId } from '../utils/tabNavigation';
+import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { gitBranchTone, gitChangePathClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
@@ -208,7 +209,7 @@ interface BranchCompareFilesTableProps {
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
   return (
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+    <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md', redevenSurfaceRoleClass('panelStrong'))}>
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -278,7 +279,7 @@ interface BranchStatusTableProps {
 
 function BranchStatusTable(props: BranchStatusTableProps) {
   return (
-    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+    <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md', redevenSurfaceRoleClass('panelStrong'))}>
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -461,7 +462,7 @@ function HistoryList(props: Pick<
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
             <Show when={props.listRefreshing && (props.commits?.length ?? 0) > 0}>
-              <div class="rounded-md border border-border/45 bg-background/72 px-2.5 py-1.5">
+              <div class={cn('rounded-md px-2.5 py-1.5', redevenSurfaceRoleClass('inset'))}>
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div class="text-[11px] text-muted-foreground">Refreshing branch history in the background.</div>
                   <GitMetaPill tone="neutral">Refreshing...</GitMetaPill>
@@ -478,11 +479,11 @@ function HistoryList(props: Pick<
                     when={(props.commits?.length ?? 0) > 0}
                     fallback={<GitSubtleNote>No commit history is available for this branch.</GitSubtleNote>}
                   >
-                    <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border/65 bg-card">
+                    <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md', redevenSurfaceRoleClass('panelStrong'))}>
                       <div class="min-h-0 flex-1 overflow-auto">
                         <table class="w-full min-w-[42rem] text-xs md:min-w-0">
                           <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
-                            <tr class="border-b border-border/60 text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            <tr class={cn('text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground', redevenDividerRoleClass('strong'), 'border-b')}>
                               <th class="px-3 py-2.5 font-medium">Commit</th>
                               <th class="px-3 py-2.5 font-medium">Author</th>
                               <th class="px-3 py-2.5 font-medium">When</th>
@@ -500,7 +501,8 @@ function HistoryList(props: Pick<
                                   <>
                                     <tr
                                       class={cn(
-                                        'cursor-pointer border-b border-border/45',
+                                        'cursor-pointer border-b',
+                                        redevenDividerRoleClass(),
                                         expanded() ? 'bg-muted/30' : 'hover:bg-muted/25'
                                       )}
                                       onClick={() => toggleCommit(commit.hash)}
@@ -511,7 +513,10 @@ function HistoryList(props: Pick<
                                             type="button"
                                             aria-label={expanded() ? 'Collapse commit' : 'Expand commit'}
                                             aria-expanded={expanded()}
-                                            class="mt-0.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded border border-border/40 bg-background/80 text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                            class={cn(
+                                              'mt-0.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded bg-background/80 text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
+                                              redevenSurfaceRoleClass('control')
+                                            )}
                                             onClick={(event) => {
                                               event.stopPropagation();
                                               toggleCommit(commit.hash);
@@ -535,9 +540,9 @@ function HistoryList(props: Pick<
                                     </tr>
 
                                     <Show when={expanded()}>
-                                      <tr class="border-b border-border/45 bg-background/70 last:border-b-0">
+                                      <tr class={cn('border-b bg-background/70 last:border-b-0', redevenDividerRoleClass())}>
                                         <td colSpan={3} class="px-3 pb-3 pt-0">
-                                          <div class="ml-7 mt-2 space-y-2 rounded-md border border-border/45 bg-background/88 p-2.5">
+                                          <div class={cn('ml-7 mt-2 space-y-2 rounded-md bg-background/88 p-2.5', redevenSurfaceRoleClass('inset'))}>
                                             <Show
                                               when={!detail()?.loading}
                                               fallback={<GitStatePane loading message="Loading changed files..." surface class="min-h-[5rem] px-1 py-2" />}
@@ -561,7 +566,7 @@ function HistoryList(props: Pick<
                                                           <Button
                                                             size="sm"
                                                             variant="outline"
-                                                            class="rounded-md bg-background/80"
+                                                            class={cn('rounded-md bg-background/80', redevenSurfaceRoleClass('control'))}
                                                             disabled={Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
                                                             onClick={() => props.onSwitchDetached?.({
                                                               commitHash: commit.hash,
@@ -766,7 +771,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
               <label class="space-y-1">
                 <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">Source</div>
                 <select
-                  class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70"
+                  class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
                   value={sourceRef()}
                   onInput={(event) => setSourceRef(event.currentTarget.value)}
                 >
@@ -781,7 +786,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
               <label class="space-y-1">
                 <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">Target</div>
                 <select
-                  class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70"
+                  class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70', redevenSurfaceRoleClass('control'))}
                   value={targetRef()}
                   onInput={(event) => setTargetRef(event.currentTarget.value)}
                 >
@@ -1006,9 +1011,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
   const showWorkspaceHelpers = () => Boolean(props.onOpenInTerminal || props.onBrowseFiles);
   const branchActionGridClass = () => 'grid-cols-1';
-  const headerControlBarClass = 'rounded-xl border border-border/60 bg-muted/[0.12] p-2 shadow-sm shadow-black/5';
+  const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
-  const secondaryActionButtonClass = 'w-full cursor-pointer rounded-md border border-border/60 bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto';
+  const secondaryActionButtonClass = cn('w-full cursor-pointer rounded-md bg-background/88 px-4 shadow-sm shadow-black/5 hover:bg-background sm:w-auto', redevenSurfaceRoleClass('control'));
   const primaryActionButtonClass = 'w-full cursor-pointer rounded-md px-4 shadow-sm shadow-black/10 sm:w-auto';
   const dangerActionButtonClass = 'w-full cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-4 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive sm:w-auto';
   const handleBranchSubviewKeyDown = (event: KeyboardEvent, currentView: GitBranchSubview) => {
@@ -1182,7 +1187,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       >
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
-            <section class="rounded-md border border-border/65 bg-card px-3 py-2.5">
+            <section class={cn('rounded-md px-3 py-2.5', redevenSurfaceRoleClass('panelStrong'))}>
               <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
                 <GitLabelBlock class="min-w-0" label="Status" tone="neutral" />
 
@@ -1210,14 +1215,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       />
                     </GitShortcutOrbDock>
                   </Show>
-                  <Button size="sm" variant="outline" class="w-full rounded-md bg-background/80 sm:w-auto" onClick={() => setCompareDialogOpen(true)}>
+                  <Button size="sm" variant="outline" class={cn('w-full rounded-md bg-background/80 sm:w-auto', redevenSurfaceRoleClass('control'))} onClick={() => setCompareDialogOpen(true)}>
                     Compare
                   </Button>
                   <Show when={props.onOpenStash}>
                     <Button
                       size="sm"
                       variant="outline"
-                      class="w-full rounded-md bg-background/80 sm:w-auto"
+                      class={cn('w-full rounded-md bg-background/80 sm:w-auto', redevenSurfaceRoleClass('control'))}
                       disabled={!canOpenStash()}
                       onClick={() => {
                         const repoRoot = statusRepoRootPath();
@@ -1244,7 +1249,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     <Show
                       when={visibleStatusWorkspace()}
                       fallback={(
-                        <div class="rounded-md border border-border/45 bg-background/72 px-2.5 py-2.5">
+                        <div class={cn('rounded-md px-2.5 py-2.5', redevenSurfaceRoleClass('inset'))}>
                           <div class="flex flex-wrap items-start justify-between gap-2">
                             <div class="min-w-0 flex-1">
                               <div class="text-xs font-medium text-foreground">{statusEmptyState().title}</div>
@@ -1259,7 +1264,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       )}
                     >
                       {(workspaceAccessor) => (
-                        <div class="grid grid-cols-1 gap-0.5 rounded-md bg-background/40 p-0.5 text-[11px] sm:grid-cols-3">
+                        <div class={cn('grid grid-cols-1 gap-0.5 rounded-md p-0.5 text-[11px] sm:grid-cols-3', redevenSurfaceRoleClass('segmented'))}>
                           <For each={WORKSPACE_VIEW_SECTIONS}>
                             {(section) => {
                               const active = () => selectedStatusSection() === section;
@@ -1268,7 +1273,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                 <button
                                   type="button"
                                   class={cn(
-                                    'w-full rounded-md border border-border/45 bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
+                                    'w-full rounded-md bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
+                                    redevenSegmentedItemClass(active()),
                                     gitToneSelectableCardClass(workspaceSectionTone(section), active())
                                   )}
                                   onClick={() => selectStatusSection(section)}
@@ -1335,7 +1341,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           <Show when={props.selectedBranch} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to inspect its status or history.</div>}>
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
-                <div class="rounded-md border border-border/70 bg-card px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]">
+                <div class={cn('rounded-md px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
                   <div class="flex flex-col gap-3">
                     <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                       <GitLabelBlock
@@ -1361,7 +1367,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
                       <div class="flex w-full xl:w-auto xl:justify-end">
                         <div
-                          class="grid w-full grid-cols-2 rounded-lg border border-border/65 bg-muted/[0.16] p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]"
+                          class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 sm:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
                           role="tablist"
                           aria-label="Branch detail tabs"
                           aria-orientation="horizontal"
@@ -1382,7 +1388,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                   tabIndex={active() ? 0 : -1}
                                   class={cn(
                                     'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150',
-                                    active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:bg-background/80 hover:text-foreground'
+                                    redevenSegmentedItemClass(active()),
+                                    active() ? 'git-browser-selection-chip' : 'text-muted-foreground hover:text-foreground'
                                   )}
                                   onClick={() => props.onSelectBranchSubview?.(view)}
                                   onKeyDown={(event) => handleBranchSubviewKeyDown(event, view)}
