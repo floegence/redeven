@@ -316,3 +316,175 @@ func TestStartTurn_RetriesWhenLiveThreadNeedsResume(t *testing.T) {
 		t.Fatalf("expected thread_1 liveLoaded after resume retry")
 	}
 }
+
+func TestReadThread_FallsBackWhenThreadIsNotYetMaterialized(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "First prompt pending",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "active",
+		CWD:           "/workspace/ui",
+	}
+	state.liveLoaded = true
+	manager.mu.Unlock()
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "thread/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Error: &rpcError{
+						Code: -32000,
+						Message: "thread thread_1 is not materialized yet; " +
+							"includeTurns is unavailable before first user message",
+					},
+				})
+			},
+		},
+		{
+			method: "thread/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireThreadReadParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.IncludeTurns {
+					t.Fatalf("expected fallback read without turns")
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireThreadReadResponse{
+						Thread: wireThread{
+							ID:            "thread_1",
+							ModelProvider: "openai/gpt-5.4",
+							CWD:           "/workspace/ui",
+							Status:        wireThreadStatus{Type: "idle"},
+						},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	detail, err := manager.ReadThread(context.Background(), "thread_1")
+	if err != nil {
+		t.Fatalf("ReadThread: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	if detail.Thread.ID != "thread_1" {
+		t.Fatalf("Thread.ID=%q", detail.Thread.ID)
+	}
+	if detail.Thread.Status != "active" {
+		t.Fatalf("Thread.Status=%q, want active", detail.Thread.Status)
+	}
+	if detail.Thread.Preview != "First prompt pending" {
+		t.Fatalf("Thread.Preview=%q", detail.Thread.Preview)
+	}
+
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if state := manager.threads["thread_1"]; state == nil || !state.liveLoaded {
+		t.Fatalf("expected thread_1 to remain live loaded after summary fallback")
+	}
+}
+
+func TestReadThread_FallbackPreservesProjectedTurns(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "First prompt pending",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "active",
+		CWD:           "/workspace/ui",
+		Turns: []Turn{
+			{
+				ID:     "turn_1",
+				Status: "in_progress",
+				Items: []Item{
+					{
+						ID:   "item_1",
+						Type: "userMessage",
+						Text: "Draft turn from projected state",
+					},
+				},
+			},
+		},
+	}
+	state.liveLoaded = true
+	manager.mu.Unlock()
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "thread/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Error: &rpcError{
+						Code: -32000,
+						Message: "thread thread_1 is not materialized yet; " +
+							"includeTurns is unavailable before first user message",
+					},
+				})
+			},
+		},
+		{
+			method: "thread/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireThreadReadResponse{
+						Thread: wireThread{
+							ID:            "thread_1",
+							ModelProvider: "openai/gpt-5.4",
+							CWD:           "/workspace/ui",
+							Status:        wireThreadStatus{Type: "idle"},
+						},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	detail, err := manager.ReadThread(context.Background(), "thread_1")
+	if err != nil {
+		t.Fatalf("ReadThread: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	if len(detail.Thread.Turns) != 1 {
+		t.Fatalf("Thread.Turns=%+v, want projected turn", detail.Thread.Turns)
+	}
+	if len(detail.Thread.Turns[0].Items) != 1 {
+		t.Fatalf("Turn.Items=%+v", detail.Thread.Turns[0].Items)
+	}
+	if detail.Thread.Turns[0].Items[0].Text != "Draft turn from projected state" {
+		t.Fatalf("Item.Text=%q", detail.Thread.Turns[0].Items[0].Text)
+	}
+}
