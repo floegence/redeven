@@ -575,8 +575,18 @@
   opacity: 0.45;
 }
 
+.codex-chat-chip-disabled {
+  cursor: default;
+  opacity: 0.78;
+}
+
 .codex-chat-working-dir-chip {
   max-width: min(17rem, 46vw);
+}
+
+.codex-chat-working-dir-chip-locked {
+  border-color: color-mix(in srgb, var(--codex-border-default) 84%, transparent);
+  background: color-mix(in srgb, var(--codex-surface-panel) 86%, var(--codex-surface-panel-subtle));
 }
 
 .codex-chat-working-dir-chip-label {
@@ -661,18 +671,6 @@
 .codex-chat-select-chip-control:focus-visible {
   outline: none;
   box-shadow: none !important;
-}
-
-.codex-chat-input-workspace-editor {
-  display: flex;
-}
-
-.codex-chat-input-workspace-input {
-  min-width: 0;
-  border-radius: 0.75rem;
-  border-color: var(--codex-border-default);
-  background: var(--codex-surface-panel-elevated);
-  font-size: 0.75rem;
 }
 
 .codex-chat-input-support {

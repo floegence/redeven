@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Send } from '@floegence/floe-webapp-core/icons';
-import { Input, Select } from '@floegence/floe-webapp-core/ui';
+import { Select } from '@floegence/floe-webapp-core/ui';
 
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
@@ -125,7 +125,11 @@ function focusFirstInteractiveDescendant(container: HTMLElement | undefined) {
 }
 
 export function CodexComposerShell(props: {
-  workspaceLabel: string;
+  workingDirPath: string;
+  workingDirLabel: string;
+  workingDirTitle: string;
+  workingDirLocked: boolean;
+  workingDirDisabled: boolean;
   modelValue: string;
   modelOptions: readonly SelectOption[];
   effortValue: string;
@@ -142,7 +146,7 @@ export function CodexComposerShell(props: {
   submitting: boolean;
   hostAvailable: boolean;
   hostDisabledReason: string;
-  onWorkspaceInput: (value: string) => void;
+  onOpenWorkingDirPicker: () => void;
   onModelChange: (value: string) => void;
   onEffortChange: (value: string) => void;
   onApprovalPolicyChange: (value: string) => void;
@@ -169,7 +173,6 @@ export function CodexComposerShell(props: {
   });
   const [isComposing, setIsComposing] = createSignal(false);
   const [isFocused, setIsFocused] = createSignal(false);
-  const [showWorkspaceEditor, setShowWorkspaceEditor] = createSignal(false);
   const [selectionStart, setSelectionStart] = createSignal(0);
   const [selectionEnd, setSelectionEnd] = createSignal(0);
   const [activePopupIndex, setActivePopupIndex] = createSignal(0);
@@ -177,7 +180,7 @@ export function CodexComposerShell(props: {
   const [fileIndexRevision, setFileIndexRevision] = createSignal(0);
   let textareaRef: HTMLTextAreaElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
-  let workspaceInputContainerRef: HTMLDivElement | undefined;
+  let workingDirChipRef: HTMLButtonElement | undefined;
   let modelContainerRef: HTMLDivElement | undefined;
   let effortContainerRef: HTMLDivElement | undefined;
   let approvalContainerRef: HTMLDivElement | undefined;
@@ -248,7 +251,7 @@ export function CodexComposerShell(props: {
   const popupSignature = createMemo(() => {
     if (popupKind() === 'file-mentions') {
       const token = mentionToken();
-      return token ? `file:${props.workspaceLabel}:${token.range.start}:${token.query}` : '';
+      return token ? `file:${props.workingDirPath}:${token.range.start}:${token.query}` : '';
     }
     if (popupKind() === 'slash-commands') {
       const token = slashCommandToken();
@@ -267,14 +270,17 @@ export function CodexComposerShell(props: {
     popupKind() === 'slash-commands'
       ? filterCodexSlashCommands({
           query: slashCommandToken()?.query ?? '',
-          context: { hostAvailable: props.hostAvailable },
+          context: {
+            hostAvailable: props.hostAvailable,
+            workingDirEditable: props.hostAvailable && !props.workingDirLocked && !props.workingDirDisabled,
+          },
         })
       : []
   ));
 
   createEffect(() => {
     if (!popupVisible() || popupKind() !== 'file-mentions') return;
-    const cwd = String(props.workspaceLabel ?? '').trim();
+    const cwd = String(props.workingDirPath ?? '').trim();
     if (!cwd) return;
     void fileIndex.ensureIndexed(cwd);
   });
@@ -289,7 +295,7 @@ export function CodexComposerShell(props: {
   const fileMentionCandidates = createMemo<CodexFileSearchEntry[]>(() => {
     void fileIndexRevision();
     if (popupKind() !== 'file-mentions') return [];
-    const cwd = String(props.workspaceLabel ?? '').trim();
+    const cwd = String(props.workingDirPath ?? '').trim();
     if (!cwd) return [];
     return fileIndex.query(cwd, mentionToken()?.query ?? '');
   });
@@ -297,7 +303,7 @@ export function CodexComposerShell(props: {
   const fileIndexLoading = createMemo(() => {
     void fileIndexRevision();
     if (popupKind() !== 'file-mentions') return false;
-    const cwd = String(props.workspaceLabel ?? '').trim();
+    const cwd = String(props.workingDirPath ?? '').trim();
     if (!cwd) return false;
     return fileIndex.getSnapshot(cwd)?.complete === false;
   });
@@ -334,8 +340,18 @@ export function CodexComposerShell(props: {
   });
 
   const sendLabel = () => 'Send to Codex';
-  const workspaceTitle = () => String(props.workspaceLabel ?? '').trim() || 'Working directory';
-  const workspaceChipLabel = () => compactPathLabel(props.workspaceLabel, 'Working dir');
+  const canOpenWorkingDirPicker = () => props.hostAvailable && !props.workingDirDisabled && !props.workingDirLocked;
+  const workingDirChipTitle = () => {
+    const absolutePath = String(props.workingDirTitle ?? '').trim() || 'Working directory';
+    if (!props.hostAvailable) {
+      return statusNote() || absolutePath;
+    }
+    if (props.workingDirLocked) {
+      return `${absolutePath} (locked to this thread)`;
+    }
+    return absolutePath;
+  };
+  const workingDirChipLabel = () => String(props.workingDirLabel ?? '').trim() || compactPathLabel(props.workingDirPath, 'Working dir');
   const attachmentSupportNote = () => {
     if (!props.hostAvailable) return '';
     if (props.capabilitiesLoading) return 'Checking image support...';
@@ -401,8 +417,13 @@ export function CodexComposerShell(props: {
       }
       case 'focus-working-dir': {
         applyComposerText(nextText, nextSelection);
-        setShowWorkspaceEditor(true);
-        requestAnimationFrame(() => focusFirstInteractiveDescendant(workspaceInputContainerRef));
+        requestAnimationFrame(() => {
+          if (canOpenWorkingDirPicker()) {
+            props.onOpenWorkingDirPicker();
+            return;
+          }
+          workingDirChipRef?.focus();
+        });
         return;
       }
       case 'focus-model': {
@@ -637,18 +658,30 @@ export function CodexComposerShell(props: {
         <div class="codex-chat-input-meta">
           <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input controls">
             <button
+              ref={workingDirChipRef}
               type="button"
               class={cn(
-                'codex-chat-chip codex-chat-working-dir-chip codex-chat-chip-actionable',
+                'codex-chat-chip codex-chat-working-dir-chip',
+                canOpenWorkingDirPicker()
+                  ? 'codex-chat-chip-actionable'
+                  : 'codex-chat-chip-disabled',
+                props.workingDirLocked && 'codex-chat-working-dir-chip-locked',
               )}
-              disabled={!props.hostAvailable}
-              onClick={() => setShowWorkspaceEditor((value) => !value)}
-              title={props.hostAvailable ? workspaceTitle() : statusNote() || workspaceTitle()}
-              aria-label="Edit working directory"
-              aria-expanded={showWorkspaceEditor()}
+              onClick={() => {
+                if (!canOpenWorkingDirPicker()) return;
+                props.onOpenWorkingDirPicker();
+              }}
+              disabled={props.workingDirDisabled}
+              title={workingDirChipTitle()}
+              aria-label={props.workingDirLocked ? 'Working directory locked' : 'Select working directory'}
+              aria-disabled={!canOpenWorkingDirPicker()}
+              tabIndex={canOpenWorkingDirPicker() ? 0 : -1}
             >
               <FolderIcon />
-              <span class="codex-chat-working-dir-chip-label">{workspaceChipLabel()}</span>
+              <span class="codex-chat-working-dir-chip-label">{workingDirChipLabel()}</span>
+              <Show when={props.workingDirLocked}>
+                <LockIcon />
+              </Show>
             </button>
 
             <button
@@ -724,22 +757,6 @@ export function CodexComposerShell(props: {
             />
           </div>
 
-          <Show when={showWorkspaceEditor()}>
-            <div
-              ref={workspaceInputContainerRef}
-              class="codex-chat-input-workspace-editor"
-            >
-              <Input
-                value={props.workspaceLabel}
-                disabled={!props.hostAvailable}
-                onInput={(event) => props.onWorkspaceInput(event.currentTarget.value)}
-                placeholder="Use host default working directory"
-                aria-label="Working directory"
-                class="w-full codex-chat-input-workspace-input"
-              />
-            </div>
-          </Show>
-
           <Show when={attachmentSupportNote() || statusNote()}>
             <div class="codex-chat-input-support">
               <Show when={attachmentSupportNote()}>
@@ -770,5 +787,12 @@ const PaperclipIcon: Component = () => (
 const FolderIcon: Component = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </svg>
+);
+
+const LockIcon: Component = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 1 1 8 0v4" />
   </svg>
 );

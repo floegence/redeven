@@ -92,6 +92,30 @@ describe('createCodexDraftController', () => {
     });
   });
 
+  it('commits a runtime field back to server truth without clearing other dirty overrides', () => {
+    withDraftController((controller) => {
+      const ownerID = codexOwnerIDForThread('thread_runtime_commit');
+      controller.ensureOwner(ownerID, {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        reasoning_effort: 'medium',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      }, '/workspace');
+
+      controller.setRuntimeField(ownerID, 'cwd', '/workspace/custom');
+      controller.setRuntimeField(ownerID, 'model', 'gpt-5.5');
+
+      controller.commitOwnerRuntimeField(ownerID, 'cwd', '/workspace/server', '/workspace/server');
+
+      const draft = controller.draftForOwner(ownerID, null, '');
+      expect(draft.runtime.cwd).toBe('/workspace/server');
+      expect(draft.dirty.cwd).toBe(false);
+      expect(draft.runtime.model).toBe('gpt-5.5');
+      expect(draft.dirty.model).toBe(true);
+    });
+  });
+
   it('treats same-value updates as no-ops so owner draft references stay stable', () => {
     withDraftController((controller) => {
       const ownerID = codexOwnerIDForThread('thread_1');

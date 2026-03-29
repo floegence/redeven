@@ -36,6 +36,14 @@ export type CodexOwnerDraftState = Readonly<{
   composer: CodexComposerDraft;
 }>;
 
+const runtimeDirtyFieldMap: Record<keyof CodexRuntimeDraft, keyof CodexRuntimeDraftDirty> = {
+  cwd: 'cwd',
+  model: 'model',
+  effort: 'effort',
+  approvalPolicy: 'approvalPolicy',
+  sandboxMode: 'sandboxMode',
+};
+
 function sameRuntimeDraft(left: CodexRuntimeDraft, right: CodexRuntimeDraft): boolean {
   return (
     left.cwd === right.cwd &&
@@ -137,14 +145,7 @@ function withRuntimeField(
   markDirty: boolean,
 ): CodexOwnerDraftState {
   const normalizedValue = String(value ?? '').trim();
-  const dirtyFieldMap: Record<keyof CodexRuntimeDraft, keyof CodexRuntimeDraftDirty> = {
-    cwd: 'cwd',
-    model: 'model',
-    effort: 'effort',
-    approvalPolicy: 'approvalPolicy',
-    sandboxMode: 'sandboxMode',
-  };
-  const dirtyField = dirtyFieldMap[field];
+  const dirtyField = runtimeDirtyFieldMap[field];
   const nextDirty = markDirty && !state.dirty[dirtyField]
     ? {
         ...state.dirty,
@@ -160,6 +161,35 @@ function withRuntimeField(
       ...state.runtime,
       [field]: normalizedValue,
     },
+    dirty: nextDirty,
+  };
+}
+
+function commitRuntimeField(
+  state: CodexOwnerDraftState,
+  field: keyof CodexRuntimeDraft,
+  value: string,
+): CodexOwnerDraftState {
+  const normalizedValue = String(value ?? '').trim();
+  const dirtyField = runtimeDirtyFieldMap[field];
+  const nextRuntime = state.runtime[field] === normalizedValue
+    ? state.runtime
+    : {
+        ...state.runtime,
+        [field]: normalizedValue,
+      };
+  const nextDirty = state.dirty[dirtyField]
+    ? {
+        ...state.dirty,
+        [dirtyField]: false,
+      }
+    : state.dirty;
+  if (nextRuntime === state.runtime && nextDirty === state.dirty) {
+    return state;
+  }
+  return {
+    ...state,
+    runtime: nextRuntime,
     dirty: nextDirty,
   };
 }
@@ -243,6 +273,27 @@ export function createCodexDraftController() {
     setDraftsByOwner((current) => {
       const existing = current[normalizedOwnerID] ?? createOwnerDraftState(null, fallbackCWD);
       const nextDraft = withRuntimeField(existing, field, value, markDirty);
+      if (nextDraft === existing && current[normalizedOwnerID]) {
+        return current;
+      }
+      return {
+        ...current,
+        [normalizedOwnerID]: nextDraft,
+      };
+    });
+  };
+
+  const commitOwnerRuntimeField = (
+    ownerID: string,
+    field: keyof CodexRuntimeDraft,
+    value: string,
+    fallbackCWD = '',
+  ) => {
+    const normalizedOwnerID = String(ownerID ?? '').trim();
+    if (!normalizedOwnerID) return;
+    setDraftsByOwner((current) => {
+      const existing = current[normalizedOwnerID] ?? createOwnerDraftState(null, fallbackCWD);
+      const nextDraft = commitRuntimeField(existing, field, value);
       if (nextDraft === existing && current[normalizedOwnerID]) {
         return current;
       }
@@ -469,6 +520,7 @@ export function createCodexDraftController() {
     ensureOwner,
     mergeOwnerRuntimeConfig,
     setRuntimeField,
+    commitOwnerRuntimeField,
     setComposerText,
     replaceAttachments,
     appendAttachments,

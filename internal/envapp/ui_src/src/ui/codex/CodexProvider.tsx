@@ -410,6 +410,24 @@ export function CodexProvider(props: ParentProps) {
     String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
   ));
 
+  createEffect(on(
+    () => {
+      if (!codexVisible()) return '';
+      const ownerID = activeOwnerID();
+      if (ownerID === CODEX_NEW_THREAD_OWNER) return '';
+      return `${ownerID}::${String(ownerFallbackRuntimeConfig().cwd ?? '').trim()}`;
+    },
+    (signature) => {
+      if (!signature) return;
+      draftController.commitOwnerRuntimeField(
+        activeOwnerID(),
+        'cwd',
+        String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+        String(ownerFallbackRuntimeConfig().cwd ?? '').trim(),
+      );
+    },
+  ));
+
   const activeCapabilitiesCWD = createMemo(() => {
     const ownerDraft = draftController.draftsByOwner()[activeOwnerID()];
     return String(
@@ -719,6 +737,9 @@ export function CodexProvider(props: ParentProps) {
   const composerText = createMemo(() => activeOwnerDraft().composer.text);
 
   const setWorkingDirDraft = (value: string) => {
+    if (activeOwnerID() !== CODEX_NEW_THREAD_OWNER) {
+      return;
+    }
     draftController.setRuntimeField(
       activeOwnerID(),
       'cwd',
@@ -908,6 +929,7 @@ export function CodexProvider(props: ParentProps) {
 
     setSubmitting(true);
     let targetThreadID = String(selectedThreadID() ?? '').trim();
+    const creatingThread = !targetThreadID;
     let targetOwnerID = ownerID;
     let optimisticTurnID = '';
     try {
@@ -935,6 +957,12 @@ export function CodexProvider(props: ParentProps) {
             ...(detail.runtime_config ?? {}),
             cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
           },
+          resolvedWorkingDir,
+        );
+        draftController.commitOwnerRuntimeField(
+          targetOwnerID,
+          'cwd',
+          String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
           resolvedWorkingDir,
         );
       } else {
@@ -970,7 +998,7 @@ export function CodexProvider(props: ParentProps) {
         threadID: targetThreadID,
         inputText: message,
         inputs: [...attachmentInputs, ...mentionInputs],
-        cwd: resolvedWorkingDir,
+        cwd: creatingThread ? resolvedWorkingDir : undefined,
         model: ownerDraft.runtime.model,
         effort: ownerDraft.runtime.effort,
         approval_policy: ownerDraft.runtime.approvalPolicy,

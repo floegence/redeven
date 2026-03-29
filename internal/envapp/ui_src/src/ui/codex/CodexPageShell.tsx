@@ -1,12 +1,23 @@
-import { Show, createEffect, createMemo, onCleanup } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import { createFollowBottomController } from '../chat/scroll/createFollowBottomController';
+import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
+import { normalizeAbsolutePath, toHomeDisplayPath } from '../utils/askFlowerPath';
+import {
+  replacePickerChildren,
+  sortPickerFolderItems,
+  toPickerFolderItem,
+  toPickerTreeAbsolutePath,
+  toPickerTreePath,
+} from '../utils/directoryPickerTree';
 import { useCodexContext } from './CodexProvider';
 import { CodexComposerShell } from './CodexComposerShell';
 import { CodexHeaderBar } from './CodexHeaderBar';
 import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
 import { CodexStatusBannerStack } from './CodexStatusBannerStack';
 import { CodexTranscript } from './CodexTranscript';
+import { CodexWorkingDirPickerDialog } from './CodexWorkingDirPickerDialog';
 import { isWorkingStatus } from './presentation';
 import {
   buildCodexWorkbenchSummary,
@@ -24,9 +35,15 @@ type ComposerOption = Readonly<{
   label: string;
 }>;
 
+type DirCache = Map<string, FileItem[]>;
+
 export function CodexPageShell() {
   const codex = useCodexContext();
+  const rpc = useRedevenRpc();
   const followBottomController = createFollowBottomController();
+  const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
+  const [workingDirFiles, setWorkingDirFiles] = createSignal<FileItem[]>([]);
+  let workingDirCache: DirCache = new Map();
 
   onCleanup(() => {
     followBottomController.dispose();
@@ -63,7 +80,18 @@ export function CodexPageShell() {
   const effortValue = createMemo(() => String(codex.effortDraft() ?? '').trim());
   const approvalPolicyValue = createMemo(() => String(codex.approvalPolicyDraft() ?? '').trim());
   const sandboxModeValue = createMemo(() => String(codex.sandboxModeDraft() ?? '').trim());
-  const workingDirValue = createMemo(() => String(codex.workingDirDraft() ?? summary().workspaceLabel ?? '').trim());
+  const homePath = createMemo(() => normalizeAbsolutePath(String(codex.status()?.agent_home_dir ?? '').trim()));
+  const workingDirPath = createMemo(() => (
+    normalizeAbsolutePath(String(codex.workingDirDraft() ?? '').trim()) ||
+    normalizeAbsolutePath(String(codex.activeRuntimeConfig().cwd ?? '').trim()) ||
+    normalizeAbsolutePath(String(codex.activeThread()?.cwd ?? '').trim()) ||
+    homePath()
+  ));
+  const workingDirValue = createMemo(() => toHomeDisplayPath(workingDirPath(), homePath()) || workingDirPath());
+  const workingDirLocked = createMemo(() => Boolean(String(codex.activeThreadID() ?? '').trim()));
+  const workingDirDisabled = createMemo(() => !summary().hostReady || codex.submitting() || !homePath());
+  const canPickWorkingDir = createMemo(() => !workingDirLocked() && !workingDirDisabled());
+  const workingDirPickerInitialPath = createMemo(() => toPickerTreePath(workingDirPath(), homePath()));
   const modelOptions = createMemo<ComposerOption[]>(() => {
     const items = (codex.capabilities()?.models ?? []).map((model) => ({
       value: String(model.id ?? '').trim(),
@@ -119,9 +147,42 @@ export function CodexPageShell() {
   ));
 
   createEffect(() => {
+    homePath();
+    workingDirCache = new Map();
+    setWorkingDirFiles([]);
+  });
+
+  createEffect(() => {
     const request = codex.scrollToBottomRequest();
     if (!request) return;
     followBottomController.requestFollowBottom(request);
+  });
+
+  const loadWorkingDirTree = async (pickerPath: string) => {
+    const absolutePath = toPickerTreeAbsolutePath(pickerPath, homePath());
+    if (!absolutePath) return;
+    if (workingDirCache.has(absolutePath)) {
+      setWorkingDirFiles((prev) => replacePickerChildren(prev, pickerPath, workingDirCache.get(absolutePath)!));
+      return;
+    }
+    try {
+      const response = await rpc.fs.list({ path: absolutePath, showHidden: false });
+      const items = sortPickerFolderItems(
+        (response?.entries ?? [])
+          .map((entry) => toPickerFolderItem(entry as FsFileInfo, homePath()))
+          .filter((item): item is FileItem => Boolean(item)),
+      );
+      workingDirCache.set(absolutePath, items);
+      setWorkingDirFiles((prev) => replacePickerChildren(prev, pickerPath, items));
+    } catch {
+      // ignore picker tree load failures and keep the previous tree state
+    }
+  };
+
+  createEffect(() => {
+    if (!workingDirPickerOpen()) return;
+    if (workingDirFiles().length > 0) return;
+    void loadWorkingDirTree('/');
   });
 
   return (
@@ -180,7 +241,11 @@ export function CodexPageShell() {
             </Show>
 
             <CodexComposerShell
-              workspaceLabel={workingDirValue()}
+              workingDirPath={workingDirPath()}
+              workingDirLabel={workingDirValue()}
+              workingDirTitle={workingDirPath() || workingDirValue() || 'Working directory'}
+              workingDirLocked={workingDirLocked()}
+              workingDirDisabled={workingDirDisabled()}
               modelValue={modelValue()}
               modelOptions={modelOptions()}
               effortValue={effortValue()}
@@ -197,7 +262,10 @@ export function CodexPageShell() {
               submitting={codex.submitting()}
               hostAvailable={summary().hostReady}
               hostDisabledReason={codex.hostDisabledReason()}
-              onWorkspaceInput={codex.setWorkingDirDraft}
+              onOpenWorkingDirPicker={() => {
+                if (!canPickWorkingDir()) return;
+                setWorkingDirPickerOpen(true);
+              }}
               onModelChange={codex.setModelDraft}
               onEffortChange={codex.setEffortDraft}
               onApprovalPolicyChange={codex.setApprovalPolicyDraft}
@@ -214,6 +282,26 @@ export function CodexPageShell() {
           </div>
         </div>
       </div>
+
+      <CodexWorkingDirPickerDialog
+        open={workingDirPickerOpen()}
+        onOpenChange={(open) => {
+          if (!open) setWorkingDirPickerOpen(false);
+        }}
+        files={workingDirFiles()}
+        initialPath={workingDirPickerInitialPath()}
+        homePath={homePath()}
+        onExpand={(path) => {
+          void loadWorkingDirTree(path);
+        }}
+        onSelect={(selectedPath) => {
+          if (!canPickWorkingDir()) return;
+          const realPath = toPickerTreeAbsolutePath(selectedPath, homePath());
+          if (!realPath) return;
+          codex.setWorkingDirDraft(realPath);
+          setWorkingDirPickerOpen(false);
+        }}
+      />
     </div>
   );
 }

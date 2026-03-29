@@ -94,6 +94,33 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
   CardHeader: (props: any) => <div class={props.class}>{props.children}</div>,
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
+  DirectoryPicker: (props: any) => (
+    props.open
+      ? (
+        <div
+          data-testid="directory-picker"
+          data-title={props.title}
+          data-initial-path={props.initialPath}
+          data-home-path={props.homePath}
+        >
+          <button
+            type="button"
+            data-testid="directory-picker-select"
+            onClick={() => props.onSelect?.('/ui')}
+          >
+            Select /ui
+          </button>
+          <button
+            type="button"
+            data-testid="directory-picker-close"
+            onClick={() => props.onOpenChange?.(false)}
+          >
+            Close
+          </button>
+        </div>
+      )
+      : null
+  ),
   Input: (props: any) => (
     <input
       type={props.type}
@@ -482,7 +509,7 @@ describe('CodexPage', () => {
     await flushAsync();
 
     const textarea = host.querySelector('textarea');
-    const workingDirButton = host.querySelector('button[aria-label="Edit working directory"]');
+    const workingDirButton = host.querySelector('button[aria-label="Select working directory"]');
     const attachmentButton = host.querySelector('button[title="Add attachments"]');
     const sendButton = host.querySelector('button[aria-label="Send to Codex"]');
 
@@ -650,12 +677,134 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('95% context left');
     expect(host.querySelector('button[aria-label="Refresh Codex thread"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
-    const workingDirChip = host.querySelector('button[aria-label="Edit working directory"]') as HTMLButtonElement | null;
-    expect(workingDirChip?.textContent).toContain('/workspace/ui');
+    const workingDirChip = host.querySelector('button[aria-label="Working directory locked"]') as HTMLButtonElement | null;
+    expect(workingDirChip?.textContent).toContain('~/ui');
+    expect(workingDirChip?.className).toContain('codex-chat-working-dir-chip-locked');
     workingDirChip?.click();
     await flushAsync();
-    const workingDirInput = host.querySelector('input[placeholder="Use host default working directory"]') as HTMLInputElement | null;
-    expect(workingDirInput?.value).toBe('/workspace/ui');
+    expect(host.querySelector('[data-testid="directory-picker"]')).toBeNull();
+  });
+
+  it('applies a new-chat working-dir selection to the first send', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_new',
+        name: 'New chat',
+        preview: 'Working dir change',
+        ephemeral: false,
+        model_provider: 'openai',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      token_usage: null,
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+    rpcMocks.fs.list.mockResolvedValue({
+      entries: [
+        {
+          name: 'ui',
+          path: '/workspace/ui',
+          isDirectory: true,
+          size: 0,
+          modifiedAt: 1,
+          createdAt: 1,
+        },
+      ],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let codex!: ReturnType<typeof useCodexContext>;
+
+    renderPageWithHarness(host, (value) => {
+      codex = value;
+    });
+
+    await flushAsync();
+    await flushAsync();
+
+    codex.setWorkingDirDraft('/workspace/ui');
+    await flushAsync();
+
+    const workingDirButton = host.querySelector('button[aria-label="Select working directory"]') as HTMLButtonElement | null;
+    if (!workingDirButton) {
+      throw new Error('working directory button not found');
+    }
+    expect(workingDirButton.textContent).toContain('~/ui');
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) {
+      throw new Error('textarea not found');
+    }
+    textarea.value = 'Review this folder';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!sendButton) {
+      throw new Error('send button not found');
+    }
+    sendButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(startCodexThreadMock).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/workspace/ui',
+      model: 'gpt-5.4',
+      approval_policy: 'on-request',
+      sandbox_mode: 'workspace-write',
+    }));
+    expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadID: 'thread_new',
+      inputText: 'Review this folder',
+      cwd: '/workspace/ui',
+    }));
   });
 
   it('renders pending request cards inside the Codex dock support lane', async () => {
@@ -1853,6 +2002,106 @@ describe('CodexPage', () => {
         path: '/workspace/ui/src/ui/codex/CodexComposerShell.tsx',
       },
     ]);
+  });
+
+  it('locks the working directory for existing threads and omits cwd overrides on later turns', async () => {
+    const openedDetail = {
+      thread: {
+        id: 'thread_1',
+        name: 'Existing thread',
+        preview: 'Keep cwd stable',
+        ephemeral: false,
+        model_provider: 'openai',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'completed',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      token_usage: null,
+      last_applied_seq: 0,
+      active_status: 'completed',
+      active_status_flags: [],
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Existing thread',
+        preview: 'Keep cwd stable',
+        ephemeral: false,
+        model_provider: 'openai',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'completed',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue(openedDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let codex!: ReturnType<typeof useCodexContext>;
+
+    renderProviderHarness(host, (value) => {
+      codex = value;
+    });
+
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    expect(codex.workingDirDraft()).toBe('/workspace/ui');
+
+    codex.setWorkingDirDraft('/workspace/override');
+    await flushAsync();
+
+    expect(codex.workingDirDraft()).toBe('/workspace/ui');
+
+    codex.setComposerText('Continue with the same thread');
+    await codex.sendTurn();
+    await flushAsync();
+
+    expect(startCodexTurnMock).toHaveBeenCalledTimes(1);
+    expect(startCodexTurnMock.mock.calls[0]?.[0]?.threadID).toBe('thread_1');
+    expect(startCodexTurnMock.mock.calls[0]?.[0]?.cwd).toBeUndefined();
   });
 
 });

@@ -24,16 +24,6 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Input: (props: any) => (
-    <input
-      class={props.class}
-      value={props.value ?? ''}
-      disabled={props.disabled}
-      placeholder={props.placeholder}
-      aria-label={props['aria-label']}
-      onInput={(event) => props.onInput?.(event)}
-    />
-  ),
   Select: (props: any) => (
     <select
       class={props.class}
@@ -60,13 +50,21 @@ function flushAsync(): Promise<void> {
 
 function renderComposer(options?: {
   initialText?: string;
+  hostAvailable?: boolean;
+  workingDirPath?: string;
+  workingDirLabel?: string;
+  workingDirTitle?: string;
+  workingDirLocked?: boolean;
+  workingDirDisabled?: boolean;
   onSend?: () => void;
+  onOpenWorkingDirPicker?: () => void;
   onAddAttachments?: (files: readonly File[]) => Promise<void>;
   onAddFileMentions?: (mentions: ReadonlyArray<{ name: string; path: string; is_image: boolean }>) => void;
   onResetComposer?: () => void;
   onStartNewThreadDraft?: () => void;
 }) {
   const onSend = options?.onSend ?? vi.fn();
+  const onOpenWorkingDirPicker = options?.onOpenWorkingDirPicker ?? vi.fn();
   const onAddAttachments = options?.onAddAttachments ?? vi.fn(async () => undefined);
   const onAddFileMentions = options?.onAddFileMentions ?? vi.fn();
   const onResetComposer = options?.onResetComposer ?? vi.fn();
@@ -78,7 +76,11 @@ function renderComposer(options?: {
     const [text, setText] = createSignal(options?.initialText ?? '');
     return (
       <CodexComposerShell
-        workspaceLabel="/workspace"
+        workingDirPath={options?.workingDirPath ?? '/workspace'}
+        workingDirLabel={options?.workingDirLabel ?? '/workspace'}
+        workingDirTitle={options?.workingDirTitle ?? '/workspace'}
+        workingDirLocked={options?.workingDirLocked ?? false}
+        workingDirDisabled={options?.workingDirDisabled ?? false}
         modelValue="gpt-5.4"
         modelOptions={[{ value: 'gpt-5.4', label: 'GPT-5.4' }]}
         effortValue="medium"
@@ -93,9 +95,9 @@ function renderComposer(options?: {
         capabilitiesLoading={false}
         composerText={text()}
         submitting={false}
-        hostAvailable={true}
+        hostAvailable={options?.hostAvailable ?? true}
         hostDisabledReason=""
-        onWorkspaceInput={() => undefined}
+        onOpenWorkingDirPicker={onOpenWorkingDirPicker}
         onModelChange={() => undefined}
         onEffortChange={() => undefined}
         onApprovalPolicyChange={() => undefined}
@@ -116,6 +118,7 @@ function renderComposer(options?: {
     host,
     dispose,
     onSend,
+    onOpenWorkingDirPicker,
     onAddAttachments,
     onAddFileMentions,
     onResetComposer,
@@ -129,6 +132,42 @@ afterEach(() => {
 });
 
 describe('CodexComposerShell', () => {
+  it('opens the working directory picker from the new-thread chip', () => {
+    const onOpenWorkingDirPicker = vi.fn();
+    const { host, dispose } = renderComposer({ onOpenWorkingDirPicker });
+
+    const button = host.querySelector('button[aria-label="Select working directory"]') as HTMLButtonElement | null;
+    if (!button) throw new Error('working directory button not found');
+
+    button.click();
+
+    expect(onOpenWorkingDirPicker).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it('renders a locked working directory chip without opening the picker', () => {
+    const onOpenWorkingDirPicker = vi.fn();
+    const { host, dispose } = renderComposer({
+      workingDirPath: '/workspace/ui',
+      workingDirLabel: '~/ui',
+      workingDirTitle: '/workspace/ui',
+      workingDirLocked: true,
+      onOpenWorkingDirPicker,
+    });
+
+    const button = host.querySelector('button[aria-label="Working directory locked"]') as HTMLButtonElement | null;
+    if (!button) throw new Error('locked working directory button not found');
+
+    button.click();
+
+    expect(button.textContent).toContain('~/ui');
+    expect(button.className).toContain('codex-chat-working-dir-chip-locked');
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    expect(button.tabIndex).toBe(-1);
+    expect(onOpenWorkingDirPicker).not.toHaveBeenCalled();
+    dispose();
+  });
+
   it('routes pasted image files into the Codex attachment pipeline', async () => {
     const onAddAttachments = vi.fn(async () => undefined);
     const { host, dispose } = renderComposer({ onAddAttachments });

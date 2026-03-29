@@ -20,6 +20,7 @@ export type CodexSlashCommandAction =
 
 export type CodexSlashCommandContext = Readonly<{
   hostAvailable: boolean;
+  workingDirEditable: boolean;
 }>;
 
 export type CodexSlashCommandSpec = Readonly<{
@@ -30,6 +31,7 @@ export type CodexSlashCommandSpec = Readonly<{
   action: CodexSlashCommandAction;
   aliases?: readonly string[];
   requires_host?: boolean;
+  requires_working_dir_editable?: boolean;
 }>;
 
 const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
@@ -59,9 +61,10 @@ const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
     id: 'cwd',
     command: 'cwd',
     title: '/cwd',
-    description: 'Focus the working directory control.',
+    description: 'Open the working directory picker for a new chat.',
     action: 'focus-working-dir',
     aliases: ['workdir'],
+    requires_working_dir_editable: true,
   },
   {
     id: 'model',
@@ -102,7 +105,9 @@ function commandAvailabilityMatches(
   command: CodexSlashCommandSpec,
   context: CodexSlashCommandContext,
 ): boolean {
-  return !command.requires_host || context.hostAvailable;
+  if (command.requires_host && !context.hostAvailable) return false;
+  if (command.requires_working_dir_editable && !context.workingDirEditable) return false;
+  return true;
 }
 
 function commandScore(command: CodexSlashCommandSpec, normalizedQuery: string): number {

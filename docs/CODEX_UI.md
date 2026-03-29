@@ -108,7 +108,7 @@ The event stream endpoint is SSE and is used for live transcript / approval upda
 - `sandbox_mode`
 - `reasoning_effort`
 
-`POST /_redeven_proxy/api/codex/threads/:id/turns` also accepts Codex-local sticky overrides:
+`POST /_redeven_proxy/api/codex/threads/:id/turns` also accepts Codex-local runtime fields for bridge/browser compatibility:
 
 - `inputs`
 - `cwd`
@@ -117,6 +117,8 @@ The event stream endpoint is SSE and is used for live transcript / approval upda
 - `approval_policy`
 - `sandbox_mode`
 - `approvals_reviewer`
+
+The browser UI currently uses `cwd` only while creating a brand-new thread and issuing its first turn. Once a thread exists, the Codex page renders the working directory as locked and does not send per-turn `cwd` overrides.
 
 When the target thread is not currently live-loaded on the bridge connection, the bridge resumes it before forwarding `turn/start`.
 
@@ -148,7 +150,9 @@ Current Env App behavior:
   - approval policy
   - sandbox mode
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.
-- New threads can override working directory, model, approval policy, and sandbox before the first turn, and later turns can keep those settings sticky through explicit `turn/start` overrides.
+- New threads can choose working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn.
+- Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.
+- Later turns may still adjust model, reasoning effort, approval policy, and sandbox mode through the Codex composer controls.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
 - User-message rendering is intentionally separate from assistant/evidence markdown rendering:
