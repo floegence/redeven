@@ -74,6 +74,16 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
   Dialog: (props: any) => <Show when={props.open}><div>{props.children}{props.footer}</div></Show>,
   DirectoryInput: (props: any) => <input value={props.value} onInput={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).value)} />,
+  HighlightBlock: (props: any) => (
+    <div
+      class={['highlight-block', props.class].filter(Boolean).join(' ')}
+      data-testid={props['data-testid']}
+      data-highlight-variant={props.variant}
+    >
+      <div>{props.title}</div>
+      {props.children}
+    </div>
+  ),
   Input: (props: any) => <input value={props.value} onInput={props.onInput} />,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
   Tooltip: (props: any) => <>{props.children}</>,
@@ -303,6 +313,7 @@ describe('EnvCodespacesPage', () => {
 
     const banner = host.querySelector('[data-testid="code-runtime-banner"]') as HTMLDivElement | null;
     expect(banner).toBeTruthy();
+    expect(banner?.className).toContain('highlight-block');
     expect(banner?.textContent).toContain('code-server runtime');
     expect(banner?.textContent).toContain('Install code-server');
     expect(banner?.textContent).toContain('Supported version 4.108.2');
