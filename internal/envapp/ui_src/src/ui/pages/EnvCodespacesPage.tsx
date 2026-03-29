@@ -14,6 +14,7 @@ import {
   CardTitle,
   Dialog,
   DirectoryInput,
+  HighlightBlock,
   Input,
   Tag,
 } from "@floegence/floe-webapp-core/ui";
@@ -535,6 +536,13 @@ function CodeRuntimeBanner(props: {
   onRefresh: () => void;
   onViewDetails: () => void;
 }) {
+  const bannerVariant = () => {
+    if (props.error || props.status?.install_state === "failed") return "error" as const;
+    if (props.loading || props.status?.install_state === "running") return "info" as const;
+    if (props.status?.install_state === "cancelled" || props.status?.detection_state === "incompatible") return "warning" as const;
+    return "note" as const;
+  };
+
   const badgeText = () => {
     const status = props.status;
     if (props.loading) return "Checking runtime";
@@ -547,37 +555,36 @@ function CodeRuntimeBanner(props: {
   };
 
   return (
-    <div
+    <HighlightBlock
+      variant={bannerVariant()}
+      title="code-server runtime"
       data-testid="code-runtime-banner"
-      class={cn("rounded-lg border p-4 space-y-3", redevenSurfaceRoleClass("panelStrong"))}
+      class={cn("border-0 shadow-none", redevenSurfaceRoleClass("panelStrong"))}
     >
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div class="space-y-2 min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <div class="text-sm font-semibold text-foreground">code-server runtime</div>
-            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
-              {badgeText()}
-            </Tag>
-            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
-              Supported version {props.status?.supported_version ?? "-"}
-            </Tag>
-          </div>
-          <div class="text-xs text-muted-foreground">
-            {props.error ? props.error : runtimeRequirementLabel(props.status)}
-          </div>
-          <div class="grid gap-1 text-[11px] text-muted-foreground">
-            <Show when={props.status?.installed_version}>
-              <div>Detected version: <span class="font-mono">{props.status?.installed_version}</span></div>
-            </Show>
-            <Show when={props.status?.binary_path}>
-              <div>Detected path: <span class="font-mono break-all">{props.status?.binary_path}</span></div>
-            </Show>
-            <Show when={props.status?.managed_prefix}>
-              <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
-            </Show>
-          </div>
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+            {badgeText()}
+          </Tag>
+          <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+            Supported version {props.status?.supported_version ?? "-"}
+          </Tag>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="text-xs text-muted-foreground">
+          {props.error ? props.error : runtimeRequirementLabel(props.status)}
+        </div>
+        <div class="grid gap-1 text-[11px] text-muted-foreground">
+          <Show when={props.status?.installed_version}>
+            <div>Detected version: <span class="font-mono">{props.status?.installed_version}</span></div>
+          </Show>
+          <Show when={props.status?.binary_path}>
+            <div>Detected path: <span class="font-mono break-all">{props.status?.binary_path}</span></div>
+          </Show>
+          <Show when={props.status?.managed_prefix}>
+            <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
+          </Show>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
             Refresh status
           </Button>
@@ -597,7 +604,7 @@ function CodeRuntimeBanner(props: {
           </Show>
         </div>
       </div>
-    </div>
+    </HighlightBlock>
   );
 }
 
