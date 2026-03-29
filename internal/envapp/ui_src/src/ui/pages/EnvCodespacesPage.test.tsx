@@ -154,6 +154,38 @@ async function waitForHostText(host: HTMLElement, text: string, attempts = 20): 
   throw new Error(`Timed out waiting for text: ${text}`);
 }
 
+function makeRuntimeStatus(overrides: any = {}): any {
+  const managedPrefix = '/Users/test/.redeven/apps/code/runtime/managed';
+  return {
+    ...overrides,
+    supported_version: '4.108.2',
+    active_runtime: {
+      detection_state: 'ready',
+      present: true,
+      source: 'managed',
+      binary_path: `${managedPrefix}/bin/code-server`,
+      installed_version: '4.108.2',
+      ...(overrides.active_runtime ?? {}),
+    },
+    managed_runtime: {
+      detection_state: 'ready',
+      present: true,
+      source: 'managed',
+      binary_path: `${managedPrefix}/bin/code-server`,
+      installed_version: '4.108.2',
+      ...(overrides.managed_runtime ?? {}),
+    },
+    managed_prefix: managedPrefix,
+    installer_script_url: 'https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh',
+    operation: {
+      state: 'idle',
+      log_tail: [],
+      ...(overrides.operation ?? {}),
+    },
+    updated_at_unix_ms: 1,
+  };
+}
+
 describe('EnvCodespacesPage', () => {
   let host: HTMLDivElement;
   let runtimeStatusResponse: any;
@@ -171,39 +203,34 @@ describe('EnvCodespacesPage', () => {
     protocolMocks.client.mockReturnValue(null);
     rpcMocks.fs.getPathContext.mockReset();
     rpcMocks.fs.list.mockReset();
-    runtimeStatusResponse = {
-      supported_version: '4.108.2',
-      detection_state: 'ready',
-      install_state: 'idle',
-      managed: true,
-      source: 'managed',
-      binary_path: '/Users/test/.redeven/apps/code/runtime/managed/bin/code-server',
-      installed_version: '4.108.2',
-      managed_prefix: '/Users/test/.redeven/apps/code/runtime/managed',
-      installer_script_url: 'https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh',
-      updated_at_unix_ms: 1,
-      log_tail: [],
-    };
+    runtimeStatusResponse = makeRuntimeStatus();
     gatewayMocks.fetchGatewayJSON.mockReset();
     gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
       }
       if (url === '/_redeven_proxy/api/code-runtime/install') {
-        runtimeStatusResponse = {
+        runtimeStatusResponse = makeRuntimeStatus({
           ...runtimeStatusResponse,
-          install_state: 'running',
-          install_stage: 'installing',
-          log_tail: ['Installing v4.108.2 of the arm64 release from GitHub.'],
-        };
+          operation: {
+            action: 'install',
+            state: 'running',
+            stage: 'installing',
+            log_tail: ['Installing v4.108.2 of the arm64 release from GitHub.'],
+          },
+        });
         return runtimeStatusResponse;
       }
       if (url === '/_redeven_proxy/api/code-runtime/cancel') {
-        runtimeStatusResponse = {
+        runtimeStatusResponse = makeRuntimeStatus({
           ...runtimeStatusResponse,
-          install_state: 'cancelled',
-          install_stage: '',
-        };
+          operation: {
+            action: 'install',
+            state: 'cancelled',
+            stage: '',
+            log_tail: runtimeStatusResponse.operation?.log_tail ?? [],
+          },
+        });
         return runtimeStatusResponse;
       }
       if (url === '/_redeven_proxy/api/spaces') {
@@ -298,15 +325,23 @@ describe('EnvCodespacesPage', () => {
   });
 
   it('shows install guidance when the code-server runtime is missing', async () => {
-    runtimeStatusResponse = {
-      ...runtimeStatusResponse,
-      detection_state: 'missing',
-      install_state: 'idle',
-      managed: false,
-      source: 'none',
-      binary_path: '',
-      installed_version: '',
-    };
+    runtimeStatusResponse = makeRuntimeStatus({
+      active_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'none',
+        binary_path: '',
+        installed_version: '',
+      },
+      managed_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'managed',
+        binary_path: '',
+        installed_version: '',
+      },
+      operation: { state: 'idle', log_tail: [] },
+    });
 
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
@@ -320,15 +355,23 @@ describe('EnvCodespacesPage', () => {
   });
 
   it('opens the explicit install dialog instead of starting a codespace when runtime is missing', async () => {
-    runtimeStatusResponse = {
-      ...runtimeStatusResponse,
-      detection_state: 'missing',
-      install_state: 'idle',
-      managed: false,
-      source: 'none',
-      binary_path: '',
-      installed_version: '',
-    };
+    runtimeStatusResponse = makeRuntimeStatus({
+      active_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'none',
+        binary_path: '',
+        installed_version: '',
+      },
+      managed_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'managed',
+        binary_path: '',
+        installed_version: '',
+      },
+      operation: { state: 'idle', log_tail: [] },
+    });
 
     gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {

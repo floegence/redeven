@@ -66,7 +66,8 @@ type Backend interface {
 	ResolveCodeServerPort(ctx context.Context, codeSpaceID string) (int, error)
 	CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error)
 	InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error)
-	CancelCodeRuntimeInstall(ctx context.Context) (CodeRuntimeStatus, error)
+	UninstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error)
+	CancelCodeRuntimeOperation(ctx context.Context) (CodeRuntimeStatus, error)
 }
 
 type PortForwardBackend interface {
@@ -1438,8 +1439,28 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g.appendAudit(meta, "code_runtime_install", "success", map[string]any{
-			"install_state": string(status.InstallState),
-			"source":        status.Source,
+			"operation_state": string(status.Operation.State),
+			"operation":       string(status.Operation.Action),
+			"source":          status.ActiveRuntime.Source,
+		}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/uninstall":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		status, err := g.backend.UninstallCodeRuntime(r.Context())
+		if err != nil {
+			g.appendAudit(meta, "code_runtime_uninstall", "failure", nil, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "code_runtime_uninstall", "success", map[string]any{
+			"operation_state": string(status.Operation.State),
+			"operation":       string(status.Operation.Action),
+			"source":          status.ActiveRuntime.Source,
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return
@@ -1449,15 +1470,16 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		status, err := g.backend.CancelCodeRuntimeInstall(r.Context())
+		status, err := g.backend.CancelCodeRuntimeOperation(r.Context())
 		if err != nil {
 			g.appendAudit(meta, "code_runtime_cancel", "failure", nil, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
 		g.appendAudit(meta, "code_runtime_cancel", "success", map[string]any{
-			"install_state": string(status.InstallState),
-			"source":        status.Source,
+			"operation_state": string(status.Operation.State),
+			"operation":       string(status.Operation.Action),
+			"source":          status.ActiveRuntime.Source,
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return

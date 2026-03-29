@@ -1,0 +1,197 @@
+// @vitest-environment jsdom
+
+import { Show } from 'solid-js';
+import { render } from 'solid-js/web';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { CodeRuntimeSettingsCard } from './CodeRuntimeSettingsCard';
+
+vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
+  RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
+}));
+
+vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Button: (props: any) => (
+    <button type="button" onClick={props.onClick} disabled={props.disabled}>
+      {props.children}
+    </button>
+  ),
+  ConfirmDialog: (props: any) => (
+    <Show when={props.open}>
+      <div>
+        <div>{props.title}</div>
+        <div>{props.children}</div>
+        <button type="button" onClick={() => props.onConfirm?.()} disabled={props.loading}>
+          {props.confirmText}
+        </button>
+      </div>
+    </Show>
+  ),
+  HighlightBlock: (props: any) => (
+    <div data-testid={props.title} data-variant={props.variant}>
+      <div>{props.title}</div>
+      {props.children}
+    </div>
+  ),
+}));
+
+vi.mock('./SettingsPrimitives', () => ({
+  SettingsCard: (props: any) => (
+    <section>
+      <div>{props.title}</div>
+      <div>{props.description}</div>
+      <div>{props.actions}</div>
+      {props.children}
+    </section>
+  ),
+  SettingsPill: (props: any) => <span>{props.children}</span>,
+}));
+
+function makeStatus(overrides: any = {}) {
+  const managedPrefix = '/Users/test/.redeven/apps/code/runtime/managed';
+  return {
+    ...overrides,
+    supported_version: '4.108.2',
+    active_runtime: {
+      detection_state: 'ready',
+      present: true,
+      source: 'managed',
+      binary_path: `${managedPrefix}/bin/code-server`,
+      installed_version: '4.108.2',
+      ...(overrides.active_runtime ?? {}),
+    },
+    managed_runtime: {
+      detection_state: 'ready',
+      present: true,
+      source: 'managed',
+      binary_path: `${managedPrefix}/bin/code-server`,
+      installed_version: '4.108.2',
+      ...(overrides.managed_runtime ?? {}),
+    },
+    managed_prefix: managedPrefix,
+    installer_script_url: 'https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh',
+    operation: {
+      state: 'idle',
+      log_tail: [],
+      ...(overrides.operation ?? {}),
+    },
+    updated_at_unix_ms: 1,
+  };
+}
+
+describe('CodeRuntimeSettingsCard', () => {
+  let host: HTMLDivElement;
+
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+  });
+
+  afterEach(() => {
+    host.remove();
+  });
+
+  it('shows an upgrade action when the managed runtime version differs from the supported version', () => {
+    render(() => (
+      <CodeRuntimeSettingsCard
+        status={makeStatus({
+          active_runtime: { source: 'system', binary_path: '/usr/local/bin/code-server' },
+          managed_runtime: { installed_version: '4.107.0' },
+        })}
+        loading={false}
+        error={null}
+        canInteract
+        canManage
+        actionLoading={false}
+        uninstallLoading={false}
+        cancelLoading={false}
+        onRefresh={() => undefined}
+        onInstall={() => undefined}
+        onUninstall={() => undefined}
+        onCancel={() => undefined}
+      />
+    ), host);
+
+    expect(host.textContent).toContain('Upgrade managed runtime');
+    expect(host.textContent).toContain('does not match the supported version');
+  });
+
+  it('opens the explicit install confirmation and calls the install action', async () => {
+    const onInstall = vi.fn(async () => undefined);
+
+    render(() => (
+      <CodeRuntimeSettingsCard
+        status={makeStatus({
+          active_runtime: {
+            detection_state: 'missing',
+            present: false,
+            source: 'none',
+            binary_path: '',
+            installed_version: '',
+          },
+          managed_runtime: {
+            detection_state: 'missing',
+            present: false,
+            source: 'managed',
+            binary_path: '',
+            installed_version: '',
+          },
+        })}
+        loading={false}
+        error={null}
+        canInteract
+        canManage
+        actionLoading={false}
+        uninstallLoading={false}
+        cancelLoading={false}
+        onRefresh={() => undefined}
+        onInstall={onInstall}
+        onUninstall={() => undefined}
+        onCancel={() => undefined}
+      />
+    ), host);
+
+    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Install code-server'));
+    installButton?.click();
+
+    expect(host.textContent).toContain('Redeven will run the official code-server installer');
+    expect(host.textContent).toContain('https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh');
+
+    const confirmButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install');
+    confirmButton?.click();
+
+    expect(onInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the explicit uninstall confirmation and calls the uninstall action', () => {
+    const onUninstall = vi.fn(async () => undefined);
+
+    render(() => (
+      <CodeRuntimeSettingsCard
+        status={makeStatus()}
+        loading={false}
+        error={null}
+        canInteract
+        canManage
+        actionLoading={false}
+        uninstallLoading={false}
+        cancelLoading={false}
+        onRefresh={() => undefined}
+        onInstall={() => undefined}
+        onUninstall={onUninstall}
+        onCancel={() => undefined}
+      />
+    ), host);
+
+    const uninstallButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Uninstall managed runtime'));
+    uninstallButton?.click();
+
+    expect(host.textContent).toContain('This removes only the Redeven-managed code-server runtime');
+
+    const confirmButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Uninstall');
+    confirmButton?.click();
+
+    expect(onUninstall).toHaveBeenCalledTimes(1);
+  });
+});
