@@ -4,7 +4,7 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, For } from 'so
 import type { Accessor, Component } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
-import { useChatContext } from '../ChatProvider';
+import { useChatContext, type ScrollToBottomBehavior } from '../ChatProvider';
 import { useVirtualList } from '../hooks/useVirtualList';
 import { getMessageRenderKey } from '../messageIdentity';
 import { WorkingIndicator } from '../status/WorkingIndicator';
@@ -42,9 +42,12 @@ const ChevronDownIcon: Component = () => (
 );
 
 type FollowMode = 'following' | 'paused';
+type FollowMotionMode = 'instant' | 'animated';
 
 const FOLLOW_BOTTOM_THRESHOLD_PX = 24;
 const EXTERNAL_SCROLL_SYNC_PASSES = 2;
+const ANIMATED_FOLLOW_TIME_CONSTANT_MS = 140;
+const ANIMATED_FOLLOW_MIN_STEP_PX = 1;
 
 const VirtualMessageRow: Component<VirtualMessageRowProps> = (props) => {
   let rowEl: HTMLDivElement | undefined;
@@ -121,9 +124,15 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   let didInitialBottomSync = false;
   let lastHandledScrollRequestSeq = 0;
   let followToBottomRaf: number | null = null;
+  let animatedFollowRaf: number | null = null;
+  let animatedFollowLastTimestamp = 0;
+  let animatedFollowTargetTop = 0;
   let viewportAnchor: ViewportAnchor | null = null;
   let tailObservedHeight = 0;
   let scrollViewportHeight = 0;
+  let followMotionMode: FollowMotionMode = 'instant';
+  let prefersReducedMotion = false;
+  let reducedMotionMedia: MediaQueryList | null = null;
 
   const getDistanceToBottom = (el: HTMLElement) =>
     Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
@@ -143,18 +152,107 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     updateDistanceToBottom(target);
   };
 
+  const getBottomScrollTop = (target: HTMLElement): number =>
+    Math.max(0, target.scrollHeight - target.clientHeight);
+
+  const cancelScheduledInstantFollow = (): void => {
+    if (followToBottomRaf !== null) {
+      cancelAnimationFrame(followToBottomRaf);
+      followToBottomRaf = null;
+    }
+  };
+
+  const cancelAnimatedFollow = (): void => {
+    if (animatedFollowRaf !== null) {
+      cancelAnimationFrame(animatedFollowRaf);
+      animatedFollowRaf = null;
+    }
+    animatedFollowLastTimestamp = 0;
+  };
+
+  const setFollowMotionMode = (nextMode: FollowMotionMode): void => {
+    if (followMotionMode === nextMode) return;
+    followMotionMode = nextMode;
+    if (nextMode === 'animated') {
+      cancelScheduledInstantFollow();
+    } else {
+      cancelAnimatedFollow();
+    }
+  };
+
+  const resolveFollowMotionMode = (behavior: ScrollToBottomBehavior): FollowMotionMode => (
+    behavior === 'smooth' && !prefersReducedMotion ? 'animated' : 'instant'
+  );
+
+  const queueAnimatedFollow = (): void => {
+    if (animatedFollowRaf !== null) return;
+    animatedFollowRaf = requestAnimationFrame((timestamp) => {
+      animatedFollowRaf = null;
+      const target = scrollContainerEl;
+      if (!target || followMode() !== 'following' || followMotionMode !== 'animated') {
+        animatedFollowLastTimestamp = 0;
+        return;
+      }
+
+      animatedFollowTargetTop = getBottomScrollTop(target);
+      const diff = animatedFollowTargetTop - target.scrollTop;
+      if (Math.abs(diff) <= 0.5) {
+        if (Math.abs(diff) > 0) {
+          target.scrollTop = animatedFollowTargetTop;
+          syncProgrammaticScroll(target);
+        } else {
+          updateDistanceToBottom(target);
+        }
+        animatedFollowLastTimestamp = 0;
+        return;
+      }
+
+      const deltaMs = animatedFollowLastTimestamp > 0
+        ? Math.min(64, Math.max(1, timestamp - animatedFollowLastTimestamp))
+        : 16;
+      animatedFollowLastTimestamp = timestamp;
+      const progress = 1 - Math.exp(-deltaMs / ANIMATED_FOLLOW_TIME_CONSTANT_MS);
+      const rawStep = diff * progress;
+      const minStep = Math.sign(diff) * ANIMATED_FOLLOW_MIN_STEP_PX;
+      const nextScrollTop = target.scrollTop + (
+        Math.abs(rawStep) >= ANIMATED_FOLLOW_MIN_STEP_PX ? rawStep : minStep
+      );
+
+      target.scrollTop = diff > 0
+        ? Math.min(animatedFollowTargetTop, nextScrollTop)
+        : Math.max(animatedFollowTargetTop, nextScrollTop);
+      syncProgrammaticScroll(target);
+      queueAnimatedFollow();
+    });
+  };
+
+  const requestAnimatedFollowToBottom = (target?: HTMLElement | null): boolean => {
+    const el = target ?? scrollContainerEl;
+    if (!el) return false;
+    animatedFollowTargetTop = getBottomScrollTop(el);
+    queueAnimatedFollow();
+    return true;
+  };
+
   const applyFollowScrollDelta = (target: HTMLElement, delta: number): void => {
     if (Math.abs(delta) < 1) {
       updateDistanceToBottom(target);
+      return;
+    }
+    if (followMotionMode === 'animated') {
+      requestAnimatedFollowToBottom(target);
       return;
     }
     target.scrollTop = Math.max(0, target.scrollTop + delta);
     syncProgrammaticScroll(target);
   };
 
-  const applyFollowingMode = () => {
+  const applyFollowingMode = (nextMotionMode?: FollowMotionMode) => {
     if (followMode() !== 'following') {
       setFollowMode('following');
+    }
+    if (nextMotionMode) {
+      setFollowMotionMode(nextMotionMode);
     }
     viewportAnchor = null;
     if (pendingMessageCount() !== 0) {
@@ -166,6 +264,8 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (followMode() !== 'paused') {
       setFollowMode('paused');
     }
+    cancelScheduledInstantFollow();
+    setFollowMotionMode('instant');
   };
 
   const capturePausedViewportAnchor = (el: HTMLElement): void => {
@@ -184,28 +284,73 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     });
   };
 
-  const scrollToBottomNow = (behavior: 'auto' | 'smooth' = 'auto'): boolean => {
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+    prefersReducedMotion = reducedMotionMedia.matches;
+    const handleReducedMotionChange = (event: MediaQueryListEvent) => {
+      prefersReducedMotion = event.matches;
+      if (!event.matches || followMotionMode !== 'animated') {
+        return;
+      }
+      setFollowMotionMode('instant');
+      if (followMode() === 'following') {
+        scheduleFollowToBottom('auto');
+      }
+    };
+
+    if (typeof reducedMotionMedia.addEventListener === 'function') {
+      reducedMotionMedia.addEventListener('change', handleReducedMotionChange);
+      onCleanup(() => {
+        reducedMotionMedia?.removeEventListener('change', handleReducedMotionChange);
+      });
+    } else if (typeof reducedMotionMedia.addListener === 'function') {
+      reducedMotionMedia.addListener(handleReducedMotionChange);
+      onCleanup(() => {
+        reducedMotionMedia?.removeListener(handleReducedMotionChange);
+      });
+    }
+  }
+
+  const scrollToBottomNow = (behavior: ScrollToBottomBehavior = 'auto'): boolean => {
     const el = scrollContainerEl;
     if (!el) return false;
 
-    if (behavior === 'smooth') {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-    } else {
+    if (resolveFollowMotionMode(behavior) === 'animated') {
+      return requestAnimatedFollowToBottom(el);
+    }
+
+    if (followMotionMode !== 'instant') {
+      setFollowMotionMode('instant');
+    }
+    if (animatedFollowTargetTop !== 0) {
+      animatedFollowTargetTop = 0;
+    }
+
+    if (behavior === 'auto') {
       virtualList.scrollToBottom();
+    } else {
+      el.scrollTop = getBottomScrollTop(el);
     }
 
     syncProgrammaticScroll(el);
     return true;
   };
 
-  const scheduleFollowToBottom = (behavior: 'auto' | 'smooth' = 'auto', passes = 1) => {
+  const scheduleFollowToBottom = (behavior?: ScrollToBottomBehavior, passes = 1) => {
+    if (behavior) {
+      setFollowMotionMode(resolveFollowMotionMode(behavior));
+    }
+    if (followMotionMode === 'animated') {
+      requestAnimatedFollowToBottom();
+      return;
+    }
     if (followToBottomRaf !== null) return;
     followToBottomRaf = requestAnimationFrame(() => {
       followToBottomRaf = null;
       if (followMode() !== 'following') return;
-      if (!scrollToBottomNow(behavior)) return;
+      if (!scrollToBottomNow('auto')) return;
       if (passes > 1) {
-        scheduleFollowToBottom(behavior, passes - 1);
+        scheduleFollowToBottom(undefined, passes - 1);
       }
     });
   };
@@ -220,13 +365,15 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
       setPendingMessageCount(0);
       setDistanceToBottomPx(0);
       setFollowMode('following');
+      cancelScheduledInstantFollow();
+      setFollowMotionMode('instant');
       return;
     }
 
     if (currentCount > prevMessageCount) {
       const addedCount = currentCount - prevMessageCount;
       if (followMode() === 'following') {
-        scheduleFollowToBottom('auto');
+        scheduleFollowToBottom();
       } else {
         setPendingMessageCount((count) => count + addedCount);
       }
@@ -250,7 +397,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (didInitialBottomSync) return;
 
     didInitialBottomSync = true;
-    applyFollowingMode();
+    applyFollowingMode('instant');
     scheduleFollowToBottom('auto', EXTERNAL_SCROLL_SYNC_PASSES);
   });
 
@@ -262,7 +409,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     if (request.seq <= lastHandledScrollRequestSeq) return;
 
     lastHandledScrollRequestSeq = request.seq;
-    applyFollowingMode();
+    applyFollowingMode(resolveFollowMotionMode(request.behavior));
     const syncPasses = request.source === 'system' ? EXTERNAL_SCROLL_SYNC_PASSES : 1;
     scheduleFollowToBottom(request.behavior, syncPasses);
   });
@@ -419,7 +566,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     requestAnimationFrame(() => {
       updateDistanceToBottom();
       if (followMode() === 'following') {
-        scheduleFollowToBottom('auto');
+        scheduleFollowToBottom();
       }
     });
   });
@@ -429,10 +576,8 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
     resizeObserver.disconnect();
     tailResizeObserver.disconnect();
     scrollContainerResizeObserver.disconnect();
-    if (followToBottomRaf !== null) {
-      cancelAnimationFrame(followToBottomRaf);
-      followToBottomRaf = null;
-    }
+    cancelScheduledInstantFollow();
+    cancelAnimatedFollow();
   });
 
   // Ref callback for message items — observe resizes.
@@ -523,8 +668,8 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
         <button
           class="chat-scroll-to-bottom-btn"
           onClick={() => {
-            applyFollowingMode();
-            ctx.requestScrollToBottom({ source: 'user', behavior: 'auto' });
+            applyFollowingMode(resolveFollowMotionMode('smooth'));
+            ctx.requestScrollToBottom({ source: 'user', behavior: 'smooth' });
           }}
           aria-label="Scroll to bottom"
           title={pendingMessageCount() > 0 ? `${pendingMessageCount()} new messages` : 'Scroll to bottom'}

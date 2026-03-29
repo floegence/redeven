@@ -14,6 +14,7 @@ const setMessageHeightMock = vi.fn();
 const getMessageHeightMock = vi.fn(() => 120);
 const onScrollMock = vi.fn();
 const setItemHeightMock = vi.fn();
+let virtualScrollElement: HTMLElement | null = null;
 
 type MockResizeObserverInstance = {
   callback: ResizeObserverCallback;
@@ -42,7 +43,9 @@ vi.mock('../ChatProvider', () => ({
 vi.mock('../hooks/useVirtualList', () => ({
   useVirtualList: () => ({
     containerRef: vi.fn(),
-    scrollRef: vi.fn(),
+    scrollRef: (element: HTMLElement) => {
+      virtualScrollElement = element;
+    },
     onScroll: onScrollMock,
     virtualItems: () => currentMessages.map((message, index) => ({ index, key: message.id, start: index * 120, size: 120, end: (index + 1) * 120 })),
     visibleRange: () => ({ start: 0, end: Math.max(0, currentMessages.length - 1) }),
@@ -50,7 +53,15 @@ vi.mock('../hooks/useVirtualList', () => ({
     paddingBottom: () => 0,
     getItemOffset: (index: number) => index * 120,
     setItemHeight: setItemHeightMock,
-    scrollToBottom: scrollToBottomMock,
+    scrollToBottom: () => {
+      if (virtualScrollElement) {
+        virtualScrollElement.scrollTop = Math.max(
+          0,
+          virtualScrollElement.scrollHeight - virtualScrollElement.clientHeight,
+        );
+      }
+      scrollToBottomMock();
+    },
   }),
 }));
 
@@ -82,12 +93,44 @@ function triggerResize(target: Element, height = 180): void {
   ], {} as ResizeObserver);
 }
 
+function createRafHarness() {
+  const callbacks: Array<FrameRequestCallback | null> = [];
+  let nextHandle = 1;
+  let nextTimestamp = 16;
+
+  return {
+    requestAnimationFrame(callback: FrameRequestCallback): number {
+      const handle = nextHandle;
+      nextHandle += 1;
+      callbacks[handle] = callback;
+      return handle;
+    },
+    cancelAnimationFrame(handle: number): void {
+      callbacks[handle] = null;
+    },
+    flushNext(): void {
+      const handle = callbacks.findIndex((callback, index) => index > 0 && callback !== null);
+      if (handle <= 0) return;
+      const callback = callbacks[handle];
+      callbacks[handle] = null;
+      callback?.(nextTimestamp);
+      nextTimestamp += 16;
+    },
+    flushAll(): void {
+      while (callbacks.some((callback, index) => index > 0 && callback !== null)) {
+        this.flushNext();
+      }
+    },
+  };
+}
+
 describe('VirtualMessageList', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
     currentMessages = [];
     currentScrollRequest = null;
+    virtualScrollElement = null;
     resizeObserverInstances.length = 0;
 
     const raf = (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0);
@@ -321,6 +364,106 @@ describe('VirtualMessageList', () => {
       expect(scrollTop).toBe(160);
       expect(scrollToBottomMock).not.toHaveBeenCalled();
       expect(onScrollMock).toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('animates user-triggered follow-bottom requests instead of snapping immediately', async () => {
+    const raf = createRafHarness();
+    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+
+    const mod = await import('./VirtualMessageList');
+    currentMessages = [];
+    currentScrollRequest = { seq: 1, behavior: 'smooth', source: 'user' };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <mod.VirtualMessageList />, host);
+
+    try {
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+      expect(scroller).toBeTruthy();
+
+      let scrollTop = 0;
+      const scrollHeight = 620;
+      const clientHeight = 400;
+      Object.defineProperty(scroller!, 'scrollHeight', {
+        configurable: true,
+        get: () => scrollHeight,
+      });
+      Object.defineProperty(scroller!, 'clientHeight', {
+        configurable: true,
+        get: () => clientHeight,
+      });
+      Object.defineProperty(scroller!, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Number(value);
+        },
+      });
+
+      triggerResize(scroller!, clientHeight);
+      raf.flushNext();
+
+      expect(scrollTop).toBeGreaterThan(0);
+      expect(scrollTop).toBeLessThan(scrollHeight - clientHeight);
+
+      raf.flushAll();
+      expect(scrollTop).toBe(scrollHeight - clientHeight);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps system follow-bottom requests instant during restore flows', async () => {
+    const raf = createRafHarness();
+    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+
+    const mod = await import('./VirtualMessageList');
+    currentMessages = [];
+    currentScrollRequest = { seq: 1, behavior: 'auto', source: 'system' };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <mod.VirtualMessageList />, host);
+
+    try {
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+      expect(scroller).toBeTruthy();
+
+      let scrollTop = 0;
+      const scrollHeight = 620;
+      const clientHeight = 400;
+      Object.defineProperty(scroller!, 'scrollHeight', {
+        configurable: true,
+        get: () => scrollHeight,
+      });
+      Object.defineProperty(scroller!, 'clientHeight', {
+        configurable: true,
+        get: () => clientHeight,
+      });
+      Object.defineProperty(scroller!, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Number(value);
+        },
+      });
+
+      triggerResize(scroller!, clientHeight);
+      raf.flushNext();
+
+      expect(scrollTop).toBe(scrollHeight - clientHeight);
     } finally {
       dispose();
     }

@@ -70,6 +70,7 @@ export interface ChatContextValue {
   toggleChecklistItem: (messageId: string, blockIndex: number, itemId: string) => void;
 }
 
+// `smooth` is reserved for explicit user bottom intents; restore/bootstrap paths stay `auto`.
 export type ScrollToBottomBehavior = 'auto' | 'smooth';
 
 export interface ScrollToBottomRequest {

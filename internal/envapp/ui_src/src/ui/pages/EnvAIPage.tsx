@@ -1485,7 +1485,10 @@ export function EnvAIPage() {
   });
 
   const requestScrollToBottom = (source: 'system' | 'user' = 'system') => {
-    chat?.requestScrollToBottom({ source, behavior: 'auto' });
+    chat?.requestScrollToBottom({
+      source,
+      behavior: source === 'user' ? 'smooth' : 'auto',
+    });
   };
 
   let lastMessagesReq = 0;
