@@ -569,6 +569,7 @@ function TranscriptRow(props: { item: CodexTranscriptItem; showAssistantAvatar?:
 }
 
 export function CodexTranscript(props: {
+  rootRef?: (element: HTMLDivElement) => void;
   items: readonly CodexTranscriptItem[];
   optimisticUserTurns?: readonly CodexOptimisticUserTurn[];
   showWorkingState?: boolean;
@@ -598,7 +599,7 @@ export function CodexTranscript(props: {
   });
   const showStandaloneWorkingRow = createMemo(() => Boolean(props.showWorkingState) && !pendingAssistantState().show);
   return (
-    <div data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
+    <div ref={props.rootRef} data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
       <Show
         when={hasRows()}
         fallback={(
@@ -621,25 +622,25 @@ export function CodexTranscript(props: {
         <div class="codex-transcript-feed">
           <For each={optimisticUserTurns()}>
             {(turn) => (
-              <div class="codex-transcript-row">
+              <div class="codex-transcript-row" data-follow-bottom-anchor-id={`optimistic:${turn.id}`}>
                 <OptimisticUserMessageRow turn={turn} />
               </div>
             )}
           </For>
           <For each={props.items}>
             {(item, index) => (
-              <div class="codex-transcript-row">
+              <div class="codex-transcript-row" data-follow-bottom-anchor-id={`item:${item.id}`}>
                 <TranscriptRow item={item} showAssistantAvatar={shouldShowAgentAvatar(props.items, index())} />
               </div>
             )}
           </For>
           <Show when={pendingAssistantState().show}>
-            <div class="codex-transcript-row">
+            <div class="codex-transcript-row" data-follow-bottom-anchor-id="pending-assistant">
               <PendingAssistantRow state={pendingAssistantState()} />
             </div>
           </Show>
           <Show when={showStandaloneWorkingRow()}>
-            <div class="codex-transcript-row">
+            <div class="codex-transcript-row" data-follow-bottom-anchor-id="working-state">
               <WorkingStateRow
                 phaseLabel={pendingAssistantState().phaseLabel}
                 showAvatar={shouldShowWorkingAvatar(props.items)}

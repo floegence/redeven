@@ -41,6 +41,7 @@ The browser-side Codex UI uses an explicit controller split so thread switching,
 - `CodexProvider` is orchestration glue only. It wires resources, user actions, SSE, and view-facing accessors.
 - `createCodexThreadController()` owns thread selection/display state, cached sessions, bootstrap status, stale-response guards, and event application into the correct cached thread.
 - `createCodexDraftController()` owns per-owner drafts for runtime fields, composer text, and attachments.
+- A shared follow-bottom scroll controller owns transcript follow/pause state for Codex transcript surfaces; Codex drives it through explicit bottom-intent requests instead of ad hoc per-render `scrollTop = scrollHeight` calls.
 - Draft ownership is explicit:
   - `draft:new` for the blank New Chat surface
   - `thread:<id>` for persisted thread-scoped drafts
@@ -137,6 +138,7 @@ Current Env App behavior:
 - Sidebar thread order changes only for real thread activity such as new-thread creation, user turn sends, or live lifecycle updates. Clicking an existing thread to read/bootstrap it must not reorder the list by itself.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
 - Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
+- Switching to an existing Codex thread explicitly re-enters follow-bottom mode, so the transcript converges to the newest output instead of staying at a stale mid-thread scroll offset.
 - Per-thread drafts are preserved independently, so composer text, attachments, and runtime overrides no longer leak between existing threads and the New Chat surface.
 - The composer keeps the most useful Codex controls directly below the input instead of in a noisy chip rail:
   - working directory
@@ -159,6 +161,9 @@ Current Env App behavior:
 - Codex markdown keeps the existing renderer DOM contract for standard links and local file references, preserves file-reference labels that include embedded line anchors such as `CODEX_UI.md#L121`, and now relies on the shared floe-webapp file-reference chip styling instead of a Codex-only outline treatment.
 - Before the first real assistant transcript message lands, the transcript renders a single pending assistant lane that owns the Codex avatar, shows a pre-output streaming cursor bubble, and places the compact working indicator directly underneath in the same lane.
 - Once a real assistant message starts streaming, that pending lane disappears; the real assistant message takes over avatar ownership, keeps the same first-line lead alignment against the avatar center, and the remaining working indicator stays avatar-free.
+- Codex transcript scrolling now has two explicit modes:
+  - `following`: thread switch, bootstrap, and send intents keep the viewport pinned to the latest output, including later markdown/layout reflow;
+  - `paused`: when the user scrolls away from the bottom, later transcript reflow preserves the visible anchor row instead of yanking the viewport back to the bottom.
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.

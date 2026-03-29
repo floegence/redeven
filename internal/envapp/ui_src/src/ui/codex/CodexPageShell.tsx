@@ -1,5 +1,6 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createMemo, onCleanup } from 'solid-js';
 
+import { createFollowBottomController } from '../chat/scroll/createFollowBottomController';
 import { useCodexContext } from './CodexProvider';
 import { CodexComposerShell } from './CodexComposerShell';
 import { CodexHeaderBar } from './CodexHeaderBar';
@@ -17,90 +18,18 @@ import {
   codexSandboxModeLabel,
   codexSupportedReasoningEfforts,
 } from './viewModel';
-import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
 type ComposerOption = Readonly<{
   value: string;
   label: string;
 }>;
 
-const TRANSCRIPT_AUTO_FOLLOW_THRESHOLD_PX = 72;
-
-function transcriptItemActivityKey(item: CodexTranscriptItem): string {
-  return [
-    item.id,
-    item.type,
-    String(item.status ?? '').trim(),
-    String(item.text ?? '').length,
-    String(item.aggregated_output ?? '').length,
-    (item.summary ?? []).map((entry) => String(entry ?? '').length).join(','),
-    (item.content ?? []).map((entry) => String(entry ?? '').length).join(','),
-    (item.changes ?? []).map((change) => `${change.path}:${String(change.diff ?? '').length}`).join(','),
-  ].join(':');
-}
-
-function optimisticTurnActivityKey(turn: CodexOptimisticUserTurn): string {
-  return [
-    turn.id,
-    turn.thread_id,
-    String(turn.text ?? '').length,
-    turn.inputs.map((entry) => `${entry.type}:${String(entry.text ?? entry.path ?? entry.url ?? entry.name ?? '').length}`).join(','),
-  ].join(':');
-}
-
-function transcriptDistanceFromBottom(element: HTMLElement): number {
-  return Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
-}
-
 export function CodexPageShell() {
   const codex = useCodexContext();
-  const [autoFollowTranscript, setAutoFollowTranscript] = createSignal(true);
-  let transcriptScrollEl: HTMLDivElement | undefined;
-  let followFrameOuter: number | null = null;
-  let followFrameInner: number | null = null;
-
-  const cancelPendingTranscriptFollow = () => {
-    if (followFrameOuter !== null && typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(followFrameOuter);
-    }
-    if (followFrameInner !== null && typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(followFrameInner);
-    }
-    followFrameOuter = null;
-    followFrameInner = null;
-  };
-
-  const syncTranscriptAutoFollow = () => {
-    const element = transcriptScrollEl;
-    if (!element) return;
-    setAutoFollowTranscript(transcriptDistanceFromBottom(element) <= TRANSCRIPT_AUTO_FOLLOW_THRESHOLD_PX);
-  };
-
-  const scheduleTranscriptFollow = () => {
-    const element = transcriptScrollEl;
-    if (!element) return;
-
-    cancelPendingTranscriptFollow();
-
-    if (typeof requestAnimationFrame !== 'function') {
-      element.scrollTop = element.scrollHeight;
-      return;
-    }
-
-    followFrameOuter = requestAnimationFrame(() => {
-      followFrameOuter = null;
-      followFrameInner = requestAnimationFrame(() => {
-        followFrameInner = null;
-        if (!autoFollowTranscript()) return;
-        const target = transcriptScrollEl;
-        if (!target) return;
-        target.scrollTop = target.scrollHeight;
-      });
-    });
-  };
+  const followBottomController = createFollowBottomController();
 
   onCleanup(() => {
-    cancelPendingTranscriptFollow();
+    followBottomController.dispose();
   });
 
   const summary = createMemo(() => buildCodexWorkbenchSummary({
@@ -188,23 +117,11 @@ export function CodexPageShell() {
       isWorkingStatus(codex.activeStatus())
     )
   ));
-  const transcriptFollowVersion = createMemo(() => [
-    codex.activeThreadID() ?? '__new__',
-    shouldShowWorkingState() ? 'working' : 'idle',
-    codex.transcriptItems().map(transcriptItemActivityKey).join('|'),
-    codex.activeOptimisticUserTurns().map(optimisticTurnActivityKey).join('|'),
-  ].join('::'));
 
   createEffect(() => {
-    codex.activeThreadID();
-    setAutoFollowTranscript(true);
-    scheduleTranscriptFollow();
-  });
-
-  createEffect(() => {
-    transcriptFollowVersion();
-    if (!autoFollowTranscript()) return;
-    scheduleTranscriptFollow();
+    const request = codex.scrollToBottomRequest();
+    if (!request) return;
+    followBottomController.requestFollowBottom(request);
   });
 
   return (
@@ -230,29 +147,24 @@ export function CodexPageShell() {
           </Show>
 
           <div
-            ref={(element) => {
-              transcriptScrollEl = element;
-              syncTranscriptAutoFollow();
-              scheduleTranscriptFollow();
-            }}
+            ref={followBottomController.setScrollContainer}
             class="codex-page-transcript-main"
             data-codex-transcript-scroll-region="true"
-            onScroll={syncTranscriptAutoFollow}
+            onScroll={followBottomController.handleScroll}
           >
-            <div class="relative mx-auto flex h-full w-full max-w-5xl flex-col">
-              <CodexTranscript
-                items={codex.transcriptItems()}
-                optimisticUserTurns={codex.activeOptimisticUserTurns()}
-                showWorkingState={shouldShowWorkingState()}
-                workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
-                workingFlags={summary().statusFlags}
-                loading={codex.threadLoading()}
-                loadingTitle={codex.threadTitle()}
-                loadingBody="Loading the selected Codex thread."
-                emptyTitle={emptyStateTitle()}
-                emptyBody={emptyStateBody()}
-              />
-            </div>
+            <CodexTranscript
+              rootRef={followBottomController.setContentRoot}
+              items={codex.transcriptItems()}
+              optimisticUserTurns={codex.activeOptimisticUserTurns()}
+              showWorkingState={shouldShowWorkingState()}
+              workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
+              workingFlags={summary().statusFlags}
+              loading={codex.threadLoading()}
+              loadingTitle={codex.threadTitle()}
+              loadingBody="Loading the selected Codex thread."
+              emptyTitle={emptyStateTitle()}
+              emptyBody={emptyStateBody()}
+            />
           </div>
         </div>
 

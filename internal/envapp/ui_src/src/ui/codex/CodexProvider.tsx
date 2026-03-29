@@ -14,6 +14,7 @@ import {
 import { useLayout, useNotification } from '@floegence/floe-webapp-core';
 
 import { useEnvContext } from '../pages/EnvContext';
+import type { FollowBottomRequest } from '../chat/scroll/createFollowBottomController';
 import {
   archiveCodexThread,
   connectCodexEventStream,
@@ -51,6 +52,7 @@ import type {
 type CodexRequestDrafts = Record<string, Record<string, string>>;
 type CodexThreadMap = Record<string, CodexThread>;
 type CodexOptimisticTurnMap = Record<string, CodexOptimisticUserTurn[]>;
+type CodexScrollToBottomReason = 'thread_switch' | 'send' | 'bootstrap' | 'manual';
 
 function createDraftEntryID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -281,6 +283,8 @@ export type CodexContextValue = Readonly<{
   archiveThread: (threadID: string) => Promise<void>;
   archiveActiveThread: () => Promise<void>;
   answerRequest: (request: CodexPendingRequest, decision?: string) => Promise<void>;
+  scrollToBottomRequest: Accessor<FollowBottomRequest | null>;
+  requestScrollToBottom: (reason?: CodexScrollToBottomReason) => void;
 }>;
 
 const CodexContext = createContext<CodexContextValue>();
@@ -299,8 +303,18 @@ export function CodexProvider(props: ParentProps) {
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
   const [streamError, setStreamError] = createSignal<string | null>(null);
   const [streamBinding, setStreamBinding] = createSignal<Readonly<{ threadID: string; afterSeq: number }> | null>(null);
+  const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
+  let scrollToBottomRequestSeq = 0;
 
   const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
+
+  const requestScrollToBottom = (reason: CodexScrollToBottomReason = 'manual'): void => {
+    scrollToBottomRequestSeq += 1;
+    setScrollToBottomRequest({
+      seq: scrollToBottomRequestSeq,
+      reason,
+    });
+  };
 
   const [status, { refetch: refetchStatus }] = createResource(
     () => (codexVisible() ? env.settingsSeq() : null),
@@ -559,7 +573,10 @@ export function CodexProvider(props: ParentProps) {
     if (current) return;
     const list = threads();
     if (list.length === 0) return;
-    untrack(() => threadController.selectThread(list[0].id));
+    untrack(() => {
+      threadController.selectThread(list[0].id);
+      requestScrollToBottom('bootstrap');
+    });
   });
 
   createEffect(on(
@@ -833,6 +850,7 @@ export function CodexProvider(props: ParentProps) {
 
   const selectThread = (threadID: string) => {
     threadController.selectThread(threadID);
+    requestScrollToBottom('thread_switch');
   };
 
   const startNewThreadDraft = () => {
@@ -946,6 +964,7 @@ export function CodexProvider(props: ParentProps) {
         inputs: optimisticInputs,
       });
       threadController.markSessionWorking(targetThreadID);
+      requestScrollToBottom('send');
 
       await startCodexTurn({
         threadID: targetThreadID,
@@ -1091,6 +1110,8 @@ export function CodexProvider(props: ParentProps) {
     archiveThread,
     archiveActiveThread,
     answerRequest,
+    scrollToBottomRequest,
+    requestScrollToBottom,
   };
 
   return <CodexContext.Provider value={value}>{props.children}</CodexContext.Provider>;
