@@ -24,6 +24,21 @@ export type CodexThreadGroup = Readonly<{
   threads: CodexThread[];
 }>;
 
+export function codexUserInputTextSummary(inputs: ReadonlyArray<{
+  type?: string;
+  text?: string;
+  path?: string;
+  name?: string;
+}> | null | undefined): string {
+  return [...(inputs ?? [])]
+    .map((entry) => {
+      if (String(entry.type ?? '').trim() === 'image') return '';
+      return String(entry.text ?? entry.path ?? entry.name ?? '').trim();
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 export function itemTitle(item: CodexItem): string {
   switch (item.type) {
     case 'userMessage':
@@ -77,10 +92,7 @@ export function itemText(item: CodexTranscriptItem): string {
   }
   if ((item.content?.length ?? 0) > 0) return (item.content ?? []).join('\n');
   if ((item.inputs?.length ?? 0) > 0) {
-    return (item.inputs ?? [])
-      .map((entry) => String(entry.text ?? entry.path ?? entry.name ?? '').trim())
-      .filter(Boolean)
-      .join('\n\n');
+    return codexUserInputTextSummary(item.inputs);
   }
   if (String(item.query ?? '').trim()) return String(item.query);
   return '';

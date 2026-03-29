@@ -33,6 +33,14 @@ function inputName(entry: CodexUserInputEntry, fallback = 'File'): string {
   return path ? basenameFromPath(path) : fallback;
 }
 
+function isFileReferencePath(path: string): boolean {
+  const normalizedPath = String(path ?? '').trim();
+  if (!normalizedPath) return false;
+  if (normalizedPath.startsWith('/')) return true;
+  if (/^[A-Za-z]:[\\/]/.test(normalizedPath)) return true;
+  return false;
+}
+
 function RawTextBlock(props: {
   text: string;
 }) {
@@ -205,12 +213,16 @@ function LocalFileButton(props: {
 function MentionInput(props: {
   entry: CodexUserInputEntry;
 }) {
+  const path = createMemo(() => String(props.entry.path ?? '').trim());
+  if (isFileReferencePath(path())) {
+    return <LocalFileButton kicker="File" entry={props.entry} class="codex-chat-user-file-card-mention" />;
+  }
+
   const label = createMemo(() => {
     const name = String(props.entry.name ?? '').trim();
-    const path = String(props.entry.path ?? '').trim();
-    return name || path || 'Mention';
+    return name || path() || 'Mention';
   });
-  const subtitle = createMemo(() => String(props.entry.path ?? '').trim());
+  const subtitle = createMemo(() => path());
 
   if (!label()) return null;
 
@@ -271,10 +283,16 @@ export function CodexUserMessageContent(props: {
 }) {
   const inputs = createMemo(() => [...(props.inputs ?? [])]);
   const fallbackText = createMemo(() => String(props.fallbackText ?? ''));
+  const hasTextInput = createMemo(() => inputs().some((entry) => (
+    inputType(entry) === 'text' && Boolean(inputText(entry).trim())
+  )));
 
   return (
     <div class="codex-chat-user-content">
-      <Show when={inputs().length > 0} fallback={<RawTextBlock text={fallbackText()} />}>
+      <Show when={!hasTextInput() && fallbackText().trim()}>
+        <RawTextBlock text={fallbackText()} />
+      </Show>
+      <Show when={inputs().length > 0} fallback={null}>
         {inputs().map((entry, index) => renderStructuredInput(entry, index))}
       </Show>
     </div>

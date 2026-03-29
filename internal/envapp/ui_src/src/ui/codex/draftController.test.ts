@@ -35,6 +35,13 @@ describe('createCodexDraftController', () => {
         data_url: 'data:image/png;base64,AAAA',
         preview_url: 'data:image/png;base64,AAAA',
       }]);
+      controller.appendMentions(CODEX_NEW_THREAD_OWNER, [{
+        id: 'mention_1',
+        name: 'app.tsx',
+        path: '/workspace/src/app.tsx',
+        kind: 'file',
+        is_image: false,
+      }]);
 
       controller.transferOwner(CODEX_NEW_THREAD_OWNER, threadOwner);
 
@@ -43,6 +50,13 @@ describe('createCodexDraftController', () => {
       expect(transferred.runtime.model).toBe('gpt-5.4');
       expect(transferred.composer.text).toBe('Create a new Codex thread');
       expect(transferred.composer.attachments).toHaveLength(1);
+      expect(transferred.composer.mentions).toEqual([{
+        id: 'mention_1',
+        name: 'app.tsx',
+        path: '/workspace/src/app.tsx',
+        kind: 'file',
+        is_image: false,
+      }]);
       expect(controller.draftsByOwner()[CODEX_NEW_THREAD_OWNER]).toBeUndefined();
     });
   });
@@ -99,8 +113,43 @@ describe('createCodexDraftController', () => {
       }, '/workspace');
       controller.setComposerText(ownerID, '');
       controller.replaceAttachments(ownerID, []);
+      controller.replaceMentions(ownerID, []);
 
       expect(controller.draftsByOwner()[ownerID]).toBe(before);
+    });
+  });
+
+  it('deduplicates file mentions by path and resets the composer state', () => {
+    withDraftController((controller) => {
+      const ownerID = codexOwnerIDForThread('thread_mentions');
+      controller.ensureOwner(ownerID, { cwd: '/workspace' }, '/workspace');
+      controller.setComposerText(ownerID, 'Review these files');
+      controller.appendMentions(ownerID, [
+        {
+          id: 'mention_1',
+          name: 'app.tsx',
+          path: '/workspace/src/app.tsx',
+          kind: 'file',
+          is_image: false,
+        },
+        {
+          id: 'mention_2',
+          name: 'app.tsx',
+          path: '/workspace/src/app.tsx',
+          kind: 'file',
+          is_image: false,
+        },
+      ]);
+
+      const draft = controller.draftForOwner(ownerID, null, '');
+      expect(draft.composer.mentions).toHaveLength(1);
+
+      controller.resetComposer(ownerID);
+
+      const reset = controller.draftForOwner(ownerID, null, '');
+      expect(reset.composer.text).toBe('');
+      expect(reset.composer.attachments).toEqual([]);
+      expect(reset.composer.mentions).toEqual([]);
     });
   });
 });

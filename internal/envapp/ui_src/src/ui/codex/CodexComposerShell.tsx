@@ -1,16 +1,35 @@
-import { For, Show, createEffect, createSignal, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Send } from '@floegence/floe-webapp-core/icons';
 import { Input, Select } from '@floegence/floe-webapp-core/ui';
 
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
+import {
+  findComposerMentionToken,
+  findComposerSlashCommandToken,
+  replaceComposerTextRange,
+} from './composerController';
+import {
+  filterCodexSlashCommands,
+  type CodexSlashCommandSpec,
+} from './composerCommands';
+import {
+  createCodexComposerFileIndex,
+  type CodexFileSearchEntry,
+} from './composerFileIndex';
 import { compactPathLabel } from './presentation';
-import type { CodexComposerAttachmentDraft } from './types';
+import type {
+  CodexComposerAttachmentDraft,
+  CodexComposerMentionDraft,
+} from './types';
 
 type SelectOption = Readonly<{
   value: string;
   label: string;
 }>;
+
+type ComposerPopupKind = 'none' | 'file-mentions' | 'slash-commands';
 
 function ComposerSelectChip(props: {
   label: string;
@@ -19,12 +38,17 @@ function ComposerSelectChip(props: {
   placeholder: string;
   disabled: boolean;
   onChange: (value: string) => void;
+  containerRef?: (element: HTMLDivElement) => void;
 }) {
   return (
-    <div class={cn(
-      'codex-chat-select-chip',
-      props.disabled && 'codex-chat-select-chip-disabled',
-    )}>
+    <div
+      ref={props.containerRef}
+      data-codex-command-focus={props.label.toLowerCase()}
+      class={cn(
+        'codex-chat-select-chip',
+        props.disabled && 'codex-chat-select-chip-disabled',
+      )}
+    >
       <span class="codex-chat-select-chip-label">{props.label}</span>
       <Select
         value={props.value}
@@ -70,6 +94,36 @@ function AttachmentCard(props: {
   );
 }
 
+function MentionChip(props: {
+  mention: CodexComposerMentionDraft;
+  onRemove: (mentionID: string) => void;
+}) {
+  return (
+    <div class="codex-chat-mention-chip">
+      <span class="codex-chat-mention-chip-kicker">@</span>
+      <span class="codex-chat-mention-chip-copy" title={props.mention.path}>
+        <span class="codex-chat-mention-chip-name">{props.mention.name}</span>
+        <span class="codex-chat-mention-chip-path">{compactPathLabel(props.mention.path, props.mention.path)}</span>
+      </span>
+      <button
+        type="button"
+        class="codex-chat-mention-chip-remove"
+        onClick={() => props.onRemove(props.mention.id)}
+        aria-label={`Remove ${props.mention.name}`}
+        title={`Remove ${props.mention.name}`}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function focusFirstInteractiveDescendant(container: HTMLElement | undefined) {
+  if (!container) return;
+  const target = container.querySelector<HTMLElement>('input, select, textarea, button, [tabindex]:not([tabindex="-1"])');
+  target?.focus();
+}
+
 export function CodexComposerShell(props: {
   workspaceLabel: string;
   modelValue: string;
@@ -81,6 +135,7 @@ export function CodexComposerShell(props: {
   sandboxModeValue: string;
   sandboxModeOptions: readonly SelectOption[];
   attachments: readonly CodexComposerAttachmentDraft[];
+  mentions: readonly CodexComposerMentionDraft[];
   supportsImages: boolean;
   capabilitiesLoading: boolean;
   composerText: string;
@@ -94,20 +149,63 @@ export function CodexComposerShell(props: {
   onSandboxModeChange: (value: string) => void;
   onAddAttachments: (files: readonly File[]) => Promise<void>;
   onRemoveAttachment: (attachmentID: string) => void;
+  onAddFileMentions: (mentions: ReadonlyArray<{
+    name: string;
+    path: string;
+    is_image: boolean;
+  }>) => void;
+  onRemoveMention: (mentionID: string) => void;
   onComposerInput: (value: string) => void;
+  onResetComposer: () => void;
+  onStartNewThreadDraft: () => void;
   onSend: () => void;
 }) {
+  const rpc = useRedevenRpc();
+  const fileIndex = createCodexComposerFileIndex({
+    listDirectory: async (path) => {
+      const response = await rpc.fs.list({ path, showHidden: true });
+      return response?.entries ?? [];
+    },
+  });
   const [isComposing, setIsComposing] = createSignal(false);
   const [isFocused, setIsFocused] = createSignal(false);
   const [showWorkspaceEditor, setShowWorkspaceEditor] = createSignal(false);
+  const [selectionStart, setSelectionStart] = createSignal(0);
+  const [selectionEnd, setSelectionEnd] = createSignal(0);
+  const [activePopupIndex, setActivePopupIndex] = createSignal(0);
+  const [dismissedPopupSignature, setDismissedPopupSignature] = createSignal('');
+  const [fileIndexRevision, setFileIndexRevision] = createSignal(0);
   let textareaRef: HTMLTextAreaElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
+  let workspaceInputContainerRef: HTMLDivElement | undefined;
+  let modelContainerRef: HTMLDivElement | undefined;
+  let effortContainerRef: HTMLDivElement | undefined;
+  let approvalContainerRef: HTMLDivElement | undefined;
+  let sandboxContainerRef: HTMLDivElement | undefined;
   let rafId: number | null = null;
 
   const canSend = () =>
     props.hostAvailable &&
-    (!!String(props.composerText ?? '').trim() || props.attachments.length > 0) &&
+    (
+      !!String(props.composerText ?? '').trim() ||
+      props.attachments.length > 0 ||
+      props.mentions.length > 0
+    ) &&
     !props.submitting;
+
+  const syncSelection = () => {
+    setSelectionStart(textareaRef?.selectionStart ?? 0);
+    setSelectionEnd(textareaRef?.selectionEnd ?? 0);
+  };
+
+  const restoreSelection = (selection: number) => {
+    requestAnimationFrame(() => {
+      if (!textareaRef) return;
+      textareaRef.focus();
+      textareaRef.setSelectionRange(selection, selection);
+      syncSelection();
+    });
+  };
 
   const scheduleAdjustHeight = () => {
     if (!textareaRef) return;
@@ -125,9 +223,114 @@ export function CodexComposerShell(props: {
     });
   };
 
+  const mentionToken = createMemo(() => findComposerMentionToken({
+    text: props.composerText,
+    selectionStart: selectionStart(),
+    selectionEnd: selectionEnd(),
+  }));
+
+  const slashCommandToken = createMemo(() => (
+    mentionToken()
+      ? null
+      : findComposerSlashCommandToken({
+          text: props.composerText,
+          selectionStart: selectionStart(),
+          selectionEnd: selectionEnd(),
+        })
+  ));
+
+  const popupKind = createMemo<ComposerPopupKind>(() => {
+    if (mentionToken()) return 'file-mentions';
+    if (slashCommandToken()) return 'slash-commands';
+    return 'none';
+  });
+
+  const popupSignature = createMemo(() => {
+    if (popupKind() === 'file-mentions') {
+      const token = mentionToken();
+      return token ? `file:${props.workspaceLabel}:${token.range.start}:${token.query}` : '';
+    }
+    if (popupKind() === 'slash-commands') {
+      const token = slashCommandToken();
+      return token ? `slash:${token.query}` : '';
+    }
+    return '';
+  });
+
+  const popupVisible = createMemo(() => {
+    const signature = popupSignature();
+    if (!signature) return false;
+    return signature !== dismissedPopupSignature();
+  });
+
+  const slashCommands = createMemo<CodexSlashCommandSpec[]>(() => (
+    popupKind() === 'slash-commands'
+      ? filterCodexSlashCommands({
+          query: slashCommandToken()?.query ?? '',
+          context: { hostAvailable: props.hostAvailable },
+        })
+      : []
+  ));
+
+  createEffect(() => {
+    if (!popupVisible() || popupKind() !== 'file-mentions') return;
+    const cwd = String(props.workspaceLabel ?? '').trim();
+    if (!cwd) return;
+    void fileIndex.ensureIndexed(cwd);
+  });
+
+  createEffect(() => {
+    const unsubscribe = fileIndex.subscribe(() => {
+      setFileIndexRevision((value) => value + 1);
+    });
+    onCleanup(unsubscribe);
+  });
+
+  const fileMentionCandidates = createMemo<CodexFileSearchEntry[]>(() => {
+    void fileIndexRevision();
+    if (popupKind() !== 'file-mentions') return [];
+    const cwd = String(props.workspaceLabel ?? '').trim();
+    if (!cwd) return [];
+    return fileIndex.query(cwd, mentionToken()?.query ?? '');
+  });
+
+  const fileIndexLoading = createMemo(() => {
+    void fileIndexRevision();
+    if (popupKind() !== 'file-mentions') return false;
+    const cwd = String(props.workspaceLabel ?? '').trim();
+    if (!cwd) return false;
+    return fileIndex.getSnapshot(cwd)?.complete === false;
+  });
+
+  const popupItemCount = createMemo(() => (
+    popupKind() === 'file-mentions'
+      ? fileMentionCandidates().length
+      : slashCommands().length
+  ));
+
+  createEffect(() => {
+    const count = popupItemCount();
+    setActivePopupIndex((current) => {
+      if (count <= 0) return 0;
+      return Math.min(current, count - 1);
+    });
+  });
+
+  createEffect(() => {
+    popupSignature();
+    setActivePopupIndex(0);
+  });
+
   createEffect(() => {
     void props.composerText;
     scheduleAdjustHeight();
+  });
+
+  onCleanup(() => {
+    if (rafId !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(rafId);
+    }
+    fileIndex.dispose();
   });
 
   const sendLabel = () => 'Send to Codex';
@@ -135,9 +338,9 @@ export function CodexComposerShell(props: {
   const workspaceChipLabel = () => compactPathLabel(props.workspaceLabel, 'Working dir');
   const attachmentSupportNote = () => {
     if (!props.hostAvailable) return '';
-    if (props.capabilitiesLoading) return 'Checking image support…';
-    if (!props.supportsImages) return 'Image attachments unavailable for the current model.';
-    return '';
+    if (props.capabilitiesLoading) return 'Checking image support...';
+    if (!props.supportsImages) return 'Image attachments are unavailable for the current model.';
+    return 'Paste an image, type @ for file references, or use / for composer commands.';
   };
   const statusNote = () => {
     if (!props.hostAvailable) {
@@ -149,11 +352,144 @@ export function CodexComposerShell(props: {
     return '';
   };
 
+  const applyComposerText = (nextText: string, nextSelection?: number) => {
+    props.onComposerInput(nextText);
+    if (typeof nextSelection === 'number') {
+      restoreSelection(nextSelection);
+    }
+  };
+
+  const commitFileMention = (entry: CodexFileSearchEntry) => {
+    const token = mentionToken();
+    if (!token) return;
+    props.onAddFileMentions([{
+      name: entry.name,
+      path: entry.path,
+      is_image: entry.is_image,
+    }]);
+    const result = replaceComposerTextRange(props.composerText, token.range, '');
+    setDismissedPopupSignature('');
+    applyComposerText(result.text, result.selection);
+  };
+
+  const runSlashCommand = (command: CodexSlashCommandSpec) => {
+    let nextText = props.composerText;
+    let nextSelection = selectionStart();
+    const token = slashCommandToken();
+    if (token) {
+      const result = replaceComposerTextRange(nextText, token.range, '');
+      nextText = result.text;
+      nextSelection = result.selection;
+    }
+    setDismissedPopupSignature('');
+
+    switch (command.action) {
+      case 'insert-mention-trigger': {
+        const result = replaceComposerTextRange(nextText, { start: nextSelection, end: nextSelection }, '@');
+        applyComposerText(result.text, result.selection);
+        return;
+      }
+      case 'start-new-thread': {
+        applyComposerText(nextText);
+        props.onStartNewThreadDraft();
+        return;
+      }
+      case 'clear-composer': {
+        props.onResetComposer();
+        restoreSelection(0);
+        return;
+      }
+      case 'focus-working-dir': {
+        applyComposerText(nextText, nextSelection);
+        setShowWorkspaceEditor(true);
+        requestAnimationFrame(() => focusFirstInteractiveDescendant(workspaceInputContainerRef));
+        return;
+      }
+      case 'focus-model': {
+        applyComposerText(nextText, nextSelection);
+        requestAnimationFrame(() => focusFirstInteractiveDescendant(modelContainerRef));
+        return;
+      }
+      case 'focus-effort': {
+        applyComposerText(nextText, nextSelection);
+        requestAnimationFrame(() => focusFirstInteractiveDescendant(effortContainerRef));
+        return;
+      }
+      case 'focus-approval': {
+        applyComposerText(nextText, nextSelection);
+        requestAnimationFrame(() => focusFirstInteractiveDescendant(approvalContainerRef));
+        return;
+      }
+      case 'focus-sandbox': {
+        applyComposerText(nextText, nextSelection);
+        requestAnimationFrame(() => focusFirstInteractiveDescendant(sandboxContainerRef));
+        return;
+      }
+      default:
+        return;
+    }
+  };
+
+  const handlePopupKeydown = (event: KeyboardEvent): boolean => {
+    if (!popupVisible()) return false;
+
+    const itemCount = popupItemCount();
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setDismissedPopupSignature(popupSignature());
+      return true;
+    }
+    if (itemCount <= 0) {
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActivePopupIndex((current) => (current + 1) % itemCount);
+      return true;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActivePopupIndex((current) => (current - 1 + itemCount) % itemCount);
+      return true;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      if (popupKind() === 'file-mentions') {
+        const candidate = fileMentionCandidates()[activePopupIndex()];
+        if (candidate) {
+          commitFileMention(candidate);
+        }
+        return true;
+      }
+      const command = slashCommands()[activePopupIndex()];
+      if (command) {
+        runSlashCommand(command);
+      }
+      return true;
+    }
+    return false;
+  };
+
   return (
     <div data-codex-surface="composer" class={cn(
       'chat-input-container codex-chat-input',
       isFocused() && 'chat-input-container-focused',
     )}>
+      <Show when={props.mentions.length > 0}>
+        <div class="codex-chat-mention-strip">
+          <For each={props.mentions}>
+            {(mention) => (
+              <MentionChip mention={mention} onRemove={props.onRemoveMention} />
+            )}
+          </For>
+        </div>
+      </Show>
+
       <Show when={props.attachments.length > 0}>
         <div class="codex-chat-attachment-strip">
           <For each={props.attachments}>
@@ -172,20 +508,49 @@ export function CodexComposerShell(props: {
             disabled={!props.hostAvailable}
             onInput={(event) => {
               props.onComposerInput(event.currentTarget.value);
+              setDismissedPopupSignature('');
+              syncSelection();
               scheduleAdjustHeight();
+            }}
+            onPaste={(event) => {
+              const files = Array.from(event.clipboardData?.items ?? [])
+                .map((item) => item.kind === 'file' ? item.getAsFile() : null)
+                .filter((file): file is File => file instanceof File && String(file.type ?? '').startsWith('image/'));
+              if (files.length === 0 || !props.hostAvailable || !props.supportsImages) {
+                return;
+              }
+              event.preventDefault();
+              void props.onAddAttachments(files);
             }}
             onCompositionStart={() => setIsComposing(true)}
             onCompositionUpdate={scheduleAdjustHeight}
             onCompositionEnd={() => {
               setIsComposing(false);
+              syncSelection();
               scheduleAdjustHeight();
             }}
             onKeyDown={(event) => {
+              if (!isComposing() && handlePopupKeydown(event)) return;
               if (!shouldSubmitOnEnterKeydown({ event, isComposing: isComposing() })) return;
               event.preventDefault();
               props.onSend();
             }}
-            onFocus={() => setIsFocused(true)}
+            onKeyUp={() => {
+              setDismissedPopupSignature('');
+              syncSelection();
+            }}
+            onSelect={() => {
+              setDismissedPopupSignature('');
+              syncSelection();
+            }}
+            onClick={() => {
+              setDismissedPopupSignature('');
+              syncSelection();
+            }}
+            onFocus={() => {
+              setIsFocused(true);
+              syncSelection();
+            }}
             onBlur={() => setIsFocused(false)}
             rows={2}
             placeholder="Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step..."
@@ -202,12 +567,72 @@ export function CodexComposerShell(props: {
               onClick={props.onSend}
               disabled={!canSend()}
               aria-label={sendLabel()}
-              title={props.submitting ? 'Sending…' : sendLabel()}
+              title={props.submitting ? 'Sending...' : sendLabel()}
             >
               <Send class="h-[18px] w-[18px]" />
             </button>
           </div>
         </div>
+
+        <Show when={popupVisible()}>
+          <div
+            class="codex-chat-popup"
+            data-codex-popup-kind={popupKind()}
+            role="listbox"
+            aria-label={popupKind() === 'file-mentions' ? 'File reference suggestions' : 'Command suggestions'}
+          >
+            <Show when={popupKind() === 'file-mentions'} fallback={(
+              <For each={slashCommands()}>
+                {(command, index) => (
+                  <button
+                    type="button"
+                    role="option"
+                    class={cn(
+                      'codex-chat-popup-item',
+                      activePopupIndex() === index() && 'codex-chat-popup-item-active',
+                    )}
+                    aria-selected={activePopupIndex() === index()}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => runSlashCommand(command)}
+                  >
+                    <span class="codex-chat-popup-item-title">{command.title}</span>
+                    <span class="codex-chat-popup-item-detail">{command.description}</span>
+                  </button>
+                )}
+              </For>
+            )}>
+              <Show
+                when={fileMentionCandidates().length > 0}
+                fallback={(
+                  <div class="codex-chat-popup-empty">
+                    {fileIndexLoading()
+                      ? 'Indexing files in the current working directory...'
+                      : 'No matching files found in the current working directory.'}
+                  </div>
+                )}
+              >
+                <For each={fileMentionCandidates()}>
+                  {(entry, index) => (
+                    <button
+                      type="button"
+                      role="option"
+                      class={cn(
+                        'codex-chat-popup-item',
+                        activePopupIndex() === index() && 'codex-chat-popup-item-active',
+                      )}
+                      aria-selected={activePopupIndex() === index()}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => commitFileMention(entry)}
+                    >
+                      <span class="codex-chat-popup-item-title">{entry.name}</span>
+                      <span class="codex-chat-popup-item-detail">{compactPathLabel(entry.parent, entry.parent)}</span>
+                    </button>
+                  )}
+                </For>
+              </Show>
+            </Show>
+          </div>
+        </Show>
 
         <div class="codex-chat-input-meta">
           <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input controls">
@@ -257,6 +682,9 @@ export function CodexComposerShell(props: {
               placeholder="Default"
               disabled={!props.hostAvailable || props.modelOptions.length === 0}
               onChange={props.onModelChange}
+              containerRef={(element) => {
+                modelContainerRef = element;
+              }}
             />
 
             <ComposerSelectChip
@@ -266,6 +694,9 @@ export function CodexComposerShell(props: {
               placeholder="Default"
               disabled={!props.hostAvailable || props.effortOptions.length === 0}
               onChange={props.onEffortChange}
+              containerRef={(element) => {
+                effortContainerRef = element;
+              }}
             />
 
             <ComposerSelectChip
@@ -275,6 +706,9 @@ export function CodexComposerShell(props: {
               placeholder="Default"
               disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
               onChange={props.onApprovalPolicyChange}
+              containerRef={(element) => {
+                approvalContainerRef = element;
+              }}
             />
 
             <ComposerSelectChip
@@ -284,11 +718,17 @@ export function CodexComposerShell(props: {
               placeholder="Default"
               disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
               onChange={props.onSandboxModeChange}
+              containerRef={(element) => {
+                sandboxContainerRef = element;
+              }}
             />
           </div>
 
           <Show when={showWorkspaceEditor()}>
-            <div class="codex-chat-input-workspace-editor">
+            <div
+              ref={workspaceInputContainerRef}
+              class="codex-chat-input-workspace-editor"
+            >
               <Input
                 value={props.workspaceLabel}
                 disabled={!props.hostAvailable}

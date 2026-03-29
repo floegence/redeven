@@ -2,6 +2,7 @@ import { createSignal, type Accessor } from 'solid-js';
 
 import type {
   CodexComposerAttachmentDraft,
+  CodexComposerMentionDraft,
   CodexThreadRuntimeConfig,
 } from './types';
 
@@ -26,6 +27,7 @@ export type CodexRuntimeDraftDirty = Readonly<{
 export type CodexComposerDraft = Readonly<{
   text: string;
   attachments: CodexComposerAttachmentDraft[];
+  mentions: CodexComposerMentionDraft[];
 }>;
 
 export type CodexOwnerDraftState = Readonly<{
@@ -66,6 +68,27 @@ function sameAttachmentDraftList(
   return left.every((entry, index) => sameAttachmentDraft(entry, right[index]!));
 }
 
+function sameMentionDraft(
+  left: CodexComposerMentionDraft,
+  right: CodexComposerMentionDraft,
+): boolean {
+  return (
+    left.id === right.id &&
+    left.name === right.name &&
+    left.path === right.path &&
+    left.kind === right.kind &&
+    left.is_image === right.is_image
+  );
+}
+
+function sameMentionDraftList(
+  left: readonly CodexComposerMentionDraft[],
+  right: readonly CodexComposerMentionDraft[],
+): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((entry, index) => sameMentionDraft(entry, right[index]!));
+}
+
 export function codexOwnerIDForThread(threadID: string | null | undefined): string {
   const normalizedThreadID = String(threadID ?? '').trim();
   return normalizedThreadID ? `thread:${normalizedThreadID}` : CODEX_NEW_THREAD_OWNER;
@@ -95,6 +118,7 @@ function createComposerDraft(): CodexComposerDraft {
   return {
     text: '',
     attachments: [],
+    mentions: [],
   };
 }
 
@@ -294,6 +318,80 @@ export function createCodexDraftController() {
     });
   };
 
+  const replaceMentions = (ownerID: string, mentions: readonly CodexComposerMentionDraft[]) => {
+    const normalizedOwnerID = String(ownerID ?? '').trim();
+    if (!normalizedOwnerID) return;
+    setDraftsByOwner((current) => {
+      const existing = current[normalizedOwnerID] ?? createOwnerDraftState(null, '');
+      if (sameMentionDraftList(existing.composer.mentions, mentions)) {
+        return current;
+      }
+      return {
+        ...current,
+        [normalizedOwnerID]: {
+          ...existing,
+          composer: {
+            ...existing.composer,
+            mentions: [...mentions],
+          },
+        },
+      };
+    });
+  };
+
+  const appendMentions = (ownerID: string, mentions: readonly CodexComposerMentionDraft[]) => {
+    if (mentions.length === 0) return;
+    const normalizedOwnerID = String(ownerID ?? '').trim();
+    if (!normalizedOwnerID) return;
+    setDraftsByOwner((current) => {
+      const existing = current[normalizedOwnerID] ?? createOwnerDraftState(null, '');
+      const seenPaths = new Set(existing.composer.mentions.map((entry) => entry.path));
+      const nextMentions = [...existing.composer.mentions];
+      for (const mention of mentions) {
+        if (seenPaths.has(mention.path)) continue;
+        seenPaths.add(mention.path);
+        nextMentions.push(mention);
+      }
+      if (sameMentionDraftList(existing.composer.mentions, nextMentions)) {
+        return current;
+      }
+      return {
+        ...current,
+        [normalizedOwnerID]: {
+          ...existing,
+          composer: {
+            ...existing.composer,
+            mentions: nextMentions,
+          },
+        },
+      };
+    });
+  };
+
+  const removeMention = (ownerID: string, mentionID: string) => {
+    const normalizedOwnerID = String(ownerID ?? '').trim();
+    const normalizedMentionID = String(mentionID ?? '').trim();
+    if (!normalizedOwnerID || !normalizedMentionID) return;
+    setDraftsByOwner((current) => {
+      const existing = current[normalizedOwnerID];
+      if (!existing) return current;
+      const nextMentions = existing.composer.mentions.filter((mention) => mention.id !== normalizedMentionID);
+      if (sameMentionDraftList(existing.composer.mentions, nextMentions)) {
+        return current;
+      }
+      return {
+        ...current,
+        [normalizedOwnerID]: {
+          ...existing,
+          composer: {
+            ...existing.composer,
+            mentions: nextMentions,
+          },
+        },
+      };
+    });
+  };
+
   const removeAttachment = (ownerID: string, attachmentID: string) => {
     const normalizedOwnerID = String(ownerID ?? '').trim();
     const normalizedAttachmentID = String(attachmentID ?? '').trim();
@@ -313,6 +411,29 @@ export function createCodexDraftController() {
             ...existing.composer,
             attachments: nextAttachments,
           },
+        },
+      };
+    });
+  };
+
+  const resetComposer = (ownerID: string) => {
+    const normalizedOwnerID = String(ownerID ?? '').trim();
+    if (!normalizedOwnerID) return;
+    setDraftsByOwner((current) => {
+      const existing = current[normalizedOwnerID];
+      if (!existing) return current;
+      if (
+        existing.composer.text === '' &&
+        existing.composer.attachments.length === 0 &&
+        existing.composer.mentions.length === 0
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        [normalizedOwnerID]: {
+          ...existing,
+          composer: createComposerDraft(),
         },
       };
     });
@@ -352,6 +473,10 @@ export function createCodexDraftController() {
     replaceAttachments,
     appendAttachments,
     removeAttachment,
+    replaceMentions,
+    appendMentions,
+    removeMention,
+    resetComposer,
     transferOwner,
     removeOwner,
   };

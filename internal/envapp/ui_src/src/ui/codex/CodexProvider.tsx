@@ -32,10 +32,12 @@ import {
   type CodexRuntimeDraft,
 } from './draftController';
 import { createCodexThreadController } from './threadController';
+import { codexUserInputTextSummary } from './presentation';
 import { codexSupportedReasoningEfforts } from './viewModel';
 import type {
   CodexCapabilitiesSnapshot,
   CodexComposerAttachmentDraft,
+  CodexComposerMentionDraft,
   CodexOptimisticUserTurn,
   CodexPendingRequest,
   CodexStatus,
@@ -50,7 +52,7 @@ type CodexRequestDrafts = Record<string, Record<string, string>>;
 type CodexThreadMap = Record<string, CodexThread>;
 type CodexOptimisticTurnMap = Record<string, CodexOptimisticUserTurn[]>;
 
-function createAttachmentID(): string {
+function createDraftEntryID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
@@ -120,6 +122,12 @@ function normalizeUserTurnText(value: string | null | undefined): string {
   return String(value ?? '').replaceAll('\r\n', '\n').trim();
 }
 
+function optimisticTurnComparableText(turn: CodexOptimisticUserTurn): string {
+  const summarizedInputs = codexUserInputTextSummary(turn.inputs);
+  if (summarizedInputs) return normalizeUserTurnText(summarizedInputs);
+  return normalizeUserTurnText(turn.text);
+}
+
 function attachmentSignature(entry: CodexUserInputEntry): string {
   return [
     String(entry.type ?? '').trim(),
@@ -146,7 +154,7 @@ function sessionContainsOptimisticTurn(
   currentSession: { items_by_id: Record<string, CodexTranscriptItem> },
   optimisticTurn: CodexOptimisticUserTurn,
 ): boolean {
-  const optimisticText = normalizeUserTurnText(optimisticTurn.text);
+  const optimisticText = optimisticTurnComparableText(optimisticTurn);
   const optimisticAttachments = attachmentSignatures(optimisticTurn.inputs);
   return Object.values(currentSession.items_by_id).some((item) => (
     item.type === 'userMessage' &&
@@ -252,8 +260,16 @@ export type CodexContextValue = Readonly<{
   attachments: Accessor<CodexComposerAttachmentDraft[]>;
   addImageAttachments: (files: readonly File[]) => Promise<void>;
   removeAttachment: (attachmentID: string) => void;
+  mentions: Accessor<CodexComposerMentionDraft[]>;
+  addFileMentions: (mentions: ReadonlyArray<{
+    name: string;
+    path: string;
+    is_image: boolean;
+  }>) => void;
+  removeMention: (mentionID: string) => void;
   composerText: Accessor<string>;
   setComposerText: (value: string) => void;
+  resetComposer: () => void;
   submitting: Accessor<boolean>;
   streamError: Accessor<string | null>;
   requestDraftValue: (requestID: string, questionID: string) => string;
@@ -682,6 +698,7 @@ export function CodexProvider(props: ParentProps) {
   const approvalPolicyDraft = createMemo(() => activeOwnerDraft().runtime.approvalPolicy);
   const sandboxModeDraft = createMemo(() => activeOwnerDraft().runtime.sandboxMode);
   const attachments = createMemo(() => [...activeOwnerDraft().composer.attachments]);
+  const mentions = createMemo(() => [...activeOwnerDraft().composer.mentions]);
   const composerText = createMemo(() => activeOwnerDraft().composer.text);
 
   const setWorkingDirDraft = (value: string) => {
@@ -738,6 +755,25 @@ export function CodexProvider(props: ParentProps) {
     draftController.setComposerText(activeOwnerID(), value);
   };
 
+  const addFileMentions = (mentionSeeds: ReadonlyArray<{
+    name: string;
+    path: string;
+    is_image: boolean;
+  }>) => {
+    if (mentionSeeds.length === 0) return;
+    const mentionsToAppend: CodexComposerMentionDraft[] = mentionSeeds
+      .map((entry) => ({
+        id: createDraftEntryID(),
+        name: String(entry.name ?? '').trim() || 'File',
+        path: String(entry.path ?? '').trim(),
+        kind: 'file' as const,
+        is_image: Boolean(entry.is_image),
+      }))
+      .filter((entry) => entry.path);
+    if (mentionsToAppend.length === 0) return;
+    draftController.appendMentions(activeOwnerID(), mentionsToAppend);
+  };
+
   const addImageAttachments = async (files: readonly File[]) => {
     const inputFiles = Array.from(files ?? []);
     if (inputFiles.length === 0) return;
@@ -751,7 +787,7 @@ export function CodexProvider(props: ParentProps) {
       try {
         const dataURL = await fileToDataURL(file);
         nextAttachments.push({
-          id: createAttachmentID(),
+          id: createDraftEntryID(),
           name: String(file.name ?? 'Image').trim() || 'Image',
           mime_type: String(file.type ?? 'image/*').trim() || 'image/*',
           size_bytes: Math.max(0, Number(file.size ?? 0) || 0),
@@ -772,6 +808,14 @@ export function CodexProvider(props: ParentProps) {
 
   const removeAttachment = (attachmentID: string) => {
     draftController.removeAttachment(activeOwnerID(), attachmentID);
+  };
+
+  const removeMention = (mentionID: string) => {
+    draftController.removeMention(activeOwnerID(), mentionID);
+  };
+
+  const resetComposer = () => {
+    draftController.resetComposer(activeOwnerID());
   };
 
   const requestDraftValue = (requestID: string, questionID: string) =>
@@ -821,7 +865,24 @@ export function CodexProvider(props: ParentProps) {
       url: attachment.data_url,
       name: attachment.name,
     }));
-    if ((!message.trim() && attachmentInputs.length === 0) || submitting()) return;
+    const mentionInputs: CodexUserInputEntry[] = ownerDraft.composer.mentions.map((mention) => ({
+      type: 'mention',
+      name: mention.name,
+      path: mention.path,
+    }));
+    const optimisticInputs: CodexUserInputEntry[] = [
+      ...(message.trim() ? [{ type: 'text', text: message } satisfies CodexUserInputEntry] : []),
+      ...attachmentInputs,
+      ...mentionInputs,
+    ];
+    const optimisticPreview = (
+      normalizeUserTurnText(codexUserInputTextSummary(optimisticInputs)) ||
+      message.trim() ||
+      ownerDraft.composer.mentions[0]?.name ||
+      ownerDraft.composer.attachments[0]?.name ||
+      ''
+    );
+    if ((!message.trim() && attachmentInputs.length === 0 && mentionInputs.length === 0) || submitting()) return;
     if (!hasHostBinary()) {
       notify.error('Host Codex not detected', hostDisabledReason());
       return;
@@ -849,7 +910,7 @@ export function CodexProvider(props: ParentProps) {
         targetOwnerID = codexOwnerIDForThread(targetThreadID);
         draftController.transferOwner(CODEX_NEW_THREAD_OWNER, targetOwnerID);
         threadController.adoptThreadDetail(detail);
-        upsertOptimisticThread(detail.thread, message.trim(), resolvedWorkingDir);
+        upsertOptimisticThread(detail.thread, optimisticPreview, resolvedWorkingDir);
         draftController.mergeOwnerRuntimeConfig(
           targetOwnerID,
           {
@@ -865,7 +926,7 @@ export function CodexProvider(props: ParentProps) {
           activeThread() ??
           buildOptimisticPlaceholderThread({
             threadID: targetThreadID,
-            preview: message.trim(),
+            preview: optimisticPreview,
             modelProvider: ownerDraft.runtime.model,
             cwd: resolvedWorkingDir,
           })
@@ -877,19 +938,19 @@ export function CodexProvider(props: ParentProps) {
         threadController.selectThread(targetThreadID);
       }
 
-      optimisticTurnID = createAttachmentID();
+      optimisticTurnID = createDraftEntryID();
       appendOptimisticTurn({
         id: optimisticTurnID,
         thread_id: targetThreadID,
         text: message,
-        inputs: attachmentInputs,
+        inputs: optimisticInputs,
       });
       threadController.markSessionWorking(targetThreadID);
 
       await startCodexTurn({
         threadID: targetThreadID,
         inputText: message,
-        inputs: attachmentInputs,
+        inputs: [...attachmentInputs, ...mentionInputs],
         cwd: resolvedWorkingDir,
         model: ownerDraft.runtime.model,
         effort: ownerDraft.runtime.effort,
@@ -903,22 +964,21 @@ export function CodexProvider(props: ParentProps) {
         null
       );
       if (currentThread) {
-        upsertOptimisticThread(currentThread, message.trim(), resolvedWorkingDir);
+        upsertOptimisticThread(currentThread, optimisticPreview, resolvedWorkingDir);
       } else {
         upsertOptimisticThread(
           buildOptimisticPlaceholderThread({
             threadID: targetThreadID,
-            preview: message.trim(),
+            preview: optimisticPreview,
             modelProvider: ownerDraft.runtime.model,
             cwd: resolvedWorkingDir,
           }),
-          message.trim(),
+          optimisticPreview,
           resolvedWorkingDir,
         );
       }
 
-      draftController.setComposerText(targetOwnerID, '');
-      draftController.replaceAttachments(targetOwnerID, []);
+      draftController.resetComposer(targetOwnerID);
       void refetchThreads();
       void loadThreadBootstrap(targetThreadID);
       void refetchCapabilities();
@@ -1014,8 +1074,12 @@ export function CodexProvider(props: ParentProps) {
     attachments,
     addImageAttachments,
     removeAttachment,
+    mentions,
+    addFileMentions,
+    removeMention,
     composerText,
     setComposerText: setComposerDraftText,
+    resetComposer,
     submitting,
     streamError,
     requestDraftValue,

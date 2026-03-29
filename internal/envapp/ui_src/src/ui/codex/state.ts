@@ -8,7 +8,7 @@ import type {
   CodexThreadSession,
   CodexTranscriptItem,
 } from './types';
-import { isWorkingStatus } from './presentation';
+import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
 
 type MutableCodexThreadSession = {
   thread: CodexThread;
@@ -206,13 +206,7 @@ function itemTextOrContent(item: CodexItem | null | undefined): string {
     if (url) return url;
   }
   const content = Array.isArray(item?.inputs)
-    ? item!.inputs
-        .map((entry) => {
-          if (String(entry.type ?? '').trim() === 'image') return '';
-          return String(entry.text ?? entry.path ?? entry.name ?? '').trim();
-        })
-        .filter(Boolean)
-        .join('\n\n')
+    ? codexUserInputTextSummary(item!.inputs)
     : '';
   return content;
 }

@@ -127,7 +127,7 @@ export function CodexPageShell() {
   );
   const emptyStateBody = () => (
     summary().hostReady
-      ? 'Start a Codex conversation with a prompt, or attach an image to give Codex visual context.'
+      ? 'Start a Codex conversation with a prompt, paste an image, use @ to reference files, or use / for local composer commands.'
       : 'Redeven does not install Codex for you. Put the host machine\'s `codex` binary on PATH, then refresh this page to start a dedicated Codex chat.'
   );
   const modelValue = createMemo(() => String(codex.modelDraft() ?? '').trim());
@@ -278,6 +278,7 @@ export function CodexPageShell() {
               sandboxModeValue={sandboxModeValue()}
               sandboxModeOptions={sandboxModeOptions()}
               attachments={codex.attachments()}
+              mentions={codex.mentions()}
               supportsImages={supportsImages()}
               capabilitiesLoading={codex.capabilitiesLoading()}
               composerText={codex.composerText()}
@@ -291,7 +292,11 @@ export function CodexPageShell() {
               onSandboxModeChange={codex.setSandboxModeDraft}
               onAddAttachments={codex.addImageAttachments}
               onRemoveAttachment={codex.removeAttachment}
+              onAddFileMentions={codex.addFileMentions}
+              onRemoveMention={codex.removeMention}
               onComposerInput={codex.setComposerText}
+              onResetComposer={codex.resetComposer}
+              onStartNewThreadDraft={codex.startNewThreadDraft}
               onSend={() => void codex.sendTurn()}
             />
           </div>

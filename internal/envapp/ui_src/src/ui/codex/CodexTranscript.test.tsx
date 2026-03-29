@@ -439,6 +439,40 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
+  it('renders fallback user text together with file mention cards and opens the file preview', async () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_user_file_mention',
+        type: 'userMessage',
+        text: 'Review this implementation.',
+        inputs: [
+          {
+            type: 'mention',
+            name: 'CodexComposerShell.tsx',
+            path: '/workspace/src/ui/codex/CodexComposerShell.tsx',
+          },
+        ],
+        order: 0,
+      },
+    ]);
+
+    expect(host.textContent).toContain('Review this implementation.');
+    const fileButton = host.querySelector('[data-codex-user-input-type="mention"]');
+    expect(fileButton?.textContent).toContain('CodexComposerShell.tsx');
+
+    fileButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(openPreview).toHaveBeenCalledWith({
+      id: '/workspace/src/ui/codex/CodexComposerShell.tsx',
+      name: 'CodexComposerShell.tsx',
+      path: '/workspace/src/ui/codex/CodexComposerShell.tsx',
+      type: 'file',
+    });
+
+    dispose();
+  });
+
   it('loads a local image thumbnail and still routes clicks into the file preview surface', async () => {
     protocolState.client = () => ({});
     readFileBytesOnceMock.mockResolvedValue({

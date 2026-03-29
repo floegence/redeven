@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
+import { createEffect } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvContext } from '../pages/EnvContext';
 import { CodexPage } from './CodexPage';
-import { CodexProvider } from './CodexProvider';
+import { CodexProvider, useCodexContext } from './CodexProvider';
 
 const fetchCodexStatusMock = vi.fn();
 const fetchCodexCapabilitiesMock = vi.fn();
@@ -16,6 +17,11 @@ const startCodexTurnMock = vi.fn();
 const archiveCodexThreadMock = vi.fn();
 const respondToCodexRequestMock = vi.fn();
 const connectCodexEventStreamMock = vi.fn();
+const rpcMocks = {
+  fs: {
+    list: vi.fn(),
+  },
+};
 const notification = {
   success: vi.fn(),
   error: vi.fn(),
@@ -134,6 +140,10 @@ vi.mock('./api', () => ({
   connectCodexEventStream: (...args: any[]) => connectCodexEventStreamMock(...args),
 }));
 
+vi.mock('../protocol/redeven_v1', () => ({
+  useRedevenRpc: () => rpcMocks,
+}));
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -184,10 +194,67 @@ function renderPage(host: HTMLDivElement) {
   ), host);
 }
 
+function CodexHarness(props: { onReady: (codex: ReturnType<typeof useCodexContext>) => void }) {
+  const codex = useCodexContext();
+  createEffect(() => {
+    if (codex.statusLoading()) return;
+    props.onReady(codex);
+  });
+  return null;
+}
+
+function renderProviderHarness(
+  host: HTMLDivElement,
+  onReady: (codex: ReturnType<typeof useCodexContext>) => void,
+) {
+  render(() => (
+    <EnvContext.Provider
+      value={{
+        env_id: () => 'env_1',
+        env: (() => null) as any,
+        localRuntime: () => null,
+        connect: async () => undefined,
+        connecting: () => false,
+        connectError: () => null,
+        connectionOverlayVisible: () => false,
+        connectionOverlayMessage: () => '',
+        goTab: () => undefined,
+        filesSidebarOpen: () => false,
+        setFilesSidebarOpen: () => undefined,
+        toggleFilesSidebar: () => undefined,
+        settingsSeq: () => 1,
+        bumpSettingsSeq: () => undefined,
+        openSettings: () => undefined,
+        debugConsoleEnabled: () => false,
+        setDebugConsoleEnabled: () => undefined,
+        openDebugConsole: () => undefined,
+        settingsFocusSeq: () => 0,
+        settingsFocusSection: () => null,
+        askFlowerIntentSeq: () => 0,
+        askFlowerIntent: () => null,
+        injectAskFlowerIntent: () => undefined,
+        openAskFlowerComposer: () => undefined,
+        openTerminalInDirectoryRequestSeq: () => 0,
+        openTerminalInDirectoryRequest: () => null,
+        openTerminalInDirectory: () => undefined,
+        consumeOpenTerminalInDirectoryRequest: () => undefined,
+        aiThreadFocusSeq: () => 0,
+        aiThreadFocusId: () => null,
+        focusAIThread: () => undefined,
+      }}
+    >
+      <CodexProvider>
+        <CodexHarness onReady={onReady} />
+      </CodexProvider>
+    </EnvContext.Provider>
+  ), host);
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.clearAllMocks();
   vi.unstubAllGlobals();
+  rpcMocks.fs.list.mockReset();
 });
 
 describe('CodexPage', () => {
@@ -887,6 +954,107 @@ describe('CodexPage', () => {
     await flushAsync();
 
     expect(host.textContent).toContain('Thread title from Codex');
+  });
+
+  it('sends selected file references as mention inputs and keeps optimistic text visible', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_new',
+        name: 'New chat',
+        preview: 'Review',
+        ephemeral: false,
+        model_provider: 'openai',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      token_usage: null,
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    startCodexThreadMock.mockResolvedValue(startedDetail);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let codex!: ReturnType<typeof useCodexContext>;
+    renderProviderHarness(host, (value) => {
+      codex = value;
+    });
+
+    await flushAsync();
+    await flushAsync();
+
+    codex.setComposerText('Review ');
+    codex.addFileMentions([{
+      name: 'CodexComposerShell.tsx',
+      path: '/workspace/ui/src/ui/codex/CodexComposerShell.tsx',
+      is_image: false,
+    }]);
+    await codex.sendTurn();
+    await flushAsync();
+
+    expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadID: 'thread_new',
+      inputText: 'Review ',
+      inputs: [
+        {
+          type: 'mention',
+          name: 'CodexComposerShell.tsx',
+          path: '/workspace/ui/src/ui/codex/CodexComposerShell.tsx',
+        },
+      ],
+    }));
+    const optimisticTurn = codex.activeOptimisticUserTurns()[0];
+    expect(optimisticTurn?.inputs).toEqual([
+      { type: 'text', text: 'Review ' },
+      {
+        type: 'mention',
+        name: 'CodexComposerShell.tsx',
+        path: '/workspace/ui/src/ui/codex/CodexComposerShell.tsx',
+      },
+    ]);
   });
 
 });

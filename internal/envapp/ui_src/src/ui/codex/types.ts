@@ -46,6 +46,14 @@ export type CodexComposerAttachmentDraft = Readonly<{
   preview_url: string;
 }>;
 
+export type CodexComposerMentionDraft = Readonly<{
+  id: string;
+  name: string;
+  path: string;
+  kind: 'file';
+  is_image: boolean;
+}>;
+
 export type CodexOptimisticUserTurn = Readonly<{
   id: string;
   thread_id: string;
