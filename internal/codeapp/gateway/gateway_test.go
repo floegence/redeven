@@ -30,6 +30,9 @@ type stubBackend struct {
 	startSpace            func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
 	stopSpace             func(ctx context.Context, codeSpaceID string) error
 	resolveCodeServerPort func(ctx context.Context, codeSpaceID string) (int, error)
+	codeRuntimeStatus     func(ctx context.Context) (CodeRuntimeStatus, error)
+	installCodeRuntime    func(ctx context.Context) (CodeRuntimeStatus, error)
+	cancelCodeRuntime     func(ctx context.Context) (CodeRuntimeStatus, error)
 }
 
 func (s *stubBackend) ListSpaces(ctx context.Context) ([]SpaceStatus, error) {
@@ -73,6 +76,24 @@ func (s *stubBackend) ResolveCodeServerPort(ctx context.Context, codeSpaceID str
 		return s.resolveCodeServerPort(ctx, codeSpaceID)
 	}
 	return 0, errors.New("not implemented")
+}
+func (s *stubBackend) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error) {
+	if s.codeRuntimeStatus != nil {
+		return s.codeRuntimeStatus(ctx)
+	}
+	return CodeRuntimeStatus{}, errors.New("not implemented")
+}
+func (s *stubBackend) InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error) {
+	if s.installCodeRuntime != nil {
+		return s.installCodeRuntime(ctx)
+	}
+	return CodeRuntimeStatus{}, errors.New("not implemented")
+}
+func (s *stubBackend) CancelCodeRuntimeInstall(ctx context.Context) (CodeRuntimeStatus, error) {
+	if s.cancelCodeRuntime != nil {
+		return s.cancelCodeRuntime(ctx)
+	}
+	return CodeRuntimeStatus{}, errors.New("not implemented")
 }
 
 func writeTestConfig(t *testing.T) string {
@@ -217,6 +238,98 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("cs origin status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
+	}
+}
+
+func TestGateway_CodeRuntimeRoutes(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+	}
+	channelID := "ch_runtime"
+	envOrigin := envOriginWithChannel(channelID)
+	var installCalls int
+	var cancelCalls int
+	b := &stubBackend{
+		codeRuntimeStatus: func(ctx context.Context) (CodeRuntimeStatus, error) {
+			return CodeRuntimeStatus{
+				SupportedVersion: "4.108.2",
+				DetectionState:   "missing",
+				InstallState:     "idle",
+				Source:           "none",
+				ManagedPrefix:    "/tmp/runtime",
+			}, nil
+		},
+		installCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
+			installCalls++
+			return CodeRuntimeStatus{
+				SupportedVersion: "4.108.2",
+				DetectionState:   "missing",
+				InstallState:     "running",
+				InstallStage:     "installing",
+				Source:           "none",
+				ManagedPrefix:    "/tmp/runtime",
+			}, nil
+		},
+		cancelCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
+			cancelCalls++
+			return CodeRuntimeStatus{
+				SupportedVersion: "4.108.2",
+				DetectionState:   "missing",
+				InstallState:     "cancelled",
+				Source:           "none",
+				ManagedPrefix:    "/tmp/runtime",
+			}, nil
+		},
+	}
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanWrite: true, CanExecute: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	request := func(method string, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		return rr
+	}
+
+	statusResp := request(http.MethodGet, "/_redeven_proxy/api/code-runtime/status")
+	if statusResp.Code != http.StatusOK {
+		t.Fatalf("status code=%d, want %d", statusResp.Code, http.StatusOK)
+	}
+	if !bytes.Contains(statusResp.Body.Bytes(), []byte(`"supported_version":"4.108.2"`)) {
+		t.Fatalf("status body missing supported_version: %s", statusResp.Body.String())
+	}
+
+	installResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/install")
+	if installResp.Code != http.StatusOK {
+		t.Fatalf("install code=%d, want %d", installResp.Code, http.StatusOK)
+	}
+	if installCalls != 1 {
+		t.Fatalf("install_calls=%d, want 1", installCalls)
+	}
+	if !bytes.Contains(installResp.Body.Bytes(), []byte(`"install_state":"running"`)) {
+		t.Fatalf("install body missing running state: %s", installResp.Body.String())
+	}
+
+	cancelResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/cancel")
+	if cancelResp.Code != http.StatusOK {
+		t.Fatalf("cancel code=%d, want %d", cancelResp.Code, http.StatusOK)
+	}
+	if cancelCalls != 1 {
+		t.Fatalf("cancel_calls=%d, want 1", cancelCalls)
+	}
+	if !bytes.Contains(cancelResp.Body.Bytes(), []byte(`"install_state":"cancelled"`)) {
+		t.Fatalf("cancel body missing cancelled state: %s", cancelResp.Body.String())
 	}
 }
 

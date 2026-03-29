@@ -48,7 +48,7 @@ This repository stays open-source and auditable. It documents the public agent r
 | Use case | Flow | Outcome |
 | --- | --- | --- |
 | Secure remote environment access | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
-| Browser-based development | Launch a codespace from Env App, then move into Code App | Reach code-server through the agent gateway and Flowersec E2EE proxy |
+| Browser-based development | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the agent gateway and Flowersec E2EE proxy |
 | Desktop operations | Start Redeven Desktop on this device or connect it to another Redeven Local UI | Use native Desktop Settings, diagnostics, and connection management around the same runtime contract |
 
 ## Quick start
@@ -187,7 +187,7 @@ Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 ### Common troubleshooting entry points
 
 - `bootstrap failed` or `missing direct connect info`: verify `--controlplane`, `--env-id`, and `--env-token`.
-- `code-server binary not found`: install `code-server`, or set `REDEVEN_CODE_SERVER_BIN` to an absolute path.
+- `code-server runtime missing or incompatible`: open Env App -> Codespaces and use the explicit `Install code-server` flow, or set `REDEVEN_CODE_SERVER_BIN` to a compatible binary path.
 - `Missing init payload` in Codespaces: reopen the codespace from Env App so a new entry ticket can be minted.
 - Desktop lock conflict: if another agent already owns `~/.redeven`, stop it or restart it with a Local UI mode, then retry.
 - Requests feel slow: open Agent Settings -> Debug Console, then inspect the floating console to compare desktop, gateway, and UI timing.

@@ -244,6 +244,9 @@ The Env App UI manages local codespaces via the agent local gateway API:
 - `POST /_redeven_proxy/api/spaces/:id/start`
 - `POST /_redeven_proxy/api/spaces/:id/stop`
 - `DELETE /_redeven_proxy/api/spaces/:id`
+- `GET /_redeven_proxy/api/code-runtime/status`
+- `POST /_redeven_proxy/api/code-runtime/install`
+- `POST /_redeven_proxy/api/code-runtime/cancel`
 
 When opening a codespace, the Env App mints a one-time ticket for `com.floegence.redeven.code`, then opens:
 
@@ -254,6 +257,8 @@ Notes:
 - Codespace/3rd-party app windows never receive `boot_ticket` or `env_session`. They only get one-time `entry_ticket`.
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
+- Codespaces does **not** auto-install `code-server`. When the runtime is missing or incompatible, Env App shows an explicit install UI and waits for the user to click `Install code-server`.
+- The install flow displays the official installer source, pinned supported version, managed install location, progress state, and recent install output inside Env App before the user continues to the pending `Start` or `Open` action.
 
 ## Build
 

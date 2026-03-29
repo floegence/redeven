@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -71,7 +72,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
   CardHeader: (props: any) => <div class={props.class}>{props.children}</div>,
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
-  Dialog: (props: any) => (props.open ? <div>{props.children}{props.footer}</div> : null),
+  Dialog: (props: any) => <Show when={props.open}><div>{props.children}{props.footer}</div></Show>,
   DirectoryInput: (props: any) => <input value={props.value} onInput={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).value)} />,
   Input: (props: any) => <input value={props.value} onInput={props.onInput} />,
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
@@ -135,8 +136,17 @@ async function flushPage(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+async function waitForHostText(host: HTMLElement, text: string, attempts = 20): Promise<void> {
+  for (let index = 0; index < attempts; index += 1) {
+    if (host.textContent?.includes(text)) return;
+    await flushPage();
+  }
+  throw new Error(`Timed out waiting for text: ${text}`);
+}
+
 describe('EnvCodespacesPage', () => {
   let host: HTMLDivElement;
+  let runtimeStatusResponse: any;
 
   beforeEach(() => {
     notificationMocks.success.mockReset();
@@ -151,8 +161,41 @@ describe('EnvCodespacesPage', () => {
     protocolMocks.client.mockReturnValue(null);
     rpcMocks.fs.getPathContext.mockReset();
     rpcMocks.fs.list.mockReset();
+    runtimeStatusResponse = {
+      supported_version: '4.108.2',
+      detection_state: 'ready',
+      install_state: 'idle',
+      managed: true,
+      source: 'managed',
+      binary_path: '/Users/test/.redeven/apps/code/runtime/managed/bin/code-server',
+      installed_version: '4.108.2',
+      managed_prefix: '/Users/test/.redeven/apps/code/runtime/managed',
+      installer_script_url: 'https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh',
+      updated_at_unix_ms: 1,
+      log_tail: [],
+    };
     gatewayMocks.fetchGatewayJSON.mockReset();
     gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') {
+        return runtimeStatusResponse;
+      }
+      if (url === '/_redeven_proxy/api/code-runtime/install') {
+        runtimeStatusResponse = {
+          ...runtimeStatusResponse,
+          install_state: 'running',
+          install_stage: 'installing',
+          log_tail: ['Installing v4.108.2 of the arm64 release from GitHub.'],
+        };
+        return runtimeStatusResponse;
+      }
+      if (url === '/_redeven_proxy/api/code-runtime/cancel') {
+        runtimeStatusResponse = {
+          ...runtimeStatusResponse,
+          install_state: 'cancelled',
+          install_stage: '',
+        };
+        return runtimeStatusResponse;
+      }
       if (url === '/_redeven_proxy/api/spaces') {
         return {
           spaces: [
@@ -169,6 +212,20 @@ describe('EnvCodespacesPage', () => {
               pid: 4242,
             },
           ],
+        };
+      }
+      if (url === '/_redeven_proxy/api/spaces/space-1/start') {
+        return {
+          code_space_id: 'space-1',
+          name: 'Demo Space',
+          description: 'Workspace demo',
+          workspace_path: '/workspace/demo',
+          code_port: 13337,
+          created_at_unix_ms: 1,
+          updated_at_unix_ms: 1,
+          last_opened_at_unix_ms: 1,
+          running: true,
+          pid: 4242,
         };
       }
       throw new Error(`Unexpected gateway call: ${url}`);
@@ -228,6 +285,85 @@ describe('EnvCodespacesPage', () => {
       notes: [],
     });
     expect(buildAskFlowerComposerCopy(intent).question).toBe('What would you like to explore inside it?');
+  });
+
+  it('shows install guidance when the code-server runtime is missing', async () => {
+    runtimeStatusResponse = {
+      ...runtimeStatusResponse,
+      detection_state: 'missing',
+      install_state: 'idle',
+      managed: false,
+      source: 'none',
+      binary_path: '',
+      installed_version: '',
+    };
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const banner = host.querySelector('[data-testid="code-runtime-banner"]') as HTMLDivElement | null;
+    expect(banner).toBeTruthy();
+    expect(banner?.textContent).toContain('code-server runtime');
+    expect(banner?.textContent).toContain('Install code-server');
+    expect(banner?.textContent).toContain('Supported version 4.108.2');
+  });
+
+  it('opens the explicit install dialog instead of starting a codespace when runtime is missing', async () => {
+    runtimeStatusResponse = {
+      ...runtimeStatusResponse,
+      detection_state: 'missing',
+      install_state: 'idle',
+      managed: false,
+      source: 'none',
+      binary_path: '',
+      installed_version: '',
+    };
+
+    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') {
+        return runtimeStatusResponse;
+      }
+      if (url === '/_redeven_proxy/api/spaces') {
+        return {
+          spaces: [
+            {
+              code_space_id: 'space-1',
+              name: 'Demo Space',
+              description: 'Workspace demo',
+              workspace_path: '/workspace/demo',
+              code_port: 13337,
+              created_at_unix_ms: 1,
+              updated_at_unix_ms: 1,
+              last_opened_at_unix_ms: 1,
+              running: false,
+              pid: 0,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected gateway call: ${url}`);
+    });
+
+    const windowOpenSpy = vi.spyOn(window, 'open');
+    windowOpenSpy.mockImplementation(() => null);
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const startButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Start');
+    expect(startButton).toBeTruthy();
+
+    startButton?.click();
+    await waitForHostText(host, 'Demo Space');
+    expect(gatewayMocks.fetchGatewayJSON.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/code-runtime/status').length).toBeGreaterThanOrEqual(2);
+    await waitForHostText(host, 'Pending action: Start codespace after install');
+
+    expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
+    expect(host.textContent).toContain('Install code-server');
+    expect(host.textContent).toContain('Pending action: Start codespace after install');
+
+    windowOpenSpy.mockRestore();
   });
 
   it('opens Terminal from a codespace card context menu with the absolute directory and preferred name', async () => {
@@ -303,6 +439,9 @@ describe('EnvCodespacesPage', () => {
 
   it('uses semantic panel and card surface classes for the neutral codespace shell', async () => {
     gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') {
+        return runtimeStatusResponse;
+      }
       if (url === '/_redeven_proxy/api/spaces') {
         return {
           spaces: [

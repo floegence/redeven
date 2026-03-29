@@ -21,6 +21,13 @@ import { resolveAgentUpgradeState } from '../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { fetchGatewayJSON } from '../services/gatewayApi';
+import {
+  cancelCodeRuntimeInstall,
+  codeRuntimeStageLabel,
+  fetchCodeRuntimeStatus,
+  installCodeRuntime,
+  type CodeRuntimeStatus,
+} from '../services/codeRuntimeApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { CodexIcon, CodexNavigationIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
@@ -321,8 +328,13 @@ export function EnvSettingsPage() {
     () => key(),
     async (k) => (k == null ? null : await fetchGatewayJSON<CodexHostStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' })),
   );
+  const [codeRuntimeStatus, { refetch: refetchCodeRuntimeStatus }] = createResource<CodeRuntimeStatus | null, number | null>(
+    () => key(),
+    async (k) => (k == null ? null : await fetchCodeRuntimeStatus()),
+  );
 
   const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
+  const canManageCodeRuntime = createMemo(() => Boolean(env.env()?.permissions?.can_read && env.env()?.permissions?.can_write && env.env()?.permissions?.can_execute));
   const debugConsoleEnabled = createMemo(() => env.debugConsoleEnabled());
 
   // Settings quick-jump directory (sidebar/select).
@@ -395,6 +407,16 @@ export function EnvSettingsPage() {
     void agentUpdate.version.ensureLatestVersionLoaded().catch(() => undefined);
   });
 
+  createEffect(() => {
+    if (codeRuntimeStatus()?.install_state !== 'running') return;
+    const timer = window.setInterval(() => {
+      void refetchCodeRuntimeStatus();
+    }, 1000);
+    onCleanup(() => {
+      window.clearInterval(timer);
+    });
+  });
+
   const [targetVersionInput, setTargetVersionInput] = createSignal('');
   const preferredUpgradeVersion = createMemo(() => agentUpdate.version.preferredTargetVersion());
   const targetUpgradeVersion = createMemo(() => String(targetVersionInput() ?? '').trim());
@@ -465,6 +487,8 @@ export function EnvSettingsPage() {
   const [codespacesView, setCodespacesView] = createSignal<ViewMode>('ui');
   const [policyView, setPolicyView] = createSignal<ViewMode>('ui');
   const [aiView, setAiView] = createSignal<ViewMode>('ui');
+  const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
+  const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
 
   // Dirty flags
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
@@ -476,6 +500,38 @@ export function EnvSettingsPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Codex status refresh failed', msg || 'Request failed.');
+    }
+  };
+  const refreshCodeRuntimeStatus = async () => {
+    try {
+      await refetchCodeRuntimeStatus();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Runtime status refresh failed', msg || 'Request failed.');
+    }
+  };
+  const installManagedCodeRuntime = async () => {
+    setCodeRuntimeActionLoading(true);
+    try {
+      await installCodeRuntime();
+      await refetchCodeRuntimeStatus();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Install failed', msg || 'Request failed.');
+    } finally {
+      setCodeRuntimeActionLoading(false);
+    }
+  };
+  const cancelManagedCodeRuntimeInstall = async () => {
+    setCodeRuntimeCancelLoading(true);
+    try {
+      await cancelCodeRuntimeInstall();
+      await refetchCodeRuntimeStatus();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Cancel failed', msg || 'Request failed.');
+    } finally {
+      setCodeRuntimeCancelLoading(false);
     }
   };
   const [policyDirty, setPolicyDirty] = createSignal(false);
@@ -638,6 +694,56 @@ export function EnvSettingsPage() {
         label: 'error',
         value: codexStatusError() || 'None',
         note: 'Latest host capability or bridge startup error, if any.',
+      },
+    ] as const;
+  });
+  const codeRuntimeStatusError = createMemo(() => {
+    const payloadError = String(codeRuntimeStatus()?.last_error ?? '').trim();
+    if (payloadError) return payloadError;
+    const err = codeRuntimeStatus.error;
+    if (!err) return null;
+    return err instanceof Error ? err.message : String(err);
+  });
+  const codeRuntimeStatusRows = createMemo(() => {
+    const current = codeRuntimeStatus();
+    return [
+      {
+        label: 'detection_state',
+        value: current?.detection_state || 'Unknown',
+        note: 'Whether the selected code-server runtime is ready, missing, or incompatible.',
+      },
+      {
+        label: 'install_state',
+        value: current?.install_state || 'idle',
+        note: 'Explicit install flow state managed by Redeven.',
+      },
+      {
+        label: 'installed_version',
+        value: current?.installed_version || 'Not detected',
+        note: 'Resolved code-server version from the selected runtime.',
+      },
+      {
+        label: 'binary_path',
+        value: current?.binary_path || 'Not detected',
+        note: 'Resolved runtime binary path used for Codespaces.',
+        mono: true,
+      },
+      {
+        label: 'managed_prefix',
+        value: current?.managed_prefix || 'Not detected',
+        note: 'Redeven-managed install prefix for the pinned standalone runtime.',
+        mono: true,
+      },
+      {
+        label: 'installer_script_url',
+        value: current?.installer_script_url || 'Not detected',
+        note: 'Official upstream install script URL Redeven uses for explicit install.',
+        mono: true,
+      },
+      {
+        label: 'error',
+        value: codeRuntimeStatusError() || 'None',
+        note: 'Latest install or compatibility error, if any.',
       },
     ] as const;
   });
@@ -2816,12 +2922,38 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={Code}
               title="Codespaces"
-              description="Port range for code-server instances."
-              badge="Manual restart required"
-              badgeVariant="warning"
+              description="Managed code-server runtime status plus the port range for Codespaces instances."
+              badge={codeRuntimeStatus()?.detection_state === 'ready' ? 'Runtime ready' : 'Runtime needs install'}
+              badgeVariant={codeRuntimeStatus()?.detection_state === 'ready' ? 'success' : 'warning'}
               error={codespacesError()}
               actions={
                 <>
+                  <Button size="sm" variant="outline" onClick={() => void refreshCodeRuntimeStatus()} disabled={codeRuntimeStatus.loading}>
+                    <RefreshIcon class="mr-2 h-4 w-4" />
+                    {codeRuntimeStatus.loading ? 'Refreshing...' : 'Refresh runtime'}
+                  </Button>
+                  <Show
+                    when={codeRuntimeStatus()?.install_state === 'running'}
+                    fallback={
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => void installManagedCodeRuntime()}
+                        disabled={!canInteract() || !canManageCodeRuntime() || codeRuntimeActionLoading()}
+                      >
+                        {codeRuntimeActionLoading() ? 'Starting install...' : (codeRuntimeStatus()?.managed ? 'Reinstall managed runtime' : 'Install code-server')}
+                      </Button>
+                    }
+                  >
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void cancelManagedCodeRuntimeInstall()}
+                      disabled={!canInteract() || !canManageCodeRuntime() || codeRuntimeCancelLoading()}
+                    >
+                      {codeRuntimeCancelLoading() ? 'Cancelling...' : 'Cancel install'}
+                    </Button>
+                  </Show>
                   <ViewToggle value={codespacesView} disabled={!canInteract()} onChange={(value) => switchCodespacesView(value)} />
                   <AutoSaveIndicator
                     dirty={codespacesDirty()}
@@ -2832,7 +2964,46 @@ export function EnvSettingsPage() {
                   />
                 </>
               }
-            >
+              >
+                <div class="space-y-6">
+                  <div class="flex flex-wrap gap-2">
+                    <SettingsPill tone={codeRuntimeStatus()?.detection_state === 'ready' ? 'success' : 'default'}>
+                      {codeRuntimeStatus()?.detection_state === 'ready' ? 'Runtime detected' : 'Runtime missing or incompatible'}
+                    </SettingsPill>
+                    <SettingsPill tone={codeRuntimeStatus()?.managed ? 'success' : 'default'}>
+                      {codeRuntimeStatus()?.managed ? 'Redeven-managed runtime' : 'Using host/runtime discovery'}
+                    </SettingsPill>
+                    <SettingsPill tone={codeRuntimeStatus()?.install_state === 'running' ? 'warning' : 'default'}>
+                      {codeRuntimeStatus()?.install_state === 'running' ? codeRuntimeStageLabel(codeRuntimeStatus()?.install_stage) : `Install state: ${codeRuntimeStatus()?.install_state ?? 'idle'}`}
+                    </SettingsPill>
+                  </div>
+
+                  <Show when={!canManageCodeRuntime()}>
+                    <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
+                      <Code class="h-5 w-5 text-muted-foreground" />
+                      <div class="text-sm text-muted-foreground">
+                        Installing or changing the managed code-server runtime requires read, write, and execute access for this environment session.
+                      </div>
+                    </div>
+                  </Show>
+
+                  <Show when={codeRuntimeStatusError()}>
+                    <div class="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                      {codeRuntimeStatusError()}
+                    </div>
+                  </Show>
+
+                  <SettingsKeyValueTable rows={codeRuntimeStatusRows()} minWidthClass="min-w-[52rem]" />
+
+                  <div class="rounded-lg border border-border bg-muted/20 p-4">
+                    <div class="text-sm font-semibold text-foreground">Install output</div>
+                    <div class="mt-2 rounded-md border border-border bg-background/80 p-3 text-xs leading-6 text-muted-foreground whitespace-pre-wrap break-words">
+                      {(codeRuntimeStatus()?.log_tail?.length ?? 0) > 0
+                        ? codeRuntimeStatus()?.log_tail?.join('\n')
+                        : 'No managed install output yet.'}
+                    </div>
+                  </div>
+
               <Show
                 when={codespacesView() === 'ui'}
                 fallback={
@@ -2925,6 +3096,7 @@ export function EnvSettingsPage() {
                   </SettingsTableBody>
                 </SettingsTable>
               </Show>
+                </div>
             </SettingsCard>
           </div>
         </SectionGroup>

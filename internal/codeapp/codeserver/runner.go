@@ -206,7 +206,7 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		return nil, err
 	}
 
-	bin, err := ResolveBinary()
+	bin, err := ResolveBinary(r.stateDir)
 	if err != nil {
 		return nil, err
 	}

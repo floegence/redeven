@@ -21,6 +21,16 @@ import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useEnvContext } from "./EnvContext";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { Tooltip } from "../primitives/Tooltip";
+import {
+  cancelCodeRuntimeInstall,
+  codeRuntimeInstalling,
+  codeRuntimeMissing,
+  codeRuntimeReady,
+  codeRuntimeStageLabel,
+  fetchCodeRuntimeStatus,
+  installCodeRuntime,
+  type CodeRuntimeStatus,
+} from "../services/codeRuntimeApi";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
 import { FLOE_APP_CODE } from "../services/floeproxyContract";
 import { fetchGatewayJSON } from "../services/gatewayApi";
@@ -53,6 +63,12 @@ type CodespaceContextMenuState = Readonly<{
   y: number;
   space: SpaceStatus;
 }>;
+
+type PendingCodespaceIntent = Readonly<{
+  kind: "open" | "start";
+  code_space_id: string;
+  name: string;
+}> | null;
 
 function fmtTime(ms: number): string {
   if (!ms) return "Never";
@@ -498,6 +514,259 @@ function CreateCodespaceDialog(props: {
   );
 }
 
+function runtimeRequirementLabel(status: CodeRuntimeStatus | null | undefined): string {
+  if (!status) return "code-server is required for Codespaces on this host.";
+  if (status.install_state === "running") return codeRuntimeStageLabel(status.install_stage);
+  if (status.detection_state === "incompatible") {
+    const version = String(status.installed_version ?? "").trim();
+    if (version) {
+      return `Detected code-server ${version}, but Redeven currently supports ${status.supported_version}.`;
+    }
+    return "Redeven detected a code-server runtime, but it is not usable for this Codespaces version.";
+  }
+  return "Redeven can install the supported version for this host using the official code-server installer.";
+}
+
+function CodeRuntimeBanner(props: {
+  status: CodeRuntimeStatus | null | undefined;
+  loading: boolean;
+  error?: string | null;
+  onInstall: () => void;
+  onRefresh: () => void;
+  onViewDetails: () => void;
+}) {
+  const badgeText = () => {
+    const status = props.status;
+    if (props.loading) return "Checking runtime";
+    if (!status) return "Runtime unavailable";
+    if (status.install_state === "running") return "Installing";
+    if (status.install_state === "failed") return "Install failed";
+    if (status.install_state === "cancelled") return "Install cancelled";
+    if (status.detection_state === "incompatible") return "Version mismatch";
+    return "Not installed";
+  };
+
+  return (
+    <div
+      data-testid="code-runtime-banner"
+      class={cn("rounded-lg border p-4 space-y-3", redevenSurfaceRoleClass("panelStrong"))}
+    >
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="space-y-2 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="text-sm font-semibold text-foreground">code-server runtime</div>
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+              {badgeText()}
+            </Tag>
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+              Supported version {props.status?.supported_version ?? "-"}
+            </Tag>
+          </div>
+          <div class="text-xs text-muted-foreground">
+            {props.error ? props.error : runtimeRequirementLabel(props.status)}
+          </div>
+          <div class="grid gap-1 text-[11px] text-muted-foreground">
+            <Show when={props.status?.installed_version}>
+              <div>Detected version: <span class="font-mono">{props.status?.installed_version}</span></div>
+            </Show>
+            <Show when={props.status?.binary_path}>
+              <div>Detected path: <span class="font-mono break-all">{props.status?.binary_path}</span></div>
+            </Show>
+            <Show when={props.status?.managed_prefix}>
+              <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
+            </Show>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
+            Refresh status
+          </Button>
+          <Show
+            when={props.status?.install_state === "running" || props.status?.install_state === "failed" || props.status?.install_state === "cancelled"}
+            fallback={
+              <Button size="sm" variant="default" onClick={props.onInstall}>
+                Install code-server
+              </Button>
+            }
+          >
+            <Button size="sm" variant="default" onClick={props.onViewDetails}>
+              <Show when={props.status?.install_state === "running"} fallback="View details">
+                View install
+              </Show>
+            </Button>
+          </Show>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CodeRuntimeInstallDialog(props: {
+  open: boolean;
+  status: CodeRuntimeStatus | null | undefined;
+  loading: boolean;
+  installSubmitting: boolean;
+  cancelSubmitting: boolean;
+  pendingIntent: PendingCodespaceIntent;
+  onOpenChange: (open: boolean) => void;
+  onInstall: () => void;
+  onCancelInstall: () => void;
+  onRetry: () => void;
+  onRefresh: () => void;
+  onContinue: () => void;
+}) {
+  const installRunning = () => codeRuntimeInstalling(props.status);
+  const installFailed = () => props.status?.install_state === "failed";
+  const installCancelled = () => props.status?.install_state === "cancelled";
+  const runtimeReady = () => codeRuntimeReady(props.status);
+  const pendingActionLabel = () => {
+    if (props.pendingIntent?.kind === "open") return "Continue to open codespace";
+    if (props.pendingIntent?.kind === "start") return "Continue to start codespace";
+    return "Done";
+  };
+  const dialogTitle = () => {
+    if (installRunning()) return "Installing code-server";
+    if (runtimeReady()) return "code-server is ready";
+    if (installFailed()) return "Unable to install code-server";
+    if (installCancelled()) return "Install cancelled";
+    return "Install code-server";
+  };
+
+  return (
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open && (installRunning() || props.installSubmitting || props.cancelSubmitting)) return;
+        props.onOpenChange(open);
+      }}
+      title={dialogTitle()}
+      footer={
+        <div class="flex justify-end gap-2">
+          <Show
+            when={installRunning()}
+            fallback={
+              <Show
+                when={runtimeReady()}
+                fallback={
+                  <Show
+                    when={installFailed() || installCancelled()}
+                    fallback={
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)} disabled={props.installSubmitting}>
+                          Close
+                        </Button>
+                        <Button size="sm" variant="default" onClick={props.onInstall} disabled={props.installSubmitting}>
+                          <Show when={props.installSubmitting}>
+                            <InlineButtonSnakeLoading class="mr-1" />
+                          </Show>
+                          Install code-server
+                        </Button>
+                      </>
+                    }
+                  >
+                    <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)} disabled={props.installSubmitting}>
+                      Close
+                    </Button>
+                    <Button size="sm" variant="default" onClick={props.onRetry} disabled={props.installSubmitting}>
+                      <Show when={props.installSubmitting}>
+                        <InlineButtonSnakeLoading class="mr-1" />
+                      </Show>
+                      Retry
+                    </Button>
+                  </Show>
+                }
+              >
+                <Button size="sm" variant="outline" onClick={props.onOpenChange.bind(null, false)}>
+                  Close
+                </Button>
+                <Button size="sm" variant="default" onClick={props.onContinue}>
+                  {pendingActionLabel()}
+                </Button>
+              </Show>
+            }
+          >
+            <Button size="sm" variant="outline" onClick={props.onCancelInstall} disabled={props.cancelSubmitting}>
+              <Show when={props.cancelSubmitting}>
+                <InlineButtonSnakeLoading class="mr-1" />
+              </Show>
+              Cancel install
+            </Button>
+          </Show>
+        </div>
+      }
+    >
+      <div class="space-y-4">
+        <div class="space-y-1">
+          <div class="text-sm text-foreground">
+            Redeven installs a managed <span class="font-mono">code-server</span> runtime only after you explicitly confirm it here.
+          </div>
+          <div class="text-xs text-muted-foreground">
+            Installer source: official <span class="font-mono">code-server install.sh</span> for the pinned Redeven-supported version.
+          </div>
+        </div>
+
+        <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          <div>Supported version: <span class="font-mono text-foreground">{props.status?.supported_version ?? "-"}</span></div>
+          <div>Managed location: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
+          <div>Installer URL: <span class="font-mono text-foreground break-all">{props.status?.installer_script_url ?? "-"}</span></div>
+          <Show when={props.pendingIntent}>
+            <div>Pending action: <span class="text-foreground">{props.pendingIntent?.kind === "open" ? "Open codespace after install" : "Start codespace after install"}</span></div>
+          </Show>
+        </div>
+
+        <Show when={installRunning()}>
+          <div class="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+            <div class="text-sm font-medium text-foreground">{codeRuntimeStageLabel(props.status?.install_stage)}</div>
+            <div class="text-xs text-muted-foreground">
+              This install was explicitly requested by you. Redeven will not retry automatically if it fails.
+            </div>
+          </div>
+        </Show>
+
+        <Show when={runtimeReady()}>
+          <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3 space-y-1">
+            <div class="text-sm font-medium text-foreground">Managed runtime is ready.</div>
+            <div class="text-xs text-muted-foreground">
+              Detected <span class="font-mono text-foreground">{props.status?.installed_version || props.status?.supported_version}</span> at{" "}
+              <span class="font-mono text-foreground break-all">{props.status?.binary_path ?? "-"}</span>.
+            </div>
+          </div>
+        </Show>
+
+        <Show when={installFailed() || installCancelled()}>
+          <div class="rounded-lg border border-border bg-muted/20 p-3 space-y-1">
+            <div class="text-sm font-medium text-foreground">
+              <Show when={installCancelled()} fallback="Install failed">
+                Install cancelled
+              </Show>
+            </div>
+            <div class="text-xs text-muted-foreground">
+              <Show when={installCancelled()} fallback={props.status?.last_error || "The official installer did not finish successfully."}>
+                The install was cancelled before the managed runtime was promoted.
+              </Show>
+            </div>
+          </div>
+        </Show>
+
+        <div class="flex items-center justify-between">
+          <div class="text-xs font-medium text-muted-foreground">Recent install output</div>
+          <Button size="sm" variant="ghost" onClick={props.onRefresh} disabled={props.loading}>
+            Refresh
+          </Button>
+        </div>
+        <pre
+          data-testid="code-runtime-log-tail"
+          class="max-h-48 overflow-auto rounded-lg border border-border bg-background/80 p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words"
+        >
+          {(props.status?.log_tail?.length ?? 0) > 0
+            ? props.status?.log_tail?.join("\n")
+            : "No install output yet."}
+        </pre>
+      </div>
+    </Dialog>
+  );
+}
+
 export function EnvCodespacesPage() {
   const notification = useNotification();
   const protocol = useProtocol();
@@ -509,6 +778,10 @@ export function EnvCodespacesPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<SpaceStatus | null>(null);
   const [deleteLoading, setDeleteLoading] = createSignal(false);
+  const [installDialogOpen, setInstallDialogOpen] = createSignal(false);
+  const [pendingIntent, setPendingIntent] = createSignal<PendingCodespaceIntent>(null);
+  const [runtimeInstallSubmitting, setRuntimeInstallSubmitting] = createSignal(false);
+  const [runtimeCancelSubmitting, setRuntimeCancelSubmitting] = createSignal(false);
   const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
   const [codespaceContextMenu, setCodespaceContextMenu] = createSignal<CodespaceContextMenuState | null>(null);
   let codespaceContextMenuEl: HTMLDivElement | null = null;
@@ -540,6 +813,7 @@ export function EnvCodespacesPage() {
     const list = out?.spaces;
     return Array.isArray(list) ? list : [];
   });
+  const [runtimeStatus, { refetch: refetchRuntimeStatus }] = createResource<CodeRuntimeStatus>(fetchCodeRuntimeStatus);
 
   // Load home directory path
   createEffect(() => {
@@ -559,6 +833,18 @@ export function EnvCodespacesPage() {
     homePath();
     cache = new Map();
     setFiles([]);
+  });
+
+  createEffect(() => {
+    const status = runtimeStatus();
+    if (!codeRuntimeInstalling(status)) return;
+
+    const timer = window.setInterval(() => {
+      void refetchRuntimeStatus();
+    }, 1000);
+    onCleanup(() => {
+      window.clearInterval(timer);
+    });
   });
 
   createEffect(() => {
@@ -643,7 +929,55 @@ export function EnvCodespacesPage() {
     }
   };
 
+  const openInstallDialog = (intent: PendingCodespaceIntent = null) => {
+    setPendingIntent(intent);
+    setInstallDialogOpen(true);
+  };
+
+  const ensureCodeRuntimeAvailable = async (kind: "open" | "start", space: SpaceStatus): Promise<boolean> => {
+    const current = runtimeStatus();
+    if (codeRuntimeReady(current)) return true;
+    try {
+      const latest = await fetchCodeRuntimeStatus();
+      await refetchRuntimeStatus();
+      if (codeRuntimeReady(latest)) return true;
+    } catch {
+      // Ignore and fall back to the explicit install dialog.
+    }
+    openInstallDialog({
+      kind,
+      code_space_id: space.code_space_id,
+      name: space.name || space.code_space_id,
+    });
+    return false;
+  };
+
+  const startRuntimeInstall = async () => {
+    setRuntimeInstallSubmitting(true);
+    try {
+      await installCodeRuntime();
+      await refetchRuntimeStatus();
+    } catch (e) {
+      notification.error("Failed to start install", e instanceof Error ? e.message : String(e));
+    } finally {
+      setRuntimeInstallSubmitting(false);
+    }
+  };
+
+  const cancelRuntimeInstallFlow = async () => {
+    setRuntimeCancelSubmitting(true);
+    try {
+      await cancelCodeRuntimeInstall();
+      await refetchRuntimeStatus();
+    } catch (e) {
+      notification.error("Failed to cancel install", e instanceof Error ? e.message : String(e));
+    } finally {
+      setRuntimeCancelSubmitting(false);
+    }
+  };
+
   const handleStart = async (space: SpaceStatus) => {
+    if (!(await ensureCodeRuntimeAvailable("start", space))) return;
     if (busyActionOf(space.code_space_id)) return;
     setBusyAction(space.code_space_id, "start");
     try {
@@ -690,6 +1024,7 @@ export function EnvCodespacesPage() {
   };
 
   const handleOpen = async (space: SpaceStatus) => {
+    if (!(await ensureCodeRuntimeAvailable("open", space))) return;
     if (busyActionOf(space.code_space_id)) return;
     setBusyAction(space.code_space_id, "open");
     try {
@@ -700,6 +1035,26 @@ export function EnvCodespacesPage() {
     } finally {
       clearBusyAction(space.code_space_id);
     }
+  };
+
+  const continuePendingIntent = async () => {
+    const intent = pendingIntent();
+    if (!intent) {
+      setInstallDialogOpen(false);
+      return;
+    }
+    const space = spaceList().find((item) => item.code_space_id === intent.code_space_id);
+    setPendingIntent(null);
+    setInstallDialogOpen(false);
+    if (!space) {
+      notification.error("Codespace missing", `Could not find "${intent.name}" anymore.`);
+      return;
+    }
+    if (intent.kind === "start") {
+      await handleStart(space);
+      return;
+    }
+    await handleOpen(space);
   };
 
   const openDeleteDialog = (space: SpaceStatus) => {
@@ -787,6 +1142,32 @@ export function EnvCodespacesPage() {
   };
 
   const spaceList = () => spaces() ?? [];
+  const runtimeBannerError = () => {
+    const err = runtimeStatus.error;
+    if (err instanceof Error) return err.message;
+    if (typeof err === "string") return err;
+    return null;
+  };
+  const showRuntimeBanner = () => {
+    const status = runtimeStatus();
+    if (runtimeStatus.loading || runtimeBannerError()) return true;
+    if (!status) return false;
+    return codeRuntimeMissing(status)
+      || status.install_state === "running"
+      || status.install_state === "failed"
+      || status.install_state === "cancelled";
+  };
+  const closeInstallDialog = (open: boolean) => {
+    if (!open) {
+      setInstallDialogOpen(false);
+      setPendingIntent(null);
+      return;
+    }
+    setInstallDialogOpen(true);
+  };
+  const handleRefreshAll = async () => {
+    await Promise.all([refetch(), refetchRuntimeStatus()]);
+  };
   const sortedSpaces = () => {
     return [...spaceList()].sort((a, b) => {
       // Running spaces first
@@ -809,7 +1190,7 @@ export function EnvCodespacesPage() {
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-              <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={spaces.loading} aria-label="Refresh" title="Refresh" class={outlineControlClass}>
+              <Button size="sm" variant="outline" onClick={() => void handleRefreshAll()} disabled={spaces.loading || runtimeStatus.loading} aria-label="Refresh" title="Refresh" class={outlineControlClass}>
                 <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path
                     stroke-linecap="round"
@@ -827,6 +1208,19 @@ export function EnvCodespacesPage() {
               </Button>
             </div>
           </div>
+
+          <Show when={showRuntimeBanner()}>
+            <CodeRuntimeBanner
+              status={runtimeStatus()}
+              loading={runtimeStatus.loading}
+              error={runtimeBannerError()}
+              onInstall={() => openInstallDialog()}
+              onRefresh={() => {
+                void refetchRuntimeStatus();
+              }}
+              onViewDetails={() => openInstallDialog(pendingIntent())}
+            />
+          </Show>
 
           {/* Codespaces list */}
           <div class="relative" style={{ "min-height": "200px" }}>
@@ -864,6 +1258,31 @@ export function EnvCodespacesPage() {
         onOpenChange={setCreateDialogOpen}
         onCreate={handleCreate}
         onLoadDir={handleLoadDir}
+      />
+
+      <CodeRuntimeInstallDialog
+        open={installDialogOpen()}
+        status={runtimeStatus()}
+        loading={runtimeStatus.loading}
+        installSubmitting={runtimeInstallSubmitting()}
+        cancelSubmitting={runtimeCancelSubmitting()}
+        pendingIntent={pendingIntent()}
+        onOpenChange={closeInstallDialog}
+        onInstall={() => {
+          void startRuntimeInstall();
+        }}
+        onCancelInstall={() => {
+          void cancelRuntimeInstallFlow();
+        }}
+        onRetry={() => {
+          void startRuntimeInstall();
+        }}
+        onRefresh={() => {
+          void refetchRuntimeStatus();
+        }}
+        onContinue={() => {
+          void continuePendingIntent();
+        }}
       />
 
       {/* Delete confirmation dialog */}
