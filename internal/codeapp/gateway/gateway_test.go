@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven-agent/internal/ai"
+	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/session"
 )
@@ -32,6 +33,7 @@ type stubBackend struct {
 	resolveCodeServerPort func(ctx context.Context, codeSpaceID string) (int, error)
 	codeRuntimeStatus     func(ctx context.Context) (CodeRuntimeStatus, error)
 	installCodeRuntime    func(ctx context.Context) (CodeRuntimeStatus, error)
+	uninstallCodeRuntime  func(ctx context.Context) (CodeRuntimeStatus, error)
 	cancelCodeRuntime     func(ctx context.Context) (CodeRuntimeStatus, error)
 }
 
@@ -89,7 +91,13 @@ func (s *stubBackend) InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus
 	}
 	return CodeRuntimeStatus{}, errors.New("not implemented")
 }
-func (s *stubBackend) CancelCodeRuntimeInstall(ctx context.Context) (CodeRuntimeStatus, error) {
+func (s *stubBackend) UninstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error) {
+	if s.uninstallCodeRuntime != nil {
+		return s.uninstallCodeRuntime(ctx)
+	}
+	return CodeRuntimeStatus{}, errors.New("not implemented")
+}
+func (s *stubBackend) CancelCodeRuntimeOperation(ctx context.Context) (CodeRuntimeStatus, error) {
 	if s.cancelCodeRuntime != nil {
 		return s.cancelCodeRuntime(ctx)
 	}
@@ -250,36 +258,83 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	channelID := "ch_runtime"
 	envOrigin := envOriginWithChannel(channelID)
 	var installCalls int
+	var uninstallCalls int
 	var cancelCalls int
 	b := &stubBackend{
 		codeRuntimeStatus: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			return CodeRuntimeStatus{
 				SupportedVersion: "4.108.2",
-				DetectionState:   "missing",
-				InstallState:     "idle",
-				Source:           "none",
-				ManagedPrefix:    "/tmp/runtime",
+				ActiveRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "none",
+				},
+				ManagedRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "managed",
+				},
+				ManagedPrefix: "/tmp/runtime",
+				Operation: codeserver.RuntimeOperationStatus{
+					State: "idle",
+				},
 			}, nil
 		},
 		installCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			installCalls++
 			return CodeRuntimeStatus{
 				SupportedVersion: "4.108.2",
-				DetectionState:   "missing",
-				InstallState:     "running",
-				InstallStage:     "installing",
-				Source:           "none",
-				ManagedPrefix:    "/tmp/runtime",
+				ActiveRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "none",
+				},
+				ManagedRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "managed",
+				},
+				ManagedPrefix: "/tmp/runtime",
+				Operation: codeserver.RuntimeOperationStatus{
+					Action: "install",
+					State:  "running",
+					Stage:  "installing",
+				},
+			}, nil
+		},
+		uninstallCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
+			uninstallCalls++
+			return CodeRuntimeStatus{
+				SupportedVersion: "4.108.2",
+				ActiveRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "none",
+				},
+				ManagedRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "managed",
+				},
+				ManagedPrefix: "/tmp/runtime",
+				Operation: codeserver.RuntimeOperationStatus{
+					Action: "uninstall",
+					State:  "running",
+					Stage:  "removing",
+				},
 			}, nil
 		},
 		cancelCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			cancelCalls++
 			return CodeRuntimeStatus{
 				SupportedVersion: "4.108.2",
-				DetectionState:   "missing",
-				InstallState:     "cancelled",
-				Source:           "none",
-				ManagedPrefix:    "/tmp/runtime",
+				ActiveRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "none",
+				},
+				ManagedRuntime: codeserver.RuntimeTargetStatus{
+					DetectionState: "missing",
+					Source:         "managed",
+				},
+				ManagedPrefix: "/tmp/runtime",
+				Operation: codeserver.RuntimeOperationStatus{
+					Action: "install",
+					State:  "cancelled",
+				},
 			}, nil
 		},
 	}
@@ -317,8 +372,19 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	if installCalls != 1 {
 		t.Fatalf("install_calls=%d, want 1", installCalls)
 	}
-	if !bytes.Contains(installResp.Body.Bytes(), []byte(`"install_state":"running"`)) {
+	if !bytes.Contains(installResp.Body.Bytes(), []byte(`"state":"running"`)) {
 		t.Fatalf("install body missing running state: %s", installResp.Body.String())
+	}
+
+	uninstallResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/uninstall")
+	if uninstallResp.Code != http.StatusOK {
+		t.Fatalf("uninstall code=%d, want %d", uninstallResp.Code, http.StatusOK)
+	}
+	if uninstallCalls != 1 {
+		t.Fatalf("uninstall_calls=%d, want 1", uninstallCalls)
+	}
+	if !bytes.Contains(uninstallResp.Body.Bytes(), []byte(`"action":"uninstall"`)) {
+		t.Fatalf("uninstall body missing uninstall action: %s", uninstallResp.Body.String())
 	}
 
 	cancelResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/cancel")
@@ -328,7 +394,7 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	if cancelCalls != 1 {
 		t.Fatalf("cancel_calls=%d, want 1", cancelCalls)
 	}
-	if !bytes.Contains(cancelResp.Body.Bytes(), []byte(`"install_state":"cancelled"`)) {
+	if !bytes.Contains(cancelResp.Body.Bytes(), []byte(`"state":"cancelled"`)) {
 		t.Fatalf("cancel body missing cancelled state: %s", cancelResp.Body.String())
 	}
 }

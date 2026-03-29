@@ -255,11 +255,18 @@ func (s *Service) InstallCodeRuntime(ctx context.Context) (gateway.CodeRuntimeSt
 	return gateway.CodeRuntimeStatus(s.runtime.StartInstall(ctx)), nil
 }
 
-func (s *Service) CancelCodeRuntimeInstall(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) UninstallCodeRuntime(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
 		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	return gateway.CodeRuntimeStatus(s.runtime.CancelInstall(ctx)), nil
+	return gateway.CodeRuntimeStatus(s.runtime.StartUninstall(ctx)), nil
+}
+
+func (s *Service) CancelCodeRuntimeOperation(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	return gateway.CodeRuntimeStatus(s.runtime.CancelOperation(ctx)), nil
 }
 
 func (s *Service) UpdateSpace(ctx context.Context, codeSpaceID string, req gateway.UpdateSpaceRequest) (*gateway.SpaceStatus, error) {

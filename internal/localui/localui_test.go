@@ -70,15 +70,19 @@ func (localUITestBackend) ResolveCodeServerPort(context.Context, string) (int, e
 }
 
 func (localUITestBackend) CodeRuntimeStatus(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{Source: "none"}, nil
+	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 
 func (localUITestBackend) InstallCodeRuntime(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{Source: "none"}, nil
+	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) CancelCodeRuntimeInstall(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{Source: "none"}, nil
+func (localUITestBackend) UninstallCodeRuntime(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{}, nil
+}
+
+func (localUITestBackend) CancelCodeRuntimeOperation(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 
 func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {

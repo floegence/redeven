@@ -22,10 +22,10 @@ import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import {
-  cancelCodeRuntimeInstall,
-  codeRuntimeStageLabel,
+  cancelCodeRuntimeOperation,
   fetchCodeRuntimeStatus,
   installCodeRuntime,
+  uninstallCodeRuntime,
   type CodeRuntimeStatus,
 } from '../services/codeRuntimeApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -33,6 +33,7 @@ import { CodexIcon, CodexNavigationIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 import { AIProviderDialog } from './settings/AIProviderDialog';
+import { CodeRuntimeSettingsCard } from './settings/CodeRuntimeSettingsCard';
 import {
   DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT,
   cloneAIProviderRow,
@@ -408,7 +409,7 @@ export function EnvSettingsPage() {
   });
 
   createEffect(() => {
-    if (codeRuntimeStatus()?.install_state !== 'running') return;
+    if (codeRuntimeStatus()?.operation.state !== 'running') return;
     const timer = window.setInterval(() => {
       void refetchCodeRuntimeStatus();
     }, 1000);
@@ -488,6 +489,7 @@ export function EnvSettingsPage() {
   const [policyView, setPolicyView] = createSignal<ViewMode>('ui');
   const [aiView, setAiView] = createSignal<ViewMode>('ui');
   const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
+  const [codeRuntimeUninstallLoading, setCodeRuntimeUninstallLoading] = createSignal(false);
   const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
 
   // Dirty flags
@@ -522,10 +524,22 @@ export function EnvSettingsPage() {
       setCodeRuntimeActionLoading(false);
     }
   };
-  const cancelManagedCodeRuntimeInstall = async () => {
+  const uninstallManagedCodeRuntime = async () => {
+    setCodeRuntimeUninstallLoading(true);
+    try {
+      await uninstallCodeRuntime();
+      await refetchCodeRuntimeStatus();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Uninstall failed', msg || 'Request failed.');
+    } finally {
+      setCodeRuntimeUninstallLoading(false);
+    }
+  };
+  const cancelManagedCodeRuntimeOperation = async () => {
     setCodeRuntimeCancelLoading(true);
     try {
-      await cancelCodeRuntimeInstall();
+      await cancelCodeRuntimeOperation();
       await refetchCodeRuntimeStatus();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -698,54 +712,9 @@ export function EnvSettingsPage() {
     ] as const;
   });
   const codeRuntimeStatusError = createMemo(() => {
-    const payloadError = String(codeRuntimeStatus()?.last_error ?? '').trim();
-    if (payloadError) return payloadError;
     const err = codeRuntimeStatus.error;
     if (!err) return null;
     return err instanceof Error ? err.message : String(err);
-  });
-  const codeRuntimeStatusRows = createMemo(() => {
-    const current = codeRuntimeStatus();
-    return [
-      {
-        label: 'detection_state',
-        value: current?.detection_state || 'Unknown',
-        note: 'Whether the selected code-server runtime is ready, missing, or incompatible.',
-      },
-      {
-        label: 'install_state',
-        value: current?.install_state || 'idle',
-        note: 'Explicit install flow state managed by Redeven.',
-      },
-      {
-        label: 'installed_version',
-        value: current?.installed_version || 'Not detected',
-        note: 'Resolved code-server version from the selected runtime.',
-      },
-      {
-        label: 'binary_path',
-        value: current?.binary_path || 'Not detected',
-        note: 'Resolved runtime binary path used for Codespaces.',
-        mono: true,
-      },
-      {
-        label: 'managed_prefix',
-        value: current?.managed_prefix || 'Not detected',
-        note: 'Redeven-managed install prefix for the pinned standalone runtime.',
-        mono: true,
-      },
-      {
-        label: 'installer_script_url',
-        value: current?.installer_script_url || 'Not detected',
-        note: 'Official upstream install script URL Redeven uses for explicit install.',
-        mono: true,
-      },
-      {
-        label: 'error',
-        value: codeRuntimeStatusError() || 'None',
-        note: 'Latest install or compatibility error, if any.',
-      },
-    ] as const;
   });
   const aiModelOptions = createMemo(() => collectAIModelOptions(aiProviders()));
   const aiProviderDialogProvider = createMemo(() => aiProviderDialogDraft());
@@ -2919,185 +2888,134 @@ export function EnvSettingsPage() {
           </div>
 
           <div id={settingsSectionElementID('codespaces')} class="scroll-mt-6">
-            <SettingsCard
-              icon={Code}
-              title="Codespaces"
-              description="Managed code-server runtime status plus the port range for Codespaces instances."
-              badge={codeRuntimeStatus()?.detection_state === 'ready' ? 'Runtime ready' : 'Runtime needs install'}
-              badgeVariant={codeRuntimeStatus()?.detection_state === 'ready' ? 'success' : 'warning'}
-              error={codespacesError()}
-              actions={
-                <>
-                  <Button size="sm" variant="outline" onClick={() => void refreshCodeRuntimeStatus()} disabled={codeRuntimeStatus.loading}>
-                    <RefreshIcon class="mr-2 h-4 w-4" />
-                    {codeRuntimeStatus.loading ? 'Refreshing...' : 'Refresh runtime'}
-                  </Button>
-                  <Show
-                    when={codeRuntimeStatus()?.install_state === 'running'}
-                    fallback={
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => void installManagedCodeRuntime()}
-                        disabled={!canInteract() || !canManageCodeRuntime() || codeRuntimeActionLoading()}
-                      >
-                        {codeRuntimeActionLoading() ? 'Starting install...' : (codeRuntimeStatus()?.managed ? 'Reinstall managed runtime' : 'Install code-server')}
-                      </Button>
-                    }
-                  >
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void cancelManagedCodeRuntimeInstall()}
-                      disabled={!canInteract() || !canManageCodeRuntime() || codeRuntimeCancelLoading()}
-                    >
-                      {codeRuntimeCancelLoading() ? 'Cancelling...' : 'Cancel install'}
-                    </Button>
-                  </Show>
-                  <ViewToggle value={codespacesView} disabled={!canInteract()} onChange={(value) => switchCodespacesView(value)} />
-                  <AutoSaveIndicator
-                    dirty={codespacesDirty()}
-                    saving={codespacesSaving()}
-                    error={codespacesError()}
-                    savedAt={codespacesSavedAt()}
-                    enabled={canInteract()}
-                  />
-                </>
-              }
-              >
-                <div class="space-y-6">
-                  <div class="flex flex-wrap gap-2">
-                    <SettingsPill tone={codeRuntimeStatus()?.detection_state === 'ready' ? 'success' : 'default'}>
-                      {codeRuntimeStatus()?.detection_state === 'ready' ? 'Runtime detected' : 'Runtime missing or incompatible'}
-                    </SettingsPill>
-                    <SettingsPill tone={codeRuntimeStatus()?.managed ? 'success' : 'default'}>
-                      {codeRuntimeStatus()?.managed ? 'Redeven-managed runtime' : 'Using host/runtime discovery'}
-                    </SettingsPill>
-                    <SettingsPill tone={codeRuntimeStatus()?.install_state === 'running' ? 'warning' : 'default'}>
-                      {codeRuntimeStatus()?.install_state === 'running' ? codeRuntimeStageLabel(codeRuntimeStatus()?.install_stage) : `Install state: ${codeRuntimeStatus()?.install_state ?? 'idle'}`}
-                    </SettingsPill>
-                  </div>
+            <div class="space-y-4">
+              <CodeRuntimeSettingsCard
+                status={codeRuntimeStatus()}
+                loading={codeRuntimeStatus.loading}
+                error={codeRuntimeStatusError()}
+                canInteract={canInteract()}
+                canManage={canManageCodeRuntime()}
+                actionLoading={codeRuntimeActionLoading()}
+                uninstallLoading={codeRuntimeUninstallLoading()}
+                cancelLoading={codeRuntimeCancelLoading()}
+                onRefresh={() => void refreshCodeRuntimeStatus()}
+                onInstall={() => installManagedCodeRuntime()}
+                onUninstall={() => uninstallManagedCodeRuntime()}
+                onCancel={() => cancelManagedCodeRuntimeOperation()}
+              />
 
-                  <Show when={!canManageCodeRuntime()}>
-                    <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
-                      <Code class="h-5 w-5 text-muted-foreground" />
-                      <div class="text-sm text-muted-foreground">
-                        Installing or changing the managed code-server runtime requires read, write, and execute access for this environment session.
-                      </div>
-                    </div>
-                  </Show>
-
-                  <Show when={codeRuntimeStatusError()}>
-                    <div class="rounded-lg border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-                      {codeRuntimeStatusError()}
-                    </div>
-                  </Show>
-
-                  <SettingsKeyValueTable rows={codeRuntimeStatusRows()} minWidthClass="min-w-[52rem]" />
-
-                  <div class="rounded-lg border border-border bg-muted/20 p-4">
-                    <div class="text-sm font-semibold text-foreground">Install output</div>
-                    <div class="mt-2 rounded-md border border-border bg-background/80 p-3 text-xs leading-6 text-muted-foreground whitespace-pre-wrap break-words">
-                      {(codeRuntimeStatus()?.log_tail?.length ?? 0) > 0
-                        ? codeRuntimeStatus()?.log_tail?.join('\n')
-                        : 'No managed install output yet.'}
-                    </div>
-                  </div>
-
-              <Show
-                when={codespacesView() === 'ui'}
-                fallback={
-                  <JSONEditor
-                    value={codespacesJSON()}
-                    onChange={(value) => {
-                      setCodespacesJSON(value);
-                      setCodespacesDirty(true);
-                    }}
-                    disabled={!canInteract()}
-                    rows={5}
-                  />
+              <SettingsCard
+                icon={Code}
+                title="Codespaces Ports"
+                description="Configure the port range used for Codespaces instances."
+                error={codespacesError()}
+                actions={
+                  <>
+                    <ViewToggle value={codespacesView} disabled={!canInteract()} onChange={(value) => switchCodespacesView(value)} />
+                    <AutoSaveIndicator
+                      dirty={codespacesDirty()}
+                      saving={codespacesSaving()}
+                      error={codespacesError()}
+                      savedAt={codespacesSavedAt()}
+                      enabled={canInteract()}
+                    />
+                  </>
                 }
               >
-                <SettingsTable minWidthClass="min-w-[48rem]">
-                  <SettingsTableHead>
-                    <SettingsTableHeaderRow>
-                      <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
-                      <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-                      <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
-                    </SettingsTableHeaderRow>
-                  </SettingsTableHead>
-                  <SettingsTableBody>
-                    <SettingsTableRow>
-                      <SettingsTableCell class="font-medium text-muted-foreground">Port policy</SettingsTableCell>
-                      <SettingsTableCell>
-                        <div class="flex items-center gap-3">
-                          <Checkbox
-                            checked={useDefaultCodePorts()}
-                            onChange={(value) => {
-                              setUseDefaultCodePorts(value);
+                <Show
+                  when={codespacesView() === 'ui'}
+                  fallback={
+                    <JSONEditor
+                      value={codespacesJSON()}
+                      onChange={(value) => {
+                        setCodespacesJSON(value);
+                        setCodespacesDirty(true);
+                      }}
+                      disabled={!canInteract()}
+                      rows={5}
+                    />
+                  }
+                >
+                  <SettingsTable minWidthClass="min-w-[48rem]">
+                    <SettingsTableHead>
+                      <SettingsTableHeaderRow>
+                        <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
+                        <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
+                      </SettingsTableHeaderRow>
+                    </SettingsTableHead>
+                    <SettingsTableBody>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">Port policy</SettingsTableCell>
+                        <SettingsTableCell>
+                          <div class="flex items-center gap-3">
+                            <Checkbox
+                              checked={useDefaultCodePorts()}
+                              onChange={(value) => {
+                                setUseDefaultCodePorts(value);
+                                setCodespacesDirty(true);
+                              }}
+                              disabled={!canInteract()}
+                              label="Use default port range"
+                              size="sm"
+                            />
+                            <SettingsPill tone={useDefaultCodePorts() ? 'success' : 'default'}>
+                              {useDefaultCodePorts() ? 'Default' : 'Custom'}
+                            </SettingsPill>
+                          </div>
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">
+                          Default range: <span class="font-mono">{DEFAULT_CODE_SERVER_PORT_MIN}</span> - <span class="font-mono">{DEFAULT_CODE_SERVER_PORT_MAX}</span>
+                        </SettingsTableCell>
+                      </SettingsTableRow>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">Effective range</SettingsTableCell>
+                        <SettingsTableCell class="font-mono text-[11px]">
+                          {codespacesEffective().effective_min} - {codespacesEffective().effective_max}
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Computed range after validation and fallback logic.</SettingsTableCell>
+                      </SettingsTableRow>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_min</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Input
+                            value={codePortMin() === '' ? '' : String(codePortMin())}
+                            onInput={(event) => {
+                              const value = event.currentTarget.value.trim();
+                              setCodePortMin(value ? Number(value) : '');
                               setCodespacesDirty(true);
                             }}
-                            disabled={!canInteract()}
-                            label="Use default port range"
+                            placeholder="20000"
                             size="sm"
+                            class="w-full"
+                            disabled={!canInteract() || useDefaultCodePorts()}
                           />
-                          <SettingsPill tone={useDefaultCodePorts() ? 'success' : 'default'}>
-                            {useDefaultCodePorts() ? 'Default' : 'Custom'}
-                          </SettingsPill>
-                        </div>
-                      </SettingsTableCell>
-                      <SettingsTableCell class="text-[11px] text-muted-foreground">
-                        Default range: <span class="font-mono">{DEFAULT_CODE_SERVER_PORT_MIN}</span> - <span class="font-mono">{DEFAULT_CODE_SERVER_PORT_MAX}</span>
-                      </SettingsTableCell>
-                    </SettingsTableRow>
-                    <SettingsTableRow>
-                      <SettingsTableCell class="font-medium text-muted-foreground">Effective range</SettingsTableCell>
-                      <SettingsTableCell class="font-mono text-[11px]">
-                        {codespacesEffective().effective_min} - {codespacesEffective().effective_max}
-                      </SettingsTableCell>
-                      <SettingsTableCell class="text-[11px] text-muted-foreground">Computed range after validation and fallback logic.</SettingsTableCell>
-                    </SettingsTableRow>
-                    <SettingsTableRow>
-                      <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_min</SettingsTableCell>
-                      <SettingsTableCell>
-                        <Input
-                          value={codePortMin() === '' ? '' : String(codePortMin())}
-                          onInput={(event) => {
-                            const value = event.currentTarget.value.trim();
-                            setCodePortMin(value ? Number(value) : '');
-                            setCodespacesDirty(true);
-                          }}
-                          placeholder="20000"
-                          size="sm"
-                          class="w-full"
-                          disabled={!canInteract() || useDefaultCodePorts()}
-                        />
-                      </SettingsTableCell>
-                      <SettingsTableCell class="text-[11px] text-muted-foreground">Start of the custom code-server port range.</SettingsTableCell>
-                    </SettingsTableRow>
-                    <SettingsTableRow>
-                      <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_max</SettingsTableCell>
-                      <SettingsTableCell>
-                        <Input
-                          value={codePortMax() === '' ? '' : String(codePortMax())}
-                          onInput={(event) => {
-                            const value = event.currentTarget.value.trim();
-                            setCodePortMax(value ? Number(value) : '');
-                            setCodespacesDirty(true);
-                          }}
-                          placeholder="21000"
-                          size="sm"
-                          class="w-full"
-                          disabled={!canInteract() || useDefaultCodePorts()}
-                        />
-                      </SettingsTableCell>
-                      <SettingsTableCell class="text-[11px] text-muted-foreground">End of the custom code-server port range.</SettingsTableCell>
-                    </SettingsTableRow>
-                  </SettingsTableBody>
-                </SettingsTable>
-              </Show>
-                </div>
-            </SettingsCard>
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Start of the custom code-server port range.</SettingsTableCell>
+                      </SettingsTableRow>
+                      <SettingsTableRow>
+                        <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_max</SettingsTableCell>
+                        <SettingsTableCell>
+                          <Input
+                            value={codePortMax() === '' ? '' : String(codePortMax())}
+                            onInput={(event) => {
+                              const value = event.currentTarget.value.trim();
+                              setCodePortMax(value ? Number(value) : '');
+                              setCodespacesDirty(true);
+                            }}
+                            placeholder="21000"
+                            size="sm"
+                            class="w-full"
+                            disabled={!canInteract() || useDefaultCodePorts()}
+                          />
+                        </SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">End of the custom code-server port range.</SettingsTableCell>
+                      </SettingsTableRow>
+                    </SettingsTableBody>
+                  </SettingsTable>
+                </Show>
+              </SettingsCard>
+            </div>
           </div>
         </SectionGroup>
 

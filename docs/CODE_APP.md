@@ -95,18 +95,34 @@ Env App uses the local gateway runtime endpoints before it tries to start Code A
 
 - `GET /_redeven_proxy/api/code-runtime/status`
 - `POST /_redeven_proxy/api/code-runtime/install`
+- `POST /_redeven_proxy/api/code-runtime/uninstall`
 - `POST /_redeven_proxy/api/code-runtime/cancel`
 
 The explicit install flow is:
 
 1. Env App reads runtime status.
-2. If the runtime is missing or incompatible, Env App shows a dedicated install UI instead of trying to start a codespace.
-3. After the user clicks `Install code-server`, the agent:
+2. Env App Settings exposes a dedicated `code-server Runtime` management card that shows:
+   - the active runtime selected for Codespaces,
+   - the Redeven-managed runtime under the agent state directory,
+   - the explicit management operation status and recent logs.
+3. If the runtime is missing or incompatible, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
+4. After the user explicitly clicks `Install code-server` or `Upgrade managed runtime`, the agent:
    - downloads or reuses the official upstream `install.sh` for the pinned version,
    - runs it with `--method=standalone --prefix <managed staging prefix> --version <supported_version>`,
    - validates the installed binary version,
    - promotes the managed runtime into the stable managed prefix.
-4. Env App shows progress, result state, and any recent installer output.
+5. If the user explicitly clicks `Uninstall managed runtime`, the agent removes only the Redeven-managed runtime path. Host-installed runtimes and environment overrides are left untouched.
+6. Env App shows progress, result state, and any recent management output.
+
+## Runtime status model
+
+`GET /_redeven_proxy/api/code-runtime/status` returns:
+
+- `active_runtime`: the runtime currently selected for Codespaces (`managed`, `system`, `env_override`, or `none`)
+- `managed_runtime`: the Redeven-managed runtime under the agent state directory, whether or not it is currently selected
+- `operation`: the current or most recent explicit management operation (`install` / `uninstall`) plus stage, error, and log tail
+
+This split exists so Settings can truthfully show managed runtime state even when an env override or host runtime is active.
 
 ## code-server binary resolution
 
@@ -177,12 +193,12 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Open the codespace from the Redeven Env App (Codespaces page). Do not open the sandbox subdomain directly.
 
 - "code-server binary not found":
-  - Open Env App -> Codespaces -> `Install code-server`.
+  - Open Env App -> Agent Settings -> `code-server Runtime` -> `Install code-server`.
   - If you intentionally manage `code-server` yourself, set `REDEVEN_CODE_SERVER_BIN` to a compatible binary path.
 
 - "unsupported code-server version":
   - Redeven detected a `code-server` binary, but it does not match the pinned supported version.
-  - Install the Redeven-managed runtime from Env App -> Codespaces, or point `REDEVEN_CODE_SERVER_BIN` at a compatible binary.
+  - Upgrade or reinstall the Redeven-managed runtime from Env App -> Agent Settings -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a compatible binary.
 
 - "code-server did not start listening on 127.0.0.1:PORT":
   - Check the per-codespace logs under:

@@ -23,9 +23,9 @@ import { useEnvContext } from "./EnvContext";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { Tooltip } from "../primitives/Tooltip";
 import {
-  cancelCodeRuntimeInstall,
-  codeRuntimeInstalling,
+  cancelCodeRuntimeOperation,
   codeRuntimeMissing,
+  codeRuntimeOperationRunning,
   codeRuntimeReady,
   codeRuntimeStageLabel,
   fetchCodeRuntimeStatus,
@@ -517,9 +517,9 @@ function CreateCodespaceDialog(props: {
 
 function runtimeRequirementLabel(status: CodeRuntimeStatus | null | undefined): string {
   if (!status) return "code-server is required for Codespaces on this host.";
-  if (status.install_state === "running") return codeRuntimeStageLabel(status.install_stage);
-  if (status.detection_state === "incompatible") {
-    const version = String(status.installed_version ?? "").trim();
+  if (status.operation.state === "running") return codeRuntimeStageLabel(status.operation.stage, status.operation.action);
+  if (status.active_runtime.detection_state === "incompatible") {
+    const version = String(status.active_runtime.installed_version ?? "").trim();
     if (version) {
       return `Detected code-server ${version}, but Redeven currently supports ${status.supported_version}.`;
     }
@@ -537,9 +537,9 @@ function CodeRuntimeBanner(props: {
   onViewDetails: () => void;
 }) {
   const bannerVariant = () => {
-    if (props.error || props.status?.install_state === "failed") return "error" as const;
-    if (props.loading || props.status?.install_state === "running") return "info" as const;
-    if (props.status?.install_state === "cancelled" || props.status?.detection_state === "incompatible") return "warning" as const;
+    if (props.error || props.status?.operation.state === "failed") return "error" as const;
+    if (props.loading || props.status?.operation.state === "running") return "info" as const;
+    if (props.status?.operation.state === "cancelled" || props.status?.active_runtime.detection_state === "incompatible") return "warning" as const;
     return "note" as const;
   };
 
@@ -547,10 +547,10 @@ function CodeRuntimeBanner(props: {
     const status = props.status;
     if (props.loading) return "Checking runtime";
     if (!status) return "Runtime unavailable";
-    if (status.install_state === "running") return "Installing";
-    if (status.install_state === "failed") return "Install failed";
-    if (status.install_state === "cancelled") return "Install cancelled";
-    if (status.detection_state === "incompatible") return "Version mismatch";
+    if (status.operation.state === "running") return status.operation.action === "uninstall" ? "Removing" : "Installing";
+    if (status.operation.state === "failed") return status.operation.action === "uninstall" ? "Uninstall failed" : "Install failed";
+    if (status.operation.state === "cancelled") return status.operation.action === "uninstall" ? "Uninstall cancelled" : "Install cancelled";
+    if (status.active_runtime.detection_state === "incompatible") return "Version mismatch";
     return "Not installed";
   };
 
@@ -574,11 +574,11 @@ function CodeRuntimeBanner(props: {
           {props.error ? props.error : runtimeRequirementLabel(props.status)}
         </div>
         <div class="grid gap-1 text-[11px] text-muted-foreground">
-          <Show when={props.status?.installed_version}>
-            <div>Detected version: <span class="font-mono">{props.status?.installed_version}</span></div>
+          <Show when={props.status?.active_runtime.installed_version}>
+            <div>Detected version: <span class="font-mono">{props.status?.active_runtime.installed_version}</span></div>
           </Show>
-          <Show when={props.status?.binary_path}>
-            <div>Detected path: <span class="font-mono break-all">{props.status?.binary_path}</span></div>
+          <Show when={props.status?.active_runtime.binary_path}>
+            <div>Detected path: <span class="font-mono break-all">{props.status?.active_runtime.binary_path}</span></div>
           </Show>
           <Show when={props.status?.managed_prefix}>
             <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
@@ -589,7 +589,7 @@ function CodeRuntimeBanner(props: {
             Refresh status
           </Button>
           <Show
-            when={props.status?.install_state === "running" || props.status?.install_state === "failed" || props.status?.install_state === "cancelled"}
+            when={props.status?.operation.state === "running" || props.status?.operation.state === "failed" || props.status?.operation.state === "cancelled"}
             fallback={
               <Button size="sm" variant="default" onClick={props.onInstall}>
                 Install code-server
@@ -597,7 +597,7 @@ function CodeRuntimeBanner(props: {
             }
           >
             <Button size="sm" variant="default" onClick={props.onViewDetails}>
-              <Show when={props.status?.install_state === "running"} fallback="View details">
+              <Show when={props.status?.operation.state === "running"} fallback="View details">
                 View install
               </Show>
             </Button>
@@ -622,9 +622,9 @@ function CodeRuntimeInstallDialog(props: {
   onRefresh: () => void;
   onContinue: () => void;
 }) {
-  const installRunning = () => codeRuntimeInstalling(props.status);
-  const installFailed = () => props.status?.install_state === "failed";
-  const installCancelled = () => props.status?.install_state === "cancelled";
+  const installRunning = () => codeRuntimeOperationRunning(props.status);
+  const installFailed = () => props.status?.operation.state === "failed";
+  const installCancelled = () => props.status?.operation.state === "cancelled";
   const runtimeReady = () => codeRuntimeReady(props.status);
   const pendingActionLabel = () => {
     if (props.pendingIntent?.kind === "open") return "Continue to open codespace";
@@ -723,7 +723,7 @@ function CodeRuntimeInstallDialog(props: {
 
         <Show when={installRunning()}>
           <div class="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
-            <div class="text-sm font-medium text-foreground">{codeRuntimeStageLabel(props.status?.install_stage)}</div>
+            <div class="text-sm font-medium text-foreground">{codeRuntimeStageLabel(props.status?.operation.stage, props.status?.operation.action)}</div>
             <div class="text-xs text-muted-foreground">
               This install was explicitly requested by you. Redeven will not retry automatically if it fails.
             </div>
@@ -734,8 +734,8 @@ function CodeRuntimeInstallDialog(props: {
           <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3 space-y-1">
             <div class="text-sm font-medium text-foreground">Managed runtime is ready.</div>
             <div class="text-xs text-muted-foreground">
-              Detected <span class="font-mono text-foreground">{props.status?.installed_version || props.status?.supported_version}</span> at{" "}
-              <span class="font-mono text-foreground break-all">{props.status?.binary_path ?? "-"}</span>.
+              Detected <span class="font-mono text-foreground">{props.status?.managed_runtime.installed_version || props.status?.supported_version}</span> at{" "}
+              <span class="font-mono text-foreground break-all">{props.status?.managed_runtime.binary_path ?? "-"}</span>.
             </div>
           </div>
         </Show>
@@ -748,7 +748,7 @@ function CodeRuntimeInstallDialog(props: {
               </Show>
             </div>
             <div class="text-xs text-muted-foreground">
-              <Show when={installCancelled()} fallback={props.status?.last_error || "The official installer did not finish successfully."}>
+              <Show when={installCancelled()} fallback={props.status?.operation.last_error || "The official installer did not finish successfully."}>
                 The install was cancelled before the managed runtime was promoted.
               </Show>
             </div>
@@ -765,8 +765,8 @@ function CodeRuntimeInstallDialog(props: {
           data-testid="code-runtime-log-tail"
           class="max-h-48 overflow-auto rounded-lg border border-border bg-background/80 p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words"
         >
-          {(props.status?.log_tail?.length ?? 0) > 0
-            ? props.status?.log_tail?.join("\n")
+          {(props.status?.operation.log_tail?.length ?? 0) > 0
+            ? props.status?.operation.log_tail?.join("\n")
             : "No install output yet."}
         </pre>
       </div>
@@ -844,7 +844,7 @@ export function EnvCodespacesPage() {
 
   createEffect(() => {
     const status = runtimeStatus();
-    if (!codeRuntimeInstalling(status)) return;
+    if (!codeRuntimeOperationRunning(status)) return;
 
     const timer = window.setInterval(() => {
       void refetchRuntimeStatus();
@@ -974,7 +974,7 @@ export function EnvCodespacesPage() {
   const cancelRuntimeInstallFlow = async () => {
     setRuntimeCancelSubmitting(true);
     try {
-      await cancelCodeRuntimeInstall();
+      await cancelCodeRuntimeOperation();
       await refetchRuntimeStatus();
     } catch (e) {
       notification.error("Failed to cancel install", e instanceof Error ? e.message : String(e));
@@ -1160,9 +1160,9 @@ export function EnvCodespacesPage() {
     if (runtimeStatus.loading || runtimeBannerError()) return true;
     if (!status) return false;
     return codeRuntimeMissing(status)
-      || status.install_state === "running"
-      || status.install_state === "failed"
-      || status.install_state === "cancelled";
+      || status.operation.state === "running"
+      || status.operation.state === "failed"
+      || status.operation.state === "cancelled";
   };
   const closeInstallDialog = (open: boolean) => {
     if (!open) {
