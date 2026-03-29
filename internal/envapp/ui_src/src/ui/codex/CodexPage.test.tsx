@@ -1233,6 +1233,7 @@ describe('CodexPage', () => {
       expect(scrollRegion?.scrollTop).toBe(240);
 
       if (scrollRegion) {
+        scrollRegion.dispatchEvent(new Event('wheel'));
         scrollRegion.scrollTop = 40;
         scrollRegion.dispatchEvent(new Event('scroll'));
       }
@@ -1395,6 +1396,7 @@ describe('CodexPage', () => {
         });
       }
 
+      scrollRegion.dispatchEvent(new Event('wheel'));
       scrollRegion.scrollTop = 100;
       scrollRegion.dispatchEvent(new Event('scroll'));
       await flushAsync();
@@ -1406,6 +1408,195 @@ describe('CodexPage', () => {
       await flushAsync();
 
       expect(scrollRegion.scrollTop).toBe(140);
+    } finally {
+      restoreScrollMetrics();
+    }
+  });
+
+  it('keeps landing on the latest output across repeated thread switches even after non-user scroll perturbations', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const resizeObserverHarness = installResizeObserverHarness();
+
+    let transcriptScrollHeight = 240;
+    const restoreScrollMetrics = installTranscriptScrollMetrics({
+      getScrollHeight: () => transcriptScrollHeight,
+    });
+
+    try {
+      let codexContext!: ReturnType<typeof useCodexContext>;
+
+      fetchCodexStatusMock.mockResolvedValue({
+        available: true,
+        ready: true,
+        binary_path: '/usr/local/bin/codex',
+        agent_home_dir: '/workspace',
+      });
+      fetchCodexCapabilitiesMock.mockResolvedValue({
+        models: [
+          {
+            id: 'gpt-5.4',
+            display_name: 'GPT-5.4',
+            supports_image_input: true,
+            supported_reasoning_efforts: ['medium'],
+          },
+        ],
+        effective_config: {
+          cwd: '/workspace/ui',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        requirements: {
+          allowed_approval_policies: ['on-request'],
+          allowed_sandbox_modes: ['workspace-write'],
+        },
+      });
+      listCodexThreadsMock.mockResolvedValue([
+        {
+          id: 'thread_1',
+          name: 'Thread one',
+          preview: 'First thread preview',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 1,
+          updated_at_unix_s: 11,
+          status: 'completed',
+          cwd: '/workspace/ui',
+        },
+        {
+          id: 'thread_2',
+          name: 'Thread two',
+          preview: 'Second thread preview',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 2,
+          updated_at_unix_s: 10,
+          status: 'completed',
+          cwd: '/workspace/ui',
+        },
+        {
+          id: 'thread_3',
+          name: 'Thread three',
+          preview: 'Third thread preview',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 3,
+          updated_at_unix_s: 9,
+          status: 'completed',
+          cwd: '/workspace/ui',
+        },
+      ]);
+      openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+        thread: {
+          id: threadID,
+          name: threadID === 'thread_1' ? 'Thread one' : threadID === 'thread_2' ? 'Thread two' : 'Thread three',
+          preview: threadID === 'thread_1' ? 'First thread preview' : threadID === 'thread_2' ? 'Second thread preview' : 'Third thread preview',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: threadID === 'thread_1' ? 1 : threadID === 'thread_2' ? 2 : 3,
+          updated_at_unix_s: threadID === 'thread_1' ? 11 : threadID === 'thread_2' ? 12 : 13,
+          status: 'completed',
+          cwd: '/workspace/ui',
+          turns: [
+            {
+              id: `${threadID}_turn_1`,
+              status: 'completed',
+              items: [
+                {
+                  id: `${threadID}_item_user`,
+                  type: 'userMessage',
+                  text: `Open ${threadID}`,
+                },
+                {
+                  id: `${threadID}_item_agent`,
+                  type: 'agentMessage',
+                  text: `Loaded ${threadID}`,
+                  status: 'completed',
+                },
+              ],
+            },
+          ],
+        },
+        runtime_config: {
+          cwd: '/workspace/ui',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        pending_requests: [],
+        last_applied_seq: 4,
+        active_status: 'completed',
+        active_status_flags: [],
+      }));
+      connectCodexEventStreamMock.mockImplementation(async () => undefined);
+
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      renderPageWithHarness(host, (codex) => {
+        codexContext = codex;
+      });
+
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+
+      const scrollRegion = host.querySelector('[data-codex-transcript-scroll-region="true"]') as HTMLDivElement | null;
+      const transcriptRoot = host.querySelector('[data-codex-surface="transcript"]') as HTMLDivElement | null;
+
+      expect(scrollRegion).not.toBeNull();
+      expect(transcriptRoot).not.toBeNull();
+      expect(scrollRegion?.scrollTop).toBe(240);
+
+      transcriptScrollHeight = 320;
+      codexContext.selectThread('thread_2');
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+
+      expect(scrollRegion?.scrollTop).toBe(320);
+
+      if (!scrollRegion || !transcriptRoot) {
+        throw new Error('transcript not rendered');
+      }
+
+      scrollRegion.scrollTop = 100;
+      scrollRegion.dispatchEvent(new Event('scroll'));
+      await flushAsync();
+
+      expect(scrollRegion.scrollTop).toBe(320);
+
+      transcriptScrollHeight = 420;
+      codexContext.selectThread('thread_3');
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+
+      expect(scrollRegion.scrollTop).toBe(420);
+
+      transcriptScrollHeight = 520;
+      resizeObserverHarness.notify(transcriptRoot);
+      await flushAsync();
+      expect(scrollRegion.scrollTop).toBe(520);
+
+      scrollRegion.scrollTop = 260;
+      scrollRegion.dispatchEvent(new Event('scroll'));
+      await flushAsync();
+      expect(scrollRegion.scrollTop).toBe(520);
+
+      transcriptScrollHeight = 280;
+      codexContext.selectThread('thread_1');
+      await flushAsync();
+      await flushAsync();
+      await flushAsync();
+
+      expect(scrollRegion.scrollTop).toBe(280);
     } finally {
       restoreScrollMetrics();
     }

@@ -108,6 +108,83 @@ afterEach(() => {
 });
 
 describe('createFollowBottomController', () => {
+  it('reasserts bottom follow instead of pausing on non-user scroll events', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame(callback) {
+        callback(0);
+        return 1;
+      },
+      cancelAnimationFrame() {
+        // No-op for test harness.
+      },
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    let scrollHeight = 360;
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => scrollHeight,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.requestFollowBottom({ seq: 1, reason: 'thread_switch' });
+
+    expect(scrollContainer.scrollTop).toBe(360);
+    expect(controller.mode()).toBe('following');
+
+    scrollContainer.scrollTop = 120;
+    controller.handleScroll();
+
+    expect(controller.mode()).toBe('following');
+    expect(scrollContainer.scrollTop).toBe(360);
+    controller.dispose();
+  });
+
+  it('pauses follow mode only after a recent user scroll intent', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame(callback) {
+        callback(0);
+        return 1;
+      },
+      cancelAnimationFrame() {
+        // No-op for test harness.
+      },
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => 360,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.requestFollowBottom({ seq: 1, reason: 'thread_switch' });
+
+    scrollContainer.dispatchEvent(new Event('wheel'));
+    scrollContainer.scrollTop = 120;
+    controller.handleScroll();
+
+    expect(controller.mode()).toBe('paused');
+    expect(scrollContainer.scrollTop).toBe(120);
+    controller.dispose();
+  });
+
   it('keeps handling resize and explicit follow intents when requestAnimationFrame is synchronous', () => {
     const observerRecords: ObserverRecord[] = [];
     const controller = createFollowBottomController({
@@ -145,6 +222,7 @@ describe('createFollowBottomController', () => {
 
     expect(scrollContainer.scrollTop).toBe(360);
 
+    scrollContainer.dispatchEvent(new Event('wheel'));
     scrollContainer.scrollTop = 40;
     controller.handleScroll();
     expect(controller.mode()).toBe('paused');
@@ -247,6 +325,7 @@ describe('createFollowBottomController', () => {
     controller.setScrollContainer(scrollContainer);
     controller.setContentRoot(contentRoot);
 
+    scrollContainer.dispatchEvent(new Event('wheel'));
     scrollContainer.scrollTop = 100;
     controller.handleScroll();
 

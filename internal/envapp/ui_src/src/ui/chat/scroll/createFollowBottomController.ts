@@ -16,6 +16,10 @@ type ResizeObserverLike = Readonly<{
 }>;
 
 type ResizeObserverFactory = (callback: ResizeObserverCallback) => ResizeObserverLike | null;
+type EventTargetLike = Readonly<{
+  addEventListener: (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => void;
+  removeEventListener: (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => void;
+}>;
 
 export type FollowBottomController = Readonly<{
   setScrollContainer: (element: HTMLElement | null | undefined) => void;
@@ -30,16 +34,30 @@ export type FollowBottomController = Readonly<{
 export type CreateFollowBottomControllerArgs = Readonly<{
   followThresholdPx?: number;
   explicitSyncPasses?: number;
+  recentUserScrollIntentMs?: number;
   anchorAttribute?: string;
   createResizeObserver?: ResizeObserverFactory;
   requestAnimationFrame?: typeof requestAnimationFrame;
   cancelAnimationFrame?: typeof cancelAnimationFrame;
+  now?: () => number;
+  eventTarget?: EventTargetLike | null;
 }>;
 
 const DEFAULT_FOLLOW_THRESHOLD_PX = 72;
 const DEFAULT_EXPLICIT_SYNC_PASSES = 2;
+const DEFAULT_RECENT_USER_SCROLL_INTENT_MS = 640;
 const DEFAULT_ANCHOR_ATTRIBUTE = 'data-follow-bottom-anchor-id';
 const FOLLOW_RAF_PENDING = -1;
+const USER_SCROLL_KEYS = new Set([
+  'ArrowDown',
+  'ArrowUp',
+  'End',
+  'Home',
+  'PageDown',
+  'PageUp',
+  ' ',
+  'Spacebar',
+]);
 
 function defaultResizeObserverFactory(callback: ResizeObserverCallback): ResizeObserverLike | null {
   if (typeof ResizeObserver === 'undefined') return null;
@@ -83,10 +101,15 @@ export function createFollowBottomController(
 ): FollowBottomController {
   const followThresholdPx = Math.max(0, Number(args.followThresholdPx ?? DEFAULT_FOLLOW_THRESHOLD_PX) || 0);
   const explicitSyncPasses = Math.max(1, Number(args.explicitSyncPasses ?? DEFAULT_EXPLICIT_SYNC_PASSES) || 1);
+  const recentUserScrollIntentMs = Math.max(0, Number(
+    args.recentUserScrollIntentMs ?? DEFAULT_RECENT_USER_SCROLL_INTENT_MS,
+  ) || 0);
   const anchorAttribute = String(args.anchorAttribute ?? DEFAULT_ANCHOR_ATTRIBUTE).trim() || DEFAULT_ANCHOR_ATTRIBUTE;
   const createResizeObserver = args.createResizeObserver ?? defaultResizeObserverFactory;
   const requestFrame = args.requestAnimationFrame ?? globalThis.requestAnimationFrame ?? fallbackRequestAnimationFrame;
   const cancelFrame = args.cancelAnimationFrame ?? globalThis.cancelAnimationFrame ?? fallbackCancelAnimationFrame;
+  const now = args.now ?? Date.now;
+  const eventTarget = args.eventTarget ?? (typeof window !== 'undefined' ? window : null);
 
   let currentMode: FollowBottomMode = 'following';
   let currentDistanceToBottomPx = 0;
@@ -97,6 +120,68 @@ export function createFollowBottomController(
   let lastHandledRequestSeq = 0;
   let remainingSyncPasses = 0;
   let followRaf: number | null = null;
+  let recentUserScrollIntentUntilMs = 0;
+  let pointerScrollGestureActive = false;
+  let disposeUserScrollIntentListeners: (() => void) | null = null;
+
+  const clearUserScrollIntent = (): void => {
+    recentUserScrollIntentUntilMs = 0;
+    pointerScrollGestureActive = false;
+  };
+
+  const markUserScrollIntent = (): void => {
+    recentUserScrollIntentUntilMs = Math.max(recentUserScrollIntentUntilMs, now() + recentUserScrollIntentMs);
+  };
+
+  const hasRecentUserScrollIntent = (): boolean => (
+    pointerScrollGestureActive ||
+    now() <= recentUserScrollIntentUntilMs
+  );
+
+  const isUserScrollKey = (event: KeyboardEvent): boolean => {
+    if (event.defaultPrevented) return false;
+    if (event.altKey || event.ctrlKey || event.metaKey) return false;
+    return USER_SCROLL_KEYS.has(event.key);
+  };
+
+  const attachUserScrollIntentListeners = (element: HTMLElement): (() => void) => {
+    const handleWheel = () => {
+      markUserScrollIntent();
+    };
+    const handleTouch = () => {
+      markUserScrollIntent();
+    };
+    const handlePointerDown = () => {
+      pointerScrollGestureActive = true;
+      markUserScrollIntent();
+    };
+    const handlePointerUp = () => {
+      pointerScrollGestureActive = false;
+    };
+    const handleKeyDown = (event: Event) => {
+      if (event instanceof KeyboardEvent && isUserScrollKey(event)) {
+        markUserScrollIntent();
+      }
+    };
+
+    element.addEventListener('wheel', handleWheel);
+    element.addEventListener('touchstart', handleTouch);
+    element.addEventListener('touchmove', handleTouch);
+    element.addEventListener('pointerdown', handlePointerDown);
+    element.addEventListener('keydown', handleKeyDown);
+    eventTarget?.addEventListener('pointerup', handlePointerUp, true);
+    eventTarget?.addEventListener('pointercancel', handlePointerUp, true);
+
+    return () => {
+      element.removeEventListener('wheel', handleWheel);
+      element.removeEventListener('touchstart', handleTouch);
+      element.removeEventListener('touchmove', handleTouch);
+      element.removeEventListener('pointerdown', handlePointerDown);
+      element.removeEventListener('keydown', handleKeyDown);
+      eventTarget?.removeEventListener('pointerup', handlePointerUp, true);
+      eventTarget?.removeEventListener('pointercancel', handlePointerUp, true);
+    };
+  };
 
   const updateDistanceToBottom = (target?: HTMLElement | null): void => {
     const element = target ?? scrollContainerEl;
@@ -110,6 +195,7 @@ export function createFollowBottomController(
   const applyFollowingMode = (): void => {
     currentMode = 'following';
     viewportAnchor = null;
+    clearUserScrollIntent();
   };
 
   const captureViewportAnchor = (): FollowBottomViewportAnchor | null => {
@@ -193,10 +279,14 @@ export function createFollowBottomController(
     const nextElement = element ?? null;
     if (scrollContainerEl === nextElement) return;
     scrollContainerResizeObserver?.disconnect();
+    disposeUserScrollIntentListeners?.();
+    disposeUserScrollIntentListeners = null;
+    clearUserScrollIntent();
     scrollContainerEl = nextElement;
     prevScrollTop = nextElement?.scrollTop ?? 0;
     updateDistanceToBottom(nextElement);
     if (scrollContainerEl) {
+      disposeUserScrollIntentListeners = attachUserScrollIntentListeners(scrollContainerEl);
       scrollContainerResizeObserver?.observe(scrollContainerEl);
       if (currentMode === 'following') {
         scheduleFollowBottom(1);
@@ -224,8 +314,12 @@ export function createFollowBottomController(
     if (currentDistanceToBottomPx <= followThresholdPx) {
       applyFollowingMode();
     } else if (Math.abs(nextScrollTop - prevScrollTop) > 0.5) {
-      currentMode = 'paused';
-      viewportAnchor = captureViewportAnchor();
+      if (hasRecentUserScrollIntent()) {
+        currentMode = 'paused';
+        viewportAnchor = captureViewportAnchor();
+      } else if (currentMode === 'following') {
+        scheduleFollowBottom(1);
+      }
     }
     prevScrollTop = nextScrollTop;
   };
@@ -244,6 +338,8 @@ export function createFollowBottomController(
   const dispose = (): void => {
     contentResizeObserver?.disconnect();
     scrollContainerResizeObserver?.disconnect();
+    disposeUserScrollIntentListeners?.();
+    disposeUserScrollIntentListeners = null;
     if (followRaf !== null) {
       cancelFrame(followRaf);
       followRaf = null;
@@ -252,6 +348,7 @@ export function createFollowBottomController(
     contentRootEl = null;
     viewportAnchor = null;
     remainingSyncPasses = 0;
+    clearUserScrollIntent();
   };
 
   return {
