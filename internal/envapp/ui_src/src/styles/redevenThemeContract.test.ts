@@ -57,6 +57,15 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src.match(/rgb\(41, 44, 51\)/g)?.length ?? 0).toBe(1);
   });
 
+  it('removes the Flower glow only for the dark-mode activity icon and chat avatar variants', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('html.dark .redeven-flower-soft-aura-nav-glow,');
+    expect(src).toContain('html.dark .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {');
+    expect(src).toContain('opacity: 0;');
+    expect(src).toContain('filter: none;');
+  });
+
   it('defines reusable semantic surface and divider classes for local Env App consumers', () => {
     const src = readRedevenCss();
 
