@@ -241,6 +241,27 @@ func (s *Service) ResolveCodeServerPort(ctx context.Context, codeSpaceID string)
 	return ins.Port, nil
 }
 
+func (s *Service) CodeRuntimeStatus(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	return gateway.CodeRuntimeStatus(s.runtime.Status(ctx)), nil
+}
+
+func (s *Service) InstallCodeRuntime(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	return gateway.CodeRuntimeStatus(s.runtime.StartInstall(ctx)), nil
+}
+
+func (s *Service) CancelCodeRuntimeInstall(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	return gateway.CodeRuntimeStatus(s.runtime.CancelInstall(ctx)), nil
+}
+
 func (s *Service) UpdateSpace(ctx context.Context, codeSpaceID string, req gateway.UpdateSpaceRequest) (*gateway.SpaceStatus, error) {
 	if s == nil || s.reg == nil {
 		return nil, errors.New("codeapp not ready")

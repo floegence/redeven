@@ -69,6 +69,18 @@ func (localUITestBackend) ResolveCodeServerPort(context.Context, string) (int, e
 	return 0, errors.New("not implemented")
 }
 
+func (localUITestBackend) CodeRuntimeStatus(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{Source: "none"}, nil
+}
+
+func (localUITestBackend) InstallCodeRuntime(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{Source: "none"}, nil
+}
+
+func (localUITestBackend) CancelCodeRuntimeInstall(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{Source: "none"}, nil
+}
+
 func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
 	t.Helper()
 	gw, err := gatewaypkg.New(gatewaypkg.Options{

@@ -25,6 +25,7 @@ import (
 
 	"github.com/floegence/redeven-agent/internal/ai"
 	"github.com/floegence/redeven-agent/internal/auditlog"
+	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
 	"github.com/floegence/redeven-agent/internal/codexbridge"
 	"github.com/floegence/redeven-agent/internal/config"
 	"github.com/floegence/redeven-agent/internal/diagnostics"
@@ -63,6 +64,9 @@ type Backend interface {
 	StartSpace(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
 	StopSpace(ctx context.Context, codeSpaceID string) error
 	ResolveCodeServerPort(ctx context.Context, codeSpaceID string) (int, error)
+	CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error)
+	InstallCodeRuntime(ctx context.Context) (CodeRuntimeStatus, error)
+	CancelCodeRuntimeInstall(ctx context.Context) (CodeRuntimeStatus, error)
 }
 
 type PortForwardBackend interface {
@@ -110,6 +114,8 @@ type UpdateSpaceRequest struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
 }
+
+type CodeRuntimeStatus = codeserver.RuntimeStatus
 
 type Gateway struct {
 	log *slog.Logger
@@ -1406,6 +1412,54 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.codex.Status(r.Context())})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/code-runtime/status":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		status, err := g.backend.CodeRuntimeStatus(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/install":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		status, err := g.backend.InstallCodeRuntime(r.Context())
+		if err != nil {
+			g.appendAudit(meta, "code_runtime_install", "failure", nil, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "code_runtime_install", "success", map[string]any{
+			"install_state": string(status.InstallState),
+			"source":        status.Source,
+		}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/cancel":
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		status, err := g.backend.CancelCodeRuntimeInstall(r.Context())
+		if err != nil {
+			g.appendAudit(meta, "code_runtime_cancel", "failure", nil, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "code_runtime_cancel", "success", map[string]any{
+			"install_state": string(status.InstallState),
+			"source":        status.Source,
+		}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/capabilities":

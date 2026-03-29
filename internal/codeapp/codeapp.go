@@ -71,12 +71,13 @@ type Service struct {
 	codePortMin int
 	codePortMax int
 
-	reg    *registry.Registry
-	pf     *portforward.Service
-	runner *codeserver.Runner
-	ai     *ai.Service
-	codex  *codexbridge.Manager
-	gw     *gateway.Gateway
+	reg     *registry.Registry
+	pf      *portforward.Service
+	runner  *codeserver.Runner
+	runtime *codeserver.RuntimeManager
+	ai      *ai.Service
+	codex   *codexbridge.Manager
+	gw      *gateway.Gateway
 }
 
 func New(ctx context.Context, opts Options) (*Service, error) {
@@ -153,6 +154,10 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		PortMax:           portMax,
 		ReconnectionGrace: reconnectionGrace,
 	})
+	runtimeMgr := codeserver.NewRuntimeManager(codeserver.RuntimeManagerOptions{
+		Logger:   logger,
+		StateDir: stateAbs,
+	})
 
 	svc := &Service{
 		log:          logger,
@@ -164,6 +169,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		reg:          reg,
 		pf:           pfSvc,
 		runner:       runner,
+		runtime:      runtimeMgr,
 	}
 
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))

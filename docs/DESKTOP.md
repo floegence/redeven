@@ -227,4 +227,8 @@ Desktop shortcuts:
 ## code-server scope
 
 The desktop package does not bundle `code-server`.
-It keeps the same external `code-server` dependency model that the CLI/runtime already uses.
+It keeps the same managed-runtime model that the CLI/runtime uses:
+
+- the base Desktop installer does not ship `code-server`,
+- Codespaces can explicitly install a managed `code-server` runtime later from Env App,
+- Redeven never auto-installs it on behalf of the user.
