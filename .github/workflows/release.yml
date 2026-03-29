@@ -287,6 +287,16 @@ jobs:
       - name: Generate release notes preface
         run: ./scripts/generate_release_notes.sh "${GITHUB_REF_NAME}" dist/RELEASE_NOTES.md
 
+      - name: Validate release notes highlights
+        run: |
+          set -euo pipefail
+          awk '
+            /^## Release Highlights$/ { in_section = 1; next }
+            /^## / && in_section { exit(found ? 0 : 1) }
+            in_section && /^- / { found = 1 }
+            END { exit(found ? 0 : 1) }
+          ' dist/RELEASE_NOTES.md
+
       - name: Generate GitHub release notes
         env:
           GH_TOKEN: ${{ github.token }}

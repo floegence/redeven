@@ -179,7 +179,7 @@ Multi-environment mode uses isolated state per environment:
 ### Public release contract
 
 - GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, and checksums.
-- On `v*` tag push, `Release Agent` publishes GitHub Release assets, checksums, signatures, and release notes.
+- On `v*` tag push, `Release Agent` publishes GitHub Release assets, checksums, signatures, and release notes with both highlights and a full change list.
 - `scripts/install.sh` resolves versions from GitHub Releases and downloads release assets directly from GitHub.
 
 Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
