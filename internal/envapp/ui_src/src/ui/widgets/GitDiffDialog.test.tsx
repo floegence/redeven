@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
-import { createSignal } from 'solid-js';
+import { createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetDiffContent = vi.hoisted(() => vi.fn());
+const previewWindowRenderStore = vi.hoisted(() => ({
+  snapshots: [] as Array<{
+    open: boolean;
+    title: string;
+    zIndex: number;
+  }>,
+}));
 
 vi.mock('../protocol/redeven_v1', async () => {
   const actual = await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1');
@@ -18,6 +25,21 @@ vi.mock('../protocol/redeven_v1', async () => {
     }),
   };
 });
+
+vi.mock('./PreviewWindow', () => ({
+  PreviewWindow: (props: { open?: boolean; title?: string; zIndex?: number; children?: JSX.Element }) => {
+    previewWindowRenderStore.snapshots.push({
+      open: Boolean(props.open),
+      title: String(props.title ?? ''),
+      zIndex: Number(props.zIndex ?? 0),
+    });
+    return props.open ? (
+      <div data-testid="preview-window" data-title={String(props.title ?? '')} data-z-index={String(props.zIndex ?? '')}>
+        {props.children}
+      </div>
+    ) : null;
+  },
+}));
 
 import { GitDiffDialog } from './GitDiffDialog';
 
@@ -43,6 +65,7 @@ beforeEach(() => {
   });
 
   mockGetDiffContent.mockReset();
+  previewWindowRenderStore.snapshots = [];
   mockGetDiffContent.mockResolvedValue({
     repoRootPath: '/workspace/repo',
     mode: 'full',
@@ -74,6 +97,53 @@ afterEach(() => {
 });
 
 describe('GitDiffDialog', () => {
+  it('renders through an elevated desktop window when requested', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitDiffDialog
+            open
+            onOpenChange={() => {}}
+            item={{
+              changeType: 'modified',
+              path: 'src/app.ts',
+              displayPath: 'src/app.ts',
+              patchText: ['@@ -4,1 +4,1 @@', '-oldMiddle();', '+newMiddle();'].join('\n'),
+            }}
+            source={{
+              kind: 'stash',
+              repoRootPath: '/workspace/repo',
+              stashId: 'stash-1',
+            }}
+            title="Stash Diff"
+            description="src/app.ts"
+            emptyMessage="Select a file to inspect its diff."
+            desktopWindowZIndex={220}
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const previewWindow = document.querySelector('[data-testid="preview-window"]') as HTMLDivElement | null;
+      expect(previewWindow).toBeTruthy();
+      expect(previewWindow?.dataset.title).toBe('Stash Diff');
+      expect(previewWindow?.dataset.zIndex).toBe('220');
+      expect(document.body.textContent).toContain('src/app.ts');
+      expect(document.body.textContent).toContain('Patch');
+      expect(previewWindowRenderStore.snapshots.at(-1)).toMatchObject({
+        open: true,
+        title: 'Stash Diff',
+        zIndex: 220,
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps patch mode as the default and fetches full context only on demand', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

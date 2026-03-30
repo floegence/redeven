@@ -9,6 +9,7 @@ import {
 import { seedGitDiffContent, type GitSeededCommitFileSummary, type GitSeededWorkspaceChange } from '../utils/gitWorkbench';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitPatchViewer } from './GitPatchViewer';
+import { PreviewWindow } from './PreviewWindow';
 import { GitStatePane } from './GitWorkbenchPrimitives';
 
 export type GitDiffDialogItem = GitSeededCommitFileSummary | GitSeededWorkspaceChange | GitDiffFileContent;
@@ -67,8 +68,12 @@ export interface GitDiffDialogProps {
   emptyMessage: string;
   unavailableMessage?: string | ((item: GitDiffFileContent) => string | undefined);
   errorFormatter?: GitDiffDialogErrorFormatter;
+  desktopWindowZIndex?: number;
   class?: string;
 }
+
+const GIT_DIFF_WINDOW_DEFAULT_SIZE = { width: 1100, height: 760 };
+const GIT_DIFF_WINDOW_MIN_SIZE = { width: 720, height: 520 };
 
 function defaultDiffErrorState(error: unknown, fallbackMessage: string): GitDiffDialogErrorState {
   if (error instanceof Error && String(error.message ?? '').trim()) {
@@ -219,6 +224,12 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
   const seededPreviewItem = createMemo(() => seedGitDiffContent(props.item));
   const effectivePreviewItem = createMemo(() => directoryUnavailableItem() ?? previewItem() ?? seededPreviewItem());
   const activeItem = createMemo(() => (mode() === 'full-context' ? fullItem() : effectivePreviewItem()));
+  const title = createMemo(() => props.title ?? 'Diff');
+  const useDesktopFloatingWindow = createMemo(() => (
+    typeof props.desktopWindowZIndex === 'number'
+    && Number.isFinite(props.desktopWindowZIndex)
+    && !layout.isMobile()
+  ));
   const unavailableMessage = (item: GitDiffFileContent): string | undefined => {
     if (isDirectoryDiffPlaceholder(item)) return 'Diff preview is unavailable for directory entries.';
     if (typeof props.unavailableMessage === 'function') return props.unavailableMessage(item);
@@ -290,130 +301,158 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     });
   }, { defer: true }));
 
-  return (
-    <Dialog
-      open={props.open}
-      onOpenChange={props.onOpenChange}
-      title={props.title ?? 'Diff'}
-      description={props.description}
-      class={cn(
-        'flex max-w-none flex-col overflow-hidden rounded-md p-0',
-        '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-        '[&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:overflow-hidden [&>div:last-child]:pt-2',
-        layout.isMobile()
-          ? 'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none'
-          : 'max-h-[88vh] w-[min(1100px,94vw)]',
-        props.class,
-      )}
-    >
-      <div class="flex h-full min-h-0 flex-col">
-        <div class="flex shrink-0 items-center justify-between gap-3 pb-2">
-          <div class={cn('inline-flex items-center gap-1 rounded-md border p-1', redevenSurfaceRoleClass('segmented'))}>
-            <button
-              type="button"
-              class={cn(
-                gitDiffModeButtonClass,
-                redevenSegmentedItemClass(mode() === 'patch'),
-                mode() === 'patch' ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-              aria-pressed={mode() === 'patch'}
-              onClick={() => setMode('patch')}
-            >
-              Patch
-            </button>
-            <button
-              type="button"
-              class={cn(
-                gitDiffModeButtonClass,
-                redevenSegmentedItemClass(mode() === 'full-context'),
-                mode() === 'full-context' ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-              aria-pressed={mode() === 'full-context'}
-              disabled={!canLoadFullContext()}
-              onClick={() => setMode('full-context')}
-            >
-              Full Context
-            </button>
-          </div>
+  const dialogContent = () => (
+    <div class="flex h-full min-h-0 flex-col">
+      <Show when={useDesktopFloatingWindow() && props.description}>
+        <div class="shrink-0 pb-2 text-xs text-muted-foreground">{props.description}</div>
+      </Show>
 
-          <div class="text-[11px] text-muted-foreground">
-            <Switch>
-              <Match when={Boolean(directoryUnavailableItem())}>Directory entries do not expose a single-file diff preview.</Match>
-              <Match when={mode() === 'full-context' && fullLoading()}>Loading full context...</Match>
-              <Match when={mode() === 'full-context' && !fullLoading()}>Includes unchanged lines for broader review context.</Match>
-              <Match when={mode() === 'patch' && previewLoading()}>Loading patch preview...</Match>
-              <Match when={true}>Loads a single-file patch on demand.</Match>
-            </Switch>
-          </div>
+      <div class="flex shrink-0 items-center justify-between gap-3 pb-2">
+        <div class={cn('inline-flex items-center gap-1 rounded-md border p-1', redevenSurfaceRoleClass('segmented'))}>
+          <button
+            type="button"
+            class={cn(
+              gitDiffModeButtonClass,
+              redevenSegmentedItemClass(mode() === 'patch'),
+              mode() === 'patch' ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            )}
+            aria-pressed={mode() === 'patch'}
+            onClick={() => setMode('patch')}
+          >
+            Patch
+          </button>
+          <button
+            type="button"
+            class={cn(
+              gitDiffModeButtonClass,
+              redevenSegmentedItemClass(mode() === 'full-context'),
+              mode() === 'full-context' ? 'text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            )}
+            aria-pressed={mode() === 'full-context'}
+            disabled={!canLoadFullContext()}
+            onClick={() => setMode('full-context')}
+          >
+            Full Context
+          </button>
         </div>
 
-        <div class="relative min-h-0 flex-1">
+        <div class="text-[11px] text-muted-foreground">
           <Switch>
-            <Match when={mode() === 'patch' && previewError()}>
-              <GitStatePane
-                tone="error"
-                message={previewError()?.message || 'Failed to load patch preview.'}
-                detail={previewError()?.detail}
-                surface
-                class="min-h-0 flex-1"
-              />
-            </Match>
-
-            <Match when={mode() === 'full-context' && fullError()}>
-              <GitStatePane
-                tone="error"
-                message={fullError()?.message || 'Failed to load full-context diff.'}
-                detail={fullError()?.detail}
-                surface
-                class="min-h-0 flex-1"
-              />
-            </Match>
-
-            <Match when={activeItem()}>
-              <GitPatchViewer
-                class="min-h-0 flex-1"
-                item={activeItem()}
-                emptyMessage={mode() === 'patch' ? props.emptyMessage : 'Full-context diff is unavailable for this file.'}
-                unavailableMessage={unavailableMessage}
-              />
-            </Match>
-
-            <Match when={mode() === 'patch' && previewLoading()}>
-              <GitStatePane loading message="Loading patch preview..." surface class="min-h-0 flex-1" />
-            </Match>
-
-            <Match when={mode() === 'full-context' && effectivePreviewItem()}>
-              <GitPatchViewer
-                class="min-h-0 flex-1"
-                item={effectivePreviewItem()}
-                emptyMessage={props.emptyMessage}
-                unavailableMessage={unavailableMessage}
-              />
-            </Match>
-
-            <Match when={mode() === 'full-context' && fullLoading()}>
-              <GitStatePane loading message="Loading full-context diff..." surface class="min-h-0 flex-1" />
-            </Match>
-
-            <Match when={true}>
-              <GitStatePane
-                message={mode() === 'patch' ? props.emptyMessage : 'Full-context diff is unavailable for this file.'}
-                surface
-                class="min-h-0 flex-1"
-              />
-            </Match>
+            <Match when={Boolean(directoryUnavailableItem())}>Directory entries do not expose a single-file diff preview.</Match>
+            <Match when={mode() === 'full-context' && fullLoading()}>Loading full context...</Match>
+            <Match when={mode() === 'full-context' && !fullLoading()}>Includes unchanged lines for broader review context.</Match>
+            <Match when={mode() === 'patch' && previewLoading()}>Loading patch preview...</Match>
+            <Match when={true}>Loads a single-file patch on demand.</Match>
           </Switch>
-
-          <Show when={mode() === 'full-context' && fullLoading() && effectivePreviewItem()}>
-            <GitStatePane
-              loading
-              message="Loading full-context diff..."
-              class="absolute inset-0 z-10 h-full rounded-md bg-background/44 backdrop-blur-[1px]"
-              contentClass={cn('rounded-md border px-4 py-3 shadow-sm', redevenSurfaceRoleClass('overlay'))}
-            />
-          </Show>
         </div>
       </div>
-    </Dialog>
+
+      <div class="relative min-h-0 flex-1">
+        <Switch>
+          <Match when={mode() === 'patch' && previewError()}>
+            <GitStatePane
+              tone="error"
+              message={previewError()?.message || 'Failed to load patch preview.'}
+              detail={previewError()?.detail}
+              surface
+              class="min-h-0 flex-1"
+            />
+          </Match>
+
+          <Match when={mode() === 'full-context' && fullError()}>
+            <GitStatePane
+              tone="error"
+              message={fullError()?.message || 'Failed to load full-context diff.'}
+              detail={fullError()?.detail}
+              surface
+              class="min-h-0 flex-1"
+            />
+          </Match>
+
+          <Match when={activeItem()}>
+            <GitPatchViewer
+              class="min-h-0 flex-1"
+              item={activeItem()}
+              emptyMessage={mode() === 'patch' ? props.emptyMessage : 'Full-context diff is unavailable for this file.'}
+              unavailableMessage={unavailableMessage}
+            />
+          </Match>
+
+          <Match when={mode() === 'patch' && previewLoading()}>
+            <GitStatePane loading message="Loading patch preview..." surface class="min-h-0 flex-1" />
+          </Match>
+
+          <Match when={mode() === 'full-context' && effectivePreviewItem()}>
+            <GitPatchViewer
+              class="min-h-0 flex-1"
+              item={effectivePreviewItem()}
+              emptyMessage={props.emptyMessage}
+              unavailableMessage={unavailableMessage}
+            />
+          </Match>
+
+          <Match when={mode() === 'full-context' && fullLoading()}>
+            <GitStatePane loading message="Loading full-context diff..." surface class="min-h-0 flex-1" />
+          </Match>
+
+          <Match when={true}>
+            <GitStatePane
+              message={mode() === 'patch' ? props.emptyMessage : 'Full-context diff is unavailable for this file.'}
+              surface
+              class="min-h-0 flex-1"
+            />
+          </Match>
+        </Switch>
+
+        <Show when={mode() === 'full-context' && fullLoading() && effectivePreviewItem()}>
+          <GitStatePane
+            loading
+            message="Loading full-context diff..."
+            class="absolute inset-0 z-10 h-full rounded-md bg-background/44 backdrop-blur-[1px]"
+            contentClass={cn('rounded-md border px-4 py-3 shadow-sm', redevenSurfaceRoleClass('overlay'))}
+          />
+        </Show>
+      </div>
+    </div>
+  );
+
+  return (
+    <Show
+      when={useDesktopFloatingWindow()}
+      fallback={(
+        <Dialog
+          open={props.open}
+          onOpenChange={props.onOpenChange}
+          title={title()}
+          description={props.description}
+          class={cn(
+            'flex max-w-none flex-col overflow-hidden rounded-md p-0',
+            '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
+            '[&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:overflow-hidden [&>div:last-child]:pt-2',
+            layout.isMobile()
+              ? 'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none'
+              : 'max-h-[88vh] w-[min(1100px,94vw)]',
+            props.class,
+          )}
+        >
+          {dialogContent()}
+        </Dialog>
+      )}
+    >
+      <PreviewWindow
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        title={title()}
+        description={props.description}
+        persistenceKey="git-diff-dialog"
+        defaultSize={GIT_DIFF_WINDOW_DEFAULT_SIZE}
+        minSize={GIT_DIFF_WINDOW_MIN_SIZE}
+        zIndex={props.desktopWindowZIndex}
+        floatingClass="bg-background"
+        mobileClass="bg-background"
+      >
+        {dialogContent()}
+      </PreviewWindow>
+    </Show>
   );
 }
