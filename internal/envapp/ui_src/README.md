@@ -37,6 +37,7 @@ Notes:
 ## CSS Layering Notes
 
 - `src/index.css` already imports the upstream Tailwind and floe-webapp compiled style stack. Prefer relying on that base layer instead of reintroducing repository-local universal resets.
+- `HighlightBlock` theming is upstream-owned. Since `floe-webapp@0.35.30` isolates highlight-specific accent tokens, downstream Env App surfaces should consume that release instead of darkening shared accent/card tokens locally.
 - Avoid global `border-style` injections on `*` selectors. They can turn intentional `border: none` declarations back into visible medium-width borders on native controls.
 - When a visual adjustment only belongs to one surface or component family, scope it to that component class instead of patching every element globally.
 - Env App standard panel surfaces live in the root-scoped `--redeven-surface-panel*` token family inside `src/styles/redeven.css`.
