@@ -109,21 +109,73 @@ function settingsInstallActionLabel(status: CodeRuntimeStatus | null | undefined
   return 'Reinstall';
 }
 
+function normalizedValue(value: string | null | undefined): string {
+  return String(value ?? '').trim();
+}
+
+function operationNeedsManagedRuntimeSection(state: string | null | undefined): boolean {
+  switch (normalizedValue(state)) {
+    case 'running':
+    case 'failed':
+    case 'cancelled':
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const [installConfirmOpen, setInstallConfirmOpen] = createSignal(false);
   const [uninstallConfirmOpen, setUninstallConfirmOpen] = createSignal(false);
 
   const runtimeReady = createMemo(() => codeRuntimeReady(props.status));
+  const activeRuntime = createMemo(() => props.status?.active_runtime);
+  const managedRuntime = createMemo(() => props.status?.managed_runtime);
   const managedInstalled = createMemo(() => codeRuntimeManagedInstalled(props.status));
   const managedSelected = createMemo(() => codeRuntimeManagedRuntimeSelected(props.status));
   const managedNeedsUpgrade = createMemo(() => codeRuntimeManagedNeedsUpgrade(props.status));
   const operationRunning = createMemo(() => codeRuntimeOperationRunning(props.status));
   const installActionLabel = createMemo(() => settingsInstallActionLabel(props.status));
+  const activeRuntimeSource = createMemo(() => normalizedValue(activeRuntime()?.source));
+  const managedRuntimeMatchesCurrent = createMemo(() => {
+    const active = activeRuntime();
+    const managed = managedRuntime();
+    return (
+      activeRuntimeSource() === 'managed' &&
+      active?.detection_state === 'ready' &&
+      managed?.present === true &&
+      managed?.detection_state === 'ready' &&
+      !managedNeedsUpgrade() &&
+      normalizedValue(active?.binary_path) !== '' &&
+      normalizedValue(active?.binary_path) === normalizedValue(managed?.binary_path) &&
+      normalizedValue(active?.installed_version) !== '' &&
+      normalizedValue(active?.installed_version) === normalizedValue(managed?.installed_version)
+    );
+  });
+  const showManagedRuntimeSection = createMemo(() => {
+    const managed = managedRuntime();
+    if (operationNeedsManagedRuntimeSection(props.status?.operation.state)) return true;
+    if (!managedInstalled()) return true;
+    if (managedNeedsUpgrade()) return true;
+    if (managed?.detection_state !== 'ready') return true;
+    if (normalizedValue(managed?.error_message) !== '') return true;
+    return !managedRuntimeMatchesCurrent();
+  });
 
   const cardBadge = createMemo(() => {
     if (operationRunning()) return props.status?.operation.action === 'uninstall' ? 'Removing runtime' : 'Installing runtime';
-    if (runtimeReady() && managedSelected()) return 'Managed runtime ready';
-    if (runtimeReady()) return 'Host runtime ready';
+    if (runtimeReady()) {
+      switch (activeRuntimeSource()) {
+        case 'managed':
+          return 'Current runtime ready';
+        case 'env_override':
+          return 'Override runtime ready';
+        case 'system':
+          return 'Host runtime ready';
+        default:
+          return 'Current runtime ready';
+      }
+    }
     if (managedInstalled() && managedNeedsUpgrade()) return 'Managed upgrade available';
     if (managedInstalled()) return 'Managed runtime installed';
     return 'Runtime needs install';
@@ -136,21 +188,39 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   });
 
   const activeSummary = createMemo(() => {
-    const active = props.status?.active_runtime;
+    const active = activeRuntime();
     if (!active) return 'Codespaces needs a compatible code-server runtime before it can start.';
     if (active.detection_state === 'ready') {
-      return active.source === 'managed'
-        ? 'Codespaces will use the Redeven-managed runtime.'
-        : 'Codespaces is currently using a compatible host runtime.';
+      switch (normalizedValue(active.source)) {
+        case 'managed':
+          return 'Codespaces is currently using the Redeven-managed runtime.';
+        case 'env_override':
+          return 'Codespaces is currently using the runtime path provided through environment override.';
+        case 'system':
+          return 'Codespaces is currently using a compatible host runtime.';
+        default:
+          return 'Codespaces is currently using a compatible runtime.';
+      }
     }
     return active.error_message || 'Codespaces needs a compatible code-server runtime before it can start.';
   });
 
   const managedSummary = createMemo(() => {
     const status = props.status;
-    const managed = status?.managed_runtime;
+    const managed = managedRuntime();
+    if (status?.operation.state === 'running') {
+      return status.operation.action === 'uninstall'
+        ? 'Redeven is currently removing the managed runtime after an explicit uninstall request.'
+        : 'Redeven is currently installing or upgrading the managed runtime after an explicit user action.';
+    }
+    if (status?.operation.state === 'failed') {
+      return 'The last managed runtime action failed. Review the management activity below before retrying.';
+    }
+    if (status?.operation.state === 'cancelled') {
+      return 'The last managed runtime action was cancelled. You can retry it explicitly when ready.';
+    }
     if (!managed?.present) return 'No managed runtime is installed. Redeven will install one only after you explicitly confirm it.';
-    if (managedSelected()) return 'The managed runtime is currently active for Codespaces.';
+    if (managedRuntimeMatchesCurrent()) return 'The managed runtime already matches the current runtime used by Codespaces.';
     if (managedNeedsUpgrade()) return 'A managed runtime is installed, but it does not match the supported version for this agent build.';
     if (runtimeReady()) return 'A managed runtime is installed, but a higher-priority compatible runtime is currently active.';
     return managed.error_message || 'The managed runtime is installed but is not currently usable.';
@@ -165,11 +235,10 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const operationOutput = createMemo(() => props.status?.operation.log_tail?.join('\n') || 'No runtime management output yet.');
   const operationError = createMemo(() => String(props.status?.operation.last_error ?? '').trim());
   const cancelLabel = createMemo(() => (props.status?.operation.action === 'uninstall' ? 'Cancel uninstall' : 'Cancel install'));
-  const activeRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
-    const active = props.status?.active_runtime;
-    const source = String(active?.source ?? '').trim();
-
-    return [
+  const currentRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
+    const active = activeRuntime();
+    const source = activeRuntimeSource();
+    const rows: RuntimeDetailRow[] = [
       {
         label: 'Status',
         value: <SettingsPill tone={runtimeStatusTone(active?.detection_state)}>{runtimeStatusLabel(active?.detection_state)}</SettingsPill>,
@@ -192,7 +261,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         value: active?.installed_version || 'Not detected',
         note:
           active?.detection_state === 'ready'
-            ? 'Detected from the runtime currently selected for Codespaces.'
+            ? source === 'managed'
+              ? 'Detected from the Redeven-managed runtime currently selected for Codespaces.'
+              : 'Detected from the runtime currently selected for Codespaces.'
             : active?.error_message || 'Version metadata appears after a compatible runtime is detected.',
         mono: true,
       },
@@ -203,9 +274,26 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         mono: true,
       },
     ];
+
+    if (!showManagedRuntimeSection() && source === 'managed') {
+      rows.push({
+        label: 'Supported version',
+        value: props.status?.supported_version || '-',
+        note: 'Pinned by this Redeven agent build.',
+        mono: true,
+      });
+      rows.push({
+        label: 'Managed location',
+        value: props.status?.managed_prefix || '-',
+        note: 'Redeven stores the current managed runtime here.',
+        mono: true,
+      });
+    }
+
+    return rows;
   });
   const managedRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
-    const managed = props.status?.managed_runtime;
+    const managed = managedRuntime();
 
     return [
       {
@@ -218,11 +306,11 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         note: managedSummary(),
       },
       {
-        label: 'Selection',
+        label: 'Codespaces selection',
         value: managedSelected() ? (
           <SettingsPill tone="success">Currently selected</SettingsPill>
         ) : managedInstalled() ? (
-          <SettingsPill>Available</SettingsPill>
+          <SettingsPill>Not selected</SettingsPill>
         ) : (
           'Unavailable'
         ),
@@ -284,7 +372,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <SettingsCard
         icon={Code}
         title="code-server Runtime"
-        description="Inspect the active runtime, manage the Redeven-installed runtime, and review explicit install or uninstall output."
+        description="Inspect the current Codespaces runtime, manage the Redeven-installed runtime when needed, and review explicit install or uninstall output."
         badge={cardBadge()}
         badgeVariant={cardBadgeVariant()}
         error={props.error}
@@ -339,9 +427,11 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <RuntimeDetailsTableSection title="Active runtime" rows={activeRuntimeRows()} />
+          <RuntimeDetailsTableSection title="Current runtime" rows={currentRuntimeRows()} />
 
-          <RuntimeDetailsTableSection title="Managed runtime" rows={managedRuntimeRows()} />
+          <Show when={showManagedRuntimeSection()}>
+            <RuntimeDetailsTableSection title="Managed runtime" rows={managedRuntimeRows()} />
+          </Show>
 
           <div class="rounded-lg border border-border bg-muted/20 p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">

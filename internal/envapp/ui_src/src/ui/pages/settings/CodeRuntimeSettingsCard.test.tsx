@@ -4,7 +4,7 @@ import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CodeRuntimeSettingsCard } from './CodeRuntimeSettingsCard';
+import { CodeRuntimeSettingsCard, type CodeRuntimeSettingsCardProps } from './CodeRuntimeSettingsCard';
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
@@ -87,6 +87,27 @@ function makeStatus(overrides: any = {}) {
   };
 }
 
+function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCardProps> = {}) {
+  const props: CodeRuntimeSettingsCardProps = {
+    status: makeStatus(),
+    loading: false,
+    error: null,
+    canInteract: true,
+    canManage: true,
+    actionLoading: false,
+    uninstallLoading: false,
+    cancelLoading: false,
+    onRefresh: () => undefined,
+    onInstall: () => undefined,
+    onUninstall: () => undefined,
+    onCancel: () => undefined,
+    ...overrides,
+  };
+
+  render(() => <CodeRuntimeSettingsCard {...props} />, host);
+  return props;
+}
+
 describe('CodeRuntimeSettingsCard', () => {
   let host: HTMLDivElement;
 
@@ -99,29 +120,28 @@ describe('CodeRuntimeSettingsCard', () => {
     host.remove();
   });
 
-  it('shows an upgrade action when the managed runtime version differs from the supported version', () => {
-    render(() => (
-      <CodeRuntimeSettingsCard
-        status={makeStatus({
-          active_runtime: { source: 'system', binary_path: '/usr/local/bin/code-server' },
-          managed_runtime: { installed_version: '4.107.0' },
-        })}
-        loading={false}
-        error={null}
-        canInteract
-        canManage
-        actionLoading={false}
-        uninstallLoading={false}
-        cancelLoading={false}
-        onRefresh={() => undefined}
-        onInstall={() => undefined}
-        onUninstall={() => undefined}
-        onCancel={() => undefined}
-      />
-    ), host);
+  it('collapses to a single current runtime section when the managed runtime is healthy and selected', () => {
+    renderCard(host);
+
+    expect(host.textContent).toContain('Current runtime');
+    expect(host.textContent).not.toContain('Codespaces selection');
+    expect(host.textContent).toContain('Supported version');
+    expect(host.textContent).toContain('Managed location');
+    expect(host.querySelectorAll('table')).toHaveLength(1);
+  });
+
+  it('shows managed runtime details when the managed runtime version differs from the supported version', () => {
+    renderCard(host, {
+      status: makeStatus({
+        active_runtime: { source: 'system', binary_path: '/usr/local/bin/code-server' },
+        managed_runtime: { installed_version: '4.107.0' },
+      }),
+    });
 
     expect(host.textContent).toContain('Upgrade');
     expect(host.textContent).not.toContain('Upgrade managed runtime');
+    expect(host.textContent).toContain('Current runtime');
+    expect(host.textContent).toContain('Managed runtime');
     expect(host.textContent).toContain('does not match the supported version');
     expect(host.querySelectorAll('table')).toHaveLength(2);
   });
@@ -129,37 +149,25 @@ describe('CodeRuntimeSettingsCard', () => {
   it('opens the explicit install confirmation and calls the install action', async () => {
     const onInstall = vi.fn(async () => undefined);
 
-    render(() => (
-      <CodeRuntimeSettingsCard
-        status={makeStatus({
-          active_runtime: {
-            detection_state: 'missing',
-            present: false,
-            source: 'none',
-            binary_path: '',
-            installed_version: '',
-          },
-          managed_runtime: {
-            detection_state: 'missing',
-            present: false,
-            source: 'managed',
-            binary_path: '',
-            installed_version: '',
-          },
-        })}
-        loading={false}
-        error={null}
-        canInteract
-        canManage
-        actionLoading={false}
-        uninstallLoading={false}
-        cancelLoading={false}
-        onRefresh={() => undefined}
-        onInstall={onInstall}
-        onUninstall={() => undefined}
-        onCancel={() => undefined}
-      />
-    ), host);
+    renderCard(host, {
+      status: makeStatus({
+        active_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'none',
+          binary_path: '',
+          installed_version: '',
+        },
+        managed_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'managed',
+          binary_path: '',
+          installed_version: '',
+        },
+      }),
+      onInstall,
+    });
 
     const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install');
     installButton?.click();
@@ -178,24 +186,11 @@ describe('CodeRuntimeSettingsCard', () => {
   it('opens the explicit uninstall confirmation and calls the uninstall action', () => {
     const onUninstall = vi.fn(async () => undefined);
 
-    render(() => (
-      <CodeRuntimeSettingsCard
-        status={makeStatus()}
-        loading={false}
-        error={null}
-        canInteract
-        canManage
-        actionLoading={false}
-        uninstallLoading={false}
-        cancelLoading={false}
-        onRefresh={() => undefined}
-        onInstall={() => undefined}
-        onUninstall={onUninstall}
-        onCancel={() => undefined}
-      />
-    ), host);
+    renderCard(host, { onUninstall });
 
     expect(host.textContent).not.toContain('Uninstall managed runtime');
+    expect(host.textContent).toContain('Current runtime');
+    expect(host.querySelectorAll('table')).toHaveLength(1);
 
     const uninstallButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Uninstall');
     uninstallButton?.click();

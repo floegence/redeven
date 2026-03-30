@@ -258,8 +258,8 @@ Notes:
 - Codespace/3rd-party app windows never receive `boot_ticket` or `env_session`. They only get one-time `entry_ticket`.
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
-- Codespaces does **not** auto-install `code-server`. When the runtime is missing or incompatible, Env App shows an explicit install UI and waits for the user to click `Install code-server`.
-- Agent Settings also exposes a dedicated `code-server Runtime` management card. It shows the active runtime, the Redeven-managed runtime, explicit install or uninstall actions, the official installer source, the pinned supported version, the managed install location, progress state, and recent management output.
+- Codespaces does **not** auto-install `code-server`. When the runtime is missing or incompatible, Env App shows an explicit install UI and waits for the user to click `Install`, `Upgrade`, or `Reinstall`.
+- Agent Settings also exposes a dedicated `code-server Runtime` management card. It always shows the current runtime selected for Codespaces, conditionally shows a separate `Managed runtime` section when the Redeven-managed install needs distinct attention, and always exposes explicit management actions, progress state, and recent management output.
 - The Codespaces install flow displays the same explicit source and progress details inside Env App before the user continues to the pending `Start` or `Open` action.
 
 ## Build
