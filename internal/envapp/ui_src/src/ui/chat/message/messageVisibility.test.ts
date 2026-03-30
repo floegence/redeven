@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { hasNonEmptyVisibleMessageContent, hasVisibleMessageContent, visibleMessageBlocks } from './messageVisibility';
+import {
+  hasNonEmptyVisibleMessageContent,
+  hasVisibleMessageContent,
+  resolveStreamingCursorBlockIndex,
+  visibleMessageBlocks,
+} from './messageVisibility';
 import type { Message } from '../types';
 
 describe('messageVisibility', () => {
@@ -82,5 +87,37 @@ describe('messageVisibility', () => {
     expect(visibleMessageBlocks(message)).toEqual([1]);
     expect(hasVisibleMessageContent(message)).toBe(true);
     expect(hasNonEmptyVisibleMessageContent(message)).toBe(false);
+  });
+
+  it('assigns the streaming cursor to the last visible markdown block in a streaming assistant message', () => {
+    const message: Message = {
+      id: 'm6',
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: 1,
+      blocks: [
+        { type: 'markdown', content: 'Intro copy' },
+        { type: 'shell', command: 'echo hi', status: 'success' },
+        { type: 'markdown', content: 'Tail answer' },
+      ],
+    };
+
+    const visible = visibleMessageBlocks(message);
+    expect(resolveStreamingCursorBlockIndex(message, visible)).toBe(2);
+  });
+
+  it('does not assign a streaming cursor owner when a streaming assistant message has no visible markdown blocks', () => {
+    const message: Message = {
+      id: 'm7',
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: 1,
+      blocks: [
+        { type: 'shell', command: 'echo hi', status: 'running' },
+      ],
+    };
+
+    const visible = visibleMessageBlocks(message);
+    expect(resolveStreamingCursorBlockIndex(message, visible)).toBeNull();
   });
 });

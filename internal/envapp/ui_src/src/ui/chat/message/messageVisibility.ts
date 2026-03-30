@@ -71,6 +71,25 @@ export function visibleMessageBlocks(message: Message): number[] {
   });
 }
 
+export function resolveStreamingCursorBlockIndex(
+  message: Message,
+  visibleBlockIndices: number[] = visibleMessageBlocks(message),
+): number | null {
+  if (message.role !== 'assistant' || message.status !== 'streaming') {
+    return null;
+  }
+
+  for (let cursor = visibleBlockIndices.length - 1; cursor >= 0; cursor -= 1) {
+    const blockIndex = visibleBlockIndices[cursor];
+    const block = message.blocks[blockIndex];
+    if (block?.type === 'markdown') {
+      return blockIndex;
+    }
+  }
+
+  return null;
+}
+
 export function hasNonEmptyVisibleMessageContent(message: Message): boolean {
   return message.blocks.some((block) => hasNonEmptyVisibleBlockContent(block, message.status)) || hasVisibleString(message.error);
 }

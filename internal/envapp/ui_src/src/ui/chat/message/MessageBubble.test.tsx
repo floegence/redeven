@@ -94,4 +94,23 @@ describe('MessageBubble', () => {
     expect(blockAfter).toBe(blockBefore);
     expect(host.querySelectorAll('.chat-message-block-slot')).toHaveLength(1);
   });
+
+  it('renders only one streaming cursor when a streaming assistant bubble contains multiple markdown blocks', () => {
+    const host = renderMessageBubble({
+      id: 'msg-single-cursor',
+      role: 'assistant',
+      status: 'streaming',
+      timestamp: 0,
+      blocks: [
+        { type: 'markdown', content: 'First paragraph' },
+        { type: 'shell', command: 'echo hi', status: 'success' },
+        { type: 'markdown', content: 'Tail paragraph' },
+      ],
+    });
+
+    const slots = [...host.querySelectorAll('.chat-message-block-slot')];
+    expect(host.querySelectorAll('.chat-markdown-streaming-cursor-row')).toHaveLength(1);
+    expect(slots[0]?.querySelector('.chat-markdown-streaming-cursor-row')).toBeNull();
+    expect(slots[2]?.querySelector('.chat-markdown-streaming-cursor-row')).toBeTruthy();
+  });
 });
