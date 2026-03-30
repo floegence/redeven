@@ -148,3 +148,94 @@ func TestApplyUnifiedDiff_RejectsAbsoluteAndEscapingPatchPaths(t *testing.T) {
 		t.Fatalf("escape patch err=%v, want invalid path", err)
 	}
 }
+
+func TestApplyUnifiedDiff_HunkMatchTrimsTrailingWhitespace(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	path := filepath.Join(workingDir, "note.txt")
+	if err := os.WriteFile(path, []byte("alpha   \nbeta\n"), 0o644); err != nil {
+		t.Fatalf("write note.txt: %v", err)
+	}
+
+	patch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Update File: note.txt",
+		"@@",
+		"-alpha",
+		"+alpha updated",
+		" beta",
+		"*** End Patch",
+	}, "\n")
+
+	if _, err := applyUnifiedDiff(workingDir, patch); err != nil {
+		t.Fatalf("applyUnifiedDiff: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read note.txt: %v", err)
+	}
+	if string(got) != "alpha updated\nbeta\n" {
+		t.Fatalf("note.txt=%q, want %q", string(got), "alpha updated\nbeta\n")
+	}
+}
+
+func TestApplyUnifiedDiff_HunkMatchNormalizesUnicodePunctuation(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	path := filepath.Join(workingDir, "note.txt")
+	if err := os.WriteFile(path, []byte("title: “ready to merge”\nstatus: pending\n"), 0o644); err != nil {
+		t.Fatalf("write note.txt: %v", err)
+	}
+
+	patch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Update File: note.txt",
+		"@@",
+		"-title: \"ready to merge\"",
+		"+title: \"merged\"",
+		" status: pending",
+		"*** End Patch",
+	}, "\n")
+
+	if _, err := applyUnifiedDiff(workingDir, patch); err != nil {
+		t.Fatalf("applyUnifiedDiff: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read note.txt: %v", err)
+	}
+	if string(got) != "title: \"merged\"\nstatus: pending\n" {
+		t.Fatalf("note.txt=%q, want %q", string(got), "title: \"merged\"\nstatus: pending\n")
+	}
+}
+
+func TestFindHunkStart_PrefersExactMatchMode(t *testing.T) {
+	t.Parallel()
+
+	hunk := unifiedDiffHunk{
+		oldStart: 1,
+		oldCount: 1,
+		newStart: 1,
+		newCount: 1,
+		lines: []string{
+			"-alpha",
+			"+alpha updated",
+			" beta",
+		},
+	}
+
+	match, ok := findHunkStart([]string{"alpha", "beta"}, hunk, 0)
+	if !ok {
+		t.Fatal("findHunkStart: want match")
+	}
+	if match.start != 0 {
+		t.Fatalf("start=%d, want 0", match.start)
+	}
+	if match.mode != hunkMatchModeExact {
+		t.Fatalf("mode=%q, want %q", match.mode, hunkMatchModeExact)
+	}
+}

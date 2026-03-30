@@ -6,7 +6,7 @@ High-level design:
 
 - The browser UI calls the agent via the existing `/_redeven_proxy/api/ai/*` gateway routes (still over Flowersec E2EE proxy).
 - The **Go agent is the security boundary** and executes tools after validating authoritative session metadata.
-- Tooling follows a shell-first workflow: `terminal.exec` for investigation and verification, `apply_patch` for file edits.
+- Tooling follows a shell-first workflow: `terminal.exec` for investigation and verification, `apply_patch` in canonical Begin/End Patch format for file edits.
 - LLM orchestration runs in the **Go runtime** via native provider SDK adapters:
   - OpenAI: `openai-go` (Responses API)
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
@@ -90,6 +90,13 @@ Built-in tools:
 - `apply_patch`
 - `write_todos`
 - `web.search` (optional; controlled by `ai.web_search_provider`)
+
+Patch execution notes:
+
+- The model-facing `apply_patch` contract is a single canonical format: one document from `*** Begin Patch` to `*** End Patch` with relative paths plus `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks.
+- `diff --git` unified diff parsing remains available as a compatibility path for older payloads, but it is not the recommended format for normal Flower-authored edits.
+- Hunk matching is intentionally controlled and explainable: Flower tries exact line matching first, then trailing-whitespace-tolerant matching, then Unicode punctuation normalization.
+- If `apply_patch` fails for a normal file edit, Flower should re-read the file and regenerate a fresh canonical patch instead of switching to shell overwrite/redirection commands.
 
 Terminal execution notes:
 

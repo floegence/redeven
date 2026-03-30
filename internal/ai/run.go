@@ -2005,7 +2005,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			Retryable: false,
 			SuggestedFixes: []string{
 				"Use a readonly command for investigation.",
-				"Use apply_patch for file edits instead of destructive shell commands.",
+				"Use apply_patch with the canonical Begin/End Patch format for file edits instead of destructive shell commands.",
 				"Disable block_dangerous_commands in Settings > AI > Execution policy only if you accept the risk.",
 			},
 		}

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 type unifiedDiffHunk struct {
@@ -39,6 +40,25 @@ const (
 	patchInputFormatBeginPatch  patchInputFormat = "begin_patch"
 	patchInputFormatUnifiedDiff patchInputFormat = "unified_diff"
 )
+
+type hunkMatchMode string
+
+const (
+	hunkMatchModeExact              hunkMatchMode = "exact"
+	hunkMatchModeTrimEnd            hunkMatchMode = "trim_end"
+	hunkMatchModeUnicodePunctuation hunkMatchMode = "unicode_punctuation"
+)
+
+type hunkMatchResult struct {
+	start int
+	mode  hunkMatchMode
+}
+
+var orderedHunkMatchModes = []hunkMatchMode{
+	hunkMatchModeExact,
+	hunkMatchModeTrimEnd,
+	hunkMatchModeUnicodePunctuation,
+}
 
 type parsedPatch struct {
 	inputFormat      patchInputFormat
@@ -654,12 +674,12 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 		if preferred < 0 {
 			preferred = 0
 		}
-		start, ok := findHunkStart(lines, h, preferred)
+		match, ok := findHunkStart(lines, h, preferred)
 		if !ok {
 			return nil, fmt.Errorf("hunk failed to apply near line %d", h.oldStart)
 		}
 		var delta int
-		lines, delta, err = applyOneHunk(lines, h, start)
+		lines, delta, err = applyOneHunk(lines, h, match)
 		if err != nil {
 			return nil, err
 		}
@@ -673,7 +693,7 @@ func applyUnifiedDiffHunksToBytes(original []byte, hunks []unifiedDiffHunk) ([]b
 	return []byte(out), nil
 }
 
-func findHunkStart(lines []string, h unifiedDiffHunk, preferred int) (int, bool) {
+func findHunkStart(lines []string, h unifiedDiffHunk, preferred int) (hunkMatchResult, bool) {
 	from := make([]string, 0, len(h.lines))
 	for _, l := range h.lines {
 		if l == "" {
@@ -686,15 +706,15 @@ func findHunkStart(lines []string, h unifiedDiffHunk, preferred int) (int, bool)
 	}
 	if len(from) == 0 {
 		if preferred < 0 {
-			return 0, true
+			return hunkMatchResult{start: 0, mode: hunkMatchModeExact}, true
 		}
 		if preferred > len(lines) {
-			return len(lines), true
+			return hunkMatchResult{start: len(lines), mode: hunkMatchModeExact}, true
 		}
-		return preferred, true
+		return hunkMatchResult{start: preferred, mode: hunkMatchModeExact}, true
 	}
 
-	tryAt := func(pos int) bool {
+	tryAt := func(pos int, mode hunkMatchMode) bool {
 		if pos < 0 {
 			return false
 		}
@@ -702,15 +722,11 @@ func findHunkStart(lines []string, h unifiedDiffHunk, preferred int) (int, bool)
 			return false
 		}
 		for i := 0; i < len(from); i++ {
-			if lines[pos+i] != from[i] {
+			if !comparePatchLine(mode, lines[pos+i], from[i]) {
 				return false
 			}
 		}
 		return true
-	}
-
-	if tryAt(preferred) {
-		return preferred, true
 	}
 
 	const window = 80
@@ -722,24 +738,29 @@ func findHunkStart(lines []string, h unifiedDiffHunk, preferred int) (int, bool)
 	if end > len(lines) {
 		end = len(lines)
 	}
-	for pos := start; pos <= end; pos++ {
-		if tryAt(pos) {
-			return pos, true
+	for _, mode := range orderedHunkMatchModes {
+		if tryAt(preferred, mode) {
+			return hunkMatchResult{start: preferred, mode: mode}, true
+		}
+		for pos := start; pos <= end; pos++ {
+			if tryAt(pos, mode) {
+				return hunkMatchResult{start: pos, mode: mode}, true
+			}
+		}
+		for pos := 0; pos <= len(lines); pos++ {
+			if pos >= start && pos <= end {
+				continue
+			}
+			if tryAt(pos, mode) {
+				return hunkMatchResult{start: pos, mode: mode}, true
+			}
 		}
 	}
-	for pos := 0; pos <= len(lines); pos++ {
-		if pos >= start && pos <= end {
-			continue
-		}
-		if tryAt(pos) {
-			return pos, true
-		}
-	}
-	return 0, false
+	return hunkMatchResult{}, false
 }
 
-func applyOneHunk(lines []string, h unifiedDiffHunk, start int) ([]string, int, error) {
-	cursor := start
+func applyOneHunk(lines []string, h unifiedDiffHunk, match hunkMatchResult) ([]string, int, error) {
+	cursor := match.start
 	delta := 0
 	for _, l := range h.lines {
 		if l == "" {
@@ -752,12 +773,12 @@ func applyOneHunk(lines []string, h unifiedDiffHunk, start int) ([]string, int, 
 		}
 		switch prefix {
 		case ' ':
-			if cursor >= len(lines) || lines[cursor] != text {
+			if cursor >= len(lines) || !comparePatchLine(match.mode, lines[cursor], text) {
 				return nil, 0, fmt.Errorf("hunk context mismatch at line %d", cursor+1)
 			}
 			cursor++
 		case '-':
-			if cursor >= len(lines) || lines[cursor] != text {
+			if cursor >= len(lines) || !comparePatchLine(match.mode, lines[cursor], text) {
 				return nil, 0, fmt.Errorf("hunk delete mismatch at line %d", cursor+1)
 			}
 			lines = append(lines[:cursor], lines[cursor+1:]...)
@@ -774,6 +795,45 @@ func applyOneHunk(lines []string, h unifiedDiffHunk, start int) ([]string, int, 
 		}
 	}
 	return lines, delta, nil
+}
+
+func comparePatchLine(mode hunkMatchMode, actual string, expected string) bool {
+	switch mode {
+	case hunkMatchModeExact:
+		return actual == expected
+	case hunkMatchModeTrimEnd:
+		return trimPatchLineEnd(actual) == trimPatchLineEnd(expected)
+	case hunkMatchModeUnicodePunctuation:
+		return normalizePatchLineUnicode(trimPatchLineEnd(actual)) == normalizePatchLineUnicode(trimPatchLineEnd(expected))
+	default:
+		return actual == expected
+	}
+}
+
+func trimPatchLineEnd(s string) string {
+	return strings.TrimRightFunc(s, unicode.IsSpace)
+}
+
+func normalizePatchLineUnicode(s string) string {
+	replacer := strings.NewReplacer(
+		"\u2018", "'",
+		"\u2019", "'",
+		"\u201a", "'",
+		"\u201b", "'",
+		"\u201c", "\"",
+		"\u201d", "\"",
+		"\u201e", "\"",
+		"\u201f", "\"",
+		"\u2010", "-",
+		"\u2011", "-",
+		"\u2012", "-",
+		"\u2013", "-",
+		"\u2014", "-",
+		"\u2015", "-",
+		"\u2026", "...",
+		"\u00a0", " ",
+	)
+	return replacer.Replace(s)
 }
 
 func atomicWriteFile(path string, data []byte, perm fs.FileMode) error {
