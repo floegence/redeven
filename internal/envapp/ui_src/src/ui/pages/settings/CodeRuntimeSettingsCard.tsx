@@ -1,6 +1,6 @@
 import { Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 
 import {
   codeRuntimeManagedActionLabel,
@@ -565,11 +565,23 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           </Show>
 
           <Show when={showInstallableStatePanel()}>
-            <RuntimeStatePanel
-              title={installableStateTitle()}
-              summary={installableStateSummary()}
-              meta={installableStateMeta()}
-            />
+            <HighlightBlock variant="warning" title={installableStateTitle()}>
+              <div class="space-y-3">
+                <div class="text-sm leading-relaxed text-muted-foreground">{installableStateSummary()}</div>
+                <Show when={installableStateMeta().length > 0}>
+                  <div class="grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2">
+                    {installableStateMeta().map((item) => (
+                      <div>
+                        {item.label}:{' '}
+                        <span class={item.mono ? 'font-mono text-foreground break-all' : 'text-foreground'}>
+                          {item.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Show>
+              </div>
+            </HighlightBlock>
           </Show>
 
           <Show when={showCurrentRuntimeSection()}>

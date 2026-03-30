@@ -28,6 +28,15 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     </Show>
   ),
+  HighlightBlock: (props: any) => (
+    <div
+      class={['highlight-block', props.class].filter(Boolean).join(' ')}
+      data-highlight-variant={props.variant}
+    >
+      <div>{props.title}</div>
+      {props.children}
+    </div>
+  ),
 }));
 
 vi.mock('./SettingsPrimitives', () => ({
@@ -160,6 +169,7 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('No runtime installed');
     expect(host.textContent).toContain('Codespaces needs a usable code-server runtime before it can start.');
+    expect(host.querySelector('.highlight-block')?.getAttribute('data-highlight-variant')).toBe('warning');
     expect(host.textContent).not.toContain('Current runtime');
     expect(host.textContent).not.toContain('Managed runtime');
     expect(host.querySelectorAll('table')).toHaveLength(0);
