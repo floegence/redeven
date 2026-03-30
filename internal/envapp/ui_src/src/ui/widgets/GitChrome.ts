@@ -132,6 +132,14 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
   );
 }
 
+export function gitSelectedSecondaryTextClass(active: boolean): string {
+  return active ? 'git-browser-selection-secondary' : 'text-muted-foreground';
+}
+
+export function gitSelectedChipClass(active: boolean): string {
+  return active ? 'git-browser-selection-chip' : '';
+}
+
 export function gitSubviewTone(view: GitWorkbenchSubview): GitChromeTone {
   switch (view) {
     case 'changes':

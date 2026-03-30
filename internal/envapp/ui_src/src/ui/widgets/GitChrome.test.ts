@@ -8,6 +8,8 @@ import {
   gitChangePathClass,
   gitChangeTone,
   gitCompareTone,
+  gitSelectedChipClass,
+  gitSelectedSecondaryTextClass,
   gitSubviewTone,
   gitToneAccentColor,
   gitToneActionButtonClass,
@@ -114,6 +116,10 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneSelectableCardClass('info', false)).toContain('cursor-pointer');
     expect(gitToneSelectableCardClass('neutral', false)).toContain('hover:border-sidebar-accent/55');
     expect(gitToneSelectableCardClass('neutral', false)).not.toContain('hover:-translate-y-px');
+    expect(gitSelectedSecondaryTextClass(true)).toBe('git-browser-selection-secondary');
+    expect(gitSelectedSecondaryTextClass(false)).toBe('text-muted-foreground');
+    expect(gitSelectedChipClass(true)).toBe('git-browser-selection-chip');
+    expect(gitSelectedChipClass(false)).toBe('');
   });
 
   it('uses rounded action buttons for git toolbar actions', () => {

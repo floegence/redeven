@@ -2,6 +2,7 @@ import { For } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitWorkbenchSubview, GitWorkbenchSubviewItem } from '../utils/gitWorkbench';
 import { buildTabElementId, buildTabPanelElementId, resolveRovingTabTargetId } from '../utils/tabNavigation';
+import { gitSelectedChipClass } from './GitChrome';
 
 export interface GitViewNavProps {
   value: GitWorkbenchSubview;
@@ -63,7 +64,7 @@ export function GitViewNav(props: GitViewNavProps) {
                 class={cn(
                   badgeBaseClass,
                   active()
-                    ? 'bg-white/10 text-current'
+                    ? gitSelectedChipClass(true)
                     : 'bg-background/70 text-muted-foreground',
                 )}
               >

@@ -399,6 +399,58 @@ func TestStashListDetailApplyAndDropFlow(t *testing.T) {
 		t.Fatalf("stash detail files missing expected paths: %+v", detailResp.Stash.Files)
 	}
 
+	var trackedFile *gitCommitFileSummary
+	var untrackedFile *gitCommitFileSummary
+	for index := range detailResp.Stash.Files {
+		file := detailResp.Stash.Files[index]
+		if trackedFile == nil && (file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath) {
+			candidate := file
+			trackedFile = &candidate
+		}
+		if untrackedFile == nil && (file.Path == workspace.UntrackedPath || file.NewPath == workspace.UntrackedPath) {
+			candidate := file
+			untrackedFile = &candidate
+		}
+	}
+	if trackedFile == nil || untrackedFile == nil {
+		t.Fatalf("expected tracked and untracked stash files for diff preview: %+v", detailResp.Stash.Files)
+	}
+
+	trackedDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "stash",
+		StashID:      saveResp.Created.ID,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: trackedFile.ChangeType,
+			Path:       trackedFile.Path,
+			OldPath:    trackedFile.OldPath,
+			NewPath:    trackedFile.NewPath,
+		},
+	})
+	if !strings.Contains(trackedDiff.File.PatchText, "+unstaged") {
+		t.Fatalf("tracked stash diff missing tracked patch content: %+v", trackedDiff.File)
+	}
+
+	untrackedDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "stash",
+		StashID:      saveResp.Created.ID,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: untrackedFile.ChangeType,
+			Path:       untrackedFile.Path,
+			OldPath:    untrackedFile.OldPath,
+			NewPath:    untrackedFile.NewPath,
+		},
+	})
+	if untrackedDiff.File.ChangeType != "added" {
+		t.Fatalf("untracked stash diff change_type=%q, want added", untrackedDiff.File.ChangeType)
+	}
+	if !strings.Contains(untrackedDiff.File.PatchText, "+todo") {
+		t.Fatalf("untracked stash diff missing file content: %+v", untrackedDiff.File)
+	}
+
 	previewApplyResp, err := svc.previewApplyStash(context.Background(), repo, saveResp.Created.ID, false)
 	if err != nil {
 		t.Fatalf("previewApplyStash: %v", err)

@@ -511,6 +511,78 @@ func TestE2E_GitRepoRPC_StashEndpoints(t *testing.T) {
 		t.Fatalf("stash detail files missing expected paths: %+v", detailResp.Stash.Files)
 	}
 
+	var trackedFile *gitCommitFileSummary
+	var untrackedFile *gitCommitFileSummary
+	for index := range detailResp.Stash.Files {
+		file := detailResp.Stash.Files[index]
+		if trackedFile == nil && (file.Path == workspace.TrackedPath || file.NewPath == workspace.TrackedPath) {
+			candidate := file
+			trackedFile = &candidate
+		}
+		if untrackedFile == nil && (file.Path == workspace.UntrackedPath || file.NewPath == workspace.UntrackedPath) {
+			candidate := file
+			untrackedFile = &candidate
+		}
+	}
+	if trackedFile == nil || untrackedFile == nil {
+		t.Fatalf("expected tracked and untracked stash files for diff preview: %+v", detailResp.Stash.Files)
+	}
+
+	trackedDiffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "stash",
+		StashID:      saveResp.Created.ID,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: trackedFile.ChangeType,
+			Path:       trackedFile.Path,
+			OldPath:    trackedFile.OldPath,
+			NewPath:    trackedFile.NewPath,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("get stash tracked diff call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get stash tracked diff rpc error: %+v", rpcErr)
+	}
+	var trackedDiffResp getDiffContentResp
+	if err := json.Unmarshal(trackedDiffPayload, &trackedDiffResp); err != nil {
+		t.Fatalf("unmarshal stash tracked diff: %v", err)
+	}
+	if !strings.Contains(trackedDiffResp.File.PatchText, "+unstaged") {
+		t.Fatalf("stash tracked diff content mismatch: %+v", trackedDiffResp.File)
+	}
+
+	untrackedDiffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "stash",
+		StashID:      saveResp.Created.ID,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: untrackedFile.ChangeType,
+			Path:       untrackedFile.Path,
+			OldPath:    untrackedFile.OldPath,
+			NewPath:    untrackedFile.NewPath,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("get stash untracked diff call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get stash untracked diff rpc error: %+v", rpcErr)
+	}
+	var untrackedDiffResp getDiffContentResp
+	if err := json.Unmarshal(untrackedDiffPayload, &untrackedDiffResp); err != nil {
+		t.Fatalf("unmarshal stash untracked diff: %v", err)
+	}
+	if untrackedDiffResp.File.ChangeType != "added" {
+		t.Fatalf("stash untracked diff change_type=%q, want added", untrackedDiffResp.File.ChangeType)
+	}
+	if !strings.Contains(untrackedDiffResp.File.PatchText, "+todo") {
+		t.Fatalf("stash untracked diff content mismatch: %+v", untrackedDiffResp.File)
+	}
+
 	previewApplyPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_PREVIEW_APPLY, mustMarshalJSON(t, previewApplyStashReq{
 		RepoRootPath: fixture.Root,
 		ID:           saveResp.Created.ID,

@@ -5,6 +5,20 @@ import { createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockGetDiffContent = vi.hoisted(() => vi.fn());
+
+vi.mock('../protocol/redeven_v1', async () => {
+  const actual = await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1');
+  return {
+    ...actual,
+    useRedevenRpc: () => ({
+      git: {
+        getDiffContent: mockGetDiffContent,
+      },
+    }),
+  };
+});
+
 vi.mock('./PreviewWindow', () => ({
   PreviewWindow: (props: { open?: boolean; children?: JSX.Element }) => (
     props.open ? <div data-testid="preview-window">{props.children}</div> : null
@@ -21,6 +35,13 @@ vi.mock('./GitPatchViewer', () => ({
 
 import { GitStashWindow } from './GitStashWindow';
 
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -34,6 +55,17 @@ beforeEach(() => {
       removeEventListener: () => {},
       dispatchEvent: () => false,
     })),
+  });
+  mockGetDiffContent.mockReset();
+  mockGetDiffContent.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    mode: 'preview',
+    file: {
+      changeType: 'modified',
+      path: 'src/app.ts',
+      displayPath: 'src/app.ts',
+      patchText: '@@ -1 +1 @@\n-before\n+after',
+    },
   });
 });
 
@@ -112,6 +144,10 @@ describe('GitStashWindow', () => {
       expect(host.textContent).toContain('Apply');
       expect(host.textContent).toContain('Apply & Remove');
       expect(host.textContent).toContain('Delete');
+      const selectedStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('WIP linked worktree')) as HTMLButtonElement | undefined;
+      const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/app.ts')) as HTMLButtonElement | undefined;
+      expect(selectedStashButton?.className).toContain('git-browser-selection-surface');
+      expect(selectedFileButton?.className).toContain('git-browser-selection-surface');
       expect(host.querySelector('[data-testid="patch-viewer"]')?.textContent).toContain('src/app.ts');
     } finally {
       dispose();
@@ -189,6 +225,66 @@ describe('GitStashWindow', () => {
       const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Confirm Apply') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows a contextual stash patch error instead of raw git CLI output', async () => {
+    mockGetDiffContent.mockRejectedValueOnce(new Error("git stash show --patch --include-untracked stash@{0} -- src/app.ts failed: Too many revisions specified"));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitStashWindow
+            open
+            onOpenChange={() => {}}
+            tab="stashes"
+            onTabChange={() => {}}
+            repoRootPath="/workspace/repo"
+            source="changes"
+            repoSummary={{
+              repoRootPath: '/workspace/repo',
+              stashCount: 1,
+              workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+            }}
+            workspaceSummary={{ stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 }}
+            stashes={[{
+              id: 'stash-1',
+              ref: 'stash@{0}',
+              message: 'WIP linked worktree',
+              createdAtUnixMs: 1,
+              fileCount: 1,
+            }]}
+            selectedStashId="stash-1"
+            onSelectStash={() => {}}
+            stashDetail={{
+              id: 'stash-1',
+              ref: 'stash@{0}',
+              message: 'WIP linked worktree',
+              fileCount: 1,
+              files: [{
+                changeType: 'modified',
+                path: 'src/app.ts',
+                displayPath: 'src/app.ts',
+              }],
+            }}
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(host.textContent).toContain('Could not load the selected stash patch.');
+      expect(host.textContent).toContain('Refresh the stash list and try again.');
+      expect(host.textContent).not.toContain('Too many revisions specified');
+      expect(host.textContent).not.toContain('git stash show');
     } finally {
       dispose();
     }

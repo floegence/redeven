@@ -39,6 +39,10 @@
   --git-browser-selection-border: color-mix(in srgb, var(--primary) 52%, #0f172a);
   --git-browser-selection-border-strong: color-mix(in srgb, var(--primary) 62%, #0b1324);
   --git-browser-selection-fg: color-mix(in srgb, white 94%, var(--primary) 6%);
+  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 78%, transparent);
+  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 10%, transparent);
+  --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 14%, var(--git-browser-selection-border) 86%);
+  --git-browser-selection-chip-fg: var(--git-browser-selection-fg);
   --git-browser-selection-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 1px 2px rgba(2, 6, 23, 0.14);
@@ -76,6 +80,10 @@ html.dark {
   --git-browser-selection-border: color-mix(in srgb, var(--primary) 58%, #243247);
   --git-browser-selection-border-strong: color-mix(in srgb, var(--primary) 68%, #30415b);
   --git-browser-selection-fg: color-mix(in srgb, white 92%, var(--primary) 8%);
+  --git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 82%, transparent);
+  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 12%, transparent);
+  --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-border) 82%);
+  --git-browser-selection-chip-fg: var(--git-browser-selection-fg);
   --git-browser-selection-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 1px 2px rgba(2, 6, 23, 0.24);
@@ -148,11 +156,19 @@ html.dark {
   border-left-color: var(--git-browser-selection-border-strong);
 }
 
+.git-browser-selection-secondary {
+  color: var(--git-browser-selection-secondary-fg);
+}
+
 .git-browser-selection-chip {
+  --tag-bg: var(--git-browser-selection-chip-bg);
+  --tag-border: var(--git-browser-selection-chip-border);
+  --tag-color: var(--git-browser-selection-chip-fg);
   border: 1px solid var(--git-browser-selection-border);
-  background: var(--git-browser-selection-bg);
-  color: var(--git-browser-selection-fg);
-  box-shadow: var(--git-browser-selection-shadow);
+  border-color: var(--git-browser-selection-chip-border);
+  background: var(--git-browser-selection-chip-bg);
+  color: var(--git-browser-selection-chip-fg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .git-tone-dot {
