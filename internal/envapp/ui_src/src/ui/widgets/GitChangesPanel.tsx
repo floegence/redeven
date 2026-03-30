@@ -35,12 +35,14 @@ import {
   GitChangeStatusPill,
   GitLabelBlock,
   GitMetaPill,
+  GitPanelFrame,
   GitPagedTableFooter,
   GitPrimaryTitle,
   GitShortcutOrbButton,
   GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
+  GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
@@ -118,7 +120,7 @@ interface WorkspaceTableProps {
 
 function WorkspaceTable(props: WorkspaceTableProps) {
   return (
-    <div class={`flex h-full min-h-0 flex-col overflow-hidden rounded-md border ${redevenSurfaceRoleClass('panelStrong')}`}>
+    <GitTableFrame class="flex h-full min-h-0 flex-col">
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -204,7 +206,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           />
         </Show>
       </Show>
-    </div>
+    </GitTableFrame>
   );
 }
 
@@ -285,7 +287,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         <Show when={!visibleLoading()} fallback={<GitStatePane loading message="Loading workspace changes..." />}>
           <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
             <div class="flex min-h-0 flex-1 flex-col gap-3">
-              <div class={`shrink-0 rounded-md border px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02] ${redevenSurfaceRoleClass('panelStrong')}`}>
+              <GitPanelFrame class="shrink-0">
                 <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                   <GitLabelBlock class="min-w-0 flex-1" label="Workspace" tone={selectedTone()}>
                     <div class="flex flex-wrap items-center gap-2">
@@ -399,7 +401,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     </div>
                   </div>
                 </div>
-              </div>
+              </GitPanelFrame>
 
               <div class="min-h-0 flex-1">
                 <WorkspaceTable

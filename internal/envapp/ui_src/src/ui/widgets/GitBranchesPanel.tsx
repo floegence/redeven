@@ -55,12 +55,14 @@ import {
   GitChangeStatusPill,
   GitLabelBlock,
   GitMetaPill,
+  GitPanelFrame,
   GitPagedTableFooter,
   GitPrimaryTitle,
   GitShortcutOrbButton,
   GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
+  GitTableFrame,
   type GitShortcutOrbTone,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
@@ -249,7 +251,7 @@ interface BranchCompareFilesTableProps {
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
   return (
-    <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md', redevenSurfaceRoleClass('panelStrong'))}>
+    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -303,7 +305,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
           }}
         />
       </Show>
-    </div>
+    </GitTableFrame>
   );
 }
 
@@ -319,7 +321,7 @@ interface BranchStatusTableProps {
 
 function BranchStatusTable(props: BranchStatusTableProps) {
   return (
-    <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md', redevenSurfaceRoleClass('panelStrong'))}>
+    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -389,7 +391,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           />
         </Show>
       </Show>
-    </div>
+    </GitTableFrame>
   );
 }
 
@@ -519,7 +521,7 @@ function HistoryList(props: Pick<
                     when={(props.commits?.length ?? 0) > 0}
                     fallback={<GitSubtleNote>No commit history is available for this branch.</GitSubtleNote>}
                   >
-                    <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md', redevenSurfaceRoleClass('panelStrong'))}>
+                    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
                       <div class="min-h-0 flex-1 overflow-auto">
                         <table class="w-full min-w-[42rem] text-xs md:min-w-0">
                           <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
@@ -673,7 +675,7 @@ function HistoryList(props: Pick<
                           </tbody>
                         </table>
                       </div>
-                    </div>
+                    </GitTableFrame>
                   </Show>
                 </div>
 
@@ -1412,7 +1414,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       >
         <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
           <div class="flex min-h-0 flex-1 flex-col gap-3">
-            <section class={cn('rounded-md px-3 py-2.5', redevenSurfaceRoleClass('panelStrong'))}>
+            <GitPanelFrame as="section">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex min-h-5 items-center gap-2">
                   <span class={cn('h-2 w-2 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.04)]', gitToneDotClass('neutral'))} aria-hidden="true" />
@@ -1510,7 +1512,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   </Show>
                 </Show>
               </div>
-            </section>
+            </GitPanelFrame>
 
             <Show when={visibleStatusWorkspace()}>
               <div class="flex min-h-0 flex-1 overflow-hidden">
@@ -1543,7 +1545,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           <Show when={props.selectedBranch} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to inspect its status or history.</div>}>
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
-                <div class={cn('rounded-md px-3 py-2.5 shadow-sm shadow-black/5 ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
+                <GitPanelFrame>
                   <div class={branchHeaderSummaryBandClass}>
                     <div class={branchHeaderTopRowClass}>
                       <div class="min-w-0 flex-1">
@@ -1682,7 +1684,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </div>
                     </Show>
                   </div>
-                </div>
+                </GitPanelFrame>
               </div>
 
               {renderStatus(branchSubview() === 'status')}

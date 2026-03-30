@@ -44,6 +44,7 @@ Notes:
 - Env App standard panel surfaces live in the root-scoped `--redeven-surface-panel*` token family inside `src/styles/redeven.css`.
 - `--card` and `--popover` are intentionally aliased to that Env App panel family, so contributors should reuse semantic surface tokens instead of hardcoding the light/dark RGB pair in component selectors.
 - Any panel surface that must also style body-portal overlays such as tooltips or popovers must stay on the root theme scope; a page-local wrapper cannot reach those portals.
+- Git browser strong review shells must use the shared `GitPanelFrame` / `GitTableFrame` primitives from `src/ui/widgets/GitWorkbenchPrimitives.tsx` instead of restating wrapper geometry ad hoc in `GitChangesPanel`, `GitBranchesPanel`, or `GitHistoryBrowser`; `redevenSurfaceRoleClass('panelStrong')` supplies surface semantics, not the full border/ring layout contract by itself.
 - Git browser title dots are intentionally build-stable semantic selectors: `src/ui/widgets/GitChrome.ts` returns `git-tone-dot` plus `git-tone-dot--<tone>`, and `src/styles/redeven.css` owns the actual colors. Do not reintroduce raw `bg-*` utility strings for those dots.
 
 ## Floating Layer Contract

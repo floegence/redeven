@@ -1,4 +1,5 @@
 import { For, Show, type Component, type JSX } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -84,6 +85,39 @@ export function GitLabelBlock(props: GitLabelBlockProps) {
       </Show>
     </div>
   );
+}
+
+const GIT_PANEL_FRAME_CLASS = cn(
+  'rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02]',
+  redevenSurfaceRoleClass('panelStrong'),
+);
+
+const GIT_TABLE_FRAME_CLASS = cn(
+  'overflow-hidden rounded-md border',
+  redevenSurfaceRoleClass('panelStrong'),
+);
+
+export interface GitPanelFrameProps {
+  as?: 'div' | 'section';
+  class?: string;
+  children?: JSX.Element;
+}
+
+export function GitPanelFrame(props: GitPanelFrameProps) {
+  return (
+    <Dynamic component={props.as ?? 'div'} class={cn(GIT_PANEL_FRAME_CLASS, props.class)}>
+      {props.children}
+    </Dynamic>
+  );
+}
+
+export interface GitTableFrameProps {
+  class?: string;
+  children?: JSX.Element;
+}
+
+export function GitTableFrame(props: GitTableFrameProps) {
+  return <div class={cn(GIT_TABLE_FRAME_CLASS, props.class)}>{props.children}</div>;
 }
 
 export interface GitStatItem {

@@ -20,11 +20,13 @@ import {
   GitChangeStatusPill,
   GitLabelBlock,
   GitMetaPill,
+  GitPanelFrame,
   GitPrimaryTitle,
   GitShortcutOrbButton,
   GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
+  GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
@@ -184,7 +186,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   return (
                     <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
-                        <section class={`rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02] ${redevenSurfaceRoleClass('panelStrong')}`}>
+                        <GitPanelFrame as="section">
                           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                             <GitLabelBlock
                               class="min-w-0 flex-1"
@@ -270,14 +272,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           <Show when={props.onSwitchDetached && alreadyDetachedHere()}>
                             <GitSubtleNote>Repository is already detached at this commit.</GitSubtleNote>
                           </Show>
-                        </section>
+                        </GitPanelFrame>
 
-                        <section class={cn('rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
+                        <GitPanelFrame as="section">
                           <GitLabelBlock class="min-w-0" label="Files in Commit" tone="info" meta={<GitMetaPill tone="neutral">{String(commitFiles().length)}</GitMetaPill>}>
                             <div class="text-xs leading-relaxed text-muted-foreground">Click a file to inspect its diff in a dialog.</div>
                           </GitLabelBlock>
                           <Show when={commitFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}>
-                            <div class={cn('mt-2.5 overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'))}>
+                            <GitTableFrame class="mt-2.5">
                               <GitVirtualTable
                                 items={commitFiles()}
                                 tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
@@ -327,9 +329,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                   );
                                 }}
                               />
-                            </div>
+                            </GitTableFrame>
                           </Show>
-                        </section>
+                        </GitPanelFrame>
                       </div>
                     </div>
                   );

@@ -275,6 +275,38 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).not.toContain('text-[24px] font-semibold tracking-tight');
   });
 
+  it('routes git content shells through shared strong panel frame primitives', () => {
+    const primitivesSrc = read('./GitWorkbenchPrimitives.tsx');
+    const changesSrc = read('./GitChangesPanel.tsx');
+    const branchesSrc = read('./GitBranchesPanel.tsx');
+    const historySrc = read('./GitHistoryBrowser.tsx');
+
+    expect(primitivesSrc).toContain('export interface GitPanelFrameProps');
+    expect(primitivesSrc).toContain('export interface GitTableFrameProps');
+    expect(primitivesSrc).toContain('export function GitPanelFrame');
+    expect(primitivesSrc).toContain('export function GitTableFrame');
+    expect(primitivesSrc).toContain("'rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02]'");
+    expect(primitivesSrc).toContain("'overflow-hidden rounded-md border'");
+    expect(primitivesSrc).toContain("redevenSurfaceRoleClass('panelStrong')");
+    expect(primitivesSrc).toContain("<Dynamic component={props.as ?? 'div'}");
+
+    expect(changesSrc).toContain('GitPanelFrame');
+    expect(changesSrc).toContain('GitTableFrame');
+    expect(changesSrc).toContain('<GitPanelFrame class="shrink-0">');
+    expect(changesSrc).toContain('<GitTableFrame class="flex h-full min-h-0 flex-col">');
+
+    expect(historySrc).toContain('GitPanelFrame');
+    expect(historySrc).toContain('GitTableFrame');
+    expect(historySrc).toContain('<GitPanelFrame as="section">');
+    expect(historySrc).toContain('<GitTableFrame class="mt-2.5">');
+
+    expect(branchesSrc).toContain('GitPanelFrame');
+    expect(branchesSrc).toContain('GitTableFrame');
+    expect(branchesSrc).toContain('<GitTableFrame class="flex min-h-0 flex-1 flex-col">');
+    expect(branchesSrc).toContain('<GitPanelFrame as="section">');
+    expect(branchesSrc).toContain('<GitPanelFrame>');
+  });
+
   it('uses the dedicated git view navigation inside the git workspace shell', () => {
     const src = read('./GitWorkspace.tsx');
 
