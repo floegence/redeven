@@ -12,16 +12,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	SupportedVersion                = "4.108.2"
-	defaultInstallScriptURLFmt      = "https://raw.githubusercontent.com/coder/code-server/v%s/install.sh"
+	defaultInstallScriptURL         = "https://code-server.dev/install.sh"
 	installScriptURLOverrideEnv     = "REDEVEN_CODE_SERVER_INSTALL_SCRIPT_URL"
 	defaultInstallerDownloadTimeout = 2 * time.Minute
 	runtimeLogTailLimit             = 80
@@ -30,9 +29,9 @@ const (
 type RuntimeDetectionState string
 
 const (
-	RuntimeDetectionReady        RuntimeDetectionState = "ready"
-	RuntimeDetectionMissing      RuntimeDetectionState = "missing"
-	RuntimeDetectionIncompatible RuntimeDetectionState = "incompatible"
+	RuntimeDetectionReady    RuntimeDetectionState = "ready"
+	RuntimeDetectionMissing  RuntimeDetectionState = "missing"
+	RuntimeDetectionUnusable RuntimeDetectionState = "unusable"
 )
 
 type RuntimeOperationAction string
@@ -64,13 +63,12 @@ const (
 )
 
 type RuntimeTargetStatus struct {
-	DetectionState   RuntimeDetectionState `json:"detection_state"`
-	Present          bool                  `json:"present"`
-	Source           string                `json:"source"`
-	BinaryPath       string                `json:"binary_path,omitempty"`
-	InstalledVersion string                `json:"installed_version,omitempty"`
-	ErrorCode        string                `json:"error_code,omitempty"`
-	ErrorMessage     string                `json:"error_message,omitempty"`
+	DetectionState RuntimeDetectionState `json:"detection_state"`
+	Present        bool                  `json:"present"`
+	Source         string                `json:"source"`
+	BinaryPath     string                `json:"binary_path,omitempty"`
+	ErrorCode      string                `json:"error_code,omitempty"`
+	ErrorMessage   string                `json:"error_message,omitempty"`
 }
 
 type RuntimeOperationStatus struct {
@@ -85,7 +83,6 @@ type RuntimeOperationStatus struct {
 }
 
 type RuntimeStatus struct {
-	SupportedVersion   string                 `json:"supported_version"`
 	ActiveRuntime      RuntimeTargetStatus    `json:"active_runtime"`
 	ManagedRuntime     RuntimeTargetStatus    `json:"managed_runtime"`
 	ManagedPrefix      string                 `json:"managed_prefix"`
@@ -97,7 +94,6 @@ type RuntimeStatus struct {
 type RuntimeManagerOptions struct {
 	Logger               *slog.Logger
 	StateDir             string
-	SupportedVersion     string
 	InstallScriptURL     string
 	InstallScriptContent []byte
 	HTTPClient           *http.Client
@@ -108,7 +104,6 @@ type RuntimeManager struct {
 	log *slog.Logger
 
 	stateDir          string
-	supportedVersion  string
 	installScriptURL  string
 	installScriptBody []byte
 	httpClient        *http.Client
@@ -128,13 +123,12 @@ type RuntimeManager struct {
 }
 
 type runtimeDetection struct {
-	state            RuntimeDetectionState
-	present          bool
-	source           string
-	binaryPath       string
-	installedVersion string
-	errorCode        string
-	errorMessage     string
+	state        RuntimeDetectionState
+	present      bool
+	source       string
+	binaryPath   string
+	errorCode    string
+	errorMessage string
 }
 
 type binaryCandidate struct {
@@ -142,24 +136,18 @@ type binaryCandidate struct {
 	source string
 }
 
-var codeServerVersionPattern = regexp.MustCompile(`\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?`)
-
 func NewRuntimeManager(opts RuntimeManagerOptions) *RuntimeManager {
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
 	stateDir := strings.TrimSpace(opts.StateDir)
-	supportedVersion := strings.TrimSpace(opts.SupportedVersion)
-	if supportedVersion == "" {
-		supportedVersion = SupportedVersion
-	}
 	installScriptURL := strings.TrimSpace(opts.InstallScriptURL)
 	if installScriptURL == "" {
 		installScriptURL = strings.TrimSpace(os.Getenv(installScriptURLOverrideEnv))
 	}
 	if installScriptURL == "" {
-		installScriptURL = fmt.Sprintf(defaultInstallScriptURLFmt, supportedVersion)
+		installScriptURL = defaultInstallScriptURL
 	}
 	httpClient := opts.HTTPClient
 	if httpClient == nil {
@@ -173,7 +161,6 @@ func NewRuntimeManager(opts RuntimeManagerOptions) *RuntimeManager {
 	return &RuntimeManager{
 		log:               logger,
 		stateDir:          stateDir,
-		supportedVersion:  supportedVersion,
 		installScriptURL:  installScriptURL,
 		installScriptBody: append([]byte(nil), opts.InstallScriptContent...),
 		httpClient:        httpClient,
@@ -185,8 +172,11 @@ func NewRuntimeManager(opts RuntimeManagerOptions) *RuntimeManager {
 
 func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 	if m == nil {
+		installScriptURL := strings.TrimSpace(os.Getenv(installScriptURLOverrideEnv))
+		if installScriptURL == "" {
+			installScriptURL = defaultInstallScriptURL
+		}
 		return RuntimeStatus{
-			SupportedVersion: SupportedVersion,
 			ActiveRuntime: RuntimeTargetStatus{
 				DetectionState: RuntimeDetectionMissing,
 				Source:         "none",
@@ -195,16 +185,16 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 				DetectionState: RuntimeDetectionMissing,
 				Source:         "managed",
 			},
-			ManagedPrefix:   "",
-			Operation:       RuntimeOperationStatus{State: RuntimeOperationStateIdle},
-			UpdatedAtUnixMs: time.Now().UnixMilli(),
+			ManagedPrefix:      "",
+			InstallerScriptURL: installScriptURL,
+			Operation:          RuntimeOperationStatus{State: RuntimeOperationStateIdle},
+			UpdatedAtUnixMs:    time.Now().UnixMilli(),
 		}
 	}
-	active := detectRuntime(ctx, m.stateDir, m.supportedVersion)
-	managed := detectManagedRuntime(ctx, m.stateDir, m.supportedVersion)
+	active := detectRuntime(ctx, m.stateDir)
+	managed := detectManagedRuntime(ctx, m.stateDir)
 	snapshot := m.snapshot()
 	return RuntimeStatus{
-		SupportedVersion:   m.supportedVersion,
 		ActiveRuntime:      runtimeTargetStatusFromDetection(active),
 		ManagedRuntime:     runtimeTargetStatusFromDetection(managed),
 		ManagedPrefix:      managedRuntimePrefix(m.stateDir),
@@ -304,7 +294,6 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 	managedPrefix := managedRuntimePrefix(m.stateDir)
 
 	m.appendLog("Preparing managed code-server install.")
-	m.appendLog("Supported version: " + m.supportedVersion)
 	m.appendLog("Installer URL: " + m.installScriptURL)
 	m.appendLog("Managed prefix: " + managedPrefix)
 
@@ -341,17 +330,10 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 	}
 
 	m.setStage(RuntimeOperationStageValidating)
-	version, err := detectBinaryVersion(ctx, filepath.Join(stagePrefix, "bin", codeServerBinaryName()))
-	if err != nil {
+	stagedBinary := filepath.Join(stagePrefix, "bin", codeServerBinaryName())
+	if err := probeRuntimeBinary(ctx, stagedBinary); err != nil {
 		errCode = "validation_failed"
 		errMessage = err.Error()
-		_ = os.RemoveAll(stagePrefix)
-		m.finishOperation(errCode, errMessage, false)
-		return
-	}
-	if version != m.supportedVersion {
-		errCode = "unsupported_version"
-		errMessage = fmt.Sprintf("installed version %s does not match supported version %s", version, m.supportedVersion)
 		_ = os.RemoveAll(stagePrefix)
 		m.finishOperation(errCode, errMessage, false)
 		return
@@ -365,9 +347,16 @@ func (m *RuntimeManager) runInstall(ctx context.Context) {
 		m.finishOperation(errCode, errMessage, false)
 		return
 	}
-	if err := repairManagedRuntimeLinks(managedPrefix, m.supportedVersion); err != nil {
+	if err := repairManagedRuntimeLinks(managedPrefix); err != nil {
 		errCode = "finalize_failed"
 		errMessage = err.Error()
+		m.finishOperation(errCode, errMessage, false)
+		return
+	}
+	managedDetection := detectManagedRuntime(ctx, m.stateDir)
+	if managedDetection.state != RuntimeDetectionReady {
+		errCode = "finalize_failed"
+		errMessage = runtimeDetectionError(managedDetection)
 		m.finishOperation(errCode, errMessage, false)
 		return
 	}
@@ -421,7 +410,7 @@ func (m *RuntimeManager) prepareInstallPaths(stagePrefix string) error {
 	paths := []string{
 		runtimeRoot(m.stateDir),
 		runtimeCacheRoot(m.stateDir),
-		runtimeInstallerCacheDir(m.stateDir, m.supportedVersion),
+		runtimeInstallerCacheDir(m.stateDir),
 		runtimeStagingRoot(m.stateDir),
 	}
 	for _, dir := range paths {
@@ -434,14 +423,11 @@ func (m *RuntimeManager) prepareInstallPaths(stagePrefix string) error {
 }
 
 func (m *RuntimeManager) ensureInstallScript(ctx context.Context) (string, error) {
-	cacheDir := runtimeInstallerCacheDir(m.stateDir, m.supportedVersion)
+	cacheDir := runtimeInstallerCacheDir(m.stateDir)
 	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
 		return "", err
 	}
 	scriptPath := filepath.Join(cacheDir, "install.sh")
-	if fi, err := os.Stat(scriptPath); err == nil && !fi.IsDir() {
-		return scriptPath, nil
-	}
 
 	m.setStage(RuntimeOperationStageDownloading)
 	var content []byte
@@ -480,7 +466,7 @@ func (m *RuntimeManager) ensureInstallScript(ctx context.Context) (string, error
 }
 
 func (m *RuntimeManager) runOfficialInstaller(ctx context.Context, scriptPath string, prefix string) error {
-	cmd := exec.CommandContext(ctx, "/bin/sh", scriptPath, "--method=standalone", "--prefix", prefix, "--version", m.supportedVersion)
+	cmd := exec.CommandContext(ctx, "/bin/sh", scriptPath, "--method=standalone", "--prefix", prefix)
 	cmd.Env = append(os.Environ(),
 		"XDG_CACHE_HOME="+runtimeCacheRoot(m.stateDir),
 	)
@@ -606,28 +592,27 @@ func runtimeTargetStatusFromDetection(d runtimeDetection) RuntimeTargetStatus {
 		source = "none"
 	}
 	return RuntimeTargetStatus{
-		DetectionState:   d.state,
-		Present:          d.present,
-		Source:           source,
-		BinaryPath:       d.binaryPath,
-		InstalledVersion: d.installedVersion,
-		ErrorCode:        d.errorCode,
-		ErrorMessage:     d.errorMessage,
+		DetectionState: d.state,
+		Present:        d.present,
+		Source:         source,
+		BinaryPath:     d.binaryPath,
+		ErrorCode:      d.errorCode,
+		ErrorMessage:   d.errorMessage,
 	}
 }
 
-func detectRuntime(ctx context.Context, stateDir string, supportedVersion string) runtimeDetection {
+func detectRuntime(ctx context.Context, stateDir string) runtimeDetection {
 	overrideCandidates := explicitOverrideCandidates()
 	if len(overrideCandidates) > 0 {
-		return detectRuntimeFromCandidates(ctx, overrideCandidates, supportedVersion)
+		return detectRuntimeFromCandidates(ctx, overrideCandidates)
 	}
 
 	var firstProblem *runtimeDetection
-	managedDetection := detectManagedRuntime(ctx, stateDir, supportedVersion)
+	managedDetection := detectManagedRuntime(ctx, stateDir)
 	if managedDetection.state == RuntimeDetectionReady {
 		return managedDetection
 	}
-	if managedDetection.state == RuntimeDetectionIncompatible {
+	if managedDetection.state == RuntimeDetectionUnusable {
 		copy := managedDetection
 		firstProblem = &copy
 	}
@@ -642,7 +627,7 @@ func detectRuntime(ctx context.Context, stateDir string, supportedVersion string
 			source: "none",
 		}
 	}
-	systemDetection := detectRuntimeFromCandidates(ctx, systemCandidates, supportedVersion)
+	systemDetection := detectRuntimeFromCandidates(ctx, systemCandidates)
 	if systemDetection.state == RuntimeDetectionReady {
 		return systemDetection
 	}
@@ -652,7 +637,7 @@ func detectRuntime(ctx context.Context, stateDir string, supportedVersion string
 	return systemDetection
 }
 
-func detectManagedRuntime(ctx context.Context, stateDir string, supportedVersion string) runtimeDetection {
+func detectManagedRuntime(ctx context.Context, stateDir string) runtimeDetection {
 	managedBinary := filepath.Join(managedRuntimePrefix(stateDir), "bin", codeServerBinaryName())
 	if _, err := os.Lstat(managedBinary); err != nil {
 		return runtimeDetection{
@@ -660,10 +645,10 @@ func detectManagedRuntime(ctx context.Context, stateDir string, supportedVersion
 			source: "managed",
 		}
 	}
-	return detectRuntimeCandidate(ctx, binaryCandidate{path: managedBinary, source: "managed"}, supportedVersion)
+	return detectRuntimeCandidate(ctx, binaryCandidate{path: managedBinary, source: "managed"})
 }
 
-func detectRuntimeFromCandidates(ctx context.Context, candidates []binaryCandidate, supportedVersion string) runtimeDetection {
+func detectRuntimeFromCandidates(ctx context.Context, candidates []binaryCandidate) runtimeDetection {
 	if len(candidates) == 0 {
 		return runtimeDetection{
 			state:  RuntimeDetectionMissing,
@@ -672,11 +657,11 @@ func detectRuntimeFromCandidates(ctx context.Context, candidates []binaryCandida
 	}
 	var firstProblem *runtimeDetection
 	for _, candidate := range candidates {
-		detection := detectRuntimeCandidate(ctx, candidate, supportedVersion)
+		detection := detectRuntimeCandidate(ctx, candidate)
 		if detection.state == RuntimeDetectionReady {
 			return detection
 		}
-		if detection.state == RuntimeDetectionIncompatible && firstProblem == nil {
+		if detection.state == RuntimeDetectionUnusable && firstProblem == nil {
 			copy := detection
 			firstProblem = &copy
 		}
@@ -687,11 +672,11 @@ func detectRuntimeFromCandidates(ctx context.Context, candidates []binaryCandida
 	}
 	return runtimeDetection{
 		state:  RuntimeDetectionMissing,
-		source: "none",
+		source: firstCandidateSource(candidates),
 	}
 }
 
-func detectRuntimeCandidate(ctx context.Context, candidate binaryCandidate, supportedVersion string) runtimeDetection {
+func detectRuntimeCandidate(ctx context.Context, candidate binaryCandidate) runtimeDetection {
 	detection := runtimeDetection{
 		source: strings.TrimSpace(candidate.source),
 	}
@@ -709,24 +694,14 @@ func detectRuntimeCandidate(ctx context.Context, candidate binaryCandidate, supp
 		detection.present = true
 	}
 
-	version, err := detectBinaryVersion(ctx, path)
-	if err != nil {
-		detection.state = RuntimeDetectionIncompatible
+	if err := probeRuntimeBinary(ctx, path); err != nil {
+		detection.state = RuntimeDetectionUnusable
 		detection.errorCode = "binary_unusable"
 		detection.errorMessage = fmt.Sprintf("%s is not usable: %v", path, err)
 		return detection
 	}
-	if version != supportedVersion {
-		detection.state = RuntimeDetectionIncompatible
-		detection.present = true
-		detection.installedVersion = version
-		detection.errorCode = "unsupported_version"
-		detection.errorMessage = fmt.Sprintf("detected code-server %s but Redeven supports %s", version, supportedVersion)
-		return detection
-	}
 	detection.state = RuntimeDetectionReady
 	detection.present = true
-	detection.installedVersion = version
 	return detection
 }
 
@@ -799,41 +774,37 @@ func explicitOverrideCandidates() []binaryCandidate {
 	return out
 }
 
-func detectBinaryVersion(ctx context.Context, binaryPath string) (string, error) {
+func probeRuntimeBinary(ctx context.Context, binaryPath string) error {
 	path := strings.TrimSpace(binaryPath)
 	if path == "" {
-		return "", errors.New("missing binary path")
+		return errors.New("missing binary path")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	versionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	execPath, prefixArgs, err := resolveCodeServerExec(path)
 	if err != nil {
-		return "", err
+		return err
 	}
 	args := append(prefixArgs, "--version")
-	cmd := exec.CommandContext(versionCtx, execPath, args...)
+	cmd := exec.CommandContext(probeCtx, execPath, args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	if err := cmd.Run(); err != nil {
-		if versionCtx.Err() != nil {
-			return "", versionCtx.Err()
+		if probeCtx.Err() != nil {
+			return probeCtx.Err()
 		}
 		msg := strings.TrimSpace(out.String())
 		if msg == "" {
-			return "", err
+			return err
 		}
-		return "", fmt.Errorf("%w: %s", err, msg)
+		return fmt.Errorf("%w: %s", err, msg)
 	}
-	match := codeServerVersionPattern.FindString(out.String())
-	if match == "" {
-		return "", fmt.Errorf("code-server version output missing semver: %s", strings.TrimSpace(out.String()))
-	}
-	return match, nil
+	return nil
 }
 
 func removeIfExists(path string) error {
@@ -872,9 +843,12 @@ func promoteManagedRuntime(stagePrefix string, managedPrefix string) error {
 	return nil
 }
 
-func repairManagedRuntimeLinks(managedPrefix string, supportedVersion string) error {
+func repairManagedRuntimeLinks(managedPrefix string) error {
 	binDir := filepath.Join(managedPrefix, "bin")
-	target := filepath.Join(managedPrefix, "lib", "code-server-"+strings.TrimSpace(supportedVersion), "bin", codeServerBinaryName())
+	target, err := locateManagedRuntimeBinary(managedPrefix)
+	if err != nil {
+		return err
+	}
 	link := filepath.Join(binDir, codeServerBinaryName())
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		return err
@@ -899,12 +873,8 @@ func runtimeCacheRoot(stateDir string) string {
 	return filepath.Join(runtimeRoot(stateDir), "cache")
 }
 
-func runtimeInstallerCacheDir(stateDir string, supportedVersion string) string {
-	version := strings.TrimSpace(supportedVersion)
-	if version == "" {
-		version = SupportedVersion
-	}
-	return filepath.Join(runtimeCacheRoot(stateDir), "installer", version)
+func runtimeInstallerCacheDir(stateDir string) string {
+	return filepath.Join(runtimeCacheRoot(stateDir), "installer")
 }
 
 func codeServerBinaryName() string {
@@ -935,4 +905,54 @@ func sanitizePathSegment(value string) string {
 		return "install"
 	}
 	return out
+}
+
+func firstCandidateSource(candidates []binaryCandidate) string {
+	for _, candidate := range candidates {
+		source := strings.TrimSpace(candidate.source)
+		if source != "" {
+			return source
+		}
+	}
+	return "none"
+}
+
+func runtimeDetectionError(detection runtimeDetection) string {
+	if msg := strings.TrimSpace(detection.errorMessage); msg != "" {
+		return msg
+	}
+	if path := strings.TrimSpace(detection.binaryPath); path != "" {
+		return fmt.Sprintf("%s is not usable", path)
+	}
+	return "managed runtime validation failed"
+}
+
+func locateManagedRuntimeBinary(managedPrefix string) (string, error) {
+	managedPrefix = strings.TrimSpace(managedPrefix)
+	if managedPrefix == "" {
+		return "", errors.New("missing managed runtime prefix")
+	}
+
+	linkPath := filepath.Join(managedPrefix, "bin", codeServerBinaryName())
+	if target, err := os.Readlink(linkPath); err == nil {
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(linkPath), target)
+		}
+		target = filepath.Clean(target)
+		if fi, statErr := os.Stat(target); statErr == nil && !fi.IsDir() {
+			return target, nil
+		}
+	}
+
+	matches, err := filepath.Glob(filepath.Join(managedPrefix, "lib", "code-server-*", "bin", codeServerBinaryName()))
+	if err != nil {
+		return "", err
+	}
+	sort.Strings(matches)
+	for _, match := range matches {
+		if fi, statErr := os.Stat(match); statErr == nil && !fi.IsDir() {
+			return match, nil
+		}
+	}
+	return "", fmt.Errorf("managed runtime binary not found under %s", managedPrefix)
 }

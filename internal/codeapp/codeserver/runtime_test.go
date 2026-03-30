@@ -19,7 +19,6 @@ func TestRuntimeManagerStatusDetectsSupportedOverride(t *testing.T) {
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             t.TempDir(),
-		SupportedVersion:     "4.108.2",
 		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
 	})
 
@@ -38,24 +37,20 @@ func TestRuntimeManagerStatusDetectsSupportedOverride(t *testing.T) {
 func TestRuntimeManagerStatusRejectsUnsupportedOverride(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "code-server")
-	writeFakeCodeServerBinary(t, bin, "4.99.0")
+	writeBrokenCodeServerBinary(t, bin, "boom")
 	t.Setenv("REDEVEN_CODE_SERVER_BIN", bin)
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             t.TempDir(),
-		SupportedVersion:     "4.108.2",
 		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
 	})
 
 	status := mgr.Status(context.Background())
-	if status.ActiveRuntime.DetectionState != RuntimeDetectionIncompatible {
-		t.Fatalf("active detection_state=%q, want %q", status.ActiveRuntime.DetectionState, RuntimeDetectionIncompatible)
+	if status.ActiveRuntime.DetectionState != RuntimeDetectionUnusable {
+		t.Fatalf("active detection_state=%q, want %q", status.ActiveRuntime.DetectionState, RuntimeDetectionUnusable)
 	}
-	if status.ActiveRuntime.InstalledVersion != "4.99.0" {
-		t.Fatalf("installed_version=%q, want %q", status.ActiveRuntime.InstalledVersion, "4.99.0")
-	}
-	if status.ActiveRuntime.ErrorCode != "unsupported_version" {
-		t.Fatalf("error_code=%q, want %q", status.ActiveRuntime.ErrorCode, "unsupported_version")
+	if status.ActiveRuntime.ErrorCode != "binary_unusable" {
+		t.Fatalf("error_code=%q, want %q", status.ActiveRuntime.ErrorCode, "binary_unusable")
 	}
 }
 
@@ -71,7 +66,6 @@ func TestRuntimeManagerStatusKeepsManagedRuntimeVisibleWhenOverrideIsActive(t *t
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             stateDir,
-		SupportedVersion:     "4.108.2",
 		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
 	})
 
@@ -92,11 +86,9 @@ func TestRuntimeManagerStatusKeepsManagedRuntimeVisibleWhenOverrideIsActive(t *t
 
 func TestRuntimeManagerInstallSucceedsAndPromotesManagedRuntime(t *testing.T) {
 	stateDir := t.TempDir()
-	version := "4.108.2"
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             stateDir,
-		SupportedVersion:     version,
-		InstallScriptContent: []byte(fakeInstallScript(false, 0)),
+		InstallScriptContent: []byte(fakeInstallScript("latest", false, 0)),
 	})
 
 	status := mgr.StartInstall(context.Background())
@@ -112,26 +104,18 @@ func TestRuntimeManagerInstallSucceedsAndPromotesManagedRuntime(t *testing.T) {
 	if final.ManagedRuntime.DetectionState != RuntimeDetectionReady {
 		t.Fatalf("managed detection_state=%q, want %q", final.ManagedRuntime.DetectionState, RuntimeDetectionReady)
 	}
-	if final.ManagedRuntime.InstalledVersion != version {
-		t.Fatalf("managed installed_version=%q, want %q", final.ManagedRuntime.InstalledVersion, version)
-	}
 	if _, err := os.Stat(managedBin); err != nil {
 		t.Fatalf("managed runtime missing: %v", err)
 	}
-	managedVersion, err := detectBinaryVersion(context.Background(), managedBin)
-	if err != nil {
-		t.Fatalf("detectBinaryVersion(managedBin) error = %v", err)
-	}
-	if managedVersion != version {
-		t.Fatalf("managedVersion=%q, want %q", managedVersion, version)
+	if err := probeRuntimeBinary(context.Background(), managedBin); err != nil {
+		t.Fatalf("probeRuntimeBinary(managedBin) error = %v", err)
 	}
 }
 
 func TestRuntimeManagerInstallFailsWithInstallerError(t *testing.T) {
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             t.TempDir(),
-		SupportedVersion:     "4.108.2",
-		InstallScriptContent: []byte(fakeInstallScript(true, 0)),
+		InstallScriptContent: []byte(fakeInstallScript("latest", true, 0)),
 	})
 
 	mgr.StartInstall(context.Background())
@@ -144,8 +128,7 @@ func TestRuntimeManagerInstallFailsWithInstallerError(t *testing.T) {
 func TestRuntimeManagerCancelInstall(t *testing.T) {
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             t.TempDir(),
-		SupportedVersion:     "4.108.2",
-		InstallScriptContent: []byte(fakeInstallScript(false, 5*time.Second)),
+		InstallScriptContent: []byte(fakeInstallScript("latest", false, 5*time.Second)),
 	})
 
 	mgr.StartInstall(context.Background())
@@ -164,8 +147,7 @@ func TestRuntimeManagerUninstallRemovesManagedRuntime(t *testing.T) {
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             stateDir,
-		SupportedVersion:     "4.108.2",
-		InstallScriptContent: []byte(fakeInstallScript(false, 0)),
+		InstallScriptContent: []byte(fakeInstallScript("latest", false, 0)),
 	})
 
 	status := mgr.StartUninstall(context.Background())
@@ -196,6 +178,15 @@ func TestResolveBinaryReturnsManagedRuntime(t *testing.T) {
 	}
 	if got != managedBin {
 		t.Fatalf("ResolveBinary() = %q, want %q", got, managedBin)
+	}
+}
+
+func TestRuntimeManagerStatusUsesOfficialLatestInstallerURL(t *testing.T) {
+	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: t.TempDir()})
+
+	status := mgr.Status(context.Background())
+	if status.InstallerScriptURL != defaultInstallScriptURL {
+		t.Fatalf("installer_script_url=%q, want %q", status.InstallerScriptURL, defaultInstallScriptURL)
 	}
 }
 
@@ -245,19 +236,37 @@ echo "ok"
 	}
 }
 
-func fakeInstallScript(fail bool, sleep time.Duration) string {
+func writeBrokenCodeServerBinary(t *testing.T, path string, message string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	script := fmt.Sprintf(`#!/bin/sh
+echo "%s" >&2
+exit 1
+`, message)
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+func fakeInstallScript(installedVersion string, fail bool, sleep time.Duration) string {
 	var b strings.Builder
 	b.WriteString("#!/bin/sh\nset -eu\n")
-	b.WriteString("prefix=\"\"\nversion=\"\"\n")
+	b.WriteString("prefix=\"\"\nrequested_version=\"\"\n")
 	b.WriteString("while [ $# -gt 0 ]; do\n")
 	b.WriteString("  case \"$1\" in\n")
 	b.WriteString("    --prefix) prefix=\"$2\"; shift 2 ;;\n")
 	b.WriteString("    --prefix=*) prefix=\"${1#*=}\"; shift ;;\n")
-	b.WriteString("    --version) version=\"$2\"; shift 2 ;;\n")
-	b.WriteString("    --version=*) version=\"${1#*=}\"; shift ;;\n")
+	b.WriteString("    --version) requested_version=\"$2\"; shift 2 ;;\n")
+	b.WriteString("    --version=*) requested_version=\"${1#*=}\"; shift ;;\n")
 	b.WriteString("    *) shift ;;\n")
 	b.WriteString("  esac\n")
 	b.WriteString("done\n")
+	b.WriteString("if [ -n \"$requested_version\" ]; then\n")
+	b.WriteString("  echo \"unexpected --version flag: $requested_version\" >&2\n")
+	b.WriteString("  exit 1\n")
+	b.WriteString("fi\n")
 	if sleep > 0 {
 		b.WriteString(fmt.Sprintf("sleep %.3f\n", sleep.Seconds()))
 	}
@@ -265,9 +274,10 @@ func fakeInstallScript(fail bool, sleep time.Duration) string {
 		b.WriteString("echo \"installer boom\" >&2\nexit 1\n")
 		return b.String()
 	}
-	b.WriteString("mkdir -p \"$prefix/lib/code-server-$version/bin\" \"$prefix/bin\"\n")
-	b.WriteString("printf '#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then\n  echo \"%s\"\n  exit 0\nfi\necho \"started\"\n' \"$version\" > \"$prefix/lib/code-server-$version/bin/code-server\"\n")
-	b.WriteString("chmod +x \"$prefix/lib/code-server-$version/bin/code-server\"\n")
-	b.WriteString("ln -fs \"$prefix/lib/code-server-$version/bin/code-server\" \"$prefix/bin/code-server\"\n")
+	b.WriteString(fmt.Sprintf("bundle_version=%q\n", installedVersion))
+	b.WriteString("mkdir -p \"$prefix/lib/code-server-$bundle_version/bin\" \"$prefix/bin\"\n")
+	b.WriteString("printf '#!/bin/sh\nif [ \"${1:-}\" = \"--version\" ]; then\n  echo \"%s\"\n  exit 0\nfi\necho \"started\"\n' \"$bundle_version\" > \"$prefix/lib/code-server-$bundle_version/bin/code-server\"\n")
+	b.WriteString("chmod +x \"$prefix/lib/code-server-$bundle_version/bin/code-server\"\n")
+	b.WriteString("ln -fs \"$prefix/lib/code-server-$bundle_version/bin/code-server\" \"$prefix/bin/code-server\"\n")
 	return b.String()
 }

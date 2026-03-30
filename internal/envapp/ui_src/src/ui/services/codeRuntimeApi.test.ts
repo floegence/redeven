@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  codeRuntimeManagedActionLabel,
   codeRuntimeOperationCancelled,
   codeRuntimeOperationFailed,
   codeRuntimeOperationNeedsAttention,
@@ -10,23 +11,20 @@ import {
 
 function makeStatus(state: CodeRuntimeStatus['operation']['state']): CodeRuntimeStatus {
   return {
-    supported_version: '4.108.2',
     active_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
       binary_path: '/Users/test/.redeven/apps/code/runtime/managed/bin/code-server',
-      installed_version: '4.108.2',
     },
     managed_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
       binary_path: '/Users/test/.redeven/apps/code/runtime/managed/bin/code-server',
-      installed_version: '4.108.2',
     },
     managed_prefix: '/Users/test/.redeven/apps/code/runtime/managed',
-    installer_script_url: 'https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh',
+    installer_script_url: 'https://code-server.dev/install.sh',
     operation: {
       action: 'install',
       state,
@@ -48,5 +46,17 @@ describe('codeRuntimeApi selectors', () => {
     expect(codeRuntimeOperationFailed(makeStatus('failed'))).toBe(true);
     expect(codeRuntimeOperationCancelled(makeStatus('cancelled'))).toBe(true);
     expect(codeRuntimeOperationSucceeded(makeStatus('idle'))).toBe(false);
+  });
+
+  it('labels the managed action around latest-stable install semantics', () => {
+    expect(codeRuntimeManagedActionLabel({
+      ...makeStatus('idle'),
+      managed_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'managed',
+      },
+    })).toBe('Install latest');
+    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Update to latest');
   });
 });

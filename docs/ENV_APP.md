@@ -258,9 +258,9 @@ Notes:
 - Codespace/3rd-party app windows never receive `boot_ticket` or `env_session`. They only get one-time `entry_ticket`.
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
-- Codespaces does **not** auto-install `code-server`. When the runtime is missing or incompatible, Env App shows an explicit install UI and waits for the user to click `Install`, `Upgrade`, or `Reinstall`.
+- Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install latest` or `Update to latest`.
 - Agent Settings also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
-  - when no compatible runtime is available, Settings renders a compact installable state instead of a dense `Not detected` table dump,
+  - when no usable runtime is available, Settings renders a compact installable state instead of a dense `Not detected` table dump,
   - while install or uninstall is running, Settings switches to a focused operation panel with optional recent output,
   - after a successful install or uninstall, Settings returns to the normal steady state instead of leaving a persistent success audit block on screen,
   - failed or cancelled actions keep their recent output visible so the user can recover explicitly.

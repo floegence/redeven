@@ -187,7 +187,7 @@ Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 ### Common troubleshooting entry points
 
 - `bootstrap failed` or `missing direct connect info`: verify `--controlplane`, `--env-id`, and `--env-token`.
-- `code-server runtime missing or incompatible`: open Env App -> Agent Settings -> `code-server Runtime` and use the explicit install or upgrade flow, or set `REDEVEN_CODE_SERVER_BIN` to a compatible binary path.
+- `code-server runtime missing or unusable`: open Env App -> Agent Settings -> `code-server Runtime` and use the explicit install or update-to-latest flow, or set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
 - `Missing init payload` in Codespaces: reopen the codespace from Env App so a new entry ticket can be minted.
 - Desktop lock conflict: if another agent already owns `~/.redeven`, stop it or restart it with a Local UI mode, then retry.
 - Requests feel slow: open Agent Settings -> Debug Console, then inspect the floating console to compare desktop, gateway, and UI timing.

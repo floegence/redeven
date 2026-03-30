@@ -59,13 +59,11 @@ function makeStatus(overrides: any = {}) {
   const managedPrefix = '/Users/test/.redeven/apps/code/runtime/managed';
   return {
     ...overrides,
-    supported_version: '4.108.2',
     active_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
       binary_path: `${managedPrefix}/bin/code-server`,
-      installed_version: '4.108.2',
       ...(overrides.active_runtime ?? {}),
     },
     managed_runtime: {
@@ -73,11 +71,10 @@ function makeStatus(overrides: any = {}) {
       present: true,
       source: 'managed',
       binary_path: `${managedPrefix}/bin/code-server`,
-      installed_version: '4.108.2',
       ...(overrides.managed_runtime ?? {}),
     },
     managed_prefix: managedPrefix,
-    installer_script_url: 'https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh',
+    installer_script_url: 'https://code-server.dev/install.sh',
     operation: {
       state: 'idle',
       log_tail: [],
@@ -125,24 +122,21 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('Current runtime');
     expect(host.textContent).not.toContain('Codespaces selection');
-    expect(host.textContent).toContain('Supported version');
     expect(host.textContent).toContain('Managed location');
     expect(host.querySelectorAll('table')).toHaveLength(1);
   });
 
-  it('shows managed runtime details when the managed runtime version differs from the supported version', () => {
+  it('shows managed runtime details when a host runtime is active instead of the managed runtime', () => {
     renderCard(host, {
       status: makeStatus({
         active_runtime: { source: 'system', binary_path: '/usr/local/bin/code-server' },
-        managed_runtime: { installed_version: '4.107.0' },
       }),
     });
 
-    expect(host.textContent).toContain('Upgrade');
-    expect(host.textContent).not.toContain('Upgrade managed runtime');
+    expect(host.textContent).toContain('Update to latest');
     expect(host.textContent).toContain('Current runtime');
     expect(host.textContent).toContain('Managed runtime');
-    expect(host.textContent).toContain('does not match the supported version');
+    expect(host.textContent).toContain('higher-priority runtime is currently active');
     expect(host.querySelectorAll('table')).toHaveLength(2);
   });
 
@@ -154,20 +148,18 @@ describe('CodeRuntimeSettingsCard', () => {
           present: false,
           source: 'none',
           binary_path: '',
-          installed_version: '',
         },
         managed_runtime: {
           detection_state: 'missing',
           present: false,
           source: 'managed',
           binary_path: '',
-          installed_version: '',
         },
       }),
     });
 
     expect(host.textContent).toContain('No runtime installed');
-    expect(host.textContent).toContain('Codespaces needs a compatible code-server runtime before it can start.');
+    expect(host.textContent).toContain('Codespaces needs a usable code-server runtime before it can start.');
     expect(host.textContent).not.toContain('Current runtime');
     expect(host.textContent).not.toContain('Managed runtime');
     expect(host.querySelectorAll('table')).toHaveLength(0);
@@ -201,14 +193,12 @@ describe('CodeRuntimeSettingsCard', () => {
           present: false,
           source: 'none',
           binary_path: '',
-          installed_version: '',
         },
         managed_runtime: {
           detection_state: 'missing',
           present: false,
           source: 'managed',
           binary_path: '',
-          installed_version: '',
         },
         operation: {
           action: 'uninstall',
@@ -253,27 +243,25 @@ describe('CodeRuntimeSettingsCard', () => {
           present: false,
           source: 'none',
           binary_path: '',
-          installed_version: '',
         },
         managed_runtime: {
           detection_state: 'missing',
           present: false,
           source: 'managed',
           binary_path: '',
-          installed_version: '',
         },
       }),
       onInstall,
     });
 
-    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install');
+    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install latest');
     installButton?.click();
 
-    expect(host.textContent).toContain('Redeven will run the official code-server installer');
-    expect(host.textContent).toContain('https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh');
+    expect(host.textContent).toContain('Redeven will run the official latest-stable code-server installer');
+    expect(host.textContent).toContain('https://code-server.dev/install.sh');
 
     const confirmButton = Array.from(host.querySelectorAll('button'))
-      .filter((button) => button.textContent === 'Install')
+      .filter((button) => button.textContent === 'Install latest')
       .at(-1);
     confirmButton?.click();
 

@@ -263,7 +263,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	b := &stubBackend{
 		codeRuntimeStatus: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			return CodeRuntimeStatus{
-				SupportedVersion: "4.108.2",
 				ActiveRuntime: codeserver.RuntimeTargetStatus{
 					DetectionState: "missing",
 					Source:         "none",
@@ -272,7 +271,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					DetectionState: "missing",
 					Source:         "managed",
 				},
-				ManagedPrefix: "/tmp/runtime",
+				ManagedPrefix:      "/tmp/runtime",
+				InstallerScriptURL: "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					State: "idle",
 				},
@@ -281,7 +281,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 		installCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			installCalls++
 			return CodeRuntimeStatus{
-				SupportedVersion: "4.108.2",
 				ActiveRuntime: codeserver.RuntimeTargetStatus{
 					DetectionState: "missing",
 					Source:         "none",
@@ -290,7 +289,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					DetectionState: "missing",
 					Source:         "managed",
 				},
-				ManagedPrefix: "/tmp/runtime",
+				ManagedPrefix:      "/tmp/runtime",
+				InstallerScriptURL: "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					Action: "install",
 					State:  "running",
@@ -301,7 +301,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 		uninstallCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			uninstallCalls++
 			return CodeRuntimeStatus{
-				SupportedVersion: "4.108.2",
 				ActiveRuntime: codeserver.RuntimeTargetStatus{
 					DetectionState: "missing",
 					Source:         "none",
@@ -310,7 +309,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					DetectionState: "missing",
 					Source:         "managed",
 				},
-				ManagedPrefix: "/tmp/runtime",
+				ManagedPrefix:      "/tmp/runtime",
+				InstallerScriptURL: "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					Action: "uninstall",
 					State:  "running",
@@ -321,7 +321,6 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 		cancelCodeRuntime: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			cancelCalls++
 			return CodeRuntimeStatus{
-				SupportedVersion: "4.108.2",
 				ActiveRuntime: codeserver.RuntimeTargetStatus{
 					DetectionState: "missing",
 					Source:         "none",
@@ -330,7 +329,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 					DetectionState: "missing",
 					Source:         "managed",
 				},
-				ManagedPrefix: "/tmp/runtime",
+				ManagedPrefix:      "/tmp/runtime",
+				InstallerScriptURL: "https://code-server.dev/install.sh",
 				Operation: codeserver.RuntimeOperationStatus{
 					Action: "install",
 					State:  "cancelled",
@@ -361,8 +361,8 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	if statusResp.Code != http.StatusOK {
 		t.Fatalf("status code=%d, want %d", statusResp.Code, http.StatusOK)
 	}
-	if !bytes.Contains(statusResp.Body.Bytes(), []byte(`"supported_version":"4.108.2"`)) {
-		t.Fatalf("status body missing supported_version: %s", statusResp.Body.String())
+	if !bytes.Contains(statusResp.Body.Bytes(), []byte(`"installer_script_url":"https://code-server.dev/install.sh"`)) {
+		t.Fatalf("status body missing installer_script_url: %s", statusResp.Body.String())
 	}
 
 	installResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/install")

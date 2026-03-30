@@ -24,6 +24,7 @@ import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { Tooltip } from "../primitives/Tooltip";
 import {
   cancelCodeRuntimeOperation,
+  codeRuntimeManagedActionLabel,
   codeRuntimeMissing,
   codeRuntimeOperationRunning,
   codeRuntimeReady,
@@ -518,14 +519,10 @@ function CreateCodespaceDialog(props: {
 function runtimeRequirementLabel(status: CodeRuntimeStatus | null | undefined): string {
   if (!status) return "code-server is required for Codespaces on this host.";
   if (status.operation.state === "running") return codeRuntimeStageLabel(status.operation.stage, status.operation.action);
-  if (status.active_runtime.detection_state === "incompatible") {
-    const version = String(status.active_runtime.installed_version ?? "").trim();
-    if (version) {
-      return `Detected code-server ${version}, but Redeven currently supports ${status.supported_version}.`;
-    }
-    return "Redeven detected a code-server runtime, but it is not usable for this Codespaces version.";
+  if (status.active_runtime.detection_state === "unusable") {
+    return status.active_runtime.error_message || "Redeven detected a code-server runtime, but it is not usable for Codespaces on this host.";
   }
-  return "Redeven can install the supported version for this host using the official code-server installer.";
+  return "Redeven can install or update the latest stable code-server release for this host using the official installer.";
 }
 
 type CodeRuntimeBannerMode = "inline" | "floating";
@@ -549,7 +546,7 @@ function CodeRuntimeBanner(props: {
     if (props.error || props.status?.operation.state === "failed") return "error" as const;
     if (
       props.status?.operation.state === "cancelled"
-      || props.status?.active_runtime.detection_state === "incompatible"
+      || props.status?.active_runtime.detection_state === "unusable"
       || props.status?.active_runtime.detection_state === "missing"
     ) return "warning" as const;
     return "note" as const;
@@ -562,7 +559,7 @@ function CodeRuntimeBanner(props: {
     if (status.operation.state === "running") return status.operation.action === "uninstall" ? "Removing" : "Installing";
     if (status.operation.state === "failed") return status.operation.action === "uninstall" ? "Uninstall failed" : "Install failed";
     if (status.operation.state === "cancelled") return status.operation.action === "uninstall" ? "Uninstall cancelled" : "Install cancelled";
-    if (status.active_runtime.detection_state === "incompatible") return "Version mismatch";
+    if (status.active_runtime.detection_state === "unusable") return "Needs attention";
     return "Not installed";
   };
 
@@ -591,11 +588,6 @@ function CodeRuntimeBanner(props: {
                 <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
                   {badgeText()}
                 </Tag>
-                <Show when={props.status?.supported_version}>
-                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
-                    Supported version {props.status?.supported_version}
-                  </Tag>
-                </Show>
               </div>
               <div class="text-xs leading-relaxed text-muted-foreground">
                 {props.error ? props.error : runtimeRequirementLabel(props.status)}
@@ -629,17 +621,11 @@ function CodeRuntimeBanner(props: {
             <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
               {badgeText()}
             </Tag>
-            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
-              Supported version {props.status?.supported_version ?? "-"}
-            </Tag>
           </div>
           <div class="text-xs text-muted-foreground">
             {props.error ? props.error : runtimeRequirementLabel(props.status)}
           </div>
           <div class="grid gap-1 text-[11px] text-muted-foreground">
-            <Show when={props.status?.active_runtime.installed_version}>
-              <div>Detected version: <span class="font-mono">{props.status?.active_runtime.installed_version}</span></div>
-            </Show>
             <Show when={props.status?.active_runtime.binary_path}>
               <div>Detected path: <span class="font-mono break-all">{props.status?.active_runtime.binary_path}</span></div>
             </Show>
@@ -656,7 +642,7 @@ function CodeRuntimeBanner(props: {
               fallback={
                 <Show when={showInstallAction()}>
                   <Button size="sm" variant="default" onClick={props.onInstall}>
-                    Install code-server
+                    {codeRuntimeManagedActionLabel(props.status)}
                   </Button>
                 </Show>
               }
@@ -697,12 +683,13 @@ function CodeRuntimeInstallDialog(props: {
     if (props.pendingIntent?.kind === "start") return "Continue to start codespace";
     return "Done";
   };
+  const installActionLabel = () => codeRuntimeManagedActionLabel(props.status);
   const dialogTitle = () => {
     if (installRunning()) return "Installing code-server";
     if (runtimeReady()) return "code-server is ready";
-    if (installFailed()) return "Unable to install code-server";
-    if (installCancelled()) return "Install cancelled";
-    return "Install code-server";
+    if (installFailed()) return "Unable to install or update code-server";
+    if (installCancelled()) return "Install or update cancelled";
+    return installActionLabel();
   };
 
   return (
@@ -732,7 +719,7 @@ function CodeRuntimeInstallDialog(props: {
                           <Show when={props.installSubmitting}>
                             <InlineButtonSnakeLoading class="mr-1" />
                           </Show>
-                          Install code-server
+                          {installActionLabel()}
                         </Button>
                       </>
                     }
@@ -771,15 +758,14 @@ function CodeRuntimeInstallDialog(props: {
       <div class="space-y-4">
         <div class="space-y-1">
           <div class="text-sm text-foreground">
-            Redeven installs a managed <span class="font-mono">code-server</span> runtime only after you explicitly confirm it here.
+            Redeven installs or updates a managed <span class="font-mono">code-server</span> runtime only after you explicitly confirm it here.
           </div>
           <div class="text-xs text-muted-foreground">
-            Installer source: official <span class="font-mono">code-server install.sh</span> for the pinned Redeven-supported version.
+            Installer source: official <span class="font-mono">code-server install.sh</span> latest-stable flow.
           </div>
         </div>
 
         <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-          <div>Supported version: <span class="font-mono text-foreground">{props.status?.supported_version ?? "-"}</span></div>
           <div>Managed location: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
           <div>Installer URL: <span class="font-mono text-foreground break-all">{props.status?.installer_script_url ?? "-"}</span></div>
           <Show when={props.pendingIntent}>
@@ -800,8 +786,7 @@ function CodeRuntimeInstallDialog(props: {
           <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3 space-y-1">
             <div class="text-sm font-medium text-foreground">Managed runtime is ready.</div>
             <div class="text-xs text-muted-foreground">
-              Detected <span class="font-mono text-foreground">{props.status?.managed_runtime.installed_version || props.status?.supported_version}</span> at{" "}
-              <span class="font-mono text-foreground break-all">{props.status?.managed_runtime.binary_path ?? "-"}</span>.
+              Binary path: <span class="font-mono text-foreground break-all">{props.status?.managed_runtime.binary_path ?? "-"}</span>.
             </div>
           </div>
         </Show>

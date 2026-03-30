@@ -158,13 +158,11 @@ function makeRuntimeStatus(overrides: any = {}): any {
   const managedPrefix = '/Users/test/.redeven/apps/code/runtime/managed';
   return {
     ...overrides,
-    supported_version: '4.108.2',
     active_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
       binary_path: `${managedPrefix}/bin/code-server`,
-      installed_version: '4.108.2',
       ...(overrides.active_runtime ?? {}),
     },
     managed_runtime: {
@@ -172,11 +170,10 @@ function makeRuntimeStatus(overrides: any = {}): any {
       present: true,
       source: 'managed',
       binary_path: `${managedPrefix}/bin/code-server`,
-      installed_version: '4.108.2',
       ...(overrides.managed_runtime ?? {}),
     },
     managed_prefix: managedPrefix,
-    installer_script_url: 'https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh',
+    installer_script_url: 'https://code-server.dev/install.sh',
     operation: {
       state: 'idle',
       log_tail: [],
@@ -216,7 +213,7 @@ describe('EnvCodespacesPage', () => {
             action: 'install',
             state: 'running',
             stage: 'installing',
-            log_tail: ['Installing v4.108.2 of the arm64 release from GitHub.'],
+            log_tail: ['Installing the latest stable release from GitHub.'],
           },
         });
         return runtimeStatusResponse;
@@ -331,14 +328,12 @@ describe('EnvCodespacesPage', () => {
         present: false,
         source: 'none',
         binary_path: '',
-        installed_version: '',
       },
       managed_runtime: {
         detection_state: 'missing',
         present: false,
         source: 'managed',
         binary_path: '',
-        installed_version: '',
       },
       operation: { state: 'idle', log_tail: [] },
     });
@@ -352,8 +347,8 @@ describe('EnvCodespacesPage', () => {
     expect(banner?.querySelector('.highlight-block')).toBeTruthy();
     expect(banner?.querySelector('.highlight-block')?.getAttribute('data-highlight-variant')).toBe('warning');
     expect(banner?.textContent).toContain('code-server runtime');
-    expect(banner?.textContent).toContain('Install code-server');
-    expect(banner?.textContent).toContain('Supported version 4.108.2');
+    expect(banner?.textContent).toContain('Install latest');
+    expect(banner?.textContent).toContain('latest stable code-server');
   });
 
   it('shows a floating runtime toast while the initial runtime check is still running', async () => {
@@ -408,14 +403,12 @@ describe('EnvCodespacesPage', () => {
         present: false,
         source: 'none',
         binary_path: '',
-        installed_version: '',
       },
       managed_runtime: {
         detection_state: 'missing',
         present: false,
         source: 'managed',
         binary_path: '',
-        installed_version: '',
       },
       operation: { state: 'idle', log_tail: [] },
     });
@@ -461,7 +454,7 @@ describe('EnvCodespacesPage', () => {
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
-    expect(host.textContent).toContain('Install code-server');
+    expect(host.textContent).toContain('Install latest');
     expect(host.textContent).toContain('Pending action: Start codespace after install');
 
     windowOpenSpy.mockRestore();
