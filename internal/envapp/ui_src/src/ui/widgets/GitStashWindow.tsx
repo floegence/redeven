@@ -175,7 +175,7 @@ function StashActionButton(props: StashActionButtonProps) {
   return (
     <Show when={!props.mobile} fallback={props.children}>
       <Tooltip content={props.tooltip} placement="top" delay={0}>
-        <span class={cn('inline-flex', props.disabled ? 'cursor-not-allowed' : 'cursor-pointer')}>
+        <span class={cn('inline-flex shrink-0', props.disabled ? 'cursor-not-allowed' : 'cursor-pointer')}>
           {props.children}
         </span>
       </Tooltip>
@@ -462,17 +462,26 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   </Show>
                                 </section>
 
-                                <div class="grid gap-2 sm:grid-cols-3">
-                                  <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.apply} disabled={actionsDisabled()}>
-                                    <Button size="sm" variant="default" class="rounded-md" disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(false)}>
-                                      {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
-                                    </Button>
-                                  </StashActionButton>
-                                  <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.applyRemove} disabled={actionsDisabled()}>
-                                    <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(true)}>
-                                      {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
-                                    </Button>
-                                  </StashActionButton>
+                                <div data-git-stash-actions class="flex flex-wrap items-center gap-2">
+                                  <div class="inline-flex flex-wrap items-center gap-2">
+                                    <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.apply} disabled={actionsDisabled()}>
+                                      <Button size="sm" variant="default" class="rounded-md" disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(false)}>
+                                        {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
+                                      </Button>
+                                    </StashActionButton>
+                                    <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.applyRemove} disabled={actionsDisabled()}>
+                                      <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(true)}>
+                                        {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
+                                      </Button>
+                                    </StashActionButton>
+                                  </div>
+
+                                  <div
+                                    data-git-stash-actions-divider
+                                    aria-hidden="true"
+                                    class={cn('hidden h-5 w-px shrink-0 sm:block', redevenDividerRoleClass())}
+                                  />
+
                                   <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.delete} disabled={actionsDisabled()}>
                                     <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.()}>
                                       {props.dropBusy ? 'Deleting...' : 'Delete'}
