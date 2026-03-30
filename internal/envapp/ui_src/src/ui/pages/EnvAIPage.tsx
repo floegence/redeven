@@ -16,7 +16,7 @@ import { FlowerIcon } from '../icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dialog, DirectoryPicker, Dropdown, Input, Select, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Dialog, Dropdown, Input, Select, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import {
   AttachmentPreview,
   ChatProvider,
@@ -66,6 +66,7 @@ import {
 import { readLiveTextValue, syncLiveTextValue } from '../utils/liveTextValue';
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
+import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import {
   replacePickerChildren,
@@ -4103,7 +4104,7 @@ export function EnvAIPage() {
               </div>
 
             {/* Input area */}
-            <DirectoryPicker
+            <LazyMountedDirectoryPicker
               open={workingDirPickerOpen()}
               onOpenChange={(open) => {
                 if (!open) setWorkingDirPickerOpen(false);

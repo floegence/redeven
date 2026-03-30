@@ -1,5 +1,5 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { DirectoryPicker } from '@floegence/floe-webapp-core/ui';
+import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
 
 export function CodexWorkingDirPickerDialog(props: {
   open: boolean;
@@ -11,7 +11,7 @@ export function CodexWorkingDirPickerDialog(props: {
   onSelect: (path: string) => void;
 }) {
   return (
-    <DirectoryPicker
+    <LazyMountedDirectoryPicker
       open={props.open}
       onOpenChange={props.onOpenChange}
       files={[...props.files]}

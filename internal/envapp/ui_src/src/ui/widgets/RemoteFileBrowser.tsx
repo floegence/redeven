@@ -4,7 +4,7 @@ import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
-import { Button, ConfirmDialog, DirectoryPicker, Dropdown, FileSavePicker, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import {
@@ -75,6 +75,7 @@ import {
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
 import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
+import { LazyMountedDirectoryPicker, LazyMountedFileSavePicker } from '../primitives/LazyMountedPickers';
 import {
   extNoDot,
   getParentDir,
@@ -3565,7 +3566,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       />
 
       {/* Move To Directory Picker */}
-      <DirectoryPicker
+      <LazyMountedDirectoryPicker
         open={moveToDialogOpen()}
         onOpenChange={(open) => {
           if (!open) setMoveToDialogOpen(false);
@@ -3583,7 +3584,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       />
 
       {/* Copy To File Save Picker */}
-      <FileSavePicker
+      <LazyMountedFileSavePicker
         open={copyToDialogOpen()}
         onOpenChange={(open) => {
           if (!open) setCopyToDialogOpen(false);
