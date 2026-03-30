@@ -3,7 +3,6 @@ import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 
 import {
-  codeRuntimeManagedActionLabel,
   codeRuntimeManagedInstalled,
   codeRuntimeManagedNeedsUpgrade,
   codeRuntimeManagedRuntimeSelected,
@@ -104,6 +103,12 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined): string {
   return 'Idle';
 }
 
+function settingsInstallActionLabel(status: CodeRuntimeStatus | null | undefined): string {
+  if (!codeRuntimeManagedInstalled(status)) return 'Install';
+  if (codeRuntimeManagedNeedsUpgrade(status)) return 'Upgrade';
+  return 'Reinstall';
+}
+
 export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const [installConfirmOpen, setInstallConfirmOpen] = createSignal(false);
   const [uninstallConfirmOpen, setUninstallConfirmOpen] = createSignal(false);
@@ -113,7 +118,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const managedSelected = createMemo(() => codeRuntimeManagedRuntimeSelected(props.status));
   const managedNeedsUpgrade = createMemo(() => codeRuntimeManagedNeedsUpgrade(props.status));
   const operationRunning = createMemo(() => codeRuntimeOperationRunning(props.status));
-  const installActionLabel = createMemo(() => codeRuntimeManagedActionLabel(props.status));
+  const installActionLabel = createMemo(() => settingsInstallActionLabel(props.status));
 
   const cardBadge = createMemo(() => {
     if (operationRunning()) return props.status?.operation.action === 'uninstall' ? 'Removing runtime' : 'Installing runtime';
@@ -299,7 +304,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                     onClick={() => setUninstallConfirmOpen(true)}
                     disabled={!props.canInteract || !props.canManage || !managedInstalled() || props.uninstallLoading}
                   >
-                    {props.uninstallLoading ? 'Starting uninstall...' : 'Uninstall managed runtime'}
+                    {props.uninstallLoading ? 'Starting uninstall...' : 'Uninstall'}
                   </Button>
                   <Button
                     size="sm"
@@ -325,14 +330,6 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         }
       >
         <div class="space-y-4">
-          <div class="flex flex-wrap gap-2">
-            <SettingsPill tone={runtimeStatusTone(props.status?.active_runtime.detection_state)}>{runtimeStatusLabel(props.status?.active_runtime.detection_state)}</SettingsPill>
-            <SettingsPill tone={managedInstalled() ? (managedNeedsUpgrade() ? 'warning' : 'success') : 'default'}>
-              {managedInstalled() ? (managedNeedsUpgrade() ? 'Managed upgrade required' : 'Managed runtime installed') : 'Managed runtime missing'}
-            </SettingsPill>
-            <SettingsPill tone={operationTone(props.status?.operation.state)}>{operationLabel(props.status)}</SettingsPill>
-          </div>
-
           <Show when={!props.canManage}>
             <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
               <Code class="h-5 w-5 text-muted-foreground" />

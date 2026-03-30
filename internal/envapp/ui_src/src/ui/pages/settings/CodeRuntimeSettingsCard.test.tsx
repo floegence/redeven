@@ -120,7 +120,8 @@ describe('CodeRuntimeSettingsCard', () => {
       />
     ), host);
 
-    expect(host.textContent).toContain('Upgrade managed runtime');
+    expect(host.textContent).toContain('Upgrade');
+    expect(host.textContent).not.toContain('Upgrade managed runtime');
     expect(host.textContent).toContain('does not match the supported version');
     expect(host.querySelectorAll('table')).toHaveLength(2);
   });
@@ -160,13 +161,15 @@ describe('CodeRuntimeSettingsCard', () => {
       />
     ), host);
 
-    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Install code-server'));
+    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install');
     installButton?.click();
 
     expect(host.textContent).toContain('Redeven will run the official code-server installer');
     expect(host.textContent).toContain('https://raw.githubusercontent.com/coder/code-server/v4.108.2/install.sh');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install');
+    const confirmButton = Array.from(host.querySelectorAll('button'))
+      .filter((button) => button.textContent === 'Install')
+      .at(-1);
     confirmButton?.click();
 
     expect(onInstall).toHaveBeenCalledTimes(1);
@@ -192,12 +195,16 @@ describe('CodeRuntimeSettingsCard', () => {
       />
     ), host);
 
-    const uninstallButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Uninstall managed runtime'));
+    expect(host.textContent).not.toContain('Uninstall managed runtime');
+
+    const uninstallButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Uninstall');
     uninstallButton?.click();
 
     expect(host.textContent).toContain('This removes only the Redeven-managed code-server runtime');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Uninstall');
+    const confirmButton = Array.from(host.querySelectorAll('button'))
+      .filter((button) => button.textContent === 'Uninstall')
+      .at(-1);
     confirmButton?.click();
 
     expect(onUninstall).toHaveBeenCalledTimes(1);
