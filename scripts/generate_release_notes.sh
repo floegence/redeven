@@ -3,7 +3,7 @@ set -eu
 
 release_tag="${1:-${RELEASE_TAG:-}}"
 output_path="${2:-${RELEASE_NOTES_PATH:-dist/RELEASE_NOTES.md}}"
-repo="${GITHUB_REPOSITORY:-floegence/redeven-agent}"
+repo="${GITHUB_REPOSITORY:-floegence/redeven}"
 install_script_url="${INSTALL_SCRIPT_URL:-}"
 release_git_ref="${RELEASE_GIT_REF:-$release_tag}"
 max_highlights="${RELEASE_NOTES_MAX_HIGHLIGHTS:-4}"
@@ -290,7 +290,7 @@ curl -fLO ${release_url}/download/${release_tag}/SHA256SUMS.pem
 cosign verify-blob \\
   --certificate SHA256SUMS.pem \\
   --signature SHA256SUMS.sig \\
-  --certificate-identity-regexp '^https://github.com/floegence/redeven-agent/.github/workflows/release\.yml@refs/tags/v.*$' \\
+  --certificate-identity-regexp '^https://github.com/floegence/redeven/.github/workflows/release\.yml@refs/tags/v.*$' \\
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
   SHA256SUMS
 

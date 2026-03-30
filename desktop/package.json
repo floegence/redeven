@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Redeven Desktop shell",
   "author": "Floegence",
-  "homepage": "https://github.com/floegence/redeven-agent",
+  "homepage": "https://github.com/floegence/redeven",
   "main": "dist/main/main.js",
   "scripts": {
     "prepare:bundled-agent": "../scripts/build_desktop_bundled_agent.sh",

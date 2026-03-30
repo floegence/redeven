@@ -1,6 +1,6 @@
 # Desktop Shell
 
-This document describes the public Electron desktop shell that is published together with each `redeven-agent` GitHub Release.
+This document describes the public Electron desktop shell that is published together with each `redeven` GitHub Release.
 
 ## Goals
 

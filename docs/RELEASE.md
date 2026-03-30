@@ -1,6 +1,6 @@
 # Release Process
 
-This document defines the release process for `redeven-agent`.
+This document defines the release process for the public `redeven` repository.
 
 ## Goals
 
@@ -86,7 +86,7 @@ Verification is bound to:
 
 - OIDC issuer: `https://token.actions.githubusercontent.com`
 - Workflow identity regex:
-  `^https://github.com/floegence/redeven-agent/.github/workflows/release\.yml@refs/tags/v.*$`
+  `^https://github.com/floegence/redeven/.github/workflows/release\.yml@refs/tags/v.*$`
 
 This is the same identity constraint used by `install.sh`.
 
@@ -113,7 +113,7 @@ The installer script source of truth is in this repository:
 cosign verify-blob \
   --certificate SHA256SUMS.pem \
   --signature SHA256SUMS.sig \
-  --certificate-identity-regexp '^https://github.com/floegence/redeven-agent/.github/workflows/release\.yml@refs/tags/v.*$' \
+  --certificate-identity-regexp '^https://github.com/floegence/redeven/.github/workflows/release\.yml@refs/tags/v.*$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   SHA256SUMS
 

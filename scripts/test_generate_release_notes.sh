@@ -49,7 +49,7 @@ git -C "$tmpdir" tag v0.1.1
 release_notes_path="${tmpdir}/release-notes-v0.1.1.md"
 (
   cd "$tmpdir"
-  GITHUB_REPOSITORY="test/redeven-agent" sh "$script_path" v0.1.1 "$release_notes_path"
+  GITHUB_REPOSITORY="test/redeven" sh "$script_path" v0.1.1 "$release_notes_path"
 )
 
 assert_contains "$release_notes_path" "## Release Highlights"
@@ -57,7 +57,7 @@ assert_contains "$release_notes_path" "- Codex workspace: render user turns from
 assert_contains "$release_notes_path" "- Workspace UI: add debug console mode."
 assert_contains "$release_notes_path" "- Git tools: lazy-load diff content."
 assert_contains "$release_notes_path" "- Maintenance: bump floeterm to v0.4.9."
-assert_contains "$release_notes_path" "- Full commit diff: [v0.1.0...v0.1.1](https://github.com/test/redeven-agent/compare/v0.1.0...v0.1.1)"
+assert_contains "$release_notes_path" "- Full commit diff: [v0.1.0...v0.1.1](https://github.com/test/redeven/compare/v0.1.0...v0.1.1)"
 
 commit_with_message "$tmpdir" "chore(deps-dev): bump brace-expansion"
 git -C "$tmpdir" tag v0.1.2
@@ -65,7 +65,7 @@ git -C "$tmpdir" tag v0.1.2
 maintenance_notes_path="${tmpdir}/release-notes-v0.1.2.md"
 (
   cd "$tmpdir"
-  GITHUB_REPOSITORY="test/redeven-agent" sh "$script_path" v0.1.2 "$maintenance_notes_path"
+  GITHUB_REPOSITORY="test/redeven" sh "$script_path" v0.1.2 "$maintenance_notes_path"
 )
 
 assert_contains "$maintenance_notes_path" "## Release Highlights"
@@ -76,7 +76,7 @@ invalid_error="${tmpdir}/invalid.err"
 
 if (
   cd "$tmpdir"
-  GITHUB_REPOSITORY="test/redeven-agent" sh "$script_path" bad-tag "${tmpdir}/invalid.md" >"$invalid_output" 2>"$invalid_error"
+  GITHUB_REPOSITORY="test/redeven" sh "$script_path" bad-tag "${tmpdir}/invalid.md" >"$invalid_output" 2>"$invalid_error"
 ); then
   echo "expected invalid tag invocation to fail" >&2
   exit 1

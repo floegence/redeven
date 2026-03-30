@@ -2,12 +2,12 @@
 # Redeven CLI Installation Script
 #
 # This script downloads and installs the latest Redeven agent binary
-# from the floegence/redeven-agent GitHub repository.
+# from the floegence/redeven GitHub repository.
 #
-# Usage: curl -fsSL https://raw.githubusercontent.com/floegence/redeven-agent/main/scripts/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 #
 # Optional:
-#   REDEVEN_VERSION=v1.2.3 curl -fsSL https://raw.githubusercontent.com/floegence/redeven-agent/main/scripts/install.sh | sh
+#   REDEVEN_VERSION=v1.2.3 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 #
 # The script will:
 # 1. Detect your OS and architecture
@@ -26,7 +26,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # GitHub repository for releases
-GITHUB_REPO="floegence/redeven-agent"
+GITHUB_REPO="floegence/redeven"
 GITHUB_RELEASES_URL="https://github.com/${GITHUB_REPO}/releases"
 GITHUB_API_URL="https://api.github.com/repos/${GITHUB_REPO}"
 
@@ -55,7 +55,7 @@ REDEVEN_INSTALL_MODE="${REDEVEN_INSTALL_MODE:-install}"
 REDEVEN_VERSION="${REDEVEN_VERSION:-}"
 
 # Cosign identity constraint for SHA256SUMS signature verification.
-COSIGN_CERT_IDENTITY_REGEXP='^https://github.com/floegence/redeven-agent/.github/workflows/release\.yml@refs/tags/v.*$'
+COSIGN_CERT_IDENTITY_REGEXP='^https://github.com/floegence/redeven/.github/workflows/release\.yml@refs/tags/v.*$'
 COSIGN_CERT_OIDC_ISSUER='https://token.actions.githubusercontent.com'
 
 # Installation directories

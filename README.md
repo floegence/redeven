@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/floegence/redeven-agent/releases">Get Desktop</a> |
+  <a href="https://github.com/floegence/redeven/releases">Get Desktop</a> |
   <a href="#quick-start">Install CLI</a> |
   <a href="#capabilities">Explore Capabilities</a> |
   <a href="#docs-by-task">Open Docs</a>
@@ -56,10 +56,10 @@ This repository stays open-source and auditable. It documents the public agent r
 ### 1. Install the CLI
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/floegence/redeven-agent/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 ```
 
-If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven-agent/releases).
+If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven/releases).
 
 ### 2. Bootstrap once
 
