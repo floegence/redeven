@@ -25,10 +25,10 @@ Reintroducing model-generated intermediate artifacts into the release path would
 
 ## Evidence
 
-- redeven-agent:scripts/build_assets.sh:112 - Asset build includes a dedicated knowledge bundle stage.
-- redeven-agent:scripts/build_knowledge_bundle.sh:23 - Bundle script calls cmd/knowledge-bundle with source root.
-- redeven-agent:cmd/knowledge-bundle/main.go:14 - Bundle command defaults to internal knowledge source directory.
-- redeven-agent:cmd/knowledge-bundle/main.go:17 - Bundle command supports source-only validation and dist verification modes.
+- redeven:scripts/build_assets.sh:112 - Asset build includes a dedicated knowledge bundle stage.
+- redeven:scripts/build_knowledge_bundle.sh:23 - Bundle script calls cmd/knowledge-bundle with source root.
+- redeven:cmd/knowledge-bundle/main.go:14 - Bundle command defaults to internal knowledge source directory.
+- redeven:cmd/knowledge-bundle/main.go:17 - Bundle command supports source-only validation and dist verification modes.
 
 ## Invalid Conditions
 

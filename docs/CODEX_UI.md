@@ -1,6 +1,6 @@
 # Codex (Optional)
 
-Redeven Agent exposes **Codex** as a separate Env App surface that uses the host machine's `codex` binary directly.
+Redeven exposes **Codex** as a separate Env App surface that uses the host machine's `codex` binary directly.
 
 This integration is intentionally independent from Flower:
 
@@ -14,9 +14,9 @@ This integration is intentionally independent from Flower:
 
 High-level design:
 
-- The browser talks only to Redeven Agent gateway routes.
+- The browser talks only to Redeven gateway routes.
 - The Go agent owns the Codex process boundary and spawns `codex app-server` from the host's `codex` binary as a child process.
-- Transport between Redeven Agent and Codex uses stdio (`codex app-server --listen stdio://`).
+- Transport between Redeven and Codex uses stdio (`codex app-server --listen stdio://`).
 - The bridge initializes the app-server with `experimentalApi=true` so it can consume upstream raw response notifications and extended-history controls that are required for refresh-safe transcript projection.
 - The bridge keeps a per-thread projected state so browser bootstrap and SSE replay always agree on the same applied event cursor.
 - Thread bootstrap uses `thread/read(includeTurns=true)` semantics, while live work uses `thread/resume` only when a thread must become active for `turn/start`.

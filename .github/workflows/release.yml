@@ -354,3 +354,34 @@ jobs:
             dist/SHA256SUMS.pem \
             dist/knowledge_bundle.manifest.json \
             dist/knowledge_bundle.sha256
+
+      - name: Notify Private Ops
+        env:
+          GH_TOKEN: ${{ secrets.REDEVEN_PRIVATE_OPS_DISPATCH_TOKEN }}
+          PRIVATE_OPS_TARGET_REPO: ${{ vars.REDEVEN_PRIVATE_OPS_TARGET_REPO }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Missing required secret REDEVEN_PRIVATE_OPS_DISPATCH_TOKEN"
+            exit 1
+          fi
+
+          if [ -z "${PRIVATE_OPS_TARGET_REPO:-}" ]; then
+            echo "::error::Missing required repository variable REDEVEN_PRIVATE_OPS_TARGET_REPO"
+            exit 1
+          fi
+
+          if [[ ! "${PRIVATE_OPS_TARGET_REPO}" =~ ^[^/]+/[^/]+$ ]]; then
+            echo "::error::Invalid REDEVEN_PRIVATE_OPS_TARGET_REPO: ${PRIVATE_OPS_TARGET_REPO}"
+            exit 1
+          fi
+
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${PRIVATE_OPS_TARGET_REPO}/dispatches" \
+            -f event_type='redeven_agent_release_published' \
+            -F client_payload[release_repo]="${GITHUB_REPOSITORY}" \
+            -F client_payload[release_tag]="${GITHUB_REF_NAME}" \
+            -F client_payload[recommended_version]="${GITHUB_REF_NAME}"

@@ -25,10 +25,10 @@ Removing or unsafely changing these packages can break protocol rendering, termi
 
 ## Evidence
 
-- redeven-agent:internal/envapp/ui_src/package.json:13 - floe-webapp-core is a declared dependency.
-- redeven-agent:internal/envapp/ui_src/package.json:14 - floe-webapp-protocol is a declared dependency.
-- redeven-agent:internal/envapp/ui_src/package.json:15 - floeterm terminal web package is a declared dependency.
-- redeven-agent:internal/envapp/ui_src/package.json:16 - flowersec core package is a declared dependency.
+- redeven:internal/envapp/ui_src/package.json:13 - floe-webapp-core is a declared dependency.
+- redeven:internal/envapp/ui_src/package.json:14 - floe-webapp-protocol is a declared dependency.
+- redeven:internal/envapp/ui_src/package.json:15 - floeterm terminal web package is a declared dependency.
+- redeven:internal/envapp/ui_src/package.json:16 - flowersec core package is a declared dependency.
 
 ## Invalid Conditions
 
