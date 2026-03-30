@@ -1,5 +1,5 @@
-import { For, Show, createEffect, createMemo, createSignal, on } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
+import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import type {
@@ -22,6 +22,7 @@ import {
   type GitStashWindowSource,
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
+import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
@@ -46,7 +47,7 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
-import { PreviewWindow } from './PreviewWindow';
+import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
 
 export type GitStashReviewState =
   | {
@@ -62,6 +63,15 @@ export type GitStashReviewState =
 type StashPatchErrorState = {
   message: string;
   detail?: string;
+};
+
+type StashActionTooltipKey = 'apply' | 'applyRemove' | 'delete';
+
+const STASH_DIFF_DIALOG_Z_INDEX = PREVIEW_WINDOW_Z_INDEX + 10;
+const STASH_ACTION_TOOLTIP_COPY: Record<StashActionTooltipKey, string> = {
+  apply: 'Review and apply this stash to the current workspace. After confirmation, the stash entry stays available.',
+  applyRemove: 'Review and apply this stash to the current workspace. After a successful confirmation, the stash entry is removed.',
+  delete: 'Review deletion of this stash entry. After confirmation, it is permanently removed without applying its changes.',
 };
 
 export interface GitStashWindowProps {
@@ -154,7 +164,27 @@ function buildStashPatchErrorState(error: unknown): StashPatchErrorState {
   };
 }
 
+interface StashActionButtonProps {
+  mobile: boolean;
+  tooltip: string;
+  disabled?: boolean;
+  children: JSX.Element;
+}
+
+function StashActionButton(props: StashActionButtonProps) {
+  return (
+    <Show when={!props.mobile} fallback={props.children}>
+      <Tooltip content={props.tooltip} placement="top" delay={0}>
+        <span class={cn('inline-flex', props.disabled ? 'cursor-not-allowed' : 'cursor-pointer')}>
+          {props.children}
+        </span>
+      </Tooltip>
+    </Show>
+  );
+}
+
 export function GitStashWindow(props: GitStashWindowProps) {
+  const layout = useLayout();
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededCommitFileSummary | null>(null);
   const [diffDialogStashId, setDiffDialogStashId] = createSignal('');
@@ -195,6 +225,8 @@ export function GitStashWindow(props: GitStashWindowProps) {
     }
     return !props.dropBusy;
   });
+  const actionsDisabled = createMemo(() => Boolean(props.reviewLoading || props.applyBusy || props.dropBusy));
+  const isMobile = createMemo(() => layout.isMobile());
   const stashTabOptions = createMemo(() => [
     { value: 'save', label: 'Save Changes' },
     { value: 'stashes', label: 'Saved Stashes' },
@@ -431,15 +463,21 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                 </section>
 
                                 <div class="grid gap-2 sm:grid-cols-3">
-                                  <Button size="sm" variant="default" class="rounded-md" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(false)}>
-                                    {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
-                                  </Button>
-                                  <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(true)}>
-                                    {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
-                                  </Button>
-                                  <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestDrop?.()}>
-                                    {props.dropBusy ? 'Deleting...' : 'Delete'}
-                                  </Button>
+                                  <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.apply} disabled={actionsDisabled()}>
+                                    <Button size="sm" variant="default" class="rounded-md" disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(false)}>
+                                      {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
+                                    </Button>
+                                  </StashActionButton>
+                                  <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.applyRemove} disabled={actionsDisabled()}>
+                                    <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(true)}>
+                                      {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
+                                    </Button>
+                                  </StashActionButton>
+                                  <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.delete} disabled={actionsDisabled()}>
+                                    <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.()}>
+                                      {props.dropBusy ? 'Deleting...' : 'Delete'}
+                                    </Button>
+                                  </StashActionButton>
                                 </div>
 
                                 <Show when={reviewMatchesSelection()}>
@@ -585,6 +623,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
         emptyMessage="Select a changed stash file to inspect its diff."
         unavailableMessage={(item) => (item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
         errorFormatter={(error) => buildStashPatchErrorState(error)}
+        desktopWindowZIndex={STASH_DIFF_DIALOG_Z_INDEX}
       />
     </PreviewWindow>
   );

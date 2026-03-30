@@ -13,6 +13,7 @@ const gitDiffDialogRenderStore = vi.hoisted(() => ({
     sourceKind: string;
     stashId: string;
     description: string;
+    desktopWindowZIndex: number;
   }>,
 }));
 
@@ -29,6 +30,7 @@ vi.mock('../protocol/redeven_v1', async () => {
 });
 
 vi.mock('./PreviewWindow', () => ({
+  PREVIEW_WINDOW_Z_INDEX: 150,
   PreviewWindow: (props: { open?: boolean; children?: JSX.Element }) => (
     props.open ? <div data-testid="preview-window">{props.children}</div> : null
   ),
@@ -40,6 +42,7 @@ vi.mock('./GitDiffDialog', () => ({
     item?: { path?: string } | null;
     source?: { kind?: string; stashId?: string } | null;
     description?: string;
+    desktopWindowZIndex?: number;
   }) => {
     createEffect(() => {
       gitDiffDialogRenderStore.snapshots.push({
@@ -48,6 +51,7 @@ vi.mock('./GitDiffDialog', () => ({
         sourceKind: String(props.source?.kind ?? ''),
         stashId: String(props.source?.stashId ?? ''),
         description: String(props.description ?? ''),
+        desktopWindowZIndex: Number(props.desktopWindowZIndex ?? 0),
       });
     });
     return (
@@ -68,6 +72,19 @@ async function flush() {
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function revealTooltipForButton(button: HTMLButtonElement | undefined): Promise<HTMLElement | null> {
+  document.querySelectorAll('[data-redeven-tooltip-anchor]').forEach((node) => {
+    node.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+  });
+  await flush();
+
+  const host = button?.closest('[data-redeven-tooltip-anchor]') as HTMLElement | null;
+  expect(host).toBeTruthy();
+  host!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+  await flush();
+  return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
 }
 
 beforeEach(() => {
@@ -166,6 +183,13 @@ describe('GitStashWindow', () => {
       const selectedStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('WIP linked worktree')) as HTMLButtonElement | undefined;
       expect(selectedStashButton?.className).toContain('git-browser-selection-surface');
 
+      const applyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Apply') as HTMLButtonElement | undefined;
+      const applyRemoveButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Apply & Remove') as HTMLButtonElement | undefined;
+      const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
+      expect((await revealTooltipForButton(applyButton))?.textContent).toContain('Review and apply this stash to the current workspace. After confirmation, the stash entry stays available.');
+      expect((await revealTooltipForButton(applyRemoveButton))?.textContent).toContain('Review and apply this stash to the current workspace. After a successful confirmation, the stash entry is removed.');
+      expect((await revealTooltipForButton(deleteButton))?.textContent).toContain('Review deletion of this stash entry. After confirmation, it is permanently removed without applying its changes.');
+
       const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'src/app.ts') as HTMLButtonElement | undefined;
       expect(selectedFileButton).toBeTruthy();
       selectedFileButton!.click();
@@ -177,6 +201,7 @@ describe('GitStashWindow', () => {
         itemPath: 'src/app.ts',
         sourceKind: 'stash',
         stashId: 'stash-1',
+        desktopWindowZIndex: 160,
       });
       expect(latestDialog?.description).toContain('src/app.ts');
       expect(host.textContent).toContain('diff-open:yes');
