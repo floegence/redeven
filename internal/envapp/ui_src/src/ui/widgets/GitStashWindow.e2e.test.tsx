@@ -102,7 +102,6 @@ describe('GitStashWindow', () => {
                 message: 'WIP linked worktree',
                 branchName: 'feature/demo',
                 createdAtUnixMs: 1,
-                fileCount: 1,
               }]}
               selectedStashId="stash-1"
               onSelectStash={() => {}}
@@ -111,7 +110,6 @@ describe('GitStashWindow', () => {
                 ref: 'stash@{0}',
                 message: 'WIP linked worktree',
                 branchName: 'feature/demo',
-                fileCount: 1,
                 files: [{
                   changeType: 'modified',
                   path: 'src/app.ts',
@@ -179,7 +177,6 @@ describe('GitStashWindow', () => {
               ref: 'stash@{0}',
               message: 'WIP linked worktree',
               createdAtUnixMs: 1,
-              fileCount: 1,
             }]}
             selectedStashId="stash-1"
             onSelectStash={() => {}}
@@ -187,7 +184,6 @@ describe('GitStashWindow', () => {
               id: 'stash-1',
               ref: 'stash@{0}',
               message: 'WIP linked worktree',
-              fileCount: 1,
               files: [{
                 changeType: 'modified',
                 path: 'src/app.ts',
@@ -204,7 +200,6 @@ describe('GitStashWindow', () => {
                   id: 'stash-1',
                   ref: 'stash@{0}',
                   message: 'WIP linked worktree',
-                  fileCount: 1,
                 },
                 blocking: {
                   kind: 'workspace_dirty',
@@ -257,7 +252,6 @@ describe('GitStashWindow', () => {
               ref: 'stash@{0}',
               message: 'WIP linked worktree',
               createdAtUnixMs: 1,
-              fileCount: 1,
             }]}
             selectedStashId="stash-1"
             onSelectStash={() => {}}
@@ -265,7 +259,6 @@ describe('GitStashWindow', () => {
               id: 'stash-1',
               ref: 'stash@{0}',
               message: 'WIP linked worktree',
-              fileCount: 1,
               files: [{
                 changeType: 'modified',
                 path: 'src/app.ts',

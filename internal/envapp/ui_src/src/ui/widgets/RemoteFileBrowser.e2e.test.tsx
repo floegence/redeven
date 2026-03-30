@@ -57,6 +57,18 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
   }>,
 }));
 
+const gitStashWindowRenderStore = vi.hoisted(() => ({
+  snapshots: [] as Array<{
+    open: boolean;
+    tab?: string;
+    stashCount: number;
+    selectedStashId?: string;
+    stashDetailId?: string;
+    stashDetailLoading: boolean;
+  }>,
+  onRefreshStashes: undefined as (() => void) | undefined,
+}));
+
 const workspaceLifecycleStore = vi.hoisted(() => ({
   filesMounts: 0,
   filesUnmounts: 0,
@@ -91,6 +103,13 @@ const mockRpc = vi.hoisted(() => ({
     listBranches: vi.fn(),
     getBranchCompare: vi.fn(),
     listCommits: vi.fn(),
+    listStashes: vi.fn(),
+    getStashDetail: vi.fn(),
+    saveStash: vi.fn(),
+    previewApplyStash: vi.fn(),
+    applyStash: vi.fn(),
+    previewDropStash: vi.fn(),
+    dropStash: vi.fn(),
     fetchRepo: vi.fn(),
     pullRepo: vi.fn(),
     pushRepo: vi.fn(),
@@ -311,6 +330,7 @@ vi.mock('./GitWorkspace', () => ({
       section: 'changes' | 'staged' | 'unstaged' | 'untracked' | 'conflicted';
       items: Array<{ section: 'staged' | 'unstaged' | 'untracked' | 'conflicted'; changeType: string; path: string; displayPath: string }>;
     }) => void;
+    onOpenStash?: (request?: { tab?: 'save' | 'stashes'; repoRootPath?: string; source?: 'header' | 'changes' | 'branch_status' | 'merge_blocker' }) => void;
     onOpenInTerminal?: (request: { path: string; preferredName?: string }) => void;
     onBrowseFiles?: (request: { path: string; preferredName?: string; title?: string }) => void | Promise<void>;
     onConfirmMergeBranch?: (
@@ -365,6 +385,18 @@ vi.mock('./GitWorkspace', () => ({
         <button type="button" onClick={() => props.onFetch?.()}>mock-fetch</button>
         <button type="button" onClick={() => props.onPull?.()}>mock-pull</button>
         <button type="button" onClick={() => props.onPush?.()}>mock-push</button>
+        {props.onOpenStash ? (
+          <button
+            type="button"
+            onClick={() => props.onOpenStash?.({
+              repoRootPath: '/workspace/repo',
+              tab: 'stashes',
+              source: 'changes',
+            })}
+          >
+            mock-open-stash
+          </button>
+        ) : null}
         {props.onAskFlower ? (
           <button
             type="button"
@@ -486,6 +518,45 @@ vi.mock('./GitWorkspace', () => ({
   },
 }));
 
+vi.mock('./GitStashWindow', () => ({
+  GitStashWindow: (props: {
+    open?: boolean;
+    tab?: 'save' | 'stashes';
+    stashes: Array<{ id: string }>;
+    selectedStashId?: string;
+    stashDetail?: { id?: string } | null;
+    stashDetailLoading?: boolean;
+    onRefreshStashes?: () => void;
+    onSelectStash?: (id: string) => void;
+    onOpenChange?: (open: boolean) => void;
+  }) => {
+    createEffect(() => {
+      gitStashWindowRenderStore.snapshots.push({
+        open: Boolean(props.open),
+        tab: props.tab,
+        stashCount: props.stashes.length,
+        selectedStashId: props.selectedStashId,
+        stashDetailId: props.stashDetail?.id,
+        stashDetailLoading: Boolean(props.stashDetailLoading),
+      });
+      gitStashWindowRenderStore.onRefreshStashes = props.onRefreshStashes;
+    });
+
+    return props.open ? (
+      <div data-testid="git-stash-window">
+        <div>stash-tab:{props.tab ?? 'save'}</div>
+        <div>stash-count:{props.stashes.length}</div>
+        <div>stash-selected:{props.selectedStashId ?? ''}</div>
+        <div>stash-detail:{props.stashDetail?.id ?? ''}</div>
+        <div>stash-detail-loading:{props.stashDetailLoading ? 'yes' : 'no'}</div>
+        <button type="button" onClick={() => props.onRefreshStashes?.()}>mock-stash-refresh</button>
+        <button type="button" onClick={() => props.onSelectStash?.(props.stashes[0]?.id ?? '')}>mock-stash-select-first</button>
+        <button type="button" onClick={() => props.onOpenChange?.(false)}>mock-stash-close</button>
+      </div>
+    ) : null;
+  },
+}));
+
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
@@ -575,6 +646,8 @@ beforeEach(() => {
   legacyClipboardStore.execCommand.mockReset();
   legacyClipboardStore.execCommand.mockReturnValue(true);
   gitWorkspaceRenderStore.snapshots = [];
+  gitStashWindowRenderStore.snapshots = [];
+  gitStashWindowRenderStore.onRefreshStashes = undefined;
   workspaceLifecycleStore.filesMounts = 0;
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
@@ -637,6 +710,69 @@ beforeEach(() => {
     commits: [{ hash: 'abc1234', shortHash: 'abc1234', parents: [], subject: 'Initial commit' }],
     hasMore: false,
     nextOffset: 0,
+  });
+  mockRpc.git.listStashes.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    stashes: [{
+      id: 'stash-1',
+      ref: 'stash@{0}',
+      message: 'WIP demo stash',
+      branchName: 'main',
+      createdAtUnixMs: 1,
+    }],
+  });
+  mockRpc.git.getStashDetail.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    stash: {
+      id: 'stash-1',
+      ref: 'stash@{0}',
+      message: 'WIP demo stash',
+      branchName: 'main',
+      createdAtUnixMs: 1,
+      files: [{
+        changeType: 'modified',
+        path: 'src/app.ts',
+        displayPath: 'src/app.ts',
+      }],
+    },
+  });
+  mockRpc.git.saveStash.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'main',
+    headCommit: 'abc1234',
+    created: {
+      id: 'stash-1',
+      ref: 'stash@{0}',
+      message: 'WIP demo stash',
+    },
+  });
+  mockRpc.git.previewApplyStash.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    planFingerprint: 'stash-plan-1',
+    stash: {
+      id: 'stash-1',
+      ref: 'stash@{0}',
+      message: 'WIP demo stash',
+    },
+  });
+  mockRpc.git.applyStash.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'main',
+    headCommit: 'abc1234',
+  });
+  mockRpc.git.previewDropStash.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    planFingerprint: 'stash-drop-plan-1',
+    stash: {
+      id: 'stash-1',
+      ref: 'stash@{0}',
+      message: 'WIP demo stash',
+    },
+  });
+  mockRpc.git.dropStash.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    headRef: 'main',
+    headCommit: 'abc1234',
   });
   mockRpc.git.fetchRepo.mockResolvedValue({
     repoRootPath: '/workspace/repo',
@@ -1074,6 +1210,64 @@ describe('RemoteFileBrowser persistence', () => {
         hasMore: false,
         nextOffset: 0,
       });
+      dispose();
+    }
+  });
+
+  it('reloads stash detail exactly once after refreshing the same selected stash', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.git.listStashes.mockClear();
+      mockRpc.git.getStashDetail.mockClear();
+      gitStashWindowRenderStore.snapshots = [];
+
+      const openStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-stash') as HTMLButtonElement | undefined;
+      expect(openStashButton).toBeTruthy();
+
+      openStashButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.tab === 'stashes')).toBe(true);
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.selectedStashId === 'stash-1')).toBe(true);
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.stashDetailId === 'stash-1')).toBe(true);
+      expect(mockRpc.git.listStashes).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.getStashDetail).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.getStashDetail).toHaveBeenNthCalledWith(1, {
+        repoRootPath: '/workspace/repo',
+        id: 'stash-1',
+      });
+
+      expect(gitStashWindowRenderStore.onRefreshStashes).toBeTruthy();
+      gitStashWindowRenderStore.onRefreshStashes?.();
+      await flush();
+      await flush();
+
+      expect(mockRpc.git.listStashes).toHaveBeenCalledTimes(2);
+      expect(mockRpc.git.getStashDetail).toHaveBeenCalledTimes(2);
+      expect(mockRpc.git.getStashDetail).toHaveBeenNthCalledWith(2, {
+        repoRootPath: '/workspace/repo',
+        id: 'stash-1',
+      });
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.tab === 'stashes' && item.stashDetailLoading)).toBe(true);
+    } finally {
       dispose();
     }
   });

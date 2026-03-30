@@ -282,10 +282,8 @@ function fromWireGitStashSummary(resp: wire_git_stash_summary | undefined): GitS
     ref: typeof resp?.ref === 'string' ? resp.ref : undefined,
     message: typeof resp?.message === 'string' ? resp.message : undefined,
     branchName: typeof resp?.branch_name === 'string' ? resp.branch_name : undefined,
-    headRef: typeof resp?.head_ref === 'string' ? resp.head_ref : undefined,
     headCommit: typeof resp?.head_commit === 'string' ? resp.head_commit : undefined,
     createdAtUnixMs: typeof resp?.created_at_unix_ms === 'number' ? resp.created_at_unix_ms : undefined,
-    fileCount: typeof resp?.file_count === 'number' ? resp.file_count : undefined,
     hasUntracked: typeof resp?.has_untracked === 'boolean' ? resp.has_untracked : undefined,
   };
 }
@@ -297,10 +295,8 @@ function fromWireGitStashDetail(resp: wire_git_stash_detail | undefined): GitSta
     ref: summary?.ref,
     message: summary?.message,
     branchName: summary?.branchName,
-    headRef: summary?.headRef,
     headCommit: summary?.headCommit,
     createdAtUnixMs: summary?.createdAtUnixMs,
-    fileCount: summary?.fileCount,
     hasUntracked: summary?.hasUntracked,
     files: Array.isArray(resp?.files) ? resp.files.map(fromWireGitCommitFileSummary) : [],
   };

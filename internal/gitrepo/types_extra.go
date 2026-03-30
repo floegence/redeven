@@ -97,10 +97,8 @@ type gitStashSummary struct {
 	Ref             string `json:"ref,omitempty"`
 	Message         string `json:"message,omitempty"`
 	BranchName      string `json:"branch_name,omitempty"`
-	HeadRef         string `json:"head_ref,omitempty"`
 	HeadCommit      string `json:"head_commit,omitempty"`
 	CreatedAtUnixMs int64  `json:"created_at_unix_ms,omitempty"`
-	FileCount       int    `json:"file_count,omitempty"`
 	HasUntracked    bool   `json:"has_untracked,omitempty"`
 }
 

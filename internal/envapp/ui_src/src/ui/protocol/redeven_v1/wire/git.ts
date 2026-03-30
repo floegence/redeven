@@ -107,10 +107,8 @@ export type wire_git_stash_summary = {
   ref?: string;
   message?: string;
   branch_name?: string;
-  head_ref?: string;
   head_commit?: string;
   created_at_unix_ms?: number;
-  file_count?: number;
   has_untracked?: boolean;
 };
 

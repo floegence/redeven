@@ -119,10 +119,8 @@ export type GitStashSummary = {
   ref?: string;
   message?: string;
   branchName?: string;
-  headRef?: string;
   headCommit?: string;
   createdAtUnixMs?: number;
-  fileCount?: number;
   hasUntracked?: boolean;
 };
 

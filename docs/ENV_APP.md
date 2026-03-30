@@ -108,8 +108,8 @@ Git stash stays a workflow overlay owned by Git browse rather than a separate pr
 The stash surface itself is split into two tabs:
 
 - `Save Changes` shows the target repository/worktree context, current workspace summary, optional stash message, and explicit `Include untracked files` / `Keep staged changes ready to commit` options.
-- `Saved Stashes` shows the shared stash stack, stash detail, changed-file patch browsing, and guarded actions for `Apply`, `Apply & Remove`, and `Delete`.
-- Stash detail returns file metadata first; the selected stash file patch is fetched lazily through `getDiffContent` when the user focuses that file.
+- `Saved Stashes` shows a lightweight shared stash summary list first, then loads metadata-only detail for the selected stash, changed-file patch browsing, and guarded actions for `Apply`, `Apply & Remove`, and `Delete`.
+- Stash detail returns file metadata first; the selected stash file patch is fetched lazily through `getDiffContent` when the user focuses that file, and the browser keeps a single detail-load owner so same-selection refreshes do not duplicate requests.
 
 Safety and refresh behavior:
 

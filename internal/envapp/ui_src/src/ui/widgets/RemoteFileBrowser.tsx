@@ -1356,7 +1356,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const loadStashList = async (options: GitLoadOptions & { preferredSelectedId?: string } = {}) => {
+  const resetStashDetailState = () => {
+    setStashDetail(null);
+    setStashDetailError('');
+  };
+
+  const loadStashList = async (options: GitLoadOptions & { preferredSelectedId?: string; reloadDetail?: boolean } = {}) => {
     const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.client()) return;
     const seq = ++stashListReqSeq;
@@ -1386,11 +1391,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
 
       if (!nextSelectedId) {
-        setStashDetail(null);
-        setStashDetailError('');
-      } else if (stashDetail()?.id !== nextSelectedId) {
-        setStashDetail(null);
-        setStashDetailError('');
+        resetStashDetailState();
+      } else if (options.reloadDetail || stashDetail()?.id !== nextSelectedId) {
+        resetStashDetailState();
       }
       return resp;
     } catch (err) {
@@ -1399,7 +1402,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (!options.silent) {
         setStashList([]);
         setSelectedStashId('');
-        setStashDetail(null);
+        resetStashDetailState();
         setStashListError(message);
       } else {
         notification.warning('Stash refresh incomplete', message);
@@ -1445,7 +1448,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const refreshStashWindowData = async (options: GitLoadOptions & { preferredSelectedId?: string } = {}) => {
+  const refreshStashWindowData = async (options: GitLoadOptions & { preferredSelectedId?: string; reloadDetail?: boolean } = {}) => {
     const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
     if (!repoRootPath) return;
     await Promise.all([
@@ -1454,19 +1457,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         silent: Boolean(options.silent),
         repoRootPath,
         preferredSelectedId: options.preferredSelectedId,
+        reloadDetail: options.reloadDetail,
       }),
     ]);
-    const nextSelectedId = String(options.preferredSelectedId ?? selectedStashId() ?? '').trim();
-    if (!nextSelectedId) {
-      setStashDetail(null);
-      setStashDetailError('');
-      return;
-    }
-    await loadStashDetail({
-      silent: Boolean(options.silent),
-      repoRootPath,
-      id: nextSelectedId,
-    });
   };
 
   const refreshActiveGitStateAfterStashMutation = async (
@@ -1556,6 +1549,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             repoRootPath,
             preferredSelectedId: resp.created?.id,
             silent: true,
+            reloadDetail: true,
           }),
         ]);
         notification.success(
@@ -1654,6 +1648,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             repoRootPath,
             preferredSelectedId: review.removeAfterApply ? undefined : stashId,
             silent: true,
+            reloadDetail: true,
           }),
         ]);
         notification.success(
@@ -1674,6 +1669,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           refreshStashWindowData({
             repoRootPath,
             silent: true,
+            reloadDetail: true,
           }),
         ]);
         notification.success('Deleted stash', 'Removed the selected stash from the stack.');
@@ -1686,6 +1682,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           repoRootPath,
           preferredSelectedId: stashId,
           silent: true,
+          reloadDetail: true,
         });
       }
       notification.error(review.kind === 'drop' ? 'Delete stash failed' : 'Apply stash failed', message || 'Request failed.');
@@ -3515,6 +3512,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         onRefreshStashes={() => {
           void refreshStashWindowData({
             repoRootPath: activeStashRepoRootPath(),
+            reloadDetail: true,
           });
         }}
         onRequestApply={(removeAfterApply) => {

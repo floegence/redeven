@@ -72,7 +72,7 @@ func (s *Service) getStashDetail(ctx context.Context, repo repoContext, id strin
 	if err != nil {
 		return nil, err
 	}
-	files, err := s.readStashFiles(ctx, repo.repoRootReal, summary.Ref)
+	files, err := s.readStashFiles(ctx, repo.repoRootReal, summary.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -166,11 +166,15 @@ func (s *Service) applyStash(ctx context.Context, repo repoContext, id string, r
 		return nil, errors.New("stash not found")
 	}
 
-	if err := s.runApplyStash(ctx, repo.repoRootReal, plan.Stash.Ref); err != nil {
+	if err := s.runApplyStash(ctx, repo.repoRootReal, plan.Stash.ID); err != nil {
 		return nil, err
 	}
 	if removeAfterApply {
-		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "stash", "drop", plan.Stash.Ref); err != nil {
+		dropTarget, err := s.resolveStashByID(ctx, repo.repoRootReal, plan.Stash.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "stash", "drop", dropTarget.Ref); err != nil {
 			return nil, err
 		}
 	}
@@ -261,7 +265,7 @@ func (s *Service) buildStashApplyPlan(ctx context.Context, repo repoContext, id 
 		plan.PlanFingerprint = buildStashApplyPlanFingerprint(plan)
 		return plan, nil
 	}
-	if reason := s.previewApplyStashInTemporaryWorktree(ctx, repo.repoRootReal, summary.Ref); reason != "" {
+	if reason := s.previewApplyStashInTemporaryWorktree(ctx, repo.repoRootReal, summary.ID); reason != "" {
 		plan.Blocking = &gitMutationBlocker{
 			Kind:   stashBlockerKindApplyConflict,
 			Reason: reason,
@@ -347,7 +351,7 @@ func (s *Service) resolveStashByID(ctx context.Context, repoRoot string, id stri
 }
 
 func (s *Service) readStashes(ctx context.Context, repoRoot string) ([]gitStashSummary, error) {
-	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "stash", "list", "--format=%H%x00%gd%x00%gs%x00%ct")
+	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "stash", "list", "--format=%H%x00%gd%x00%gs%x00%ct%x00%P")
 	if err != nil {
 		return nil, err
 	}
@@ -364,33 +368,37 @@ func (s *Service) readStashes(ctx context.Context, repoRoot string) ([]gitStashS
 			continue
 		}
 		fields := strings.Split(line, "\x00")
-		if len(fields) < 4 {
+		if len(fields) < 5 {
 			continue
 		}
-		id := strings.TrimSpace(fields[0])
-		ref := strings.TrimSpace(fields[1])
-		rawMessage := strings.TrimSpace(fields[2])
 		createdUnix, _ := strconv.ParseInt(strings.TrimSpace(fields[3]), 10, 64)
-		branchName, message := parseStashMessage(rawMessage)
-		headCommit := strings.TrimSpace(readGitOptional(ctx, repoRoot, "rev-parse", "--verify", id+"^1"))
-		fileCount, err := readStashFileCount(ctx, repoRoot, ref)
-		if err != nil {
-			return nil, err
-		}
-		parentCount := readStashParentCount(ctx, repoRoot, id)
-		stashes = append(stashes, gitStashSummary{
-			ID:              id,
-			Ref:             ref,
-			Message:         message,
-			BranchName:      branchName,
-			HeadRef:         branchName,
-			HeadCommit:      headCommit,
-			CreatedAtUnixMs: createdUnix * 1000,
-			FileCount:       fileCount,
-			HasUntracked:    parentCount >= 3,
-		})
+		stashes = append(stashes, buildStashSummary(
+			strings.TrimSpace(fields[0]),
+			strings.TrimSpace(fields[1]),
+			strings.TrimSpace(fields[2]),
+			createdUnix,
+			strings.TrimSpace(fields[4]),
+		))
 	}
 	return stashes, nil
+}
+
+func buildStashSummary(id string, ref string, rawMessage string, createdUnix int64, parentsRaw string) gitStashSummary {
+	branchName, message := parseStashMessage(rawMessage)
+	parents := strings.Fields(strings.TrimSpace(parentsRaw))
+	headCommit := ""
+	if len(parents) > 0 {
+		headCommit = strings.TrimSpace(parents[0])
+	}
+	return gitStashSummary{
+		ID:              strings.TrimSpace(id),
+		Ref:             strings.TrimSpace(ref),
+		Message:         message,
+		BranchName:      branchName,
+		HeadCommit:      headCommit,
+		CreatedAtUnixMs: createdUnix * 1000,
+		HasUntracked:    len(parents) >= 3,
+	}
 }
 
 func parseStashMessage(raw string) (string, string) {
@@ -429,40 +437,7 @@ func splitStashBranchAndMessage(raw string) (string, string, bool) {
 	return branch, message, true
 }
 
-func readStashFileCount(ctx context.Context, repoRoot string, ref string) (int, error) {
-	out, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "stash", "show", "--name-only", "--include-untracked", ref)
-	if err != nil {
-		return 0, err
-	}
-	seen := make(map[string]struct{})
-	count := 0
-	for _, line := range strings.Split(string(out), "\n") {
-		pathValue := strings.TrimSpace(line)
-		if pathValue == "" {
-			continue
-		}
-		if _, ok := seen[pathValue]; ok {
-			continue
-		}
-		seen[pathValue] = struct{}{}
-		count += 1
-	}
-	return count, nil
-}
-
-func readStashParentCount(ctx context.Context, repoRoot string, id string) int {
-	out := strings.TrimSpace(readGitOptional(ctx, repoRoot, "rev-list", "--parents", "-n", "1", id))
-	if out == "" {
-		return 0
-	}
-	parts := strings.Fields(out)
-	if len(parts) == 0 {
-		return 0
-	}
-	return len(parts) - 1
-}
-
-func (s *Service) readStashFiles(ctx context.Context, repoRoot string, ref string) ([]gitCommitFileSummary, error) {
+func (s *Service) readStashFiles(ctx context.Context, repoRoot string, stashSpec string) ([]gitCommitFileSummary, error) {
 	files, err := s.readGitDiffMetadata(ctx, repoRoot,
 		[]string{
 			"stash",
@@ -473,7 +448,7 @@ func (s *Service) readStashFiles(ctx context.Context, repoRoot string, ref strin
 			"--find-renames",
 			"--find-copies",
 			"--no-ext-diff",
-			ref,
+			stashSpec,
 		},
 		[]string{
 			"stash",
@@ -484,7 +459,7 @@ func (s *Service) readStashFiles(ctx context.Context, repoRoot string, ref strin
 			"--find-renames",
 			"--find-copies",
 			"--no-ext-diff",
-			ref,
+			stashSpec,
 		},
 	)
 	if err != nil {
@@ -493,7 +468,7 @@ func (s *Service) readStashFiles(ctx context.Context, repoRoot string, ref strin
 	return files, nil
 }
 
-func (s *Service) previewApplyStashInTemporaryWorktree(ctx context.Context, repoRoot string, ref string) string {
+func (s *Service) previewApplyStashInTemporaryWorktree(ctx context.Context, repoRoot string, stashSpec string) string {
 	tempRoot, err := os.MkdirTemp("", "redeven-stash-preview-*")
 	if err != nil {
 		return "Failed to prepare a temporary stash preview."
@@ -508,14 +483,14 @@ func (s *Service) previewApplyStashInTemporaryWorktree(ctx context.Context, repo
 		_, _ = gitutil.RunCombinedOutput(context.Background(), repoRoot, nil, "worktree", "remove", "--force", worktreePath)
 	}()
 
-	if err := s.runApplyStash(ctx, worktreePath, ref); err != nil {
+	if err := s.runApplyStash(ctx, worktreePath, stashSpec); err != nil {
 		return strings.TrimSpace(err.Error())
 	}
 	return ""
 }
 
-func (s *Service) runApplyStash(ctx context.Context, repoRoot string, ref string) error {
-	if _, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "stash", "apply", "--index", "--quiet", ref); err != nil {
+func (s *Service) runApplyStash(ctx context.Context, repoRoot string, stashSpec string) error {
+	if _, err := gitutil.RunCombinedOutput(ctx, repoRoot, nil, "stash", "apply", "--index", "--quiet", stashSpec); err != nil {
 		status, statusErr := s.readWorkspaceStatus(ctx, repoRoot)
 		if statusErr == nil && len(status.Conflicted) > 0 {
 			return errors.New("this stash cannot be applied cleanly on the current HEAD")

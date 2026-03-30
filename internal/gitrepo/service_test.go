@@ -76,6 +76,40 @@ func mustContainPath(t *testing.T, paths []string, want string) {
 	t.Fatalf("paths=%v, want %q", paths, want)
 }
 
+func TestBuildStashSummary_UsesParentsForLightweightMetadata(t *testing.T) {
+	t.Parallel()
+
+	summary := buildStashSummary(
+		"stash-oid",
+		"stash@{0}",
+		"WIP on feature/demo: keep request small",
+		1711824000,
+		"head-commit index-commit untracked-commit",
+	)
+
+	if summary.ID != "stash-oid" {
+		t.Fatalf("summary.ID=%q, want stash-oid", summary.ID)
+	}
+	if summary.Ref != "stash@{0}" {
+		t.Fatalf("summary.Ref=%q, want stash@{0}", summary.Ref)
+	}
+	if summary.BranchName != "feature/demo" {
+		t.Fatalf("summary.BranchName=%q, want feature/demo", summary.BranchName)
+	}
+	if summary.Message != "keep request small" {
+		t.Fatalf("summary.Message=%q, want keep request small", summary.Message)
+	}
+	if summary.HeadCommit != "head-commit" {
+		t.Fatalf("summary.HeadCommit=%q, want head-commit", summary.HeadCommit)
+	}
+	if !summary.HasUntracked {
+		t.Fatalf("summary.HasUntracked=%v, want true", summary.HasUntracked)
+	}
+	if summary.CreatedAtUnixMs != 1711824000000 {
+		t.Fatalf("summary.CreatedAtUnixMs=%d, want 1711824000000", summary.CreatedAtUnixMs)
+	}
+}
+
 func TestResolveRepoForPath(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

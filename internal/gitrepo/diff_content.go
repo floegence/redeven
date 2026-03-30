@@ -118,10 +118,6 @@ func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, re
 		if stashID == "" {
 			return nil, nil, errors.New("missing stash id")
 		}
-		summary, err := s.resolveStashByID(ctx, repo.repoRootReal, stashID)
-		if err != nil {
-			return nil, nil, err
-		}
 		args := []string{
 			"stash",
 			"show",
@@ -135,7 +131,7 @@ func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, re
 		if unifiedArg != "" {
 			args = append(args, unifiedArg)
 		}
-		args = append(args, summary.Ref)
+		args = append(args, stashID)
 		// `git stash show <stash> -- <path>` is not a valid file-scoped preview form.
 		// Load the stash patch once and reuse existing diff-entry matching to select
 		// the requested file, including tracked and untracked stash entries.

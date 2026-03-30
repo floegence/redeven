@@ -347,10 +347,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                     )}
                                     onClick={() => props.onSelectStash?.(stash.id)}
                                   >
-                                    <div class="flex items-center justify-between gap-2">
-                                      <div class={cn('min-w-0 truncate text-xs font-semibold', active() ? 'text-current' : 'text-foreground')}>{stash.message || stash.ref || 'Unnamed stash'}</div>
-                                      <GitMetaPill tone="neutral" class={gitSelectedChipClass(active())}>{stash.fileCount ?? 0} file{(stash.fileCount ?? 0) === 1 ? '' : 's'}</GitMetaPill>
-                                    </div>
+                                    <div class={cn('min-w-0 truncate text-xs font-semibold', active() ? 'text-current' : 'text-foreground')}>{stash.message || stash.ref || 'Unnamed stash'}</div>
                                     <div class={cn('flex flex-wrap items-center gap-1.5 text-[11px]', gitSelectedSecondaryTextClass(active()))}>
                                       <GitMetaPill tone="violet" class={gitSelectedChipClass(active())}>{stash.ref || shortGitHash(stash.id)}</GitMetaPill>
                                       <Show when={stash.branchName}>
