@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { ChevronRight, Folder, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
@@ -70,6 +70,7 @@ import {
 import { GitDeleteBranchConfirmDialog } from './GitDeleteBranchConfirmDialog';
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
+import { resolveGitBranchHeaderLayout } from './gitBranchHeaderLayout';
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
 
@@ -920,6 +921,8 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
 export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const rpc = useRedevenRpc();
   const branchSubviewTabRefs = new Map<GitBranchSubview, HTMLButtonElement>();
+  const [branchHeaderTopRowElement, setBranchHeaderTopRowElement] = createSignal<HTMLDivElement>();
+  const [branchHeaderWidth, setBranchHeaderWidth] = createSignal(0);
 
   const [statusWorkspace, setStatusWorkspace] = createSignal<GitListWorkspaceChangesResponse | null>(null);
   const [statusPages, setStatusPages] = createSignal<Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>>(createEmptyWorkspaceViewPageStateRecord());
@@ -1210,10 +1213,27 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       };
     });
   });
+  const branchHeaderLayout = createMemo(() => resolveGitBranchHeaderLayout(branchHeaderWidth()));
   const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));
   const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';
   const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5';
-  const branchHeaderTopRowClass = 'grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-x-3 lg:gap-y-1.5';
+  const branchHeaderTopRowClass = () => cn(
+    'grid gap-2',
+    branchHeaderLayout() === 'inline'
+      ? 'grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1.5'
+      : 'grid-cols-1',
+  );
+  const branchHeaderTabRailClass = () => cn('flex', branchHeaderLayout() === 'inline' ? 'w-auto justify-end' : 'w-full');
+  const branchHeaderTabListClass = () => cn(
+    'grid grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5',
+    redevenSurfaceRoleClass('segmented'),
+    branchHeaderLayout() === 'inline' ? 'w-[15rem]' : 'w-full',
+  );
+  const branchHeaderTitleClass = () => (branchHeaderLayout() === 'inline' ? 'min-w-0 truncate' : '');
+  const branchHeaderSummaryClass = () => cn(
+    'text-[11px] leading-relaxed text-muted-foreground',
+    branchHeaderLayout() === 'inline' ? 'truncate' : 'line-clamp-1 sm:line-clamp-2',
+  );
   const branchHeaderControlRailClass = 'flex flex-col gap-2 md:gap-2.5 lg:flex-row lg:items-center';
   const branchHeaderControlGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5';
   const branchHeaderActionsGroupClass = 'flex flex-wrap items-center gap-2 md:gap-2.5 lg:ml-auto';
@@ -1327,6 +1347,30 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (!state.initialized || state.loading || !state.hasMore) return;
     return loadStatusSection(section, { append: true, force: true });
   };
+
+  createEffect(() => {
+    const branch = props.selectedBranch;
+    const element = branchHeaderTopRowElement();
+    if (!branch || !element) {
+      setBranchHeaderWidth(0);
+      return;
+    }
+
+    const syncBranchHeaderWidth = () => {
+      setBranchHeaderWidth(element.offsetWidth ?? 0);
+    };
+
+    syncBranchHeaderWidth();
+
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      syncBranchHeaderWidth();
+    });
+    observer.observe(element);
+
+    onCleanup(() => observer.disconnect());
+  });
 
   createEffect(() => {
     const branch = props.selectedBranch;
@@ -1547,7 +1591,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <GitPanelFrame>
                   <div class={branchHeaderSummaryBandClass}>
-                    <div class={branchHeaderTopRowClass}>
+                    <div ref={setBranchHeaderTopRowElement} class={branchHeaderTopRowClass()}>
                       <div class="min-w-0 flex-1">
                         <GitLabelBlock
                           class="min-w-0 flex-1"
@@ -1564,18 +1608,18 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             </div>
                           }
                         >
-                          <GitPrimaryTitle>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
+                          <GitPrimaryTitle class={branchHeaderTitleClass()}>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
                           <Show when={branchSummary().visible}>
-                            <div class="text-[11px] leading-relaxed line-clamp-1 text-muted-foreground sm:line-clamp-2" title={branchSummary().title}>
+                            <div class={branchHeaderSummaryClass()} title={branchSummary().title}>
                               {branchSummary().text}
                             </div>
                           </Show>
                         </GitLabelBlock>
                       </div>
 
-                      <div class="flex w-full lg:w-auto lg:justify-end">
+                      <div class={branchHeaderTabRailClass()}>
                         <div
-                          class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 lg:w-[15rem]', redevenSurfaceRoleClass('segmented'))}
+                          class={branchHeaderTabListClass()}
                           role="tablist"
                           aria-label="Branch detail tabs"
                           aria-orientation="horizontal"
