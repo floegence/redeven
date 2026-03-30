@@ -10,9 +10,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
-	"github.com/floegence/redeven-agent/internal/codeapp/registry"
-	"github.com/floegence/redeven-agent/internal/pathutil"
+	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/codeapp/registry"
+	"github.com/floegence/redeven/internal/pathutil"
 )
 
 func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error) {

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
-	"github.com/floegence/redeven-agent/internal/lockfile"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/lockfile"
 )
 
 func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *testing.T) {

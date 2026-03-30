@@ -1,5 +1,5 @@
 {
-  "name": "@floegence/redeven-agent-codeapp-ui",
+  "name": "@floegence/redeven-codeapp-ui",
   "private": true,
   "type": "module",
   "engines": {

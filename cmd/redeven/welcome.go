@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/localui"
+	"github.com/floegence/redeven/internal/localui"
 	"golang.org/x/term"
 )
 

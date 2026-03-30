@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/ai"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 type taskOutcome struct {

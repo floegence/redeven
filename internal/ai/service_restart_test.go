@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestNewService_ResetsStaleActiveThreadRunStateAfterRestart(t *testing.T) {

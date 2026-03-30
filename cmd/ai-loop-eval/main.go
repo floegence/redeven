@@ -17,11 +17,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/redeven-agent/internal/ai"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/session"
-	"github.com/floegence/redeven-agent/internal/settings"
+	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/settings"
 )
 
 type turnMetrics struct {

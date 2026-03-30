@@ -13,11 +13,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/agent"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/localui"
-	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
-	"github.com/floegence/redeven-agent/internal/lockfile"
+	"github.com/floegence/redeven/internal/agent"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/localui"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/lockfile"
 )
 
 var (

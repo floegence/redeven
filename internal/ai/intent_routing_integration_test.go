@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func newIntentRoutingService(t *testing.T, mock *openAIMock) (*Service, session.Meta) {

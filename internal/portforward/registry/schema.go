@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/floegence/redeven-agent/internal/persistence/sqliteutil"
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 const (

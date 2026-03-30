@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/accessgate"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestServer_E2E_LockedUntilUnlock(t *testing.T) {

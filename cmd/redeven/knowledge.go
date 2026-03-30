@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/knowledge"
+	"github.com/floegence/redeven/internal/knowledge"
 )
 
 func (c *cli) knowledgeCmd(args []string) int {

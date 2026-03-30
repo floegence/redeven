@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 // Repository provides context-oriented reads/writes over threadstore.

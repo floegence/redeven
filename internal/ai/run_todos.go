@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoItem, expectedVersion *int64, explanation string) (any, error) {

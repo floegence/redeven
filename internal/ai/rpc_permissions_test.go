@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestRPC_Permissions_RequireRWX(t *testing.T) {

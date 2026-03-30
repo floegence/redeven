@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitutil"
 )
 
 func mustEvalPath(t *testing.T, value string) string {

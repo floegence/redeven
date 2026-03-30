@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func checkpointIDForRun(runID string) string {

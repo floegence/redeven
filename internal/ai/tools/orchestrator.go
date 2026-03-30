@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/pathutil"
+	"github.com/floegence/redeven/internal/pathutil"
 )
 
 // Invocation carries the minimum context required for error classification and retry hints.

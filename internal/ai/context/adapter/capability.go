@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
-	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/ai/context/model"
+	contextstore "github.com/floegence/redeven/internal/ai/context/store"
+	"github.com/floegence/redeven/internal/config"
 )
 
 const capabilityResolverVersion = 1

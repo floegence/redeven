@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestClassifyRunPolicy_UsesModelDecision(t *testing.T) {

@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
-	"github.com/floegence/redeven-agent/internal/accessgate"
-	"github.com/floegence/redeven-agent/internal/auditlog"
-	"github.com/floegence/redeven-agent/internal/diagnostics"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func sanitizeAuditError(err error) string {

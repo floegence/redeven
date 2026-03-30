@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitutil"
 )
 
 func (s *Service) readGitDiffMetadata(ctx context.Context, repoRoot string, nameStatusArgs []string, numstatArgs []string) ([]gitCommitFileSummary, error) {

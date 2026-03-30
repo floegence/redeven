@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
 
 type openAIToolLoopMock struct {

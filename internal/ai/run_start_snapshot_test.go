@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestEnsureAssistantMessageStarted_IsIdempotent(t *testing.T) {

@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/pathutil"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/session"
 )
 
 // NewThreadID generates a cryptographically random thread id.

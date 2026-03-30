@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/adapter"
-	"github.com/floegence/redeven-agent/internal/ai/context/compactor"
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
-	"github.com/floegence/redeven-agent/internal/ai/context/retriever"
-	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
+	"github.com/floegence/redeven/internal/ai/context/adapter"
+	"github.com/floegence/redeven/internal/ai/context/compactor"
+	"github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/ai/context/retriever"
+	contextstore "github.com/floegence/redeven/internal/ai/context/store"
 )
 
 // BuildInput captures all runtime dimensions for prompt pack assembly.

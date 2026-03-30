@@ -10,8 +10,8 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/framing/jsonframe"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	"github.com/floegence/redeven-agent/internal/accessgate"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/session"
 )
 
 // ServeReadFileStream implements the `fs/read_file` stream.

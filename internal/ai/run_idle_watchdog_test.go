@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {

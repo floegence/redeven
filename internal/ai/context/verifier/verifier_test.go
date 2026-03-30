@@ -3,7 +3,7 @@ package verifier
 import (
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/ai/context/model"
 )
 
 func TestVerify_PassWithSufficientSaving(t *testing.T) {

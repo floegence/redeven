@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPrompt(t *testing.T) {

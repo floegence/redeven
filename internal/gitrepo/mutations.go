@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitutil"
 )
 
 type checkoutBranchTarget struct {

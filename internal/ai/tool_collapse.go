@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func (s *Service) GetActiveRunSnapshot(meta *session.Meta, threadID string) (string, string, error) {

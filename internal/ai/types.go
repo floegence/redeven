@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
-	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 type Model struct {

@@ -1430,7 +1430,7 @@ func (m *skillManager) doGitHubRequestLocked(endpoint string, token string) ([]b
 	if err != nil {
 		return nil, 0, newSkillError(ErrCodeAISkillsInvalidSource, http.StatusBadRequest, "invalid github endpoint", err)
 	}
-	req.Header.Set("User-Agent", "redeven-agent-skill-manager")
+	req.Header.Set("User-Agent", "redeven-skill-manager")
 	req.Header.Set("Accept", "application/vnd.github+json")
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(token))

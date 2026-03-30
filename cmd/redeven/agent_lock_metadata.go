@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/lockfile"
+	"github.com/floegence/redeven/internal/lockfile"
 )
 
 type agentLockMetadata struct {

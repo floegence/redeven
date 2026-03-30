@@ -10,9 +10,9 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/testutil/legacydb"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/testutil/legacydb"
 )
 
 func TestAgentRun_MigratesLegacyThreadstoreE2E(t *testing.T) {

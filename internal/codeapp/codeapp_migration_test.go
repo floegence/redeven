@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/session"
-	"github.com/floegence/redeven-agent/internal/testutil/legacydb"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/testutil/legacydb"
 
 	_ "modernc.org/sqlite"
 )

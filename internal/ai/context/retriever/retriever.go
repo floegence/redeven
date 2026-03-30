@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
-	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
+	"github.com/floegence/redeven/internal/ai/context/model"
+	contextstore "github.com/floegence/redeven/internal/ai/context/store"
 )
 
 // RetrieveOptions controls multi-plane retrieval.
@@ -18,23 +18,23 @@ type RetrieveOptions struct {
 	Objective  string
 	UserInput  string
 
-	MaxTurns             int
+	MaxTurns                int
 	MaxStructuredUserInputs int
-	MaxExecutionEvidence int
-	MaxMemoryItems       int
+	MaxExecutionEvidence    int
+	MaxMemoryItems          int
 }
 
 // RetrievalResult is the normalized retrieval output consumed by packer.
 type RetrievalResult struct {
-	RecentDialogue        []model.DialogueTurn
+	RecentDialogue             []model.DialogueTurn
 	RecentStructuredUserInputs []model.StructuredUserInput
-	ExecutionEvidence     []model.ExecutionEvidence
-	ActiveConstraints     []string
-	PendingTodos          []model.MemoryItem
-	Blockers              []model.MemoryItem
-	LongTermMemory        []model.MemoryItem
-	ThreadSnapshot        string
-	MemoryRecallHitRate   float64
+	ExecutionEvidence          []model.ExecutionEvidence
+	ActiveConstraints          []string
+	PendingTodos               []model.MemoryItem
+	Blockers                   []model.MemoryItem
+	LongTermMemory             []model.MemoryItem
+	ThreadSnapshot             string
+	MemoryRecallHitRate        float64
 }
 
 type Retriever struct {

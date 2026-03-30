@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func testModelLockConfig() *config.AIConfig {

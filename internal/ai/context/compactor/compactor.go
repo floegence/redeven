@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
-	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
-	"github.com/floegence/redeven-agent/internal/ai/context/verifier"
+	"github.com/floegence/redeven/internal/ai/context/model"
+	contextstore "github.com/floegence/redeven/internal/ai/context/store"
+	"github.com/floegence/redeven/internal/ai/context/verifier"
 )
 
 // SnapshotCompactor performs semantic compression and quality verification.

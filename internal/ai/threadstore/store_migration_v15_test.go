@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/testutil/legacydb"
+	"github.com/floegence/redeven/internal/testutil/legacydb"
 
 	_ "modernc.org/sqlite"
 )

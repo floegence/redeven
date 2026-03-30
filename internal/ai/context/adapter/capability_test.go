@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
-	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/ai/context/model"
+	contextstore "github.com/floegence/redeven/internal/ai/context/store"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestResolver_ResolveAndCache(t *testing.T) {

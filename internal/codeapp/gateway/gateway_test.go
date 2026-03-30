@@ -17,10 +17,10 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai"
-	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/codeapp/codeserver"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
 
 type stubBackend struct {

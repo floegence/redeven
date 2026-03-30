@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestService_CreateThread_RejectsWorkingDirOutsideAgentHome(t *testing.T) {

@@ -16,17 +16,17 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	contextadapter "github.com/floegence/redeven-agent/internal/ai/context/adapter"
-	contextcompactor "github.com/floegence/redeven-agent/internal/ai/context/compactor"
-	contextextractor "github.com/floegence/redeven-agent/internal/ai/context/extractor"
-	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
-	contextpacker "github.com/floegence/redeven-agent/internal/ai/context/packer"
-	contextretriever "github.com/floegence/redeven-agent/internal/ai/context/retriever"
-	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/pathutil"
-	"github.com/floegence/redeven-agent/internal/session"
+	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
+	contextcompactor "github.com/floegence/redeven/internal/ai/context/compactor"
+	contextextractor "github.com/floegence/redeven/internal/ai/context/extractor"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	contextpacker "github.com/floegence/redeven/internal/ai/context/packer"
+	contextretriever "github.com/floegence/redeven/internal/ai/context/retriever"
+	contextstore "github.com/floegence/redeven/internal/ai/context/store"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/session"
 )
 
 var (

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/floegence/redeven-agent/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitutil"
 )
 
 const (

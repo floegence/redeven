@@ -3,7 +3,7 @@ package accessgate
 import (
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestGate_UnlockAndResumeReusableToken(t *testing.T) {

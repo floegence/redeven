@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/gitutil"
+	"github.com/floegence/redeven/internal/gitutil"
 )
 
 type deleteBranchPlan struct {

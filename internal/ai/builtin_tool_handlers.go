@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 type builtInToolHandler struct {

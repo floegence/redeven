@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestRunToolWriteTodos_PersistsSnapshotAndEvent(t *testing.T) {

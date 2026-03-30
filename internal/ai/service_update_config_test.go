@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func testAIConfigForUpdate(t *testing.T, currentModelID string, models ...string) *config.AIConfig {

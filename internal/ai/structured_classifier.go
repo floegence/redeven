@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 const (

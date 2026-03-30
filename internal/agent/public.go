@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
-	"github.com/floegence/redeven-agent/internal/diagnostics"
+	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/diagnostics"
 )
 
 func (a *Agent) CodeGateway() *gateway.Gateway {

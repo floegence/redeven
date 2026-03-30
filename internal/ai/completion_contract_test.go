@@ -3,7 +3,7 @@ package ai
 import (
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestCompletionContractForExecutionContract(t *testing.T) {

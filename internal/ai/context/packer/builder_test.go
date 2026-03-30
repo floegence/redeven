@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/compactor"
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
-	"github.com/floegence/redeven-agent/internal/ai/context/retriever"
-	contextstore "github.com/floegence/redeven-agent/internal/ai/context/store"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/context/compactor"
+	"github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/ai/context/retriever"
+	contextstore "github.com/floegence/redeven/internal/ai/context/store"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestBuilder_BuildPromptPack(t *testing.T) {

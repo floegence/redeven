@@ -325,9 +325,9 @@ describe('MarkdownBlock', () => {
   it('renders file links with line anchors as links instead of headings', async () => {
     const content = [
       'Current behavior is controlled in',
-      '[TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1069)',
+      '[TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1069)',
       'and',
-      '[TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1113).',
+      '[TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1113).',
     ].join(' ');
     const normalized = normalizeMarkdownForDisplay(content);
     renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
@@ -351,7 +351,7 @@ describe('MarkdownBlock', () => {
   it('renders codex file links with hash-style line labels without splitting them into headings', async () => {
     const content = [
       'Evidence in',
-      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121)',
+      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121)',
       'stays a file reference.',
     ].join(' ');
     const normalized = normalizeMarkdownForDisplay(content);
@@ -378,7 +378,7 @@ describe('MarkdownBlock', () => {
     const content = [
       'Current path is',
       '[controlplaneApi.ts',
-      'L278](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278).',
+      'L278](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278).',
     ].join(' ');
     const normalized = normalizeMarkdownForDisplay(content);
     renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
@@ -405,10 +405,10 @@ describe('MarkdownBlock', () => {
   it('shows short path prefixes when codex file refs share the same basename', async () => {
     const content = [
       '[controlplaneApi.ts',
-      'L278](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)',
+      'L278](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)',
       'and',
       '[controlplaneApi.ts',
-      'L330](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts#L330).',
+      'L330](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts#L330).',
     ].join(' ');
     const normalized = normalizeMarkdownForDisplay(content);
     renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false, 'codex'));
@@ -427,7 +427,7 @@ describe('MarkdownBlock', () => {
   });
 
   it('keeps default markdown link rendering outside codex', async () => {
-    const content = '[controlplaneApi.ts\nL278](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)';
+    const content = '[controlplaneApi.ts\nL278](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278)';
     const normalized = normalizeMarkdownForDisplay(content);
     renderMarkdownSnapshotMock.mockResolvedValue(createSnapshot(normalized, false));
 

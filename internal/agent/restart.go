@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	"github.com/floegence/redeven-agent/internal/session"
-	syssvc "github.com/floegence/redeven-agent/internal/sys"
+	"github.com/floegence/redeven/internal/session"
+	syssvc "github.com/floegence/redeven/internal/sys"
 )
 
 const restartDelay = 200 * time.Millisecond

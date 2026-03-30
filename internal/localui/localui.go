@@ -23,13 +23,13 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
 	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
 	"github.com/floegence/flowersec/flowersec-go/realtime/ws"
-	"github.com/floegence/redeven-agent/internal/accessgate"
-	"github.com/floegence/redeven-agent/internal/agent"
-	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/diagnostics"
-	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/agent"
+	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/diagnostics"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/session"
 )
 
 const (

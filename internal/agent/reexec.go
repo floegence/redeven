@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 )
 
 type selfExecPlan struct {

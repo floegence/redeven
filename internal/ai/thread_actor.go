@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/session"
 )
 
 // threadManager provides per-thread serialization without blocking unrelated threads.

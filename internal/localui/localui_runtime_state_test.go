@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/diagnostics"
-	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
+	"github.com/floegence/redeven/internal/diagnostics"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 )
 
 func discardLogger() *slog.Logger {

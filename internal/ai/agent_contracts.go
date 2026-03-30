@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 // StreamEventType is the normalized stream event kind produced by provider adapters.

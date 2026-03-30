@@ -14,12 +14,12 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/floegence/redeven-agent/internal/accessgate"
-	"github.com/floegence/redeven-agent/internal/agent"
-	gatewaypkg "github.com/floegence/redeven-agent/internal/codeapp/gateway"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/diagnostics"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/agent"
+	gatewaypkg "github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func writeTestConfig(t *testing.T) string {

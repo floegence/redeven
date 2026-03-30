@@ -10,8 +10,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/floegence/redeven-agent/internal/codexbridge"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/codexbridge"
+	"github.com/floegence/redeven/internal/session"
 )
 
 type stubCodexBackend struct {

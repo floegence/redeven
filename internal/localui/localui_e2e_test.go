@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/accessgate"
+	"github.com/floegence/redeven/internal/accessgate"
 )
 
 func TestServer_E2E_LocalPasswordFlow(t *testing.T) {

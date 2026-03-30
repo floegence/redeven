@@ -1,4 +1,4 @@
-module github.com/floegence/redeven-agent
+module github.com/floegence/redeven
 
 go 1.25.8
 

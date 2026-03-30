@@ -12,7 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/redeven-agent/internal/portforward/registry"
+	"github.com/floegence/redeven/internal/portforward/registry"
 )
 
 type CreateForwardRequest struct {

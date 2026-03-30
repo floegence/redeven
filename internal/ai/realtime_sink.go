@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func (s *Service) ListActiveThreadRuns(endpointID string) []ActiveThreadRun {

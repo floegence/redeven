@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
-	promptpacker "github.com/floegence/redeven-agent/internal/ai/context/packer"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/session"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	promptpacker "github.com/floegence/redeven/internal/ai/context/packer"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func newSendTurnTestService(t *testing.T) *Service {

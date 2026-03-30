@@ -3,7 +3,7 @@ package ai
 import (
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func newModeToolFilter(cfg *config.AIConfig) ModeToolFilter {

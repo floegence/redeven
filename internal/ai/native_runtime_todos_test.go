@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 )
 
 func TestExtractWriteTodosState(t *testing.T) {

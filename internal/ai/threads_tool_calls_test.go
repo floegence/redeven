@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestService_ListRecentThreadToolCalls(t *testing.T) {

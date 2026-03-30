@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestE2E_DBConfiguredModel_GuidedStructuredInteractionPreservesContractAcrossTurns(t *testing.T) {

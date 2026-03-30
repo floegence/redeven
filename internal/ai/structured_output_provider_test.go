@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestInitStructuredOutputProvider_MoonshotUsesPromptLevelJSON(t *testing.T) {

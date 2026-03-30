@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/session"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func newPolicyTestRun(t *testing.T, workspace string, mode string, policy *config.AIExecutionPolicy, messageID string) *run {

@@ -19,13 +19,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/knowledge"
-	"github.com/floegence/redeven-agent/internal/pathutil"
-	"github.com/floegence/redeven-agent/internal/session"
-	"github.com/floegence/redeven-agent/internal/websearch"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/knowledge"
+	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/websearch"
 )
 
 type runOptions struct {

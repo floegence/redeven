@@ -8,36 +8,36 @@ import (
 	"strings"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	"github.com/floegence/redeven-agent/internal/accessgate"
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/accessgate"
+	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/session"
 )
 
 const (
 	// Type IDs must stay in sync with
 	// internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
-	TypeID_AI_SEND_USER_TURN      uint32 = 6001
-	TypeID_AI_RUN_CANCEL          uint32 = 6002
-	TypeID_AI_SUBSCRIBE_SUMMARY   uint32 = 6003
-	TypeID_AI_EVENT_NOTIFY        uint32 = 6004 // notify (agent -> client)
-	TypeID_AI_TOOL_APPROVAL       uint32 = 6005
-	TypeID_AI_MESSAGES_LIST       uint32 = 6006
-	TypeID_AI_ACTIVE_RUN_SNAPSHOT uint32 = 6007
-	TypeID_AI_SET_TOOL_COLLAPSED  uint32 = 6008
-	TypeID_AI_SUBSCRIBE_THREAD    uint32 = 6009
-	TypeID_AI_THREAD_REWIND       uint32 = 6010
-	TypeID_AI_STOP_THREAD         uint32 = 6011
+	TypeID_AI_SEND_USER_TURN                    uint32 = 6001
+	TypeID_AI_RUN_CANCEL                        uint32 = 6002
+	TypeID_AI_SUBSCRIBE_SUMMARY                 uint32 = 6003
+	TypeID_AI_EVENT_NOTIFY                      uint32 = 6004 // notify (agent -> client)
+	TypeID_AI_TOOL_APPROVAL                     uint32 = 6005
+	TypeID_AI_MESSAGES_LIST                     uint32 = 6006
+	TypeID_AI_ACTIVE_RUN_SNAPSHOT               uint32 = 6007
+	TypeID_AI_SET_TOOL_COLLAPSED                uint32 = 6008
+	TypeID_AI_SUBSCRIBE_THREAD                  uint32 = 6009
+	TypeID_AI_THREAD_REWIND                     uint32 = 6010
+	TypeID_AI_STOP_THREAD                       uint32 = 6011
 	TypeID_AI_SUBMIT_STRUCTURED_PROMPT_RESPONSE uint32 = 6012
 )
 
 type aiSendUserTurnReq struct {
-	ThreadID              string                 `json:"thread_id"`
-	Model                 string                 `json:"model,omitempty"`
-	Input                 RunInput               `json:"input"`
-	Options               RunOptions             `json:"options"`
-	ExpectedRunID         string                 `json:"expected_run_id,omitempty"`
-	QueueAfterWaitingUser bool                   `json:"queue_after_waiting_user,omitempty"`
-	SourceFollowupID      string                 `json:"source_followup_id,omitempty"`
+	ThreadID              string     `json:"thread_id"`
+	Model                 string     `json:"model,omitempty"`
+	Input                 RunInput   `json:"input"`
+	Options               RunOptions `json:"options"`
+	ExpectedRunID         string     `json:"expected_run_id,omitempty"`
+	QueueAfterWaitingUser bool       `json:"queue_after_waiting_user,omitempty"`
+	SourceFollowupID      string     `json:"source_followup_id,omitempty"`
 }
 
 type aiSendUserTurnResp struct {

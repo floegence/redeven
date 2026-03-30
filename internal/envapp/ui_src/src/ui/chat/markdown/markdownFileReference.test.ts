@@ -10,31 +10,31 @@ import {
 describe('parseMarkdownFileReference', () => {
   it('parses multiline file reference labels from local file links', () => {
     const reference = parseMarkdownFileReference(
-      '/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
+      '/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
       'controlplaneApi.ts\nL278',
     );
 
     expect(reference).toEqual({
-      href: '/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
-      path: '/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts',
+      href: '/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
+      path: '/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts',
       displayName: 'controlplaneApi.ts',
       lineLabel: 'L278',
-      title: '/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
+      title: '/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
     });
   });
 
   it('parses hash-style line labels from local file links', () => {
     const reference = parseMarkdownFileReference(
-      '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121',
+      '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121',
       'CODEX_UI.md#L121',
     );
 
     expect(reference).toEqual({
-      href: '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121',
-      path: '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md',
+      href: '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121',
+      path: '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md',
       displayName: 'CODEX_UI.md',
       lineLabel: 'L121',
-      title: '/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121',
+      title: '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121',
     });
   });
 
@@ -47,11 +47,11 @@ describe('parseMarkdownFileReference', () => {
 
   it('builds the shortest unique path prefixes for duplicate basenames', () => {
     const controlplaneReference = parseMarkdownFileReference(
-      '/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
+      '/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts#L278',
       'controlplaneApi.ts\nL278',
     );
     const anotherControlplaneReference = parseMarkdownFileReference(
-      '/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts#L330',
+      '/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts#L330',
       'controlplaneApi.ts\nL330',
     );
 
@@ -60,8 +60,8 @@ describe('parseMarkdownFileReference', () => {
       anotherControlplaneReference!,
     ]);
 
-    expect(prefixMap.get('/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts')).toBe('…/services/');
-    expect(prefixMap.get('/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts')).toBe('…/api/');
+    expect(prefixMap.get('/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts')).toBe('…/services/');
+    expect(prefixMap.get('/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/api/controlplaneApi.ts')).toBe('…/api/');
   });
 
   it('parses local file hrefs independently from the visible link label', () => {

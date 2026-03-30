@@ -71,8 +71,8 @@ describe('normalizeMarkdownForDisplay', () => {
 
   it('keeps markdown file links with line anchors intact', () => {
     const input = [
-      'See [TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1069)',
-      'and [TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1113).',
+      'See [TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1069)',
+      'and [TerminalPanel.tsx](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx#L1113).',
     ].join(' ');
 
     expect(normalizeMarkdownForDisplay(input)).toBe(input);
@@ -81,9 +81,9 @@ describe('normalizeMarkdownForDisplay', () => {
   it('keeps markdown file links with hash-style line labels intact', () => {
     const input = [
       'Evidence lives at',
-      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven-agent/docs/CODEX_UI.md#L121)',
+      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121)',
       'and',
-      '[CodexTranscript.tsx#L248](/Users/tangjianyin/Downloads/code/redeven-agent/internal/envapp/ui_src/src/ui/codex/CodexTranscript.tsx#L248).',
+      '[CodexTranscript.tsx#L248](/Users/tangjianyin/Downloads/code/redeven/internal/envapp/ui_src/src/ui/codex/CodexTranscript.tsx#L248).',
     ].join(' ');
 
     expect(normalizeMarkdownForDisplay(input)).toBe(input);

@@ -23,17 +23,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/ai"
-	"github.com/floegence/redeven-agent/internal/auditlog"
-	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
-	"github.com/floegence/redeven-agent/internal/codexbridge"
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/diagnostics"
-	"github.com/floegence/redeven-agent/internal/pathutil"
-	"github.com/floegence/redeven-agent/internal/portforward"
-	pfregistry "github.com/floegence/redeven-agent/internal/portforward/registry"
-	"github.com/floegence/redeven-agent/internal/session"
-	"github.com/floegence/redeven-agent/internal/settings"
+	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/codeapp/codeserver"
+	"github.com/floegence/redeven/internal/codexbridge"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/pathutil"
+	"github.com/floegence/redeven/internal/portforward"
+	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/settings"
 )
 
 type Options struct {

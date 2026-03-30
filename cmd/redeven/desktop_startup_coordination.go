@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 )
 
 const (

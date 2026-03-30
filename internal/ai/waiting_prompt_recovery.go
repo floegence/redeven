@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const waitingPromptTranscriptRecoveryLimit = 8

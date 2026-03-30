@@ -3,7 +3,7 @@ package verifier
 import (
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/ai/context/model"
 )
 
 // VerifyInput contains source and compressed prompt packs.

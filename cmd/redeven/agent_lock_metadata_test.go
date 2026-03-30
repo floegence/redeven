@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/lockfile"
+	"github.com/floegence/redeven/internal/lockfile"
 )
 
 func TestWriteAndReadAgentLockMetadata(t *testing.T) {

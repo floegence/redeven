@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/session"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestGetActiveRunSnapshot_UsesStreamingStatus(t *testing.T) {

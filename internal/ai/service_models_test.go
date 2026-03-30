@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven-agent/internal/config"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestService_ListModels_CurrentFirstAndDedup(t *testing.T) {

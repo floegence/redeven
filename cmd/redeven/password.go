@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/floegence/redeven-agent/internal/accessgate"
+	"github.com/floegence/redeven/internal/accessgate"
 	"golang.org/x/term"
 )
 

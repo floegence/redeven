@@ -15,9 +15,9 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
-	contextcompactor "github.com/floegence/redeven-agent/internal/ai/context/compactor"
-	contextmodel "github.com/floegence/redeven-agent/internal/ai/context/model"
-	"github.com/floegence/redeven-agent/internal/config"
+	contextcompactor "github.com/floegence/redeven/internal/ai/context/compactor"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
 	oresponses "github.com/openai/openai-go/responses"

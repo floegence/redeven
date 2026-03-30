@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	localuiruntime "github.com/floegence/redeven-agent/internal/localui/runtime"
+	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 )
 
 func TestRewriteSelfExecArgsReusesRuntimeBindForDynamicBind(t *testing.T) {

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/codeapp/codeserver"
-	"github.com/floegence/redeven-agent/internal/codeapp/gateway"
-	"github.com/floegence/redeven-agent/internal/codeapp/registry"
+	"github.com/floegence/redeven/internal/codeapp/codeserver"
+	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/codeapp/registry"
 )
 
 func TestService_CreateUpdateDeleteSpace_MetadataOnly(t *testing.T) {

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven-agent/internal/config"
-	"github.com/floegence/redeven-agent/internal/settings"
-	"github.com/floegence/redeven-agent/internal/websearch"
+	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/settings"
+	"github.com/floegence/redeven/internal/websearch"
 )
 
 func (c *cli) searchCmd(args []string) int {

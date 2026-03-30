@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	aitools "github.com/floegence/redeven-agent/internal/ai/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 const (
