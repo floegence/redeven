@@ -285,7 +285,7 @@ export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';
 export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';
 export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = cn('sticky right-0 z-20 border-l bg-muted/30 px-2.5 py-1 text-right font-medium', redevenDividerRoleClass());
 export const GIT_CHANGED_FILES_SECONDARY_PATH_CLASS = 'mt-px truncate text-[10px] leading-3.5 text-muted-foreground';
-export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:pointer-events-none disabled:opacity-45';
+export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';
 
 export function gitChangedFilesRowClass(active: boolean): string {
   return active

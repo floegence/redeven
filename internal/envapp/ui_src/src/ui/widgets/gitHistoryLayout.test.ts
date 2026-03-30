@@ -224,7 +224,7 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('statusToolbarActions');
     expect(branchesSrc).toContain('statusSectionCards');
     expect(branchesSrc).toContain('flex flex-wrap items-center justify-between gap-2');
-    expect(branchesSrc).toContain("class={cn('grid grid-cols-3 gap-0.5 rounded-md p-0.5 text-[11px]', redevenSurfaceRoleClass('segmented'))}");
+    expect(branchesSrc).toContain("class={cn('grid grid-cols-3 gap-1 rounded-xl p-1 text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', redevenSurfaceRoleClass('segmented'))}");
     expect(branchesSrc).not.toContain('lg:flex-row lg:items-start lg:justify-between');
     expect(branchesSrc).not.toContain('sm:grid-cols-[minmax(0,1fr)_auto]');
     expect(branchesSrc).not.toContain('sm:w-[15rem]');
@@ -263,7 +263,7 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEAD_CLASS = 'sticky top-0 z-10 bg-muted/30 backdrop-blur';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';");
-    expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:pointer-events-none disabled:opacity-45';");
+    expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';");
     expect(primitivesSrc).toContain("grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5");
     expect(primitivesSrc).toContain("'grid grid-cols-1 gap-2 border-t px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center sm:gap-x-2 sm:gap-y-2'");
     expect(primitivesSrc).toContain("redevenDividerRoleClass()");

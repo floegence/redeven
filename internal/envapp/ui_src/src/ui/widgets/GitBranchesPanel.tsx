@@ -1220,9 +1220,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const dangerActionButtonClass = 'cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-3 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive';
   const branchStatusSectionCardClass = (active: boolean) =>
     cn(
-      'w-full rounded-md bg-background/88 px-2 py-1 text-left text-xs transition-[background-color,border-color,box-shadow,color] duration-150 hover:shadow-sm',
+      'w-full cursor-pointer rounded-lg border border-transparent bg-background/72 px-2.5 py-1.5 text-left text-xs transition-[transform,background-color,border-color,box-shadow,color] duration-150 hover:-translate-y-[1px] hover:border-border/65 hover:bg-background/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
       redevenSegmentedItemClass(active),
-      active ? 'text-foreground shadow-sm' : 'text-foreground',
+      active ? 'text-foreground shadow-[0_14px_30px_-24px_rgba(15,23,42,0.5)] ring-1 ring-black/[0.03]' : 'text-foreground/90',
     );
   const branchSubviewTabClass = (active: boolean) =>
     cn(
@@ -1474,12 +1474,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         </div>
                       )}
                     >
-                      <div class={cn('grid grid-cols-3 gap-0.5 rounded-md p-0.5 text-[11px]', redevenSurfaceRoleClass('segmented'))}>
+                      <div class={cn('grid grid-cols-3 gap-1 rounded-xl p-1 text-[11px] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', redevenSurfaceRoleClass('segmented'))}>
                         <For each={statusSectionCards()}>
                           {(item) => (
                             <button
                               type="button"
                               class={branchStatusSectionCardClass(item.active)}
+                              aria-pressed={item.active}
                               aria-label={`${item.label}: ${item.compactCaption}`}
                               title={item.verboseCaption}
                               onClick={() => selectStatusSection(item.section)}

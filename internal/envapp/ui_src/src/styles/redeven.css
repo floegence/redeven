@@ -347,12 +347,18 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 }
 
 .redeven-surface-segmented__item {
+  cursor: pointer;
   border: 1px solid transparent;
   transition:
     border-color 150ms ease,
     background-color 150ms ease,
     color 150ms ease,
     box-shadow 150ms ease;
+}
+
+.redeven-surface-segmented__item:disabled,
+.redeven-surface-segmented__item[aria-disabled='true'] {
+  cursor: not-allowed;
 }
 
 .redeven-surface-segmented__item:hover:not([aria-selected='true']) {

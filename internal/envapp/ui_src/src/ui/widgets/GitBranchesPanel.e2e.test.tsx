@@ -231,6 +231,8 @@ describe('GitBranchesPanel interactions', () => {
       const mergeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Merge') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
       expect(changesButton).toBeTruthy();
+      expect(changesButton?.className).toContain('cursor-pointer');
+      expect(changesButton?.className).toContain('rounded-lg');
       expect(changesButton?.className).toContain('redeven-surface-segmented__item--active');
       expect(changesButton?.className).toContain('text-foreground');
       expect(changesButton?.className).not.toContain('git-browser-selection-surface');

@@ -92,6 +92,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--tag-color: var(--git-browser-selection-chip-fg);');
     expect(src).toContain('.redeven-surface-segmented {');
     expect(src).toContain('.redeven-surface-segmented__item {');
+    expect(src).toContain('cursor: pointer;');
+    expect(src).toContain(".redeven-surface-segmented__item:disabled,");
+    expect(src).toContain("cursor: not-allowed;");
     expect(src).toContain('.redeven-surface-segmented__item--active {');
     expect(src).toContain('color: var(--foreground) !important;');
     expect(src).toContain('.redeven-surface-inset {');
