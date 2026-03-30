@@ -24,16 +24,16 @@ if [ "$CARD_COUNT" -lt 1 ]; then
   exit 1
 fi
 
-if search_pattern "^[[:space:]]*-[[:space:]]*redeven[[:space:]]*:" "$SOURCE_ROOT/manifest.yaml"; then
-  echo "manifest allowed_repos must not include redeven" >&2
+if search_pattern "^[[:space:]]*-[[:space:]]*redeven-agent[[:space:]]*$" "$SOURCE_ROOT/manifest.yaml"; then
+  echo "manifest allowed_repos must not include redeven-agent" >&2
   exit 1
 fi
-if search_pattern "^[[:space:]]*redeven/" "$SOURCE_ROOT/indices/code_index.yaml"; then
-  echo "code index must not include redeven paths" >&2
+if search_pattern "^[[:space:]]*redeven-agent/" "$SOURCE_ROOT/indices/code_index.yaml"; then
+  echo "code index must not include redeven-agent paths" >&2
   exit 1
 fi
-if search_pattern "^[[:space:]]*-[[:space:]]*redeven:" "$SOURCE_ROOT/cards"; then
-  echo "cards evidence must not include redeven repo" >&2
+if search_pattern "^[[:space:]]*-[[:space:]]*redeven-agent:" "$SOURCE_ROOT/cards"; then
+  echo "cards evidence must not include redeven-agent repo" >&2
   exit 1
 fi
 
