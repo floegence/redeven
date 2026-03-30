@@ -3,19 +3,17 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import type {
-  GitDiffFileContent,
   GitPreviewApplyStashResponse,
   GitPreviewDropStashResponse,
   GitRepoSummaryResponse,
   GitStashSummary,
   GitWorkspaceSummary,
 } from '../protocol/redeven_v1';
-import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   changeDisplayPath,
+  changeSecondaryPath,
   gitDiffEntryIdentity,
   repoDisplayName,
-  seedGitDiffContent,
   shortGitHash,
   summarizeWorkspaceCount,
   workspaceHealthLabel,
@@ -25,16 +23,28 @@ import {
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
-import { GitPatchViewer } from './GitPatchViewer';
+import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
+import { GitDiffDialog } from './GitDiffDialog';
+import { GitVirtualTable } from './GitVirtualTable';
 import {
+  GIT_CHANGED_FILES_CELL_CLASS,
+  GIT_CHANGED_FILES_HEADER_CELL_CLASS,
+  GIT_CHANGED_FILES_HEADER_ROW_CLASS,
+  GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
+  GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
+  GIT_CHANGED_FILES_TABLE_CLASS,
   GitChecklistItem,
+  GitChangedFilesActionButton,
+  GitChangeMetrics,
+  GitChangeStatusPill,
   GitLabelBlock,
   GitMetaPill,
   GitPrimaryTitle,
   GitSection,
   GitStatePane,
   GitSubtleNote,
+  gitChangedFilesRowClass,
+  gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
 import { PreviewWindow } from './PreviewWindow';
 
@@ -145,18 +155,9 @@ function buildStashPatchErrorState(error: unknown): StashPatchErrorState {
 }
 
 export function GitStashWindow(props: GitStashWindowProps) {
-  let rpc: ReturnType<typeof useRedevenRpc> | null = null;
-  try {
-    rpc = useRedevenRpc();
-  } catch {
-    rpc = null;
-  }
-  const [selectedFileKey, setSelectedFileKey] = createSignal('');
-  const [selectedFileDiff, setSelectedFileDiff] = createSignal<GitDiffFileContent | null>(null);
-  const [selectedFileDiffLoading, setSelectedFileDiffLoading] = createSignal(false);
-  const [selectedFileDiffError, setSelectedFileDiffError] = createSignal<StashPatchErrorState | null>(null);
-  const [selectedFileDiffLoadedKey, setSelectedFileDiffLoadedKey] = createSignal('');
-  let selectedFileDiffReqSeq = 0;
+  const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
+  const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededCommitFileSummary | null>(null);
+  const [diffDialogStashId, setDiffDialogStashId] = createSignal('');
 
   const repoPath = () => String(props.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
   const repoName = () => repoDisplayName(repoPath());
@@ -174,22 +175,6 @@ export function GitStashWindow(props: GitStashWindowProps) {
     return props.stashes[0] ?? null;
   });
   const detailFiles = createMemo(() => props.stashDetail?.files ?? []);
-  const selectedFile = createMemo<GitSeededCommitFileSummary | null>(() => {
-    const files = detailFiles();
-    if (files.length === 0) return null;
-    return files.find((item) => gitDiffEntryIdentity(item) === selectedFileKey()) ?? files[0] ?? null;
-  });
-  const selectedFileRequestKey = createMemo(() => JSON.stringify({
-    repoRootPath: repoPath(),
-    stashId: selectedStash()?.id ?? '',
-    file: {
-      changeType: selectedFile()?.changeType ?? '',
-      path: selectedFile()?.path ?? '',
-      oldPath: selectedFile()?.oldPath ?? '',
-      newPath: selectedFile()?.newPath ?? '',
-    },
-  }));
-  const seededSelectedFileDiff = createMemo(() => seedGitDiffContent(selectedFile()));
   const reviewMatchesSelection = createMemo(() => {
     const review = props.review;
     const stashId = selectedStash()?.id;
@@ -218,58 +203,35 @@ export function GitStashWindow(props: GitStashWindowProps) {
     props.onTabChange(value === 'stashes' ? 'stashes' : 'save');
   };
 
+  const closeDiffDialog = () => {
+    setDiffDialogOpen(false);
+    setDiffDialogItem(null);
+    setDiffDialogStashId('');
+  };
+  const openDiffDialog = (file: GitSeededCommitFileSummary) => {
+    setDiffDialogItem(file);
+    setDiffDialogStashId(String(selectedStash()?.id ?? '').trim());
+    setDiffDialogOpen(true);
+  };
+
+  createEffect(on(() => [props.open, props.tab] as const, ([open, tab]) => {
+    if (open && tab === 'stashes') return;
+    closeDiffDialog();
+  }));
+
+  createEffect(on(() => selectedStash()?.id ?? '', (stashId) => {
+    const activeDialogStashId = diffDialogStashId();
+    if (!activeDialogStashId) return;
+    if (stashId && stashId === activeDialogStashId) return;
+    closeDiffDialog();
+  }));
+
   createEffect(() => {
-    const files = detailFiles();
-    if (files.length === 0) {
-      setSelectedFileKey('');
-      return;
-    }
-    const current = selectedFileKey();
-    if (current && files.some((item) => gitDiffEntryIdentity(item) === current)) return;
-    setSelectedFileKey(gitDiffEntryIdentity(files[0]));
+    const item = diffDialogItem();
+    if (!item) return;
+    if (detailFiles().some((file) => gitDiffEntryIdentity(file) === gitDiffEntryIdentity(item))) return;
+    closeDiffDialog();
   });
-
-  createEffect(on(() => [props.open, props.tab, selectedFileRequestKey()] as const, () => {
-    selectedFileDiffReqSeq += 1;
-    setSelectedFileDiff(seededSelectedFileDiff());
-    setSelectedFileDiffLoading(false);
-    setSelectedFileDiffError(null);
-    setSelectedFileDiffLoadedKey(seededSelectedFileDiff() ? selectedFileRequestKey() : '');
-  }));
-
-  createEffect(on(() => [props.open, props.tab, selectedStash()?.id, selectedFile(), selectedFileRequestKey()] as const, ([open, tab, stashId, file, requestKey]) => {
-    if (!open || tab !== 'stashes' || !stashId || !file || !repoPath()) return;
-    if (seededSelectedFileDiff()) return;
-    if (!rpc?.git?.getDiffContent) return;
-    if (selectedFileDiffLoadedKey() === requestKey || selectedFileDiffLoading()) return;
-
-    const seq = ++selectedFileDiffReqSeq;
-    setSelectedFileDiffLoading(true);
-    setSelectedFileDiffError(null);
-
-    void rpc.git.getDiffContent({
-      repoRootPath: repoPath(),
-      sourceKind: 'stash',
-      stashId,
-      mode: 'preview',
-      file: {
-        changeType: file.changeType,
-        path: file.path,
-        oldPath: file.oldPath,
-        newPath: file.newPath,
-      },
-    }).then((resp) => {
-      if (seq !== selectedFileDiffReqSeq || selectedFileRequestKey() !== requestKey) return;
-      setSelectedFileDiff(resp.file ?? null);
-      setSelectedFileDiffLoadedKey(requestKey);
-    }).catch((err) => {
-      if (seq !== selectedFileDiffReqSeq || selectedFileRequestKey() !== requestKey) return;
-      setSelectedFileDiff(null);
-      setSelectedFileDiffError(buildStashPatchErrorState(err));
-    }).finally(() => {
-      if (seq === selectedFileDiffReqSeq) setSelectedFileDiffLoading(false);
-    });
-  }));
 
   return (
     <PreviewWindow
@@ -328,7 +290,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
 
                 <Show when={!props.stashesLoading} fallback={<GitStatePane loading message="Loading stash list..." surface class="h-full" />}>
                   <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? 'Failed to load stashes.'} surface class="h-full" />}>
-                    <div class="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)]">
+                    <div class="flex h-full min-h-0 flex-col gap-3 overflow-auto xl:grid xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] xl:overflow-hidden">
                       <div class={cn('min-h-0 overflow-auto rounded-md p-2', redevenSurfaceRoleClass('panelStrong'))}>
                         <Show
                           when={props.stashes.length > 0}
@@ -366,7 +328,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                         </Show>
                       </div>
 
-                      <div class="min-h-0 overflow-hidden">
+                      <div class="min-h-0 xl:overflow-auto">
                         <Show
                           when={!props.stashDetailLoading}
                           fallback={<GitStatePane loading message="Loading stash detail..." surface class="h-full" />}
@@ -376,122 +338,134 @@ export function GitStashWindow(props: GitStashWindowProps) {
                               when={props.stashDetail}
                               fallback={<GitStatePane message="Select a stash to inspect its files and actions." surface class="h-full" />}
                             >
-                              <div class="grid h-full min-h-0 gap-3 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
-                                <div class="flex min-h-0 flex-col gap-3 overflow-hidden">
-                                  <GitSection
-                                    label="Selected Stash"
-                                    tone="violet"
-                                    aside={<GitMetaPill tone="violet">{props.stashDetail?.ref || shortGitHash(props.stashDetail?.id)}</GitMetaPill>}
-                                  >
-                                    <div class="space-y-2">
-                                      <div class="text-sm font-semibold text-foreground">{props.stashDetail?.message || 'Unnamed stash'}</div>
-                                      <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                        <Show when={props.stashDetail?.branchName}>
-                                          <GitMetaPill tone="neutral">{props.stashDetail?.branchName}</GitMetaPill>
-                                        </Show>
-                                        <Show when={props.stashDetail?.headCommit}>
-                                          <GitMetaPill tone="neutral">{shortGitHash(props.stashDetail?.headCommit)}</GitMetaPill>
-                                        </Show>
-                                        <Show when={props.stashDetail?.hasUntracked}>
-                                          <GitMetaPill tone="warning">Includes untracked</GitMetaPill>
-                                        </Show>
-                                      </div>
-                                      <div class="text-[11px] text-muted-foreground">{formatStashTime(props.stashDetail?.createdAtUnixMs)}</div>
+                              <div class="flex flex-col gap-3">
+                                <GitSection
+                                  label="Selected Stash"
+                                  tone="violet"
+                                  aside={<GitMetaPill tone="violet">{props.stashDetail?.ref || shortGitHash(props.stashDetail?.id)}</GitMetaPill>}
+                                >
+                                  <div class="space-y-2">
+                                    <div class="text-sm font-semibold text-foreground">{props.stashDetail?.message || 'Unnamed stash'}</div>
+                                    <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                      <Show when={props.stashDetail?.branchName}>
+                                        <GitMetaPill tone="neutral">{props.stashDetail?.branchName}</GitMetaPill>
+                                      </Show>
+                                      <Show when={props.stashDetail?.headCommit}>
+                                        <GitMetaPill tone="neutral">{shortGitHash(props.stashDetail?.headCommit)}</GitMetaPill>
+                                      </Show>
+                                      <Show when={props.stashDetail?.hasUntracked}>
+                                        <GitMetaPill tone="warning">Includes untracked</GitMetaPill>
+                                      </Show>
                                     </div>
-                                  </GitSection>
+                                    <div class="text-[11px] text-muted-foreground">{formatStashTime(props.stashDetail?.createdAtUnixMs)}</div>
+                                  </div>
+                                </GitSection>
 
-                                  <div class={cn('rounded-md p-2', redevenSurfaceRoleClass('panelStrong'))}>
-                                    <div class="mb-2 flex items-center justify-between gap-2 px-1">
-                                      <div class="text-xs font-semibold text-foreground">Changed Files</div>
-                                      <GitMetaPill tone="neutral">{detailFiles().length} file{detailFiles().length === 1 ? '' : 's'}</GitMetaPill>
-                                    </div>
-                                    <div class="min-h-0 max-h-[16rem] space-y-1 overflow-auto">
-                                      <For each={detailFiles()}>
-                                        {(file) => {
-                                          const active = () => gitDiffEntryIdentity(file) === gitDiffEntryIdentity(selectedFile());
+                                <section class={cn('rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
+                                  <GitLabelBlock class="min-w-0" label="Changed Files" tone="info" meta={<GitMetaPill tone="neutral">{String(detailFiles().length)}</GitMetaPill>}>
+                                    <div class="text-xs leading-relaxed text-muted-foreground">Click a file to inspect its diff in a dialog.</div>
+                                  </GitLabelBlock>
+                                  <Show when={detailFiles().length > 0} fallback={<GitSubtleNote class="mt-2.5">No changed files are available for this stash.</GitSubtleNote>}>
+                                    <div class={cn('mt-2.5 overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'))}>
+                                      <GitVirtualTable
+                                        items={detailFiles()}
+                                        tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
+                                        header={(
+                                          <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+                                            <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
+                                            <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
+                                            <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+                                            <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                                          </tr>
+                                        )}
+                                        renderRow={(file) => {
+                                          const active = () => (
+                                            diffDialogOpen()
+                                            && diffDialogStashId() === String(selectedStash()?.id ?? '').trim()
+                                            && gitDiffEntryIdentity(diffDialogItem()) === gitDiffEntryIdentity(file)
+                                          );
+                                          const primaryPath = changeDisplayPath(file);
+                                          const secondaryPath = changeSecondaryPath(file);
                                           return (
-                                            <button
-                                              type="button"
-                                              class={cn(
-                                                'flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-colors duration-150',
-                                                gitToneSelectableCardClass(workspaceSectionTone(file.changeType), active()),
-                                              )}
-                                              onClick={() => setSelectedFileKey(gitDiffEntryIdentity(file))}
+                                            <tr
+                                              aria-selected={active()}
+                                              class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                                              onClick={() => openDiffDialog(file)}
                                             >
-                                              <div class="min-w-0">
-                                                <div class={cn('truncate text-[11px] font-medium', active() ? 'text-current' : 'text-foreground')}>{changeDisplayPath(file)}</div>
-                                                <div class={cn('truncate text-[10px]', gitSelectedSecondaryTextClass(active()))}>{file.changeType || 'modified'}</div>
-                                              </div>
-                                              <GitMetaPill tone="neutral" class={gitSelectedChipClass(active())}>{shortGitHash(props.stashDetail?.id)}</GitMetaPill>
-                                            </button>
+                                              <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                                <div class="min-w-0">
+                                                  <button
+                                                    type="button"
+                                                    class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
+                                                    title={secondaryPath}
+                                                    onClick={(event) => {
+                                                      event.stopPropagation();
+                                                      openDiffDialog(file);
+                                                    }}
+                                                  >
+                                                    {primaryPath}
+                                                  </button>
+                                                  <Show when={secondaryPath !== primaryPath}>
+                                                    <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={secondaryPath}>{secondaryPath}</div>
+                                                  </Show>
+                                                </div>
+                                              </td>
+                                              <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
+                                              <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
+                                              <td class={gitChangedFilesStickyCellClass(active())}>
+                                                <GitChangedFilesActionButton
+                                                  onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    openDiffDialog(file);
+                                                  }}
+                                                >
+                                                  View Diff
+                                                </GitChangedFilesActionButton>
+                                              </td>
+                                            </tr>
                                           );
                                         }}
-                                      </For>
+                                      />
                                     </div>
-                                  </div>
-
-                                  <div class="grid gap-2 sm:grid-cols-3">
-                                    <Button size="sm" variant="default" class="rounded-md" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(false)}>
-                                      {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
-                                    </Button>
-                                    <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(true)}>
-                                      {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
-                                    </Button>
-                                    <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestDrop?.()}>
-                                      {props.dropBusy ? 'Deleting...' : 'Delete'}
-                                    </Button>
-                                  </div>
-
-                                  <Show when={reviewMatchesSelection()}>
-                                    <GitChecklistItem
-                                      title={props.review?.kind === 'drop' ? 'Delete this stash entry' : (props.review?.removeAfterApply ? 'Apply and remove this stash' : 'Apply this stash')}
-                                      detail={reviewBlockingReason()
-                                        ? reviewBlockingReason()
-                                        : props.review?.kind === 'drop'
-                                          ? 'Confirm deletion to remove this stash from the shared stack.'
-                                          : 'Confirm the reviewed apply plan before mutating the current worktree.'}
-                                      tone={reviewBlockingReason() ? 'warning' : 'violet'}
-                                      complete={!reviewBlockingReason()}
-                                      required
-                                    >
-                                      <Show when={props.reviewError}>
-                                        <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.reviewError}</GitSubtleNote>
-                                      </Show>
-                                      <div class="flex flex-wrap gap-2">
-                                        <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} onClick={() => props.onCancelReview?.()}>
-                                          Cancel
-                                        </Button>
-                                        <Button size="sm" variant="default" class="rounded-md" disabled={!canConfirmReview()} loading={Boolean(props.reviewLoading || props.applyBusy || props.dropBusy)} onClick={() => props.onConfirmReview?.()}>
-                                          {props.review?.kind === 'drop' ? 'Confirm Delete' : (props.review?.removeAfterApply ? 'Confirm Apply & Remove' : 'Confirm Apply')}
-                                        </Button>
-                                      </div>
-                                    </GitChecklistItem>
                                   </Show>
+                                </section>
+
+                                <div class="grid gap-2 sm:grid-cols-3">
+                                  <Button size="sm" variant="default" class="rounded-md" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(false)}>
+                                    {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
+                                  </Button>
+                                  <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestApply?.(true)}>
+                                    {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
+                                  </Button>
+                                  <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" disabled={props.reviewLoading || props.applyBusy || props.dropBusy} onClick={() => props.onRequestDrop?.()}>
+                                    {props.dropBusy ? 'Deleting...' : 'Delete'}
+                                  </Button>
                                 </div>
 
-                                <Show
-                                  when={!selectedFileDiffLoading()}
-                                  fallback={<GitStatePane loading message="Loading stash patch..." surface class="min-h-0" />}
-                                >
-                                  <Show
-                                    when={!selectedFileDiffError()}
-                                    fallback={(
-                                      <GitStatePane
-                                        tone="error"
-                                        message={selectedFileDiffError()?.message || 'Could not load the selected stash patch.'}
-                                        detail={selectedFileDiffError()?.detail}
-                                        surface
-                                        class="min-h-0"
-                                      />
-                                    )}
+                                <Show when={reviewMatchesSelection()}>
+                                  <GitChecklistItem
+                                    title={props.review?.kind === 'drop' ? 'Delete this stash entry' : (props.review?.removeAfterApply ? 'Apply and remove this stash' : 'Apply this stash')}
+                                    detail={reviewBlockingReason()
+                                      ? reviewBlockingReason()
+                                      : props.review?.kind === 'drop'
+                                        ? 'Confirm deletion to remove this stash from the shared stack.'
+                                        : 'Confirm the reviewed apply plan before mutating the current worktree.'}
+                                    tone={reviewBlockingReason() ? 'warning' : 'violet'}
+                                    complete={!reviewBlockingReason()}
+                                    required
                                   >
-                                    <GitPatchViewer
-                                      class="min-h-0"
-                                      item={selectedFileDiff()}
-                                      emptyMessage="Select a stash file to inspect its patch."
-                                      unavailableMessage={(item) => item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined}
-                                    />
-                                  </Show>
+                                    <Show when={props.reviewError}>
+                                      <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.reviewError}</GitSubtleNote>
+                                    </Show>
+                                    <div class="flex flex-wrap gap-2">
+                                      <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} onClick={() => props.onCancelReview?.()}>
+                                        Cancel
+                                      </Button>
+                                      <Button size="sm" variant="default" class="rounded-md" disabled={!canConfirmReview()} loading={Boolean(props.reviewLoading || props.applyBusy || props.dropBusy)} onClick={() => props.onConfirmReview?.()}>
+                                        {props.review?.kind === 'drop' ? 'Confirm Delete' : (props.review?.removeAfterApply ? 'Confirm Apply & Remove' : 'Confirm Apply')}
+                                      </Button>
+                                    </div>
+                                  </GitChecklistItem>
                                 </Show>
                               </div>
                             </Show>
@@ -590,6 +564,28 @@ export function GitStashWindow(props: GitStashWindowProps) {
           </Show>
         </div>
       </div>
+
+      <GitDiffDialog
+        open={diffDialogOpen()}
+        onOpenChange={(open) => {
+          if (open) {
+            setDiffDialogOpen(true);
+            return;
+          }
+          closeDiffDialog();
+        }}
+        item={diffDialogItem()}
+        source={diffDialogItem() && diffDialogStashId() ? {
+          kind: 'stash',
+          repoRootPath: repoPath(),
+          stashId: diffDialogStashId(),
+        } : null}
+        title="Stash Diff"
+        description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected stash file diff.'}
+        emptyMessage="Select a changed stash file to inspect its diff."
+        unavailableMessage={(item) => (item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
+        errorFormatter={(error) => buildStashPatchErrorState(error)}
+      />
     </PreviewWindow>
   );
 }

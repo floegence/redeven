@@ -367,6 +367,56 @@ describe('GitDiffDialog', () => {
     }
   });
 
+  it('supports caller-formatted stash diff errors without leaking raw git output', async () => {
+    mockGetDiffContent.mockRejectedValueOnce(new Error('git stash show --patch stash@{0} -- src/app.ts failed: Too many revisions specified'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitDiffDialog
+            open
+            onOpenChange={() => {}}
+            item={{
+              changeType: 'modified',
+              path: 'src/app.ts',
+              displayPath: 'src/app.ts',
+              patchText: ['@@ -4,1 +4,1 @@', '-oldMiddle();', '+newMiddle();'].join('\n'),
+            }}
+            source={{
+              kind: 'stash',
+              repoRootPath: '/workspace/repo',
+              stashId: 'stash-1',
+            }}
+            title="Stash Diff"
+            emptyMessage="Select a file to inspect its diff."
+            errorFormatter={() => ({
+              message: 'Could not load the selected stash patch.',
+              detail: 'Refresh the stash list and try again.',
+            })}
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const fullContextButton = Array.from(document.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Full Context');
+      expect(fullContextButton).toBeTruthy();
+      fullContextButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain('Could not load the selected stash patch.');
+      expect(document.body.textContent).toContain('Refresh the stash list and try again.');
+      expect(document.body.textContent).not.toContain('Too many revisions specified');
+      expect(document.body.textContent).not.toContain('git stash show');
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows directory placeholders as unavailable without requesting diff content', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

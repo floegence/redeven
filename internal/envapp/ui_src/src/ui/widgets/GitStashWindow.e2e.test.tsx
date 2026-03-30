@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
-import { createSignal, type JSX } from 'solid-js';
+import { createEffect, createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetDiffContent = vi.hoisted(() => vi.fn());
+const gitDiffDialogRenderStore = vi.hoisted(() => ({
+  snapshots: [] as Array<{
+    open: boolean;
+    itemPath: string;
+    sourceKind: string;
+    stashId: string;
+    description: string;
+  }>,
+}));
 
 vi.mock('../protocol/redeven_v1', async () => {
   const actual = await vi.importActual<typeof import('../protocol/redeven_v1')>('../protocol/redeven_v1');
@@ -25,12 +34,31 @@ vi.mock('./PreviewWindow', () => ({
   ),
 }));
 
-vi.mock('./GitPatchViewer', () => ({
-  GitPatchViewer: (props: { item?: { displayPath?: string }; emptyMessage?: string }) => (
-    <div data-testid="patch-viewer">
-      {props.item?.displayPath ?? props.emptyMessage}
-    </div>
-  ),
+vi.mock('./GitDiffDialog', () => ({
+  GitDiffDialog: (props: {
+    open?: boolean;
+    item?: { path?: string } | null;
+    source?: { kind?: string; stashId?: string } | null;
+    description?: string;
+  }) => {
+    createEffect(() => {
+      gitDiffDialogRenderStore.snapshots.push({
+        open: Boolean(props.open),
+        itemPath: String(props.item?.path ?? ''),
+        sourceKind: String(props.source?.kind ?? ''),
+        stashId: String(props.source?.stashId ?? ''),
+        description: String(props.description ?? ''),
+      });
+    });
+    return (
+      <div data-testid="git-diff-dialog">
+        <div>diff-open:{props.open ? 'yes' : 'no'}</div>
+        <div>diff-item:{props.item?.path ?? ''}</div>
+        <div>diff-source:{props.source?.kind ?? ''}</div>
+        <div>diff-stash:{props.source?.stashId ?? ''}</div>
+      </div>
+    );
+  },
 }));
 
 import { GitStashWindow } from './GitStashWindow';
@@ -57,16 +85,7 @@ beforeEach(() => {
     })),
   });
   mockGetDiffContent.mockReset();
-  mockGetDiffContent.mockResolvedValue({
-    repoRootPath: '/workspace/repo',
-    mode: 'preview',
-    file: {
-      changeType: 'modified',
-      path: 'src/app.ts',
-      displayPath: 'src/app.ts',
-      patchText: '@@ -1 +1 @@\n-before\n+after',
-    },
-  });
+  gitDiffDialogRenderStore.snapshots = [];
 });
 
 afterEach(() => {
@@ -74,7 +93,7 @@ afterEach(() => {
 });
 
 describe('GitStashWindow', () => {
-  it('switches from save mode to the stash list and exposes stash actions', () => {
+  it('switches from save mode to the stash list and exposes stash actions', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -135,18 +154,34 @@ describe('GitStashWindow', () => {
 
       const stashesTab = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Saved Stashes')) as HTMLButtonElement | undefined;
       expect(stashesTab).toBeTruthy();
-      stashesTab!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      stashesTab!.click();
+      await flush();
 
       expect(host.textContent).toContain('Selected Stash');
       expect(host.textContent).toContain('WIP linked worktree');
+      expect(host.textContent).toContain('Changed Files');
       expect(host.textContent).toContain('Apply');
       expect(host.textContent).toContain('Apply & Remove');
       expect(host.textContent).toContain('Delete');
       const selectedStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('WIP linked worktree')) as HTMLButtonElement | undefined;
-      const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/app.ts')) as HTMLButtonElement | undefined;
       expect(selectedStashButton?.className).toContain('git-browser-selection-surface');
-      expect(selectedFileButton?.className).toContain('git-browser-selection-surface');
-      expect(host.querySelector('[data-testid="patch-viewer"]')?.textContent).toContain('src/app.ts');
+
+      const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'src/app.ts') as HTMLButtonElement | undefined;
+      expect(selectedFileButton).toBeTruthy();
+      selectedFileButton!.click();
+      await flush();
+
+      const latestDialog = gitDiffDialogRenderStore.snapshots.at(-1);
+      expect(latestDialog).toMatchObject({
+        open: true,
+        itemPath: 'src/app.ts',
+        sourceKind: 'stash',
+        stashId: 'stash-1',
+      });
+      expect(latestDialog?.description).toContain('src/app.ts');
+      expect(host.textContent).toContain('diff-open:yes');
+      expect(host.textContent).toContain('diff-source:stash');
+      expect(host.textContent).toContain('diff-stash:stash-1');
     } finally {
       dispose();
     }
@@ -225,9 +260,7 @@ describe('GitStashWindow', () => {
     }
   });
 
-  it('shows a contextual stash patch error instead of raw git CLI output', async () => {
-    mockGetDiffContent.mockRejectedValueOnce(new Error("git stash show --patch --include-untracked stash@{0} -- src/app.ts failed: Too many revisions specified"));
-
+  it('keeps stash review summary-first and does not fetch inline patch content', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -272,12 +305,21 @@ describe('GitStashWindow', () => {
 
     try {
       await flush();
+      expect(mockGetDiffContent).not.toHaveBeenCalled();
+      expect(host.textContent).not.toContain('Select a stash file to inspect its patch.');
+
+      const viewDiffButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'View Diff') as HTMLButtonElement | undefined;
+      expect(viewDiffButton).toBeTruthy();
+      viewDiffButton!.click();
       await flush();
-      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
-      expect(host.textContent).toContain('Could not load the selected stash patch.');
-      expect(host.textContent).toContain('Refresh the stash list and try again.');
-      expect(host.textContent).not.toContain('Too many revisions specified');
-      expect(host.textContent).not.toContain('git stash show');
+
+      expect(mockGetDiffContent).not.toHaveBeenCalled();
+      expect(gitDiffDialogRenderStore.snapshots.at(-1)).toMatchObject({
+        open: true,
+        itemPath: 'src/app.ts',
+        sourceKind: 'stash',
+        stashId: 'stash-1',
+      });
     } finally {
       dispose();
     }

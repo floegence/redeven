@@ -38,7 +38,7 @@ Key points:
 - Git browser title dots are a semantic chrome contract rather than ad-hoc Tailwind background utilities: `src/ui/widgets/GitChrome.ts` maps `GitChromeTone` to stable `git-tone-dot--*` classes, while `src/styles/redeven.css` owns the final light/dark pigment tokens so agent-bundled production CSS cannot silently drop those markers.
 - Git stash is implemented as one shared floating Git surface instead of a fourth top-level browse mode: the header `Stashes` badge opens the saved-stack review tab, `Changes` and `Branches -> Status` open the save tab for the correct worktree target, and merge blockers can deep-link directly into `Stash current changes` when structured blocker data says the workspace can be stashed.
 - Git collection RPCs now keep file lists metadata-only; the UI resolves selected file patches lazily through a single `getDiffContent` contract instead of embedding `patch_text` into workspace, compare, commit, or stash collection payloads.
-- Large Git file tables use shared virtualization in the Env App (`Changes`, `Branches -> Compare`, `Branches -> Status`, and `Graph` commit files), while stash review remains summary-first and fetches patch content only for the actively selected file.
+- Large Git file tables use shared virtualization in the Env App (`Changes`, `Branches -> Compare`, `Branches -> Status`, `Graph` commit files, and stash changed-file review), while stash review stays summary-first and opens single-file diffs through the shared dialog flow on demand.
 - CSS, HTML, SCSS, Less, TOML, Makefile-family files, Vue/Svelte-class files, and other text formats now stay on the same Monaco-backed preview/edit path instead of splitting by language support tables.
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
@@ -108,8 +108,8 @@ Git stash stays a workflow overlay owned by Git browse rather than a separate pr
 The stash surface itself is split into two tabs:
 
 - `Save Changes` shows the target repository/worktree context, current workspace summary, optional stash message, and explicit `Include untracked files` / `Keep staged changes ready to commit` options.
-- `Saved Stashes` shows a lightweight shared stash summary list first, then loads metadata-only detail for the selected stash, changed-file patch browsing, and guarded actions for `Apply`, `Apply & Remove`, and `Delete`.
-- Stash detail returns file metadata first; the selected stash file patch is fetched lazily through `getDiffContent` when the user focuses that file, and the browser keeps a single detail-load owner so same-selection refreshes do not duplicate requests.
+- `Saved Stashes` shows a lightweight shared stash summary list first, then loads metadata-only detail for the selected stash, a compact changed-files table, and guarded actions for `Apply`, `Apply & Remove`, and `Delete`.
+- Stash detail returns file metadata first; clicking a changed file opens the shared `GitDiffDialog`, which fetches `getDiffContent` lazily for preview/full-context review instead of forcing an inline patch split inside the stash surface.
 
 Safety and refresh behavior:
 

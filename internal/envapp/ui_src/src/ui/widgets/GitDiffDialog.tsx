@@ -38,6 +38,21 @@ export type GitDiffDialogSource =
 
 type GitDiffDialogMode = 'patch' | 'full-context';
 type GitDiffContentMode = 'preview' | 'full';
+type GitDiffDialogErrorState = {
+  message: string;
+  detail?: string;
+};
+
+export type GitDiffDialogErrorFormatterContext = {
+  mode: GitDiffContentMode;
+  source?: GitDiffDialogSource | null;
+  item: GitDiffDialogItem | null | undefined;
+};
+
+export type GitDiffDialogErrorFormatter = (
+  error: unknown,
+  context: GitDiffDialogErrorFormatterContext,
+) => GitDiffDialogErrorState | string | null | undefined;
 
 const gitDiffModeButtonClass =
   'cursor-pointer rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-50';
@@ -51,7 +66,40 @@ export interface GitDiffDialogProps {
   description?: string;
   emptyMessage: string;
   unavailableMessage?: string | ((item: GitDiffFileContent) => string | undefined);
+  errorFormatter?: GitDiffDialogErrorFormatter;
   class?: string;
+}
+
+function defaultDiffErrorState(error: unknown, fallbackMessage: string): GitDiffDialogErrorState {
+  if (error instanceof Error && String(error.message ?? '').trim()) {
+    return { message: String(error.message).trim() };
+  }
+  const raw = String(error ?? '').trim();
+  return { message: raw || fallbackMessage };
+}
+
+function resolveDiffErrorState(
+  error: unknown,
+  fallbackMessage: string,
+  context: GitDiffDialogErrorFormatterContext,
+  formatter?: GitDiffDialogErrorFormatter,
+): GitDiffDialogErrorState {
+  const formatted = formatter?.(error, context);
+  if (typeof formatted === 'string') {
+    const message = formatted.trim();
+    if (message) return { message };
+  }
+  if (formatted && typeof formatted === 'object') {
+    const message = String(formatted.message ?? '').trim();
+    const detail = String(formatted.detail ?? '').trim();
+    if (message) {
+      return {
+        message,
+        detail: detail || undefined,
+      };
+    }
+  }
+  return defaultDiffErrorState(error, fallbackMessage);
 }
 
 function normalizeDiffPathCandidate(value: unknown): string {
@@ -146,11 +194,11 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
   const [mode, setMode] = createSignal<GitDiffDialogMode>('patch');
   const [previewItem, setPreviewItem] = createSignal<GitDiffFileContent | null>(null);
   const [previewLoading, setPreviewLoading] = createSignal(false);
-  const [previewError, setPreviewError] = createSignal('');
+  const [previewError, setPreviewError] = createSignal<GitDiffDialogErrorState | null>(null);
   const [previewLoadedKey, setPreviewLoadedKey] = createSignal('');
   const [fullItem, setFullItem] = createSignal<GitDiffFileContent | null>(null);
   const [fullLoading, setFullLoading] = createSignal(false);
-  const [fullError, setFullError] = createSignal('');
+  const [fullError, setFullError] = createSignal<GitDiffDialogErrorState | null>(null);
   const [fullLoadedKey, setFullLoadedKey] = createSignal('');
 
   let previewReqSeq = 0;
@@ -183,11 +231,11 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     setMode('patch');
     setPreviewItem(seededPreviewItem());
     setPreviewLoading(false);
-    setPreviewError('');
+    setPreviewError(null);
     setPreviewLoadedKey(seededPreviewItem() && previewRequestKey() ? previewRequestKey() : '');
     setFullItem(null);
     setFullLoading(false);
-    setFullError('');
+    setFullError(null);
     setFullLoadedKey('');
   }, { defer: true }));
 
@@ -198,7 +246,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
 
     const seq = ++previewReqSeq;
     setPreviewLoading(true);
-    setPreviewError('');
+    setPreviewError(null);
 
     void rpc.git.getDiffContent(nextRequest).then((resp) => {
       if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey) return;
@@ -207,7 +255,11 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     }).catch((err) => {
       if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey) return;
       setPreviewItem(null);
-      setPreviewError(err instanceof Error ? err.message : String(err ?? 'Failed to load patch preview.'));
+      setPreviewError(resolveDiffErrorState(err, 'Failed to load patch preview.', {
+        mode: 'preview',
+        source: props.source,
+        item: props.item,
+      }, props.errorFormatter));
     }).finally(() => {
       if (seq === previewReqSeq) setPreviewLoading(false);
     });
@@ -219,7 +271,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
 
     const seq = ++fullReqSeq;
     setFullLoading(true);
-    setFullError('');
+    setFullError(null);
 
     void rpc.git.getDiffContent(nextRequest).then((resp) => {
       if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey) return;
@@ -228,7 +280,11 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     }).catch((err) => {
       if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey) return;
       setFullItem(null);
-      setFullError(err instanceof Error ? err.message : String(err ?? 'Failed to load full-context diff.'));
+      setFullError(resolveDiffErrorState(err, 'Failed to load full-context diff.', {
+        mode: 'full',
+        source: props.source,
+        item: props.item,
+      }, props.errorFormatter));
     }).finally(() => {
       if (seq === fullReqSeq) setFullLoading(false);
     });
@@ -294,11 +350,23 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         <div class="relative min-h-0 flex-1">
           <Switch>
             <Match when={mode() === 'patch' && previewError()}>
-              <GitStatePane tone="error" message={previewError()} surface class="min-h-0 flex-1" />
+              <GitStatePane
+                tone="error"
+                message={previewError()?.message || 'Failed to load patch preview.'}
+                detail={previewError()?.detail}
+                surface
+                class="min-h-0 flex-1"
+              />
             </Match>
 
             <Match when={mode() === 'full-context' && fullError()}>
-              <GitStatePane tone="error" message={fullError()} surface class="min-h-0 flex-1" />
+              <GitStatePane
+                tone="error"
+                message={fullError()?.message || 'Failed to load full-context diff.'}
+                detail={fullError()?.detail}
+                surface
+                class="min-h-0 flex-1"
+              />
             </Match>
 
             <Match when={activeItem()}>
