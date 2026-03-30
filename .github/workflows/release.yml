@@ -355,32 +355,32 @@ jobs:
             dist/knowledge_bundle.manifest.json \
             dist/knowledge_bundle.sha256
 
-      - name: Notify Private Ops
+      - name: Notify Portal Repo
         env:
-          GH_TOKEN: ${{ secrets.REDEVEN_PRIVATE_OPS_DISPATCH_TOKEN }}
-          PRIVATE_OPS_TARGET_REPO: ${{ vars.REDEVEN_PRIVATE_OPS_TARGET_REPO }}
+          GH_TOKEN: ${{ secrets.REDEVEN_POST_RELEASE_TOKEN }}
+          PORTAL_REPO: ${{ vars.REDEVEN_PORTAL_REPO }}
         run: |
           set -euo pipefail
 
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::error::Missing required secret REDEVEN_PRIVATE_OPS_DISPATCH_TOKEN"
+            echo "::error::Missing required secret REDEVEN_POST_RELEASE_TOKEN"
             exit 1
           fi
 
-          if [ -z "${PRIVATE_OPS_TARGET_REPO:-}" ]; then
-            echo "::error::Missing required repository variable REDEVEN_PRIVATE_OPS_TARGET_REPO"
+          if [ -z "${PORTAL_REPO:-}" ]; then
+            echo "::error::Missing required repository variable REDEVEN_PORTAL_REPO"
             exit 1
           fi
 
-          if [[ ! "${PRIVATE_OPS_TARGET_REPO}" =~ ^[^/]+/[^/]+$ ]]; then
-            echo "::error::Invalid REDEVEN_PRIVATE_OPS_TARGET_REPO: ${PRIVATE_OPS_TARGET_REPO}"
+          if [[ ! "${PORTAL_REPO}" =~ ^[^/]+/[^/]+$ ]]; then
+            echo "::error::Invalid REDEVEN_PORTAL_REPO: ${PORTAL_REPO}"
             exit 1
           fi
 
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
-            "/repos/${PRIVATE_OPS_TARGET_REPO}/dispatches" \
+            "/repos/${PORTAL_REPO}/dispatches" \
             -f event_type='redeven_agent_release_published' \
             -F client_payload[release_repo]="${GITHUB_REPOSITORY}" \
             -F client_payload[release_tag]="${GITHUB_REF_NAME}" \
