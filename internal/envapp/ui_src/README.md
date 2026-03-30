@@ -62,6 +62,7 @@ The Flower chat UI now follows five explicit constraints:
    - Settled transcript rows stay transcript-only `MessageItem` rows.
    - In-flight assistant output renders through a dedicated non-virtualized live surface mounted at the transcript tail, not through synthetic transcript messages.
    - Pending lifecycle states, empty streaming placeholders, hidden-only `thinking`, streamed answer content, finalization status, and transcript catch-up are all inner states of that one mounted live surface.
+   - A streaming assistant message bubble may expose at most one streaming cursor owner at a time; message composition selects the last visible eligible tail block, while earlier markdown blocks remain visible as committed content only.
    - Synthetic pending assistant messages, display-slot adoption, and frontend-only message-id remapping are forbidden.
 
 3. `VirtualMessageList` owns scroll anchoring.

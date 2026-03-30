@@ -5,7 +5,7 @@ import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { Message, MessageBlock } from '../types';
 import { BlockRenderer } from '../blocks/BlockRenderer';
-import { visibleMessageBlocks } from './messageVisibility';
+import { resolveStreamingCursorBlockIndex, visibleMessageBlocks } from './messageVisibility';
 
 export interface MessageBubbleProps {
   message: Message;
@@ -41,6 +41,9 @@ function isStructuredReceiptBlock(block: MessageBlock): boolean {
 
 export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   const visibleBlockIndices = createMemo(() => visibleMessageBlocks(props.message));
+  const streamingCursorBlockIndex = createMemo(() => (
+    resolveStreamingCursorBlockIndex(props.message, visibleBlockIndices())
+  ));
   const isStructuredReceiptMessage = createMemo(() => (
     props.message.role === 'user'
     && visibleBlockIndices().length > 0
@@ -78,7 +81,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
                 block={block()!}
                 messageId={props.message.id}
                 blockIndex={blockIndex()}
-                isStreaming={block()!.type === 'markdown' ? props.message.status === 'streaming' : undefined}
+                isStreaming={blockIndex() === streamingCursorBlockIndex() ? true : undefined}
               />
             </div>
           );

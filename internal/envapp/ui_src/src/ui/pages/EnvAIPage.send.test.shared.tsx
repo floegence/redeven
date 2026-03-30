@@ -1321,6 +1321,95 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
+    it('keeps a single streaming cursor when multiple markdown blocks are visible in the same assistant message', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const messageId = 'assistant-single-cursor-owner';
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'message-start',
+            messageId,
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 0,
+            blockType: 'markdown',
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-delta',
+            messageId,
+            blockIndex: 0,
+            delta: 'Intro text',
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 1,
+            blockType: 'shell',
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-set',
+            messageId,
+            blockIndex: 1,
+            block: {
+              type: 'shell',
+              command: 'echo hi',
+              status: 'success',
+              output: 'hi',
+            },
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-start',
+            messageId,
+            blockIndex: 2,
+            blockType: 'markdown',
+          },
+        });
+        emitRealtimeEvent({
+          threadId: 'thread-1',
+          eventType: 'stream_event',
+          streamEvent: {
+            type: 'block-delta',
+            messageId,
+            blockIndex: 2,
+            delta: 'Tail block content',
+          },
+        });
+        await flushAsync();
+
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Intro text');
+          expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Tail block content');
+          expect(host.querySelectorAll('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toHaveLength(1);
+        });
+      } finally {
+        dispose();
+      }
+    });
+
     it('keeps thinking blocks hidden from the default transcript view', async () => {
       const { host, dispose } = await renderPage();
       try {
