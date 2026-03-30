@@ -528,18 +528,30 @@ function runtimeRequirementLabel(status: CodeRuntimeStatus | null | undefined): 
   return "Redeven can install the supported version for this host using the official code-server installer.";
 }
 
+type CodeRuntimeBannerMode = "inline" | "floating";
+
 function CodeRuntimeBanner(props: {
   status: CodeRuntimeStatus | null | undefined;
   loading: boolean;
   error?: string | null;
+  mode: CodeRuntimeBannerMode;
   onInstall: () => void;
   onRefresh: () => void;
   onViewDetails: () => void;
 }) {
-  const bannerVariant = () => {
+  const isFloating = () => props.mode === "floating";
+  const showDetailsAction = () =>
+    props.status?.operation.state === "running"
+    || props.status?.operation.state === "failed"
+    || props.status?.operation.state === "cancelled";
+  const showInstallAction = () => !props.error && !props.loading && !showDetailsAction();
+  const inlineVariant = () => {
     if (props.error || props.status?.operation.state === "failed") return "error" as const;
-    if (props.loading || props.status?.operation.state === "running") return "info" as const;
-    if (props.status?.operation.state === "cancelled" || props.status?.active_runtime.detection_state === "incompatible") return "warning" as const;
+    if (
+      props.status?.operation.state === "cancelled"
+      || props.status?.active_runtime.detection_state === "incompatible"
+      || props.status?.active_runtime.detection_state === "missing"
+    ) return "warning" as const;
     return "note" as const;
   };
 
@@ -554,57 +566,111 @@ function CodeRuntimeBanner(props: {
     return "Not installed";
   };
 
-  return (
-    <HighlightBlock
-      variant={bannerVariant()}
-      title="code-server runtime"
-      data-testid="code-runtime-banner"
-      class={cn("border-0 shadow-none", redevenSurfaceRoleClass("panelStrong"))}
-    >
-      <div class="space-y-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
-            {badgeText()}
-          </Tag>
-          <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
-            Supported version {props.status?.supported_version ?? "-"}
-          </Tag>
-        </div>
-        <div class="text-xs text-muted-foreground">
-          {props.error ? props.error : runtimeRequirementLabel(props.status)}
-        </div>
-        <div class="grid gap-1 text-[11px] text-muted-foreground">
-          <Show when={props.status?.active_runtime.installed_version}>
-            <div>Detected version: <span class="font-mono">{props.status?.active_runtime.installed_version}</span></div>
-          </Show>
-          <Show when={props.status?.active_runtime.binary_path}>
-            <div>Detected path: <span class="font-mono break-all">{props.status?.active_runtime.binary_path}</span></div>
-          </Show>
-          <Show when={props.status?.managed_prefix}>
-            <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
-          </Show>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
-            Refresh status
-          </Button>
-          <Show
-            when={props.status?.operation.state === "running" || props.status?.operation.state === "failed" || props.status?.operation.state === "cancelled"}
-            fallback={
-              <Button size="sm" variant="default" onClick={props.onInstall}>
-                Install code-server
-              </Button>
-            }
-          >
-            <Button size="sm" variant="default" onClick={props.onViewDetails}>
-              <Show when={props.status?.operation.state === "running"} fallback="View details">
-                View install
+  if (isFloating()) {
+    return (
+      <div
+        data-testid="code-runtime-banner"
+        data-banner-mode="floating"
+        class="fixed bottom-3 right-3 z-[70] w-[min(28rem,calc(100vw-1.5rem))] sm:bottom-4 sm:right-4"
+      >
+        <div
+          class={cn(
+            "rounded-xl border border-border/70 bg-background/95 p-4 shadow-[0_24px_48px_-32px_rgba(15,23,42,0.45)] backdrop-blur",
+            redevenSurfaceRoleClass("panelStrong"),
+          )}
+        >
+          <div class="flex items-start gap-3">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <span class="origin-center scale-[0.72]">
+                <SnakeLoader size="sm" />
+              </span>
+            </div>
+            <div class="min-w-0 flex-1 space-y-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="text-sm font-semibold text-foreground">code-server runtime</div>
+                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+                  {badgeText()}
+                </Tag>
+                <Show when={props.status?.supported_version}>
+                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+                    Supported version {props.status?.supported_version}
+                  </Tag>
+                </Show>
+              </div>
+              <div class="text-xs leading-relaxed text-muted-foreground">
+                {props.error ? props.error : runtimeRequirementLabel(props.status)}
+              </div>
+              <Show when={props.status?.operation.state === "running"}>
+                <div class="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
+                    Refresh status
+                  </Button>
+                  <Button size="sm" variant="default" onClick={props.onViewDetails}>
+                    View install
+                  </Button>
+                </div>
               </Show>
-            </Button>
-          </Show>
+            </div>
+          </div>
         </div>
       </div>
-    </HighlightBlock>
+    );
+  }
+
+  return (
+    <div data-testid="code-runtime-banner" data-banner-mode="inline">
+      <HighlightBlock
+        variant={inlineVariant()}
+        title="code-server runtime"
+        class={cn("border-0 shadow-none", redevenSurfaceRoleClass("panelStrong"))}
+      >
+        <div class="space-y-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+              {badgeText()}
+            </Tag>
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
+              Supported version {props.status?.supported_version ?? "-"}
+            </Tag>
+          </div>
+          <div class="text-xs text-muted-foreground">
+            {props.error ? props.error : runtimeRequirementLabel(props.status)}
+          </div>
+          <div class="grid gap-1 text-[11px] text-muted-foreground">
+            <Show when={props.status?.active_runtime.installed_version}>
+              <div>Detected version: <span class="font-mono">{props.status?.active_runtime.installed_version}</span></div>
+            </Show>
+            <Show when={props.status?.active_runtime.binary_path}>
+              <div>Detected path: <span class="font-mono break-all">{props.status?.active_runtime.binary_path}</span></div>
+            </Show>
+            <Show when={props.status?.managed_prefix}>
+              <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
+            </Show>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
+              Refresh status
+            </Button>
+            <Show
+              when={showDetailsAction()}
+              fallback={
+                <Show when={showInstallAction()}>
+                  <Button size="sm" variant="default" onClick={props.onInstall}>
+                    Install code-server
+                  </Button>
+                </Show>
+              }
+            >
+              <Button size="sm" variant="default" onClick={props.onViewDetails}>
+                <Show when={props.status?.operation.state === "running"} fallback="View details">
+                  View install
+                </Show>
+              </Button>
+            </Show>
+          </div>
+        </div>
+      </HighlightBlock>
+    </div>
   );
 }
 
@@ -1155,14 +1221,19 @@ export function EnvCodespacesPage() {
     if (typeof err === "string") return err;
     return null;
   };
-  const showRuntimeBanner = () => {
+  const runtimeBannerMode = (): CodeRuntimeBannerMode | null => {
     const status = runtimeStatus();
-    if (runtimeStatus.loading || runtimeBannerError()) return true;
-    if (!status) return false;
-    return codeRuntimeMissing(status)
-      || status.operation.state === "running"
+    if (runtimeBannerError()) return "inline";
+    if (runtimeStatus.loading || status?.operation.state === "running") return "floating";
+    if (!status) return null;
+    if (
+      codeRuntimeMissing(status)
       || status.operation.state === "failed"
-      || status.operation.state === "cancelled";
+      || status.operation.state === "cancelled"
+    ) {
+      return "inline";
+    }
+    return null;
   };
   const closeInstallDialog = (open: boolean) => {
     if (!open) {
@@ -1216,11 +1287,12 @@ export function EnvCodespacesPage() {
             </div>
           </div>
 
-          <Show when={showRuntimeBanner()}>
+          <Show when={runtimeBannerMode() === "inline"}>
             <CodeRuntimeBanner
               status={runtimeStatus()}
               loading={runtimeStatus.loading}
               error={runtimeBannerError()}
+              mode="inline"
               onInstall={() => openInstallDialog()}
               onRefresh={() => {
                 void refetchRuntimeStatus();
@@ -1255,6 +1327,20 @@ export function EnvCodespacesPage() {
           </div>
         </PanelContent>
       </Panel>
+
+      <Show when={runtimeBannerMode() === "floating"}>
+        <CodeRuntimeBanner
+          status={runtimeStatus()}
+          loading={runtimeStatus.loading}
+          error={runtimeBannerError()}
+          mode="floating"
+          onInstall={() => openInstallDialog()}
+          onRefresh={() => {
+            void refetchRuntimeStatus();
+          }}
+          onViewDetails={() => openInstallDialog(pendingIntent())}
+        />
+      </Show>
 
       {/* Create dialog */}
       <CreateCodespaceDialog

@@ -348,10 +348,57 @@ describe('EnvCodespacesPage', () => {
 
     const banner = host.querySelector('[data-testid="code-runtime-banner"]') as HTMLDivElement | null;
     expect(banner).toBeTruthy();
-    expect(banner?.className).toContain('highlight-block');
+    expect(banner?.dataset.bannerMode).toBe('inline');
+    expect(banner?.querySelector('.highlight-block')).toBeTruthy();
+    expect(banner?.querySelector('.highlight-block')?.getAttribute('data-highlight-variant')).toBe('warning');
     expect(banner?.textContent).toContain('code-server runtime');
     expect(banner?.textContent).toContain('Install code-server');
     expect(banner?.textContent).toContain('Supported version 4.108.2');
+  });
+
+  it('shows a floating runtime toast while the initial runtime check is still running', async () => {
+    let resolveRuntimeStatus!: (value: any) => void;
+
+    gatewayMocks.fetchGatewayJSON.mockImplementation((url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') {
+        return new Promise((resolve) => {
+          resolveRuntimeStatus = resolve as (value: any) => void;
+        });
+      }
+      if (url === '/_redeven_proxy/api/spaces') {
+        return Promise.resolve({
+          spaces: [
+            {
+              code_space_id: 'space-1',
+              name: 'Demo Space',
+              description: 'Workspace demo',
+              workspace_path: '/workspace/demo',
+              code_port: 13337,
+              created_at_unix_ms: 1,
+              updated_at_unix_ms: 1,
+              last_opened_at_unix_ms: 1,
+              running: true,
+              pid: 4242,
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected gateway call: ${url}`);
+    });
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const banner = host.querySelector('[data-testid="code-runtime-banner"]') as HTMLDivElement | null;
+    expect(banner).toBeTruthy();
+    expect(banner?.dataset.bannerMode).toBe('floating');
+    expect(banner?.className).toContain('fixed');
+    expect(banner?.textContent).toContain('Checking runtime');
+
+    resolveRuntimeStatus(makeRuntimeStatus());
+    await flushPage();
+
+    expect(host.querySelector('[data-testid="code-runtime-banner"]')).toBeNull();
   });
 
   it('opens the explicit install dialog instead of starting a codespace when runtime is missing', async () => {
