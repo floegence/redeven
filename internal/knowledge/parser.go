@@ -62,8 +62,8 @@ func LoadSourceManifest(sourceRoot string) (SourceManifest, []byte, error) {
 		return SourceManifest{}, nil, fmt.Errorf("manifest requires allowed_repos")
 	}
 	for _, repo := range manifest.AllowedRepos {
-		if strings.EqualFold(repo, "redeven") {
-			return SourceManifest{}, nil, fmt.Errorf("allowed_repos must not contain redeven")
+		if strings.EqualFold(repo, "redeven-portal") {
+			return SourceManifest{}, nil, fmt.Errorf("allowed_repos must not contain redeven-portal")
 		}
 	}
 	if len(manifest.SourceRefs) > 0 {

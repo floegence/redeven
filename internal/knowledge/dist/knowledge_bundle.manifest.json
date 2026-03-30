@@ -1,17 +1,17 @@
 {
   "schema_version": 2,
   "built_at": "2026-02-19T00:00:00Z",
-  "knowledge_id": "redeven-agent-core",
+  "knowledge_id": "redeven-core",
   "allowed_repos": [
     "floe-webapp",
     "floeterm",
     "flowersec",
-    "redeven-agent"
+    "redeven"
   ],
   "card_count": 5,
-  "bundle_sha256": "84bdb0e4083951f8c023c61a12f7376e760125306c2a5bfc6c7f9ffe15496fb6",
-  "cards_sha256": "b89a7a66200fe78a5b690b6c9c196e29805a25afd24b5e3f1a93b031a96ace9c",
+  "bundle_sha256": "fb68ddebddba9e3eb1ae6007b836d54704aed84e52500be99d09625139fe0d36",
+  "cards_sha256": "1074b1b414685258d6b29b13fb1559f68b26d859b9d296523e233b0406bc0b58",
   "topic_index_sha256": "dfd7c78e54aa4a5c0db5dc3c5cd00b6cc91ba2443c417587f3d2d37a03f58d49",
-  "code_index_sha256": "e0410e00b46907aa753550c1464d91ae4d98becdb2a110d7fabd80613749409a",
-  "source_sha256": "af140644b2e0503bfed37073120db48bf68672552ee57571796fc03b7de52c85"
+  "code_index_sha256": "b71706bd808f000237fa9b30fa9f39bab3f55e3d80c9c0825ede466113b4ec9d",
+  "source_sha256": "fef1caf3e17c667b1e4b7e5b14dd1e77a20b51fdf549c1700b8e2faf387bc9f5"
 }

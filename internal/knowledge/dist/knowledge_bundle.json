@@ -1,21 +1,21 @@
 {
   "schema_version": 2,
   "built_at": "2026-02-19T00:00:00Z",
-  "knowledge_id": "redeven-agent-core",
-  "knowledge_name": "Redeven Agent Runtime Knowledge",
+  "knowledge_id": "redeven-core",
+  "knowledge_name": "Redeven Runtime Knowledge",
   "allowed_repos": [
     "floe-webapp",
     "floeterm",
     "flowersec",
-    "redeven-agent"
+    "redeven"
   ],
   "source_refs": {
     "floe-webapp": "workspace",
     "floeterm": "workspace",
     "flowersec": "workspace",
-    "redeven-agent": "main"
+    "redeven": "main"
   },
-  "source_sha256": "af140644b2e0503bfed37073120db48bf68672552ee57571796fc03b7de52c85",
+  "source_sha256": "fef1caf3e17c667b1e4b7e5b14dd1e77a20b51fdf549c1700b8e2faf387bc9f5",
   "cards": [
     {
       "id": "K-AGENT-001",
@@ -36,25 +36,25 @@
       "invalid_conditions": "This card becomes invalid if session startup skips permission intersection or starts accepting browser-side permission claims as authoritative.",
       "evidence": [
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "README.md",
           "line": 106,
           "note": "The security model states that browser-claimed permissions are not trusted."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/agent/agent.go",
           "line": 430,
           "note": "Unsupported floe_app values are rejected before session setup."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/agent/agent.go",
           "line": 435,
           "note": "Permission clamp intersects grants with local policy."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/agent/agent.go",
           "line": 459,
           "note": "Effective permissions overwrite session metadata fields."
@@ -74,31 +74,31 @@
         "architecture",
         "dependencies"
       ],
-      "summary": "Redeven Agent runtime is coupled to Flowersec for transport/control primitives and Floeterm for terminal session orchestration.",
+      "summary": "Redeven runtime is coupled to Flowersec for transport/control primitives and Floeterm for terminal session orchestration.",
       "mechanism": "Go module dependencies pin both SDKs, while runtime packages import Flowersec endpoint/rpc layers and Floeterm manager APIs for terminal lifecycle handling.",
       "boundaries": "Upgrading either dependency without validating protocol and runtime behavior can break control/data session compatibility.",
       "invalid_conditions": "This card becomes invalid if runtime terminal or transport stacks stop depending on these libraries or move to a different integration contract.",
       "evidence": [
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "go.mod",
           "line": 7,
           "note": "Floeterm terminal-go dependency is pinned in the runtime module."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "go.mod",
           "line": 8,
           "note": "Flowersec-go dependency is pinned in the runtime module."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/agent/agent.go",
           "line": 20,
           "note": "Agent runtime imports Flowersec client and endpoint packages."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/terminal/manager.go",
           "line": 16,
           "note": "Terminal manager imports Floeterm terminal-go manager."
@@ -124,25 +124,25 @@
       "invalid_conditions": "This card becomes invalid if release-critical knowledge artifacts depend on ad-hoc local model generation instead of deterministic source compilation.",
       "evidence": [
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "scripts/build_assets.sh",
           "line": 112,
           "note": "Asset build includes a dedicated knowledge bundle stage."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "scripts/build_knowledge_bundle.sh",
           "line": 23,
           "note": "Bundle script calls cmd/knowledge-bundle with source root."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "cmd/knowledge-bundle/main.go",
           "line": 14,
           "note": "Bundle command defaults to internal knowledge source directory."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "cmd/knowledge-bundle/main.go",
           "line": 17,
           "note": "Bundle command supports source-only validation and dist verification modes."
@@ -168,13 +168,13 @@
       "invalid_conditions": "This card becomes invalid if release workflows stop publishing knowledge bundle verification artifacts.",
       "evidence": [
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": ".github/workflows/release.yml",
           "line": 49,
           "note": "Release build collects knowledge bundle assets."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": ".github/workflows/release.yml",
           "line": 109,
           "note": "Release checksums include bundle manifest and hash files."
@@ -200,25 +200,25 @@
       "invalid_conditions": "This card becomes invalid if Env App UI no longer uses these dependency families for protocol and terminal rendering.",
       "evidence": [
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/envapp/ui_src/package.json",
           "line": 13,
           "note": "floe-webapp-core is a declared dependency."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/envapp/ui_src/package.json",
           "line": 14,
           "note": "floe-webapp-protocol is a declared dependency."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/envapp/ui_src/package.json",
           "line": 15,
           "note": "floeterm terminal web package is a declared dependency."
         },
         {
-          "repo": "redeven-agent",
+          "repo": "redeven",
           "path": "internal/envapp/ui_src/package.json",
           "line": 16,
           "note": "flowersec core package is a declared dependency."
@@ -257,32 +257,32 @@
       ]
     },
     "code_paths": {
-      "redeven-agent/.github/workflows/release.yml": [
+      "redeven/.github/workflows/release.yml": [
         "K-REL-001"
       ],
-      "redeven-agent/README.md": [
+      "redeven/README.md": [
         "K-AGENT-001"
       ],
-      "redeven-agent/cmd/knowledge-bundle/main.go": [
+      "redeven/cmd/knowledge-bundle/main.go": [
         "K-KNOW-001"
       ],
-      "redeven-agent/go.mod": [
+      "redeven/go.mod": [
         "K-DEP-001"
       ],
-      "redeven-agent/internal/agent/agent.go": [
+      "redeven/internal/agent/agent.go": [
         "K-AGENT-001",
         "K-DEP-001"
       ],
-      "redeven-agent/internal/envapp/ui_src/package.json": [
+      "redeven/internal/envapp/ui_src/package.json": [
         "K-WEB-001"
       ],
-      "redeven-agent/internal/terminal/manager.go": [
+      "redeven/internal/terminal/manager.go": [
         "K-DEP-001"
       ],
-      "redeven-agent/scripts/build_assets.sh": [
+      "redeven/scripts/build_assets.sh": [
         "K-KNOW-001"
       ],
-      "redeven-agent/scripts/build_knowledge_bundle.sh": [
+      "redeven/scripts/build_knowledge_bundle.sh": [
         "K-KNOW-001"
       ]
     }

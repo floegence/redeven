@@ -173,8 +173,8 @@ func validateCardsAndIndices(cards []Card, indices Indices) error {
 		if err != nil {
 			return fmt.Errorf("invalid code index path %q: %w", path, err)
 		}
-		if strings.EqualFold(repo, "redeven") {
-			return fmt.Errorf("code index must not contain redeven path %q", path)
+		if strings.EqualFold(repo, "redeven-portal") {
+			return fmt.Errorf("code index must not contain redeven-portal path %q", path)
 		}
 		for _, id := range ids {
 			if _, ok := cardIDs[id]; !ok {
