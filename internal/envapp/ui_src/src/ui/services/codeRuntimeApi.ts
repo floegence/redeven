@@ -65,6 +65,22 @@ export function codeRuntimeOperationRunning(status: CodeRuntimeStatus | null | u
   return status?.operation.state === 'running';
 }
 
+export function codeRuntimeOperationSucceeded(status: CodeRuntimeStatus | null | undefined): boolean {
+  return status?.operation.state === 'succeeded';
+}
+
+export function codeRuntimeOperationFailed(status: CodeRuntimeStatus | null | undefined): boolean {
+  return status?.operation.state === 'failed';
+}
+
+export function codeRuntimeOperationCancelled(status: CodeRuntimeStatus | null | undefined): boolean {
+  return status?.operation.state === 'cancelled';
+}
+
+export function codeRuntimeOperationNeedsAttention(status: CodeRuntimeStatus | null | undefined): boolean {
+  return codeRuntimeOperationFailed(status) || codeRuntimeOperationCancelled(status);
+}
+
 export function codeRuntimeManagedInstalled(status: CodeRuntimeStatus | null | undefined): boolean {
   return Boolean(status?.managed_runtime.present);
 }

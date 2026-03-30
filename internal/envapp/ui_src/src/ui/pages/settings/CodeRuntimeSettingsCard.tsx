@@ -6,6 +6,9 @@ import {
   codeRuntimeManagedInstalled,
   codeRuntimeManagedNeedsUpgrade,
   codeRuntimeManagedRuntimeSelected,
+  codeRuntimeOperationCancelled,
+  codeRuntimeOperationFailed,
+  codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationRunning,
   codeRuntimeReady,
   codeRuntimeStageLabel,
@@ -20,11 +23,93 @@ type RuntimeDetailRow = Readonly<{
   mono?: boolean;
 }>;
 
+type RuntimeMetaItem = Readonly<{
+  label: string;
+  value: string;
+  mono?: boolean;
+}>;
+
+type RuntimePanelTone = 'default' | 'warning' | 'success' | 'danger';
+
 function RuntimeDetailsTableSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
   return (
     <div class="space-y-2">
       <div class="text-sm font-semibold text-foreground">{props.title}</div>
       <SettingsKeyValueTable rows={props.rows} minWidthClass="min-w-[40rem]" />
+    </div>
+  );
+}
+
+function runtimePanelClass(tone: RuntimePanelTone): string {
+  switch (tone) {
+    case 'warning':
+      return 'border-amber-500/30 bg-amber-500/[0.06]';
+    case 'success':
+      return 'border-emerald-500/30 bg-emerald-500/[0.05]';
+    case 'danger':
+      return 'border-destructive/20 bg-destructive/10';
+    default:
+      return 'border-border bg-muted/20';
+  }
+}
+
+function RuntimeStatePanel(props: {
+  title: string;
+  summary: string;
+  tone?: RuntimePanelTone;
+  badge?: string;
+  meta?: readonly RuntimeMetaItem[];
+  error?: string | null;
+  outputTitle?: string;
+  output?: string;
+  outputOpen?: boolean;
+}) {
+  const tone = () => props.tone ?? 'default';
+  const meta = () => props.meta ?? [];
+  const output = () => String(props.output ?? '').trim();
+
+  return (
+    <div class={`rounded-lg border p-4 ${runtimePanelClass(tone())}`}>
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="text-sm font-semibold text-foreground">{props.title}</div>
+          <Show when={props.badge}>
+            <SettingsPill tone={tone()}>{props.badge}</SettingsPill>
+          </Show>
+        </div>
+
+        <div class="text-sm leading-relaxed text-muted-foreground">{props.summary}</div>
+
+        <Show when={props.error}>
+          <div class="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
+            {props.error}
+          </div>
+        </Show>
+
+        <Show when={meta().length > 0}>
+          <div class="grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2">
+            {meta().map((item) => (
+              <div>
+                {item.label}:{' '}
+                <span class={item.mono ? 'font-mono text-foreground break-all' : 'text-foreground'}>
+                  {item.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Show>
+
+        <Show when={output()}>
+          <details open={props.outputOpen} class="rounded-md border border-border bg-background/80">
+            <summary class="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+              {props.outputTitle || 'Recent runtime output'}
+            </summary>
+            <pre class="max-h-52 overflow-auto border-t border-border px-3 py-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words">
+              {output()}
+            </pre>
+          </details>
+        </Show>
+      </div>
     </div>
   );
 }
@@ -80,14 +165,16 @@ function runtimeStatusLabel(state: string | null | undefined): string {
   }
 }
 
-function operationTone(state: string | null | undefined): 'default' | 'success' | 'warning' | 'danger' {
+function operationTone(state: string | null | undefined): RuntimePanelTone {
   switch (String(state ?? '').trim()) {
     case 'running':
       return 'warning';
-    case 'succeeded':
-      return 'success';
     case 'failed':
       return 'danger';
+    case 'cancelled':
+      return 'warning';
+    case 'succeeded':
+      return 'success';
     default:
       return 'default';
   }
@@ -113,17 +200,6 @@ function normalizedValue(value: string | null | undefined): string {
   return String(value ?? '').trim();
 }
 
-function operationNeedsManagedRuntimeSection(state: string | null | undefined): boolean {
-  switch (normalizedValue(state)) {
-    case 'running':
-    case 'failed':
-    case 'cancelled':
-      return true;
-    default:
-      return false;
-  }
-}
-
 export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const [installConfirmOpen, setInstallConfirmOpen] = createSignal(false);
   const [uninstallConfirmOpen, setUninstallConfirmOpen] = createSignal(false);
@@ -135,6 +211,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const managedSelected = createMemo(() => codeRuntimeManagedRuntimeSelected(props.status));
   const managedNeedsUpgrade = createMemo(() => codeRuntimeManagedNeedsUpgrade(props.status));
   const operationRunning = createMemo(() => codeRuntimeOperationRunning(props.status));
+  const operationFailed = createMemo(() => codeRuntimeOperationFailed(props.status));
+  const operationCancelled = createMemo(() => codeRuntimeOperationCancelled(props.status));
+  const operationNeedsAttention = createMemo(() => codeRuntimeOperationNeedsAttention(props.status));
   const installActionLabel = createMemo(() => settingsInstallActionLabel(props.status));
   const activeRuntimeSource = createMemo(() => normalizedValue(activeRuntime()?.source));
   const managedRuntimeMatchesCurrent = createMemo(() => {
@@ -152,15 +231,26 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       normalizedValue(active?.installed_version) === normalizedValue(managed?.installed_version)
     );
   });
+
+  const showInstallableStatePanel = createMemo(() => {
+    if (operationRunning()) return false;
+    if (operationNeedsAttention()) return false;
+    return !runtimeReady() && !managedInstalled();
+  });
+
+  const showCurrentRuntimeSection = createMemo(() => !operationRunning() && !showInstallableStatePanel());
+
   const showManagedRuntimeSection = createMemo(() => {
+    if (!showCurrentRuntimeSection()) return false;
     const managed = managedRuntime();
-    if (operationNeedsManagedRuntimeSection(props.status?.operation.state)) return true;
-    if (!managedInstalled()) return true;
+    if (!managedInstalled()) return false;
     if (managedNeedsUpgrade()) return true;
     if (managed?.detection_state !== 'ready') return true;
     if (normalizedValue(managed?.error_message) !== '') return true;
     return !managedRuntimeMatchesCurrent();
   });
+
+  const showOperationPanel = createMemo(() => operationRunning() || operationNeedsAttention());
 
   const cardBadge = createMemo(() => {
     if (operationRunning()) return props.status?.operation.action === 'uninstall' ? 'Removing runtime' : 'Installing runtime';
@@ -208,13 +298,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const managedSummary = createMemo(() => {
     const status = props.status;
     const managed = managedRuntime();
-    if (status?.operation.state === 'running') {
-      return status.operation.action === 'uninstall'
-        ? 'Redeven is currently removing the managed runtime after an explicit uninstall request.'
-        : 'Redeven is currently installing or upgrading the managed runtime after an explicit user action.';
-    }
     if (status?.operation.state === 'failed') {
-      return 'The last managed runtime action failed. Review the management activity below before retrying.';
+      return 'The last managed runtime action failed. Review the attention panel before retrying.';
     }
     if (status?.operation.state === 'cancelled') {
       return 'The last managed runtime action was cancelled. You can retry it explicitly when ready.';
@@ -232,9 +317,104 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     return 'Removing it will not touch the currently selected host runtime.';
   });
 
-  const operationOutput = createMemo(() => props.status?.operation.log_tail?.join('\n') || 'No runtime management output yet.');
+  const operationOutput = createMemo(() => props.status?.operation.log_tail?.join('\n') || '');
   const operationError = createMemo(() => String(props.status?.operation.last_error ?? '').trim());
   const cancelLabel = createMemo(() => (props.status?.operation.action === 'uninstall' ? 'Cancel uninstall' : 'Cancel install'));
+
+  const installableStateTitle = createMemo(() => {
+    if (activeRuntime()?.detection_state === 'incompatible') return 'Compatible runtime needed';
+    return 'No runtime installed';
+  });
+
+  const installableStateSummary = createMemo(() => {
+    const active = activeRuntime();
+    if (active?.detection_state === 'incompatible') {
+      return active.error_message || 'Redeven detected a code-server runtime, but it does not match the supported version for Codespaces.';
+    }
+    return 'Codespaces needs a compatible code-server runtime before it can start. Install the Redeven-managed runtime explicitly when you want Codespaces available on this host.';
+  });
+
+  const installableStateMeta = createMemo<readonly RuntimeMetaItem[]>(() => {
+    const rows: RuntimeMetaItem[] = [
+      {
+        label: 'Supported version',
+        value: props.status?.supported_version || '-',
+        mono: true,
+      },
+      {
+        label: 'Managed location',
+        value: props.status?.managed_prefix || '-',
+        mono: true,
+      },
+    ];
+    if (normalizedValue(activeRuntime()?.installed_version) !== '') {
+      rows.push({
+        label: 'Detected version',
+        value: activeRuntime()?.installed_version || '-',
+        mono: true,
+      });
+    }
+    if (normalizedValue(activeRuntime()?.binary_path) !== '') {
+      rows.push({
+        label: 'Detected path',
+        value: activeRuntime()?.binary_path || '-',
+        mono: true,
+      });
+    }
+    return rows;
+  });
+
+  const operationPanelTitle = createMemo(() => {
+    if (operationRunning()) return props.status?.operation.action === 'uninstall' ? 'Removing managed runtime' : 'Installing managed runtime';
+    if (operationFailed()) return props.status?.operation.action === 'uninstall' ? 'Unable to remove managed runtime' : 'Unable to install managed runtime';
+    if (operationCancelled()) return props.status?.operation.action === 'uninstall' ? 'Managed runtime removal cancelled' : 'Managed runtime install cancelled';
+    return '';
+  });
+
+  const operationPanelSummary = createMemo(() => {
+    if (operationRunning()) {
+      return props.status?.operation.action === 'uninstall'
+        ? 'Redeven is removing the managed runtime after your explicit request. The card will return to the normal steady state as soon as the runtime status settles.'
+        : 'Redeven is installing or upgrading the managed runtime after your explicit request. The card will return to the normal steady state as soon as the runtime status settles.';
+    }
+    if (operationFailed()) {
+      return 'The last managed runtime action did not finish successfully. Review the recent output below before retrying.';
+    }
+    if (operationCancelled()) {
+      return props.status?.operation.action === 'uninstall'
+        ? 'The managed runtime removal was cancelled before Redeven confirmed the runtime was fully gone.'
+        : 'The managed runtime install was cancelled before Redeven promoted the result.';
+    }
+    return '';
+  });
+
+  const operationPanelMeta = createMemo<readonly RuntimeMetaItem[]>(() => {
+    const rows: RuntimeMetaItem[] = [
+      {
+        label: 'Supported version',
+        value: props.status?.supported_version || '-',
+        mono: true,
+      },
+      {
+        label: 'Managed location',
+        value: props.status?.managed_prefix || '-',
+        mono: true,
+      },
+      {
+        label: 'Current active runtime',
+        value: runtimeSourceLabel(props.status?.active_runtime.source),
+      },
+    ];
+    if (normalizedValue(props.status?.active_runtime.installed_version) !== '') {
+      rows.push({
+        label: 'Detected version',
+        value: props.status?.active_runtime.installed_version || '-',
+        mono: true,
+      });
+    }
+    return rows;
+  });
+
   const currentRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
     const active = activeRuntime();
     const source = activeRuntimeSource();
@@ -264,7 +444,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             ? source === 'managed'
               ? 'Detected from the Redeven-managed runtime currently selected for Codespaces.'
               : 'Detected from the runtime currently selected for Codespaces.'
-            : active?.error_message || 'Version metadata appears after a compatible runtime is detected.',
+            : active?.error_message || 'Version metadata appears after runtime detection succeeds.',
         mono: true,
       },
       {
@@ -292,6 +472,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
 
     return rows;
   });
+
   const managedRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
     const managed = managedRuntime();
 
@@ -309,16 +490,12 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         label: 'Codespaces selection',
         value: managedSelected() ? (
           <SettingsPill tone="success">Currently selected</SettingsPill>
-        ) : managedInstalled() ? (
-          <SettingsPill>Not selected</SettingsPill>
         ) : (
-          'Unavailable'
+          <SettingsPill>Not selected</SettingsPill>
         ),
         note: managedSelected()
           ? 'Codespaces is currently using the managed runtime.'
-          : managedInstalled()
-            ? 'A different compatible runtime currently has higher priority.'
-            : 'Install the managed runtime to make it available for Codespaces.',
+          : 'A different compatible runtime currently has higher priority.',
       },
       {
         label: 'Supported version',
@@ -329,23 +506,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       {
         label: 'Managed version',
         value: managed?.installed_version || 'Not installed',
-        note: managedInstalled()
-          ? managedNeedsUpgrade()
-            ? 'Upgrade to align the managed runtime with the supported version.'
-            : 'Managed runtime matches the supported version.'
-          : 'No managed runtime is installed yet.',
+        note: managedNeedsUpgrade()
+          ? 'Upgrade to align the managed runtime with the supported version.'
+          : 'Managed runtime matches the supported version.',
         mono: true,
       },
       {
         label: 'Managed location',
         value: props.status?.managed_prefix || '-',
         note: 'Only the Redeven-managed runtime is stored here.',
-        mono: true,
-      },
-      {
-        label: 'Installer URL',
-        value: props.status?.installer_script_url || '-',
-        note: 'Used only after you explicitly confirm install or upgrade.',
         mono: true,
       },
     ];
@@ -372,7 +541,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <SettingsCard
         icon={Code}
         title="code-server Runtime"
-        description="Inspect the current Codespaces runtime, manage the Redeven-installed runtime when needed, and review explicit install or uninstall output."
+        description="Inspect the current Codespaces runtime and explicitly manage the Redeven-installed runtime when needed."
         badge={cardBadge()}
         badgeVariant={cardBadgeVariant()}
         error={props.error}
@@ -427,29 +596,35 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <RuntimeDetailsTableSection title="Current runtime" rows={currentRuntimeRows()} />
+          <Show when={showOperationPanel()}>
+            <RuntimeStatePanel
+              title={operationPanelTitle()}
+              summary={operationPanelSummary()}
+              tone={operationTone(props.status?.operation.state)}
+              badge={operationLabel(props.status)}
+              meta={operationPanelMeta()}
+              error={operationError()}
+              outputTitle="Recent runtime output"
+              output={operationOutput()}
+              outputOpen={operationNeedsAttention()}
+            />
+          </Show>
+
+          <Show when={showInstallableStatePanel()}>
+            <RuntimeStatePanel
+              title={installableStateTitle()}
+              summary={installableStateSummary()}
+              meta={installableStateMeta()}
+            />
+          </Show>
+
+          <Show when={showCurrentRuntimeSection()}>
+            <RuntimeDetailsTableSection title="Current runtime" rows={currentRuntimeRows()} />
+          </Show>
 
           <Show when={showManagedRuntimeSection()}>
             <RuntimeDetailsTableSection title="Managed runtime" rows={managedRuntimeRows()} />
           </Show>
-
-          <div class="rounded-lg border border-border bg-muted/20 p-4">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="text-sm font-semibold text-foreground">Management activity</div>
-              <SettingsPill tone={operationTone(props.status?.operation.state)}>{operationLabel(props.status)}</SettingsPill>
-            </div>
-            <div class="mt-2 text-xs text-muted-foreground">
-              Redeven never auto-installs code-server. Every managed install, upgrade, or uninstall must be explicitly triggered from Env App.
-            </div>
-            <Show when={operationError()}>
-              <div class="mt-3 rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
-                {operationError()}
-              </div>
-            </Show>
-            <pre class="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background/80 p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words">
-              {operationOutput()}
-            </pre>
-          </div>
         </div>
       </SettingsCard>
 

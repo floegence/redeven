@@ -146,6 +146,103 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.querySelectorAll('table')).toHaveLength(2);
   });
 
+  it('renders a compact installable state when no compatible runtime is installed', () => {
+    renderCard(host, {
+      status: makeStatus({
+        active_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'none',
+          binary_path: '',
+          installed_version: '',
+        },
+        managed_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'managed',
+          binary_path: '',
+          installed_version: '',
+        },
+      }),
+    });
+
+    expect(host.textContent).toContain('No runtime installed');
+    expect(host.textContent).toContain('Codespaces needs a compatible code-server runtime before it can start.');
+    expect(host.textContent).not.toContain('Current runtime');
+    expect(host.textContent).not.toContain('Managed runtime');
+    expect(host.querySelectorAll('table')).toHaveLength(0);
+  });
+
+  it('shows a focused uninstall progress panel while runtime removal is running', () => {
+    renderCard(host, {
+      status: makeStatus({
+        operation: {
+          action: 'uninstall',
+          state: 'running',
+          stage: 'removing',
+          log_tail: ['Preparing managed code-server uninstall.', 'Managed runtime has been removed.'],
+        },
+      }),
+    });
+
+    expect(host.textContent).toContain('Removing managed runtime');
+    expect(host.textContent).toContain('Removing managed runtime files...');
+    expect(host.textContent).toContain('Recent runtime output');
+    expect(host.textContent).not.toContain('Current runtime');
+    expect(host.textContent).not.toContain('Codespaces selection');
+    expect(host.querySelectorAll('table')).toHaveLength(0);
+  });
+
+  it('returns to the compact steady state after a successful uninstall', () => {
+    renderCard(host, {
+      status: makeStatus({
+        active_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'none',
+          binary_path: '',
+          installed_version: '',
+        },
+        managed_runtime: {
+          detection_state: 'missing',
+          present: false,
+          source: 'managed',
+          binary_path: '',
+          installed_version: '',
+        },
+        operation: {
+          action: 'uninstall',
+          state: 'succeeded',
+          log_tail: ['Preparing managed code-server uninstall.', 'Managed runtime has been removed.'],
+        },
+      }),
+    });
+
+    expect(host.textContent).toContain('No runtime installed');
+    expect(host.textContent).not.toContain('Uninstall completed');
+    expect(host.textContent).not.toContain('Recent runtime output');
+    expect(host.querySelectorAll('table')).toHaveLength(0);
+  });
+
+  it('shows an attention panel with output when uninstall fails', () => {
+    renderCard(host, {
+      status: makeStatus({
+        operation: {
+          action: 'uninstall',
+          state: 'failed',
+          last_error: 'permission denied',
+          log_tail: ['Preparing managed code-server uninstall.', 'permission denied'],
+        },
+      }),
+    });
+
+    expect(host.textContent).toContain('Unable to remove managed runtime');
+    expect(host.textContent).toContain('permission denied');
+    expect(host.textContent).toContain('Recent runtime output');
+    expect(host.textContent).toContain('Current runtime');
+    expect(host.querySelectorAll('table')).toHaveLength(1);
+  });
+
   it('opens the explicit install confirmation and calls the install action', async () => {
     const onInstall = vi.fn(async () => undefined);
 

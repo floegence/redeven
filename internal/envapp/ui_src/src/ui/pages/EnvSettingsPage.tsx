@@ -23,6 +23,8 @@ import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/share
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import {
   cancelCodeRuntimeOperation,
+  codeRuntimeOperationNeedsAttention,
+  codeRuntimeOperationSucceeded,
   fetchCodeRuntimeStatus,
   installCodeRuntime,
   uninstallCodeRuntime,
@@ -418,6 +420,31 @@ export function EnvSettingsPage() {
     });
   });
 
+  createEffect(() => {
+    const pendingAction = pendingRuntimeSuccessAction();
+    if (!pendingAction) return;
+
+    const status = codeRuntimeStatus();
+    if (!status) return;
+
+    const operationAction = String(status.operation.action ?? '').trim();
+    if (status.operation.state === 'running') return;
+
+    if (codeRuntimeOperationSucceeded(status) && operationAction === pendingAction) {
+      if (pendingAction === 'uninstall') {
+        notify.success('Runtime removed', 'The Redeven-managed code-server runtime has been removed.');
+      } else {
+        notify.success('Runtime ready', 'The Redeven-managed code-server runtime is ready for Codespaces.');
+      }
+      setPendingRuntimeSuccessAction('');
+      return;
+    }
+
+    if (codeRuntimeOperationNeedsAttention(status) && operationAction === pendingAction) {
+      setPendingRuntimeSuccessAction('');
+    }
+  });
+
   const [targetVersionInput, setTargetVersionInput] = createSignal('');
   const preferredUpgradeVersion = createMemo(() => agentUpdate.version.preferredTargetVersion());
   const targetUpgradeVersion = createMemo(() => String(targetVersionInput() ?? '').trim());
@@ -491,6 +518,7 @@ export function EnvSettingsPage() {
   const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
   const [codeRuntimeUninstallLoading, setCodeRuntimeUninstallLoading] = createSignal(false);
   const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
+  const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'install' | 'uninstall'>('');
 
   // Dirty flags
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
@@ -514,10 +542,12 @@ export function EnvSettingsPage() {
   };
   const installManagedCodeRuntime = async () => {
     setCodeRuntimeActionLoading(true);
+    setPendingRuntimeSuccessAction('install');
     try {
       await installCodeRuntime();
       await refetchCodeRuntimeStatus();
     } catch (e) {
+      setPendingRuntimeSuccessAction('');
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Install failed', msg || 'Request failed.');
     } finally {
@@ -526,10 +556,12 @@ export function EnvSettingsPage() {
   };
   const uninstallManagedCodeRuntime = async () => {
     setCodeRuntimeUninstallLoading(true);
+    setPendingRuntimeSuccessAction('uninstall');
     try {
       await uninstallCodeRuntime();
       await refetchCodeRuntimeStatus();
     } catch (e) {
+      setPendingRuntimeSuccessAction('');
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Uninstall failed', msg || 'Request failed.');
     } finally {

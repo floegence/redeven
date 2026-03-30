@@ -102,9 +102,10 @@ The explicit install flow is:
 
 1. Env App reads runtime status.
 2. Env App Settings exposes a dedicated `code-server Runtime` management card that shows:
-   - the current runtime selected for Codespaces,
+   - a steady-state runtime summary for the current Codespaces runtime,
    - a separate `Managed runtime` section only when the managed install adds distinct context beyond the current runtime,
-   - the explicit management operation status and recent logs.
+   - a focused running/error panel for explicit install or uninstall actions,
+   - recent output only while an operation is running or when the last action failed or was cancelled.
 3. If the runtime is missing or incompatible, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
 4. After the user explicitly clicks `Install`, `Upgrade`, or `Reinstall`, the agent:
    - downloads or reuses the official upstream `install.sh` for the pinned version,
@@ -112,7 +113,7 @@ The explicit install flow is:
    - validates the installed binary version,
    - promotes the managed runtime into the stable managed prefix.
 5. If the user explicitly clicks `Uninstall`, the agent removes only the Redeven-managed runtime path. Host-installed runtimes and environment overrides are left untouched.
-6. Env App shows progress, result state, and any recent management output.
+6. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
 
 ## Runtime status model
 
