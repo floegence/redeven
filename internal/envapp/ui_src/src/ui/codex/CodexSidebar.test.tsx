@@ -18,6 +18,11 @@ const startCodexTurnMock = vi.fn();
 const archiveCodexThreadMock = vi.fn();
 const respondToCodexRequestMock = vi.fn();
 const connectCodexEventStreamMock = vi.fn();
+const rpcMocks = {
+  fs: {
+    list: vi.fn(),
+  },
+};
 const notification = {
   success: vi.fn(),
   error: vi.fn(),
@@ -146,6 +151,10 @@ vi.mock('./api', () => ({
   archiveCodexThread: (...args: any[]) => archiveCodexThreadMock(...args),
   respondToCodexRequest: (...args: any[]) => respondToCodexRequestMock(...args),
   connectCodexEventStream: (...args: any[]) => connectCodexEventStreamMock(...args),
+}));
+
+vi.mock('../protocol/redeven_v1', () => ({
+  useRedevenRpc: () => rpcMocks,
 }));
 
 async function flushAsync(): Promise<void> {
