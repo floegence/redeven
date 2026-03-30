@@ -25,8 +25,8 @@ If manifest/checksum artifacts are omitted, downstream installers lose auditable
 
 ## Evidence
 
-- redeven-agent:.github/workflows/release.yml:49 - Release build collects knowledge bundle assets.
-- redeven-agent:.github/workflows/release.yml:109 - Release checksums include bundle manifest and hash files.
+- redeven:.github/workflows/release.yml:49 - Release build collects knowledge bundle assets.
+- redeven:.github/workflows/release.yml:109 - Release checksums include bundle manifest and hash files.
 
 ## Invalid Conditions
 

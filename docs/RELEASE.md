@@ -71,7 +71,6 @@ Repository secrets expected by `.github/workflows/release.yml`:
 - `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY`
 - `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID`
 - `REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER`
-
 Notes:
 
 - `REDEVEN_DESKTOP_MAC_CERT_BASE64` must contain the base64-encoded `.p12` Developer ID certificate bundle.

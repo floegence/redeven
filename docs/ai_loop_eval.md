@@ -1,6 +1,6 @@
 # Flower Behavioral Eval Workflow
 
-This document describes the current Flower evaluation workflow in Redeven Agent.
+This document describes the current Flower evaluation workflow in Redeven.
 
 The workflow is gate-first:
 

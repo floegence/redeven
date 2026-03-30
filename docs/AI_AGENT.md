@@ -1,6 +1,6 @@
 # Flower (Optional)
 
-Redeven Agent can optionally enable **Flower**, an on-device AI assistant inside the Env App UI.
+Redeven can optionally enable **Flower**, an on-device AI assistant inside the Env App UI.
 
 High-level design:
 
@@ -190,7 +190,7 @@ Installer note:
 - Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
 - Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.
-- The current shipped schema keeps semantic memory in `memory_items`. Redeven Agent does not currently ship a separate persistent embeddings table until the runtime fully owns that lifecycle.
+- The current shipped schema keeps semantic memory in `memory_items`. Redeven does not currently ship a separate persistent embeddings table until the runtime fully owns that lifecycle.
 
 ## Behavioral evaluation
 

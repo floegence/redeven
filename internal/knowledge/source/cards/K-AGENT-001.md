@@ -26,10 +26,10 @@ Any attempt to trust browser-reported permissions instead of the session metadat
 
 ## Evidence
 
-- redeven-agent:README.md:106 - The security model states that browser-claimed permissions are not trusted.
-- redeven-agent:internal/agent/agent.go:430 - Unsupported floe_app values are rejected before session setup.
-- redeven-agent:internal/agent/agent.go:435 - Permission clamp intersects grants with local policy.
-- redeven-agent:internal/agent/agent.go:459 - Effective permissions overwrite session metadata fields.
+- redeven:README.md:106 - The security model states that browser-claimed permissions are not trusted.
+- redeven:internal/agent/agent.go:430 - Unsupported floe_app values are rejected before session setup.
+- redeven:internal/agent/agent.go:435 - Permission clamp intersects grants with local policy.
+- redeven:internal/agent/agent.go:459 - Effective permissions overwrite session metadata fields.
 
 ## Invalid Conditions
 

@@ -2,7 +2,7 @@
   <img src="internal/envapp/ui_src/public/logo.png" alt="Redeven" width="120">
 </p>
 
-# Redeven Agent
+# Redeven
 
 <p align="center">
   <strong>Turn any machine into a secure E2EE workspace endpoint for files, terminals, monitoring, codespaces, desktop access, and AI-assisted workflows.</strong>
@@ -21,11 +21,11 @@
 ![Desktop](https://img.shields.io/badge/Desktop-Electron-47848F?logo=electron)
 ![Distribution](https://img.shields.io/badge/Distribution-GitHub%20Releases-181717?logo=github)
 
-Redeven Agent runs on the user machine. Redeven Service issues grants, Flowersec carries encrypted bytes, and the endpoint hosts the real application surfaces and local capabilities.
+Redeven runs on the user machine as the endpoint/runtime layer. Redeven Service issues grants, Flowersec carries encrypted bytes, and the endpoint hosts the real application surfaces and local capabilities.
 
-This repository stays open-source and auditable. It documents the public agent runtime, its Local UI behavior, and the public GitHub Release contract.
+This repository stays open-source and auditable. It documents the public `redeven` runtime, its Local UI behavior, and the public GitHub Release contract.
 
-![Redeven Agent architecture overview](docs/images/readme-architecture.svg)
+![Redeven architecture overview](docs/images/readme-architecture.svg)
 
 ## Why teams use it
 
@@ -196,4 +196,4 @@ Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 
 ## Open-source scope
 
-This public repository describes the agent runtime, Local UI behavior, and the public GitHub Release contract. It does not document private downstream deployment wrappers.
+This public `redeven` repository describes the endpoint/runtime layer, Local UI behavior, and the public GitHub Release contract. It does not document private downstream deployment wrappers.
