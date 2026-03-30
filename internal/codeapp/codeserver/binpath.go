@@ -3,22 +3,17 @@ package codeserver
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 )
 
 // ResolveBinary resolves the selected code-server binary path for the current
-// machine and validates that it matches the supported version.
+// machine and validates that it is usable.
 func ResolveBinary(stateDir string) (string, error) {
-	detection := detectRuntime(context.Background(), stateDir, SupportedVersion)
+	detection := detectRuntime(context.Background(), stateDir)
 	switch detection.state {
 	case RuntimeDetectionReady:
 		return detection.binaryPath, nil
-	case RuntimeDetectionIncompatible:
-		if detection.installedVersion != "" {
-			return "", fmt.Errorf("unsupported code-server version %s (supported: %s)", detection.installedVersion, SupportedVersion)
-		}
-		if msg := strings.TrimSpace(detection.errorMessage); msg != "" {
+	case RuntimeDetectionUnusable:
+		if msg := runtimeDetectionError(detection); msg != "" {
 			return "", errors.New(msg)
 		}
 		return "", errors.New("code-server binary is present but unusable")

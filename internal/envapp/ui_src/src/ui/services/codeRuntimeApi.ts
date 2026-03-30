@@ -1,6 +1,6 @@
 import { fetchGatewayJSON } from './gatewayApi';
 
-export type CodeRuntimeDetectionState = 'ready' | 'missing' | 'incompatible';
+export type CodeRuntimeDetectionState = 'ready' | 'missing' | 'unusable';
 export type CodeRuntimeOperationAction = 'install' | 'uninstall' | '';
 export type CodeRuntimeOperationState = 'idle' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 export type CodeRuntimeOperationStage = 'preparing' | 'downloading' | 'installing' | 'removing' | 'validating' | 'finalizing' | '';
@@ -10,7 +10,6 @@ export type CodeRuntimeTargetStatus = Readonly<{
   present: boolean;
   source: string;
   binary_path?: string;
-  installed_version?: string;
   error_code?: string;
   error_message?: string;
 }>;
@@ -27,7 +26,6 @@ export type CodeRuntimeOperationStatus = Readonly<{
 }>;
 
 export type CodeRuntimeStatus = Readonly<{
-  supported_version: string;
   active_runtime: CodeRuntimeTargetStatus;
   managed_runtime: CodeRuntimeTargetStatus;
   managed_prefix: string;
@@ -58,7 +56,7 @@ export function codeRuntimeReady(status: CodeRuntimeStatus | null | undefined): 
 
 export function codeRuntimeMissing(status: CodeRuntimeStatus | null | undefined): boolean {
   const state = String(status?.active_runtime.detection_state ?? '').trim();
-  return state === 'missing' || state === 'incompatible';
+  return state === 'missing' || state === 'unusable';
 }
 
 export function codeRuntimeOperationRunning(status: CodeRuntimeStatus | null | undefined): boolean {
@@ -89,17 +87,9 @@ export function codeRuntimeManagedRuntimeSelected(status: CodeRuntimeStatus | nu
   return status?.active_runtime.source === 'managed' && status?.active_runtime.detection_state === 'ready';
 }
 
-export function codeRuntimeManagedNeedsUpgrade(status: CodeRuntimeStatus | null | undefined): boolean {
-  if (!status?.managed_runtime.present) return false;
-  const managedVersion = String(status.managed_runtime.installed_version ?? '').trim();
-  const supportedVersion = String(status.supported_version ?? '').trim();
-  return Boolean(managedVersion && supportedVersion && managedVersion !== supportedVersion);
-}
-
 export function codeRuntimeManagedActionLabel(status: CodeRuntimeStatus | null | undefined): string {
-  if (!codeRuntimeManagedInstalled(status)) return 'Install code-server';
-  if (codeRuntimeManagedNeedsUpgrade(status)) return 'Upgrade managed runtime';
-  return 'Reinstall managed runtime';
+  if (!codeRuntimeManagedInstalled(status)) return 'Install latest';
+  return 'Update to latest';
 }
 
 export function codeRuntimeStageLabel(stage: string | null | undefined, action?: string | null | undefined): string {
@@ -123,7 +113,7 @@ export function codeRuntimeStageLabel(stage: string | null | undefined, action?:
     case 'preparing':
       return 'Preparing managed runtime...';
     case 'downloading':
-      return 'Downloading the official installer...';
+      return 'Downloading the official latest-stable installer...';
     case 'installing':
       return 'Running the official installer...';
     case 'validating':
@@ -131,6 +121,6 @@ export function codeRuntimeStageLabel(stage: string | null | undefined, action?:
     case 'finalizing':
       return 'Finalizing managed runtime...';
     default:
-      return 'Installing code-server...';
+      return 'Installing or updating code-server...';
   }
 }

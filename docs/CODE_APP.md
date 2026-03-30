@@ -46,14 +46,14 @@ Code App data:
       runtime/
         managed/
           bin/code-server
-          lib/code-server-<supported_version>/
+          lib/code-server-<upstream_release>/
         staging/
           <job_id>/
         cache/
           installer/
-            <supported_version>/install.sh
+            install.sh
           code-server/
-            code-server-<supported_version>-<os>-<arch>.tar.gz
+            code-server-<upstream_release>-<os>-<arch>.tar.gz
       registry.sqlite
       spaces/
         <code_space_id>/
@@ -81,13 +81,10 @@ Instead, Codespaces can install a **managed** `code-server` runtime on demand af
 Rules:
 
 - Redeven never auto-installs `code-server` on page load or on codespace open.
-- The user must explicitly click `Install code-server`.
-- Redeven runs the official upstream `code-server` install script in `standalone` mode and pins one supported version.
+- The user must explicitly click `Install latest` or `Update to latest`.
+- Redeven runs the official upstream `code-server` install script in `standalone` mode and follows the latest stable release flow by default.
 - The managed install target lives under the agent state directory, so no user shell commands or PATH edits are required.
-
-Current supported version:
-
-- `4.108.2`
+- Redeven does not pin business behavior to one exact upstream `code-server` version.
 
 ## Runtime status and install API
 
@@ -106,11 +103,11 @@ The explicit install flow is:
    - a separate `Managed runtime` section only when the managed install adds distinct context beyond the current runtime,
    - a focused running/error panel for explicit install or uninstall actions,
    - recent output only while an operation is running or when the last action failed or was cancelled.
-3. If the runtime is missing or incompatible, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
-4. After the user explicitly clicks `Install`, `Upgrade`, or `Reinstall`, the agent:
-   - downloads or reuses the official upstream `install.sh` for the pinned version,
-   - runs it with `--method=standalone --prefix <managed staging prefix> --version <supported_version>`,
-   - validates the installed binary version,
+3. If the runtime is missing or unusable, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
+4. After the user explicitly clicks `Install latest` or `Update to latest`, the agent:
+   - downloads the official upstream `install.sh` latest-stable entrypoint,
+   - runs it with `--method=standalone --prefix <managed staging prefix>`,
+   - validates that the installed binary is usable,
    - promotes the managed runtime into the stable managed prefix.
 5. If the user explicitly clicks `Uninstall`, the agent removes only the Redeven-managed runtime path. Host-installed runtimes and environment overrides are left untouched.
 6. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
@@ -137,7 +134,7 @@ Binary resolution order:
 3) Common install locations (`~/.local/bin/code-server`, Homebrew paths, `/usr/local/bin`, `/usr/bin`, ...)
 4) `PATH` (`exec.LookPath("code-server")`)
 
-The selected binary must match the pinned supported version. If the resolved runtime is missing or incompatible, Env App blocks the Codespaces launch path and asks the user to explicitly install the managed runtime.
+The selected binary must be usable on the current machine. If the resolved runtime is missing or unusable, Env App blocks the Codespaces launch path and asks the user to explicitly install or update the managed runtime.
 
 ### Note for macOS/Homebrew
 
@@ -194,12 +191,12 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Open the codespace from the Redeven Env App (Codespaces page). Do not open the sandbox subdomain directly.
 
 - "code-server binary not found":
-  - Open Env App -> Agent Settings -> `code-server Runtime` -> `Install code-server`.
-  - If you intentionally manage `code-server` yourself, set `REDEVEN_CODE_SERVER_BIN` to a compatible binary path.
+  - Open Env App -> Agent Settings -> `code-server Runtime` -> `Install latest`.
+  - If you intentionally manage `code-server` yourself, set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
 
-- "unsupported code-server version":
-  - Redeven detected a `code-server` binary, but it does not match the pinned supported version.
-  - Upgrade or reinstall the Redeven-managed runtime from Env App -> Agent Settings -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a compatible binary.
+- "code-server binary is present but unusable":
+  - Redeven detected a `code-server` binary, but the runtime probe failed on this host.
+  - Update the Redeven-managed runtime to latest from Env App -> Agent Settings -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
 
 - "code-server did not start listening on 127.0.0.1:PORT":
   - Check the per-codespace logs under:
