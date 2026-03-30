@@ -1,6 +1,6 @@
-import { Show, createMemo, createSignal } from 'solid-js';
+import { Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog, HighlightBlock } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 
 import {
   codeRuntimeManagedActionLabel,
@@ -12,7 +12,23 @@ import {
   codeRuntimeStageLabel,
   type CodeRuntimeStatus,
 } from '../../services/codeRuntimeApi';
-import { SettingsCard, SettingsPill } from './SettingsPrimitives';
+import { SettingsCard, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
+
+type RuntimeDetailRow = Readonly<{
+  label: string;
+  value: JSX.Element | string;
+  note?: JSX.Element | string;
+  mono?: boolean;
+}>;
+
+function RuntimeDetailsTableSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
+  return (
+    <div class="space-y-2">
+      <div class="text-sm font-semibold text-foreground">{props.title}</div>
+      <SettingsKeyValueTable rows={props.rows} minWidthClass="min-w-[40rem]" />
+    </div>
+  );
+}
 
 export interface CodeRuntimeSettingsCardProps {
   status: CodeRuntimeStatus | null | undefined;
@@ -144,6 +160,103 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const operationOutput = createMemo(() => props.status?.operation.log_tail?.join('\n') || 'No runtime management output yet.');
   const operationError = createMemo(() => String(props.status?.operation.last_error ?? '').trim());
   const cancelLabel = createMemo(() => (props.status?.operation.action === 'uninstall' ? 'Cancel uninstall' : 'Cancel install'));
+  const activeRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
+    const active = props.status?.active_runtime;
+    const source = String(active?.source ?? '').trim();
+
+    return [
+      {
+        label: 'Status',
+        value: <SettingsPill tone={runtimeStatusTone(active?.detection_state)}>{runtimeStatusLabel(active?.detection_state)}</SettingsPill>,
+        note: activeSummary(),
+      },
+      {
+        label: 'Source',
+        value: runtimeSourceLabel(active?.source),
+        note:
+          source === 'managed'
+            ? 'Redeven-managed runtime currently selected for Codespaces.'
+            : source === 'system'
+              ? 'A compatible host runtime currently has priority over the managed runtime.'
+              : source === 'env_override'
+                ? 'This session is using a runtime path provided by environment override.'
+                : 'No compatible runtime is currently selected.',
+      },
+      {
+        label: 'Detected version',
+        value: active?.installed_version || 'Not detected',
+        note:
+          active?.detection_state === 'ready'
+            ? 'Detected from the runtime currently selected for Codespaces.'
+            : active?.error_message || 'Version metadata appears after a compatible runtime is detected.',
+        mono: true,
+      },
+      {
+        label: 'Binary path',
+        value: active?.binary_path || 'Not detected',
+        note: active?.binary_path ? 'Executable path used for Codespaces launches.' : 'Path appears after runtime detection succeeds.',
+        mono: true,
+      },
+    ];
+  });
+  const managedRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
+    const managed = props.status?.managed_runtime;
+
+    return [
+      {
+        label: 'State',
+        value: (
+          <SettingsPill tone={managedInstalled() ? (managedNeedsUpgrade() ? 'warning' : 'success') : 'default'}>
+            {managedInstalled() ? (managedNeedsUpgrade() ? 'Needs upgrade' : 'Installed') : 'Not installed'}
+          </SettingsPill>
+        ),
+        note: managedSummary(),
+      },
+      {
+        label: 'Selection',
+        value: managedSelected() ? (
+          <SettingsPill tone="success">Currently selected</SettingsPill>
+        ) : managedInstalled() ? (
+          <SettingsPill>Available</SettingsPill>
+        ) : (
+          'Unavailable'
+        ),
+        note: managedSelected()
+          ? 'Codespaces is currently using the managed runtime.'
+          : managedInstalled()
+            ? 'A different compatible runtime currently has higher priority.'
+            : 'Install the managed runtime to make it available for Codespaces.',
+      },
+      {
+        label: 'Supported version',
+        value: props.status?.supported_version || '-',
+        note: 'Pinned by this Redeven agent build.',
+        mono: true,
+      },
+      {
+        label: 'Managed version',
+        value: managed?.installed_version || 'Not installed',
+        note: managedInstalled()
+          ? managedNeedsUpgrade()
+            ? 'Upgrade to align the managed runtime with the supported version.'
+            : 'Managed runtime matches the supported version.'
+          : 'No managed runtime is installed yet.',
+        mono: true,
+      },
+      {
+        label: 'Managed location',
+        value: props.status?.managed_prefix || '-',
+        note: 'Only the Redeven-managed runtime is stored here.',
+        mono: true,
+      },
+      {
+        label: 'Installer URL',
+        value: props.status?.installer_script_url || '-',
+        note: 'Used only after you explicitly confirm install or upgrade.',
+        mono: true,
+      },
+    ];
+  });
 
   const confirmInstall = async () => {
     try {
@@ -229,39 +342,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
 
-          <HighlightBlock variant={runtimeReady() ? 'info' : 'warning'} title="Active runtime">
-            <div class="space-y-3">
-              <div class="flex flex-wrap items-center gap-2">
-                <SettingsPill tone={runtimeStatusTone(props.status?.active_runtime.detection_state)}>{runtimeStatusLabel(props.status?.active_runtime.detection_state)}</SettingsPill>
-                <SettingsPill>{runtimeSourceLabel(props.status?.active_runtime.source)}</SettingsPill>
-              </div>
-              <div class="text-xs text-muted-foreground">{activeSummary()}</div>
-              <div class="grid gap-1 text-[11px] text-muted-foreground">
-                <div>Detected version: <span class="font-mono break-all">{props.status?.active_runtime.installed_version || 'Not detected'}</span></div>
-                <div>Binary path: <span class="font-mono break-all">{props.status?.active_runtime.binary_path || 'Not detected'}</span></div>
-              </div>
-            </div>
-          </HighlightBlock>
+          <RuntimeDetailsTableSection title="Active runtime" rows={activeRuntimeRows()} />
 
-          <HighlightBlock variant={managedNeedsUpgrade() ? 'warning' : managedInstalled() ? 'info' : 'note'} title="Managed runtime">
-            <div class="space-y-3">
-              <div class="flex flex-wrap items-center gap-2">
-                <SettingsPill tone={managedInstalled() ? (managedNeedsUpgrade() ? 'warning' : 'success') : 'default'}>
-                  {managedInstalled() ? (managedNeedsUpgrade() ? 'Needs upgrade' : 'Installed') : 'Not installed'}
-                </SettingsPill>
-                <Show when={managedSelected()}>
-                  <SettingsPill tone="success">Currently selected</SettingsPill>
-                </Show>
-              </div>
-              <div class="text-xs text-muted-foreground">{managedSummary()}</div>
-              <div class="grid gap-1 text-[11px] text-muted-foreground">
-                <div>Supported version: <span class="font-mono break-all">{props.status?.supported_version || '-'}</span></div>
-                <div>Managed version: <span class="font-mono break-all">{props.status?.managed_runtime.installed_version || 'Not installed'}</span></div>
-                <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix || '-'}</span></div>
-                <div>Installer URL: <span class="font-mono break-all">{props.status?.installer_script_url || '-'}</span></div>
-              </div>
-            </div>
-          </HighlightBlock>
+          <RuntimeDetailsTableSection title="Managed runtime" rows={managedRuntimeRows()} />
 
           <div class="rounded-lg border border-border bg-muted/20 p-4">
             <div class="flex flex-wrap items-center justify-between gap-2">

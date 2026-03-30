@@ -28,12 +28,6 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       </div>
     </Show>
   ),
-  HighlightBlock: (props: any) => (
-    <div data-testid={props.title} data-variant={props.variant}>
-      <div>{props.title}</div>
-      {props.children}
-    </div>
-  ),
 }));
 
 vi.mock('./SettingsPrimitives', () => ({
@@ -44,6 +38,19 @@ vi.mock('./SettingsPrimitives', () => ({
       <div>{props.actions}</div>
       {props.children}
     </section>
+  ),
+  SettingsKeyValueTable: (props: any) => (
+    <table>
+      <tbody>
+        {props.rows.map((row: any) => (
+          <tr>
+            <td>{row.label}</td>
+            <td>{row.value}</td>
+            <td>{row.note}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   ),
   SettingsPill: (props: any) => <span>{props.children}</span>,
 }));
@@ -115,6 +122,7 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('Upgrade managed runtime');
     expect(host.textContent).toContain('does not match the supported version');
+    expect(host.querySelectorAll('table')).toHaveLength(2);
   });
 
   it('opens the explicit install confirmation and calls the install action', async () => {
