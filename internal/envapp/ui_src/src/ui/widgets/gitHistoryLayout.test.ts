@@ -131,7 +131,7 @@ describe('browser workspace layout wiring', () => {
     expect(navSrc).toContain('sm:py-1.5');
     expect(navSrc).toContain('border-l-[2px] git-browser-selection-surface git-browser-selection-nav font-medium');
     expect(navSrc).toContain('bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground');
-    expect(navSrc).toContain('bg-white/10 text-current');
+    expect(navSrc).toContain('gitSelectedChipClass(true)');
     expect(navSrc).not.toContain('gitSubviewTone');
     expect(navSrc).not.toContain('gitToneBadgeClass');
     expect(navSrc).not.toContain('gitToneSelectableCardClass');
@@ -304,7 +304,8 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2');
     expect(src).toContain('min-h-4 truncate text-[10px]');
     expect(src).toContain('gitToneSelectableCardClass(tone(), active())');
-    expect(src).toContain('text-current opacity-75');
+    expect(src).toContain('gitSelectedSecondaryTextClass(active())');
+    expect(src).toContain('gitSelectedChipClass(true)');
     expect(src).not.toContain('text-lg font-semibold tracking-tight');
   });
 

@@ -28,6 +28,10 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);');
     expect(src).toContain('--card: var(--redeven-surface-panel);');
     expect(src).toContain('--popover: var(--redeven-surface-panel);');
+    expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 78%, transparent);');
+    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 10%, transparent);');
+    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 14%, var(--git-browser-selection-border) 86%);');
+    expect(src).toContain('--git-browser-selection-chip-fg: var(--git-browser-selection-fg);');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
     expect(src).toContain('--redeven-surface-panel-soft: #353942;');
@@ -42,6 +46,10 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 68%, var(--foreground) 32%);');
     expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);');
     expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);');
+    expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 82%, transparent);');
+    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 12%, transparent);');
+    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-border) 82%);');
+    expect(src).toContain('--git-browser-selection-chip-fg: var(--git-browser-selection-fg);');
   });
 
   it('keeps Flower on the shared panel surface family instead of private raw color literals', () => {
@@ -75,6 +83,13 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-surface-overlay {');
     expect(src).toContain('.redeven-surface-control {');
     expect(src).toContain('.redeven-surface-control--muted {');
+    expect(src).toContain('.git-browser-selection-surface {');
+    expect(src).toContain('.git-browser-selection-nav {');
+    expect(src).toContain('.git-browser-selection-secondary {');
+    expect(src).toContain('.git-browser-selection-chip {');
+    expect(src).toContain('--tag-bg: var(--git-browser-selection-chip-bg);');
+    expect(src).toContain('--tag-border: var(--git-browser-selection-chip-border);');
+    expect(src).toContain('--tag-color: var(--git-browser-selection-chip-fg);');
     expect(src).toContain('.redeven-surface-segmented {');
     expect(src).toContain('.redeven-surface-segmented__item {');
     expect(src).toContain('.redeven-surface-segmented__item--active {');

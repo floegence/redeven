@@ -25,7 +25,7 @@ import {
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
+import { gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitPatchViewer } from './GitPatchViewer';
 import {
   GitChecklistItem,
@@ -48,6 +48,11 @@ export type GitStashReviewState =
     kind: 'drop';
     preview: GitPreviewDropStashResponse;
   };
+
+type StashPatchErrorState = {
+  message: string;
+  detail?: string;
+};
 
 export interface GitStashWindowProps {
   open: boolean;
@@ -114,6 +119,31 @@ function sourceLabel(source?: GitStashWindowSource): string {
   }
 }
 
+function buildStashPatchErrorState(error: unknown): StashPatchErrorState {
+  const raw = typeof error === 'string'
+    ? error.trim()
+    : error instanceof Error
+      ? String(error.message ?? '').trim()
+      : String(error ?? '').trim();
+  const lower = raw.toLowerCase();
+  if (lower.includes('stash not found')) {
+    return {
+      message: 'The selected stash is no longer available.',
+      detail: 'Refresh the stash list to load the latest shared stash stack.',
+    };
+  }
+  if (lower.includes('file not found in diff')) {
+    return {
+      message: 'This file is no longer available inside the selected stash.',
+      detail: 'Refresh the stash list and choose another file if needed.',
+    };
+  }
+  return {
+    message: 'Could not load the selected stash patch.',
+    detail: 'Refresh the stash list and try again.',
+  };
+}
+
 export function GitStashWindow(props: GitStashWindowProps) {
   let rpc: ReturnType<typeof useRedevenRpc> | null = null;
   try {
@@ -124,7 +154,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
   const [selectedFileKey, setSelectedFileKey] = createSignal('');
   const [selectedFileDiff, setSelectedFileDiff] = createSignal<GitDiffFileContent | null>(null);
   const [selectedFileDiffLoading, setSelectedFileDiffLoading] = createSignal(false);
-  const [selectedFileDiffError, setSelectedFileDiffError] = createSignal('');
+  const [selectedFileDiffError, setSelectedFileDiffError] = createSignal<StashPatchErrorState | null>(null);
   const [selectedFileDiffLoadedKey, setSelectedFileDiffLoadedKey] = createSignal('');
   let selectedFileDiffReqSeq = 0;
 
@@ -203,9 +233,9 @@ export function GitStashWindow(props: GitStashWindowProps) {
     selectedFileDiffReqSeq += 1;
     setSelectedFileDiff(seededSelectedFileDiff());
     setSelectedFileDiffLoading(false);
-    setSelectedFileDiffError('');
+    setSelectedFileDiffError(null);
     setSelectedFileDiffLoadedKey(seededSelectedFileDiff() ? selectedFileRequestKey() : '');
-  }, { defer: true }));
+  }));
 
   createEffect(on(() => [props.open, props.tab, selectedStash()?.id, selectedFile(), selectedFileRequestKey()] as const, ([open, tab, stashId, file, requestKey]) => {
     if (!open || tab !== 'stashes' || !stashId || !file || !repoPath()) return;
@@ -215,7 +245,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
 
     const seq = ++selectedFileDiffReqSeq;
     setSelectedFileDiffLoading(true);
-    setSelectedFileDiffError('');
+    setSelectedFileDiffError(null);
 
     void rpc.git.getDiffContent({
       repoRootPath: repoPath(),
@@ -235,11 +265,11 @@ export function GitStashWindow(props: GitStashWindowProps) {
     }).catch((err) => {
       if (seq !== selectedFileDiffReqSeq || selectedFileRequestKey() !== requestKey) return;
       setSelectedFileDiff(null);
-      setSelectedFileDiffError(err instanceof Error ? err.message : String(err ?? 'Failed to load stash patch.'));
+      setSelectedFileDiffError(buildStashPatchErrorState(err));
     }).finally(() => {
       if (seq === selectedFileDiffReqSeq) setSelectedFileDiffLoading(false);
     });
-  }, { defer: true }));
+  }));
 
   return (
     <PreviewWindow
@@ -318,19 +348,19 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                     onClick={() => props.onSelectStash?.(stash.id)}
                                   >
                                     <div class="flex items-center justify-between gap-2">
-                                      <div class="min-w-0 truncate text-xs font-semibold text-foreground">{stash.message || stash.ref || 'Unnamed stash'}</div>
-                                      <GitMetaPill tone="neutral">{stash.fileCount ?? 0} file{(stash.fileCount ?? 0) === 1 ? '' : 's'}</GitMetaPill>
+                                      <div class={cn('min-w-0 truncate text-xs font-semibold', active() ? 'text-current' : 'text-foreground')}>{stash.message || stash.ref || 'Unnamed stash'}</div>
+                                      <GitMetaPill tone="neutral" class={gitSelectedChipClass(active())}>{stash.fileCount ?? 0} file{(stash.fileCount ?? 0) === 1 ? '' : 's'}</GitMetaPill>
                                     </div>
-                                    <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                      <GitMetaPill tone="violet">{stash.ref || shortGitHash(stash.id)}</GitMetaPill>
+                                    <div class={cn('flex flex-wrap items-center gap-1.5 text-[11px]', gitSelectedSecondaryTextClass(active()))}>
+                                      <GitMetaPill tone="violet" class={gitSelectedChipClass(active())}>{stash.ref || shortGitHash(stash.id)}</GitMetaPill>
                                       <Show when={stash.branchName}>
-                                        <GitMetaPill tone="neutral">{stash.branchName}</GitMetaPill>
+                                        <GitMetaPill tone="neutral" class={gitSelectedChipClass(active())}>{stash.branchName}</GitMetaPill>
                                       </Show>
                                       <Show when={stash.hasUntracked}>
-                                        <GitMetaPill tone="warning">Untracked</GitMetaPill>
+                                        <GitMetaPill tone="warning" class={gitSelectedChipClass(active())}>Untracked</GitMetaPill>
                                       </Show>
                                     </div>
-                                    <div class="text-[10px] text-muted-foreground">{formatStashTime(stash.createdAtUnixMs)}</div>
+                                    <div class={cn('text-[10px]', gitSelectedSecondaryTextClass(active()))}>{formatStashTime(stash.createdAtUnixMs)}</div>
                                   </button>
                                 );
                               }}
@@ -392,10 +422,10 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                               onClick={() => setSelectedFileKey(gitDiffEntryIdentity(file))}
                                             >
                                               <div class="min-w-0">
-                                                <div class="truncate text-[11px] font-medium text-foreground">{changeDisplayPath(file)}</div>
-                                                <div class="truncate text-[10px] text-muted-foreground">{file.changeType || 'modified'}</div>
+                                                <div class={cn('truncate text-[11px] font-medium', active() ? 'text-current' : 'text-foreground')}>{changeDisplayPath(file)}</div>
+                                                <div class={cn('truncate text-[10px]', gitSelectedSecondaryTextClass(active()))}>{file.changeType || 'modified'}</div>
                                               </div>
-                                              <GitMetaPill tone="neutral">{shortGitHash(props.stashDetail?.id)}</GitMetaPill>
+                                              <GitMetaPill tone="neutral" class={gitSelectedChipClass(active())}>{shortGitHash(props.stashDetail?.id)}</GitMetaPill>
                                             </button>
                                           );
                                         }}
@@ -446,7 +476,18 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   when={!selectedFileDiffLoading()}
                                   fallback={<GitStatePane loading message="Loading stash patch..." surface class="min-h-0" />}
                                 >
-                                  <Show when={!selectedFileDiffError()} fallback={<GitStatePane tone="error" message={selectedFileDiffError() || 'Failed to load stash patch.'} surface class="min-h-0" />}>
+                                  <Show
+                                    when={!selectedFileDiffError()}
+                                    fallback={(
+                                      <GitStatePane
+                                        tone="error"
+                                        message={selectedFileDiffError()?.message || 'Could not load the selected stash patch.'}
+                                        detail={selectedFileDiffError()?.detail}
+                                        surface
+                                        class="min-h-0"
+                                      />
+                                    )}
+                                  >
                                     <GitPatchViewer
                                       class="min-h-0"
                                       item={selectedFileDiff()}

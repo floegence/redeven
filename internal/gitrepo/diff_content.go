@@ -136,10 +136,9 @@ func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, re
 			args = append(args, unifiedArg)
 		}
 		args = append(args, summary.Ref)
-		if len(pathspecs) > 0 {
-			args = append(args, "--")
-			args = append(args, pathspecs...)
-		}
+		// `git stash show <stash> -- <path>` is not a valid file-scoped preview form.
+		// Load the stash patch once and reuse existing diff-entry matching to select
+		// the requested file, including tracked and untracked stash entries.
 		return args, nil, nil
 	default:
 		return nil, nil, errors.New("invalid source kind")
