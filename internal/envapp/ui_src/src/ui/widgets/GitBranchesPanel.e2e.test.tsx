@@ -29,10 +29,46 @@ vi.mock('../protocol/redeven_v1', async () => {
 import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitBranchesPanel } from './GitBranchesPanel';
 
+const resizeObserverState = {
+  observers: [] as Array<{
+    callback: ResizeObserverCallback;
+    elements: Element[];
+  }>,
+};
+
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function defineElementWidth(element: Element, width: number) {
+  Object.defineProperty(element, 'offsetWidth', {
+    configurable: true,
+    get: () => width,
+  });
+}
+
+function triggerResizeObservers() {
+  for (const observer of resizeObserverState.observers) {
+    observer.callback(
+      observer.elements.map((element) => ({
+        target: element,
+        contentRect: {
+          width: (element as HTMLElement).offsetWidth ?? 0,
+          height: 0,
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: (element as HTMLElement).offsetWidth ?? 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        },
+      }) as ResizeObserverEntry),
+      {} as ResizeObserver,
+    );
+  }
 }
 
 beforeEach(() => {
@@ -40,6 +76,7 @@ beforeEach(() => {
   mockGetBranchCompare.mockReset();
   mockListWorkspacePage.mockReset();
   mockGetDiffContent.mockReset();
+  resizeObserverState.observers.length = 0;
   mockGetCommitDetail.mockResolvedValue({
     repoRootPath: '/workspace/repo',
     commit: {
@@ -105,10 +142,39 @@ beforeEach(() => {
       dispatchEvent: () => false,
     })),
   });
+
+  vi.stubGlobal('ResizeObserver', class {
+    private readonly record: {
+      callback: ResizeObserverCallback;
+      elements: Element[];
+    };
+
+    constructor(callback: ResizeObserverCallback) {
+      this.record = {
+        callback,
+        elements: [],
+      };
+      resizeObserverState.observers.push(this.record);
+    }
+
+    observe(element: Element) {
+      this.record.elements.push(element);
+    }
+
+    unobserve(element: Element) {
+      this.record.elements = this.record.elements.filter((entry) => entry !== element);
+    }
+
+    disconnect() {
+      this.record.elements = [];
+    }
+  });
 });
 
 afterEach(() => {
   document.body.innerHTML = '';
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function revealTooltipForButton(button: HTMLButtonElement | undefined): Promise<HTMLElement | null> {
@@ -1144,7 +1210,7 @@ describe('GitBranchesPanel interactions', () => {
     }
   });
 
-  it('keeps branch header controls compact without squeezing branch metadata at mid widths', () => {
+  it('keeps branch header controls compact without squeezing branch metadata at narrow measured widths', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1182,6 +1248,8 @@ describe('GitBranchesPanel interactions', () => {
     ), host);
 
     try {
+      await flush();
+
       const controlBar = Array.from(host.querySelectorAll('div')).find((node) => node.className.includes('rounded-xl') && node.className.includes('redeven-surface-control') && node.className.includes('bg-muted/[0.12]')) as HTMLDivElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Checkout')) as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
@@ -1194,6 +1262,11 @@ describe('GitBranchesPanel interactions', () => {
         node.textContent?.includes('Actions') &&
         node.textContent.includes('Checkout') &&
         node.textContent.includes('Delete')) as HTMLDivElement | undefined;
+
+      expect(branchHeaderTopRow).toBeTruthy();
+      defineElementWidth(branchHeaderTopRow!, 420);
+      triggerResizeObservers();
+      await flush();
 
       expect(controlBar).toBeTruthy();
       expect(shortcutDock).toBeTruthy();
@@ -1209,19 +1282,18 @@ describe('GitBranchesPanel interactions', () => {
       expect(deleteButton?.className).not.toContain('w-full');
       expect(tablistRow?.className).toContain('flex');
       expect(tablistRow?.className).toContain('w-full');
-      expect(tablistRow?.className).toContain('lg:w-auto');
-      expect(tablistRow?.className).toContain('lg:justify-end');
+      expect(tablistRow?.className).not.toContain('w-auto');
+      expect(tablistRow?.className).not.toContain('justify-end');
       expect(branchHeaderTopRow?.className).toContain('grid');
       expect(branchHeaderTopRow?.className).toContain('grid-cols-1');
-      expect(branchHeaderTopRow?.className).toContain('lg:grid-cols-[minmax(0,1fr)_auto]');
+      expect(branchHeaderTopRow?.className).not.toContain('grid-cols-[minmax(0,1fr)_auto]');
       expect(branchHeaderTopRow?.textContent).not.toContain('Checkout');
       expect(tablist?.className).toContain('grid');
       expect(tablist?.className).toContain('w-full');
       expect(tablist?.className).toContain('grid-cols-2');
       expect(tablist?.className).toContain('rounded-lg');
       expect(tablist?.className).toContain('redeven-surface-segmented');
-      expect(tablist?.className).toContain('lg:w-[15rem]');
-      expect(tablist?.className).not.toContain('sm:w-[15rem]');
+      expect(tablist?.className).not.toContain('w-[15rem]');
       const activeTab = host.querySelector('#git-branch-subview-tab-status') as HTMLButtonElement | null;
       const historyTab = host.querySelector('#git-branch-subview-tab-history') as HTMLButtonElement | null;
       expect(activeTab?.className).toContain('cursor-pointer');
@@ -1230,6 +1302,62 @@ describe('GitBranchesPanel interactions', () => {
       expect(activeTab?.className).toContain('text-foreground');
       expect(activeTab?.className).not.toContain('git-browser-selection-chip');
       expect(historyTab?.className).toContain('text-muted-foreground');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('realigns the branch detail tabs inline when the measured header width becomes wide enough', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px] w-[960px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                selectedBranch={{
+                  name: 'feature/wide-layout',
+                  fullName: 'refs/heads/feature/wide-layout',
+                  kind: 'local',
+                  worktreePath: '/workspace/repo-wide',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                    { name: 'feature/wide-layout', fullName: 'refs/heads/feature/wide-layout', kind: 'local', worktreePath: '/workspace/repo-wide' },
+                  ],
+                  remote: [],
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const tablist = host.querySelector('[aria-label="Branch detail tabs"]') as HTMLDivElement | null;
+      const tablistRow = tablist?.parentElement as HTMLDivElement | null;
+      const branchHeaderTopRow = tablistRow?.parentElement as HTMLDivElement | null;
+
+      expect(branchHeaderTopRow).toBeTruthy();
+      defineElementWidth(branchHeaderTopRow!, 860);
+      triggerResizeObservers();
+      await flush();
+
+      expect(branchHeaderTopRow?.className).toContain('grid-cols-[minmax(0,1fr)_auto]');
+      expect(branchHeaderTopRow?.className).toContain('items-start');
+      expect(tablistRow?.className).toContain('w-auto');
+      expect(tablistRow?.className).toContain('justify-end');
+      expect(tablist?.className).toContain('w-[15rem]');
+      expect(tablist?.className).not.toContain('w-full');
     } finally {
       dispose();
     }

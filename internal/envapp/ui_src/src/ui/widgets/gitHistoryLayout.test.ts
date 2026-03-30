@@ -178,6 +178,7 @@ describe('browser workspace layout wiring', () => {
 
   it('routes branch review through status and history views with compare in a dialog', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
+    const branchHeaderLayoutSrc = read('./gitBranchHeaderLayout.ts');
 
     expect(branchesSrc).toContain("selectedBranchSubview?: GitBranchSubview;");
     expect(branchesSrc).toContain('branchContextSummary');
@@ -200,11 +201,14 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('flex min-h-0 flex-1 flex-col');
     expect(branchesSrc).toContain('flex min-h-0 flex-1 overflow-hidden');
     expect(branchesSrc).toContain('flex min-h-5 items-center gap-1.5');
-    expect(branchesSrc).toContain('text-[11px] leading-relaxed line-clamp-1 text-muted-foreground sm:line-clamp-2');
+    expect(branchesSrc).toContain('resolveGitBranchHeaderLayout');
+    expect(branchesSrc).toContain("const [branchHeaderWidth, setBranchHeaderWidth] = createSignal(0);");
+    expect(branchesSrc).toContain('new ResizeObserver');
     expect(branchesSrc).toContain("const branchHeaderSummaryBandClass = 'flex flex-col gap-2.5';");
-    expect(branchesSrc).toContain("const branchHeaderTopRowClass = 'grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start lg:gap-x-3 lg:gap-y-1.5';");
+    expect(branchesSrc).toContain("const branchHeaderTopRowClass = () => cn(");
+    expect(branchesSrc).toContain("branchHeaderLayout() === 'inline'");
     expect(branchesSrc).toContain('min-w-0');
-    expect(branchesSrc).toContain('flex w-full lg:w-auto lg:justify-end');
+    expect(branchesSrc).toContain("const branchHeaderTabRailClass = () => cn('flex', branchHeaderLayout() === 'inline' ? 'w-auto justify-end' : 'w-full');");
     expect(branchesSrc).toContain("const headerControlBarClass = cn('rounded-xl bg-muted/[0.12] p-2 shadow-sm shadow-black/5', redevenSurfaceRoleClass('control'));");
     expect(branchesSrc).toContain("const headerControlGroupLabelClass = 'px-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60';");
     expect(branchesSrc).toContain("const branchHeaderControlRailClass = 'flex flex-col gap-2 md:gap-2.5 lg:flex-row lg:items-center';");
@@ -218,7 +222,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain("const dangerActionButtonClass = 'cursor-pointer rounded-md border border-destructive/20 bg-destructive/[0.08] px-3 text-destructive shadow-sm shadow-black/5 hover:bg-destructive/[0.14] hover:text-destructive';");
     expect(branchesSrc).toContain('>Workspace<');
     expect(branchesSrc).toContain('>Actions<');
-    expect(branchesSrc).toContain("class={cn('grid w-full grid-cols-2 rounded-lg p-0.5 shadow-sm shadow-black/5 lg:w-[15rem]', redevenSurfaceRoleClass('segmented'))}");
+    expect(branchesSrc).toContain("const branchHeaderTabListClass = () => cn(");
+    expect(branchesSrc).toContain("'w-[15rem]' : 'w-full'");
     expect(branchesSrc).toContain("'cursor-pointer rounded-md px-3 py-1.5 text-center text-xs font-medium transition-colors duration-150'");
     expect(branchesSrc).toContain('<GitShortcutOrbDock>');
     expect(branchesSrc).toContain('statusToolbarActions');
@@ -230,6 +235,10 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).not.toContain('sm:w-[15rem]');
     expect(branchesSrc).not.toContain('w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem] sm:text-right');
     expect(branchesSrc).not.toContain('Subject');
+
+    expect(branchHeaderLayoutSrc).toContain("export type GitBranchHeaderLayout = 'stacked' | 'inline';");
+    expect(branchHeaderLayoutSrc).toContain('GIT_BRANCH_HEADER_INLINE_MIN_WIDTH = 720');
+    expect(branchHeaderLayoutSrc).toContain("return width >= GIT_BRANCH_HEADER_INLINE_MIN_WIDTH ? 'inline' : 'stacked';");
   });
 
 
