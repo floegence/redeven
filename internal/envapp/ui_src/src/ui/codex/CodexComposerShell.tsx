@@ -18,6 +18,7 @@ import {
   createCodexComposerFileIndex,
   type CodexFileSearchEntry,
 } from './composerFileIndex';
+import { createCodexComposerAutosizeController } from './createCodexComposerAutosizeController';
 import { compactPathLabel } from './presentation';
 import type {
   CodexComposerAttachmentDraft,
@@ -185,7 +186,7 @@ export function CodexComposerShell(props: {
   let effortContainerRef: HTMLDivElement | undefined;
   let approvalContainerRef: HTMLDivElement | undefined;
   let sandboxContainerRef: HTMLDivElement | undefined;
-  let rafId: number | null = null;
+  const autosizeController = createCodexComposerAutosizeController();
 
   const canSend = () =>
     props.hostAvailable &&
@@ -210,20 +211,8 @@ export function CodexComposerShell(props: {
     });
   };
 
-  const scheduleAdjustHeight = () => {
-    if (!textareaRef) return;
-    if (rafId !== null) return;
-    if (typeof requestAnimationFrame !== 'function') {
-      textareaRef.style.height = 'auto';
-      textareaRef.style.height = `${Math.min(textareaRef.scrollHeight, 320)}px`;
-      return;
-    }
-    rafId = requestAnimationFrame(() => {
-      rafId = null;
-      if (!textareaRef) return;
-      textareaRef.style.height = 'auto';
-      textareaRef.style.height = `${Math.min(textareaRef.scrollHeight, 320)}px`;
-    });
+  const requestAutosize = (text = textareaRef?.value ?? props.composerText) => {
+    autosizeController.requestMeasure(text);
   };
 
   const mentionToken = createMemo(() => findComposerMentionToken({
@@ -329,13 +318,11 @@ export function CodexComposerShell(props: {
 
   createEffect(() => {
     void props.composerText;
-    scheduleAdjustHeight();
+    requestAutosize(props.composerText);
   });
 
   onCleanup(() => {
-    if (rafId !== null && typeof cancelAnimationFrame === 'function') {
-      cancelAnimationFrame(rafId);
-    }
+    autosizeController.dispose();
     fileIndex.dispose();
   });
 
@@ -524,14 +511,17 @@ export function CodexComposerShell(props: {
       <div class="chat-input-body codex-chat-input-body">
         <div class="codex-chat-input-primary-row">
           <textarea
-            ref={textareaRef}
+            ref={(element) => {
+              textareaRef = element;
+              autosizeController.setTextarea(element);
+            }}
             value={props.composerText}
             disabled={!props.hostAvailable}
             onInput={(event) => {
               props.onComposerInput(event.currentTarget.value);
               setDismissedPopupSignature('');
               syncSelection();
-              scheduleAdjustHeight();
+              requestAutosize(event.currentTarget.value);
             }}
             onPaste={(event) => {
               const files = Array.from(event.clipboardData?.items ?? [])
@@ -544,11 +534,11 @@ export function CodexComposerShell(props: {
               void props.onAddAttachments(files);
             }}
             onCompositionStart={() => setIsComposing(true)}
-            onCompositionUpdate={scheduleAdjustHeight}
+            onCompositionUpdate={() => requestAutosize()}
             onCompositionEnd={() => {
               setIsComposing(false);
               syncSelection();
-              scheduleAdjustHeight();
+              requestAutosize();
             }}
             onKeyDown={(event) => {
               if (!isComposing() && handlePopupKeydown(event)) return;

@@ -9,6 +9,7 @@
   --codex-border-default: var(--redeven-surface-panel-border);
   --codex-border-accent: color-mix(in srgb, var(--primary) 28%, var(--border));
   --codex-text-secondary: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
+  --codex-composer-font-family: "Inter", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -321,6 +322,7 @@
   appearance: none;
   font-size: 0.8125rem;
   line-height: 1.5;
+  font-family: var(--codex-composer-font-family);
 }
 
 .codex-chat-input-textarea:focus,

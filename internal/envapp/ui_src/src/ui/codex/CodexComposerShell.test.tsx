@@ -5,11 +5,17 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CodexComposerShell } from './CodexComposerShell';
+import { resetCodexPretextModuleForTests } from './pretextLoader';
 
 const rpcMocks = {
   fs: {
     list: vi.fn(),
   },
+};
+
+const pretextMocks = {
+  prepare: vi.fn(() => ({ prepared: true })),
+  layout: vi.fn(() => ({ height: 156, lineCount: 8 })),
 };
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -43,6 +49,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => rpcMocks,
 }));
+
+vi.mock('@chenglou/pretext', () => pretextMocks);
 
 function flushAsync(): Promise<void> {
   return Promise.resolve().then(() => Promise.resolve());
@@ -128,6 +136,9 @@ function renderComposer(options?: {
 
 afterEach(() => {
   rpcMocks.fs.list.mockReset();
+  pretextMocks.prepare.mockClear();
+  pretextMocks.layout.mockClear();
+  resetCodexPretextModuleForTests();
   document.body.innerHTML = '';
 });
 
@@ -304,6 +315,64 @@ describe('CodexComposerShell', () => {
     await flushAsync();
 
     expect(onSend).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it('autosizes the Codex textarea through the Codex-local pretext path', async () => {
+    const requestFrameSpy = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      });
+    const cancelFrameSpy = vi
+      .spyOn(window, 'cancelAnimationFrame')
+      .mockImplementation(() => undefined);
+    const { host, dispose } = renderComposer({
+      initialText: 'Review this diff',
+    });
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) throw new Error('textarea not found');
+
+    textarea.style.fontFamily = '"Segoe UI", Arial, sans-serif';
+    textarea.style.fontSize = '13px';
+    textarea.style.lineHeight = '1.5';
+    textarea.style.minHeight = '56px';
+    textarea.style.maxHeight = '320px';
+    textarea.style.paddingTop = '0px';
+    textarea.style.paddingBottom = '0px';
+    textarea.style.paddingLeft = '0px';
+    textarea.style.paddingRight = '0px';
+    Object.defineProperty(textarea, 'clientWidth', {
+      configurable: true,
+      get: () => 280,
+    });
+    Object.defineProperty(textarea, 'scrollHeight', {
+      configurable: true,
+      get: () => 56,
+    });
+    textarea.getBoundingClientRect = () => ({
+      width: 280,
+      height: 56,
+      top: 0,
+      right: 280,
+      bottom: 56,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
+
+    textarea.value = 'Review this diff with a longer autosize payload';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushAsync();
+    await flushAsync();
+
+    expect(pretextMocks.prepare).toHaveBeenCalled();
+    expect(pretextMocks.layout).toHaveBeenCalled();
+    expect(textarea.style.height).toBe('156px');
+    requestFrameSpy.mockRestore();
+    cancelFrameSpy.mockRestore();
     dispose();
   });
 });
