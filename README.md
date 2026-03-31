@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="internal/envapp/ui_src/public/logo.png" alt="Redeven" width="120">
+  <img src="docs/images/readme-logo-app-icon.svg" alt="Redeven" width="120">
 </p>
 
 # Redeven
