@@ -38,7 +38,13 @@ Redeven is the endpoint/runtime that actually lives on the user machine. The ser
 - 🧭 One runtime unlocks Env App, Code App, Desktop Shell, Flower, and Codex.
 - 📦 The same contract ships as both CLI and desktop artifacts through auditable GitHub Releases.
 
-![Redeven architecture overview](docs/images/readme-architecture.svg)
+![Redeven architecture overview](docs/images/readme-architecture-overview.jpeg)
+
+**Architecture at a glance**
+- `Redeven Service` stays in the control plane and issues bootstrap payloads, grants, and immutable session metadata.
+- `Browser / Desktop` stay user-facing while `Flowersec Tunnel` carries encrypted bytes between the client and the endpoint runtime.
+- `Redeven Runtime` terminates sessions on the user machine, enforces the local permission cap, and hosts the real files, terminal, monitoring, and app surfaces.
+- Local state such as config, PSKs, audit logs, and diagnostics stays on the endpoint, while releases remain auditable through published checksums and signatures.
 
 ## Why teams use it
 
