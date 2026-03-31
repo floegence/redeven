@@ -24,7 +24,7 @@ describe('blockedPage', () => {
     expect(html).toContain('Redeven is already running');
     expect(html).toContain('without an attachable Local UI');
     expect(html).toContain('Default state directory: /Users/tester/.redeven');
-    expect(html).toContain('Advanced Settings');
+    expect(html).toContain('This Device Options');
     expect(html).not.toContain('gradient');
     expect(html).toContain('Skip to main content');
     expect(html).toContain('id="blocked-main"');
@@ -73,7 +73,7 @@ describe('blockedPage', () => {
 
     expect(html).toContain('Redeven target is unavailable');
     expect(html).toContain('Target URL: http://192.168.1.11:24000/');
-    expect(html).toContain('Connection Center');
+    expect(html).toContain('Choose Device');
     expect(html).toContain('aria-describedby="blocked-meta"');
   });
 });

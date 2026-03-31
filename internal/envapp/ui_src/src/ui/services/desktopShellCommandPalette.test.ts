@@ -3,29 +3,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { buildDesktopShellCommandPaletteEntries } from './desktopShellCommandPalette';
 
 describe('desktopShellCommandPalette', () => {
-  it('builds Desktop command palette entries with stable copy and actions', async () => {
-    const openConnectionCenter = vi.fn().mockResolvedValue(undefined);
-    const openAdvancedSettings = vi.fn().mockResolvedValue(undefined);
+  it('builds the single Desktop chooser command palette entry', async () => {
+    const openDeviceChooser = vi.fn().mockResolvedValue(undefined);
 
     const entries = buildDesktopShellCommandPaletteEntries({
-      openConnectionCenter,
-      openAdvancedSettings,
+      openDeviceChooser,
     });
 
     expect(entries.map((entry) => entry.id)).toEqual([
-      'redeven.desktop.openConnectionCenter',
-      'redeven.desktop.openAdvancedSettings',
+      'redeven.desktop.switchDevice',
     ]);
-    expect(entries.map((entry) => entry.category)).toEqual(['Desktop', 'Desktop']);
+    expect(entries.map((entry) => entry.category)).toEqual(['Desktop']);
     expect(entries.map((entry) => entry.title)).toEqual([
-      'Open Connection Center...',
-      'Open Advanced Settings...',
+      'Switch Device...',
     ]);
 
     await entries[0]?.execute();
-    await entries[1]?.execute();
 
-    expect(openConnectionCenter).toHaveBeenCalledTimes(1);
-    expect(openAdvancedSettings).toHaveBeenCalledTimes(1);
+    expect(openDeviceChooser).toHaveBeenCalledTimes(1);
   });
 });

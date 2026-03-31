@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildConnectionCenterPageHTML } from './connectionCenterPage';
 
 describe('connectionCenterPage', () => {
-  it('renders the connection center with open, share, link, and recent device sections', () => {
+  it('renders the chooser-first startup page with this-device and recent-device entry points', () => {
     const html = buildConnectionCenterPageHTML({
       draft: {
         target_kind: 'external_local_ui',
@@ -14,34 +14,53 @@ describe('connectionCenterPage', () => {
         env_id: 'env_123',
         env_token: 'token-123',
       },
-      current_target_kind: 'external_local_ui',
-      current_local_ui_url: 'http://192.168.1.11:24000/',
-      active_runtime_remote_enabled: null,
-      share_preset: 'local_network',
-      link_state: 'pending',
-      recent_external_local_ui_urls: ['http://192.168.1.11:24000/', 'http://192.168.1.12:24000/'],
+      entry_reason: 'switch_device',
+      remembered_target_kind: 'external_local_ui',
+      active_session_target_kind: 'managed_local',
+      active_session_local_ui_url: 'http://127.0.0.1:23998/',
+      cancel_label: 'Back to current device',
+      this_device_local_ui_url: 'http://127.0.0.1:23998/',
+      this_device_share_preset: 'local_network',
+      this_device_link_state: 'pending',
+      recent_devices: [
+        {
+          local_ui_url: 'http://192.168.1.11:24000/',
+          is_remembered_target: true,
+          is_active_session: false,
+        },
+        {
+          local_ui_url: 'http://192.168.1.12:24000/',
+          is_remembered_target: false,
+          is_active_session: false,
+        },
+      ],
+      issue: null,
+      advanced_section_open: false,
     }, '', 'linux');
 
-    expect(html).toContain('<title>Connection Center</title>');
-    expect(html).toContain('Connection Center');
-    expect(html).toContain('Open a Redeven device');
-    expect(html).toContain('Choose how This device is exposed');
-    expect(html).toContain('Link This device to Redeven');
+    expect(html).toContain('<title>Choose a device</title>');
+    expect(html).toContain('Choose a device');
+    expect(html).toContain('Open This Device');
+    expect(html).toContain('Open another machine');
+    expect(html).toContain('This device options');
+    expect(html).toContain('Advanced troubleshooting');
+    expect(html).toContain('Save and return');
+    expect(html).toContain('Remembered');
+    expect(html).toContain('Current session');
     expect(html).toContain('Only this device');
     expect(html).toContain('Local network');
     expect(html).toContain('Custom');
     expect(html).toContain('Recent devices');
-    expect(html).toContain('recent-target-chip');
+    expect(html).toContain('recent-device-button');
     expect(html).toContain('data-recent-url="http://192.168.1.11:24000/"');
-    expect(html).toContain('Local network');
-    expect(html).toContain('Open Another Device');
+    expect(html).toContain('Open Device');
     expect(html).toContain('crypto.getRandomValues');
     expect(html).toContain('initialLocalNetworkBind');
     expect(html).toContain('Skip to main content');
     expect(html).toContain('id="connection-center-main"');
-    expect(html).toContain('summary-strip');
-    expect(html).toContain('settings-card');
-    expect(html).toContain('Desktop will queue a one-shot Redeven link request');
+    expect(html).toContain('hero-meta');
+    expect(html).toContain('device-card');
+    expect(html).toContain('Desktop already has a saved one-shot Redeven link request');
   });
 
   it('renders without recent targets when none are available', () => {
@@ -55,24 +74,30 @@ describe('connectionCenterPage', () => {
         env_id: '',
         env_token: '',
       },
-      current_target_kind: 'managed_local',
-      current_local_ui_url: '',
-      active_runtime_remote_enabled: true,
-      share_preset: 'this_device',
-      link_state: 'connected',
-      recent_external_local_ui_urls: [],
+      entry_reason: 'app_launch',
+      remembered_target_kind: 'managed_local',
+      active_session_target_kind: null,
+      active_session_local_ui_url: '',
+      cancel_label: 'Quit',
+      this_device_local_ui_url: '',
+      this_device_share_preset: 'this_device',
+      this_device_link_state: 'connected',
+      recent_devices: [],
+      issue: null,
+      advanced_section_open: false,
     }, '', 'darwin');
 
-    expect(html).toContain('data-tone="local"');
-    expect(html).toContain('Connected');
+    expect(html).toContain('No device opened');
+    expect(html).toContain('Remote control connected');
     expect(html).toContain('Private to this device');
-    expect(html).toContain('Start or attach to the bundled Redeven runtime on this machine.');
-    expect(html).toContain('id="recent-targets" class="recent-targets" hidden');
-    expect(html).toContain('calc(24px + 0px)');
+    expect(html).toContain('Desktop can start or attach to the bundled runtime on this machine when you choose This device.');
+    expect(html).toContain('id="recent-devices-section" hidden');
+    expect(html).toContain('>Quit<');
+    expect(html).toContain('calc(26px + 0px)');
     expect(html).not.toContain('env(titlebar-area-height, 0px)');
   });
 
-  it('renders an inline error when validation fails', () => {
+  it('renders validation and chooser issues inline', () => {
     const html = buildConnectionCenterPageHTML({
       draft: {
         target_kind: 'managed_local',
@@ -83,15 +108,30 @@ describe('connectionCenterPage', () => {
         env_id: '',
         env_token: '',
       },
-      current_target_kind: 'managed_local',
-      current_local_ui_url: '',
-      active_runtime_remote_enabled: false,
-      share_preset: 'this_device',
-      link_state: 'idle',
-      recent_external_local_ui_urls: [],
+      entry_reason: 'blocked',
+      remembered_target_kind: 'managed_local',
+      active_session_target_kind: null,
+      active_session_local_ui_url: '',
+      cancel_label: 'Quit',
+      this_device_local_ui_url: '',
+      this_device_share_preset: 'this_device',
+      this_device_link_state: 'idle',
+      recent_devices: [],
+      issue: {
+        scope: 'this_device',
+        code: 'state_dir_locked',
+        title: 'Redeven is already running',
+        message: 'Another Redeven instance is already using the state directory.',
+        diagnostics_copy: 'status: blocked\\ncode: state_dir_locked',
+        target_url: '',
+      },
+      advanced_section_open: true,
     }, 'Redeven URL is required.', 'linux');
 
     expect(html).toContain('Redeven URL is required.');
+    expect(html).toContain('Redeven is already running');
+    expect(html).toContain('status: blocked');
+    expect(html).toContain('Copy diagnostics');
     expect(html).toContain("errorEl.setAttribute('aria-hidden', text ? 'false' : 'true');");
     expect(html).toContain('queueMicrotask(() => errorEl.focus())');
   });

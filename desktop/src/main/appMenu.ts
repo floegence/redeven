@@ -41,9 +41,7 @@ export function buildAppMenuTemplate(
     ? {
         label: 'Redeven Desktop',
         submenu: [
-          { label: 'Connection Center...', click: actions.openConnectionCenter },
-          { type: 'separator' },
-          { label: 'Advanced Settings...', accelerator: 'CommandOrControl+,', click: actions.openAdvancedSettings },
+          { label: 'Switch Device...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
           { type: 'separator' },
           { label: 'Hide Redeven Desktop', role: 'hide' },
           { label: 'Hide Others', role: 'hideOthers' },
@@ -55,9 +53,7 @@ export function buildAppMenuTemplate(
     : {
         label: 'File',
         submenu: [
-          { label: 'Connection Center...', click: actions.openConnectionCenter },
-          { type: 'separator' },
-          { label: 'Advanced Settings...', accelerator: 'CommandOrControl+,', click: actions.openAdvancedSettings },
+          { label: 'Switch Device...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
           { type: 'separator' },
           { label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
         ],

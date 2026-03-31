@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSettingsPageHTML } from './settingsPage';
 
 describe('settingsPage', () => {
-  it('renders the Advanced Settings page with low-level startup sections', () => {
+  it('renders the This Device Options page with low-level startup sections', () => {
     const html = buildSettingsPageHTML({
       target_kind: 'managed_local',
       external_local_ui_url: '',
@@ -14,9 +14,9 @@ describe('settingsPage', () => {
       env_token: 'token-123',
     }, '', 'linux', 'advanced_settings');
 
-    expect(html).toContain('<title>Advanced Settings</title>');
-    expect(html).toContain('Advanced Settings');
-    expect(html).toContain('Connection Center owns open, share, and link');
+    expect(html).toContain('<title>This Device Options</title>');
+    expect(html).toContain('This Device Options');
+    expect(html).toContain('The device chooser owns machine selection');
     expect(html).toContain('Desktop-managed startup');
     expect(html).toContain('Next desktop-managed start');
     expect(html).toContain('Host This Device');
@@ -58,7 +58,7 @@ describe('settingsPage', () => {
     expect(html).toContain('Save for this device');
     expect(html).toContain('Desktop is currently targeting Another device');
     expect(html).toContain('id="redeven-target-presentations"');
-    expect(html).toContain('Advanced Settings');
+    expect(html).toContain('This Device Options');
   });
 
   it('keeps the page on a flat theme and exposes dark-mode tokens', () => {

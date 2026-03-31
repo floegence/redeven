@@ -6,25 +6,25 @@ This document describes the public Electron desktop shell that is published toge
 
 - Keep `redeven` as the single runtime authority for endpoint behavior.
 - Ship a desktop installer that bundles the matching `redeven` binary.
-- Reuse the existing Local UI over the configured local HTTP bind instead of adding a second UI runtime.
-- Treat `Redeven Local UI endpoint` as the single host/connect contract for both `redeven` runtime instances and `Redeven Desktop`.
+- Reuse Redeven Local UI instead of adding a second UI runtime.
+- Make machine selection explicit on every cold desktop launch.
+- Keep chooser, recovery, and diagnostics in one main-window flow.
 
 ## Architecture
 
-- Electron is a thin shell.
-- `redeven run --mode desktop --desktop-managed` remains the only runtime entrypoint.
-- Desktop-owned startup settings are stored separately from runtime state, so the shell can control launch arguments without introducing a second runtime.
-- Desktop can either:
-  - target `This device` and use the bundled runtime flow
-  - target `Another device` and open another machine's Local UI directly
-- The desktop shell waits for a machine-readable desktop launch report file from `redeven`.
-- If a compatible Local UI instance is already running from the same default state directory, the desktop shell reuses that reported Local UI URL instead of failing on the state-directory lock.
-- If the default state directory is locked by another runtime instance without an attachable Local UI, the desktop shell stays open and renders a blocked page instead of crashing with raw stderr.
+- Electron is a thin shell around Redeven Local UI.
+- `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
+- The main BrowserWindow has two shell-owned routes:
+  - `Startup chooser`
+  - `Active target`
+- Every cold desktop launch opens the startup chooser first.
+- The user explicitly chooses one of:
+  - `This device`
+  - a remembered recent device
+  - a newly entered Redeven Local UI URL
+- Reopening the chooser from an active session does not immediately disconnect the current target. The current session stays available until the user confirms a different target.
+- Common startup failures return to the chooser with inline context instead of bouncing users to a separate blocked surface.
 - Electron only allows navigation to the exact reported Local UI origin (`localhost` / loopback / explicit local IP) and opens all other URLs in the system browser.
-- Desktop exposes:
-  - a native `Connection Center...` menu entry for open/share/link workflows
-  - a native `Advanced Settings...` window for shell-owned raw startup configuration
-  - explicit quit accelerators (`CommandOrControl+,`, `CommandOrControl+Q`)
 
 ## Runtime contract
 
@@ -50,21 +50,15 @@ Desktop may add user-configured startup flags on top of that base command:
 
 Behavior:
 
-- Local UI always starts.
+- Local UI always starts for `This device`.
 - Remote control channel is enabled only when the local config is already bootstrapped and remote-valid.
 - `--desktop-managed` disables CLI self-upgrade semantics; restart remains available.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
-- Desktop-managed inline bootstrap keeps the default logging baseline at `info` instead of inheriting a stale `debug` level implicitly.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
 
-When the desktop target is `Another device`, Desktop does not start the bundled binary.
+When the selected target is `Another device`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
-
-The ready/attached startup payload also carries:
-
-- `state_dir`: the runtime state directory used by the current runtime instance
-- `diagnostics_enabled`: whether the runtime debug-console collector is active for this launch
 
 ### Launch outcomes
 
@@ -80,86 +74,101 @@ The first stable blocked code is:
 
 That blocked payload includes lock owner metadata and the relevant state paths so Desktop can show actionable diagnostics without guessing from stderr text.
 
+## Startup chooser
+
+The startup chooser is the primary shell-owned UX.
+
+Visual hierarchy:
+
+- page title: `Choose a device`
+- hero action: `This device`
+- recent devices list
+- `Open another device` URL entry
+- secondary disclosures:
+  - `This device options`
+  - `Advanced troubleshooting`
+
+Interaction rules:
+
+- Cold launch never auto-opens the remembered target.
+- The remembered target is suggested, not auto-run.
+- `This device options` holds sharing presets, raw bind/password editing, and the one-shot Redeven link request.
+- `Advanced troubleshooting` holds diagnostics and chooser-first recovery details.
+- Validation errors and startup failures render inline on the chooser.
+
 ## Desktop shell preferences
 
-Desktop owns two shell-managed surfaces over one native preferences model:
+Desktop keeps one persisted preference model for remembered selection plus `This device` configuration:
 
-- `Connection Center`
-  - opens `This device` or `Another device`
-  - exposes `Only this device`, `Local network`, and `Custom` share presets for `This device`
-  - queues a one-shot Redeven link request for the next successful `This device` start
-  - remembers recent external Local UI targets so switching devices is faster
-- `Advanced Settings`
-  - edits the raw bind, password, and bootstrap inputs behind Connection Center
-
-The persisted model contains:
-
-- Persistent target settings:
-  - `desktop_target_kind`
-  - `external_local_ui_url`
-  - `recent_external_local_ui_urls`
-- Persistent settings:
-  - `local_ui_bind`
-  - `local_ui_password`
-- One-shot bootstrap settings:
-  - `controlplane_url`
-  - `env_id`
-  - `env_token`
+- `target`
+  - remembered chooser target for the next desktop launch
+  - `managed_local` or `external_local_ui`
+- `external_local_ui_url`
+  - remembered URL when `target.kind=external_local_ui`
+- `recent_external_local_ui_urls`
+  - normalized, de-duplicated recent successful external targets
+- `local_ui_bind`
+  - raw Local UI bind for `This device`
+- `local_ui_password`
+  - raw Local UI password for `This device`
+- `pending_bootstrap`
+  - one-shot control plane bootstrap request for the next successful `This device` start
 
 Semantics:
 
-- `desktop_target_kind` chooses whether Desktop opens this machine or another Redeven Local UI endpoint.
-- `external_local_ui_url` stores the last explicit external target URL and is only active when `desktop_target_kind=external_local_ui`.
-- `recent_external_local_ui_urls` stores a small, normalized, de-duplicated list of successful external targets for Connection Center.
-- The Local UI bind and password apply to every future desktop-managed start.
-- The bootstrap triple is treated as a one-shot “register to Redeven on next successful start” request.
-- After a spawned desktop-managed start succeeds, Desktop clears the pending bootstrap request automatically so an expired environment token is not retried on every future launch.
+- `target` is a remembered chooser selection, not an auto-connect instruction.
+- `local_ui_bind` and `local_ui_password` apply to future desktop-managed starts on this machine.
+- `pending_bootstrap` is cleared automatically after a fresh successful desktop-managed start consumes it.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
-- `Connection Center` presets intentionally map high-level tasks to the same runtime contract:
-  - `Only this device` -> `127.0.0.1:0` with no password
-  - `Local network` -> a LAN bind plus a required password baseline
-  - `Custom` -> raw bind/password editing
+
+Chooser presets intentionally map high-level user intent to the same runtime contract:
+
+- `Only this device` -> `127.0.0.1:0` with no password
+- `Local network` -> `0.0.0.0:24000` with a required password baseline
+- `Custom` -> raw bind/password editing
 
 Target validation rules:
 
 - External targets must use an absolute `http://` or `https://` URL.
 - The host must be `localhost` or an IP literal.
 - The shell normalizes the configured target to the Local UI origin root.
-- Desktop does not implement a separate desktop-to-desktop protocol; it reuses the same Local UI contract that Env App already uses.
 
 Desktop shell preferences live under the Electron user data directory, not inside the git checkout.
 
 ## User entry points
 
-- `Connection Center...` from the native app menu opens the high-level open/share/link workflow.
-- `Advanced Settings...` opens the raw desktop startup/settings window.
-- After Local UI opens inside Redeven Desktop, Env App also exposes `Open Connection Center...` and `Open Advanced Settings...` in the command palette as shell-owned quick actions.
-- Desktop intentionally keeps `Connection Center` and `Advanced Settings` separate from Env App `Runtime Settings` so shell-owned startup state does not collide with runtime-owned configuration.
-- The blocked page routes to either `Connection Center` or `Advanced Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
-- The native `Connection Center` / `Advanced Settings` pages use the same design-token naming and settings-surface hierarchy as Env App `Runtime Settings`, but they remain repository-owned Desktop HTML pages rather than shared browser components.
-- Responsibility split stays strict:
-  - `Connection Center` owns the task-oriented open/share/link workflow for the Desktop shell
-  - `Advanced Settings` owns shell-managed raw bind/password and one-shot registration bootstrap inputs
-  - Env App `Runtime Settings` only appears after Local UI opens and owns runtime configuration inside the running endpoint
+- Cold app launch opens the startup chooser in the main window.
+- The native app menu exposes one primary shell action: `Switch Device...`
+- Legacy advanced-settings entrypoints route into the same chooser with `This device options` / troubleshooting disclosures expanded.
+- After Local UI opens inside Redeven Desktop, Env App also exposes a shell-owned `Switch Device...` command through the Desktop browser bridge.
+- Env App `Runtime Settings` stays separate from shell-owned startup/device-selection state.
+
+## Error recovery
+
+- Remote target unreachable
+  - chooser reloads with the failing URL preserved and an inline error callout
+- Desktop-managed startup blocked
+  - chooser reloads with a `This device` issue and diagnostics in the troubleshooting disclosure
+- Secondary fallback surfaces such as the blocked page remain compatibility helpers, but the normal product flow is chooser-first recovery in the main window
 
 ## Accessibility behavior
 
 Desktop-owned HTML pages target the same WCAG 2.2 AA baseline as Env App, but they do so with repository-owned markup instead of shared browser components.
 
-The required contract for `settingsPage.ts` and `blockedPage.ts` is:
+The required contract is:
 
 - Include a skip link and a stable `main` target so keyboard users can bypass the window chrome and page preamble.
-- Keep validation and blocked-state summaries focusable and announced with appropriate alert/live-region semantics.
-- Use explicit labels, `fieldset` / `legend`, and `aria-describedby` relationships for settings forms instead of placeholder-only guidance.
-- Preserve visible `:focus-visible` treatments on links, buttons, radio cards, and inputs.
+- Keep chooser validation and startup-failure summaries focusable and announced with alert/live-region semantics.
+- Use explicit labels, `fieldset` / `legend`, and `aria-describedby` relationships for settings inputs instead of placeholder-only guidance.
+- Preserve visible `:focus-visible` treatments on links, buttons, radio cards, disclosures, and inputs.
 - Respect `prefers-reduced-motion` in page-level CSS.
 - Maintain contrast-safe theme tokens when updating desktop palette values.
 
 Desktop-specific outcomes from this implementation:
 
-- The Connection Center / Advanced Settings pages focus the surfaced error region on validation failure or initial error rendering.
-- The blocked page focuses its summary alert on load so the reason and next action are announced immediately.
-- The blocked action row is exposed as a labeled navigation landmark.
+- The chooser focuses the surfaced validation or startup issue region on initial render.
+- The fallback blocked page focuses its summary alert on load so the reason and next action are announced immediately.
+- Interactive chooser controls expose a pointer cursor while active.
 
 ## Env App behavior
 
@@ -167,10 +176,7 @@ Desktop-specific outcomes from this implementation:
 - Env App hides `Update Redeven` in desktop-managed runs.
 - Env App keeps `Restart runtime`.
 - The maintenance card explains that updates must come from a new desktop release.
-- Desktop-managed Env App windows can reopen selected serialized surfaces as dedicated BrowserWindow instances instead of in-page overlays. The first detached surfaces are `File Preview` and the AI page `File Browser`, both reconstructed from query-driven scene state while keeping the same Local UI + Flowersec session contract.
-- Desktop records Chromium-side request diagnostics into `<state_dir>/diagnostics/desktop-events.jsonl` while attached to a Local UI runtime that exposes diagnostics.
-- Desktop follows the runtime diagnostics state from the `X-Redeven-Debug-Console-Enabled` response header.
-- Desktop skips self-observation for the diagnostics API itself so the floating debug console reflects application traffic rather than its own refresh/export requests.
+- Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the scene rendered inside the window changes.
 
 ## Release assets
 
@@ -214,44 +220,3 @@ npm run package -- --mac dmg
 ```
 
 For release automation, the same preparation script can hydrate the bundle from a prebuilt CLI tarball by setting `REDEVEN_DESKTOP_AGENT_TARBALL`.
-
-If another `redeven` process already holds `~/.redeven/agent.lock`, Desktop now behaves as follows:
-
-- If that process exposes a compatible Local UI, Desktop attaches automatically.
-- If that process does not expose Local UI (for example a `remote`-only run), Desktop shows a blocked page with `Retry`, `Advanced Settings`, `Copy diagnostics`, and `Quit`.
-
-Desktop can also open another machine directly:
-
-- Open `Connection Center...` from the app menu.
-- Select `Another device`.
-- Enter the target Local UI base URL, for example `http://192.168.1.11:24000/`.
-- If that target uses a Local UI password, Env App will ask for it after the page loads.
-- To expose this machine for another Desktop instance, choose `Local network` in Connection Center or switch the local host bind to an explicit reachable address such as `0.0.0.0:24000` in Advanced Settings and set a Local UI password.
-
-Desktop shortcuts:
-
-- `Connection Center...` is available from the native app menu.
-- `CommandOrControl+,` opens `Advanced Settings...`.
-- Env App command palette mirrors those shell-owned actions after a desktop-managed session is open.
-- `CommandOrControl+Q` asks for confirmation before quitting the desktop app.
-
-## macOS distribution
-
-- Local ad-hoc builds (`REDEVEN_DESKTOP_MAC_IDENTITY=-`) are for development only.
-- Public macOS release artifacts must be signed with a `Developer ID Application` certificate and notarized with Apple before they are uploaded to GitHub Release.
-- The release workflow now requires the following repository secrets for macOS jobs:
-  - `REDEVEN_DESKTOP_MAC_CERT_BASE64`
-  - `REDEVEN_DESKTOP_MAC_CERT_PASSWORD`
-  - `REDEVEN_DESKTOP_MAC_IDENTITY`
-  - `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY`
-  - `REDEVEN_DESKTOP_MAC_NOTARY_API_KEY_ID`
-  - `REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER`
-
-## code-server scope
-
-The desktop package does not bundle `code-server`.
-It keeps the same managed-runtime model that the CLI/runtime uses:
-
-- the base Desktop installer does not ship `code-server`,
-- Codespaces can explicitly install a managed `code-server` runtime later from Env App,
-- Redeven never auto-installs it on behalf of the user.

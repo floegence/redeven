@@ -88,7 +88,7 @@ export interface DesktopPageViewModel {
 }
 
 export function pageWindowTitle(_mode: DesktopPageMode): string {
-  return 'Advanced Settings';
+  return 'This Device Options';
 }
 
 export const desktopTargetPresentations = {
@@ -98,7 +98,7 @@ export const desktopTargetPresentations = {
     targetSummaryBody: 'Desktop starts the bundled runtime on this machine.',
     hostStateNote: 'These values apply to desktop-managed starts on this machine.',
     bootstrapStateNote: 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.',
-    advancedSettingsNotice: 'Use Connection Center... when you want to switch between This device and Another device without editing the raw startup inputs below.',
+    advancedSettingsNotice: 'Use Switch Device... when you want to choose This device or Another device without editing the raw startup inputs below.',
     saveLabel: 'Save and apply',
   },
   external_local_ui: {
@@ -107,7 +107,7 @@ export const desktopTargetPresentations = {
     targetSummaryBody: "Desktop opens another device's Local UI inside this shell.",
     hostStateNote: 'Desktop is currently targeting Another device. These values stay saved for the next This device start.',
     bootstrapStateNote: 'Desktop is currently targeting Another device. This request stays saved for the next This device start and is never sent to the external target.',
-    advancedSettingsNotice: 'Desktop is currently targeting Another device, so the values below are stored for the next time you switch back to This device.',
+    advancedSettingsNotice: 'Desktop is currently targeting Another device, so the values below stay scoped to the next This device start.',
     saveLabel: 'Save for this device',
   },
 } as const satisfies Record<DesktopTargetKind, DesktopTargetPresentation>;
@@ -171,7 +171,7 @@ export function buildSettingsPageViewModel(
 
   return {
     windowTitle: pageWindowTitle(mode),
-    lead: 'Edit the low-level startup, access, and one-shot bootstrap inputs that back Connection Center.',
+    lead: 'Edit the low-level This device startup, access, and one-shot bootstrap inputs that sit behind the device chooser.',
     statusLabel: presentation.statusLabel,
     statusTone: presentation.statusTone,
     saveLabel: presentation.saveLabel,
@@ -198,7 +198,7 @@ export function buildSettingsPageViewModel(
     ],
     alert: {
       kicker: 'Primary workflow',
-      title: 'Connection Center owns open, share, and link',
+      title: 'The device chooser owns machine selection',
       body: presentation.advancedSettingsNotice,
       bodyId: 'desktop-target-alert-body',
       tone: 'info',

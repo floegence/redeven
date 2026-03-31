@@ -1,4 +1,6 @@
 export interface DesktopShellBridge {
+  openDeviceChooser?: () => Promise<void>;
+  switchDevice?: () => Promise<void>;
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
   openConnectToRedeven?: () => Promise<void>;
@@ -21,12 +23,10 @@ function desktopShellBridge(): DesktopShellBridge | null {
   if (
     !candidate
     || (
-      typeof candidate.openConnectionCenter !== 'function'
+      typeof candidate.openDeviceChooser !== 'function'
+      && typeof candidate.switchDevice !== 'function'
+      && typeof candidate.openConnectionCenter !== 'function'
       && typeof candidate.openConnectToRedeven !== 'function'
-    )
-    || (
-      typeof candidate.openAdvancedSettings !== 'function'
-      && typeof candidate.openDesktopSettings !== 'function'
     )
   ) {
     return null;
@@ -45,6 +45,14 @@ export async function openConnectionCenter(): Promise<boolean> {
     return false;
   }
 
+  if (typeof bridge.openDeviceChooser === 'function') {
+    await bridge.openDeviceChooser();
+    return true;
+  }
+  if (typeof bridge.switchDevice === 'function') {
+    await bridge.switchDevice();
+    return true;
+  }
   if (typeof bridge.openConnectionCenter === 'function') {
     await bridge.openConnectionCenter();
     return true;
@@ -59,6 +67,9 @@ export async function openAdvancedSettings(): Promise<boolean> {
     return false;
   }
 
+  if (typeof bridge.openAdvancedSettings !== 'function' && typeof bridge.openDesktopSettings !== 'function') {
+    return openConnectionCenter();
+  }
   if (typeof bridge.openAdvancedSettings === 'function') {
     await bridge.openAdvancedSettings();
     return true;
