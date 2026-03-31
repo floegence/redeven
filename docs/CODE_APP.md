@@ -1,6 +1,6 @@
 # Code App (code-server over Flowersec E2EE)
 
-This document describes the **Code App** implementation in the Redeven agent:
+This document describes the **Code App** implementation in the Redeven runtime:
 
 - `floe_app = com.floegence.redeven.code`
 - Browser ↔ Agent traffic is end-to-end encrypted (E2EE) via **Flowersec tunnel**

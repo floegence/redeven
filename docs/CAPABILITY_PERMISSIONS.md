@@ -32,7 +32,7 @@ Notes:
 
 ## Effective Permissions (Server-Issued Grant ∩ Endpoint Local Cap)
 
-Redeven agents enforce permissions from two sources:
+The Redeven runtime enforces permissions from two sources:
 
 1) Session bootstrap: `session_meta` delivered by the Redeven service (authoritative grant).
 2) Endpoint local: `permission_policy` in the agent config (authoritative cap).

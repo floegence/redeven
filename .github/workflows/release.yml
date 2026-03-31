@@ -354,3 +354,35 @@ jobs:
             dist/SHA256SUMS.pem \
             dist/knowledge_bundle.manifest.json \
             dist/knowledge_bundle.sha256
+
+      - name: Notify Private Ops
+        if: github.repository_owner == 'floegence'
+        env:
+          GH_TOKEN: ${{ secrets.REDEVEN_POST_RELEASE_TOKEN }}
+          PORTAL_REPO: ${{ vars.REDEVEN_PORTAL_REPO }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::Missing required secret REDEVEN_POST_RELEASE_TOKEN"
+            exit 1
+          fi
+
+          if [ -z "${PORTAL_REPO:-}" ]; then
+            echo "::error::Missing required repository variable REDEVEN_PORTAL_REPO"
+            exit 1
+          fi
+
+          if [[ ! "${PORTAL_REPO}" =~ ^[^/]+/[^/]+$ ]]; then
+            echo "::error::Invalid REDEVEN_PORTAL_REPO: ${PORTAL_REPO}"
+            exit 1
+          fi
+
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${PORTAL_REPO}/dispatches" \
+            -f event_type='redeven_agent_release_published' \
+            -F client_payload[release_repo]="${GITHUB_REPOSITORY}" \
+            -F client_payload[release_tag]="${GITHUB_REF_NAME}" \
+            -F client_payload[recommended_version]="${GITHUB_REF_NAME}"

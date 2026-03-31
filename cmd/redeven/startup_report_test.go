@@ -49,7 +49,7 @@ func TestWriteDesktopLaunchReportBlocked(t *testing.T) {
 	err := writeDesktopLaunchReport(reportPath, desktopLaunchReport{
 		Status:  desktopLaunchStatusBlocked,
 		Code:    desktopLaunchCodeStateDirLocked,
-		Message: "Another Redeven agent is already using this state directory.",
+		Message: "Another Redeven runtime instance is already using this state directory.",
 		LockOwner: &desktopLaunchLockOwner{
 			PID:            42,
 			Mode:           "remote",

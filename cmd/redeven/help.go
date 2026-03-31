@@ -19,15 +19,15 @@ func rootHelpText() string {
 	return strings.TrimLeft(fmt.Sprintf(`
 redeven
 
-Redeven agent runtime and Local UI launcher.
+Redeven runtime and Local UI launcher.
 
 Usage:
   redeven <command> [flags]
   redeven help [command]
 
 Commands:
-  bootstrap   Exchange an environment token for local agent config.
-  run         Start the agent in remote, hybrid, local, or desktop mode.
+  bootstrap   Exchange an environment token for local runtime config.
+  run         Start the runtime in remote, hybrid, local, or desktop mode.
   search      Run web search using configured provider credentials.
   knowledge   Build or verify embedded knowledge bundle assets.
   version     Print build information.
@@ -59,7 +59,7 @@ func bootstrapHelpText() string {
 	return strings.TrimLeft(fmt.Sprintf(`
 redeven bootstrap
 
-Exchange an environment token for local agent config.
+Exchange an environment token for local runtime config.
 
 Usage:
   redeven bootstrap --controlplane <url> --env-id <env_public_id> (--env-token <token> | --env-token-env <env_name>) [flags]
@@ -71,7 +71,7 @@ Required flags:
   --env-token-env <env_name>        Read the environment token from an environment variable.
 
 Optional flags:
-  --agent-home-dir <path>           Agent home dir for filesystem-facing features.
+  --agent-home-dir <path>           Runtime home dir for filesystem-facing features.
   --shell <command>                 Shell command (default: $SHELL or /bin/bash).
   --permission-policy <preset>      Local permission policy: execute_read, read_only, or execute_read_write.
   --log-format <json|text>          Log format override.
@@ -90,7 +90,7 @@ Examples:
   Bootstrap with a stricter permission preset:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s --permission-policy read_only
 
-  Bootstrap, then start the agent:
+  Bootstrap, then start the runtime:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
     redeven run --mode hybrid
 `, exampleControlplaneURL, exampleEnvID, exampleEnvToken), "\n")
@@ -100,7 +100,7 @@ func runHelpText() string {
 	return strings.TrimLeft(fmt.Sprintf(`
 redeven run
 
-Start the agent in remote, hybrid, local, or desktop mode.
+Start the runtime in remote, hybrid, local, or desktop mode.
 
 Usage:
   redeven run [flags]

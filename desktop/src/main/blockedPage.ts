@@ -18,12 +18,12 @@ function blockedHeadline(report: LaunchBlockedReport): { title: string; body: st
     if (report.lock_owner?.local_ui_enabled === true) {
       return {
         title: 'Redeven is already starting elsewhere',
-        body: 'Another Redeven agent is using the default state directory and appears to provide Local UI. If it is still starting, retry in a moment so Desktop can attach to it.',
+        body: 'Another Redeven runtime instance is using the default state directory and appears to provide Local UI. If it is still starting, retry in a moment so Desktop can attach to it.',
       };
     }
     return {
       title: 'Redeven is already running',
-      body: 'Another Redeven agent is using the default state directory without an attachable Local UI. Stop that agent or restart it in a Local UI mode, then retry.',
+      body: 'Another Redeven runtime instance is using the default state directory without an attachable Local UI. Stop that runtime or restart it in a Local UI mode, then retry.',
     };
   }
   if (report.code === 'external_target_unreachable') {

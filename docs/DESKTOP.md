@@ -4,10 +4,10 @@ This document describes the public Electron desktop shell that is published toge
 
 ## Goals
 
-- Keep `redeven` as the single runtime authority for agent behavior.
+- Keep `redeven` as the single runtime authority for endpoint behavior.
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse the existing Local UI over the configured local HTTP bind instead of adding a second UI runtime.
-- Treat `Redeven Local UI endpoint` as the single host/connect contract for both `redeven agent` and `Redeven Desktop`.
+- Treat `Redeven Local UI endpoint` as the single host/connect contract for both `redeven` runtime instances and `Redeven Desktop`.
 
 ## Architecture
 

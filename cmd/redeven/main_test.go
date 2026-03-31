@@ -18,7 +18,7 @@ func TestRunCLIHelp(t *testing.T) {
 			t.Fatalf("stderr = %q, want empty", stderr)
 		}
 		assertContainsAll(t, stdout,
-			"Redeven agent runtime and Local UI launcher.",
+			"Redeven runtime and Local UI launcher.",
 			"Quick start:",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 			"redeven run --mode local",

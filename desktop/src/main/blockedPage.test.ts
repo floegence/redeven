@@ -11,7 +11,7 @@ describe('blockedPage', () => {
     const html = buildBlockedPageHTML({
       status: 'blocked',
       code: 'state_dir_locked',
-      message: 'Another Redeven agent is already using this state directory.',
+      message: 'Another Redeven runtime instance is already using this state directory.',
       lock_owner: {
         mode: 'remote',
         local_ui_enabled: false,
@@ -37,7 +37,7 @@ describe('blockedPage', () => {
     const html = buildBlockedPageHTML({
       status: 'blocked',
       code: 'state_dir_locked',
-      message: 'Another Redeven agent is already using this state directory.',
+      message: 'Another Redeven runtime instance is already using this state directory.',
       lock_owner: {
         mode: 'hybrid',
         local_ui_enabled: true,

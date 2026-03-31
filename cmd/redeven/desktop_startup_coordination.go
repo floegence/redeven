@@ -80,7 +80,7 @@ func handleDesktopLockConflict(reportPath string, lockPath string, configPath st
 	if err := writeDesktopLaunchReport(reportPath, desktopLaunchReport{
 		Status:    desktopLaunchStatusBlocked,
 		Code:      desktopLaunchCodeStateDirLocked,
-		Message:   "Another Redeven agent is already using this state directory.",
+		Message:   "Another Redeven runtime instance is already using this state directory.",
 		LockOwner: lockOwnerFromMetadata(metadata),
 		Diagnostics: &desktopLaunchDiagnostics{
 			LockPath:         lockPath,

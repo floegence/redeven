@@ -55,7 +55,7 @@ describe('launchReport', () => {
     expect(parseLaunchReport(JSON.stringify({
       status: 'blocked',
       code: 'state_dir_locked',
-      message: 'Another Redeven agent is already using this state directory.',
+      message: 'Another Redeven runtime instance is already using this state directory.',
       lock_owner: {
         pid: 42,
         mode: 'remote',
@@ -68,7 +68,7 @@ describe('launchReport', () => {
     }))).toEqual({
       status: 'blocked',
       code: 'state_dir_locked',
-      message: 'Another Redeven agent is already using this state directory.',
+      message: 'Another Redeven runtime instance is already using this state directory.',
       lock_owner: {
         pid: 42,
         mode: 'remote',
