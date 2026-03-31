@@ -48,12 +48,12 @@ function secondaryAction(report: LaunchBlockedReport): Readonly<{ action: Blocke
   if (report.code === 'external_target_unreachable' || report.code === 'external_target_invalid') {
     return {
       action: 'connection-center',
-      label: 'Connection Center',
+      label: 'Choose Device',
     };
   }
   return {
     action: 'advanced-settings',
-    label: 'Advanced Settings',
+    label: 'This Device Options',
   };
 }
 

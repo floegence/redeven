@@ -80,7 +80,6 @@ import { subscribeDesktopAskFlowerMainWindowHandoff, type DesktopAskFlowerMainWi
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
-  openAdvancedSettings,
   openConnectionCenter,
 } from './services/desktopShellBridge';
 import {
@@ -1757,8 +1756,7 @@ export function EnvAppShell() {
 
     if (desktopShellAvailable) {
       list.push(...buildDesktopShellCommandPaletteEntries({
-        openConnectionCenter: () => runDesktopShellCommand('Connection Center', openConnectionCenter),
-        openAdvancedSettings: () => runDesktopShellCommand('Advanced Settings', openAdvancedSettings),
+        openDeviceChooser: () => runDesktopShellCommand('Switch Device', openConnectionCenter),
       }));
     }
 

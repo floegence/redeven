@@ -128,6 +128,9 @@ if (!preload) {
     hasAskFlowerBridge: typeof window.redevenDesktopAskFlowerHandoff === 'object'
       && typeof window.redevenDesktopAskFlowerHandoff?.requestMainWindowHandoff === 'function'
       && typeof window.redevenDesktopAskFlowerHandoff?.onMainWindowHandoff === 'function',
+    hasDesktopSettingsBridge: typeof window.redevenDesktopSettings === 'object'
+      && typeof window.redevenDesktopSettings?.save === 'function'
+      && typeof window.redevenDesktopSettings?.cancel === 'function',
     hasDesktopShellBridge: typeof window.redevenDesktopShell === 'object'
       && typeof window.redevenDesktopShell?.openConnectionCenter === 'function'
       && typeof window.redevenDesktopShell?.openAdvancedSettings === 'function'
@@ -191,14 +194,16 @@ app.whenReady().then(async () => {
     });
 
     const payload = JSON.parse(extractElectronRuntimePayload(stdout)) as {
-      main: { hasAskFlowerBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
-      child: { hasAskFlowerBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
+      main: { hasAskFlowerBridge: boolean; hasDesktopSettingsBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
+      child: { hasAskFlowerBridge: boolean; hasDesktopSettingsBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
     };
 
     expect(payload.main.hasAskFlowerBridge).toBe(true);
+    expect(payload.main.hasDesktopSettingsBridge).toBe(true);
     expect(payload.main.hasDesktopShellBridge).toBe(true);
     expect(payload.main.hasStateStorageBridge).toBe(true);
     expect(payload.child.hasAskFlowerBridge).toBe(true);
+    expect(payload.child.hasDesktopSettingsBridge).toBe(true);
     expect(payload.child.hasDesktopShellBridge).toBe(true);
     expect(payload.child.hasStateStorageBridge).toBe(true);
   }, electronRuntimeIntegrationTimeoutMs);

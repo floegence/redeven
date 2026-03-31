@@ -2,7 +2,9 @@ import {
   desktopPreferencesToDraft,
   type DesktopPreferences,
   type DesktopTargetKind,
+  type DesktopTargetPreferences,
 } from './desktopPreferences';
+import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { parseLocalUIBind } from './localUIBind';
 import type { StartupReport } from './startup';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
@@ -11,21 +13,46 @@ export const DEFAULT_LOCAL_NETWORK_BIND = '0.0.0.0:24000';
 
 export type DesktopSharePreset = 'this_device' | 'local_network' | 'custom';
 export type DesktopLinkState = 'idle' | 'pending' | 'connected';
+export type DesktopConnectionCenterEntryReason = 'app_launch' | 'switch_device' | 'connect_failed' | 'blocked';
+
+export type DesktopConnectionCenterIssue = Readonly<{
+  scope: 'this_device' | 'remote_device' | 'startup';
+  code: string;
+  title: string;
+  message: string;
+  diagnostics_copy: string;
+  target_url: string;
+}>;
+
+export type DesktopRecentDeviceCard = Readonly<{
+  local_ui_url: string;
+  is_remembered_target: boolean;
+  is_active_session: boolean;
+}>;
 
 export type DesktopConnectionCenterSnapshot = Readonly<{
   draft: DesktopSettingsDraft;
-  current_target_kind: DesktopTargetKind;
-  current_local_ui_url: string;
-  active_runtime_remote_enabled: boolean | null;
-  share_preset: DesktopSharePreset;
-  link_state: DesktopLinkState;
-  recent_external_local_ui_urls: readonly string[];
+  entry_reason: DesktopConnectionCenterEntryReason;
+  remembered_target_kind: DesktopTargetKind;
+  active_session_target_kind: DesktopTargetKind | null;
+  active_session_local_ui_url: string;
+  cancel_label: 'Quit' | 'Back to current device';
+  this_device_local_ui_url: string;
+  this_device_share_preset: DesktopSharePreset;
+  this_device_link_state: DesktopLinkState;
+  recent_devices: readonly DesktopRecentDeviceCard[];
+  issue: DesktopConnectionCenterIssue | null;
+  advanced_section_open: boolean;
 }>;
 
 export type BuildDesktopConnectionCenterSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
   managedStartup?: StartupReport | null;
   externalStartup?: StartupReport | null;
+  activeSessionTarget?: DesktopTargetPreferences | null;
+  entryReason?: DesktopConnectionCenterEntryReason;
+  issue?: DesktopConnectionCenterIssue | null;
+  advancedSectionOpen?: boolean;
 }>;
 
 function isThisDevicePreset(bindRaw: string, passwordRaw: string): boolean {
@@ -77,24 +104,132 @@ export function resolveDesktopLinkState(
   return 'idle';
 }
 
+function diagnosticsLines(lines: readonly string[]): string {
+  return lines.filter((value) => String(value ?? '').trim() !== '').join('\n');
+}
+
+export function buildRemoteConnectionIssue(
+  targetURL: string,
+  code: string,
+  message: string,
+): DesktopConnectionCenterIssue {
+  return {
+    scope: 'remote_device',
+    code,
+    title: code === 'external_target_invalid' ? 'Check the Redeven URL' : 'Unable to open that device',
+    message,
+    diagnostics_copy: diagnosticsLines([
+      'status: blocked',
+      `code: ${code}`,
+      `message: ${message}`,
+      `target url: ${targetURL}`,
+    ]),
+    target_url: targetURL,
+  };
+}
+
+export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopConnectionCenterIssue {
+  if (report.code === 'state_dir_locked') {
+    if (report.lock_owner?.local_ui_enabled === true) {
+      return {
+        scope: 'this_device',
+        code: report.code,
+        title: 'Redeven is already starting elsewhere',
+        message: 'Another Redeven runtime instance is using the default state directory and appears to provide Local UI. Retry in a moment so Desktop can attach to it.',
+        diagnostics_copy: formatBlockedLaunchDiagnostics(report),
+        target_url: '',
+      };
+    }
+    return {
+      scope: 'this_device',
+      code: report.code,
+      title: 'Redeven is already running',
+      message: 'Another Redeven runtime instance is using the default state directory without an attachable Local UI. Stop that runtime or restart it in a Local UI mode, then try again.',
+      diagnostics_copy: formatBlockedLaunchDiagnostics(report),
+      target_url: '',
+    };
+  }
+
+  return {
+    scope: 'this_device',
+    code: report.code,
+    title: 'This device needs attention',
+    message: report.message,
+    diagnostics_copy: formatBlockedLaunchDiagnostics(report),
+    target_url: '',
+  };
+}
+
+function buildRecentDevices(
+  preferences: DesktopPreferences,
+  activeSessionTarget: DesktopTargetPreferences | null,
+): readonly DesktopRecentDeviceCard[] {
+  const candidates: string[] = [];
+  if (preferences.target.kind === 'external_local_ui' && preferences.target.external_local_ui_url) {
+    candidates.push(preferences.target.external_local_ui_url);
+  }
+  if (activeSessionTarget?.kind === 'external_local_ui' && activeSessionTarget.external_local_ui_url) {
+    candidates.push(activeSessionTarget.external_local_ui_url);
+  }
+  candidates.push(...preferences.recent_external_local_ui_urls);
+
+  const seen = new Set<string>();
+  const recentDevices: DesktopRecentDeviceCard[] = [];
+  for (const localUIURL of candidates) {
+    const cleanURL = String(localUIURL ?? '').trim();
+    if (!cleanURL || seen.has(cleanURL)) {
+      continue;
+    }
+    seen.add(cleanURL);
+    recentDevices.push({
+      local_ui_url: cleanURL,
+      is_remembered_target: preferences.target.kind === 'external_local_ui'
+        && preferences.target.external_local_ui_url === cleanURL,
+      is_active_session: activeSessionTarget?.kind === 'external_local_ui'
+        && activeSessionTarget.external_local_ui_url === cleanURL,
+    });
+  }
+
+  return recentDevices;
+}
+
+function activeSessionLocalUIURL(
+  activeSessionTarget: DesktopTargetPreferences | null,
+  managedStartup: StartupReport | null,
+  externalStartup: StartupReport | null,
+): string {
+  if (!activeSessionTarget) {
+    return '';
+  }
+  if (activeSessionTarget.kind === 'external_local_ui') {
+    return externalStartup?.local_ui_url ?? activeSessionTarget.external_local_ui_url;
+  }
+  return managedStartup?.local_ui_url ?? '';
+}
+
 export function buildDesktopConnectionCenterSnapshot(
   args: BuildDesktopConnectionCenterSnapshotArgs,
 ): DesktopConnectionCenterSnapshot {
   const preferences = args.preferences;
-  const activeStartup = preferences.target.kind === 'external_local_ui'
-    ? args.externalStartup ?? null
-    : args.managedStartup ?? null;
-  const activeRuntimeRemoteEnabled = preferences.target.kind === 'managed_local'
-    ? (typeof args.managedStartup?.remote_enabled === 'boolean' ? args.managedStartup.remote_enabled : null)
+  const managedStartup = args.managedStartup ?? null;
+  const externalStartup = args.externalStartup ?? null;
+  const activeSessionTarget = args.activeSessionTarget ?? null;
+  const activeRuntimeRemoteEnabled = activeSessionTarget?.kind === 'managed_local'
+    ? (typeof managedStartup?.remote_enabled === 'boolean' ? managedStartup.remote_enabled : null)
     : null;
 
   return {
     draft: desktopPreferencesToDraft(preferences),
-    current_target_kind: preferences.target.kind,
-    current_local_ui_url: activeStartup?.local_ui_url ?? '',
-    active_runtime_remote_enabled: activeRuntimeRemoteEnabled,
-    share_preset: resolveDesktopSharePreset(preferences.local_ui_bind, preferences.local_ui_password),
-    link_state: resolveDesktopLinkState(preferences, activeRuntimeRemoteEnabled),
-    recent_external_local_ui_urls: preferences.recent_external_local_ui_urls,
+    entry_reason: args.entryReason ?? 'app_launch',
+    remembered_target_kind: preferences.target.kind,
+    active_session_target_kind: activeSessionTarget?.kind ?? null,
+    active_session_local_ui_url: activeSessionLocalUIURL(activeSessionTarget, managedStartup, externalStartup),
+    cancel_label: activeSessionTarget ? 'Back to current device' : 'Quit',
+    this_device_local_ui_url: managedStartup?.local_ui_url ?? '',
+    this_device_share_preset: resolveDesktopSharePreset(preferences.local_ui_bind, preferences.local_ui_password),
+    this_device_link_state: resolveDesktopLinkState(preferences, activeRuntimeRemoteEnabled),
+    recent_devices: buildRecentDevices(preferences, activeSessionTarget),
+    issue: args.issue ?? null,
+    advanced_section_open: Boolean(args.advancedSectionOpen),
   };
 }

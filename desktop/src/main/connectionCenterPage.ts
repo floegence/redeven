@@ -18,99 +18,130 @@ function serializeJSON(value: unknown): string {
     .replaceAll('&', '\\u0026');
 }
 
-function shareSummaryValue(snapshot: DesktopConnectionCenterSnapshot): string {
-  switch (snapshot.share_preset) {
-    case 'this_device':
-      return 'Private to this device';
+function pageLead(snapshot: DesktopConnectionCenterSnapshot): string {
+  switch (snapshot.entry_reason) {
+    case 'switch_device':
+      return 'Choose which machine to open next. Your current session stays available until you confirm another device.';
+    case 'connect_failed':
+      return 'Choose a device to recover from the failed connection without leaving the main window.';
+    case 'blocked':
+      return 'Choose a recovery path for this session. Troubleshooting stays on the same page as device selection.';
+    default:
+      return 'Choose which machine to open in this Desktop session.';
+  }
+}
+
+function activeSessionLabel(snapshot: DesktopConnectionCenterSnapshot): string {
+  if (snapshot.active_session_target_kind === 'external_local_ui') {
+    return 'Another device';
+  }
+  if (snapshot.active_session_target_kind === 'managed_local') {
+    return 'This device';
+  }
+  return 'No device opened';
+}
+
+function activeSessionBody(snapshot: DesktopConnectionCenterSnapshot): string {
+  if (snapshot.active_session_target_kind === 'external_local_ui') {
+    return snapshot.active_session_local_ui_url
+      ? `Current session: ${snapshot.active_session_local_ui_url}`
+      : 'Current session is connected to another Redeven device.';
+  }
+  if (snapshot.active_session_target_kind === 'managed_local') {
+    return snapshot.this_device_local_ui_url
+      ? `Current session: ${snapshot.this_device_local_ui_url}`
+      : 'Current session is attached to This device.';
+  }
+  return 'Nothing is opened yet.';
+}
+
+function thisDeviceStatusValue(snapshot: DesktopConnectionCenterSnapshot): string {
+  return snapshot.this_device_local_ui_url ? 'Ready on this machine' : 'Ready to start';
+}
+
+function thisDeviceStatusBody(snapshot: DesktopConnectionCenterSnapshot): string {
+  if (snapshot.this_device_local_ui_url) {
+    return `Redeven can open This device from ${snapshot.this_device_local_ui_url}.`;
+  }
+  return 'Desktop can start or attach to the bundled runtime on this machine when you choose This device.';
+}
+
+function thisDeviceShareValue(snapshot: DesktopConnectionCenterSnapshot): string {
+  switch (snapshot.this_device_share_preset) {
     case 'local_network':
       return 'Shared on your local network';
+    case 'custom':
+      return 'Custom exposure';
     default:
-      return 'Custom sharing';
+      return 'Private to this device';
   }
 }
 
-function shareSummaryBody(snapshot: DesktopConnectionCenterSnapshot): string {
-  switch (snapshot.share_preset) {
-    case 'this_device':
-      return 'Desktop keeps This device on a loopback-only Local UI bind until you choose to share it.';
+function thisDeviceShareBody(snapshot: DesktopConnectionCenterSnapshot): string {
+  switch (snapshot.this_device_share_preset) {
     case 'local_network':
-      return snapshot.current_target_kind === 'managed_local' && snapshot.current_local_ui_url
-        ? `This device can be opened from another trusted machine through ${snapshot.current_local_ui_url}.`
+      return snapshot.this_device_local_ui_url
+        ? `This device can be opened from another trusted machine through ${snapshot.this_device_local_ui_url}.`
         : `Desktop will expose This device on ${DEFAULT_LOCAL_NETWORK_BIND} with an access password.`;
+    case 'custom':
+      return 'This device uses a custom Local UI bind or password setup.';
     default:
-      return 'This device uses a custom Local UI bind or password setup. Advanced Settings remains available for raw editing.';
+      return 'Desktop keeps This device on a loopback-only Local UI bind until you choose to share it.';
   }
 }
 
-function linkSummaryValue(snapshot: DesktopConnectionCenterSnapshot): string {
-  switch (snapshot.link_state) {
+function thisDeviceLinkValue(snapshot: DesktopConnectionCenterSnapshot): string {
+  switch (snapshot.this_device_link_state) {
     case 'pending':
       return 'Queued for next start';
     case 'connected':
-      return 'Connected';
+      return 'Remote control connected';
     default:
       return 'No queued request';
   }
 }
 
-function linkSummaryBody(snapshot: DesktopConnectionCenterSnapshot): string {
-  switch (snapshot.link_state) {
+function thisDeviceLinkBody(snapshot: DesktopConnectionCenterSnapshot): string {
+  switch (snapshot.this_device_link_state) {
     case 'pending':
-      return 'Connection Center already has a saved one-shot link request for the next successful This device start.';
+      return 'Desktop already has a saved one-shot Redeven link request for the next successful This device start.';
     case 'connected':
       return 'This device is currently running with a valid remote control channel.';
     default:
-      return snapshot.current_target_kind === 'external_local_ui'
-        ? 'Switch back to This device to inspect or change the local Redeven link request.'
-        : 'No one-shot link request is queued. You can add one below whenever you need it.';
+      return 'Add a one-shot Redeven link request only when you need the next This device start to register itself remotely.';
   }
 }
 
-function currentTargetValue(snapshot: DesktopConnectionCenterSnapshot): string {
-  return snapshot.current_target_kind === 'external_local_ui' ? 'Another device' : 'This device';
-}
-
-function currentTargetBody(snapshot: DesktopConnectionCenterSnapshot): string {
-  if (snapshot.current_local_ui_url) {
-    return snapshot.current_target_kind === 'external_local_ui'
-      ? `Redeven Desktop is currently pointed at ${snapshot.current_local_ui_url}.`
-      : `Redeven Desktop is currently serving This device from ${snapshot.current_local_ui_url}.`;
+function renderRecentDeviceCard(snapshot: DesktopConnectionCenterSnapshot, localUIURL: string, index: number): string {
+  const recentDevice = snapshot.recent_devices.find((item) => item.local_ui_url === localUIURL);
+  if (!recentDevice) {
+    return '';
   }
-  return snapshot.current_target_kind === 'external_local_ui'
-    ? 'Open another machine inside this Desktop shell by pointing at its Redeven Local UI URL.'
-    : 'Start or attach to the bundled Redeven runtime on this machine.';
-}
+  const badges: string[] = [];
+  if (recentDevice.is_remembered_target) {
+    badges.push('<span class="device-badge">Remembered</span>');
+  }
+  if (recentDevice.is_active_session) {
+    badges.push('<span class="device-badge">Current session</span>');
+  }
 
-function renderTargetChoice(id: string, value: 'managed_local' | 'external_local_ui', title: string, description: string): string {
   return `
-    <label class="choice-option" for="${escapeHTML(id)}">
-      <input id="${escapeHTML(id)}" type="radio" name="target_kind" value="${escapeHTML(value)}">
-      <span>
-        <span class="choice-title">${escapeHTML(title)}</span>
-        <span class="choice-help">${escapeHTML(description)}</span>
-      </span>
-    </label>
+    <article class="device-card">
+      <div class="device-card-copy">
+        <div class="device-card-kicker">Recent device ${index + 1}</div>
+        <h3>${escapeHTML(localUIURL)}</h3>
+        <p>Open this Redeven Local UI in the same Desktop shell.</p>
+      </div>
+      <div class="device-card-actions">
+        ${badges.join('')}
+        <button type="button" class="button subtle recent-device-button" data-recent-url="${escapeHTML(localUIURL)}">Open</button>
+      </div>
+    </article>
   `;
-}
-
-function renderShareChoice(id: string, value: 'this_device' | 'local_network' | 'custom', title: string, description: string): string {
-  return `
-    <label class="choice-option" for="${escapeHTML(id)}">
-      <input id="${escapeHTML(id)}" type="radio" name="share_preset" value="${escapeHTML(value)}">
-      <span>
-        <span class="choice-title">${escapeHTML(title)}</span>
-        <span class="choice-help">${escapeHTML(description)}</span>
-      </span>
-    </label>
-  `;
-}
-
-function renderRecentTarget(url: string): string {
-  return `<button class="recent-target-chip" type="button" data-recent-url="${escapeHTML(url)}">${escapeHTML(url)}</button>`;
 }
 
 export function connectionCenterWindowTitle(): string {
-  return 'Connection Center';
+  return 'Choose a device';
 }
 
 export function buildConnectionCenterPageHTML(
@@ -118,14 +149,15 @@ export function buildConnectionCenterPageHTML(
   errorMessage = '',
   platform: NodeJS.Platform = process.platform,
 ): string {
-  const error = String(errorMessage ?? '').trim();
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
-  const targetValue = currentTargetValue(snapshot);
-  const targetBody = currentTargetBody(snapshot);
-  const shareValue = shareSummaryValue(snapshot);
-  const shareBody = shareSummaryBody(snapshot);
-  const linkValue = linkSummaryValue(snapshot);
-  const linkBody = linkSummaryBody(snapshot);
+  const initialError = String(errorMessage ?? '').trim();
+  const issue = snapshot.issue;
+  const issueTitle = issue?.title ?? '';
+  const issueMessage = issue?.message ?? '';
+  const issueDiagnostics = issue?.diagnostics_copy ?? '';
+  const issueTargetURL = issue?.target_url ?? '';
+  const advancedOpen = snapshot.advanced_section_open || Boolean(issueDiagnostics);
+  const canSaveAndReturn = snapshot.active_session_target_kind !== null;
 
   return `<!doctype html>
 <html lang="en">
@@ -136,50 +168,36 @@ export function buildConnectionCenterPageHTML(
     <style>
       :root {
         color-scheme: light;
-        --background: ${desktopLightTheme.pageBackground};
-        --foreground: ${desktopLightTheme.text};
-        --primary: ${desktopLightTheme.accent};
-        --primary-foreground: ${desktopLightTheme.accentText};
-        --secondary: ${desktopLightTheme.surfaceMuted};
-        --secondary-foreground: ${desktopLightTheme.text};
-        --accent: ${desktopLightTheme.accentSoft};
-        --accent-foreground: ${desktopLightTheme.text};
-        --card: ${desktopLightTheme.surface};
-        --card-foreground: ${desktopLightTheme.text};
+        --bg: ${desktopLightTheme.pageBackground};
+        --bg-elevated: color-mix(in srgb, ${desktopLightTheme.surface} 94%, white);
+        --panel: ${desktopLightTheme.surface};
+        --panel-soft: color-mix(in srgb, ${desktopLightTheme.surfaceMuted} 72%, white);
+        --text: ${desktopLightTheme.text};
+        --muted: ${desktopLightTheme.muted};
         --border: ${desktopLightTheme.border};
-        --input: ${desktopLightTheme.border};
-        --ring: ${desktopLightTheme.accent};
-        --muted: ${desktopLightTheme.surfaceMuted};
-        --muted-foreground: ${desktopLightTheme.muted};
-        --success: ${desktopLightTheme.success};
+        --accent: ${desktopLightTheme.accent};
+        --accent-soft: ${desktopLightTheme.accentSoft};
+        --accent-text: ${desktopLightTheme.accentText};
+        --danger: ${desktopLightTheme.danger};
         --warning: ${desktopLightTheme.warning};
-        --error: ${desktopLightTheme.danger};
-        --info: ${desktopLightTheme.info};
-        --shadow: 0 18px 40px rgba(19, 30, 47, 0.08);
+        --shadow: 0 28px 60px rgba(22, 30, 43, 0.12);
       }
       @media (prefers-color-scheme: dark) {
         :root {
           color-scheme: dark;
-          --background: ${desktopDarkTheme.pageBackground};
-          --foreground: ${desktopDarkTheme.text};
-          --primary: ${desktopDarkTheme.accent};
-          --primary-foreground: ${desktopDarkTheme.accentText};
-          --secondary: ${desktopDarkTheme.surfaceMuted};
-          --secondary-foreground: ${desktopDarkTheme.text};
-          --accent: ${desktopDarkTheme.accentSoft};
-          --accent-foreground: ${desktopDarkTheme.text};
-          --card: ${desktopDarkTheme.surface};
-          --card-foreground: ${desktopDarkTheme.text};
+          --bg: ${desktopDarkTheme.pageBackground};
+          --bg-elevated: color-mix(in srgb, ${desktopDarkTheme.surface} 92%, black);
+          --panel: ${desktopDarkTheme.surface};
+          --panel-soft: color-mix(in srgb, ${desktopDarkTheme.surfaceMuted} 72%, black);
+          --text: ${desktopDarkTheme.text};
+          --muted: ${desktopDarkTheme.muted};
           --border: ${desktopDarkTheme.border};
-          --input: ${desktopDarkTheme.border};
-          --ring: ${desktopDarkTheme.accent};
-          --muted: ${desktopDarkTheme.surfaceMuted};
-          --muted-foreground: ${desktopDarkTheme.muted};
-          --success: ${desktopDarkTheme.success};
+          --accent: ${desktopDarkTheme.accent};
+          --accent-soft: ${desktopDarkTheme.accentSoft};
+          --accent-text: ${desktopDarkTheme.accentText};
+          --danger: ${desktopDarkTheme.danger};
           --warning: ${desktopDarkTheme.warning};
-          --error: ${desktopDarkTheme.danger};
-          --info: ${desktopDarkTheme.info};
-          --shadow: 0 22px 46px rgba(0, 0, 0, 0.28);
+          --shadow: 0 30px 72px rgba(0, 0, 0, 0.36);
         }
       }
       * { box-sizing: border-box; }
@@ -187,305 +205,344 @@ export function buildConnectionCenterPageHTML(
       body {
         margin: 0;
         min-height: 100vh;
-        background: var(--background);
-        color: var(--foreground);
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        padding: calc(24px + ${titleBarInset}) 24px 24px;
+        padding: calc(26px + ${titleBarInset}) 24px 28px;
+        background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--accent) 16%, transparent), transparent 32%),
+          linear-gradient(180deg, color-mix(in srgb, var(--bg) 84%, var(--panel-soft)) 0%, var(--bg) 100%);
+        color: var(--text);
+        font-family: "Aptos", "Avenir Next", "Segoe UI Variable", sans-serif;
       }
+      button,
       input,
-      button {
+      summary {
         font: inherit;
+      }
+      button,
+      summary,
+      label[for] {
+        cursor: pointer;
       }
       .skip-link {
         position: absolute;
         left: 24px;
         top: calc(8px + ${titleBarInset});
         z-index: 10;
-        padding: 0.55rem 0.85rem;
-        border-radius: 8px;
-        background: var(--primary);
-        color: var(--primary-foreground);
+        padding: 0.55rem 0.9rem;
+        border-radius: 999px;
+        background: var(--accent);
+        color: var(--accent-text);
         text-decoration: none;
         transform: translateY(-220%);
       }
       .skip-link:focus-visible {
         transform: translateY(0);
-        outline: 2px solid color-mix(in srgb, var(--ring) 35%, white);
+        outline: 2px solid color-mix(in srgb, var(--accent) 30%, white);
         outline-offset: 3px;
       }
       main {
-        width: min(980px, 100%);
+        width: min(1080px, 100%);
         margin: 0 auto;
       }
       .shell {
         overflow: hidden;
         border: 1px solid var(--border);
-        border-radius: 18px;
-        background: color-mix(in srgb, var(--card) 96%, transparent);
+        border-radius: 26px;
+        background: color-mix(in srgb, var(--panel) 96%, transparent);
         box-shadow: var(--shadow);
+        backdrop-filter: blur(18px);
       }
-      .page-header {
-        display: grid;
-        gap: 10px;
-        padding: 22px 24px 20px;
+      .hero {
+        padding: 28px;
         border-bottom: 1px solid var(--border);
-        background: color-mix(in srgb, var(--card) 72%, var(--background));
+        background:
+          linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 58%, transparent), transparent 56%),
+          color-mix(in srgb, var(--panel) 92%, transparent);
       }
       .eyebrow {
-        margin: 0;
+        margin: 0 0 10px;
         font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.14em;
+        font-weight: 700;
+        letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+        color: color-mix(in srgb, var(--muted) 80%, transparent);
       }
-      .title-row {
+      .hero-row {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 10px 12px;
+        gap: 12px;
+        margin-bottom: 10px;
       }
       h1 {
         margin: 0;
-        font-size: clamp(22px, 3vw, 30px);
-        line-height: 1.1;
-        letter-spacing: -0.02em;
+        font-size: clamp(30px, 5vw, 46px);
+        line-height: 1;
+        letter-spacing: -0.03em;
+      }
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+        background: color-mix(in srgb, var(--accent-soft) 54%, transparent);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
       }
       .lead {
         margin: 0;
         max-width: 72ch;
-        color: var(--muted-foreground);
-        font-size: 13px;
-        line-height: 1.65;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
       }
-      .status-chip {
-        display: inline-flex;
-        align-items: center;
-        min-height: 24px;
-        padding: 0 10px;
-        border-radius: 999px;
-        border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--secondary) 72%, transparent);
-        color: var(--foreground);
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-      .status-chip[data-tone="external"] {
-        border-color: color-mix(in srgb, var(--info) 42%, var(--border));
-        background: color-mix(in srgb, var(--info) 12%, transparent);
-        color: color-mix(in srgb, var(--foreground) 84%, var(--info));
-      }
-      form {
-        display: grid;
-        gap: 18px;
-        padding: 18px;
-      }
-      .summary-strip {
+      .hero-meta {
+        margin-top: 18px;
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
       }
-      .summary-item {
-        display: grid;
-        gap: 6px;
-        padding: 12px 14px;
+      .summary-card {
+        padding: 14px 16px;
+        border-radius: 16px;
         border: 1px solid var(--border);
-        border-radius: 12px;
-        background: color-mix(in srgb, var(--background) 62%, var(--card));
+        background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
       }
       .summary-label {
+        margin-bottom: 6px;
         font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
-      }
-      .summary-value {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--card-foreground);
-      }
-      .summary-copy {
-        margin: 0;
-        color: var(--muted-foreground);
-        font-size: 12px;
-        line-height: 1.55;
-      }
-      .inline-alert {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: 12px;
-        align-items: start;
-        padding: 14px;
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: color-mix(in srgb, var(--info) 10%, var(--card));
-      }
-      .inline-alert-bar {
-        width: 4px;
-        min-height: 100%;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--info) 70%, var(--primary));
-      }
-      .inline-alert-copy {
-        display: grid;
-        gap: 4px;
-      }
-      .inline-alert-kicker {
-        font-size: 11px;
-        font-weight: 600;
+        font-weight: 700;
         letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+        color: color-mix(in srgb, var(--muted) 80%, transparent);
       }
-      .inline-alert-title {
-        font-size: 16px;
-        font-weight: 600;
-        line-height: 1.2;
+      .summary-value {
+        font-size: 15px;
+        font-weight: 700;
       }
-      .inline-alert-body {
-        margin: 0;
-        color: var(--muted-foreground);
+      .summary-body {
+        margin: 6px 0 0;
+        color: var(--muted);
         font-size: 12px;
         line-height: 1.6;
       }
-      .section-group {
+      .content {
         display: grid;
-        gap: 12px;
+        gap: 18px;
+        padding: 20px;
       }
-      .section-group-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .section-group-title {
-        margin: 0;
-        white-space: nowrap;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-      }
-      .section-group-divider {
-        height: 1px;
-        flex: 1 1 auto;
-        background: color-mix(in srgb, var(--border) 64%, transparent);
-      }
-      .settings-card {
-        overflow: hidden;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        background: var(--card);
-      }
-      .settings-card-header {
-        padding: 14px 16px;
-        border-bottom: 1px solid var(--border);
-        background: color-mix(in srgb, var(--muted) 20%, var(--card));
-      }
-      .settings-card-header-copy {
+      .inline-error {
         display: grid;
         gap: 6px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+        background: color-mix(in srgb, var(--danger) 10%, var(--panel));
       }
-      .settings-card-kicker {
+      .inline-error[hidden] {
+        display: none;
+      }
+      .inline-error-kicker {
         font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.1em;
+        font-weight: 700;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+        color: color-mix(in srgb, var(--danger) 78%, var(--text));
       }
-      .settings-card-title-row {
+      .inline-error-title {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .inline-error-body {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.95fr);
+        gap: 18px;
+      }
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: color-mix(in srgb, var(--panel) 94%, transparent);
+        overflow: hidden;
+      }
+      .panel-header {
+        padding: 18px 18px 0;
+      }
+      .panel-kicker {
+        margin: 0 0 8px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: color-mix(in srgb, var(--muted) 80%, transparent);
+      }
+      .panel-title {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.15;
+      }
+      .panel-description {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+      .panel-body {
+        display: grid;
+        gap: 16px;
+        padding: 18px;
+      }
+      .this-device-summary {
+        display: grid;
+        gap: 10px;
+      }
+      .this-device-summary-card {
+        padding: 14px 16px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--panel-soft);
+      }
+      .this-device-summary-title {
+        margin: 0 0 6px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .this-device-summary-copy {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .button-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .button {
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        padding: 0 18px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        font-weight: 700;
+        text-decoration: none;
+        transition: transform 150ms ease, background-color 150ms ease, border-color 150ms ease;
+      }
+      .button:hover {
+        transform: translateY(-1px);
+      }
+      .button.primary {
+        border-color: transparent;
+        background: var(--accent);
+        color: var(--accent-text);
+      }
+      .button.subtle {
+        background: color-mix(in srgb, var(--panel-soft) 78%, transparent);
+      }
+      .button.danger {
+        border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
+        background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+      }
+      .button[disabled] {
+        cursor: not-allowed;
+        opacity: 0.65;
+        transform: none;
+      }
+      .device-list {
+        display: grid;
+        gap: 12px;
+      }
+      .device-card {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: var(--panel-soft);
+      }
+      .device-card h3 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.4;
+        word-break: break-word;
+      }
+      .device-card p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .device-card-actions {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
       }
-      .settings-card-title-row h2 {
-        margin: 0;
-        font-size: 16px;
-        line-height: 1.2;
-      }
-      .settings-card-badge {
+      .device-card-kicker,
+      .device-badge {
         display: inline-flex;
         align-items: center;
         min-height: 24px;
         padding: 0 10px;
         border-radius: 999px;
         border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--background) 70%, var(--card));
-        color: var(--muted-foreground);
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
-      .settings-card-description {
-        margin: 0;
-        color: var(--muted-foreground);
-        font-size: 12px;
-        line-height: 1.6;
-      }
-      .settings-card-body {
-        display: grid;
-        gap: 14px;
-        padding: 16px;
-      }
-      .card-inline-note {
-        padding: 10px 12px;
-        border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
-        border-radius: 10px;
-        background: color-mix(in srgb, var(--primary) 6%, var(--background));
-        color: var(--foreground);
-        font-size: 12px;
-        line-height: 1.55;
-      }
       .field {
         display: grid;
-        gap: 6px;
-      }
-      fieldset {
-        margin: 0;
-        min-width: 0;
-        padding: 0;
-        border: 0;
+        gap: 7px;
       }
       .field-label {
-        display: block;
         font-size: 12px;
-        font-weight: 600;
-        color: var(--foreground);
+        font-weight: 700;
       }
       .field-help {
-        color: var(--muted-foreground);
+        color: var(--muted);
         font-size: 11px;
-        line-height: 1.55;
+        line-height: 1.6;
+      }
+      .field-row {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       input {
         width: 100%;
-        min-height: 38px;
-        border-radius: 10px;
-        border: 1px solid var(--input);
-        background: color-mix(in srgb, var(--background) 84%, transparent);
-        color: var(--foreground);
-        padding: 0 12px;
-        font-size: 12px;
-        box-shadow: 0 1px 2px rgba(19, 30, 47, 0.04);
+        min-height: 42px;
+        padding: 0 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+        color: var(--text);
       }
       input::placeholder {
-        color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+        color: color-mix(in srgb, var(--muted) 82%, transparent);
       }
-      input:focus-visible,
-      button:focus-visible,
-      .choice-option:has(input:focus-visible) {
-        outline: 2px solid color-mix(in srgb, var(--ring) 22%, transparent);
-        outline-offset: 2px;
-      }
-      input:focus-visible,
-      button:focus-visible {
-        border-color: color-mix(in srgb, var(--ring) 48%, var(--border));
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent);
+      fieldset {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        min-width: 0;
       }
       .choice-grid {
         display: grid;
@@ -493,125 +550,106 @@ export function buildConnectionCenterPageHTML(
       }
       .choice-option {
         display: grid;
-        grid-template-columns: 16px minmax(0, 1fr);
-        gap: 8px 10px;
+        grid-template-columns: 18px minmax(0, 1fr);
+        gap: 12px;
         align-items: start;
-        padding: 12px;
-        border-radius: 12px;
+        padding: 14px;
+        border-radius: 16px;
         border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--background) 72%, var(--card));
-        cursor: pointer;
-        transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+        background: color-mix(in srgb, var(--panel-soft) 82%, transparent);
       }
       .choice-option:hover {
-        background: color-mix(in srgb, var(--accent) 34%, var(--background));
+        border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
       }
       .choice-option:has(input:checked) {
-        border-color: color-mix(in srgb, var(--ring) 38%, var(--border));
-        background: color-mix(in srgb, var(--primary) 8%, var(--background));
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ring) 12%, transparent);
+        border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+        background: color-mix(in srgb, var(--accent-soft) 52%, transparent);
       }
       .choice-option input {
-        width: 16px;
-        min-height: 16px;
+        width: 18px;
+        min-height: 18px;
         margin: 2px 0 0;
-        padding: 0;
-        accent-color: var(--primary);
+        accent-color: var(--accent);
       }
       .choice-title {
         display: block;
         font-size: 13px;
-        font-weight: 600;
+        font-weight: 700;
       }
       .choice-help {
         display: block;
         margin-top: 4px;
-        color: var(--muted-foreground);
-        font-size: 11px;
-        line-height: 1.55;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.6;
       }
-      .recent-targets {
-        display: grid;
-        gap: 8px;
+      details {
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: color-mix(in srgb, var(--panel) 94%, transparent);
+        overflow: hidden;
       }
-      .recent-target-list {
+      summary {
+        list-style: none;
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        font-size: 15px;
+        font-weight: 700;
       }
-      .recent-target-chip {
-        min-height: 30px;
-        border-radius: 999px;
-        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-        background: color-mix(in srgb, var(--muted) 26%, var(--background));
-        color: var(--foreground);
-        padding: 0 12px;
-        cursor: pointer;
+      summary::-webkit-details-marker {
+        display: none;
       }
-      .recent-target-chip:hover {
-        background: color-mix(in srgb, var(--accent) 48%, var(--background));
+      .summary-meta {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 500;
       }
-      code {
-        padding: 0 6px;
-        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-        border-radius: 6px;
-        background: color-mix(in srgb, var(--muted) 62%, var(--background));
-        font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-        font-size: 11px;
+      .details-body {
+        display: grid;
+        gap: 16px;
+        padding: 0 18px 18px;
+        border-top: 1px solid var(--border);
       }
-      .form-footer {
+      .details-note {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .diagnostics {
         display: grid;
         gap: 12px;
-        padding: 14px 16px;
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: color-mix(in srgb, var(--muted) 18%, var(--card));
       }
-      .error {
-        display: ${error ? 'block' : 'none'};
-        padding: 10px 12px;
-        border: 1px solid color-mix(in srgb, var(--error) 26%, transparent);
-        border-radius: 10px;
-        background: color-mix(in srgb, var(--error) 10%, transparent);
-        color: var(--error);
-        line-height: 1.55;
+      .diagnostics pre {
+        margin: 0;
+        padding: 14px;
+        border-radius: 16px;
+        background: #181d24;
+        color: #f4f6fb;
+        overflow: auto;
         font-size: 12px;
+        line-height: 1.65;
+        white-space: pre-wrap;
+        word-break: break-word;
       }
-      .actions {
+      .footer {
         display: flex;
-        justify-content: flex-end;
-        gap: 8px;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding-top: 4px;
       }
-      button {
-        min-height: 34px;
-        border-radius: 10px;
-        border: 1px solid var(--input);
-        background: color-mix(in srgb, var(--background) 84%, transparent);
-        color: var(--foreground);
-        padding: 0 14px;
+      .footer-copy {
+        color: var(--muted);
         font-size: 12px;
-        font-weight: 600;
-        box-shadow: 0 1px 2px rgba(19, 30, 47, 0.04);
-        cursor: pointer;
-        transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+        line-height: 1.6;
       }
-      button:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--accent) 54%, var(--background));
-      }
-      button.primary {
-        border-color: var(--primary);
-        background: var(--primary);
-        color: var(--primary-foreground);
-      }
-      button.primary:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--primary) 92%, black);
-      }
-      button:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      [hidden] {
-        display: none !important;
+      :focus-visible {
+        outline: 2px solid color-mix(in srgb, var(--accent) 38%, white);
+        outline-offset: 3px;
       }
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
@@ -622,219 +660,238 @@ export function buildConnectionCenterPageHTML(
           transition: none !important;
         }
       }
-      @media (max-width: 720px) {
-        body { padding: calc(12px + ${titleBarInset}) 12px 12px; }
-        .page-header { padding: 18px 18px 16px; }
-        form { padding: 14px; }
-        .summary-strip { grid-template-columns: 1fr; }
-        .actions { flex-direction: column-reverse; }
-        button { width: 100%; }
-        .skip-link { left: 12px; }
-        .recent-target-list {
-          display: grid;
+      @media (max-width: 900px) {
+        .layout,
+        .hero-meta,
+        .field-row {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 640px) {
+        body {
+          padding-inline: 16px;
+        }
+        .hero,
+        .content,
+        .panel-body {
+          padding-inline: 16px;
         }
       }
     </style>
   </head>
   <body>
     <a class="skip-link" href="#connection-center-main">Skip to main content</a>
-    <main id="connection-center-main" tabindex="-1">
-      <div class="shell">
-        <header class="page-header">
+    <main id="connection-center-main">
+      <section class="shell">
+        <header class="hero">
           <p class="eyebrow">Redeven Desktop</p>
-          <div class="title-row">
-            <h1>${escapeHTML(connectionCenterWindowTitle())}</h1>
-            <span id="target-status-badge" class="status-chip" data-tone="${snapshot.current_target_kind === 'external_local_ui' ? 'external' : 'local'}">${escapeHTML(targetValue)}</span>
+          <div class="hero-row">
+            <h1>Choose a device</h1>
+            <span class="hero-badge">${escapeHTML(snapshot.active_session_target_kind ? activeSessionLabel(snapshot) : 'Startup')}</span>
           </div>
-          <p id="page-lead" class="lead">Open this device, open another device, share this device, or queue a Redeven link from one place. Advanced Settings stays available for raw troubleshooting inputs.</p>
+          <p class="lead">${escapeHTML(pageLead(snapshot))}</p>
+          <div class="hero-meta">
+            <article class="summary-card">
+              <div class="summary-label">Current session</div>
+              <div class="summary-value">${escapeHTML(activeSessionLabel(snapshot))}</div>
+              <p class="summary-body">${escapeHTML(activeSessionBody(snapshot))}</p>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">Remembered target</div>
+              <div class="summary-value">${escapeHTML(snapshot.remembered_target_kind === 'external_local_ui' ? 'Another device' : 'This device')}</div>
+              <p class="summary-body">Desktop suggests the remembered target, but it never opens it automatically on launch.</p>
+            </article>
+            <article class="summary-card">
+              <div class="summary-label">Recovery model</div>
+              <div class="summary-value">Same-window flow</div>
+              <p class="summary-body">Selection, recovery, and advanced troubleshooting stay in one main-window surface.</p>
+            </article>
+          </div>
         </header>
 
-        <form id="connection-form" aria-describedby="page-lead connection-error">
-          <section class="summary-strip" aria-label="Current connection summary">
-            <article class="summary-item">
-              <div class="summary-label">Current target</div>
-              <div id="summary-target-value" class="summary-value">${escapeHTML(targetValue)}</div>
-              <p id="summary-target-body" class="summary-copy">${escapeHTML(targetBody)}</p>
-            </article>
-            <article class="summary-item">
-              <div class="summary-label">Sharing</div>
-              <div id="summary-share-value" class="summary-value">${escapeHTML(shareValue)}</div>
-              <p id="summary-share-body" class="summary-copy">${escapeHTML(shareBody)}</p>
-            </article>
-            <article class="summary-item">
-              <div class="summary-label">Redeven link</div>
-              <div id="summary-link-value" class="summary-value">${escapeHTML(linkValue)}</div>
-              <p id="summary-link-body" class="summary-copy">${escapeHTML(linkBody)}</p>
-            </article>
+        <section class="content">
+          <section id="connection-error" class="inline-error" role="alert" aria-live="assertive" aria-hidden="${initialError ? 'false' : 'true'}"${initialError ? '' : ' hidden'} tabindex="-1">
+            <div class="inline-error-kicker">Validation</div>
+            <div class="inline-error-title">Check these fields</div>
+            <p class="inline-error-body">${escapeHTML(initialError)}</p>
           </section>
 
-          <section class="inline-alert">
-            <div class="inline-alert-bar" aria-hidden="true"></div>
-            <div class="inline-alert-copy">
-              <div class="inline-alert-kicker">Shell-owned workflow</div>
-              <div class="inline-alert-title">Connection Center keeps open, share, and link together</div>
-              <p class="inline-alert-body">Use this page for the high-level workflow. Advanced Settings remains available when you need raw bind, password, or one-shot bootstrap editing.</p>
+          <section id="chooser-issue" class="inline-error" role="alert" aria-live="polite" aria-hidden="${issue ? 'false' : 'true'}"${issue ? '' : ' hidden'} tabindex="-1">
+            <div class="inline-error-kicker">${escapeHTML(issue?.scope === 'remote_device' ? 'Remote device' : issue?.scope === 'this_device' ? 'This device' : 'Desktop startup')}</div>
+            <div id="chooser-issue-title" class="inline-error-title">${escapeHTML(issueTitle)}</div>
+            <p id="chooser-issue-message" class="inline-error-body">${escapeHTML(issueMessage)}</p>
+          </section>
+
+          <div class="layout">
+            <div class="stack">
+              <section class="panel">
+                <div class="panel-header">
+                  <p class="panel-kicker">Recommended first step</p>
+                  <h2 class="panel-title">This device</h2>
+                  <p class="panel-description">Open the Redeven runtime on this machine, with sharing and one-shot remote control options available below when you need them.</p>
+                </div>
+                <div class="panel-body">
+                  <div class="this-device-summary">
+                    <article class="this-device-summary-card">
+                      <h3 class="this-device-summary-title">${escapeHTML(thisDeviceStatusValue(snapshot))}</h3>
+                      <p class="this-device-summary-copy">${escapeHTML(thisDeviceStatusBody(snapshot))}</p>
+                    </article>
+                    <article class="this-device-summary-card">
+                      <h3 class="this-device-summary-title">${escapeHTML(thisDeviceShareValue(snapshot))}</h3>
+                      <p class="this-device-summary-copy">${escapeHTML(thisDeviceShareBody(snapshot))}</p>
+                    </article>
+                    <article class="this-device-summary-card">
+                      <h3 class="this-device-summary-title">${escapeHTML(thisDeviceLinkValue(snapshot))}</h3>
+                      <p class="this-device-summary-copy">${escapeHTML(thisDeviceLinkBody(snapshot))}</p>
+                    </article>
+                  </div>
+                  <div class="button-row">
+                    <button id="open-this-device" type="button" class="button primary">Open This Device</button>
+                    ${canSaveAndReturn ? '<button id="save-and-return" type="button" class="button subtle">Save and return</button>' : ''}
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <p class="panel-kicker">Recent devices</p>
+                  <h2 class="panel-title">Open another machine</h2>
+                  <p class="panel-description">Choose a recent Redeven Local UI target or paste a new Redeven URL below.</p>
+                </div>
+                <div class="panel-body">
+                  <section id="recent-devices-section"${snapshot.recent_devices.length > 0 ? '' : ' hidden'}>
+                    <div class="device-list">
+                      ${snapshot.recent_devices.map((item, index) => renderRecentDeviceCard(snapshot, item.local_ui_url, index)).join('')}
+                    </div>
+                  </section>
+                  <section class="device-card">
+                    <div class="device-card-copy">
+                      <div class="device-card-kicker">Paste a Redeven URL</div>
+                      <h3>Open another device</h3>
+                      <p>Enter the base Redeven Local UI URL from another machine on your network.</p>
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="external-local-ui-url">Redeven URL</label>
+                      <input id="external-local-ui-url" type="url" autocomplete="url" spellcheck="false" placeholder="http://192.168.1.11:24000/" value="${escapeHTML(snapshot.draft.external_local_ui_url)}">
+                      <div class="field-help">Desktop normalizes Local UI URLs to their base path before opening them.</div>
+                    </div>
+                    <div class="button-row">
+                      <button id="open-remote-device" type="button" class="button subtle">Open Device</button>
+                    </div>
+                  </section>
+                </div>
+              </section>
             </div>
-          </section>
 
-          <section class="section-group" aria-labelledby="connection-section-title">
-            <div class="section-group-header">
-              <h2 id="connection-section-title" class="section-group-title">Open</h2>
-              <div class="section-group-divider" aria-hidden="true"></div>
-            </div>
-            <section class="settings-card" id="open-card">
-              <div class="settings-card-header">
-                <div class="settings-card-header-copy">
-                  <div class="settings-card-kicker">Connection target</div>
-                  <div class="settings-card-title-row">
-                    <h2>Open a Redeven device</h2>
-                    <span class="settings-card-badge">Connection Center</span>
+            <div class="stack">
+              <details id="this-device-options"${snapshot.advanced_section_open ? ' open' : ''}>
+                <summary>
+                  <span>This device options</span>
+                  <span class="summary-meta">Sharing, raw bind, password, and one-shot link request</span>
+                </summary>
+                <div class="details-body">
+                  <p class="details-note">These inputs configure This device. They are applied whenever you open This device from this chooser.</p>
+                  <fieldset class="field">
+                    <legend class="field-label">How should This device be exposed?</legend>
+                    <div class="choice-grid">
+                      <label class="choice-option" for="share-this-device">
+                        <input id="share-this-device" type="radio" name="share_preset" value="this_device">
+                        <span>
+                          <span class="choice-title">Only this device</span>
+                          <span class="choice-help">Keep Local UI private on a loopback-only dynamic port.</span>
+                        </span>
+                      </label>
+                      <label class="choice-option" for="share-local-network">
+                        <input id="share-local-network" type="radio" name="share_preset" value="local_network">
+                        <span>
+                          <span class="choice-title">Local network</span>
+                          <span class="choice-help">Expose This device on ${escapeHTML(DEFAULT_LOCAL_NETWORK_BIND)} with a generated password.</span>
+                        </span>
+                      </label>
+                      <label class="choice-option" for="share-custom">
+                        <input id="share-custom" type="radio" name="share_preset" value="custom">
+                        <span>
+                          <span class="choice-title">Custom</span>
+                          <span class="choice-help">Set the raw bind and password manually.</span>
+                        </span>
+                      </label>
+                    </div>
+                  </fieldset>
+
+                  <div id="local-network-password-row" class="field" hidden>
+                    <label class="field-label" for="local-network-password">Local network password</label>
+                    <input id="local-network-password" type="password" autocomplete="new-password" spellcheck="false">
+                    <div class="field-help">Desktop generates a password automatically if you leave this blank.</div>
                   </div>
-                  <p class="settings-card-description">Choose whether Desktop opens this machine or another Redeven Local UI endpoint.</p>
-                </div>
-              </div>
-              <div class="settings-card-body">
-                <fieldset class="field">
-                  <legend class="field-label">Target</legend>
-                  <div class="choice-grid">
-                    ${renderTargetChoice('target-kind-managed-local', 'managed_local', 'This device', 'Start or attach to the bundled Redeven runtime on this machine.')}
-                    ${renderTargetChoice('target-kind-external-local-ui', 'external_local_ui', 'Another device', 'Open another machine’s Redeven Local UI directly inside this Desktop shell.')}
+
+                  <div id="custom-bind-row" class="field-row" hidden>
+                    <div class="field">
+                      <label class="field-label" for="custom-local-ui-bind">Local UI bind address</label>
+                      <input id="custom-local-ui-bind" type="text" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="custom-local-ui-password">Local UI password</label>
+                      <input id="custom-local-ui-password" type="password" autocomplete="new-password" spellcheck="false">
+                    </div>
                   </div>
-                </fieldset>
 
-                <div id="external-url-row" class="field" hidden>
-                  <label class="field-label" for="external-local-ui-url">Redeven URL</label>
-                  <input id="external-local-ui-url" type="url" autocomplete="url" inputmode="url" spellcheck="false" aria-describedby="external-local-ui-url-help connection-error" placeholder="http://192.168.1.11:24000/">
-                  <div id="external-local-ui-url-help" class="field-help">Paste a Local UI base URL using localhost or an IP literal. Desktop intentionally does not accept arbitrary hostnames here.</div>
-                </div>
-
-                <div id="recent-targets" class="recent-targets"${snapshot.recent_external_local_ui_urls.length > 0 ? '' : ' hidden'}>
-                  <div class="field-label">Recent devices</div>
-                  <div class="recent-target-list">
-                    ${snapshot.recent_external_local_ui_urls.map(renderRecentTarget).join('')}
+                  <div class="field-row">
+                    <div class="field">
+                      <label class="field-label" for="controlplane-url">Control plane URL</label>
+                      <input id="controlplane-url" type="url" autocomplete="url" spellcheck="false" placeholder="https://region.example.invalid">
+                    </div>
+                    <div class="field">
+                      <label class="field-label" for="env-id">Environment ID</label>
+                      <input id="env-id" type="text" autocomplete="off" spellcheck="false">
+                    </div>
                   </div>
-                  <div class="field-help">Choosing a recent device hydrates the URL field and switches the target to Another device.</div>
-                </div>
-              </div>
-            </section>
-          </section>
-
-          <section class="section-group" aria-labelledby="share-section-title">
-            <div class="section-group-header">
-              <h2 id="share-section-title" class="section-group-title">Share</h2>
-              <div class="section-group-divider" aria-hidden="true"></div>
-            </div>
-            <section class="settings-card" id="share-card">
-              <div class="settings-card-header">
-                <div class="settings-card-header-copy">
-                  <div class="settings-card-kicker">Share This device</div>
-                  <div class="settings-card-title-row">
-                    <h2>Choose how This device is exposed</h2>
-                    <span class="settings-card-badge">This device</span>
+                  <div class="field">
+                    <label class="field-label" for="env-token">Environment token</label>
+                    <input id="env-token" type="password" autocomplete="off" spellcheck="false">
+                    <div class="field-help">These link fields are stored locally and only sent on the next successful This device start.</div>
                   </div>
-                  <p class="settings-card-description">Pick a privacy level first. Advanced Settings still owns the raw bind/password inputs when you need precise control.</p>
                 </div>
-              </div>
-              <div class="settings-card-body">
-                <fieldset class="field">
-                  <legend class="field-label">Visibility</legend>
-                  <div class="choice-grid">
-                    ${renderShareChoice('share-preset-this-device', 'this_device', 'Only this device', 'Keep the Local UI on a loopback-only dynamic port.')}
-                    ${renderShareChoice('share-preset-local-network', 'local_network', 'Local network', `Expose This device on ${DEFAULT_LOCAL_NETWORK_BIND} with an access password.`)}
-                    ${renderShareChoice('share-preset-custom', 'custom', 'Custom', 'Use a raw bind/password combination instead of the recommended presets.')}
+              </details>
+
+              <details id="advanced-troubleshooting"${advancedOpen ? ' open' : ''}>
+                <summary>
+                  <span>Advanced troubleshooting</span>
+                  <span class="summary-meta">Diagnostics and same-surface recovery</span>
+                </summary>
+                <div class="details-body">
+                  <p class="details-note">Use this section when This device startup or a remote device connection needs more context. The normal machine-selection flow still stays above.</p>
+                  <div id="diagnostics-panel" class="diagnostics"${issueDiagnostics ? '' : ' hidden'}>
+                    <div class="field">
+                      <label class="field-label" for="diagnostics-copy">Diagnostics</label>
+                      <input id="issue-target-url" type="text" value="${escapeHTML(issueTargetURL)}" hidden>
+                      <pre id="diagnostics-copy">${escapeHTML(issueDiagnostics)}</pre>
+                    </div>
+                    <div class="button-row">
+                      <button id="copy-diagnostics" type="button" class="button subtle">Copy diagnostics</button>
+                    </div>
                   </div>
-                </fieldset>
-
-                <div id="local-network-password-row" class="field" hidden>
-                  <label class="field-label" for="local-network-password">Access password</label>
-                  <input id="local-network-password" type="password" autocomplete="new-password" spellcheck="false" aria-describedby="local-network-password-help connection-error">
-                  <div id="local-network-password-help" class="field-help">Desktop generates a strong password automatically if you leave this blank while choosing Local network.</div>
+                  <p class="details-note">If you opened this screen from a legacy desktop command, you can still use it as the expert fallback without splitting the primary startup flow into another window.</p>
                 </div>
-
-                <div id="custom-bind-row" class="field" hidden>
-                  <label class="field-label" for="custom-local-ui-bind">Local UI bind address</label>
-                  <input id="custom-local-ui-bind" type="text" autocomplete="off" spellcheck="false" aria-describedby="custom-local-ui-bind-help connection-error">
-                  <div id="custom-local-ui-bind-help" class="field-help">Examples: <code>127.0.0.1:0</code>, <code>0.0.0.0:24000</code>, <code>192.168.1.11:24000</code>.</div>
-                </div>
-
-                <div id="custom-password-row" class="field" hidden>
-                  <label class="field-label" for="custom-local-ui-password">Access password</label>
-                  <input id="custom-local-ui-password" type="password" autocomplete="new-password" spellcheck="false" aria-describedby="custom-local-ui-password-help connection-error">
-                  <div id="custom-local-ui-password-help" class="field-help">Non-loopback binds require a password. Desktop passes it through the runtime environment instead of argv.</div>
-                </div>
-              </div>
-            </section>
-          </section>
-
-          <section class="section-group" aria-labelledby="link-section-title">
-            <div class="section-group-header">
-              <h2 id="link-section-title" class="section-group-title">Link</h2>
-              <div class="section-group-divider" aria-hidden="true"></div>
-            </div>
-            <section class="settings-card" id="link-card">
-              <div class="settings-card-header">
-                <div class="settings-card-header-copy">
-                  <div class="settings-card-kicker">Link This device</div>
-                  <div class="settings-card-title-row">
-                    <h2>Link This device to Redeven</h2>
-                    <span class="settings-card-badge">One-shot request</span>
-                  </div>
-                  <p class="settings-card-description">These details affect This device only. Desktop saves them as a one-shot request for the next successful This device start.</p>
-                </div>
-              </div>
-              <div class="settings-card-body">
-                <div id="link-state-note" class="card-inline-note">${escapeHTML(linkBody)}</div>
-
-                <div class="field">
-                  <label class="field-label" for="controlplane-url">Redeven URL</label>
-                  <input id="controlplane-url" type="url" autocomplete="url" inputmode="url" spellcheck="false" aria-describedby="connection-error">
-                </div>
-
-                <div class="field">
-                  <label class="field-label" for="env-id">Environment ID</label>
-                  <input id="env-id" type="text" autocomplete="off" spellcheck="false" aria-describedby="connection-error">
-                </div>
-
-                <div class="field">
-                  <label class="field-label" for="env-token">Environment token</label>
-                  <input id="env-token" type="password" autocomplete="off" spellcheck="false" aria-describedby="env-token-help connection-error">
-                  <div id="env-token-help" class="field-help">Desktop stores this secret locally and passes it through <code>--env-token-env</code> when the next This device start is launched.</div>
-                </div>
-              </div>
-            </section>
-          </section>
-
-          <div class="form-footer">
-            <div id="connection-error" class="error" role="alert" aria-live="assertive" tabindex="-1">${escapeHTML(error)}</div>
-            <div class="actions">
-              <button id="cancel" type="button">Cancel</button>
-              <button id="save" class="primary" type="submit">Open Selected Device</button>
+              </details>
             </div>
           </div>
-        </form>
-      </div>
+
+          <footer class="footer">
+            <div class="footer-copy">Desktop treats machine selection as the primary decision. Advanced fields stay secondary so startup always begins with the user’s intent.</div>
+            <button id="cancel" type="button" class="button danger">${escapeHTML(snapshot.cancel_label)}</button>
+          </footer>
+        </section>
+      </section>
     </main>
 
     <script id="redeven-connection-center-state" type="application/json">${serializeJSON(snapshot)}</script>
     <script>
       const snapshot = JSON.parse(document.getElementById('redeven-connection-center-state').textContent || '{}');
-      const form = document.getElementById('connection-form');
+      const defaultDraft = snapshot.draft || {};
       const errorEl = document.getElementById('connection-error');
-      const cancelButton = document.getElementById('cancel');
-      const saveButton = document.getElementById('save');
-      const targetStatusBadge = document.getElementById('target-status-badge');
-      const summaryTargetValue = document.getElementById('summary-target-value');
-      const summaryTargetBody = document.getElementById('summary-target-body');
-      const summaryShareValue = document.getElementById('summary-share-value');
-      const summaryShareBody = document.getElementById('summary-share-body');
-      const summaryLinkValue = document.getElementById('summary-link-value');
-      const summaryLinkBody = document.getElementById('summary-link-body');
-      const linkStateNote = document.getElementById('link-state-note');
-      const externalURLRow = document.getElementById('external-url-row');
-      const recentTargetsSection = document.getElementById('recent-targets');
-      const localNetworkPasswordRow = document.getElementById('local-network-password-row');
-      const customBindRow = document.getElementById('custom-bind-row');
-      const customPasswordRow = document.getElementById('custom-password-row');
+      const issueEl = document.getElementById('chooser-issue');
+      const diagnosticsPanel = document.getElementById('diagnostics-panel');
+      const diagnosticsCopyEl = document.getElementById('diagnostics-copy');
       const externalLocalUIURL = document.getElementById('external-local-ui-url');
       const localNetworkPassword = document.getElementById('local-network-password');
       const customLocalUIBind = document.getElementById('custom-local-ui-bind');
@@ -842,22 +899,22 @@ export function buildConnectionCenterPageHTML(
       const controlplaneURL = document.getElementById('controlplane-url');
       const envID = document.getElementById('env-id');
       const envToken = document.getElementById('env-token');
-      const targetKindInputs = Array.from(document.querySelectorAll('input[name="target_kind"]'));
       const sharePresetInputs = Array.from(document.querySelectorAll('input[name="share_preset"]'));
-      const recentTargetButtons = Array.from(document.querySelectorAll('[data-recent-url]'));
-      const defaultDraft = snapshot.draft || {};
-      const initialLocalNetworkBind = snapshot.share_preset === 'local_network' && typeof defaultDraft.local_ui_bind === 'string' && defaultDraft.local_ui_bind.trim() !== ''
+      const openThisDeviceButton = document.getElementById('open-this-device');
+      const openRemoteDeviceButton = document.getElementById('open-remote-device');
+      const cancelButton = document.getElementById('cancel');
+      const saveAndReturnButton = document.getElementById('save-and-return');
+      const recentDeviceButtons = Array.from(document.querySelectorAll('.recent-device-button'));
+      const localNetworkPasswordRow = document.getElementById('local-network-password-row');
+      const customBindRow = document.getElementById('custom-bind-row');
+      const copyDiagnosticsButton = document.getElementById('copy-diagnostics');
+      const initialLocalNetworkBind = snapshot.this_device_share_preset === 'local_network' && typeof defaultDraft.local_ui_bind === 'string' && defaultDraft.local_ui_bind.trim() !== ''
         ? defaultDraft.local_ui_bind
-        : ${serializeJSON(DEFAULT_LOCAL_NETWORK_BIND)};
-
-      function selectedTargetKind() {
-        const selected = targetKindInputs.find((input) => input.checked);
-        return selected ? selected.value : (defaultDraft.target_kind || 'managed_local');
-      }
+        : '${DEFAULT_LOCAL_NETWORK_BIND}';
 
       function selectedSharePreset() {
         const selected = sharePresetInputs.find((input) => input.checked);
-        return selected ? selected.value : (snapshot.share_preset || 'this_device');
+        return selected ? selected.value : (snapshot.this_device_share_preset || 'this_device');
       }
 
       function generatePassword() {
@@ -865,23 +922,32 @@ export function buildConnectionCenterPageHTML(
         const bytes = new Uint8Array(18);
         if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
           globalThis.crypto.getRandomValues(bytes);
-          return Array.from(bytes, (value) => alphabet[value % alphabet.length]).join('');
+        } else {
+          for (let index = 0; index < bytes.length; index += 1) {
+            bytes[index] = Math.floor(Math.random() * 255);
+          }
         }
-        return 'redeven-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        return Array.from(bytes, (value) => alphabet[value % alphabet.length]).join('');
       }
 
       function setError(text) {
-        errorEl.textContent = text;
-        errorEl.style.display = text ? 'block' : 'none';
+        errorEl.querySelector('.inline-error-body').textContent = text;
+        errorEl.hidden = !text;
         errorEl.setAttribute('aria-hidden', text ? 'false' : 'true');
         if (text) {
           queueMicrotask(() => errorEl.focus());
         }
       }
 
+      function syncShareMode() {
+        const preset = selectedSharePreset();
+        localNetworkPasswordRow.hidden = preset !== 'local_network';
+        customBindRow.hidden = preset !== 'custom';
+      }
+
       function ensureLocalNetworkPassword() {
         const clean = String(localNetworkPassword.value || '').trim();
-        if (clean !== '') {
+        if (clean) {
           return clean;
         }
         const generated = generatePassword();
@@ -889,152 +955,126 @@ export function buildConnectionCenterPageHTML(
         return generated;
       }
 
-      function anyLinkFieldsFilled() {
-        return [controlplaneURL, envID, envToken].some((input) => String(input.value || '').trim() !== '');
-      }
-
-      function syncTargetMode() {
-        const targetKind = selectedTargetKind();
-        const isExternal = targetKind === 'external_local_ui';
-        externalURLRow.hidden = !isExternal;
-        if (recentTargetsSection) {
-          recentTargetsSection.hidden = !isExternal || recentTargetButtons.length === 0;
-        }
-        targetStatusBadge.textContent = isExternal ? 'Another device' : 'This device';
-        targetStatusBadge.setAttribute('data-tone', isExternal ? 'external' : 'local');
-        summaryTargetValue.textContent = isExternal ? 'Another device' : 'This device';
-        summaryTargetBody.textContent = isExternal
-          ? (snapshot.current_target_kind === 'external_local_ui' && snapshot.current_local_ui_url
-            ? 'Redeven Desktop is currently pointed at ' + snapshot.current_local_ui_url + '.'
-            : 'Open another machine inside this Desktop shell by pointing at its Redeven Local UI URL.')
-          : (snapshot.current_target_kind === 'managed_local' && snapshot.current_local_ui_url
-            ? 'Redeven Desktop is currently serving This device from ' + snapshot.current_local_ui_url + '.'
-            : 'Start or attach to the bundled Redeven runtime on this machine.');
-        saveButton.textContent = isExternal ? 'Open Another Device' : 'Open This Device';
-      }
-
-      function syncShareMode() {
+      function buildDraft(targetKind, explicitExternalURL) {
         const sharePreset = selectedSharePreset();
-        const isLocalNetwork = sharePreset === 'local_network';
-        const isCustom = sharePreset === 'custom';
-        localNetworkPasswordRow.hidden = !isLocalNetwork;
-        customBindRow.hidden = !isCustom;
-        customPasswordRow.hidden = !isCustom;
-        if (isLocalNetwork) {
-          ensureLocalNetworkPassword();
-          summaryShareValue.textContent = 'Shared on your local network';
-          summaryShareBody.textContent = snapshot.current_target_kind === 'managed_local' && snapshot.current_local_ui_url
-            ? 'This device can be opened from another trusted machine through ' + snapshot.current_local_ui_url + '.'
-            : 'Desktop will expose This device on ${DEFAULT_LOCAL_NETWORK_BIND} with an access password.';
-          return;
-        }
-        if (isCustom) {
-          summaryShareValue.textContent = 'Custom sharing';
-          summaryShareBody.textContent = 'This device uses a custom Local UI bind or password setup. Advanced Settings remains available for raw editing.';
-          return;
-        }
-        summaryShareValue.textContent = 'Private to this device';
-        summaryShareBody.textContent = 'Desktop keeps This device on a loopback-only dynamic port until you choose to share it.';
-      }
-
-      function syncLinkPreview() {
-        if (anyLinkFieldsFilled()) {
-          summaryLinkValue.textContent = 'Queued for next start';
-          summaryLinkBody.textContent = 'Desktop will queue a one-shot Redeven link request for the next successful This device start after all three fields are present.';
-          linkStateNote.textContent = 'These values apply to This device only and stay saved until the next successful This device start consumes them.';
-          return;
-        }
-        summaryLinkValue.textContent = ${serializeJSON(linkValue)};
-        summaryLinkBody.textContent = ${serializeJSON(linkBody)};
-        linkStateNote.textContent = ${serializeJSON(linkBody)};
-      }
-
-      function buildDraft() {
-        const sharePreset = selectedSharePreset();
-        let localUIBind = '127.0.0.1:0';
-        let localUIPassword = '';
-        if (sharePreset === 'local_network') {
+        let localUIBind = String(defaultDraft.local_ui_bind || '127.0.0.1:0');
+        let localUIPassword = String(defaultDraft.local_ui_password || '');
+        if (sharePreset === 'this_device') {
+          localUIBind = '127.0.0.1:0';
+          localUIPassword = '';
+        } else if (sharePreset === 'local_network') {
           localUIBind = initialLocalNetworkBind;
           localUIPassword = ensureLocalNetworkPassword();
-        } else if (sharePreset === 'custom') {
+        } else {
           localUIBind = String(customLocalUIBind.value || '').trim();
           localUIPassword = String(customLocalUIPassword.value || '');
         }
 
         return {
-          target_kind: selectedTargetKind(),
-          external_local_ui_url: String(externalLocalUIURL.value || '').trim(),
+          target_kind: targetKind,
+          external_local_ui_url: String(explicitExternalURL || '').trim(),
           local_ui_bind: localUIBind,
           local_ui_password: localUIPassword,
           controlplane_url: String(controlplaneURL.value || '').trim(),
           env_id: String(envID.value || '').trim(),
-          env_token: String(envToken.value || '').trim(),
+          env_token: String(envToken.value || ''),
         };
       }
 
-      targetKindInputs.forEach((input) => {
-        input.checked = input.value === (defaultDraft.target_kind || snapshot.current_target_kind || 'managed_local');
-        input.addEventListener('change', syncTargetMode);
-      });
+      async function persistDraft(draft) {
+        if (!window.redevenDesktopSettings || typeof window.redevenDesktopSettings.save !== 'function') {
+          setError('Redeven Desktop settings bridge is unavailable in this window.');
+          return;
+        }
+        setError('');
+        const result = await window.redevenDesktopSettings.save(draft);
+        if (!result || result.ok !== true) {
+          setError(result && result.error ? result.error : 'Redeven Desktop could not save this request.');
+        }
+      }
+
+      async function saveAndReturn() {
+        if (!snapshot.active_session_target_kind) {
+          return;
+        }
+        const externalURL = snapshot.active_session_target_kind === 'external_local_ui'
+          ? (snapshot.active_session_local_ui_url || defaultDraft.external_local_ui_url || '')
+          : '';
+        await persistDraft(buildDraft(snapshot.active_session_target_kind, externalURL));
+      }
+
+      async function copyDiagnostics() {
+        const diagnosticsText = String(diagnosticsCopyEl ? diagnosticsCopyEl.textContent || '' : '').trim();
+        if (!diagnosticsText) {
+          return;
+        }
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(diagnosticsText);
+          return;
+        }
+        const selection = document.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(diagnosticsCopyEl);
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.execCommand('copy');
+        selection.removeAllRanges();
+      }
+
       sharePresetInputs.forEach((input) => {
-        input.checked = input.value === (snapshot.share_preset || 'this_device');
+        input.checked = input.value === (snapshot.this_device_share_preset || 'this_device');
         input.addEventListener('change', syncShareMode);
       });
-      recentTargetButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-          const targetURL = button.getAttribute('data-recent-url') || '';
-          const externalInput = targetKindInputs.find((input) => input.value === 'external_local_ui');
-          if (externalInput) {
-            externalInput.checked = true;
-          }
-          externalLocalUIURL.value = targetURL;
-          syncTargetMode();
-          externalLocalUIURL.focus();
-        });
-      });
 
-      externalLocalUIURL.value = String(defaultDraft.external_local_ui_url || '');
-      if (snapshot.share_preset === 'local_network') {
-        localNetworkPassword.value = String(defaultDraft.local_ui_password || '');
-      } else if (snapshot.share_preset === 'custom') {
-        customLocalUIBind.value = String(defaultDraft.local_ui_bind || '');
-        customLocalUIPassword.value = String(defaultDraft.local_ui_password || '');
-      } else {
-        customLocalUIBind.value = String(defaultDraft.local_ui_bind || '127.0.0.1:0');
-      }
+      localNetworkPassword.value = snapshot.this_device_share_preset === 'local_network'
+        ? String(defaultDraft.local_ui_password || '')
+        : '';
+      customLocalUIBind.value = snapshot.this_device_share_preset === 'custom'
+        ? String(defaultDraft.local_ui_bind || '')
+        : '';
+      customLocalUIPassword.value = snapshot.this_device_share_preset === 'custom'
+        ? String(defaultDraft.local_ui_password || '')
+        : '';
       controlplaneURL.value = String(defaultDraft.controlplane_url || '');
       envID.value = String(defaultDraft.env_id || '');
       envToken.value = String(defaultDraft.env_token || '');
 
-      [controlplaneURL, envID, envToken].forEach((input) => input.addEventListener('input', syncLinkPreview));
+      syncShareMode();
+
+      openThisDeviceButton.addEventListener('click', () => {
+        void persistDraft(buildDraft('managed_local', ''));
+      });
+      openRemoteDeviceButton.addEventListener('click', () => {
+        void persistDraft(buildDraft('external_local_ui', externalLocalUIURL.value));
+      });
+      if (saveAndReturnButton) {
+        saveAndReturnButton.addEventListener('click', () => {
+          void saveAndReturn();
+        });
+      }
+      recentDeviceButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const recentURL = button.getAttribute('data-recent-url') || '';
+          externalLocalUIURL.value = recentURL;
+          void persistDraft(buildDraft('external_local_ui', recentURL));
+        });
+      });
       cancelButton.addEventListener('click', () => {
         window.redevenDesktopSettings.cancel();
       });
+      if (copyDiagnosticsButton) {
+        copyDiagnosticsButton.addEventListener('click', () => {
+          void copyDiagnostics();
+        });
+      }
 
-      form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        setError('');
-        saveButton.disabled = true;
-        try {
-          const result = await window.redevenDesktopSettings.save(buildDraft());
-          if (!result || !result.ok) {
-            setError(result && result.error ? result.error : 'Failed to save connection settings.');
-            return;
-          }
-        } catch (error) {
-          setError(error instanceof Error ? error.message : String(error));
-        } finally {
-          saveButton.disabled = false;
-        }
-      });
-
-      syncTargetMode();
-      syncShareMode();
-      syncLinkPreview();
-      if (errorEl.textContent.trim() !== '') {
+      if (!diagnosticsPanel.hidden) {
+        document.getElementById('advanced-troubleshooting').open = true;
+      }
+      if (issueEl && !issueEl.hidden && issueEl.textContent.trim() !== '') {
+        queueMicrotask(() => issueEl.focus());
+      } else if (!errorEl.hidden && errorEl.textContent.trim() !== '') {
         queueMicrotask(() => errorEl.focus());
-      } else {
-        queueMicrotask(() => document.getElementById('connection-center-main')?.focus());
       }
     </script>
   </body>
@@ -1046,5 +1086,5 @@ export function connectionCenterPageDataURL(
   errorMessage = '',
   platform: NodeJS.Platform = process.platform,
 ): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(buildConnectionCenterPageHTML(snapshot, errorMessage, platform))}`;
+  return `data:text/html;charset=UTF-8,${encodeURIComponent(buildConnectionCenterPageHTML(snapshot, errorMessage, platform))}`;
 }

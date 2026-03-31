@@ -19,10 +19,12 @@ describe('desktopShellBridge', () => {
     expect(desktopShellBridgeAvailable()).toBe(false);
   });
 
-  it('prefers the canonical connection-center and advanced-settings bridge methods', async () => {
+  it('prefers the canonical chooser and advanced bridge methods', async () => {
+    const openDeviceChooserBridge = vi.fn().mockResolvedValue(undefined);
     const openConnectionCenterBridge = vi.fn().mockResolvedValue(undefined);
     const openAdvancedSettingsBridge = vi.fn().mockResolvedValue(undefined);
     window.redevenDesktopShell = {
+      openDeviceChooser: openDeviceChooserBridge,
       openConnectionCenter: openConnectionCenterBridge,
       openAdvancedSettings: openAdvancedSettingsBridge,
     };
@@ -31,14 +33,17 @@ describe('desktopShellBridge', () => {
     await expect(openConnectionCenter()).resolves.toBe(true);
     await expect(openAdvancedSettings()).resolves.toBe(true);
 
-    expect(openConnectionCenterBridge).toHaveBeenCalledTimes(1);
+    expect(openDeviceChooserBridge).toHaveBeenCalledTimes(1);
+    expect(openConnectionCenterBridge).toHaveBeenCalledTimes(0);
     expect(openAdvancedSettingsBridge).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to the legacy aliases for compatibility', async () => {
+  it('falls back to switch-device and legacy aliases for compatibility', async () => {
+    const switchDeviceBridge = vi.fn().mockResolvedValue(undefined);
     const openConnectToRedevenBridge = vi.fn().mockResolvedValue(undefined);
     const openDesktopSettingsBridge = vi.fn().mockResolvedValue(undefined);
     window.redevenDesktopShell = {
+      switchDevice: switchDeviceBridge,
       openConnectToRedeven: openConnectToRedevenBridge,
       openDesktopSettings: openDesktopSettingsBridge,
     };
@@ -47,7 +52,8 @@ describe('desktopShellBridge', () => {
     await expect(openDesktopConnectToRedeven()).resolves.toBe(true);
     await expect(openDesktopSettings()).resolves.toBe(true);
 
-    expect(openConnectToRedevenBridge).toHaveBeenCalledTimes(1);
+    expect(switchDeviceBridge).toHaveBeenCalledTimes(1);
+    expect(openConnectToRedevenBridge).toHaveBeenCalledTimes(0);
     expect(openDesktopSettingsBridge).toHaveBeenCalledTimes(1);
   });
 });

@@ -13,6 +13,8 @@ describe('desktop persistence wiring', () => {
 
     expect(preloadSrc).toContain("import { bootstrapDesktopAskFlowerHandoffBridge } from './askFlowerHandoff';");
     expect(preloadSrc).toContain('bootstrapDesktopAskFlowerHandoffBridge();');
+    expect(preloadSrc).toContain("import { bootstrapDesktopSettingsBridge } from './desktopSettingsBridge';");
+    expect(preloadSrc).toContain('bootstrapDesktopSettingsBridge();');
     expect(preloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
     expect(preloadSrc).toContain('bootstrapDesktopShellBridge();');
     expect(preloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
