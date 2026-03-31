@@ -21,7 +21,7 @@ describe('GitHistoryModeSwitch', () => {
   it('wraps the disabled Git mode button with a tooltip that explains why it is unavailable', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const disabledReason = 'Git is not installed or not available in PATH on this agent.';
+    const disabledReason = 'Git is not installed or not available in PATH on this runtime host.';
 
     const dispose = render(() => (
       <GitHistoryModeSwitch

@@ -68,19 +68,19 @@ export function AgentUpdateFloatingPrompt(props: AgentUpdateFloatingPromptProps)
   const position = createMemo(() => resolveWindowPosition(viewport()));
   const width = createMemo(() => resolveWindowWidth(viewport()));
   const title = createMemo(() => {
-    if (props.mode === 'updating') return 'Updating agent';
+    if (props.mode === 'updating') return 'Updating Redeven';
     if (props.mode === 'failed') return 'Update failed';
     return 'Update available';
   });
 
   const description = createMemo(() => {
     if (props.mode === 'updating') {
-      return props.stage || 'Restarting agent...';
+      return props.stage || 'Restarting runtime...';
     }
     if (props.mode === 'failed') {
       return props.error || 'The update could not be completed. You can retry now or skip this version.';
     }
-    return 'A newer recommended agent version is ready for this environment.';
+    return 'A newer recommended Redeven version is ready for this environment.';
   });
 
   const footer = createMemo(() => {
@@ -182,7 +182,7 @@ export function AgentUpdateFloatingPrompt(props: AgentUpdateFloatingPromptProps)
 
           <Show when={props.mode === 'updating'}>
             <div class="rounded-lg border border-border/70 bg-primary/5 px-3 py-2 text-xs leading-5 text-primary">
-              The update runs online and the page will reconnect to the new agent automatically.
+              The update runs online and the page will reconnect to the updated runtime automatically.
             </div>
           </Show>
 

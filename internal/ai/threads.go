@@ -334,8 +334,8 @@ func validateThreadWorkingDir(workingDir string, agentHomeDir string) (string, e
 		switch {
 		case msg == "path must be absolute":
 			return "", errors.New("working_dir must be absolute")
-		case msg == "path escapes agent home":
-			return "", errors.New("working_dir must stay within agent home")
+		case msg == "path escapes runtime home directory":
+			return "", errors.New("working_dir must stay within the runtime home directory")
 		case errors.Is(err, os.ErrNotExist):
 			return "", errors.New("working_dir does not exist")
 		case msg == "path must be a directory":

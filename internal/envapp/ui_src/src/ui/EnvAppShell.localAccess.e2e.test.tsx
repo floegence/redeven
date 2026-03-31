@@ -290,7 +290,7 @@ beforeEach(() => {
   unlockGatewayAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
   getEnvironmentMock.mockResolvedValue({
     public_id: 'env_local',
-    name: 'Local agent',
+    name: 'Local runtime',
     namespace_public_id: 'ns_local',
     status: 'online',
     lifecycle_status: 'running',
@@ -307,7 +307,7 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell top bar affordances', () => {
-  it('renders Agent Settings as the bottom activity action label', async () => {
+  it('renders Runtime Settings as the bottom activity action label', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -317,7 +317,7 @@ describe('EnvAppShell top bar affordances', () => {
     try {
       await flushAsync();
       await flushAsync();
-      expect(host.textContent).toContain('Agent Settings');
+      expect(host.textContent).toContain('Runtime Settings');
     } finally {
       dispose();
     }
@@ -406,7 +406,7 @@ describe('EnvAppShell local access gate', () => {
 
       expect(host.textContent).toContain('Preparing secure access');
       expect(host.textContent).toContain('Checking secure access...');
-      expect(host.textContent).not.toContain('Unlock local agent');
+      expect(host.textContent).not.toContain('Unlock local runtime');
       expect(host.querySelector('input[type="password"]')).toBeFalsy();
       expect(connectMock).not.toHaveBeenCalled();
 
@@ -414,14 +414,14 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.textContent).toContain('Unlock local agent');
+      expect(host.textContent).toContain('Unlock local runtime');
       expect(host.querySelector('input[type="password"]')).toBeTruthy();
     } finally {
       dispose();
     }
   });
 
-  it('waits for password unlock before connecting the local agent', async () => {
+  it('waits for password unlock before connecting the local runtime', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -431,7 +431,7 @@ describe('EnvAppShell local access gate', () => {
     try {
       await flushAsync();
 
-      expect(host.textContent).toContain('Unlock local agent');
+      expect(host.textContent).toContain('Unlock local runtime');
       expect(connectMock).not.toHaveBeenCalled();
       expect(mintLocalDirectConnectInfoMock).not.toHaveBeenCalled();
 
@@ -467,7 +467,7 @@ describe('EnvAppShell local access gate', () => {
       expect(mintLocalDirectConnectInfoMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();
       expect(resumeCalls).toEqual([]);
-      expect(host.textContent).not.toContain('Unlock local agent');
+      expect(host.textContent).not.toContain('Unlock local runtime');
       expect(host.textContent).toContain('activity main');
       expect(host.textContent).not.toContain('Preparing secure session');
     } finally {
@@ -496,7 +496,7 @@ describe('EnvAppShell local access gate', () => {
       expect(input).toBeTruthy();
       expect(input?.getAttribute('aria-describedby')).toContain('redeven-access-password-help');
       expect(help?.textContent).toContain('Use the full Local UI password');
-      expect(notice?.textContent).toContain('Password verification stays inside the agent-managed session');
+      expect(notice?.textContent).toContain('Password verification stays inside the runtime-managed session');
 
       input!.value = 'bad-secret';
       input!.dispatchEvent(new Event('input', { bubbles: true }));
@@ -528,7 +528,7 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.textContent).not.toContain('Unlock local agent');
+      expect(host.textContent).not.toContain('Unlock local runtime');
       expect(host.querySelector('input[type="password"]')).toBeFalsy();
       expect(connectMock).toHaveBeenCalledTimes(1);
       expect(unlockLocalAccessMock).not.toHaveBeenCalled();
@@ -587,7 +587,7 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(host.textContent).toContain('Preparing secure access');
       expect(host.textContent).toContain('Checking secure access...');
-      expect(host.textContent).not.toContain('Unlock agent');
+      expect(host.textContent).not.toContain('Unlock runtime');
       expect(host.querySelector('input[type="password"]')).toBeFalsy();
       expect(connectMock).not.toHaveBeenCalled();
 
@@ -595,7 +595,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.textContent).toContain('Unlock agent');
+      expect(host.textContent).toContain('Unlock runtime');
       expect(host.querySelector('input[type="password"]')).toBeTruthy();
     } finally {
       dispose();
@@ -792,7 +792,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
-      expect(host.textContent).toContain('Unlock agent');
+      expect(host.textContent).toContain('Unlock runtime');
       expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
       expect(host.querySelector('input[type="password"]')).toBeTruthy();
     } finally {
@@ -800,7 +800,7 @@ describe('EnvAppShell remote access gate', () => {
     }
   });
 
-  it('waits for password unlock before connecting the remote agent', async () => {
+  it('waits for password unlock before connecting the remote runtime', async () => {
     getLocalRuntimeMock.mockResolvedValue(null);
     getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
 
@@ -813,7 +813,7 @@ describe('EnvAppShell remote access gate', () => {
     try {
       await flushAsync();
 
-      expect(host.textContent).toContain('Unlock agent');
+      expect(host.textContent).toContain('Unlock runtime');
       expect(connectMock).not.toHaveBeenCalled();
       expect(getEnvironmentMock).not.toHaveBeenCalled();
 
@@ -846,7 +846,7 @@ describe('EnvAppShell remote access gate', () => {
       });
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(host.textContent).toContain('activity main');
-      expect(host.textContent).not.toContain('Unlock agent');
+      expect(host.textContent).not.toContain('Unlock runtime');
     } finally {
       dispose();
     }
@@ -867,7 +867,7 @@ describe('EnvAppShell remote access gate', () => {
     getEnvironmentMock
       .mockResolvedValueOnce({
         public_id: 'env_demo',
-        name: 'Remote agent',
+        name: 'Remote runtime',
         namespace_public_id: 'ns_remote',
         status: 'offline',
         lifecycle_status: 'running',
@@ -875,7 +875,7 @@ describe('EnvAppShell remote access gate', () => {
       })
       .mockResolvedValueOnce({
         public_id: 'env_demo',
-        name: 'Remote agent',
+        name: 'Remote runtime',
         namespace_public_id: 'ns_remote',
         status: 'online',
         lifecycle_status: 'running',
@@ -892,7 +892,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.textContent).toContain('Waiting for agent');
+      expect(host.textContent).toContain('Waiting for runtime');
       expect(findButtonByText(host, 'Retry now')).toBeTruthy();
 
       await vi.advanceTimersByTimeAsync(2_000);

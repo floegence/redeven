@@ -330,7 +330,7 @@ describe('EnvAppShell desktop Ask Flower handoff', () => {
 
       envDeferred.resolve({
         public_id: 'env_local',
-        name: 'Local agent',
+        name: 'Local runtime',
         namespace_public_id: 'ns_local',
         status: 'online',
         lifecycle_status: 'running',

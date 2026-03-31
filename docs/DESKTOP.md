@@ -13,13 +13,13 @@ This document describes the public Electron desktop shell that is published toge
 
 - Electron is a thin shell.
 - `redeven run --mode desktop --desktop-managed` remains the only runtime entrypoint.
-- Desktop-owned startup settings are stored separately from agent runtime state, so the shell can control launch arguments without introducing a second runtime.
+- Desktop-owned startup settings are stored separately from runtime state, so the shell can control launch arguments without introducing a second runtime.
 - Desktop can either:
   - target `This device` and use the bundled runtime flow
   - target `External Redeven` and open another machine's Local UI directly
 - The desktop shell waits for a machine-readable desktop launch report file from `redeven`.
-- If a compatible Local UI instance is already running from the same default state directory, the desktop shell reuses that reported Local UI URL instead of failing on the agent lock.
-- If the default state directory is locked by another agent without an attachable Local UI, the desktop shell stays open and renders a blocked page instead of crashing with raw stderr.
+- If a compatible Local UI instance is already running from the same default state directory, the desktop shell reuses that reported Local UI URL instead of failing on the state-directory lock.
+- If the default state directory is locked by another runtime instance without an attachable Local UI, the desktop shell stays open and renders a blocked page instead of crashing with raw stderr.
 - Electron only allows navigation to the exact reported Local UI origin (`localhost` / loopback / explicit local IP) and opens all other URLs in the system browser.
 - Desktop exposes:
   - a native `Connect to Redeven...` menu entry for target selection
@@ -56,15 +56,15 @@ Behavior:
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
 - Desktop-managed inline bootstrap keeps the default logging baseline at `info` instead of inheriting a stale `debug` level implicitly.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
-- Desktop-managed startup settings do not create a separate agent state directory; `~/.redeven` remains the runtime source of truth.
+- Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
 
 When the desktop target is `External Redeven`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 
 The ready/attached startup payload also carries:
 
-- `state_dir`: the runtime state directory used by the current agent instance
-- `diagnostics_enabled`: whether the agent debug-console runtime collector is active for this launch
+- `state_dir`: the runtime state directory used by the current runtime instance
+- `diagnostics_enabled`: whether the runtime debug-console collector is active for this launch
 
 ### Launch outcomes
 
@@ -72,7 +72,7 @@ The launch report distinguishes these outcomes:
 
 - `ready`: the spawned desktop-managed process started Local UI successfully
 - `attached`: the desktop shell found an attachable Local UI from the same state directory and reuses it
-- `blocked`: another agent owns the same state directory, but Desktop cannot attach to a Local UI from it
+- `blocked`: another runtime instance owns the same state directory, but Desktop cannot attach to a Local UI from it
 
 The first stable blocked code is:
 
@@ -117,7 +117,7 @@ Desktop settings live under the Electron user data directory, not inside the git
 
 - `Connect to Redeven...` from the native app menu opens the target selection flow.
 - `Desktop Settings...` opens the desktop startup/settings window.
-- Desktop intentionally keeps connection targeting separate from `Desktop Settings...` so shell-owned startup state does not collide with Env App `Agent Settings`.
+- Desktop intentionally keeps connection targeting separate from `Desktop Settings...` so shell-owned startup state does not collide with Env App `Runtime Settings`.
 - The blocked page routes to either `Connect to Redeven` or `Desktop Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
 
 ## Accessibility behavior
@@ -142,8 +142,8 @@ Desktop-specific outcomes from this implementation:
 ## Env App behavior
 
 - Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, and `remote_enabled` through the local runtime/version endpoints.
-- Env App hides `Update agent` in desktop-managed runs.
-- Env App keeps `Restart agent`.
+- Env App hides `Update Redeven` in desktop-managed runs.
+- Env App keeps `Restart runtime`.
 - The maintenance card explains that updates must come from a new desktop release.
 - Desktop-managed Env App windows can reopen selected serialized surfaces as dedicated BrowserWindow instances instead of in-page overlays. The first detached surfaces are `File Preview` and the AI page `File Browser`, both reconstructed from query-driven scene state while keeping the same Local UI + Flowersec session contract.
 - Desktop records Chromium-side request diagnostics into `<state_dir>/diagnostics/desktop-events.jsonl` while attached to a Local UI runtime that exposes diagnostics.

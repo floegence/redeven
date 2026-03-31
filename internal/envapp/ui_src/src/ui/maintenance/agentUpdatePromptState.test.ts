@@ -59,7 +59,7 @@ describe('agentUpdatePromptState', () => {
     });
   });
 
-  it('suppresses prompting when access gate is closed, user is non-admin, agent is offline, stale or disconnected', () => {
+  it('suppresses prompting when access gate is closed, user is non-admin, the runtime is offline, stale or disconnected', () => {
     const base = {
       accessGateVisible: false,
       isLocalMode: false,

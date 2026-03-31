@@ -81,7 +81,7 @@ func (c *cli) searchCmd(args []string) int {
 	}
 	if strings.TrimSpace(key) == "" {
 		fmt.Fprintf(c.stderr, "missing web search api key for provider %q\n", providerID)
-		fmt.Fprintf(c.stderr, "Hint: set REDEVEN_BRAVE_API_KEY (or BRAVE_API_KEY), or configure it in the agent Settings.\n")
+		fmt.Fprintf(c.stderr, "Hint: set REDEVEN_BRAVE_API_KEY (or BRAVE_API_KEY), or configure it in Runtime Settings.\n")
 		return 1
 	}
 

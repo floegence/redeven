@@ -4,8 +4,8 @@ Redeven can optionally enable **Flower**, an on-device AI assistant inside the E
 
 High-level design:
 
-- The browser UI calls the agent via the existing `/_redeven_proxy/api/ai/*` gateway routes (still over Flowersec E2EE proxy).
-- The **Go agent is the security boundary** and executes tools after validating authoritative session metadata.
+- The browser UI calls the runtime via the existing `/_redeven_proxy/api/ai/*` gateway routes (still over Flowersec E2EE proxy).
+- The **Go runtime is the security boundary** and executes tools after validating authoritative session metadata.
 - Tooling follows a shell-first workflow: `terminal.exec` for investigation and verification, `apply_patch` in canonical Begin/End Patch format for file edits.
 - LLM orchestration runs in the **Go runtime** via native provider SDK adapters:
   - OpenAI: `openai-go` (Responses API)
@@ -19,7 +19,7 @@ High-level design:
 
 ## Configuration
 
-Enable Flower by adding an `ai` section to the agent config file (default: `~/.redeven/config.json`).
+Enable Flower by adding an `ai` section to the runtime config file (default: `~/.redeven/config.json`).
 
 Notes:
 
@@ -32,7 +32,7 @@ Notes:
 API keys:
 
 - Keys are stored in `~/.redeven/secrets.json` (chmod `0600`) and never returned in plaintext.
-- You can configure keys from the Env App UI: Agent Settings → Flower → Provider → API key.
+- You can configure keys from the Env App UI: Runtime Settings → Flower → Provider → API key.
 - Multiple provider keys can be stored at the same time (keyed by `providers[].id`).
 - At runtime, Go resolves the provider key from local secrets per run and injects it directly into the provider SDK client.
 
@@ -169,8 +169,8 @@ Behavior summary:
 - Thread runtime metadata also carries `last_context_run_id`, which identifies the latest run whose persisted context telemetry should be recoverable after the live run has already ended.
 - Empty thread titles stay empty until a dedicated auto-title generator summarizes public user intent; persisting the raw first user message as `title` is not allowed.
 - Auto titles are generated from public user-visible text only, recorded with title metadata (`title_source`, input message id, model id, prompt version), and may only fill a still-untitled thread.
-- Auto-title generation is a single-purpose background flow with bounded retry backoff. Inside one generation pass, the agent may retry once with a larger output budget when a reasoning-heavy model exhausts the first budget before emitting visible JSON title text; if three generation passes still fail, the agent should stop provider retries, fall back to a truncated first user message as a temporary title, and allow a later user message in that thread to trigger a fresh auto-title attempt.
-- Service startup performs a recovery scan for recent still-untitled threads and re-enqueues title generation from the latest persisted public user message, so an agent restart does not strand blank titles.
+- Auto-title generation is a single-purpose background flow with bounded retry backoff. Inside one generation pass, the runtime may retry once with a larger output budget when a reasoning-heavy model exhausts the first budget before emitting visible JSON title text; if three generation passes still fail, the runtime should stop provider retries, fall back to a truncated first user message as a temporary title, and allow a later user message in that thread to trigger a fresh auto-title attempt.
+- Service startup performs a recovery scan for recent still-untitled threads and re-enqueues title generation from the latest persisted public user message, so a runtime restart does not strand blank titles.
 - Manual rename always wins. Once a thread is manually renamed, later automatic generation must not overwrite that user-owned title state, even if the user intentionally renamed it to blank.
 - no-tool backpressure defaults to 3 rounds, but active guided structured continuations may jump directly into a signal-only recovery turn (`ask_user` / `task_complete`) once the threshold is hit so Flower does not waste another generic text-only round.
 - Runtime observability for these fast paths should stay explicit through `interaction.contract.classified.classification_mode`, `ask_user.attempt.validation_mode`, and `signal.recovery.attempt`.

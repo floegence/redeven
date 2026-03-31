@@ -48,7 +48,7 @@ type Options struct {
 	Diagnostics             *diagnostics.Store
 	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	ResolveSessionTunnelURL func(channelID string) (string, bool)
-	// ConfigPath is the absolute path to the agent config file.
+	// ConfigPath is the absolute path to the runtime config file.
 	// It is used to read and persist settings updates initiated from the Env App UI.
 	ConfigPath string
 	// SecretsStore holds user-managed secrets (such as AI provider API keys).
@@ -1237,7 +1237,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if len(body.Codex) > 0 {
 			writeJSON(w, http.StatusBadRequest, apiResp{
 				OK:    false,
-				Error: "Codex is host-managed and cannot be configured from Agent Settings. Install and configure `codex` on the host machine instead.",
+				Error: "Codex is host-managed and cannot be configured from Runtime Settings. Install and configure `codex` on the host machine instead.",
 			})
 			return
 		}

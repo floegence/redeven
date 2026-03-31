@@ -27,7 +27,7 @@ Flower deliberately splits non-secret settings and secrets into two local files:
    - provider API keys
    - future user secrets
 
-The UI never receives stored plaintext secrets back from the agent. It only gets derived state such as `key_set=true`.
+The UI never receives stored plaintext secrets back from the runtime. It only gets derived state such as `key_set=true`.
 
 ## 2. Provider registry
 
@@ -89,7 +89,7 @@ For each run the Go runtime:
 
 ## 5. UI behavior
 
-Current Agent Settings UI behavior is:
+Current Runtime Settings UI behavior is:
 
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
@@ -130,4 +130,4 @@ Current behavior:
 - Execution mode is stored per thread and enforced server-side.
 - If a task in `plan` requires edits, Flower must ask for a mode switch when interaction is allowed.
 
-The execution-policy UI is exposed under Agent Settings → Flower → Execution policy.
+The execution-policy UI is exposed under Runtime Settings → Flower → Execution policy.

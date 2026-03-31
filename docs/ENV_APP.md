@@ -4,11 +4,11 @@ This document describes the **Env App** implementation in the Redeven runtime.
 
 Key points:
 
-- The Env App UI is **agent-bundled** (built + embedded into the agent binary).
+- The Env App UI is **runtime-bundled** (built + embedded into the Redeven runtime binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex).
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
-- Agent Settings -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in agent settings.
+- Runtime Settings -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in runtime settings.
 - The Codex sidebar/page use floe-webapp layout and form primitives for visual consistency, but Codex state, icon assets, thread navigation, transcript projection, and request handling stay implemented as a separate surface rather than as Flower extensions.
 - Shared highlight/callout visuals should continue to flow from released floe-webapp tokens. The product-owned Env App must not re-theme generic accent tokens just to deepen `HighlightBlock`, because that would recouple unrelated shared primitives.
 - The Codex surface is structured as a dedicated conversation navigator plus chat shell, intentionally following the same high-level sidebar + transcript + bottom composer rhythm as Flower while keeping the implementation fully Codex-local.
@@ -20,13 +20,13 @@ Key points:
 - Codex markdown keeps the existing standard-link and local-file-reference DOM structure, preserves local file-reference labels that include embedded line anchors such as `CODEX_UI.md#L121`, and consumes the shared floe-webapp file-reference chip styling instead of maintaining a Codex-only outline variant.
 - Env App owns a root-scoped paired surface/stroke theme contract: `--redeven-surface-panel*` defines the standard light/dark panel family, matching `--redeven-stroke-*` tokens define panel, overlay, control, and divider borders, and shared `card` / `popover` surfaces plus Flower chat consume that same contract so body portals and in-tree panels stay visually aligned.
 - Flower chat keeps model-picking scope explicit: the draft chat picker updates the default model for future new chats, active unlocked threads edit only their own thread model, and locked threads show a read-only model badge instead of a misleading editable control.
-- Flower thread history keeps the chat `title` separate from the latest `last_message_preview` snippet: untitled chats render as `New chat` until the agent later writes a generated title, while the preview line continues to reflect the newest visible message text.
+- Flower thread history keeps the chat `title` separate from the latest `last_message_preview` snippet: untitled chats render as `New chat` until the runtime later writes a generated title, while the preview line continues to reflect the newest visible message text.
 - Flower thread runtime metadata also records `last_context_run_id`, letting completed chats recover the latest context summary without depending on transient live-run state in the current page session.
-- Flower auto titles are best-effort but resilient: the agent retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, falls back to a truncated first user message after three failed generation passes, and also recovers recent untitled threads after restart, so users should see a usable title appear without manual refresh or rename in normal cases.
+- Flower auto titles are best-effort but resilient: the runtime retries transient generation failures in the background, can expand the title-generation output budget once for reasoning-heavy models, falls back to a truncated first user message after three failed generation passes, and also recovers recent untitled threads after restart, so users should see a usable title appear without manual refresh or rename in normal cases.
 - File Browser keeps Monaco as the single text surface for both preview and edit, so read-only and editable text/code views stay visually and behaviorally aligned without branching on syntax-support gaps.
 - When a supported code file switches from read-only preview into Edit mode, Env App intentionally remounts the Monaco instance instead of only flipping `readOnly`; this lifecycle boundary prevents stale preview state from leaking into editability.
 - If Monaco cannot start while the user is entering Edit mode, Env App shows an explicit editor-unavailable state instead of silently dropping back to a fake editable fallback.
-- When the environment grants `can_write`, text previews can switch into Monaco-backed edit mode and save changes back through the agent file RPC.
+- When the environment grants `can_write`, text previews can switch into Monaco-backed edit mode and save changes back through the runtime file RPC.
 - File Browser directory context menus can hand off into Terminal by opening the terminal page and creating a new session rooted at the selected directory.
 - Terminal session creation is dormant-first: `createSession` records the logical session, the first terminal attach starts the PTY with the measured viewport, and the terminal surface performs one explicit post-attach resize confirmation after mount so remote size converges to the settled visible viewport instead of a provisional fallback.
 - Terminal size handoff is focus-driven after attach: when multiple surfaces can reopen the same session, only the focused surface is allowed to emit remote resize updates, and regaining focus re-fits plus re-emits the settled viewport so the active surface can reclaim remote PTY ownership from a previously active narrower or wider surface.
@@ -35,7 +35,7 @@ Key points:
 - Env App right-click menus that expose cross-surface handoff actions keep a shared priority order: `Ask Flower` first, `Open in Terminal` second when present, `Browse files` next when present, then a separator before any remaining actions.
 - Git browser cards now follow the same helper-action ordering where it makes semantic sense: `Changes` exposes `Ask Flower`, `Open in Terminal`, and `Browse Files`; `Branches` exposes directory handoffs only when the selected branch resolves to a checked-out worktree; `Graph` exposes commit-scoped `Ask Flower` plus `Switch --detach here`, branch-history commit detail exposes the same detach action, and detached repository chrome now shows explicit `Detached HEAD` state plus a one-click `Checkout <branch>` action back to the latest attached local branch when checkout history can resolve one safely.
 - `Branches` also keeps its branch-detail chrome intentionally compact: empty branch summaries are omitted instead of reserving placeholder space, branch subview tabs key off the measured branch-header container width so narrow content panes get a dedicated row while wider panes realign to the branch header's right edge without collapsing the workspace/action rail into that same row, workspace/actions controls wrap in self-contained groups so labels never detach from their buttons, and the status-section picker stays a segmented strip so the changed-file table reaches the viewport sooner.
-- Git browser title dots are a semantic chrome contract rather than ad-hoc Tailwind background utilities: `src/ui/widgets/GitChrome.ts` maps `GitChromeTone` to stable `git-tone-dot--*` classes, while `src/styles/redeven.css` owns the final light/dark pigment tokens so agent-bundled production CSS cannot silently drop those markers.
+- Git browser title dots are a semantic chrome contract rather than ad-hoc Tailwind background utilities: `src/ui/widgets/GitChrome.ts` maps `GitChromeTone` to stable `git-tone-dot--*` classes, while `src/styles/redeven.css` owns the final light/dark pigment tokens so runtime-bundled production CSS cannot silently drop those markers.
 - Git stash is implemented as one shared floating Git surface instead of a fourth top-level browse mode: the header `Stashes` badge opens the saved-stack review tab, `Changes` and `Branches -> Status` open the save tab for the correct worktree target, and merge blockers can deep-link directly into `Stash current changes` when structured blocker data says the workspace can be stashed.
 - Git collection RPCs now keep file lists metadata-only; the UI resolves selected file patches lazily through a single `getDiffContent` contract instead of embedding `patch_text` into workspace, compare, commit, or stash collection payloads.
 - Large Git file tables use shared virtualization in the Env App (`Changes`, `Branches -> Compare`, `Branches -> Status`, `Graph` commit files, and stash changed-file review), while stash review stays summary-first and opens single-file diffs through the shared dialog flow on demand.
@@ -124,7 +124,7 @@ Browser side:
 
 - A sandbox bootstrap window (`env-<env_id>.<region>.<base-sandbox-domain>`, for example `env-demo.dev.redeven-sandbox.test`) creates a runtime-mode proxy:
   - A Service Worker forwards `fetch()` to the proxy runtime via `postMessage + MessageChannel`.
-  - The runtime forwards HTTP/WS traffic over Flowersec E2EE to the agent.
+  - The runtime forwards HTTP/WS traffic over Flowersec E2EE to the Redeven runtime.
 - The bootstrap then loads the Env App UI via a same-origin iframe:
   - `/_redeven_proxy/env/`
 - This same-origin iframe pattern is specific to the trusted Env App origin.
@@ -132,11 +132,11 @@ Browser side:
     `cs-*` / `pf-*` trusted launcher -> `rt-*` controller origin -> `app-*` untrusted app origin.
   - The untrusted app never runs on the same origin as the Env App runtime/controller window.
 
-Agent side:
+Runtime side:
 
-- The agent serves Env App static assets under `/_redeven_proxy/env/*` via the local gateway.
-- The Env App UI talks to the agent using **Flowersec RPC/streams** (fs/terminal/monitor domains).
-- Codex uses a separate browser-facing gateway contract under `/_redeven_proxy/api/codex/*`; the browser never connects directly to `codex app-server`, and the agent resolves the host `codex` binary on demand instead of mirroring Codex runtime defaults into `config.json`.
+- The runtime serves Env App static assets under `/_redeven_proxy/env/*` via the local gateway.
+- The Env App UI talks to the runtime using **Flowersec RPC/streams** (fs/terminal/monitor domains).
+- Codex uses a separate browser-facing gateway contract under `/_redeven_proxy/api/codex/*`; the browser never connects directly to `codex app-server`, and the runtime resolves the host `codex` binary on demand instead of mirroring Codex runtime defaults into `config.json`.
 - Codex transcript scrolling uses an explicit follow-bottom controller: thread switches and sends re-enter follow mode, late transcript reflow keeps the viewport at the latest output while following, and manual user scroll-away pauses bottom following until the user returns near the bottom or triggers a new explicit bottom intent.
 - Flower assistant live rendering strictly separates the settled transcript from the in-flight assistant surface. Persisted transcript rows stay in the virtualized message list, while the active assistant run renders through one dedicated non-virtualized tail surface inside the same scroll container until transcript persistence catches up.
 - Flower assistant live output no longer creates synthetic pending transcript messages, transient display rows, or frontend-only message-id adoption. Empty output, hidden-only `thinking`, visible answer text, recovery snapshots, and terminal handoff are inner states of the same mounted live surface.
@@ -172,7 +172,7 @@ Env App reconnect recovery is intentionally split into two layers:
 
 1. **Transport fast retries**
    - Flowersec transport reconnect keeps a small bounded retry budget for short websocket/tunnel blips.
-   - This path is optimized for brief network hiccups and quick agent restarts.
+   - This path is optimized for brief network hiccups and quick runtime restarts.
 
 2. **App-level waiting loop**
    - If fast retries are exhausted, Env App switches into an explicit waiting state instead of hammering full reconnect attempts.
@@ -181,11 +181,11 @@ Env App reconnect recovery is intentionally split into two layers:
 
 UI contract:
 
-- `Connecting to agent...`
+- `Connecting to runtime...`
   - initial session establishment
-- `Reconnecting to agent...`
+- `Reconnecting to runtime...`
   - transport fast retry or an explicit hard reconnect probe is in flight
-- `Waiting for agent...`
+- `Waiting for runtime...`
   - prolonged outage / restart window after offline-like failures
 - `Preparing secure session`
   - transport is back, but the access-gate password/session resume handshake is still running
@@ -194,7 +194,7 @@ Design goals:
 
 - keep transient recovery fast,
 - bound control-plane pressure during prolonged downtime,
-- distinguish agent unavailability from secure-session recovery,
+- distinguish runtime unavailability from secure-session recovery,
 - keep reconnect policy centralized in the Env App shell instead of scattering timers across pages.
 
 ## Audit log
@@ -205,12 +205,12 @@ There are **two** audit log sources:
    - This is **not** shown in the Env App.
    - It is surfaced in the Redeven web app for environment admins.
 
-2) Agent-local audit log (user operations): recorded and persisted by the agent.
+2) Runtime-local audit log (user operations): recorded and persisted by the runtime.
    - Env App reads it via the local gateway API (env admin only):
      - `GET /_redeven_proxy/api/audit/logs?limit=<n>`
    - Storage (JSONL + rotation):
      - `<state_dir>/audit/events.jsonl`
-     - `state_dir` is the directory of the agent config file (default: `~/.redeven/`)
+     - `state_dir` is the directory of the runtime config file (default: `~/.redeven/`)
    - The log is metadata-only and must not contain secrets (PSK/attach token/AI secrets/file contents).
    - If present, `tunnel_url` is transport routing metadata only. It must not be interpreted as the authorization scope for the session.
 
@@ -220,7 +220,7 @@ Diagnostics is an infrastructure capability of the local runtime. The floating D
 
 Behavior:
 
-- Agent-side request/direct-session diagnostics are stored separately from audit logs:
+- Runtime-side request/direct-session diagnostics are stored separately from audit logs:
   - `<state_dir>/diagnostics/agent-events.jsonl`
 - Desktop builds that attach to the same runtime may also write:
   - `<state_dir>/diagnostics/desktop-events.jsonl`
@@ -228,17 +228,17 @@ Behavior:
   - `X-Redeven-Debug-Trace-ID`
 - Local UI and gateway also expose the runtime collector state through:
   - `X-Redeven-Debug-Console-Enabled`
-- Agent Settings exposes a dedicated Debug Console section separate from Logging, and the floating console reads data through:
+- Runtime Settings exposes a dedicated Debug Console section separate from Logging, and the floating console reads data through:
   - `GET /_redeven_proxy/api/debug/diagnostics`
   - `GET /_redeven_proxy/api/debug/diagnostics/export`
   - `GET /_redeven_proxy/api/debug/diagnostics/stream`
-- Browser-local rendering telemetry such as FPS, long tasks, layout shifts, and heap usage stays in the Env App shell, starts while the Debug Console is visible, and is merged into the exported debug bundle without being persisted back into the agent state directory.
+- Browser-local rendering telemetry such as FPS, long tasks, layout shifts, and heap usage stays in the Env App shell, starts while the Debug Console is visible, and is merged into the exported debug bundle without being persisted back into the runtime state directory.
 
 The diagnostics stream is timing-focused and must remain separate from the audit log because it is intended for troubleshooting performance and startup issues rather than user-operation auditing.
 
 ## Codespaces (code-server) management
 
-The Env App UI manages local codespaces via the agent local gateway API:
+The Env App UI manages local codespaces via the local runtime gateway API:
 
 - `GET /_redeven_proxy/api/spaces`
 - `POST /_redeven_proxy/api/spaces`
@@ -260,7 +260,7 @@ Notes:
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
 - Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install latest` or `Update to latest`.
-- Agent Settings also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
+- Runtime Settings also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
   - when no usable runtime is available, Settings renders a compact installable state instead of a dense `Not detected` table dump,
   - while install or uninstall is running, Settings switches to a focused operation panel with optional recent output,
   - after a successful install or uninstall, Settings returns to the normal steady state instead of leaving a persistent success audit block on screen,

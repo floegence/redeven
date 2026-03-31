@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   plugins: [solid(), tailwindcss()],
-  // The Env App is served under /_redeven_proxy/env/ by the agent.
+  // The Env App is served under /_redeven_proxy/env/ by the runtime.
   base: '/_redeven_proxy/env/',
   build: {
     outDir: path.resolve(__dirname, '../ui/dist/env'),

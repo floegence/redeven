@@ -46,7 +46,7 @@ export function GitDeleteBranchDialog(props: GitDeleteBranchDialogProps) {
 
   const changeImpact = () => {
     if (!requiresWorktreeRemoval()) return 'No worktree or uncommitted files will be removed.';
-    if (!worktreeAccessible()) return 'The agent cannot inspect uncommitted changes in that worktree from here.';
+    if (!worktreeAccessible()) return 'The runtime cannot inspect uncommitted changes in that worktree from here.';
     if (!pendingChangeSummary()) return 'No uncommitted files are currently detected in that worktree.';
     return `Uncommitted changes in that worktree will be discarded (${pendingChangeSummary()}).`;
   };

@@ -1,27 +1,27 @@
 # Capability-to-Permission Mapping
 
-This document defines a stable mapping from **agent capabilities** to **permission categories**.
+This document defines a stable mapping from **runtime capabilities** to **permission categories**.
 
 It is intentionally public and reviewable: users should be able to audit what each permission enables.
 
 Scope:
 - Flowersec **RPC** (typed RPC `type_id`s)
 - Flowersec **streams** (Yamux stream `kind`s)
-- Agent local **HTTP gateway APIs** under `/_redeven_proxy/api/*`
+- Local runtime **HTTP gateway APIs** under `/_redeven_proxy/api/*`
 
 ## Permission Categories
 
 - `read`
   - Non-destructive access (filesystem reads, safe queries, list endpoints).
-  - May create/update **agent-local metadata** used by the UI (e.g. AI threads, uploads), but must not mutate the **workspace filesystem** or execute commands.
+  - May create/update **runtime-local metadata** used by the UI (e.g. AI threads, uploads), but must not mutate the **workspace filesystem** or execute commands.
 - `write`
-  - Workspace filesystem mutations (write/delete/rename/copy) and destructive deletes of agent-local data.
+  - Workspace filesystem mutations (write/delete/rename/copy) and destructive deletes of runtime-local data.
   - High risk and should be explicitly enabled.
 - `execute`
   - Command execution, interactive sessions, and network-forwarding style capabilities.
   - High risk and should be explicitly enabled.
 - `admin`
-  - Management actions (codespace management, settings updates, agent maintenance operations, audit log access).
+  - Management actions (codespace management, settings updates, runtime maintenance operations, audit log access).
   - This is the namespace-level `admin` bit delivered in authoritative `session_meta`.
 
 Notes:
@@ -35,9 +35,9 @@ Notes:
 The Redeven runtime enforces permissions from two sources:
 
 1) Session bootstrap: `session_meta` delivered by the Redeven service (authoritative grant).
-2) Endpoint local: `permission_policy` in the agent config (authoritative cap).
+2) Endpoint local: `permission_policy` in the runtime config (authoritative cap).
 
-The agent must always compute:
+The runtime must always compute:
 
 ```
 cap_rwx = permission_policy.local_max
@@ -98,11 +98,11 @@ Design notes:
 
 Notes:
 - Proxy streams are enabled per-session. The same stream kind can require different permissions depending on `session_meta.floe_app` (and sometimes `code_space_id`).
-- Code App is intentionally conservative: the agent requires **all three** permission bits (`read`, `write`, `execute`) before it will serve `floe_app = com.floegence.redeven.code` (to avoid misleading "read-only code-server" semantics).
+- Code App is intentionally conservative: the runtime requires **all three** permission bits (`read`, `write`, `execute`) before it will serve `floe_app = com.floegence.redeven.code` (to avoid misleading "read-only code-server" semantics).
 
 ## Local Gateway HTTP API Capabilities (`/_redeven_proxy/api/*`)
 
-These endpoints are served by the agent local gateway and delivered to the browser over Flowersec E2EE proxy.
+These endpoints are served by the local runtime gateway and delivered to the browser over Flowersec E2EE proxy.
 
 Permissions are enforced by checking effective `session_meta` bits (see `internal/codeapp/gateway/gateway.go`).
 

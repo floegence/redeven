@@ -53,14 +53,14 @@ func TestResolveToolPath(t *testing.T) {
 		}
 	})
 
-	t.Run("expands tilde to agent home directory", func(t *testing.T) {
+	t.Run("expands tilde to runtime home directory", func(t *testing.T) {
 		t.Parallel()
 		resolved, err := resolveToolPath("~/", root, root)
 		if err != nil {
 			t.Fatalf("resolveToolPath: %v", err)
 		}
 		if canonicalPath(resolved) != canonicalPath(root) {
-			t.Fatalf("resolved=%q, want agent home=%q", resolved, root)
+			t.Fatalf("resolved=%q, want runtime home=%q", resolved, root)
 		}
 	})
 }

@@ -92,7 +92,7 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 	case strings.Contains(lower, "must be absolute") || strings.Contains(lower, "invalid path") || strings.Contains(lower, "invalid cwd"):
 		out.Code = ErrorCodeInvalidPath
 		out.Retryable = true
-		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths are resolved against working_dir_abs; '~/' resolves to the configured agent home directory."}
+		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths are resolved against working_dir_abs; '~/' resolves to the configured runtime home directory."}
 	case strings.Contains(lower, "not found"):
 		out.Code = ErrorCodeNotFound
 		out.Retryable = false

@@ -21,7 +21,7 @@ const (
 	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
 	TypeID_SYS_UPGRADE uint32 = 4002
 
-	// TypeID_SYS_RESTART restarts the agent process (best-effort).
+	// TypeID_SYS_RESTART restarts the runtime process (best-effort).
 	//
 	// NOTE: The type_id must match Env App: internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
 	TypeID_SYS_RESTART uint32 = 4003

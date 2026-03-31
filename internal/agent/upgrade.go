@@ -73,7 +73,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 	plan, err := resolveSelfExecPlan(a.runtimeStatePath)
 	if err != nil {
 		a.log.Warn("sys_upgrade: resolve self paths failed", "error", err)
-		return nil, &rpc.Error{Code: 500, Message: "failed to resolve agent executable path"}
+		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
 	}
 
 	if !a.maintenance.CompareAndSwap(maintenanceOpNone, maintenanceOpUpgrade) {
@@ -105,9 +105,9 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 
 	go a.runSelfUpgrade(plan, userPublicID, channelID, targetVersion)
 
-	msg := "Upgrade started. The agent will restart shortly."
+	msg := "Upgrade started. The runtime will restart shortly."
 	if targetVersion != "" {
-		msg = "Upgrade started for " + targetVersion + ". The agent will restart shortly."
+		msg = "Upgrade started for " + targetVersion + ". The runtime will restart shortly."
 	}
 	return &syssvc.UpgradeResponse{OK: true, Message: msg}, nil
 }

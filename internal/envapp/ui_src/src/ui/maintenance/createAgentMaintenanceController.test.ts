@@ -94,7 +94,7 @@ describe('createAgentMaintenanceController', () => {
       expect(refetchEnvironment).toHaveBeenCalledTimes(1);
       expect(controller.kind()).toBe(null);
       expect(controller.error()).toBe(null);
-      expect(notify.success).toHaveBeenCalledWith('Updated', 'Agent updated to v1.1.0.');
+      expect(notify.success).toHaveBeenCalledWith('Updated', 'Redeven updated to v1.1.0.');
     } finally {
       dispose();
     }
@@ -208,7 +208,7 @@ describe('createAgentMaintenanceController', () => {
       expect(connect).not.toHaveBeenCalled();
       expect(controller.kind()).toBe(null);
       expect(controller.error()).toBe(null);
-      expect(notify.success).toHaveBeenCalledWith('Reconnected', 'Agent is back online.');
+      expect(notify.success).toHaveBeenCalledWith('Reconnected', 'The runtime is back online.');
     } finally {
       dispose();
     }

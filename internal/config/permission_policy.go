@@ -8,7 +8,7 @@ import (
 
 const permissionPolicySchemaVersionV1 = 1
 
-// PermissionPolicy is the local permission cap configuration stored on the agent endpoint.
+// PermissionPolicy is the local permission cap configuration stored on the runtime endpoint.
 //
 // It is used to clamp control-plane granted permissions ("session_meta") to a user-approved maximum.
 type PermissionPolicy struct {
@@ -22,7 +22,7 @@ type PermissionPolicy struct {
 	ByApp  map[string]*PermissionSet `json:"by_app,omitempty"`
 }
 
-// PermissionSet is the 3-bit permission model used by Redeven agents.
+// PermissionSet is the 3-bit permission model used by Redeven runtimes.
 type PermissionSet struct {
 	Read    bool `json:"read"`
 	Write   bool `json:"write"`

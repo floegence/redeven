@@ -1151,7 +1151,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                           columnsClass="sm:grid-cols-2 xl:grid-cols-5"
                           items={[
                             { label: 'Events', value: String(props.controller.stats().total_events) },
-                            { label: 'Agent', value: String(props.controller.stats().agent_events) },
+                            { label: 'Runtime', value: String(props.controller.stats().agent_events) },
                             { label: 'Desktop', value: String(props.controller.stats().desktop_events) },
                             { label: 'Slow', value: String(props.controller.stats().slow_events) },
                             { label: 'Traces', value: String(props.controller.stats().trace_count) },
@@ -1235,7 +1235,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                               <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
                                   <div class="font-medium text-foreground">Backend diagnostics</div>
-                                  <div class="mt-1 text-[9px] leading-5 text-muted-foreground">Snapshot summary, agent event list, desktop event list, and runtime state directory.</div>
+                                  <div class="mt-1 text-[9px] leading-5 text-muted-foreground">Snapshot summary, runtime event list, desktop event list, and runtime state directory.</div>
                                 </div>
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
                                   <div class="font-medium text-foreground">Current UI state</div>

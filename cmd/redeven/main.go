@@ -121,7 +121,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 	envToken := fs.String("env-token", "", "Environment token (raw token; 'Bearer <token>' is also accepted)")
 	envTokenEnv := fs.String("env-token-env", "", "Environment variable name holding the environment token")
 
-	agentHomeDir := fs.String("agent-home-dir", "", "Agent home dir used for filesystem-facing features (default: user home dir)")
+	agentHomeDir := fs.String("agent-home-dir", "", "Runtime home dir used for filesystem-facing features (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
 
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (empty: keep existing; default: execute_read_write)")
@@ -322,8 +322,8 @@ func (c *cli) runCmd(args []string) int {
 		return 1
 	}
 
-	// Prevent multiple agent processes from managing the same local state directory.
-	// This avoids control-plane flapping and data-plane races when users start the agent twice.
+	// Prevent multiple runtime processes from managing the same local state directory.
+	// This avoids control-plane flapping and data-plane races when users start the runtime twice.
 	lockPath := filepath.Join(filepath.Dir(cfgPathClean), "agent.lock")
 	lk, err := lockfile.Acquire(lockPath)
 	if err != nil {
@@ -339,16 +339,16 @@ func (c *cli) runCmd(args []string) int {
 				}
 			}
 			fmt.Fprintf(c.stderr, "another redeven runtime instance is already using this state directory: %s\n", lockPath)
-			fmt.Fprintf(c.stderr, "Hint: stop the existing agent process, or use a different environment/state directory before retrying.\n")
+			fmt.Fprintf(c.stderr, "Hint: stop the existing runtime process, or use a different environment/state directory before retrying.\n")
 			return 1
 		}
-		fmt.Fprintf(c.stderr, "failed to acquire agent lock (%s): %v\n", lockPath, err)
+		fmt.Fprintf(c.stderr, "failed to acquire runtime lock (%s): %v\n", lockPath, err)
 		return 1
 	}
 	defer func() { _ = lk.Release() }()
 
 	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, cfgPathClean, localuiruntime.RuntimeStatePath(cfgPathClean))); err != nil {
-		fmt.Fprintf(c.stderr, "failed to write agent lock metadata: %v\n", err)
+		fmt.Fprintf(c.stderr, "failed to write runtime lock metadata: %v\n", err)
 		return 1
 	}
 
@@ -473,7 +473,7 @@ func (c *cli) runCmd(args []string) int {
 		AccessGate:            accessGate,
 	})
 	if err != nil {
-		fmt.Fprintf(c.stderr, "failed to init agent: %v\n", err)
+		fmt.Fprintf(c.stderr, "failed to init runtime: %v\n", err)
 		return 1
 	}
 
@@ -552,7 +552,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 
 	if err := a.Run(ctx); err != nil && ctx.Err() == nil {
-		fmt.Fprintf(c.stderr, "agent exited with error: %v\n", err)
+		fmt.Fprintf(c.stderr, "runtime exited with error: %v\n", err)
 		return 1
 	}
 	return 0
@@ -576,7 +576,7 @@ func buildRunBootstrapArgs(
 	}
 	if mode == runModeDesktop && desktopManaged {
 		// Desktop startup should stay on the normal logging baseline unless the
-		// user later opts into debug mode explicitly from Agent Settings.
+		// user later opts into debug mode explicitly from Runtime Settings.
 		args.LogLevel = "info"
 	}
 	return args
@@ -585,7 +585,7 @@ func buildRunBootstrapArgs(
 func (c *cli) printNotBootstrappedGuidance(reason error) int {
 	writeErrorWithHelp(
 		c.stderr,
-		fmt.Sprintf("agent is not bootstrapped for remote or hybrid mode: %v", reason),
+		fmt.Sprintf("runtime is not bootstrapped for remote or hybrid mode: %v", reason),
 		[]string{
 			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and either --env-token or --env-token-env directly to `redeven run`.",
 			"Examples:",

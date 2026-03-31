@@ -148,7 +148,7 @@ func (s *Service) buildDeleteBranchPlan(ctx context.Context, repo repoContext, t
 		SafeDeleteBaseCommit:        safeDeleteBaseCommit,
 	}
 	if linkedWorktree != nil && !linkedWorktree.Accessible {
-		plan.BlockingReason = fmt.Sprintf("Linked worktree %s is not accessible from this agent.", linkedWorktree.WorktreePath)
+		plan.BlockingReason = fmt.Sprintf("Linked worktree %s is not accessible from this runtime host.", linkedWorktree.WorktreePath)
 		plan.ForceDeleteAllowed = false
 		plan.ForceDeleteReason = plan.BlockingReason
 	}

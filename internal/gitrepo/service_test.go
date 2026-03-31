@@ -1867,7 +1867,7 @@ func TestPreviewDeleteBranch_BlocksForceDeleteForInaccessibleLinkedWorktree(t *t
 	if preview.ForceDeleteAllowed {
 		t.Fatalf("expected force delete to be blocked for inaccessible linked worktree: %+v", preview)
 	}
-	if !strings.Contains(preview.BlockingReason, "not accessible from this agent") {
+	if !strings.Contains(preview.BlockingReason, "not accessible from this runtime host") {
 		t.Fatalf("unexpected blocking reason: %+v", preview)
 	}
 	if preview.ForceDeleteReason != preview.BlockingReason {

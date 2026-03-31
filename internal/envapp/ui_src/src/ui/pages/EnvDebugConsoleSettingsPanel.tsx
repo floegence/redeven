@@ -42,7 +42,7 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
         actions={(
           <div class="flex flex-wrap items-center gap-2">
             <SettingsPill tone="success">Frontend only</SettingsPill>
-            <SettingsPill tone="default">No agent config writes</SettingsPill>
+            <SettingsPill tone="default">No runtime config writes</SettingsPill>
           </div>
         )}
       />
@@ -68,7 +68,7 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
               </div>
             </SettingsTableCell>
             <SettingsTableCell class="text-[11px] text-muted-foreground">
-              This switch is local to the current UI session. It does not change <code>log_level</code>, <code>log_format</code>, or any persisted agent setting.
+              This switch is local to the current UI session. It does not change <code>log_level</code>, <code>log_format</code>, or any persisted runtime setting.
             </SettingsTableCell>
           </SettingsTableRow>
         </SettingsTableBody>

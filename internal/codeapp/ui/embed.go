@@ -7,8 +7,8 @@ import (
 
 // embeddedDist contains the minimal runtime assets served under `/_redeven_proxy/*`.
 //
-// We embed the built artifacts (not sources) so the agent binary is self-contained and
-// the shipped UI version is strictly coupled to the agent version.
+// We embed the built artifacts (not sources) so the runtime binary is self-contained and
+// the shipped UI version is strictly coupled to the runtime version.
 //
 // To update dist, edit `internal/codeapp/ui_src/` and run:
 //

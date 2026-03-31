@@ -15,12 +15,12 @@
     "flowersec": "workspace",
     "redeven": "main"
   },
-  "source_sha256": "fef1caf3e17c667b1e4b7e5b14dd1e77a20b51fdf549c1700b8e2faf387bc9f5",
+  "source_sha256": "5c5c0d4bfd887a3572c5c1ee6d3093dab1f515a752c4364e9856f2b0baf8fbd5",
   "cards": [
     {
       "id": "K-AGENT-001",
       "version": 1,
-      "title": "Agent session permissions are enforced by session metadata and local policy",
+      "title": "Runtime session permissions are enforced by session metadata and local policy",
       "status": "stable",
       "owners": [
         "backend"
@@ -30,7 +30,7 @@
         "security",
         "session_security"
       ],
-      "summary": "The agent accepts authoritative session metadata and always clamps granted permissions with the local permission policy before serving a session.",
+      "summary": "The runtime accepts authoritative session metadata and always clamps granted permissions with the local permission policy before serving a session.",
       "mechanism": "When a grant arrives, the runtime validates channel and app metadata, intersects granted read/write/execute permissions with the local cap, and persists the effective permission set into the session snapshot.",
       "boundaries": "Any attempt to trust browser-reported permissions instead of the session metadata and local cap would bypass endpoint-side permission enforcement.",
       "invalid_conditions": "This card becomes invalid if session startup skips permission intersection or starts accepting browser-side permission claims as authoritative.",

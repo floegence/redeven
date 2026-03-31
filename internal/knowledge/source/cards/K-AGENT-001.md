@@ -1,7 +1,7 @@
 ---
 id: K-AGENT-001
 version: 1
-title: Agent session permissions are enforced by session metadata and local policy
+title: Runtime session permissions are enforced by session metadata and local policy
 status: stable
 owners:
   - backend
@@ -14,7 +14,7 @@ source_card_id: K-AGENT-001
 
 ## Conclusion
 
-The agent accepts authoritative session metadata and always clamps granted permissions with the local permission policy before serving a session.
+The runtime accepts authoritative session metadata and always clamps granted permissions with the local permission policy before serving a session.
 
 ## Mechanism
 

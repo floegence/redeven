@@ -3,9 +3,9 @@
 The Redeven runtime enforces permissions from two sources:
 
 1) Session bootstrap: `session_meta` delivered by the Redeven service (authoritative grant).
-2) Endpoint local: `permission_policy` in the agent config (authoritative cap).
+2) Endpoint local: `permission_policy` in the runtime config (authoritative cap).
 
-The agent must always compute:
+The runtime must always compute:
 
 ```
 cap_rwx = permission_policy.local_max

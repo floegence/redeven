@@ -11,7 +11,7 @@ import (
 //
 // Notes:
 //   - Secrets (api keys) must never be stored in this config. Keys are managed via a separate local secrets file.
-//   - Field names are snake_case to match the rest of the agent config surface.
+//   - Field names are snake_case to match the rest of the runtime config surface.
 type AIConfig struct {
 	// Providers is the provider registry available to the runtime and UI.
 	//

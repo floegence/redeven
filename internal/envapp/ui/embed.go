@@ -8,7 +8,7 @@ import (
 // embeddedDist contains the Env App built artifacts served under `/_redeven_proxy/env/*`.
 //
 // We embed the build output (not sources) so the shipped Env App UI is strictly coupled
-// to the agent version.
+// to the runtime version.
 //
 // To update dist, edit `internal/envapp/ui_src/` and run:
 //

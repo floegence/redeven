@@ -2113,7 +2113,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				Message:   "Failed to create workspace checkpoint: " + strings.TrimSpace(err.Error()),
 				Retryable: true,
 				SuggestedFixes: []string{
-					"Ensure the agent state directory is writable.",
+					"Ensure the runtime state directory is writable.",
 					"Retry the tool call after fixing the checkpoint error.",
 				},
 			}, "")

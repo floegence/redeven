@@ -74,7 +74,7 @@ function formatSessionPerm(s: ActiveSession): string {
 
 function formatAppLabel(floeApp: string): string {
   const v = String(floeApp ?? '').trim();
-  if (v === 'com.floegence.redeven.agent') return 'Agent';
+  if (v === 'com.floegence.redeven.agent') return 'Runtime';
   if (v === 'com.floegence.redeven.code') return 'Code';
   if (v === 'com.floegence.redeven.portforward') return 'Port Forward';
   return v || '-';
@@ -117,7 +117,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   const [sampleSeq, setSampleSeq] = createSignal(0);
   const [chartToken, setChartToken] = createSignal(0);
 
-  // Sort client-side as a safety net in case the agent-side ordering changes.
+  // Sort client-side as a safety net in case the runtime-side ordering changes.
   const processes = createMemo<SysMonitorProcessInfo[]>(() => {
     const list = data()?.processes ?? [];
     const copied = [...list];

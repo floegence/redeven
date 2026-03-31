@@ -48,7 +48,7 @@ const (
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
 
-	gitUnavailableReason = "Git is not installed or not available in PATH on this agent."
+	gitUnavailableReason = "Git is not installed or not available in PATH on this runtime host."
 )
 
 var errGitUnavailable = errors.New("git unavailable")
@@ -1066,7 +1066,7 @@ func classifyGitMutationRPCError(err error) *rpc.Error {
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "discard confirmation is required"):
 		return &rpc.Error{Code: 400, Message: message}
-	case strings.Contains(lower, "not accessible from this agent"):
+	case strings.Contains(lower, "not accessible from this agent"), strings.Contains(lower, "not accessible from this runtime host"):
 		return &rpc.Error{Code: 400, Message: message}
 	case strings.Contains(lower, "attach head to a local branch before merging"):
 		return &rpc.Error{Code: 400, Message: message}

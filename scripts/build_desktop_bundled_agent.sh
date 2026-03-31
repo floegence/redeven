@@ -84,7 +84,7 @@ bundle_from_tarball() {
     ui_pkg_die "tar not found (required to unpack REDEVEN_DESKTOP_AGENT_TARBALL)"
   fi
 
-  ui_pkg_log "Preparing desktop bundled agent from release tarball..."
+  ui_pkg_log "Preparing desktop bundled runtime from release tarball..."
   ui_pkg_log "TARBALL: $tarball_path"
 
   prepare_bundle_dir "$bundle_dir"
@@ -97,14 +97,14 @@ bundle_from_source() {
   local output_path="$3"
 
   if ! command -v go >/dev/null 2>&1; then
-    ui_pkg_die "go not found (required to build the desktop bundled agent)"
+    ui_pkg_die "go not found (required to build the desktop bundled runtime)"
   fi
 
   local version="${REDEVEN_DESKTOP_BUNDLE_VERSION:-${REDEVEN_DESKTOP_VERSION:-0.0.0-dev}}"
   local commit="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
   local build_time="${REDEVEN_DESKTOP_BUNDLE_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
-  ui_pkg_log "Building desktop bundled agent from the current repository..."
+  ui_pkg_log "Building desktop bundled runtime from the current repository..."
   ui_pkg_log "TARGET: ${goos}-${goarch}"
   ui_pkg_log "OUTPUT: $output_path"
 
@@ -132,7 +132,7 @@ main() {
   bundle_dir="$ROOT_DIR/desktop/.bundle/${goos}-${goarch}"
   bundle_path="$bundle_dir/$binary_name"
 
-  ui_pkg_log "Preparing desktop bundled agent..."
+  ui_pkg_log "Preparing desktop bundled runtime..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
 
   if [ -n "$tarball_path" ]; then
@@ -143,11 +143,11 @@ main() {
   fi
 
   if [ ! -f "$bundle_path" ]; then
-    ui_pkg_die "desktop bundled agent not found after preparation: $bundle_path"
+    ui_pkg_die "desktop bundled runtime not found after preparation: $bundle_path"
   fi
 
   chmod +x "$bundle_path"
-  ui_pkg_log "Desktop bundled agent ready: $bundle_path"
+  ui_pkg_log "Desktop bundled runtime ready: $bundle_path"
   printf '%s\n' "$bundle_path"
 }
 

@@ -105,7 +105,7 @@ const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const GIT_COMMIT_PAGE_SIZE = 50;
 const GIT_WORKSPACE_PAGE_SIZE = 200;
-const DEFAULT_GIT_UNAVAILABLE_REASON = 'Git is not installed or not available in PATH on this agent.';
+const DEFAULT_GIT_UNAVAILABLE_REASON = 'Git is not installed or not available in PATH on this runtime host.';
 const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_SIDEBAR_MIN_WIDTH = 180;
 const PAGE_SIDEBAR_MAX_WIDTH = 520;
@@ -2490,7 +2490,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const seq = ++dirReqSeq;
     const p = normalizePath(path);
     if (p !== rootPath && !p.startsWith(`${rootPath}/`)) {
-      return { status: 'invalid_path', message: 'Path is outside agent home.' };
+      return { status: 'invalid_path', message: 'Path is outside the runtime home directory.' };
     }
 
     const rel = p === rootPath ? '' : p.slice(rootPath.length);

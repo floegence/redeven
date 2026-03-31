@@ -121,7 +121,7 @@ type SettingsNavItem = Readonly<{
 const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
   { id: 'config', label: 'Config File', icon: FileCode },
   { id: 'connection', label: 'Connection', icon: Globe },
-  { id: 'agent', label: 'Agent', icon: Zap },
+  { id: 'agent', label: 'Runtime', icon: Zap },
   { id: 'runtime', label: 'Runtime', icon: Terminal },
   { id: 'logging', label: 'Logging', icon: Database },
   { id: 'debug_console', label: 'Debug Console', icon: RefreshIcon },
@@ -505,7 +505,7 @@ export function EnvSettingsPage() {
     }
   };
 
-  const connectOverlayMessage = createMemo(() => (maintaining() ? 'Agent restarting...' : env.connectionOverlayMessage()));
+  const connectOverlayMessage = createMemo(() => (maintaining() ? 'Runtime restarting...' : env.connectionOverlayMessage()));
 
   // View mode signals
   const [configView, setConfigView] = createSignal<ViewMode>('ui');
@@ -733,7 +733,7 @@ export function EnvSettingsPage() {
       {
         label: 'agent_home_dir',
         value: current?.agent_home_dir || 'Not detected',
-        note: 'Current agent runtime home directory exposed to the Codex bridge.',
+        note: 'Current runtime home directory exposed to the Codex bridge.',
         mono: true,
       },
       {
@@ -2481,9 +2481,9 @@ export function EnvSettingsPage() {
         {/* Page Header */}
         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 class="text-xl font-semibold text-foreground tracking-tight">Agent Settings</h1>
+            <h1 class="text-xl font-semibold text-foreground tracking-tight">Runtime Settings</h1>
             <p class="text-sm text-muted-foreground mt-1 leading-relaxed">
-              Configure your agent runtime. Changes are auto-saved when valid. Restart-required settings only apply after a manual restart that you trigger.
+              Configure your Redeven runtime. Changes are auto-saved when valid. Restart-required settings only apply after a manual restart that you trigger.
             </p>
           </div>
           <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={settings.loading} class="gap-1.5 self-start">
@@ -2518,7 +2518,7 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={FileCode}
               title="Config File"
-              description="Location of the agent configuration file."
+              description="Location of the runtime configuration file."
               badge="Read-only"
               actions={<ViewToggle value={configView} onChange={(value) => setConfigView(value)} />}
             >
@@ -2528,7 +2528,7 @@ export function EnvSettingsPage() {
                     {
                       label: 'Path',
                       value: configPath() || '(unknown)',
-                      note: 'Agent config file on local disk.',
+                      note: 'Runtime config file on local disk.',
                       mono: true,
                     },
                   ]}
@@ -2562,7 +2562,7 @@ export function EnvSettingsPage() {
                       mono: true,
                     },
                     {
-                      label: 'Agent Instance ID',
+                      label: 'Runtime Instance ID',
                       value: String(settings()?.connection?.agent_instance_id ?? ''),
                       note: 'Current runtime instance identifier.',
                       mono: true,
@@ -2597,12 +2597,12 @@ export function EnvSettingsPage() {
           </div>
         </SectionGroup>
 
-        {/* ── Agent Management ── */}
-        <SectionGroup title="Agent Management">
+        {/* ── Runtime Management ── */}
+        <SectionGroup title="Runtime Management">
           <div id={settingsSectionElementID('agent')} class="scroll-mt-6">
             <SettingsCard
               icon={Zap}
-              title="Agent"
+              title="Runtime"
               description="Version and maintenance actions."
               badge={agentCardBadge()}
               badgeVariant={agentCardBadgeVariant()}
@@ -2617,7 +2617,7 @@ export function EnvSettingsPage() {
                     loading={isRestarting()}
                     disabled={!canStartRestart()}
                   >
-                    Restart agent
+                    Restart runtime
                   </Button>
                   <Show when={upgradeState().allowsUpgradeAction}>
                     <Button
@@ -2628,7 +2628,7 @@ export function EnvSettingsPage() {
                       loading={isUpgrading()}
                       disabled={!canStartUpgrade()}
                     >
-                      Update agent
+                      Update Redeven
                     </Button>
                   </Show>
                 </>
@@ -2814,7 +2814,7 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={Database}
               title="Logging"
-              description="Log format and verbosity for backend agent logs."
+              description="Log format and verbosity for backend runtime logs."
               badge="Log changes require restart"
               badgeVariant="warning"
               error={loggingError()}
@@ -2895,7 +2895,7 @@ export function EnvSettingsPage() {
                             class="w-full"
                           />
                         </SettingsTableCell>
-                        <SettingsTableCell class="text-[11px] text-muted-foreground">Controls agent log verbosity only. Debug Console is a separate frontend diagnostics surface.</SettingsTableCell>
+                        <SettingsTableCell class="text-[11px] text-muted-foreground">Controls runtime log verbosity only. Debug Console is a separate frontend diagnostics surface.</SettingsTableCell>
                       </SettingsTableRow>
                     </SettingsTableBody>
                   </SettingsTable>
@@ -3095,7 +3095,7 @@ export function EnvSettingsPage() {
                   </div>
 
                   <div class="space-y-3">
-                    <SubSectionHeader title="local_max" description="Global permission ceiling for this agent. User and app rules are clamped to these limits." />
+                    <SubSectionHeader title="local_max" description="Global permission ceiling for this runtime. User and app rules are clamped to these limits." />
                     <PermissionMatrixTable
                       read={policyLocalRead()}
                       write={policyLocalWrite()}
@@ -3488,7 +3488,7 @@ export function EnvSettingsPage() {
                     <div class="flex items-start gap-2.5 rounded-lg border border-warning/50 bg-warning/10 p-3">
                       <Shield class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                       <div class="text-xs font-medium text-foreground">
-                        Dangerous command blocking is disabled. The agent may execute high-risk commands directly.
+                        Dangerous command blocking is disabled. The runtime may execute high-risk commands directly.
                       </div>
                     </div>
                   </Show>
@@ -3734,18 +3734,18 @@ export function EnvSettingsPage() {
         }}
       />
 
-      {/* Update Agent Confirmation Dialog */}
+      {/* Update Runtime Confirmation Dialog */}
       <ConfirmDialog
         open={upgradeOpen()}
         onOpenChange={(open) => setUpgradeOpen(open)}
-        title="Update agent"
+        title="Update Redeven"
         confirmText="Update"
         loading={isUpgrading()}
         onConfirm={() => void startUpgrade()}
       >
         <div class="space-y-3">
-          <p class="text-sm">This will restart the agent and terminate all running activities. Continue?</p>
-          <p class="text-xs text-muted-foreground">You will reconnect automatically after the agent comes back online.</p>
+          <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
+          <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
           <p class="text-xs text-muted-foreground">
             Target version: <span class="font-mono">{targetUpgradeVersion() || '—'}</span>
           </p>
@@ -3755,18 +3755,18 @@ export function EnvSettingsPage() {
         </div>
       </ConfirmDialog>
 
-      {/* Restart Agent Confirmation Dialog */}
+      {/* Restart Runtime Confirmation Dialog */}
       <ConfirmDialog
         open={restartOpen()}
         onOpenChange={(open) => setRestartOpen(open)}
-        title="Restart agent"
+        title="Restart runtime"
         confirmText="Restart"
         loading={isRestarting()}
         onConfirm={() => void startRestart()}
       >
         <div class="space-y-3">
-          <p class="text-sm">This will restart the agent and terminate all running activities. Continue?</p>
-          <p class="text-xs text-muted-foreground">You will reconnect automatically after the agent comes back online.</p>
+          <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
+          <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
         </div>
       </ConfirmDialog>
 
@@ -4080,7 +4080,7 @@ export function EnvSettingsPage() {
         <div class="space-y-3">
           <p class="text-sm">Are you sure you want to disable Flower?</p>
           <p class="text-xs text-muted-foreground">
-            This will remove the <CodeBadge>ai</CodeBadge> section from the agent config file.
+            This will remove the <CodeBadge>ai</CodeBadge> section from the runtime config file.
           </p>
         </div>
       </ConfirmDialog>

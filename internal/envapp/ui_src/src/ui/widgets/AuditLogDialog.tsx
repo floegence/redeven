@@ -243,7 +243,7 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
       }
     >
       <div class="space-y-2">
-        <div class="text-xs text-muted-foreground">Recent events recorded by this agent. Tunnel endpoint values are routing metadata only.</div>
+        <div class="text-xs text-muted-foreground">Recent events recorded by this runtime. Tunnel endpoint values are routing metadata only.</div>
 
         <Show when={errorText()}>
           <div class="text-xs text-error break-words">{errorText()}</div>

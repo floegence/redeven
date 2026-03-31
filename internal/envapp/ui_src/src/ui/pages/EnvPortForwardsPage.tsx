@@ -171,7 +171,7 @@ function EmptyState(props: { onCreateClick: () => void; disabled?: boolean }) {
       </div>
       <h3 class="text-sm font-medium text-foreground mb-1">No port forwards yet</h3>
       <p class="text-xs text-muted-foreground text-center max-w-xs mb-4">
-        Create a port forward to expose HTTP services running on (or reachable from) the agent to your browser.
+        Create a port forward to expose HTTP services running on (or reachable from) the runtime host to your browser.
       </p>
       <Button size="sm" variant="default" onClick={props.onCreateClick} disabled={props.disabled}>
         Create Forward
@@ -595,7 +595,7 @@ export function EnvPortForwardsPage() {
               <div class="space-y-1">
                 <div class="text-sm font-semibold">Port Forwards</div>
                 <div class="text-xs text-muted-foreground">
-                  Expose HTTP services running on (or reachable from) the agent to your browser via secure E2EE tunnel.
+                  Expose HTTP services running on (or reachable from) the runtime host to your browser via secure E2EE tunnel.
                 </div>
               </div>
             </div>

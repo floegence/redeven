@@ -68,7 +68,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
   ) {
     return {
       kind: 'agent_offline',
-      message: 'Agent is offline. Waiting for it to come back online.',
+      message: 'The runtime is offline. Waiting for it to come back online.',
     };
   }
 
@@ -80,7 +80,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
   ) {
     return {
       kind: 'agent_unavailable',
-      message: 'Agent is restarting or not ready yet. Retrying automatically.',
+      message: 'The runtime is restarting or not ready yet. Retrying automatically.',
     };
   }
 

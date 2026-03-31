@@ -67,7 +67,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 
 | Surface | What users get | Why it matters | Docs |
 | --- | --- | --- | --- |
-| `Env App` 🗂️ | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Agent Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| `Env App` 🗂️ | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Runtime Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | `Code App` 💻 | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | `Desktop Shell` 🖥️ | Native Electron app that opens this device or another Redeven Local UI | Local UX, Desktop Settings, connection management, blocked-state handling, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | `Flower` (optional) 🌸 | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
@@ -78,7 +78,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 | Use case | Flow | Outcome |
 | --- | --- | --- |
 | Secure remote environment access 🔐 | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
-| Browser-based development ⚙️ | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the agent gateway and Flowersec E2EE proxy |
+| Browser-based development ⚙️ | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the local runtime gateway and Flowersec E2EE proxy |
 | Desktop operations 🖥️ | Start Redeven Desktop on this device or connect it to another Redeven Local UI | Use native Desktop Settings, diagnostics, and connection management around the same runtime contract |
 
 ## Quick start
@@ -131,7 +131,7 @@ Security posture first, convenience second. 🔒
 
 | Topic | Public contract |
 | --- | --- |
-| Trust boundary | The agent does not trust browser-claimed permissions. Effective permissions come from server-issued session grants, clamped by local policy. |
+| Trust boundary | The runtime does not trust browser-claimed permissions. Effective permissions come from server-issued session grants, clamped by local policy. |
 | Control plane vs data plane | Management traffic issues grants and metadata. [Flowersec](https://github.com/floegence/flowersec) forwards encrypted bytes and cannot decrypt application data. |
 | Local secrets | Local config contains sensitive material, including E2EE PSKs, so the state directory must stay private to the local account. |
 
@@ -208,7 +208,7 @@ Notes:
 - `~/.redeven/agent.lock`
 - `~/.redeven/secrets.json`
 - `~/.redeven/audit/events.jsonl`
-- `~/.redeven/diagnostics/agent-events.jsonl` for agent-side request/direct-session diagnostics
+- `~/.redeven/diagnostics/agent-events.jsonl` for runtime-side request/direct-session diagnostics
 - `~/.redeven/diagnostics/desktop-events.jsonl` when the same runtime is attached by Redeven Desktop
 - `~/.redeven/apps/code/...`
 
@@ -219,7 +219,7 @@ Multi-environment mode uses isolated state per environment:
 ### Public release contract
 
 - GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, and checksums.
-- On `v*` tag push, `Release Agent` publishes GitHub Release assets, checksums, signatures, and release notes with both highlights and a full change list.
+- On `v*` tag push, `Release Redeven` publishes GitHub Release assets, checksums, signatures, and release notes with both highlights and a full change list.
 - `scripts/install.sh` resolves versions from GitHub Releases and downloads release assets directly from GitHub.
 
 Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
@@ -227,10 +227,10 @@ Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 ### Common troubleshooting entry points
 
 - `bootstrap failed` or `missing direct connect info`: verify `--controlplane`, `--env-id`, and `--env-token`.
-- `code-server runtime missing or unusable`: open Env App -> Agent Settings -> `code-server Runtime` and use the explicit install or update-to-latest flow, or set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
+- `code-server runtime missing or unusable`: open Env App -> Runtime Settings -> `code-server Runtime` and use the explicit install or update-to-latest flow, or set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
 - `Missing init payload` in Codespaces: reopen the codespace from Env App so a new entry ticket can be minted.
-- Desktop lock conflict: if another agent already owns `~/.redeven`, stop it or restart it with a Local UI mode, then retry.
-- Requests feel slow: open Agent Settings -> Debug Console, then inspect the floating console to compare desktop, gateway, and UI timing.
+- Desktop lock conflict: if another runtime instance already owns `~/.redeven`, stop it or restart it with a Local UI mode, then retry.
+- Requests feel slow: open Runtime Settings -> Debug Console, then inspect the floating console to compare desktop, gateway, and UI timing.
 
 </details>
 

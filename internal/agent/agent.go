@@ -158,7 +158,7 @@ func New(opts Options) (*Agent, error) {
 		agentHomeDir = strings.TrimSpace(home)
 	}
 	if agentHomeDir == "" {
-		return nil, errors.New("missing agent home dir")
+		return nil, errors.New("missing runtime home dir")
 	}
 	agentHomeAbs, err := pathutil.CanonicalizeExistingDirAbs(agentHomeDir)
 	if err != nil {

@@ -7,7 +7,7 @@ This integration is intentionally independent from Flower:
 - Codex has its own activity-bar entry in Env App.
 - Codex uses its own gateway namespace: `/_redeven_proxy/api/codex/*`.
 - Codex UI state, request handling, and thread lifecycle do not reuse Flower thread/runtime contracts.
-- Agent Settings only shows read-only Codex host/runtime status; it does not persist Codex runtime settings.
+- Runtime Settings only shows read-only Codex host/runtime status; it does not persist Codex runtime settings.
 - The Codex surface uses official OpenAI Codex branding assets and floe-webapp primitives without coupling Codex implementation details back to Flower.
 
 ## Architecture
@@ -15,7 +15,7 @@ This integration is intentionally independent from Flower:
 High-level design:
 
 - The browser talks only to Redeven gateway routes.
-- The Go agent owns the Codex process boundary and spawns `codex app-server` from the host's `codex` binary as a child process.
+- The Go runtime owns the Codex process boundary and spawns `codex app-server` from the host's `codex` binary as a child process.
 - Transport between Redeven and Codex uses stdio (`codex app-server --listen stdio://`).
 - The bridge initializes the app-server with `experimentalApi=true` so it can consume upstream raw response notifications and extended-history controls that are required for refresh-safe transcript projection.
 - The bridge keeps a per-thread projected state so browser bootstrap and SSE replay always agree on the same applied event cursor.
@@ -59,10 +59,10 @@ Redeven resolves `codex` like this:
 
 1. Look up `codex` on the host `PATH`.
 2. Start `codex app-server` on demand when a Codex route needs it by spawning the user's configured shell in `login + interactive` mode and executing `codex app-server --listen stdio://` through that shell.
-3. Inherit the agent process environment as-is and let the user's shell startup files resolve host-specific settings such as `PATH`, `CODEX_HOME`, and related Codex runtime configuration.
+3. Inherit the runtime process environment as-is and let the user's shell startup files resolve host-specific settings such as `PATH`, `CODEX_HOME`, and related Codex runtime configuration.
 4. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
 
-Agent Settings -> Codex is diagnostic-only and currently shows:
+Runtime Settings -> Codex is diagnostic-only and currently shows:
 
 - `available`
 - `ready`
@@ -179,6 +179,6 @@ Current Env App behavior:
 Current permission policy is:
 
 - Opening the Codex activity requires `read + write + execute`.
-- Reading Codex status in Agent Settings requires `read`.
+- Reading Codex status in Runtime Settings requires `read`.
 
 This matches the fact that Codex may inspect files, edit files, and run commands on the endpoint runtime.

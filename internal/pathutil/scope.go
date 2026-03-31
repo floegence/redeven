@@ -53,7 +53,7 @@ func NormalizeUserPathInput(path string, agentHomeAbs string) (string, error) {
 	if path == "~" || strings.HasPrefix(path, "~/") {
 		agentHomeAbs = strings.TrimSpace(agentHomeAbs)
 		if agentHomeAbs == "" {
-			return "", errors.New("missing agent home")
+			return "", errors.New("missing runtime home directory")
 		}
 		if path == "~" {
 			path = agentHomeAbs
@@ -146,7 +146,7 @@ func validateWithinScope(pathAbs string, agentHomeAbs string) (string, error) {
 		return "", err
 	}
 	if !ok {
-		return "", errors.New("path escapes agent home")
+		return "", errors.New("path escapes runtime home directory")
 	}
 	return filepath.Clean(pathAbs), nil
 }

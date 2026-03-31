@@ -588,7 +588,7 @@ export function EnvAppShell() {
     const first = String(options[0]?.id ?? '').trim();
     if (first && allowed.has(first)) return first;
 
-    throw new Error('No available model. Configure AI in Agent Settings first.');
+    throw new Error('No available model. Configure AI in Runtime Settings first.');
   };
 
   const validateAskFlowerWorkingDir = async (workingDir: string): Promise<string> => {
@@ -628,7 +628,7 @@ export function EnvAppShell() {
     if (!intent) return;
 
     if (protocol.status() !== 'connected') {
-      notify.error('Not connected', 'Connecting to agent...');
+      notify.error('Not connected', 'Connecting to runtime...');
       return;
     }
     if (!canUseFlower()) {
@@ -783,7 +783,7 @@ export function EnvAppShell() {
     const id = envId();
     if (!id) throw new Error('Missing env context. Please reopen from the Redeven Portal.');
 
-    // Probe agent status to avoid grant-audit spam while the agent is clearly offline.
+    // Probe runtime status to avoid grant-audit spam while the runtime is clearly offline.
     let agentStatus: string | null = null;
     try {
       const detail = await getEnvironment(id);
@@ -795,7 +795,7 @@ export function EnvAppShell() {
       // For transient failures (meta/network), continue with the grant flow below.
     }
     if (agentStatus && agentStatus !== 'online') {
-      throw new Error(`Agent is ${agentStatus}.`);
+      throw new Error(`Runtime is ${agentStatus}.`);
     }
 
     const entryTicket = await mintEnvProxyEntryTicket({
@@ -948,8 +948,8 @@ export function EnvAppShell() {
 
     if (remoteReconnectController.phase() === 'waiting_for_agent') {
       return {
-        title: 'Waiting for agent',
-        message: remoteReconnectFailure()?.message || 'Agent is unavailable right now. Retrying automatically.',
+        title: 'Waiting for runtime',
+        message: remoteReconnectFailure()?.message || 'The runtime is unavailable right now. Retrying automatically.',
       };
     }
 
@@ -1003,7 +1003,7 @@ export function EnvAppShell() {
           remoteReconnectController.controlplaneStatus() === 'offline'
           || remoteReconnectFailure()?.kind === 'agent_offline'
         ) {
-          return 'Waiting for agent';
+          return 'Waiting for runtime';
         }
         return 'Reconnecting soon';
       case 'reconnecting':
@@ -1056,25 +1056,25 @@ export function EnvAppShell() {
   });
   const connectionOverlayVisible = createMemo(() => !accessGateVisible() && protocol.status() !== 'connected');
   const connectionOverlayMessage = createMemo(() => {
-    if (isLocalMode()) return 'Connecting to local agent...';
+    if (isLocalMode()) return 'Connecting to local runtime...';
     if (agentMaintenanceController.maintaining()) {
-      return agentMaintenanceController.stage() || 'Agent restarting...';
+      return agentMaintenanceController.stage() || 'Runtime restarting...';
     }
 
     switch (remoteReconnectController.phase()) {
       case 'transport_retry':
       case 'reconnecting':
-        return 'Reconnecting to agent...';
+        return 'Reconnecting to runtime...';
       case 'waiting_for_agent':
         if (
           remoteReconnectController.controlplaneStatus() === 'offline'
           || remoteReconnectFailure()?.kind === 'agent_offline'
         ) {
-          return 'Waiting for agent...';
+          return 'Waiting for runtime...';
         }
-        return 'Trying the agent again soon...';
+        return 'Trying the runtime again soon...';
       default:
-        return 'Connecting to agent...';
+        return 'Connecting to runtime...';
     }
   });
   const connectError = createMemo(() => connectNotice()?.message ?? null);
@@ -1478,7 +1478,7 @@ export function EnvAppShell() {
     // Access to Flower is still gated via navigation + permission checks.
     list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'codex', name: 'Codex', icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 8, fullScreen: false, renderIn: 'main' } });
-    list.push({ id: 'settings', name: 'Agent Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
+    list.push({ id: 'settings', name: 'Runtime Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
 
@@ -1631,11 +1631,11 @@ export function EnvAppShell() {
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
-    return [{ id: 'settings', icon: Settings, label: 'Agent Settings', onClick: () => openSettings() }];
+    return [{ id: 'settings', icon: Settings, label: 'Runtime Settings', onClick: () => openSettings() }];
   };
 
   const envName = () => {
-    if (accessGateVisible()) return isLocalMode() ? 'Local agent' : 'Environment';
+    if (accessGateVisible()) return isLocalMode() ? 'Local runtime' : 'Environment';
     if (env.state !== 'ready') return 'Loading...';
     return env()?.name || 'Environment';
   };
@@ -1822,33 +1822,33 @@ export function EnvAppShell() {
       case 'resume_blocked':
         return 'Secure session needs attention';
       case 'unlock_required':
-        return isLocalMode() ? 'Unlock local agent' : 'Unlock agent';
+        return isLocalMode() ? 'Unlock local runtime' : 'Unlock runtime';
       default:
-        return isLocalMode() ? 'Local agent' : 'Environment';
+        return isLocalMode() ? 'Local runtime' : 'Environment';
     }
   });
   const accessGateDescription = createMemo(() => {
     switch (accessGatePhase()) {
       case 'checking':
-        return 'Checking whether this page can continue with an existing secure agent session.';
+        return 'Checking whether this page can continue with an existing secure runtime session.';
       case 'resuming':
-        return 'Verifying the password for this environment page and connecting to the agent.';
+        return 'Verifying the password for this environment page and connecting to the runtime.';
       case 'resume_blocked':
         return 'The secure session is still blocked for this environment page. Retry the connection or reload the page.';
       case 'unlock_required':
         return isLocalMode()
-          ? 'Enter the full access password before this browser load can connect to the local agent.'
-          : 'Enter the full access password before this environment page can connect to the agent.';
+          ? 'Enter the full access password before this browser load can connect to the local runtime.'
+          : 'Enter the full access password before this environment page can connect to the runtime.';
       default:
         return 'Secure access is ready.';
     }
   });
   const accessGateCheckingLabel = createMemo(() => 'Checking secure access...');
-  const accessGateResumeHint = createMemo(() => 'The page stays blocked until the direct agent session confirms the password for this environment page.');
+  const accessGateResumeHint = createMemo(() => 'The page stays blocked until the direct runtime session confirms the password for this environment page.');
   const accessGatePasswordLabel = createMemo(() => 'Access password');
   const accessGatePasswordHelp = createMemo(() => (
     isLocalMode()
-      ? 'Use the full Local UI password configured for this local agent.'
+      ? 'Use the full Local UI password configured for this local runtime.'
       : 'Use the full Local UI password configured for this environment page.'
   ));
   const accessGateRegionDescribedBy = createMemo(() => {
@@ -1963,7 +1963,7 @@ export function EnvAppShell() {
               id={ACCESS_GATE_IDS.notice}
               class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground"
             >
-              Password verification stays inside the agent-managed session before interactive features continue.
+              Password verification stays inside the runtime-managed session before interactive features continue.
             </div>
           </section>
         </PanelContent>

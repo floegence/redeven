@@ -3,8 +3,8 @@
 This document describes the **Code App** implementation in the Redeven runtime:
 
 - `floe_app = com.floegence.redeven.code`
-- Browser ↔ Agent traffic is end-to-end encrypted (E2EE) via **Flowersec tunnel**
-- The browser talks to the agent using `flowersec-proxy/http1` and `flowersec-proxy/ws`
+- Browser ↔ Runtime traffic is end-to-end encrypted (E2EE) via **Flowersec tunnel**
+- The browser talks to the runtime using `flowersec-proxy/http1` and `flowersec-proxy/ws`
 
 ## Tunnel endpoint semantics
 
@@ -21,9 +21,9 @@ This document describes the **Code App** implementation in the Redeven runtime:
   - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the controller runtime.
   - The injected script patches same-origin `WebSocket` so it also goes through `flowersec-proxy/ws`, but it now uses `registerCodeAppProxyBridge()` instead of reading `window.top.__flowersecProxyRuntime`.
 
-- Agent side:
-  - The agent starts one `code-server` process per `code_space_id` (localhost only).
-  - The agent hosts a local gateway on `127.0.0.1`:
+- Runtime side:
+  - The runtime starts one `code-server` process per `code_space_id` (localhost only).
+  - The runtime hosts a local gateway on `127.0.0.1`:
     - Serves `/_redeven_proxy/inject.js`
     - Proxies everything else to the correct `code-server` instance
   - The Flowersec server endpoint handlers (`flowersec-proxy/http1`, `flowersec-proxy/ws`) are registered with a **fixed upstream**: the local gateway.
@@ -32,7 +32,7 @@ This document describes the **Code App** implementation in the Redeven runtime:
 
 The Code App stores all code space data on the user's machine (not on Redeven servers).
 
-By default, the agent config is `~/.redeven/config.json`, so the state directory is:
+By default, the runtime config is `~/.redeven/config.json`, so the state directory is:
 
 - `state_dir = ~/.redeven/`
 
@@ -75,7 +75,7 @@ It does **not** delete the user's `workspace_path` directory.
 
 ## Managed runtime model
 
-The agent does **not** bundle code-server into the base CLI/Desktop installer.
+The runtime does **not** bundle code-server into the base CLI/Desktop installer.
 Instead, Codespaces can install a **managed** `code-server` runtime on demand after an explicit user action inside Env App.
 
 Rules:
@@ -83,7 +83,7 @@ Rules:
 - Redeven never auto-installs `code-server` on page load or on codespace open.
 - The user must explicitly click `Install latest` or `Update to latest`.
 - Redeven runs the official upstream `code-server` install script in `standalone` mode and follows the latest stable release flow by default.
-- The managed install target lives under the agent state directory, so no user shell commands or PATH edits are required.
+- The managed install target lives under the runtime state directory, so no user shell commands or PATH edits are required.
 - Redeven does not pin business behavior to one exact upstream `code-server` version.
 
 ## Runtime status and install API
@@ -104,12 +104,12 @@ The explicit install flow is:
    - a focused running/error panel for explicit install or uninstall actions,
    - recent output only while an operation is running or when the last action failed or was cancelled.
 3. If the runtime is missing or unusable, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
-4. After the user explicitly clicks `Install latest` or `Update to latest`, the agent:
+4. After the user explicitly clicks `Install latest` or `Update to latest`, the runtime:
    - downloads the official upstream `install.sh` latest-stable entrypoint,
    - runs it with `--method=standalone --prefix <managed staging prefix>`,
    - validates that the installed binary is usable,
    - promotes the managed runtime into the stable managed prefix.
-5. If the user explicitly clicks `Uninstall`, the agent removes only the Redeven-managed runtime path. Host-installed runtimes and environment overrides are left untouched.
+5. If the user explicitly clicks `Uninstall`, the runtime removes only the Redeven-managed runtime path. Host-installed runtimes and environment overrides are left untouched.
 6. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
 
 ## Runtime status model
@@ -117,7 +117,7 @@ The explicit install flow is:
 `GET /_redeven_proxy/api/code-runtime/status` returns:
 
 - `active_runtime`: the runtime currently selected for Codespaces (`managed`, `system`, `env_override`, or `none`)
-- `managed_runtime`: the Redeven-managed runtime under the agent state directory, whether or not it is currently selected
+- `managed_runtime`: the Redeven-managed runtime under the runtime state directory, whether or not it is currently selected
 - `operation`: the current or most recent explicit management operation (`install` / `uninstall`) plus stage, error, and log tail
 
 This split exists so Settings can truthfully show managed runtime state even when an env override or host runtime is active.
@@ -140,7 +140,7 @@ The selected binary must be usable on the current machine. If the resolved runti
 
 Homebrew installs `code-server` as a **Node.js script** with a hardcoded shebang that points to a specific Homebrew node binary.
 
-To make the agent more robust, the Code App detects a Node.js shebang and executes:
+To make the runtime more robust, the Code App detects a Node.js shebang and executes:
 
 - `node <code-server-script> ...`
 
@@ -156,7 +156,7 @@ If your `node` is not available in `PATH`, you can override it with:
 
 ## Startup timeout
 
-By default, the agent waits up to **20s** for `code-server` to start listening on its localhost port.
+By default, the runtime waits up to **20s** for `code-server` to start listening on its localhost port.
 
 You can override this with:
 
@@ -177,7 +177,7 @@ You can override the grace window with:
 
 ## Permissions
 
-For MVP, the agent requires **all three** permissions before serving Code App sessions:
+For MVP, the runtime requires **all three** permissions before serving Code App sessions:
 
 - `read`
 - `write`
@@ -191,12 +191,12 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Open the codespace from the Redeven Env App (Codespaces page). Do not open the sandbox subdomain directly.
 
 - "code-server binary not found":
-  - Open Env App -> Agent Settings -> `code-server Runtime` -> `Install latest`.
+  - Open Env App -> Runtime Settings -> `code-server Runtime` -> `Install latest`.
   - If you intentionally manage `code-server` yourself, set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
 
 - "code-server binary is present but unusable":
   - Redeven detected a `code-server` binary, but the runtime probe failed on this host.
-  - Update the Redeven-managed runtime to latest from Env App -> Agent Settings -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
+  - Update the Redeven-managed runtime to latest from Env App -> Runtime Settings -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
 
 - "code-server did not start listening on 127.0.0.1:PORT":
   - Check the per-codespace logs under:
@@ -218,4 +218,4 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Ensure the launcher/controller bootstrap can load `/_redeven_boot/`, and the app origin can load `/_redeven_app/` plus `/_redeven_app_sw.js`.
   - Ensure popups are allowed.
   - If you refreshed the codespace window after the bootstrap cleared the URL hash, the page must re-request a fresh `entry_ticket` from its opener (Env App). Reopen the codespace from the Env App if the opener is gone.
-  - Ensure the agent is online and reachable via the configured Flowersec tunnel endpoint.
+  - Ensure the runtime is online and reachable via the configured Flowersec tunnel endpoint.

@@ -59,7 +59,7 @@ describe('createAgentReconnectController', () => {
       return disposeRoot;
     });
 
-    controller.activateWaiting({ kind: 'agent_offline', message: 'Agent is offline.' });
+    controller.activateWaiting({ kind: 'agent_offline', message: 'The runtime is offline.' });
     expect(controller.phase()).toBe('waiting_for_agent');
 
     await vi.advanceTimersByTimeAsync(2_000);
@@ -98,7 +98,7 @@ describe('createAgentReconnectController', () => {
       return disposeRoot;
     });
 
-    controller.activateWaiting({ kind: 'agent_offline', message: 'Agent is offline.' });
+    controller.activateWaiting({ kind: 'agent_offline', message: 'The runtime is offline.' });
     controller.requestReconnectNow();
     await flushAsync();
 

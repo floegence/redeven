@@ -11,7 +11,7 @@ import (
 	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
 )
 
-// Config is the on-disk configuration for the Redeven agent.
+// Config is the on-disk configuration for the Redeven runtime.
 //
 // NOTE: This file contains secrets (PSK). Always keep it chmod 0600.
 type Config struct {
@@ -20,7 +20,7 @@ type Config struct {
 	AgentInstanceID     string                      `json:"agent_instance_id"`
 	Direct              *directv1.DirectConnectInfo `json:"direct"`
 
-	// AI config controls optional native AI agent features.
+	// AI config controls optional native AI assistant features.
 	AI *AIConfig `json:"ai,omitempty"`
 
 	// PermissionPolicy is the local permission cap applied on the endpoint.
@@ -28,11 +28,11 @@ type Config struct {
 	PermissionPolicy *PermissionPolicy `json:"permission_policy,omitempty"`
 
 	// AgentHomeDir is the configured filesystem scope for user-facing features.
-	// If empty, the agent picks a safe default (the current user home dir).
+	// If empty, the runtime picks a safe default (the current user home dir).
 	AgentHomeDir string `json:"agent_home_dir,omitempty"`
 
 	// Shell is the shell command used for terminal sessions.
-	// If empty, the agent picks a default (SHELL or /bin/bash).
+	// If empty, the runtime picks a default (SHELL or /bin/bash).
 	Shell string `json:"shell,omitempty"`
 
 	// LogFormat is "json" or "text".
@@ -41,12 +41,12 @@ type Config struct {
 	LogLevel string `json:"log_level,omitempty"`
 
 	// CodeServerPortMin/Max configures the dynamic port range used for code-server processes.
-	// If unset/invalid, the agent uses a safe default range.
+	// If unset/invalid, the runtime uses a safe default range.
 	CodeServerPortMin int `json:"code_server_port_min,omitempty"`
 	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
 }
 
-// ValidateLocalMinimal validates config fields required to start the agent in local-only mode.
+// ValidateLocalMinimal validates config fields required to start the runtime in local-only mode.
 //
 // Local-only mode is enabled by `redeven run --mode local` and must work even when the
 // controlplane credentials are missing (no bootstrap yet).
@@ -69,7 +69,7 @@ func (c *Config) ValidateLocalMinimal() error {
 
 // ValidateRemoteStrict validates the fields required to connect to the remote control channel.
 //
-// This is the standard mode requirements: the agent must be fully bootstrapped.
+// This is the standard mode requirements: the runtime must be fully bootstrapped.
 func (c *Config) ValidateRemoteStrict() error {
 	if c == nil {
 		return errors.New("nil config")

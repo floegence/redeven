@@ -35,7 +35,7 @@ const (
 type Options struct {
 	Logger   *slog.Logger
 	StateDir string
-	// ConfigPath is the absolute path to the agent config file (used to persist settings updates from the Env App UI).
+	// ConfigPath is the absolute path to the runtime config file (used to persist settings updates from the Env App UI).
 	ConfigPath          string
 	ControlplaneBaseURL string
 

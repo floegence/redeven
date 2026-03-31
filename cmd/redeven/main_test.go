@@ -277,7 +277,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 1", code)
 		}
 		assertContainsAll(t, stderr,
-			"agent is not bootstrapped for remote or hybrid mode:",
+			"runtime is not bootstrapped for remote or hybrid mode:",
 			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and either --env-token or --env-token-env directly to `redeven run`.",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 			"redeven run --mode hybrid --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",

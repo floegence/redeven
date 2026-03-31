@@ -58,11 +58,11 @@ type Options struct {
 	// Agent serves direct sessions (RPC/streams) after a successful E2EE handshake.
 	Agent *agent.Agent
 
-	// ConfigPath is the absolute path to the agent config file.
+	// ConfigPath is the absolute path to the runtime config file.
 	// It is used to compute the local permission cap and to render Settings consistently.
 	ConfigPath string
 
-	// Version is the agent build version (used by /api/local/agent/version/latest).
+	// Version is the runtime build version (used by /api/local/agent/version/latest).
 	Version string
 
 	// Diagnostics stores structured debug-only request timing events.

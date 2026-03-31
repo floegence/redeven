@@ -260,7 +260,7 @@ Pinned install:
 curl -fsSL ${install_script_url} | REDEVEN_VERSION=${release_tag} sh
 \`\`\`
 
-Upgrade an existing agent in place:
+Upgrade an existing runtime in place:
 
 \`\`\`bash
 curl -fsSL ${install_script_url} | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION=${release_tag} sh

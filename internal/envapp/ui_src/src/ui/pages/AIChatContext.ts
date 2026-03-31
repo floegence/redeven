@@ -1132,7 +1132,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     }
 
     if (protocol.status() !== 'connected') {
-      notify.error('Not connected', 'Connecting to agent...');
+      notify.error('Not connected', 'Connecting to runtime...');
       return;
     }
 
@@ -1225,7 +1225,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
   const ensureThreadForSend = async (opts?: { executionMode?: ExecutionMode }): Promise<string | null> => {
     if (protocol.status() !== 'connected') {
-      notify.error('Not connected', 'Connecting to agent...');
+      notify.error('Not connected', 'Connecting to runtime...');
       return null;
     }
     if (!canUseFlower()) {
@@ -1233,7 +1233,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       return null;
     }
     if (!aiEnabled()) {
-      notify.error('AI not configured', 'Open Agent Settings to enable AI.');
+      notify.error('AI not configured', 'Open Runtime Settings to enable AI.');
       return null;
     }
 

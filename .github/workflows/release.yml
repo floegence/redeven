@@ -1,4 +1,4 @@
-name: Release Agent
+name: Release Redeven
 
 on:
   push:
@@ -118,7 +118,7 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Download matching agent package
+      - name: Download matching runtime package
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -71,13 +71,13 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
     if (!currentKind) return null;
 
     if (String(args.protocolStatus() ?? '').trim() === 'connected') {
-      return currentKind === 'upgrade' ? 'Downloading and installing update...' : 'Restarting agent...';
+      return currentKind === 'upgrade' ? 'Downloading and installing update...' : 'Restarting runtime...';
     }
 
     const nextStatus = String(polledStatus() ?? '').trim().toLowerCase();
-    if (nextStatus && nextStatus !== 'online') return 'Agent restarting...';
+    if (nextStatus && nextStatus !== 'online') return 'Runtime restarting...';
     if (nextStatus === 'online') return 'Reconnecting...';
-    return 'Waiting for agent...';
+    return 'Waiting for runtime...';
   });
 
   let maintenanceAborted = false;
@@ -107,14 +107,14 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
     }
 
     if (String(args.protocolStatus() ?? '').trim() !== 'connected') {
-      const message = 'Agent connection is not ready.';
+      const message = 'Runtime connection is not ready.';
       setError(message);
       args.notify.error(nextKind === 'upgrade' ? 'Update failed' : 'Restart failed', message);
       return;
     }
 
     if (String(args.controlplaneStatus() ?? '').trim().toLowerCase() !== 'online') {
-      const message = 'Agent must be online before maintenance starts.';
+      const message = 'The runtime must be online before maintenance starts.';
       setError(message);
       args.notify.error(nextKind === 'upgrade' ? 'Update failed' : 'Restart failed', message);
       return;
@@ -171,13 +171,13 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
           ? `Target version: ${cleanTargetVersion}`
           : response?.message
             ? String(response.message)
-            : 'The agent will restart shortly.',
+            : 'The runtime will restart shortly.',
       );
     } catch (err) {
       const message = formatUnknownError(err) || 'Request failed.';
       if (String(args.protocolStatus() ?? '').trim() !== 'connected') {
         started = true;
-        args.notify.info(nextKind === 'upgrade' ? 'Update started' : 'Restart started', 'Waiting for agent restart...');
+        args.notify.info(nextKind === 'upgrade' ? 'Update started' : 'Restart started', 'Waiting for runtime restart...');
       } else {
         setError(message);
         args.notify.error(nextKind === 'upgrade' ? 'Update failed' : 'Restart failed', message);
@@ -199,7 +199,7 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
       if (maintenanceAborted) return;
 
       if (Date.now() - startedAt > timeoutMs) {
-        const message = 'Timed out waiting for the agent to restart.';
+        const message = 'Timed out waiting for the runtime to restart.';
         setError(message);
         args.notify.error(nextKind === 'upgrade' ? 'Update timed out' : 'Restart timed out', message);
         setKind(null);
@@ -247,9 +247,9 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
           }
 
           if (nextKind === 'upgrade' && previousVersion && nextVersion && nextVersion !== previousVersion) {
-            args.notify.success('Updated', `Agent updated to ${nextVersion}.`);
+            args.notify.success('Updated', `Redeven updated to ${nextVersion}.`);
           } else {
-            args.notify.success('Reconnected', 'Agent is back online.');
+            args.notify.success('Reconnected', 'The runtime is back online.');
           }
           return;
         } catch {

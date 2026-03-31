@@ -32,7 +32,7 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 	plan, err := resolveSelfExecPlan(a.runtimeStatePath)
 	if err != nil {
 		a.log.Warn("sys_restart: resolve self paths failed", "error", err)
-		return nil, &rpc.Error{Code: 500, Message: "failed to resolve agent executable path"}
+		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
 	}
 
 	if !a.maintenance.CompareAndSwap(maintenanceOpNone, maintenanceOpRestart) {
@@ -64,7 +64,7 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 
 	return &syssvc.RestartResponse{
 		OK:      true,
-		Message: "Restart started. The agent will restart shortly.",
+		Message: "Restart started. The runtime will restart shortly.",
 	}, nil
 }
 

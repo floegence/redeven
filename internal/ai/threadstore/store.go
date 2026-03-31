@@ -758,7 +758,7 @@ func isPersistedContextRunEventType(eventType string) bool {
 //
 // Why this exists:
 // - Active runs are held in memory during normal execution.
-// - If the agent process restarts, those in-memory runs are gone.
+// - If the runtime process restarts, those in-memory runs are gone.
 // - Any persisted thread state that still looks "active" must be reset so UI does not show phantom running threads.
 func (s *Store) ResetStaleActiveThreadRunStates(ctx context.Context) (int64, error) {
 	if s == nil || s.db == nil {
