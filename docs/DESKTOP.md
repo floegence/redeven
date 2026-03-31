@@ -119,6 +119,11 @@ Desktop settings live under the Electron user data directory, not inside the git
 - `Desktop Settings...` opens the desktop startup/settings window.
 - Desktop intentionally keeps connection targeting separate from `Desktop Settings...` so shell-owned startup state does not collide with Env App `Runtime Settings`.
 - The blocked page routes to either `Connect to Redeven` or `Desktop Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
+- The native `Connect to Redeven` / `Desktop Settings` pages use the same design-token naming and settings-surface hierarchy as Env App `Runtime Settings`, but they remain repository-owned Desktop HTML pages rather than shared browser components.
+- Responsibility split stays strict:
+  - `Connect to Redeven` owns target selection for the Desktop shell
+  - `Desktop Settings` owns shell-managed startup bind/password and one-shot registration bootstrap
+  - Env App `Runtime Settings` only appears after Local UI opens and owns runtime configuration inside the running endpoint
 
 ## Accessibility behavior
 

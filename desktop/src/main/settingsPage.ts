@@ -1,8 +1,20 @@
-import { desktopTheme } from './desktopTheme';
+import { desktopDarkTheme, desktopLightTheme } from './desktopTheme';
+import {
+  buildSettingsPageViewModel,
+  desktopTargetPresentations,
+  pageWindowTitle,
+  type DesktopPageAlertModel,
+  type DesktopPageCardModel,
+  type DesktopPageChoiceModel,
+  type DesktopPageFieldModel,
+  type DesktopPageMode,
+  type DesktopPageSectionModel,
+  type DesktopSummaryItem,
+} from './settingsPageContent';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
 
-export type DesktopPageMode = 'desktop_settings' | 'connect';
+export type { DesktopPageMode } from './settingsPageContent';
 
 function escapeHTML(value: string): string {
   return String(value ?? '')
@@ -13,252 +25,131 @@ function escapeHTML(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function serializeDraft(draft: DesktopSettingsDraft): string {
-  return JSON.stringify(draft)
+function serializeJSON(value: unknown): string {
+  return JSON.stringify(value)
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e')
     .replaceAll('&', '\\u0026');
 }
 
-function serializeMode(mode: DesktopPageMode): string {
-  return JSON.stringify(mode)
-    .replaceAll('<', '\\u003c')
-    .replaceAll('>', '\\u003e')
-    .replaceAll('&', '\\u0026');
-}
-
-function desktopHostThisDeviceStateNote(externalMode: boolean): string {
-  return externalMode
-    ? 'Desktop is currently targeting External Redeven. These values stay saved for the next This device start.'
-    : 'These values apply to desktop-managed starts on this machine.';
-}
-
-function desktopBootstrapStateNote(externalMode: boolean): string {
-  return externalMode
-    ? 'Desktop is currently targeting External Redeven. This request stays saved for the next This device start and is never sent to the external target.'
-    : 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.';
-}
-
-function desktopSaveButtonLabel(externalMode: boolean): string {
-  return externalMode ? 'Save for this device' : 'Save and apply';
-}
-
-function connectSaveButtonLabel(externalMode: boolean): string {
-  return externalMode ? 'Connect' : 'Use this device';
-}
-
-export function pageWindowTitle(mode: DesktopPageMode): string {
-  return mode === 'connect' ? 'Connect to Redeven' : 'Desktop Settings';
-}
-
-function pageLead(mode: DesktopPageMode): string {
-  return mode === 'connect'
-    ? 'Choose whether Desktop opens this machine or another Redeven Local UI endpoint.'
-    : 'Configure how Desktop starts, exposes, and bootstraps the bundled Redeven runtime when this app is targeting this device.';
-}
-
-function currentTargetLabel(externalMode: boolean): string {
-  return externalMode ? 'External Redeven' : 'This device';
-}
-
-function currentTargetSummary(externalMode: boolean): string {
-  return externalMode
-    ? 'Desktop opens another machine\'s Local UI inside this shell.'
-    : 'Desktop starts the bundled runtime on this machine.';
-}
-
-function summaryCardsHTML(
-  mode: DesktopPageMode,
-  externalMode: boolean,
-  hostThisDeviceStateNote: string,
-  bootstrapStateNote: string,
-): string {
-  if (mode === 'connect') {
-    return `
-      <section class="summary-grid" aria-label="Current configuration summary">
-        <article class="summary-card">
-          <div class="summary-label">Current target</div>
-          <div id="target-summary-value" class="summary-value">${escapeHTML(currentTargetLabel(externalMode))}</div>
-          <p id="target-summary-note" class="summary-copy">${escapeHTML(currentTargetSummary(externalMode))}</p>
-        </article>
-        <article class="summary-card">
-          <div class="summary-label">Desktop settings</div>
-          <div class="summary-value">Stay separate</div>
-          <p class="summary-copy">
-            Host This Device and Register to Redeven on next start stay in Desktop Settings. Agent runtime configuration appears later inside Agent Settings after Local UI opens.
-          </p>
-        </article>
-        <article class="summary-card">
-          <div class="summary-label">External URLs</div>
-          <div class="summary-value">IP or localhost only</div>
-          <p class="summary-copy">
-            Paste a Local UI base URL using localhost or an IP literal. Hostnames are intentionally not supported.
-          </p>
-        </article>
-      </section>
-    `;
-  }
-
+function renderSummaryItem(item: DesktopSummaryItem): string {
+  const valueID = item.valueId ? ` id="${escapeHTML(item.valueId)}"` : '';
+  const bodyID = item.bodyId ? ` id="${escapeHTML(item.bodyId)}"` : '';
   return `
-    <section class="summary-grid" aria-label="Current configuration summary">
-      <article class="summary-card">
-        <div class="summary-label">Current target</div>
-        <div id="target-summary-value" class="summary-value">${escapeHTML(currentTargetLabel(externalMode))}</div>
-        <p id="target-summary-note" class="summary-copy">${escapeHTML(currentTargetSummary(externalMode))}</p>
-      </article>
-      <article class="summary-card">
-        <div class="summary-label">Host This Device</div>
-        <div class="summary-value">Desktop-managed Local UI</div>
-        <p id="host-summary-note" class="summary-copy">${escapeHTML(hostThisDeviceStateNote)}</p>
-      </article>
-      <article class="summary-card">
-        <div class="summary-label">Next start</div>
-        <div class="summary-value">One-shot bootstrap</div>
-        <p id="bootstrap-summary-note" class="summary-copy">${escapeHTML(bootstrapStateNote)}</p>
-      </article>
-    </section>
+    <article class="summary-item">
+      <div class="summary-label">${escapeHTML(item.label)}</div>
+      <div${valueID} class="summary-value">${escapeHTML(item.value)}</div>
+      <p${bodyID} class="summary-copy">${escapeHTML(item.body)}</p>
+    </article>
   `;
 }
 
-function modeCalloutHTML(mode: DesktopPageMode, externalMode: boolean): string {
-  if (mode === 'connect') {
-    return `
-      <section class="notice-panel">
-        <div class="notice-mark" aria-hidden="true"></div>
-        <div class="notice-content">
-          <div class="notice-kicker">Separate Responsibilities</div>
-          <h2>Desktop Settings stay separate</h2>
-          <p class="section-note">
-            Host This Device and Register to Redeven on next start live in Desktop Settings. Agent runtime configuration appears later inside Agent Settings after Local UI opens.
-          </p>
-        </div>
-      </section>
-    `;
-  }
+function renderChoice(choice: DesktopPageChoiceModel): string {
+  return `
+    <label class="choice-option" for="${escapeHTML(choice.id)}">
+      <input id="${escapeHTML(choice.id)}" type="radio" name="target_kind" value="${escapeHTML(choice.value)}">
+      <span>
+        <span class="choice-title">${escapeHTML(choice.title)}</span>
+        <span class="choice-help">${escapeHTML(choice.description)}</span>
+      </span>
+    </label>
+  `;
+}
 
-  const detail = externalMode
-    ? 'Desktop is currently targeting External Redeven, so the values below are stored for the next time you switch back to This device.'
-    : 'Use Connect to Redeven... from the app menu when you want to switch between This device and External Redeven.';
+function renderField(field: DesktopPageFieldModel): string {
+  const typeAttr = field.type ? ` type="${escapeHTML(field.type)}"` : '';
+  const autocompleteAttr = field.autocomplete ? ` autocomplete="${escapeHTML(field.autocomplete)}"` : '';
+  const inputModeAttr = field.inputMode ? ` inputmode="${escapeHTML(field.inputMode)}"` : '';
+  const placeholderAttr = field.placeholder ? ` placeholder="${escapeHTML(field.placeholder)}"` : '';
+  const describedByAttr = field.describedBy?.length
+    ? ` aria-describedby="${escapeHTML(field.describedBy.join(' '))}"`
+    : '';
+  const hiddenAttr = field.hidden ? ' hidden' : '';
+  const fieldID = field.id === 'external-local-ui-url' ? ' id="external-local-ui-url-row"' : '';
+  const spellcheckAttr = ' spellcheck="false"';
+  const helpHTML = field.helpHTML && field.helpId
+    ? `<div id="${escapeHTML(field.helpId)}" class="field-help">${field.helpHTML}</div>`
+    : '';
 
   return `
-    <section class="notice-panel">
-      <div class="notice-mark" aria-hidden="true"></div>
-      <div class="notice-content">
-        <div class="notice-kicker">Connection Target</div>
-        <h2>Connection target is managed separately</h2>
-        <p class="section-note">${escapeHTML(detail)}</p>
+    <div${fieldID} class="field"${hiddenAttr}>
+      <label class="field-label" for="${escapeHTML(field.id)}">${escapeHTML(field.label)}</label>
+      <input
+        id="${escapeHTML(field.id)}"
+        name="${escapeHTML(field.name)}"${typeAttr}${autocompleteAttr}${inputModeAttr}${spellcheckAttr}${describedByAttr}${placeholderAttr}
+      >
+      ${helpHTML}
+    </div>
+  `;
+}
+
+function renderCard(card: DesktopPageCardModel): string {
+  const badgeHTML = card.badge ? `<span class="settings-card-badge">${escapeHTML(card.badge)}</span>` : '';
+  const stateNoteHTML = card.stateNote
+    ? `<div id="${escapeHTML(card.stateNote.id)}" class="card-inline-note" aria-live="polite">${escapeHTML(card.stateNote.text)}</div>`
+    : '';
+  const choiceGroupHTML = card.choices?.length
+    ? `
+      <fieldset class="field">
+        <legend class="field-label">${escapeHTML(card.choiceLegend ?? 'Options')}</legend>
+        <div class="choice-grid">
+          ${card.choices.map(renderChoice).join('')}
+        </div>
+        ${card.choiceHint ? `<div id="${escapeHTML(card.choiceHint.id)}" class="field-help">${escapeHTML(card.choiceHint.text)}</div>` : ''}
+      </fieldset>
+    `
+    : '';
+
+  return `
+    <section class="settings-card" id="${escapeHTML(card.id)}">
+      <div class="settings-card-header">
+        <div class="settings-card-header-copy">
+          <div class="settings-card-kicker">${escapeHTML(card.kicker)}</div>
+          <div class="settings-card-title-row">
+            <h3>${escapeHTML(card.title)}</h3>
+            ${badgeHTML}
+          </div>
+          <p class="settings-card-description">${card.descriptionHTML}</p>
+        </div>
+      </div>
+      <div class="settings-card-body">
+        ${stateNoteHTML}
+        ${choiceGroupHTML}
+        ${card.fields.map(renderField).join('')}
       </div>
     </section>
   `;
 }
 
-function targetSectionHTML(): string {
+function renderSection(section: DesktopPageSectionModel): string {
   return `
-    <section class="panel">
-      <div class="panel-header">
-        <div class="panel-heading">
-          <div class="panel-kicker">Connection</div>
-          <div class="panel-title-row">
-            <div class="panel-mark" aria-hidden="true"></div>
-            <h2>Connect to Redeven</h2>
-          </div>
-          <p class="section-note">
-            Switch between this machine and another Redeven Local UI endpoint without mixing that choice into Desktop startup settings.
-          </p>
-        </div>
-        <div class="panel-pill">Connection target</div>
+    <section class="section-group" aria-labelledby="${escapeHTML(`${section.id}-title`)}">
+      <div class="section-group-header">
+        <h2 id="${escapeHTML(`${section.id}-title`)}" class="section-group-title">${escapeHTML(section.title)}</h2>
+        <div class="section-group-divider" aria-hidden="true"></div>
       </div>
-      <div class="panel-body">
-        <fieldset class="field">
-          <legend class="field-label">Target</legend>
-          <div class="choice-grid">
-            <label class="choice-option" for="target-kind-managed-local">
-              <input id="target-kind-managed-local" type="radio" name="target_kind" value="managed_local">
-              <span class="choice-title">This device</span>
-              <span class="choice-help">Use the bundled Desktop-managed Redeven runtime on this machine.</span>
-            </label>
-            <label class="choice-option" for="target-kind-external-local-ui">
-              <input id="target-kind-external-local-ui" type="radio" name="target_kind" value="external_local_ui">
-              <span class="choice-title">External Redeven</span>
-              <span class="choice-help">Open another machine’s Redeven Local UI directly inside this Desktop shell.</span>
-            </label>
-          </div>
-          <div id="target-kind-help" class="field-help">Choose where Desktop opens the Redeven Local UI.</div>
-        </fieldset>
-        <div id="external-local-ui-url-row" class="field">
-          <label class="field-label" for="external-local-ui-url">Redeven URL</label>
-          <input id="external-local-ui-url" name="external_local_ui_url" autocomplete="url" inputmode="url" spellcheck="false" aria-describedby="external-local-ui-url-help settings-error" placeholder="http://192.168.1.11:24000/">
-          <div id="external-local-ui-url-help" class="field-help">Paste the Local UI base URL. Hostnames are intentionally not supported; use localhost or an IP literal.</div>
-        </div>
+      <div class="section-group-body">
+        ${section.cards.map(renderCard).join('')}
       </div>
     </section>
   `;
 }
 
-function desktopSettingsSectionsHTML(hostThisDeviceStateNote: string, bootstrapStateNote: string): string {
+function renderAlert(alert: DesktopPageAlertModel): string {
+  const bodyID = alert.bodyId ? ` id="${escapeHTML(alert.bodyId)}"` : '';
   return `
-    <section class="panel">
-      <div class="panel-header">
-        <div class="panel-heading">
-          <div class="panel-kicker">Desktop Startup</div>
-          <div class="panel-title-row">
-            <div class="panel-mark" aria-hidden="true"></div>
-            <h2>Host This Device</h2>
-          </div>
-          <p class="section-note">
-            Use <code>127.0.0.1:0</code> for the default loopback-only dynamic port, or an explicit address such as <code>0.0.0.0:24000</code> to make this Desktop reachable on your LAN.
-            <span id="host-this-device-state-note" class="state-note" aria-live="polite">${escapeHTML(hostThisDeviceStateNote)}</span>
-          </p>
-        </div>
-        <div class="panel-pill">Desktop shell</div>
-      </div>
-      <div class="panel-body">
-        <div class="field">
-          <label class="field-label" for="local-ui-bind">Local UI bind address</label>
-          <input id="local-ui-bind" name="local_ui_bind" autocomplete="off" spellcheck="false" aria-describedby="local-ui-bind-help settings-error">
-          <div id="local-ui-bind-help" class="field-help">Non-loopback Local UI binds require a Local UI password.</div>
-        </div>
-        <div class="field">
-          <label class="field-label" for="local-ui-password">Local UI password</label>
-          <input id="local-ui-password" name="local_ui_password" type="password" autocomplete="new-password" spellcheck="false" aria-describedby="local-ui-password-help settings-error">
-          <div id="local-ui-password-help" class="field-help">Desktop stores this secret locally and passes it through <code>--password-env</code>.</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header">
-        <div class="panel-heading">
-          <div class="panel-kicker">Next Start</div>
-          <div class="panel-title-row">
-            <div class="panel-mark" aria-hidden="true"></div>
-            <h2>Register to Redeven on next start</h2>
-          </div>
-          <p class="section-note">
-            These values are treated as a one-shot bootstrap request for the next successful desktop-managed start on this device, then cleared automatically.
-            <span id="bootstrap-state-note" class="state-note" aria-live="polite">${escapeHTML(bootstrapStateNote)}</span>
-          </p>
-        </div>
-        <div class="panel-pill">One-shot request</div>
-      </div>
-      <div class="panel-body">
-        <div class="field">
-          <label class="field-label" for="controlplane-url">Control plane URL</label>
-          <input id="controlplane-url" name="controlplane_url" autocomplete="url" inputmode="url" spellcheck="false" aria-describedby="settings-error">
-        </div>
-        <div class="field">
-          <label class="field-label" for="env-id">Environment ID</label>
-          <input id="env-id" name="env_id" autocomplete="off" spellcheck="false" aria-describedby="settings-error">
-        </div>
-        <div class="field">
-          <label class="field-label" for="env-token">Environment token</label>
-          <input id="env-token" name="env_token" type="password" autocomplete="off" spellcheck="false" aria-describedby="env-token-help settings-error">
-          <div id="env-token-help" class="field-help">Desktop passes this secret through <code>--env-token-env</code> instead of putting it in the process arguments.</div>
-        </div>
+    <section class="inline-alert" data-tone="${escapeHTML(alert.tone ?? 'default')}">
+      <div class="inline-alert-bar" aria-hidden="true"></div>
+      <div class="inline-alert-copy">
+        <div class="inline-alert-kicker">${escapeHTML(alert.kicker)}</div>
+        <div class="inline-alert-title">${escapeHTML(alert.title)}</div>
+        <p${bodyID} class="inline-alert-body">${escapeHTML(alert.body)}</p>
       </div>
     </section>
   `;
 }
+
+export { pageWindowTitle };
 
 export function buildSettingsPageHTML(
   draft: DesktopSettingsDraft,
@@ -268,42 +159,62 @@ export function buildSettingsPageHTML(
 ): string {
   const error = String(errorMessage ?? '').trim();
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
-  const externalMode = draft.target_kind === 'external_local_ui';
-  const hostThisDeviceStateNote = desktopHostThisDeviceStateNote(externalMode);
-  const bootstrapStateNote = desktopBootstrapStateNote(externalMode);
-  const saveButtonLabel = mode === 'connect' ? connectSaveButtonLabel(externalMode) : desktopSaveButtonLabel(externalMode);
-  const pageTitle = pageWindowTitle(mode);
-  const pageStatusLabel = currentTargetLabel(externalMode);
-  const bodyHTML = mode === 'connect'
-    ? targetSectionHTML()
-    : desktopSettingsSectionsHTML(hostThisDeviceStateNote, bootstrapStateNote);
+  const pageModel = buildSettingsPageViewModel(mode, draft.target_kind);
 
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${escapeHTML(pageTitle)}</title>
+    <title>${escapeHTML(pageModel.windowTitle)}</title>
     <style>
       :root {
         color-scheme: light;
-        --background: ${desktopTheme.pageBackground};
-        --foreground: ${desktopTheme.text};
-        --primary: ${desktopTheme.accent};
-        --primary-foreground: ${desktopTheme.accentText};
-        --secondary: ${desktopTheme.surfaceMuted};
-        --accent: ${desktopTheme.accentSoft};
-        --accent-foreground: ${desktopTheme.text};
-        --card: ${desktopTheme.surface};
-        --card-foreground: ${desktopTheme.text};
-        --border: ${desktopTheme.border};
-        --input: ${desktopTheme.border};
-        --ring: ${desktopTheme.accent};
-        --muted: ${desktopTheme.surfaceMuted};
-        --muted-foreground: ${desktopTheme.muted};
-        --info: oklch(0.65 0.13 250);
-        --danger: ${desktopTheme.danger};
+        --background: ${desktopLightTheme.pageBackground};
+        --foreground: ${desktopLightTheme.text};
+        --primary: ${desktopLightTheme.accent};
+        --primary-foreground: ${desktopLightTheme.accentText};
+        --secondary: ${desktopLightTheme.surfaceMuted};
+        --secondary-foreground: ${desktopLightTheme.text};
+        --accent: ${desktopLightTheme.accentSoft};
+        --accent-foreground: ${desktopLightTheme.text};
+        --card: ${desktopLightTheme.surface};
+        --card-foreground: ${desktopLightTheme.text};
+        --border: ${desktopLightTheme.border};
+        --input: ${desktopLightTheme.border};
+        --ring: ${desktopLightTheme.accent};
+        --muted: ${desktopLightTheme.surfaceMuted};
+        --muted-foreground: ${desktopLightTheme.muted};
+        --success: ${desktopLightTheme.success};
+        --warning: ${desktopLightTheme.warning};
+        --error: ${desktopLightTheme.danger};
+        --info: ${desktopLightTheme.info};
         --shadow: 0 18px 40px rgba(19, 30, 47, 0.08);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --background: ${desktopDarkTheme.pageBackground};
+          --foreground: ${desktopDarkTheme.text};
+          --primary: ${desktopDarkTheme.accent};
+          --primary-foreground: ${desktopDarkTheme.accentText};
+          --secondary: ${desktopDarkTheme.surfaceMuted};
+          --secondary-foreground: ${desktopDarkTheme.text};
+          --accent: ${desktopDarkTheme.accentSoft};
+          --accent-foreground: ${desktopDarkTheme.text};
+          --card: ${desktopDarkTheme.surface};
+          --card-foreground: ${desktopDarkTheme.text};
+          --border: ${desktopDarkTheme.border};
+          --input: ${desktopDarkTheme.border};
+          --ring: ${desktopDarkTheme.accent};
+          --muted: ${desktopDarkTheme.surfaceMuted};
+          --muted-foreground: ${desktopDarkTheme.muted};
+          --success: ${desktopDarkTheme.success};
+          --warning: ${desktopDarkTheme.warning};
+          --error: ${desktopDarkTheme.danger};
+          --info: ${desktopDarkTheme.info};
+          --shadow: 0 22px 46px rgba(0, 0, 0, 0.28);
+        }
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
@@ -337,29 +248,22 @@ export function buildSettingsPageHTML(
         outline-offset: 3px;
       }
       main {
-        width: min(1040px, 100%);
+        width: min(980px, 100%);
         margin: 0 auto;
       }
-      .workspace-shell {
+      .settings-shell {
         overflow: hidden;
         border: 1px solid var(--border);
         border-radius: 18px;
-        background: color-mix(in srgb, var(--card) 96%, white);
+        background: color-mix(in srgb, var(--card) 96%, transparent);
         box-shadow: var(--shadow);
       }
-      .workspace-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 18px;
-        padding: 20px 22px;
-        border-bottom: 1px solid var(--border);
-        background: color-mix(in srgb, var(--card) 75%, var(--background));
-      }
-      .workspace-heading {
+      .page-header {
         display: grid;
-        gap: 8px;
-        min-width: 0;
+        gap: 10px;
+        padding: 22px 24px 20px;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in srgb, var(--card) 72%, var(--background));
       }
       .eyebrow {
         margin: 0;
@@ -377,16 +281,16 @@ export function buildSettingsPageHTML(
       }
       h1 {
         margin: 0;
-        font-size: clamp(21px, 3vw, 27px);
-        line-height: 1.15;
+        font-size: clamp(22px, 3vw, 30px);
+        line-height: 1.1;
         letter-spacing: -0.02em;
       }
-      p.lead {
+      .lead {
         margin: 0;
+        max-width: 72ch;
         color: var(--muted-foreground);
-        line-height: 1.65;
-        max-width: 70ch;
         font-size: 13px;
+        line-height: 1.65;
       }
       .status-chip {
         display: inline-flex;
@@ -395,7 +299,7 @@ export function buildSettingsPageHTML(
         padding: 0 10px;
         border-radius: 999px;
         border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--secondary) 72%, white);
+        background: color-mix(in srgb, var(--secondary) 72%, transparent);
         color: var(--foreground);
         font-size: 10px;
         font-weight: 700;
@@ -403,49 +307,27 @@ export function buildSettingsPageHTML(
         text-transform: uppercase;
       }
       .status-chip[data-tone="external"] {
-        border-color: color-mix(in srgb, var(--info) 35%, var(--border));
-        background: color-mix(in srgb, var(--info) 10%, var(--background));
-        color: color-mix(in srgb, var(--foreground) 86%, var(--info));
-      }
-      .workspace-side {
-        width: min(300px, 100%);
-        display: grid;
-        gap: 6px;
-        padding: 12px 14px;
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        background: color-mix(in srgb, var(--background) 80%, white);
-      }
-      .side-kicker {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
-      }
-      .side-copy {
-        margin: 0;
-        color: var(--muted-foreground);
-        font-size: 12px;
-        line-height: 1.6;
+        border-color: color-mix(in srgb, var(--info) 42%, var(--border));
+        background: color-mix(in srgb, var(--info) 12%, transparent);
+        color: color-mix(in srgb, var(--foreground) 84%, var(--info));
       }
       form {
         display: grid;
-        gap: 14px;
+        gap: 18px;
         padding: 18px;
       }
-      .summary-grid {
+      .summary-strip {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
       }
-      .summary-card {
+      .summary-item {
         display: grid;
         gap: 6px;
         padding: 12px 14px;
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: var(--card);
+        background: color-mix(in srgb, var(--background) 62%, var(--card));
       }
       .summary-label {
         font-size: 11px;
@@ -465,7 +347,7 @@ export function buildSettingsPageHTML(
         font-size: 12px;
         line-height: 1.55;
       }
-      .notice-panel {
+      .inline-alert {
         display: grid;
         grid-template-columns: auto minmax(0, 1fr);
         gap: 12px;
@@ -473,102 +355,152 @@ export function buildSettingsPageHTML(
         padding: 14px;
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: color-mix(in srgb, var(--muted) 28%, var(--card));
+        background: color-mix(in srgb, var(--muted) 22%, var(--card));
       }
-      .notice-mark {
+      .inline-alert[data-tone="info"] {
+        border-color: color-mix(in srgb, var(--info) 24%, var(--border));
+        background: color-mix(in srgb, var(--info) 10%, var(--card));
+      }
+      .inline-alert-bar {
         width: 4px;
         min-height: 100%;
         border-radius: 999px;
         background: var(--primary);
       }
-      .notice-content {
+      .inline-alert[data-tone="info"] .inline-alert-bar {
+        background: color-mix(in srgb, var(--info) 70%, var(--primary));
+      }
+      .inline-alert-copy {
         display: grid;
         gap: 4px;
       }
-      .notice-kicker {
+      .inline-alert-kicker {
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.1em;
         text-transform: uppercase;
         color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
       }
-      h2 {
-        margin: 0;
+      .inline-alert-title {
         font-size: 16px;
+        font-weight: 600;
         line-height: 1.2;
       }
-      p.section-note {
+      .inline-alert-body {
         margin: 0;
         color: var(--muted-foreground);
-        line-height: 1.6;
         font-size: 12px;
+        line-height: 1.6;
       }
-      .panel {
+      .section-group {
+        display: grid;
+        gap: 12px;
+      }
+      .section-group-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .section-group-title {
+        margin: 0;
+        white-space: nowrap;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+      }
+      .section-group-divider {
+        height: 1px;
+        flex: 1 1 auto;
+        background: color-mix(in srgb, var(--border) 64%, transparent);
+      }
+      .section-group-body {
+        display: grid;
+        gap: 14px;
+      }
+      .settings-card {
         overflow: hidden;
         border: 1px solid var(--border);
         border-radius: 14px;
         background: var(--card);
       }
-      .panel-header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
+      .settings-card-header {
         padding: 14px 16px;
         border-bottom: 1px solid var(--border);
-        background: color-mix(in srgb, var(--muted) 24%, var(--card));
+        background: color-mix(in srgb, var(--muted) 20%, var(--card));
       }
-      .panel-heading {
+      .settings-card-header-copy {
         display: grid;
         gap: 6px;
-        min-width: 0;
       }
-      .panel-kicker {
+      .settings-card-kicker {
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.1em;
         text-transform: uppercase;
         color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
       }
-      .panel-title-row {
+      .settings-card-title-row {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
       }
-      .panel-mark {
-        width: 3px;
-        height: 18px;
-        border-radius: 999px;
-        background: var(--primary);
+      .settings-card-title-row h3 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.2;
       }
-      .panel-pill {
-        flex-shrink: 0;
+      .settings-card-badge {
         display: inline-flex;
         align-items: center;
         min-height: 24px;
         padding: 0 10px;
-        border: 1px solid var(--border);
         border-radius: 999px;
-        background: var(--background);
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--background) 70%, var(--card));
         color: var(--muted-foreground);
         font-size: 10px;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
-      .panel-body {
-        padding: 16px;
+      .settings-card-description {
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+      .settings-card-body {
         display: grid;
         gap: 14px;
+        padding: 16px;
+      }
+      .card-inline-note {
+        padding: 10px 12px;
+        border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--primary) 6%, var(--background));
+        color: var(--foreground);
+        font-size: 12px;
+        line-height: 1.55;
       }
       .field {
         display: grid;
         gap: 6px;
       }
+      fieldset {
+        margin: 0;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+      }
       .field-label {
         display: block;
         font-size: 12px;
         font-weight: 600;
+        color: var(--foreground);
       }
       .field-help {
         color: var(--muted-foreground);
@@ -577,34 +509,32 @@ export function buildSettingsPageHTML(
       }
       input {
         width: 100%;
-        min-height: 36px;
-        border-radius: 8px;
+        min-height: 38px;
+        border-radius: 10px;
         border: 1px solid var(--input);
-        background: var(--background);
+        background: color-mix(in srgb, var(--background) 84%, transparent);
         color: var(--foreground);
         padding: 0 12px;
         font-size: 12px;
         box-shadow: 0 1px 2px rgba(19, 30, 47, 0.04);
       }
       input::placeholder {
-        color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+        color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+      }
+      input:focus-visible,
+      button:focus-visible,
+      .choice-option:has(input:focus-visible) {
+        outline: 2px solid color-mix(in srgb, var(--ring) 22%, transparent);
+        outline-offset: 2px;
       }
       input:focus-visible,
       button:focus-visible {
-        outline: 2px solid color-mix(in srgb, var(--ring) 18%, transparent);
-        outline-offset: 0;
-        border-color: var(--ring);
+        border-color: color-mix(in srgb, var(--ring) 48%, var(--border));
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent);
       }
       .choice-grid {
         display: grid;
         gap: 10px;
-      }
-      fieldset {
-        margin: 0;
-        min-width: 0;
-        padding: 0;
-        border: 0;
       }
       .choice-option {
         display: grid;
@@ -614,18 +544,17 @@ export function buildSettingsPageHTML(
         padding: 12px;
         border-radius: 12px;
         border: 1px solid var(--border);
-        background: var(--background);
+        background: color-mix(in srgb, var(--background) 72%, var(--card));
         cursor: pointer;
         transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
       }
-      .choice-option:has(input:checked) {
-        border-color: color-mix(in srgb, var(--ring) 35%, var(--border));
-        background: color-mix(in srgb, var(--accent) 60%, var(--background));
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ring) 12%, transparent);
+      .choice-option:hover {
+        background: color-mix(in srgb, var(--accent) 34%, var(--background));
       }
-      .choice-option:has(input:focus-visible) {
-        outline: 2px solid color-mix(in srgb, var(--ring) 18%, transparent);
-        outline-offset: 2px;
+      .choice-option:has(input:checked) {
+        border-color: color-mix(in srgb, var(--ring) 38%, var(--border));
+        background: color-mix(in srgb, var(--primary) 8%, var(--background));
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ring) 12%, transparent);
       }
       .choice-option input {
         width: 16px;
@@ -654,27 +583,21 @@ export function buildSettingsPageHTML(
         font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
         font-size: 11px;
       }
-      .state-note {
-        display: block;
-        margin-top: 8px;
-        font-weight: 600;
-        color: var(--foreground);
-      }
       .form-footer {
         display: grid;
         gap: 12px;
         padding: 14px 16px;
         border: 1px solid var(--border);
         border-radius: 12px;
-        background: color-mix(in srgb, var(--muted) 22%, var(--card));
+        background: color-mix(in srgb, var(--muted) 18%, var(--card));
       }
       .error {
         display: ${error ? 'block' : 'none'};
         padding: 10px 12px;
-        border: 1px solid color-mix(in srgb, var(--danger) 26%, transparent);
+        border: 1px solid color-mix(in srgb, var(--error) 26%, transparent);
         border-radius: 10px;
-        background: color-mix(in srgb, var(--danger) 10%, transparent);
-        color: var(--danger);
+        background: color-mix(in srgb, var(--error) 10%, transparent);
+        color: var(--error);
         line-height: 1.55;
         font-size: 12px;
       }
@@ -684,32 +607,32 @@ export function buildSettingsPageHTML(
         gap: 8px;
       }
       button {
-        min-height: 32px;
-        border-radius: 8px;
+        min-height: 34px;
+        border-radius: 10px;
         border: 1px solid var(--input);
-        background: var(--background);
+        background: color-mix(in srgb, var(--background) 84%, transparent);
         color: var(--foreground);
-        padding: 0 12px;
+        padding: 0 14px;
         font-size: 12px;
         font-weight: 600;
         box-shadow: 0 1px 2px rgba(19, 30, 47, 0.04);
         cursor: pointer;
         transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
       }
+      button:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--accent) 54%, var(--background));
+      }
       button.primary {
         border-color: var(--primary);
         background: var(--primary);
         color: var(--primary-foreground);
       }
-      button:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--accent) 88%, white);
-      }
       button.primary:hover:not(:disabled) {
         background: color-mix(in srgb, var(--primary) 92%, black);
       }
       button:disabled {
-        opacity: 0.65;
-        cursor: wait;
+        opacity: 0.6;
+        cursor: not-allowed;
       }
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
@@ -722,63 +645,53 @@ export function buildSettingsPageHTML(
       }
       @media (max-width: 720px) {
         body { padding: calc(12px + ${titleBarInset}) 12px 12px; }
-        .workspace-header { padding: 16px; }
+        .page-header { padding: 18px 18px 16px; }
         form { padding: 14px; }
-        .workspace-side { width: 100%; }
-        .summary-grid { grid-template-columns: 1fr; }
-        .panel-header { flex-direction: column; }
-        .panel-pill { align-self: flex-start; }
+        .summary-strip { grid-template-columns: 1fr; }
         .actions { flex-direction: column-reverse; }
         button { width: 100%; }
         .skip-link { left: 12px; }
-      }
-      @media (max-width: 900px) {
-        .workspace-header { flex-direction: column; }
       }
     </style>
   </head>
   <body>
     <a class="skip-link" href="#settings-main">Skip to main content</a>
     <main id="settings-main" tabindex="-1">
-      <div class="workspace-shell">
-        <header class="workspace-header">
-          <div class="workspace-heading">
-            <p class="eyebrow">Redeven Desktop</p>
-            <div class="title-row">
-              <h1>${escapeHTML(pageTitle)}</h1>
-              <span id="page-status-badge" class="status-chip" data-tone="${externalMode ? 'external' : 'local'}">${escapeHTML(pageStatusLabel)}</span>
-            </div>
-            <p id="page-lead" class="lead">${escapeHTML(pageLead(mode))}</p>
+      <div class="settings-shell">
+        <header class="page-header">
+          <p class="eyebrow">Redeven Desktop</p>
+          <div class="title-row">
+            <h1>${escapeHTML(pageModel.windowTitle)}</h1>
+            <span id="page-status-badge" class="status-chip" data-tone="${escapeHTML(pageModel.statusTone)}">${escapeHTML(pageModel.statusLabel)}</span>
           </div>
-          <aside class="workspace-side" aria-label="Desktop shell note">
-            <div class="side-kicker">Desktop shell</div>
-            <p class="side-copy">
-              Target selection stays here. Agent runtime configuration appears later inside Agent Settings after Local UI opens.
-            </p>
-          </aside>
+          <p id="page-lead" class="lead">${escapeHTML(pageModel.lead)}</p>
         </header>
         <form id="settings-form" aria-describedby="page-lead settings-error">
-          ${summaryCardsHTML(mode, externalMode, hostThisDeviceStateNote, bootstrapStateNote)}
-          ${modeCalloutHTML(mode, externalMode)}
-          ${bodyHTML}
+          <section class="summary-strip" aria-label="Current configuration summary">
+            ${pageModel.summaryItems.map(renderSummaryItem).join('')}
+          </section>
+          ${renderAlert(pageModel.alert)}
+          ${pageModel.sections.map(renderSection).join('')}
 
           <div class="form-footer">
             <div id="settings-error" class="error" role="alert" aria-live="assertive" tabindex="-1">${escapeHTML(error)}</div>
 
             <div class="actions">
               <button id="cancel" type="button">Cancel</button>
-              <button id="save" class="primary" type="submit">${escapeHTML(saveButtonLabel)}</button>
+              <button id="save" class="primary" type="submit">${escapeHTML(pageModel.saveLabel)}</button>
             </div>
           </div>
         </form>
       </div>
     </main>
 
-    <script id="redeven-settings-state" type="application/json">${serializeDraft(draft)}</script>
-    <script id="redeven-settings-mode" type="application/json">${serializeMode(mode)}</script>
+    <script id="redeven-settings-state" type="application/json">${serializeJSON(draft)}</script>
+    <script id="redeven-settings-mode" type="application/json">${serializeJSON(mode)}</script>
+    <script id="redeven-target-presentations" type="application/json">${serializeJSON(desktopTargetPresentations)}</script>
     <script>
       const state = JSON.parse(document.getElementById('redeven-settings-state').textContent || '{}');
       const mode = JSON.parse(document.getElementById('redeven-settings-mode').textContent || '"desktop_settings"');
+      const targetPresentations = JSON.parse(document.getElementById('redeven-target-presentations').textContent || '{}');
       const form = document.getElementById('settings-form');
       const errorEl = document.getElementById('settings-error');
       const cancelButton = document.getElementById('cancel');
@@ -800,6 +713,7 @@ export function buildSettingsPageHTML(
       const targetSummaryNote = document.getElementById('target-summary-note');
       const hostSummaryNote = document.getElementById('host-summary-note');
       const bootstrapSummaryNote = document.getElementById('bootstrap-summary-note');
+      const desktopTargetAlertBody = document.getElementById('desktop-target-alert-body');
 
       function selectedTargetKind() {
         if (targetKindInputs.length === 0) {
@@ -809,55 +723,59 @@ export function buildSettingsPageHTML(
         return selected ? selected.value : (state.target_kind || 'managed_local');
       }
 
-      function currentSaveLabel(externalMode) {
-        if (mode === 'connect') {
-          return externalMode ? 'Connect' : 'Use this device';
-        }
-        return externalMode ? 'Save for this device' : 'Save and apply';
+      function resolvePresentation(targetKind) {
+        return targetPresentations[targetKind] || targetPresentations.managed_local || {
+          statusLabel: 'This device',
+          statusTone: 'local',
+          targetSummaryBody: '',
+          hostStateNote: '',
+          bootstrapStateNote: '',
+          desktopSettingsNotice: '',
+          saveLabel: {
+            desktop_settings: 'Save and apply',
+            connect: 'Use this device',
+          },
+        };
       }
 
       function syncTargetMode() {
-        const externalMode = selectedTargetKind() === 'external_local_ui';
+        const targetKind = selectedTargetKind();
+        const presentation = resolvePresentation(targetKind);
+        const externalMode = targetKind === 'external_local_ui';
         if (pageStatusBadge) {
-          pageStatusBadge.textContent = externalMode ? 'External Redeven' : 'This device';
-          pageStatusBadge.setAttribute('data-tone', externalMode ? 'external' : 'local');
+          pageStatusBadge.textContent = presentation.statusLabel;
+          pageStatusBadge.setAttribute('data-tone', presentation.statusTone);
         }
         if (targetSummaryValue) {
-          targetSummaryValue.textContent = externalMode ? 'External Redeven' : 'This device';
+          targetSummaryValue.textContent = presentation.statusLabel;
         }
         if (targetSummaryNote) {
-          targetSummaryNote.textContent = externalMode
-            ? 'Desktop opens another machine\\'s Local UI inside this shell.'
-            : 'Desktop starts the bundled runtime on this machine.';
+          targetSummaryNote.textContent = presentation.targetSummaryBody;
+        }
+        if (hostThisDeviceStateNote) {
+          hostThisDeviceStateNote.textContent = presentation.hostStateNote;
+        }
+        if (hostSummaryNote) {
+          hostSummaryNote.textContent = presentation.hostStateNote;
+        }
+        if (bootstrapStateNote) {
+          bootstrapStateNote.textContent = presentation.bootstrapStateNote;
+        }
+        if (bootstrapSummaryNote) {
+          bootstrapSummaryNote.textContent = presentation.bootstrapStateNote;
+        }
+        if (desktopTargetAlertBody) {
+          desktopTargetAlertBody.textContent = presentation.desktopSettingsNotice;
         }
         if (externalLocalUIURLRow) {
           externalLocalUIURLRow.hidden = !externalMode;
         }
         if (fields.external_local_ui_url) {
           fields.external_local_ui_url.disabled = !externalMode;
-          fields.external_local_ui_url.placeholder = 'http://192.168.1.11:24000/';
         }
-        if (hostThisDeviceStateNote) {
-          hostThisDeviceStateNote.textContent = externalMode
-            ? 'Desktop is currently targeting External Redeven. These values stay saved for the next This device start.'
-            : 'These values apply to desktop-managed starts on this machine.';
+        if (saveButton) {
+          saveButton.textContent = presentation.saveLabel[mode] || saveButton.textContent;
         }
-        if (hostSummaryNote) {
-          hostSummaryNote.textContent = externalMode
-            ? 'Desktop is currently targeting External Redeven. These values stay saved for the next This device start.'
-            : 'These values apply to desktop-managed starts on this machine.';
-        }
-        if (bootstrapStateNote) {
-          bootstrapStateNote.textContent = externalMode
-            ? 'Desktop is currently targeting External Redeven. This request stays saved for the next This device start and is never sent to the external target.'
-            : 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.';
-        }
-        if (bootstrapSummaryNote) {
-          bootstrapSummaryNote.textContent = externalMode
-            ? 'Desktop is currently targeting External Redeven. This request stays saved for the next This device start and is never sent to the external target.'
-            : 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.';
-        }
-        saveButton.textContent = currentSaveLabel(externalMode);
       }
 
       for (const [key, element] of Object.entries(fields)) {
@@ -871,6 +789,7 @@ export function buildSettingsPageHTML(
       syncTargetMode();
 
       function setBusy(busy) {
+        form.setAttribute('aria-busy', busy ? 'true' : 'false');
         saveButton.disabled = busy;
         cancelButton.disabled = busy;
       }
@@ -907,11 +826,15 @@ export function buildSettingsPageHTML(
           if (!element) continue;
           payload[key] = element.value || '';
         }
-        const result = await window.redevenDesktopSettings.save(payload);
-        if (!result || result.ok !== true) {
+        try {
+          const result = await window.redevenDesktopSettings.save(payload);
+          if (!result || result.ok !== true) {
+            setBusy(false);
+            setError(result && result.error ? result.error : 'Failed to save settings.');
+          }
+        } catch (error) {
           setBusy(false);
-          setError(result && result.error ? result.error : 'Failed to save settings.');
-          return;
+          setError(error instanceof Error ? error.message : String(error));
         }
       });
 
