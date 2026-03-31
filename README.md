@@ -5,53 +5,79 @@
 # Redeven
 
 <p align="center">
-  <strong>Turn any machine into a secure E2EE workspace endpoint for files, terminals, monitoring, codespaces, desktop access, and AI-assisted workflows.</strong>
+  <strong>Secure the real machine, not just the browser tab. 🔐⚡</strong><br>
+  Turn any machine into an end-to-end encrypted workspace endpoint for files, terminals, monitoring, codespaces, desktop access, and AI-assisted workflows.
 </p>
 
 <p align="center">
   <a href="https://github.com/floegence/redeven/releases">Get Desktop</a> |
   <a href="#quick-start">Install CLI</a> |
   <a href="#capabilities">Explore Capabilities</a> |
-  <a href="#docs-by-task">Open Docs</a>
+  <a href="#docs-by-task">Open Docs</a> |
+  <a href="https://github.com/floegence/flowersec">Flowersec</a> |
+  <a href="https://github.com/floegence/floe-webapp">floe-webapp</a>
 </p>
 
-![Go Version](https://img.shields.io/badge/Go-1.25.8-00ADD8?logo=go)
-![Node Version](https://img.shields.io/badge/Node.js-24-339933?logo=node.js)
-![Architecture](https://img.shields.io/badge/Architecture-E2EE%20Endpoint-5B2CFF)
-![Desktop](https://img.shields.io/badge/Desktop-Electron-47848F?logo=electron)
-![Distribution](https://img.shields.io/badge/Distribution-GitHub%20Releases-181717?logo=github)
+<p align="center">
+  <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.25.8-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
+  <a href="#security-at-a-glance"><img alt="Architecture" src="https://img.shields.io/badge/Architecture-E2EE%20Endpoint-6C3BFF?style=flat-square"></a>
+  <a href="https://github.com/floegence/flowersec"><img alt="Flowersec" src="https://img.shields.io/badge/Tunnel-Flowersec-F27A1A?style=flat-square"></a>
+  <a href="https://github.com/floegence/floe-webapp"><img alt="floe-webapp" src="https://img.shields.io/badge/UI-floe--webapp-7B61FF?style=flat-square"></a>
+  <a href="docs/DESKTOP.md"><img alt="Desktop" src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron"></a>
+  <a href="docs/CODE_APP.md"><img alt="Code App" src="https://img.shields.io/badge/Code%20App-code--server-007ACC?style=flat-square"></a>
+  <a href="docs/AI_AGENT.md"><img alt="Flower" src="https://img.shields.io/badge/AI-Flower-FF4FA3?style=flat-square"></a>
+  <a href="https://github.com/floegence/redeven/releases"><img alt="Distribution" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
+  <a href="#open-source-scope"><img alt="Open Source" src="https://img.shields.io/badge/Open%20Source-Auditable-2E8B57?style=flat-square"></a>
+</p>
 
-Redeven runs on the user machine as the endpoint/runtime layer. Redeven Service issues grants, Flowersec carries encrypted bytes, and the endpoint hosts the real application surfaces and local capabilities.
+Redeven is the endpoint/runtime that actually lives on the user machine. The service layer issues grants, [Flowersec](https://github.com/floegence/flowersec) carries encrypted bytes, and shared frontend interaction patterns can build on released [floe-webapp](https://github.com/floegence/floe-webapp) packages.
 
-This repository stays open-source and auditable. It documents the public `redeven` runtime, its Local UI behavior, and the GitHub Release contract.
+**Why it feels different**
+- 🔐 Plaintext stays where it belongs: on the endpoint.
+- 🧭 One runtime unlocks Env App, Code App, Desktop Shell, Flower, and Codex.
+- 📦 The same contract ships as both CLI and desktop artifacts through auditable GitHub Releases.
 
 ![Redeven architecture overview](docs/images/readme-architecture.svg)
 
 ## Why teams use it
 
+A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the control plane lean while giving the user machine the real runtime surface. ✨
+
 - Keep application data on the endpoint while the control plane only issues grants and metadata.
 - Give users one entry point for files, terminals, monitoring, codespaces, and optional AI workflows.
 - Ship the same runtime as a CLI and as a desktop app, with versioned GitHub Release artifacts and verification steps.
+
+## Key technologies
+
+| Technology | Role in Redeven | Jump |
+| --- | --- | --- |
+| [Flowersec](https://github.com/floegence/flowersec) | End-to-end encrypted transport for runtime sessions and byte forwarding | [Open repository](https://github.com/floegence/flowersec) |
+| [floe-webapp](https://github.com/floegence/floe-webapp) | Shared frontend building blocks and interaction semantics for Redeven surfaces | [Open repository](https://github.com/floegence/floe-webapp) |
+| Go | Core runtime, CLI, session handling, and embedded services | [Install Go](https://go.dev/) |
+| Electron | Desktop shell that wraps Redeven Local UI with native UX and diagnostics | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 
 ## Capabilities
 
 | Surface | What users get | Why it matters | Docs |
 | --- | --- | --- | --- |
-| `Env App` | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Agent Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| `Code App` | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
-| `Desktop Shell` | Native Electron app that opens this device or another Redeven Local UI | Local UX, Desktop Settings, connection management, blocked-state handling, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
-| `Flower` (optional) | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
-| `Codex` (optional) | Independent Codex conversation threads backed by the host machine's `codex app-server` | Keeps Codex UI, official Codex branding, and upgrade cadence separate from Flower while giving Codex its own navigator/chat shell inside Env App | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
+| `Env App` 🗂️ | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Agent Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| `Code App` 💻 | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
+| `Desktop Shell` 🖥️ | Native Electron app that opens this device or another Redeven Local UI | Local UX, Desktop Settings, connection management, blocked-state handling, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| `Flower` (optional) 🌸 | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
+| `Codex` (optional) 🤖 | Independent Codex conversation threads backed by the host machine's `codex app-server` | Keeps Codex UI, official Codex branding, and upgrade cadence separate from Flower while giving Codex its own navigator/chat shell inside Env App | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 
 ## Example workflows
 
 | Use case | Flow | Outcome |
 | --- | --- | --- |
-| Secure remote environment access | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
-| Browser-based development | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the agent gateway and Flowersec E2EE proxy |
-| Desktop operations | Start Redeven Desktop on this device or connect it to another Redeven Local UI | Use native Desktop Settings, diagnostics, and connection management around the same runtime contract |
+| Secure remote environment access 🔐 | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
+| Browser-based development ⚙️ | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the agent gateway and Flowersec E2EE proxy |
+| Desktop operations 🖥️ | Start Redeven Desktop on this device or connect it to another Redeven Local UI | Use native Desktop Settings, diagnostics, and connection management around the same runtime contract |
 
 ## Quick start
+
+From zero to a live endpoint in a few minutes. 🚀
 
 ### 1. Install the CLI
 
@@ -95,15 +121,19 @@ Expected result:
 
 ## Security at a glance
 
+Security posture first, convenience second. 🔒
+
 | Topic | Public contract |
 | --- | --- |
 | Trust boundary | The agent does not trust browser-claimed permissions. Effective permissions come from server-issued session grants, clamped by local policy. |
-| Control plane vs data plane | Management traffic issues grants and metadata. Flowersec forwards encrypted bytes and cannot decrypt application data. |
+| Control plane vs data plane | Management traffic issues grants and metadata. [Flowersec](https://github.com/floegence/flowersec) forwards encrypted bytes and cannot decrypt application data. |
 | Local secrets | Local config contains sensitive material, including E2EE PSKs, so the state directory must stay private to the local account. |
 
 Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md) and [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md).
 
 ## Frontend accessibility baseline
+
+Accessibility is part of the product contract, not a late-stage polish pass. ♿
 
 - Env App and Desktop target a WCAG 2.2 AA baseline for keyboard access, visible focus, semantic landmarks, motion reduction, and contrast-sensitive text.
 - Shared interaction semantics should come from released `@floegence/floe-webapp-*` packages first. Product-owned Redeven widgets should only add app-specific accessibility behavior on top of those primitives.
@@ -111,6 +141,8 @@ Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PER
 - Contributor guidance for the two frontend surfaces lives in [`docs/ENV_APP.md`](docs/ENV_APP.md) and [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
 ## Docs by task
+
+Pick the shortest path to what you need. 📚
 
 | I want to... | Read |
 | --- | --- |
@@ -123,6 +155,8 @@ Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PER
 | Verify releases and artifacts | [`docs/RELEASE.md`](docs/RELEASE.md) |
 
 ## For developers
+
+Build, lint, and verify from source. 🛠️
 
 <details>
 <summary>Build from source</summary>
@@ -195,6 +229,8 @@ Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 </details>
 
 ## Open-source scope
+
+Public, auditable, and intentionally scoped. 🌍
 
 This public `redeven` repository describes the endpoint/runtime layer, Local UI behavior, and the GitHub Release contract.
 Organization-specific deployment automation and environment-specific wrappers are intentionally out of scope for this repository.
