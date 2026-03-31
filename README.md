@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/readme-logo-app-icon.svg" alt="Redeven" width="120">
+  <img src="desktop/build/icon.svg" alt="Redeven" width="120">
 </p>
 
 # Redeven
