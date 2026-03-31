@@ -166,14 +166,16 @@ func (m *Manager) Status(_ context.Context) Status {
 	return out
 }
 
-func (m *Manager) ListThreads(ctx context.Context, limit int) ([]Thread, error) {
+func (m *Manager) ListThreads(ctx context.Context, req ListThreadsRequest) ([]Thread, error) {
+	limit := req.Limit
 	if limit <= 0 || limit > 200 {
 		limit = 100
 	}
 	var resp wireThreadListResponse
 	if err := m.call(ctx, "thread/list", wireThreadListParams{
-		Limit:   limit,
-		SortKey: "updated_at",
+		Limit:    limit,
+		SortKey:  "updated_at",
+		Archived: req.Archived,
 	}, &resp); err != nil {
 		return nil, err
 	}
@@ -349,6 +351,7 @@ func (m *Manager) ReadCapabilities(ctx context.Context, cwd string) (*Capabiliti
 	out := &Capabilities{
 		EffectiveConfig: normalizeEffectiveConfig(configResp.Config, cwd),
 		Requirements:    normalizeConfigRequirements(requirementsResp.Requirements),
+		Operations:      defaultCapabilityOperations(),
 	}
 	if len(modelResp.Data) > 0 {
 		out.Models = make([]ModelOption, 0, len(modelResp.Data))
@@ -480,6 +483,139 @@ func (m *Manager) ArchiveThread(ctx context.Context, threadID string) error {
 	}
 	m.mu.Unlock()
 	return nil
+}
+
+func (m *Manager) UnarchiveThread(ctx context.Context, threadID string) error {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return ErrThreadNotFound
+	}
+	var resp wireThreadUnarchiveResponse
+	if err := m.call(ctx, "thread/unarchive", wireThreadUnarchiveParams{ThreadID: threadID}, &resp); err != nil {
+		if isThreadNotFoundError(err) {
+			return ErrThreadNotFound
+		}
+		return err
+	}
+	thread := normalizeThread(resp.Thread)
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	projectedThread := mergeProjectedThread(state, thread)
+	projectedThread.Status = "notLoaded"
+	projectedThread.ActiveFlags = nil
+	projectedThread.UpdatedAtUnixS = time.Now().Unix()
+	state.thread = &projectedThread
+	state.liveLoaded = false
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *Manager) ForkThread(ctx context.Context, req ForkThreadRequest) (*ThreadDetail, error) {
+	threadID := strings.TrimSpace(req.ThreadID)
+	if threadID == "" {
+		return nil, ErrThreadNotFound
+	}
+	approvalPolicy := normalizeApprovalPolicyRequest(req.ApprovalPolicy)
+	sandboxMode := normalizeSandboxModeRequest(req.SandboxMode)
+	approvalsReviewer := normalizeApprovalsReviewer(req.ApprovalsReviewer)
+	params := wireThreadForkParams{
+		ThreadID:               threadID,
+		Model:                  stringPtr(req.Model),
+		PersistExtendedHistory: true,
+	}
+	if approvalPolicy != "" {
+		params.ApprovalPolicy = stringPtr(approvalPolicy)
+	}
+	if sandboxMode != "" {
+		params.Sandbox = stringPtr(sandboxMode)
+	}
+	if approvalsReviewer != "" {
+		params.ApprovalsReviewer = stringPtr(approvalsReviewer)
+	}
+	var resp wireThreadForkResponse
+	if err := m.call(ctx, "thread/fork", params, &resp); err != nil {
+		if isThreadNotFoundError(err) {
+			return nil, ErrThreadNotFound
+		}
+		return nil, err
+	}
+	thread := normalizeThread(resp.Thread)
+	runtimeConfig := normalizeThreadRuntimeConfig(
+		resp.Model,
+		resp.ModelProvider,
+		resp.CWD,
+		resp.ApprovalPolicy,
+		resp.ApprovalsReviewer,
+		resp.Sandbox,
+		resp.ReasoningEffort,
+	)
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(thread.ID)
+	state.thread = &thread
+	state.runtimeConfig = runtimeConfig
+	state.liveLoaded = isLoadedThreadStatus(thread.Status)
+	detail := m.buildThreadDetailLocked(state, thread)
+	m.mu.Unlock()
+	return &detail, nil
+}
+
+func (m *Manager) InterruptTurn(ctx context.Context, req InterruptTurnRequest) error {
+	threadID := strings.TrimSpace(req.ThreadID)
+	turnID := strings.TrimSpace(req.TurnID)
+	if threadID == "" || turnID == "" {
+		return ErrThreadNotFound
+	}
+	if err := m.call(ctx, "turn/interrupt", wireTurnInterruptParams{
+		ThreadID: threadID,
+		TurnID:   turnID,
+	}, nil); err != nil {
+		if isThreadNotFoundError(err) {
+			return ErrThreadNotFound
+		}
+		return err
+	}
+	m.mu.Lock()
+	if state := m.threads[threadID]; state != nil {
+		thread := ensureProjectedThread(state, threadID)
+		thread.UpdatedAtUnixS = time.Now().Unix()
+	}
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *Manager) StartReview(ctx context.Context, req StartReviewRequest) (*ThreadDetail, error) {
+	threadID := strings.TrimSpace(req.ThreadID)
+	if threadID == "" {
+		return nil, ErrThreadNotFound
+	}
+	if err := m.ensureThreadLoaded(ctx, threadID); err != nil {
+		return nil, err
+	}
+	var resp wireReviewStartResponse
+	if err := m.call(ctx, "review/start", wireReviewStartParams{
+		ThreadID: threadID,
+		Target: wireReviewTarget{
+			Type: normalizeReviewTarget(req.Target),
+		},
+	}, &resp); err != nil {
+		if isThreadNotFoundError(err) {
+			return nil, ErrThreadNotFound
+		}
+		return nil, err
+	}
+	reviewThreadID := strings.TrimSpace(resp.ReviewThreadID)
+	if reviewThreadID != "" && reviewThreadID != threadID {
+		return m.ReadThread(ctx, reviewThreadID)
+	}
+	turn := normalizeTurn(resp.Turn)
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	thread := ensureProjectedThread(state, threadID)
+	upsertProjectedTurn(thread, turn)
+	thread.UpdatedAtUnixS = time.Now().Unix()
+	detail := m.buildThreadDetailLocked(state, *thread)
+	m.mu.Unlock()
+	return &detail, nil
 }
 
 func (m *Manager) SubscribeThreadEvents(ctx context.Context, threadID string, afterSeq int64) ([]Event, <-chan Event, error) {
@@ -1369,6 +1505,26 @@ func normalizeApprovalsReviewer(v string) string {
 		return "guardian_subagent"
 	default:
 		return ""
+	}
+}
+
+func normalizeReviewTarget(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "uncommitted_changes", "uncommittedchanges":
+		return "uncommittedChanges"
+	default:
+		return "uncommittedChanges"
+	}
+}
+
+func defaultCapabilityOperations() []OperationName {
+	return []OperationName{
+		OperationThreadArchive,
+		OperationThreadUnarchive,
+		OperationThreadFork,
+		OperationThreadListArchived,
+		OperationTurnInterrupt,
+		OperationReviewStart,
 	}
 }
 

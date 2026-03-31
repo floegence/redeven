@@ -16,6 +16,10 @@ const openCodexThreadMock = vi.fn();
 const startCodexThreadMock = vi.fn();
 const startCodexTurnMock = vi.fn();
 const archiveCodexThreadMock = vi.fn();
+const unarchiveCodexThreadMock = vi.fn();
+const forkCodexThreadMock = vi.fn();
+const interruptCodexTurnMock = vi.fn();
+const startCodexReviewMock = vi.fn();
 const respondToCodexRequestMock = vi.fn();
 const connectCodexEventStreamMock = vi.fn();
 const rpcMocks = {
@@ -173,6 +177,10 @@ vi.mock('./api', () => ({
   startCodexThread: (...args: any[]) => startCodexThreadMock(...args),
   startCodexTurn: (...args: any[]) => startCodexTurnMock(...args),
   archiveCodexThread: (...args: any[]) => archiveCodexThreadMock(...args),
+  unarchiveCodexThread: (...args: any[]) => unarchiveCodexThreadMock(...args),
+  forkCodexThread: (...args: any[]) => forkCodexThreadMock(...args),
+  interruptCodexTurn: (...args: any[]) => interruptCodexTurnMock(...args),
+  startCodexReview: (...args: any[]) => startCodexReviewMock(...args),
   respondToCodexRequest: (...args: any[]) => respondToCodexRequestMock(...args),
   connectCodexEventStream: (...args: any[]) => connectCodexEventStreamMock(...args),
 }));
@@ -295,7 +303,6 @@ describe('CodexSidebar', () => {
         lastSeenActivitySignature: 'status:running',
       },
     }));
-
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -590,6 +597,88 @@ describe('CodexSidebar', () => {
         lastSeenActivitySignature: 'status:completed',
       },
     });
+  });
+
+  it('loads archived threads and restores them back into the active list', async () => {
+    const activeThread = {
+      id: 'thread_active',
+      preview: 'Active planning thread',
+      model_provider: 'openai/gpt-5.4',
+      created_at_unix_s: 100,
+      updated_at_unix_s: 110,
+      status: 'active',
+      cwd: '/workspace',
+    };
+    const archivedThread = {
+      id: 'thread_archived',
+      preview: 'Archived release summary',
+      model_provider: 'openai/gpt-5.4',
+      created_at_unix_s: 90,
+      updated_at_unix_s: 95,
+      status: 'archived',
+      cwd: '/workspace',
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+      },
+      operations: [
+        'thread_archive',
+        'thread_unarchive',
+        'thread_fork',
+        'thread_list_archived',
+        'turn_interrupt',
+        'review_start',
+      ],
+    });
+    listCodexThreadsMock.mockImplementation(async (args?: { archived?: boolean }) => (
+      args?.archived ? [archivedThread] : [activeThread]
+    ));
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: threadID === 'thread_archived' && unarchiveCodexThreadMock.mock.calls.length === 0
+        ? archivedThread
+        : (threadID === 'thread_archived' ? { ...archivedThread, status: 'active' } : activeThread),
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+      },
+      pending_requests: [],
+      last_applied_seq: 1,
+      active_status: threadID === 'thread_archived' && unarchiveCodexThreadMock.mock.calls.length === 0 ? 'archived' : 'active',
+      active_status_flags: [],
+    }));
+    unarchiveCodexThreadMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+    await flushAsync();
+
+    const archivedToggle = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Archived'));
+    expect(archivedToggle).toBeTruthy();
+    archivedToggle?.click();
+    await flushAsync();
+
+    expect(listCodexThreadsMock.mock.calls.some((call) => call[0]?.archived === true)).toBe(true);
+    expect(sidebarThreadIDs(host)).toContain('thread_archived');
+
+    const restoreButton = host.querySelector('button[aria-label^="Restore chat"]') as HTMLButtonElement | null;
+    expect(restoreButton).toBeTruthy();
+    restoreButton?.click();
+    await flushAsync();
+
+    expect(unarchiveCodexThreadMock).toHaveBeenCalledWith('thread_archived');
+    expect(listCodexThreadsMock.mock.calls.some((call) => call[0]?.archived === false)).toBe(true);
   });
 
   it('keeps the existing sidebar threads visible during a background refresh', async () => {

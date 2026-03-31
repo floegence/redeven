@@ -1,5 +1,4 @@
 import { For, Index, Show, createMemo } from 'solid-js';
-import { Trash } from '@floegence/floe-webapp-core/icons';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Button, ProcessingIndicator, Tag } from '@floegence/floe-webapp-core/ui';
 
@@ -54,16 +53,19 @@ function RuntimeSummary() {
 
 function EmptyState() {
   const codex = useCodexContext();
+  const showingArchived = createMemo(() => codex.threadFilter() === 'archived');
 
   return (
     <div data-codex-surface="sidebar-empty" class="codex-sidebar-empty">
       <CodexIcon class="mx-auto mb-3 h-12 w-12" />
       <p class="text-xs font-medium text-muted-foreground/80">
-        {codex.hasHostBinary() ? 'No conversations yet' : 'Codex is not available yet'}
+        {codex.hasHostBinary()
+          ? (showingArchived() ? 'No archived conversations' : 'No conversations yet')
+          : 'Codex is not available yet'}
       </p>
       <p class="mt-1 text-[11px] leading-5 text-muted-foreground/50">
         {codex.hasHostBinary()
-          ? 'Start a new Codex chat to begin.'
+          ? (showingArchived() ? 'Archived Codex threads will appear here.' : 'Start a new Codex chat to begin.')
           : 'Install `codex` on the host, then refresh this panel.'}
       </p>
     </div>
@@ -75,14 +77,16 @@ function ThreadCard(props: {
   active: boolean;
   isRunning: boolean;
   unread: boolean;
-  canArchive: boolean;
+  actionLabel: string;
+  actionAriaLabel: string;
+  actionDisabled?: boolean;
+  actionDisabledReason?: string;
   onClick: () => void;
-  onArchive: () => void;
+  onAction: () => void;
 }) {
   const title = () => String(props.thread.name ?? props.thread.preview ?? '').trim() || 'New chat';
   const preview = () => threadPreview(props.thread);
   const timeLabel = () => formatRelativeThreadTime(props.thread.updated_at_unix_s);
-  const archiveLabel = () => `Archive chat ${title()}`;
   const indicatorMode = (): 'running' | 'unread' | 'none' => {
     if (props.isRunning) return 'running';
     if (props.unread) return 'unread';
@@ -137,31 +141,49 @@ function ThreadCard(props: {
       </button>
 
       <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">
-        <Show
-          when={props.canArchive}
-          fallback={
-            <span class="select-none text-[10px] text-muted-foreground/60" aria-hidden="true">
-              {timeLabel()}
-            </span>
-          }
-        >
+        <Show when={props.actionLabel}>
           <span
             class="select-none text-[10px] text-muted-foreground/60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
             aria-hidden="true"
           >
             {timeLabel()}
           </span>
-          <button
-            type="button"
-            class="pointer-events-auto absolute inset-0 flex cursor-pointer items-center justify-center rounded text-muted-foreground/60 opacity-0 transition-all duration-150 hover:bg-warning/10 hover:text-warning focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 group-focus-within:opacity-100"
-            aria-label={archiveLabel()}
-            onClick={(event) => {
-              event.stopPropagation();
-              props.onArchive();
-            }}
-          >
-            <Trash class="h-3.5 w-3.5" />
-          </button>
+          <Show when={props.actionDisabled && props.actionDisabledReason} fallback={(
+            <button
+              type="button"
+              class="pointer-events-auto absolute inset-0 flex cursor-pointer items-center justify-center rounded px-1 text-[10px] font-medium text-muted-foreground/70 opacity-0 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 group-focus-within:opacity-100"
+              aria-label={props.actionAriaLabel}
+              disabled={props.actionDisabled}
+              onClick={(event) => {
+                event.stopPropagation();
+                props.onAction();
+              }}
+            >
+              {props.actionLabel}
+            </button>
+          )}>
+            <Tooltip content={props.actionDisabledReason || ''} placement="bottom" delay={0}>
+              <span class="pointer-events-auto absolute inset-0 inline-flex">
+                <button
+                  type="button"
+                  class="flex w-full cursor-pointer items-center justify-center rounded px-1 text-[10px] font-medium text-muted-foreground/70 opacity-0 transition-all duration-150 hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 group-focus-within:opacity-100"
+                  aria-label={props.actionAriaLabel}
+                  disabled={props.actionDisabled}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    props.onAction();
+                  }}
+                >
+                  {props.actionLabel}
+                </button>
+              </span>
+            </Tooltip>
+          </Show>
+        </Show>
+        <Show when={!props.actionLabel}>
+          <span class="select-none text-[10px] text-muted-foreground/60" aria-hidden="true">
+            {timeLabel()}
+          </span>
         </Show>
       </div>
     </div>
@@ -180,13 +202,17 @@ export function CodexSidebarShell() {
     <Button
       variant="primary"
       size="sm"
-      class="h-8 flex-1 justify-start gap-2 shadow-sm"
+      class="h-8 flex-1 cursor-pointer justify-start gap-2 shadow-sm"
       disabled={!codex.hasHostBinary()}
       onClick={codex.startNewThreadDraft}
     >
       New Chat
     </Button>
   );
+  const filterButtonClass = (value: 'active' | 'archived') => (
+    `h-8 flex-1 cursor-pointer justify-center text-xs ${codex.threadFilter() === value ? 'shadow-sm' : ''}`
+  );
+  const canBrowseArchived = createMemo(() => codex.supportsOperation('thread_list_archived'));
 
   return (
     <SidebarContent class="codex-sidebar-shell">
@@ -200,6 +226,27 @@ export function CodexSidebarShell() {
         </Show>
       </div>
 
+      <Show when={canBrowseArchived()}>
+        <div class="flex gap-2">
+          <Button
+            variant={codex.threadFilter() === 'active' ? 'secondary' : 'ghost'}
+            size="sm"
+            class={filterButtonClass('active')}
+            onClick={() => codex.setThreadFilter('active')}
+          >
+            Active
+          </Button>
+          <Button
+            variant={codex.threadFilter() === 'archived' ? 'secondary' : 'ghost'}
+            size="sm"
+            class={filterButtonClass('archived')}
+            onClick={() => codex.setThreadFilter('archived')}
+          >
+            Archived
+          </Button>
+        </div>
+      </Show>
+
       <RuntimeSummary />
 
       <Show when={codex.statusError()}>
@@ -212,12 +259,12 @@ export function CodexSidebarShell() {
         when={!showInitialLoading()}
         fallback={
           <div class="codex-sidebar-loading">
-            Loading chats...
+            Loading {codex.threadFilter() === 'archived' ? 'archived chats' : 'chats'}...
           </div>
         }
       >
         <Show when={hasThreads()} fallback={<EmptyState />}>
-          <SidebarSection title="Conversations">
+          <SidebarSection title={codex.threadFilter() === 'archived' ? 'Archived Conversations' : 'Conversations'}>
             <div class="codex-sidebar-thread-list">
               <Index each={groupedThreads()}>
                 {(groupAccessor) => {
@@ -231,15 +278,41 @@ export function CodexSidebarShell() {
                       </Show>
                       <For each={group().threads}>
                         {(thread) => (
+                          (() => {
+                            const archivedView = codex.threadFilter() === 'archived';
+                            const canRestore = codex.supportsOperation('thread_unarchive');
+                            const canArchive = codex.supportsOperation('thread_archive');
+                            return (
                           <ThreadCard
                             thread={thread}
                             active={thread.id === codex.activeThreadID()}
                             isRunning={codex.isThreadRunning(thread.id)}
                             unread={codex.isThreadUnread(thread.id)}
-                            canArchive={thread.id === codex.activeThreadID()}
+                            actionLabel={
+                              archivedView
+                                ? (canRestore ? (codex.restoringThreadID() === thread.id ? 'Restoring…' : 'Restore') : '')
+                                : (canArchive ? (codex.archivingThreadID() === thread.id ? 'Archiving…' : 'Archive') : '')
+                            }
+                            actionAriaLabel={
+                              archivedView
+                                ? `Restore chat ${String(thread.name ?? thread.preview ?? thread.id).trim() || thread.id}`
+                                : `Archive chat ${String(thread.name ?? thread.preview ?? thread.id).trim() || thread.id}`
+                            }
+                            actionDisabled={
+                              archivedView
+                                ? !codex.hasHostBinary() || codex.restoringThreadID() === thread.id
+                                : !codex.hasHostBinary() || codex.archivingThreadID() === thread.id
+                            }
+                            actionDisabledReason={!codex.hasHostBinary() ? codex.hostDisabledReason() : ''}
                             onClick={() => codex.selectThread(thread.id)}
-                            onArchive={() => void codex.archiveThread(thread.id)}
+                            onAction={() => (
+                              archivedView
+                                ? void codex.restoreThread(thread.id)
+                                : void codex.archiveThread(thread.id)
+                            )}
                           />
+                            );
+                          })()
                         )}
                       </For>
                     </>

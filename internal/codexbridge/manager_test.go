@@ -488,3 +488,307 @@ func TestReadThread_FallbackPreservesProjectedTurns(t *testing.T) {
 		t.Fatalf("Item.Text=%q", detail.Thread.Turns[0].Items[0].Text)
 	}
 }
+
+func TestListThreads_ForwardsArchivedFilter(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	archived := true
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "thread/list",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireThreadListParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.Limit != 10 {
+					t.Fatalf("Limit=%d, want 10", params.Limit)
+				}
+				if params.Archived == nil || !*params.Archived {
+					t.Fatalf("Archived=%v, want true", params.Archived)
+				}
+				if params.SortKey != "updated_at" {
+					t.Fatalf("SortKey=%q", params.SortKey)
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireThreadListResponse{
+						Data: []wireThread{
+							{
+								ID:            "thread_archived_1",
+								Preview:       "Archived thread",
+								ModelProvider: "openai/gpt-5.4",
+								Status:        wireThreadStatus{Type: "archived"},
+								CWD:           "/workspace",
+							},
+						},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	threads, err := manager.ListThreads(context.Background(), ListThreadsRequest{
+		Limit:    10,
+		Archived: &archived,
+	})
+	if err != nil {
+		t.Fatalf("ListThreads: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	if len(threads) != 1 || threads[0].ID != "thread_archived_1" || threads[0].Status != "archived" {
+		t.Fatalf("unexpected threads: %+v", threads)
+	}
+}
+
+func TestForkThread_UsesNormalizedOverrides(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "thread/fork",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireThreadForkParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.ThreadID != "thread_1" {
+					t.Fatalf("ThreadID=%q, want thread_1", params.ThreadID)
+				}
+				if stringValue(params.Model) != "gpt-5.4" {
+					t.Fatalf("Model=%q", stringValue(params.Model))
+				}
+				if stringValue(params.ApprovalPolicy) != "on-request" {
+					t.Fatalf("ApprovalPolicy=%q", stringValue(params.ApprovalPolicy))
+				}
+				if stringValue(params.Sandbox) != "workspace-write" {
+					t.Fatalf("Sandbox=%q", stringValue(params.Sandbox))
+				}
+				if stringValue(params.ApprovalsReviewer) != "user" {
+					t.Fatalf("ApprovalsReviewer=%q", stringValue(params.ApprovalsReviewer))
+				}
+				if !params.PersistExtendedHistory {
+					t.Fatalf("PersistExtendedHistory=false, want true")
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireThreadForkResponse{
+						Thread: wireThread{
+							ID:            "thread_forked_1",
+							Preview:       "Forked thread",
+							ModelProvider: "openai/gpt-5.4",
+							Status:        wireThreadStatus{Type: "active"},
+							CWD:           "/workspace",
+						},
+						Model:             "gpt-5.4",
+						ModelProvider:     "openai",
+						CWD:               "/workspace",
+						ApprovalPolicy:    json.RawMessage(`"on-request"`),
+						ApprovalsReviewer: "user",
+						Sandbox:           wireSandboxPolicy{Type: "workspaceWrite"},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	detail, err := manager.ForkThread(context.Background(), ForkThreadRequest{
+		ThreadID:          "thread_1",
+		Model:             "gpt-5.4",
+		ApprovalPolicy:    "on-request",
+		SandboxMode:       "workspace-write",
+		ApprovalsReviewer: "user",
+	})
+	if err != nil {
+		t.Fatalf("ForkThread: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	if detail.Thread.ID != "thread_forked_1" {
+		t.Fatalf("Thread.ID=%q", detail.Thread.ID)
+	}
+	if detail.RuntimeConfig.Model != "gpt-5.4" || detail.RuntimeConfig.ApprovalPolicy != "on-request" || detail.RuntimeConfig.SandboxMode != "workspace-write" {
+		t.Fatalf("unexpected runtime config: %+v", detail.RuntimeConfig)
+	}
+}
+
+func TestUnarchiveThread_ProjectsNotLoadedState(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "Archived thread",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "archived",
+		CWD:           "/workspace",
+	}
+	state.liveLoaded = false
+	manager.mu.Unlock()
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "thread/unarchive",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireThreadUnarchiveResponse{
+						Thread: wireThread{
+							ID:            "thread_1",
+							Preview:       "Archived thread",
+							ModelProvider: "openai/gpt-5.4",
+							Status:        wireThreadStatus{Type: "active"},
+							CWD:           "/workspace",
+						},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	if err := manager.UnarchiveThread(context.Background(), "thread_1"); err != nil {
+		t.Fatalf("UnarchiveThread: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	state = manager.threads["thread_1"]
+	if state == nil || state.thread == nil {
+		t.Fatalf("expected thread state")
+	}
+	if state.thread.Status != "notLoaded" {
+		t.Fatalf("thread.Status=%q, want notLoaded", state.thread.Status)
+	}
+	if state.liveLoaded {
+		t.Fatalf("liveLoaded=true, want false")
+	}
+}
+
+func TestInterruptTurn_ForwardsThreadAndTurnIDs(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "turn/interrupt",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireTurnInterruptParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.ThreadID != "thread_1" || params.TurnID != "turn_7" {
+					t.Fatalf("unexpected params: %+v", params)
+				}
+				proc.dispatchEnvelope(rpcEnvelope{ID: env.ID, Result: mustJSONRaw(map[string]any{})})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	if err := manager.InterruptTurn(context.Background(), InterruptTurnRequest{
+		ThreadID: "thread_1",
+		TurnID:   "turn_7",
+	}); err != nil {
+		t.Fatalf("InterruptTurn: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+}
+
+func TestStartReview_ProjectsInlineTurn(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "Review current changes",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "active",
+		CWD:           "/workspace",
+	}
+	state.liveLoaded = true
+	manager.mu.Unlock()
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "review/start",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireReviewStartParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.ThreadID != "thread_1" || params.Target.Type != "uncommittedChanges" {
+					t.Fatalf("unexpected review params: %+v", params)
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireReviewStartResponse{
+						Turn: wireTurn{
+							ID:     "turn_review_1",
+							Status: "in_progress",
+						},
+						ReviewThreadID: "thread_1",
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	detail, err := manager.StartReview(context.Background(), StartReviewRequest{
+		ThreadID: "thread_1",
+		Target:   "uncommitted_changes",
+	})
+	if err != nil {
+		t.Fatalf("StartReview: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	if len(detail.Thread.Turns) != 1 || detail.Thread.Turns[0].ID != "turn_review_1" {
+		t.Fatalf("unexpected review turns: %+v", detail.Thread.Turns)
+	}
+}

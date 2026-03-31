@@ -31,10 +31,39 @@ export type CodexConfigRequirements = Readonly<{
   allowed_sandbox_modes?: string[];
 }>;
 
+export type CodexOperationName =
+  | 'thread_archive'
+  | 'thread_unarchive'
+  | 'thread_fork'
+  | 'thread_list_archived'
+  | 'turn_interrupt'
+  | 'review_start';
+
 export type CodexCapabilitiesSnapshot = Readonly<{
   models?: CodexModelOption[];
   effective_config?: CodexThreadRuntimeConfig;
   requirements?: CodexConfigRequirements | null;
+  operations?: CodexOperationName[];
+}>;
+
+export type CodexThreadListFilter = 'active' | 'archived';
+
+export type CodexForkThreadRequest = Readonly<{
+  thread_id: string;
+  model?: string;
+  approval_policy?: string;
+  sandbox_mode?: string;
+  approvals_reviewer?: string;
+}>;
+
+export type CodexInterruptTurnRequest = Readonly<{
+  thread_id: string;
+  turn_id: string;
+}>;
+
+export type CodexReviewStartRequest = Readonly<{
+  thread_id: string;
+  target: 'uncommitted_changes';
 }>;
 
 export type CodexComposerAttachmentDraft = Readonly<{

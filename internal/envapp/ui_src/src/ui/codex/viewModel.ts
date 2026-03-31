@@ -2,6 +2,7 @@ import { displayStatus, isWorkingStatus } from './presentation';
 import type {
   CodexCapabilitiesSnapshot,
   CodexModelOption,
+  CodexOperationName,
   CodexPendingRequest,
   CodexStatus,
   CodexThread,
@@ -173,6 +174,25 @@ export function codexAllowedSandboxModes(
     capabilities?.requirements?.allowed_sandbox_modes,
     ['read-only', 'workspace-write', 'danger-full-access'],
   ]);
+}
+
+const DEFAULT_CODEX_OPERATIONS: readonly CodexOperationName[] = [
+  'thread_archive',
+  'thread_unarchive',
+  'thread_fork',
+  'thread_list_archived',
+  'turn_interrupt',
+  'review_start',
+];
+
+export function codexSupportsOperation(
+  capabilities: CodexCapabilitiesSnapshot | null | undefined,
+  operation: CodexOperationName,
+): boolean {
+  const operations = Array.isArray(capabilities?.operations) && capabilities?.operations.length > 0
+    ? capabilities.operations
+    : DEFAULT_CODEX_OPERATIONS;
+  return operations.some((value) => String(value ?? '').trim() === operation);
 }
 
 export function codexApprovalPolicyLabel(value: string | null | undefined): string {

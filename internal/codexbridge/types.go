@@ -1,5 +1,16 @@
 package codexbridge
 
+type OperationName string
+
+const (
+	OperationThreadArchive      OperationName = "thread_archive"
+	OperationThreadUnarchive    OperationName = "thread_unarchive"
+	OperationThreadFork         OperationName = "thread_fork"
+	OperationThreadListArchived OperationName = "thread_list_archived"
+	OperationTurnInterrupt      OperationName = "turn_interrupt"
+	OperationReviewStart        OperationName = "review_start"
+)
+
 type Status struct {
 	Available    bool   `json:"available"`
 	Ready        bool   `json:"ready"`
@@ -37,10 +48,24 @@ type Capabilities struct {
 	Models          []ModelOption       `json:"models,omitempty"`
 	EffectiveConfig ThreadRuntimeConfig `json:"effective_config"`
 	Requirements    *ConfigRequirements `json:"requirements,omitempty"`
+	Operations      []OperationName     `json:"operations,omitempty"`
+}
+
+type ListThreadsRequest struct {
+	Limit    int   `json:"limit,omitempty"`
+	Archived *bool `json:"archived,omitempty"`
 }
 
 type StartThreadRequest struct {
 	CWD               string `json:"cwd,omitempty"`
+	Model             string `json:"model,omitempty"`
+	ApprovalPolicy    string `json:"approval_policy,omitempty"`
+	SandboxMode       string `json:"sandbox_mode,omitempty"`
+	ApprovalsReviewer string `json:"approvals_reviewer,omitempty"`
+}
+
+type ForkThreadRequest struct {
+	ThreadID          string `json:"thread_id"`
 	Model             string `json:"model,omitempty"`
 	ApprovalPolicy    string `json:"approval_policy,omitempty"`
 	SandboxMode       string `json:"sandbox_mode,omitempty"`
@@ -57,6 +82,16 @@ type StartTurnRequest struct {
 	ApprovalPolicy    string           `json:"approval_policy,omitempty"`
 	SandboxMode       string           `json:"sandbox_mode,omitempty"`
 	ApprovalsReviewer string           `json:"approvals_reviewer,omitempty"`
+}
+
+type InterruptTurnRequest struct {
+	ThreadID string `json:"thread_id"`
+	TurnID   string `json:"turn_id"`
+}
+
+type StartReviewRequest struct {
+	ThreadID string `json:"thread_id"`
+	Target   string `json:"target,omitempty"`
 }
 
 type TokenUsageBreakdown struct {

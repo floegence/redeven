@@ -2,6 +2,9 @@ import { fetchGatewayJSON, prepareGatewayRequestInit } from '../services/gateway
 import type {
   CodexCapabilitiesSnapshot,
   CodexEvent,
+  CodexForkThreadRequest,
+  CodexInterruptTurnRequest,
+  CodexReviewStartRequest,
   CodexStatus,
   CodexThread,
   CodexThreadDetail,
@@ -25,9 +28,17 @@ export async function fetchCodexCapabilities(cwd?: string): Promise<CodexCapabil
   );
 }
 
-export async function listCodexThreads(limit = 100): Promise<CodexThread[]> {
+export async function listCodexThreads(args: {
+  limit?: number;
+  archived?: boolean;
+} = {}): Promise<CodexThread[]> {
+  const params = new URLSearchParams();
+  params.set('limit', String(args.limit ?? 100));
+  if (typeof args.archived === 'boolean') {
+    params.set('archived', String(args.archived));
+  }
   const out = await fetchGatewayJSON<Readonly<{ threads?: CodexThread[] }>>(
-    `/_redeven_proxy/api/codex/threads?limit=${encodeURIComponent(String(limit))}`,
+    `/_redeven_proxy/api/codex/threads?${params.toString()}`,
     { method: 'GET' },
   );
   return Array.isArray(out?.threads) ? out.threads : [];
@@ -87,6 +98,44 @@ export async function startCodexTurn(args: {
 export async function archiveCodexThread(threadID: string): Promise<void> {
   const id = encodeURIComponent(String(threadID ?? '').trim());
   await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/archive`, { method: 'POST' });
+}
+
+export async function unarchiveCodexThread(threadID: string): Promise<void> {
+  const id = encodeURIComponent(String(threadID ?? '').trim());
+  await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/unarchive`, { method: 'POST' });
+}
+
+export async function forkCodexThread(args: CodexForkThreadRequest): Promise<CodexThreadDetail> {
+  const id = encodeURIComponent(String(args.thread_id ?? '').trim());
+  return fetchGatewayJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}/fork`, {
+    method: 'POST',
+    body: JSON.stringify({
+      model: String(args.model ?? '').trim(),
+      approval_policy: String(args.approval_policy ?? '').trim(),
+      sandbox_mode: String(args.sandbox_mode ?? '').trim(),
+      approvals_reviewer: String(args.approvals_reviewer ?? '').trim(),
+    }),
+  });
+}
+
+export async function interruptCodexTurn(args: CodexInterruptTurnRequest): Promise<void> {
+  const id = encodeURIComponent(String(args.thread_id ?? '').trim());
+  await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/interrupt`, {
+    method: 'POST',
+    body: JSON.stringify({
+      turn_id: String(args.turn_id ?? '').trim(),
+    }),
+  });
+}
+
+export async function startCodexReview(args: CodexReviewStartRequest): Promise<CodexThreadDetail> {
+  const id = encodeURIComponent(String(args.thread_id ?? '').trim());
+  return fetchGatewayJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify({
+      target: String(args.target ?? 'uncommitted_changes').trim() || 'uncommitted_changes',
+    }),
+  });
 }
 
 export async function respondToCodexRequest(args: {

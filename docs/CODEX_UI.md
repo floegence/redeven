@@ -80,11 +80,20 @@ The current browser-facing contract is:
 - `POST /_redeven_proxy/api/codex/threads`
 - `GET /_redeven_proxy/api/codex/threads/:id`
 - `POST /_redeven_proxy/api/codex/threads/:id/archive`
+- `POST /_redeven_proxy/api/codex/threads/:id/unarchive`
+- `POST /_redeven_proxy/api/codex/threads/:id/fork`
+- `POST /_redeven_proxy/api/codex/threads/:id/interrupt`
+- `POST /_redeven_proxy/api/codex/threads/:id/review`
 - `POST /_redeven_proxy/api/codex/threads/:id/turns`
 - `GET /_redeven_proxy/api/codex/threads/:id/events`
 - `POST /_redeven_proxy/api/codex/threads/:id/requests/:request_id/response`
 
 The event stream endpoint is SSE and is used for live transcript / approval updates.
+
+`GET /_redeven_proxy/api/codex/threads` accepts:
+
+- `limit`
+- `archived`
 
 `GET /_redeven_proxy/api/codex/threads/:id` returns a projected bootstrap payload with:
 
@@ -122,6 +131,21 @@ The browser UI currently uses `cwd` only while creating a brand-new thread and i
 
 When the target thread is not currently live-loaded on the bridge connection, the bridge resumes it before forwarding `turn/start`.
 
+`GET /_redeven_proxy/api/codex/capabilities` now also returns `operations`, a browser-facing list of lifecycle/control actions currently exposed by the Redeven Codex surface. Phase 1 operations are:
+
+- `thread_archive`
+- `thread_unarchive`
+- `thread_fork`
+- `thread_list_archived`
+- `turn_interrupt`
+- `review_start`
+
+`POST /_redeven_proxy/api/codex/threads/:id/fork` returns the normalized thread detail bootstrap for the newly forked thread.
+
+`POST /_redeven_proxy/api/codex/threads/:id/review` currently supports the Phase 1 target `uncommitted_changes` only and starts the review inline on the current thread.
+
+`POST /_redeven_proxy/api/codex/threads/:id/interrupt` requires `turn_id`.
+
 ## UI behavior
 
 Current Env App behavior:
@@ -138,6 +162,7 @@ Current Env App behavior:
 - Codex visual styling uses a Codex-local semantic surface token family on `.codex-page-shell` (`--codex-surface-*`, `--codex-border-*`, `--codex-text-secondary`) so page, dock, transcript, reasoning, and markdown surfaces share one flat presentation contract instead of per-selector decorative gradients.
 - Codex intentionally excludes decorative `linear-gradient(...)` / `radial-gradient(...)` treatments from its page shell; when Codex needs to neutralize shared chat styling such as user bubbles or the send button, it does so through `.codex-page-shell .chat-*` overrides instead of mutating Flower-owned selectors.
 - The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
+- The sidebar now exposes `Active` and `Archived` thread filters instead of treating archive as a one-way disappearance from the browser surface.
 - Sidebar thread order changes only for real thread activity such as new-thread creation, user turn sends, or live lifecycle updates. Clicking an existing thread to read/bootstrap it must not reorder the list by itself.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
 - Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
@@ -153,8 +178,15 @@ Current Env App behavior:
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.
 - New threads can choose working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn.
 - Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.
+- Restoring an archived thread switches the browser back to the active-thread view and reopens that thread.
 - Later turns may still adjust model, reasoning effort, approval policy, and sandbox mode through the Codex composer controls.
+- Archived threads are read-only in the browser UI until they are restored.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
+- The thread header now exposes capability-gated lifecycle actions:
+  - archive / restore
+  - fork
+  - review current workspace changes
+  - stop the active turn when the current thread has an in-progress turn
 - Transcript rows project user prompts, Codex replies, command executions, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
 - Command execution rows render the collapsible shell block directly in the transcript lane instead of nesting it inside an extra evidence-card header chrome.
 - User-message rendering is intentionally separate from assistant/evidence markdown rendering:

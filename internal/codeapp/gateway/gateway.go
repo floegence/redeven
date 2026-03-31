@@ -82,11 +82,15 @@ type PortForwardBackend interface {
 type CodexBackend interface {
 	Status(ctx context.Context) codexbridge.Status
 	ReadCapabilities(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
-	ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error)
+	ListThreads(ctx context.Context, req codexbridge.ListThreadsRequest) ([]codexbridge.Thread, error)
 	ReadThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	StartTurn(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
 	ArchiveThread(ctx context.Context, threadID string) error
+	UnarchiveThread(ctx context.Context, threadID string) error
+	ForkThread(ctx context.Context, req codexbridge.ForkThreadRequest) (*codexbridge.ThreadDetail, error)
+	InterruptTurn(ctx context.Context, req codexbridge.InterruptTurnRequest) error
+	StartReview(ctx context.Context, req codexbridge.StartReviewRequest) (*codexbridge.ThreadDetail, error)
 	SubscribeThreadEvents(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error)
 	RespondToRequest(ctx context.Context, threadID string, requestID string, resp codexbridge.PendingRequestResponse) error
 }
@@ -1514,7 +1518,19 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				limit = v
 			}
 		}
-		threads, err := g.codex.ListThreads(r.Context(), limit)
+		var archived *bool
+		if raw := strings.TrimSpace(r.URL.Query().Get("archived")); raw != "" {
+			v, err := strconv.ParseBool(raw)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid archived filter"})
+				return
+			}
+			archived = &v
+		}
+		threads, err := g.codex.ListThreads(r.Context(), codexbridge.ListThreadsRequest{
+			Limit:    limit,
+			Archived: archived,
+		})
 		if err != nil {
 			writeCodexError(w, err)
 			return
@@ -1601,6 +1617,93 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "unarchive":
+			if err := g.codex.UnarchiveThread(r.Context(), threadID); err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "fork":
+			type reqBody struct {
+				Model             string `json:"model"`
+				ApprovalPolicy    string `json:"approval_policy"`
+				SandboxMode       string `json:"sandbox_mode"`
+				ApprovalsReviewer string `json:"approvals_reviewer"`
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body reqBody
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			detail, err := g.codex.ForkThread(r.Context(), codexbridge.ForkThreadRequest{
+				ThreadID:          threadID,
+				Model:             strings.TrimSpace(body.Model),
+				ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
+				SandboxMode:       strings.TrimSpace(body.SandboxMode),
+				ApprovalsReviewer: strings.TrimSpace(body.ApprovalsReviewer),
+			})
+			if err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
+			return
+		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "interrupt":
+			type reqBody struct {
+				TurnID string `json:"turn_id"`
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body reqBody
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := g.codex.InterruptTurn(r.Context(), codexbridge.InterruptTurnRequest{
+				ThreadID: threadID,
+				TurnID:   strings.TrimSpace(body.TurnID),
+			}); err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			return
+		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "review":
+			type reqBody struct {
+				Target string `json:"target"`
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body reqBody
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			detail, err := g.codex.StartReview(r.Context(), codexbridge.StartReviewRequest{
+				ThreadID: threadID,
+				Target:   strings.TrimSpace(body.Target),
+			})
+			if err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
 			return
 		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "turns":
 			type reqBody struct {

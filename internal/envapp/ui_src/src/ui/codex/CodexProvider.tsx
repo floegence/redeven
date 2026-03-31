@@ -24,11 +24,15 @@ import {
   connectCodexEventStream,
   fetchCodexCapabilities,
   fetchCodexStatus,
+  forkCodexThread,
+  interruptCodexTurn,
   listCodexThreads,
   openCodexThread,
   respondToCodexRequest,
   startCodexThread,
+  startCodexReview,
   startCodexTurn,
+  unarchiveCodexThread,
 } from './api';
 import {
   CODEX_NEW_THREAD_OWNER,
@@ -46,15 +50,17 @@ import {
 } from './codexThreadUnreadState';
 import { createCodexThreadController } from './threadController';
 import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
-import { codexSupportedReasoningEfforts } from './viewModel';
+import { codexSupportedReasoningEfforts, codexSupportsOperation } from './viewModel';
 import type {
   CodexCapabilitiesSnapshot,
   CodexComposerAttachmentDraft,
   CodexComposerMentionDraft,
+  CodexOperationName,
   CodexOptimisticUserTurn,
   CodexPendingRequest,
   CodexStatus,
   CodexThread,
+  CodexThreadListFilter,
   CodexThreadTokenUsage,
   CodexThreadRuntimeConfig,
   CodexTranscriptItem,
@@ -153,6 +159,26 @@ function patchThreadDisplayFallbacks(
     preview: normalizedPreview,
     cwd: normalizedCWD,
   };
+}
+
+function matchesThreadFilter(thread: CodexThread, filter: CodexThreadListFilter): boolean {
+  const status = String(thread.status ?? '').trim().toLowerCase();
+  if (filter === 'archived') {
+    return status === 'archived';
+  }
+  return status !== 'archived';
+}
+
+function findInterruptibleTurnID(thread: CodexThread | null | undefined): string | null {
+  const turns = Array.isArray(thread?.turns) ? thread?.turns : [];
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!turn) continue;
+    if (!isWorkingStatus(String(turn.status ?? '').trim())) continue;
+    const turnID = String(turn.id ?? '').trim();
+    if (turnID) return turnID;
+  }
+  return null;
 }
 
 function normalizeUserTurnText(value: string | null | undefined): string {
@@ -312,6 +338,9 @@ export type CodexContextValue = Readonly<{
   hostDisabledReason: Accessor<string>;
   capabilities: Accessor<CodexCapabilitiesSnapshot | null | undefined>;
   capabilitiesLoading: Accessor<boolean>;
+  threadFilter: Accessor<CodexThreadListFilter>;
+  setThreadFilter: (value: CodexThreadListFilter) => void;
+  supportsOperation: (operation: CodexOperationName) => boolean;
   activeThreadID: Accessor<string | null>;
   displayedThreadID: Accessor<string | null>;
   activeThread: Accessor<CodexThread | null>;
@@ -320,6 +349,7 @@ export type CodexContextValue = Readonly<{
   activeOptimisticUserTurns: Accessor<CodexOptimisticUserTurn[]>;
   activeStatus: Accessor<string>;
   activeStatusFlags: Accessor<string[]>;
+  activeInterruptTurnID: Accessor<string | null>;
   threadTitle: Accessor<string>;
   threadLoading: Accessor<boolean>;
   activeThreadError: Accessor<string | null>;
@@ -354,6 +384,11 @@ export type CodexContextValue = Readonly<{
   resetComposer: () => void;
   submitting: Accessor<boolean>;
   streamError: Accessor<string | null>;
+  archivingThreadID: Accessor<string | null>;
+  restoringThreadID: Accessor<string | null>;
+  forkingThreadID: Accessor<string | null>;
+  interruptingTurnID: Accessor<string | null>;
+  reviewingThreadID: Accessor<string | null>;
   requestDraftValue: (requestID: string, questionID: string) => string;
   setRequestDraftValue: (requestID: string, questionID: string, value: string) => void;
   selectThread: (threadID: string) => void;
@@ -362,6 +397,11 @@ export type CodexContextValue = Readonly<{
   sendTurn: () => Promise<void>;
   archiveThread: (threadID: string) => Promise<void>;
   archiveActiveThread: () => Promise<void>;
+  restoreThread: (threadID: string) => Promise<void>;
+  restoreActiveThread: () => Promise<void>;
+  forkActiveThread: () => Promise<void>;
+  interruptActiveTurn: () => Promise<void>;
+  reviewActiveThread: () => Promise<void>;
   answerRequest: (request: CodexPendingRequest, decision?: string) => Promise<void>;
   scrollToBottomRequest: Accessor<FollowBottomRequest | null>;
   requestScrollToBottom: (reason?: CodexScrollToBottomReason) => void;
@@ -379,9 +419,15 @@ export function CodexProvider(props: ParentProps) {
 
   const [optimisticThreadsByID, setOptimisticThreadsByID] = createSignal<CodexThreadMap>({});
   const [optimisticTurnsByThreadID, setOptimisticTurnsByThreadID] = createSignal<CodexOptimisticTurnMap>({});
+  const [threadFilter, setThreadFilter] = createSignal<CodexThreadListFilter>('active');
   const [submitting, setSubmitting] = createSignal(false);
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
   const [streamError, setStreamError] = createSignal<string | null>(null);
+  const [archivingThreadID, setArchivingThreadID] = createSignal<string | null>(null);
+  const [restoringThreadID, setRestoringThreadID] = createSignal<string | null>(null);
+  const [forkingThreadID, setForkingThreadID] = createSignal<string | null>(null);
+  const [interruptingTurnID] = createSignal<string | null>(null);
+  const [reviewingThreadID, setReviewingThreadID] = createSignal<string | null>(null);
   const [streamBinding, setStreamBinding] = createSignal<Readonly<{ threadID: string; afterSeq: number }> | null>(null);
   const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
   const [threadReadStateByThread, setThreadReadStateByThread] = createSignal<CodexThreadReadStateByThread>({});
@@ -404,9 +450,19 @@ export function CodexProvider(props: ParentProps) {
     async (settingsSeq) => (settingsSeq === null ? null : fetchCodexStatus()),
   );
   const [threadsResource, { refetch: refetchThreads }] = createResource(
-    () => (codexVisible() && !status.loading && status()?.available ? env.settingsSeq() : null),
-    async () => (status()?.available ? listCodexThreads(100) : []),
+    () => (codexVisible() && !status.loading && status()?.available ? `${env.settingsSeq()}::${threadFilter()}` : null),
+    async (key) => {
+      if (!status()?.available) return [];
+      const archived = String(key ?? '').endsWith('::archived');
+      return listCodexThreads({ limit: 100, archived });
+    },
   );
+  const threadListReady = createMemo(() => {
+    if (!codexVisible()) return false;
+    if (status.loading) return false;
+    if (!status()?.available) return true;
+    return threadsResource.state === 'ready' || threadsResource.state === 'refreshing';
+  });
 
   const selectedThreadID = createMemo(() => threadController.selectedThreadID());
   const displayedThreadID = createMemo(() => threadController.displayedThreadID());
@@ -420,7 +476,7 @@ export function CodexProvider(props: ParentProps) {
     return next;
   });
 
-  const threads = createMemo<CodexThread[]>(() => {
+  const allThreads = createMemo<CodexThread[]>(() => {
     const merged = new Map<string, CodexThread>();
     for (const [threadID, thread] of listedThreadsByID()) {
       merged.set(threadID, thread);
@@ -450,6 +506,8 @@ export function CodexProvider(props: ParentProps) {
     }
     return sortThreads(Array.from(merged.values()));
   });
+
+  const threads = createMemo<CodexThread[]>(() => allThreads().filter((thread) => matchesThreadFilter(thread, threadFilter())));
 
   const threadReadStateStorageKey = createMemo(() => {
     const envID = String(env.env_id() ?? '').trim();
@@ -541,7 +599,7 @@ export function CodexProvider(props: ParentProps) {
     const threadID = String(selectedThreadID() ?? '').trim();
     if (!threadID) return null;
     return (
-      threads().find((thread) => thread.id === threadID) ??
+      allThreads().find((thread) => thread.id === threadID) ??
       threadController.sessionForThread(threadID)?.thread ??
       null
     );
@@ -775,11 +833,21 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(() => {
     if (!codexVisible()) return;
-    if (threadController.blankDraftActive()) return;
-    const current = String(selectedThreadID() ?? '').trim();
-    if (current) return;
+    const filter = threadFilter();
+    const current = selectedThread();
+    if (current && matchesThreadFilter(current, filter)) return;
     const list = threads();
-    if (list.length === 0) return;
+    if (list.length === 0) {
+      if (!threadListReady()) return;
+      if (filter === 'active') {
+        if (threadController.blankDraftActive()) return;
+        untrack(() => threadController.startNewThreadDraft());
+        return;
+      }
+      untrack(() => threadController.clearSelection());
+      return;
+    }
+    if (filter === 'active' && threadController.blankDraftActive() && !current) return;
     untrack(() => {
       threadController.selectThread(list[0].id);
       requestScrollToBottom('bootstrap');
@@ -857,6 +925,7 @@ export function CodexProvider(props: ParentProps) {
     return statusError() || 'Install `codex` on the host machine and refresh diagnostics.';
   });
   const hasHostBinary = createMemo(() => Boolean(status()?.available));
+  const supportsOperation = (operation: CodexOperationName): boolean => codexSupportsOperation(capabilities(), operation);
   const isThreadRunning = (threadID: string | null | undefined): boolean => {
     const normalizedThreadID = String(threadID ?? '').trim();
     if (!normalizedThreadID) return false;
@@ -900,6 +969,7 @@ export function CodexProvider(props: ParentProps) {
     displayedSession()?.thread ??
     null
   ));
+  const activeInterruptTurnID = createMemo(() => findInterruptibleTurnID(activeThread()));
 
   const activeRuntimeConfig = createMemo<CodexThreadRuntimeConfig>(() => (
     selectedSession()?.runtime_config ??
@@ -1109,6 +1179,9 @@ export function CodexProvider(props: ParentProps) {
 
   const startNewThreadDraft = () => {
     if (!hasHostBinary()) return;
+    if (threadFilter() !== 'active') {
+      setThreadFilter('active');
+    }
     threadController.startNewThreadDraft();
     setStreamError(null);
   };
@@ -1159,6 +1232,10 @@ export function CodexProvider(props: ParentProps) {
       notify.error('Host Codex not detected', hostDisabledReason());
       return;
     }
+    if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
+      notify.error('Thread archived', 'Restore the archived thread before sending a new turn.');
+      return;
+    }
 
     setSubmitting(true);
     let targetThreadID = String(selectedThreadID() ?? '').trim();
@@ -1201,7 +1278,7 @@ export function CodexProvider(props: ParentProps) {
       } else {
         targetOwnerID = codexOwnerIDForThread(targetThreadID);
         const existingThread = (
-          threads().find((thread) => thread.id === targetThreadID) ??
+          allThreads().find((thread) => thread.id === targetThreadID) ??
           activeThread() ??
           buildOptimisticPlaceholderThread({
             threadID: targetThreadID,
@@ -1239,7 +1316,7 @@ export function CodexProvider(props: ParentProps) {
       });
 
       const currentThread = (
-        threads().find((thread) => thread.id === targetThreadID) ??
+        allThreads().find((thread) => thread.id === targetThreadID) ??
         threadController.sessionForThread(targetThreadID)?.thread ??
         null
       );
@@ -1283,6 +1360,11 @@ export function CodexProvider(props: ParentProps) {
       notify.error('Host Codex not detected', hostDisabledReason());
       return;
     }
+    if (!supportsOperation('thread_archive')) {
+      notify.error('Action unavailable', 'This Codex host does not support thread archiving from Redeven yet.');
+      return;
+    }
+    setArchivingThreadID(normalizedThreadID);
     try {
       await archiveCodexThread(normalizedThreadID);
       removeOptimisticThread(normalizedThreadID);
@@ -1302,11 +1384,144 @@ export function CodexProvider(props: ParentProps) {
       await refetchThreads();
     } catch (error) {
       notify.error('Archive failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      setArchivingThreadID((current) => (current === normalizedThreadID ? null : current));
     }
   };
 
   const archiveActiveThread = async () => {
     await archiveThread(String(selectedThreadID() ?? '').trim());
+  };
+
+  const restoreThread = async (threadID: string) => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return;
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', hostDisabledReason());
+      return;
+    }
+    if (!supportsOperation('thread_unarchive')) {
+      notify.error('Action unavailable', 'This Codex host does not support thread restore from Redeven yet.');
+      return;
+    }
+    setRestoringThreadID(normalizedThreadID);
+    try {
+      await unarchiveCodexThread(normalizedThreadID);
+      removeOptimisticThread(normalizedThreadID);
+      draftController.removeOwner(codexOwnerIDForThread(normalizedThreadID));
+      threadController.removeThreadState(normalizedThreadID);
+      setThreadFilter('active');
+      await refetchThreads();
+      threadController.selectThread(normalizedThreadID);
+      requestScrollToBottom('bootstrap');
+      notify.success('Restored', 'The archived Codex thread is active again.');
+    } catch (error) {
+      notify.error('Restore failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      setRestoringThreadID((current) => (current === normalizedThreadID ? null : current));
+    }
+  };
+
+  const restoreActiveThread = async () => {
+    await restoreThread(String(selectedThreadID() ?? '').trim());
+  };
+
+  const forkActiveThread = async () => {
+    const threadID = String(selectedThreadID() ?? '').trim();
+    if (!threadID) return;
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', hostDisabledReason());
+      return;
+    }
+    if (!supportsOperation('thread_fork')) {
+      notify.error('Action unavailable', 'This Codex host does not support thread fork from Redeven yet.');
+      return;
+    }
+    setForkingThreadID(threadID);
+    try {
+      const ownerDraft = activeOwnerDraft();
+      const detail = await forkCodexThread({
+        thread_id: threadID,
+        model: ownerDraft.runtime.model,
+        approval_policy: ownerDraft.runtime.approvalPolicy,
+        sandbox_mode: ownerDraft.runtime.sandboxMode,
+        approvals_reviewer: String(activeRuntimeConfig().approvals_reviewer ?? '').trim(),
+      });
+      setThreadFilter('active');
+      threadController.adoptThreadDetail(detail);
+      upsertOptimisticThread(detail.thread);
+      draftController.mergeOwnerRuntimeConfig(
+        codexOwnerIDForThread(detail.thread.id),
+        {
+          ...(detail.runtime_config ?? {}),
+          cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
+        },
+        String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
+      );
+      requestScrollToBottom('bootstrap');
+      notify.success('Forked', 'Started a new Codex thread from the current conversation.');
+      await refetchThreads();
+    } catch (error) {
+      notify.error('Fork failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      setForkingThreadID((current) => (current === threadID ? null : current));
+    }
+  };
+
+  const interruptActiveTurn = async () => {
+    const threadID = String(selectedThreadID() ?? '').trim();
+    const turnID = String(activeInterruptTurnID() ?? '').trim();
+    if (!threadID || !turnID) return;
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', hostDisabledReason());
+      return;
+    }
+    if (!supportsOperation('turn_interrupt')) {
+      notify.error('Action unavailable', 'This Codex host does not support turn interruption from Redeven yet.');
+      return;
+    }
+    try {
+      await interruptCodexTurn({
+        thread_id: threadID,
+        turn_id: turnID,
+      });
+      notify.success('Interrupted', 'Requested Codex to stop the active turn.');
+    } catch (error) {
+      notify.error('Interrupt failed', error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const reviewActiveThread = async () => {
+    const threadID = String(selectedThreadID() ?? '').trim();
+    if (!threadID) return;
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', hostDisabledReason());
+      return;
+    }
+    if (!supportsOperation('review_start')) {
+      notify.error('Action unavailable', 'This Codex host does not support inline review from Redeven yet.');
+      return;
+    }
+    if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
+      notify.error('Thread archived', 'Restore the archived thread before starting a review.');
+      return;
+    }
+    setReviewingThreadID(threadID);
+    try {
+      const detail = await startCodexReview({
+        thread_id: threadID,
+        target: 'uncommitted_changes',
+      });
+      threadController.adoptThreadDetail(detail);
+      upsertOptimisticThread(detail.thread);
+      requestScrollToBottom('send');
+      notify.success('Review started', 'Codex is reviewing the current workspace changes.');
+      await refetchThreads();
+    } catch (error) {
+      notify.error('Review failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      setReviewingThreadID((current) => (current === threadID ? null : current));
+    }
   };
 
   const answerRequest = async (request: CodexPendingRequest, decision?: string) => {
@@ -1332,6 +1547,9 @@ export function CodexProvider(props: ParentProps) {
     hostDisabledReason,
     capabilities,
     capabilitiesLoading: () => capabilities.loading,
+    threadFilter,
+    setThreadFilter,
+    supportsOperation,
     activeThreadID: selectedThreadID,
     displayedThreadID,
     activeThread,
@@ -1340,6 +1558,7 @@ export function CodexProvider(props: ParentProps) {
     activeTokenUsage,
     activeStatus,
     activeStatusFlags,
+    activeInterruptTurnID,
     threadTitle,
     threadLoading: () => threadController.threadLoading(),
     activeThreadError: () => threadController.activeThreadError(),
@@ -1370,6 +1589,11 @@ export function CodexProvider(props: ParentProps) {
     resetComposer,
     submitting,
     streamError,
+    archivingThreadID,
+    restoringThreadID,
+    forkingThreadID,
+    interruptingTurnID,
+    reviewingThreadID,
     requestDraftValue,
     setRequestDraftValue,
     selectThread,
@@ -1378,6 +1602,11 @@ export function CodexProvider(props: ParentProps) {
     sendTurn,
     archiveThread,
     archiveActiveThread,
+    restoreThread,
+    restoreActiveThread,
+    forkActiveThread,
+    interruptActiveTurn,
+    reviewActiveThread,
     answerRequest,
     scrollToBottomRequest,
     requestScrollToBottom,

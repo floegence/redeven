@@ -15,6 +15,10 @@ const openCodexThreadMock = vi.fn();
 const startCodexThreadMock = vi.fn();
 const startCodexTurnMock = vi.fn();
 const archiveCodexThreadMock = vi.fn();
+const unarchiveCodexThreadMock = vi.fn();
+const forkCodexThreadMock = vi.fn();
+const interruptCodexTurnMock = vi.fn();
+const startCodexReviewMock = vi.fn();
 const respondToCodexRequestMock = vi.fn();
 const connectCodexEventStreamMock = vi.fn();
 const rpcMocks = {
@@ -191,6 +195,10 @@ vi.mock('./api', () => ({
   startCodexThread: (...args: any[]) => startCodexThreadMock(...args),
   startCodexTurn: (...args: any[]) => startCodexTurnMock(...args),
   archiveCodexThread: (...args: any[]) => archiveCodexThreadMock(...args),
+  unarchiveCodexThread: (...args: any[]) => unarchiveCodexThreadMock(...args),
+  forkCodexThread: (...args: any[]) => forkCodexThreadMock(...args),
+  interruptCodexTurn: (...args: any[]) => interruptCodexTurnMock(...args),
+  startCodexReview: (...args: any[]) => startCodexReviewMock(...args),
   respondToCodexRequest: (...args: any[]) => respondToCodexRequestMock(...args),
   connectCodexEventStream: (...args: any[]) => connectCodexEventStreamMock(...args),
 }));
@@ -580,6 +588,178 @@ describe('CodexPage', () => {
     expect(attachmentButton?.hasAttribute('disabled')).toBe(true);
     expect(sendButton?.hasAttribute('disabled')).toBe(true);
     expect(host.textContent).toContain('host codex binary not found on PATH');
+  });
+
+  it('exposes stop, review, and fork actions for an active thread', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      },
+      operations: [
+        'thread_archive',
+        'thread_unarchive',
+        'thread_fork',
+        'thread_list_archived',
+        'turn_interrupt',
+        'review_start',
+      ],
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Gateway parity review',
+        preview: 'Review the current workspace changes',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 5,
+        status: 'running',
+        cwd: '/workspace',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Gateway parity review',
+        preview: 'Review the current workspace changes',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 5,
+        status: 'running',
+        cwd: '/workspace',
+        turns: [
+          {
+            id: 'turn_1',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      },
+      pending_requests: [],
+      last_applied_seq: 2,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    interruptCodexTurnMock.mockResolvedValue(undefined);
+    startCodexReviewMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Gateway parity review',
+        preview: 'Review the current workspace changes',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 6,
+        status: 'running',
+        cwd: '/workspace',
+        turns: [
+          {
+            id: 'turn_review',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      },
+      pending_requests: [],
+      last_applied_seq: 3,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    forkCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_forked',
+        name: 'Forked parity review',
+        preview: 'Forked review thread',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 7,
+        updated_at_unix_s: 7,
+        status: 'running',
+        cwd: '/workspace',
+        turns: [
+          {
+            id: 'turn_fork',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      },
+      pending_requests: [],
+      last_applied_seq: 1,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+    await flushAsync();
+
+    const queryStopButton = () => host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
+    const queryReviewButton = () => host.querySelector('button[aria-label="Review current workspace changes"]') as HTMLButtonElement | null;
+    const queryForkButton = () => host.querySelector('button[aria-label="Fork Codex thread"]') as HTMLButtonElement | null;
+
+    const stopButton = queryStopButton();
+    const reviewButton = queryReviewButton();
+    const forkButton = queryForkButton();
+
+    expect(stopButton).toBeTruthy();
+    expect(reviewButton).toBeTruthy();
+    expect(forkButton).toBeTruthy();
+
+    stopButton?.click();
+    await flushAsync();
+    expect(interruptCodexTurnMock).toHaveBeenCalledWith({
+      thread_id: 'thread_1',
+      turn_id: 'turn_1',
+    });
+
+    queryReviewButton()?.click();
+    await flushAsync();
+    expect(startCodexReviewMock).toHaveBeenCalledWith({
+      thread_id: 'thread_1',
+      target: 'uncommitted_changes',
+    });
+
+    queryForkButton()?.click();
+    await flushAsync();
+    expect(forkCodexThreadMock).toHaveBeenCalledWith({
+      thread_id: 'thread_1',
+      model: 'gpt-5.4',
+      approval_policy: 'on-request',
+      sandbox_mode: 'workspace-write',
+      approvals_reviewer: '',
+    });
   });
 
   it('renders the conversation shell, transcript rows, and runtime flags for the active Codex thread', async () => {

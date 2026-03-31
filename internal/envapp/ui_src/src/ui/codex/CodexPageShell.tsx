@@ -13,7 +13,7 @@ import {
 } from '../utils/directoryPickerTree';
 import { useCodexContext } from './CodexProvider';
 import { CodexComposerShell } from './CodexComposerShell';
-import { CodexHeaderBar } from './CodexHeaderBar';
+import { CodexHeaderBar, type CodexHeaderAction } from './CodexHeaderBar';
 import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
 import { CodexStatusBannerStack } from './CodexStatusBannerStack';
 import { CodexTranscript } from './CodexTranscript';
@@ -67,14 +67,22 @@ export function CodexPageShell() {
   );
 
   const emptyStateTitle = () => (
+    codex.threadFilter() === 'archived' && !codex.activeThreadID()
+      ? 'Archived Codex Threads'
+      : (
     summary().hostReady
       ? 'Codex'
       : 'Install Codex on the host'
+      )
   );
   const emptyStateBody = () => (
+    codex.threadFilter() === 'archived' && !codex.activeThreadID()
+      ? 'Select an archived thread to inspect it, or switch back to Active to start a new Codex conversation.'
+      : (
     summary().hostReady
       ? 'Start a Codex conversation with a prompt, paste an image, use @ to reference files, or use / for local composer commands.'
       : 'Redeven does not install Codex for you. Put the host machine\'s `codex` binary on PATH, then refresh this page to start a dedicated Codex chat.'
+      )
   );
   const modelValue = createMemo(() => String(codex.modelDraft() ?? '').trim());
   const effortValue = createMemo(() => String(codex.effortDraft() ?? '').trim());
@@ -145,6 +153,99 @@ export function CodexPageShell() {
       isWorkingStatus(codex.activeStatus())
     )
   ));
+  const threadArchived = createMemo(() => String(codex.activeThread()?.status ?? '').trim().toLowerCase() === 'archived');
+  const archivedBrowseMode = createMemo(() => codex.threadFilter() === 'archived' && !codex.activeThreadID());
+  const composerHostAvailable = createMemo(() => summary().hostReady && !threadArchived() && !archivedBrowseMode());
+  const composerDisabledReason = createMemo(() => (
+    archivedBrowseMode()
+      ? 'Switch back to Active to start a new Codex conversation.'
+      : !summary().hostReady
+      ? codex.hostDisabledReason()
+      : threadArchived()
+        ? 'Restore the archived thread before sending another turn.'
+        : ''
+  ));
+  const headerActions = createMemo<CodexHeaderAction[]>(() => {
+    const threadID = String(codex.activeThreadID() ?? '').trim();
+    if (!threadID) return [];
+    const actions: CodexHeaderAction[] = [];
+    const hostUnavailableReason = codex.hostDisabledReason();
+    const archivePending = codex.archivingThreadID() === threadID;
+    const restorePending = codex.restoringThreadID() === threadID;
+    const forkPending = codex.forkingThreadID() === threadID;
+    const reviewPending = codex.reviewingThreadID() === threadID;
+    const interruptPending = codex.interruptingTurnID() === codex.activeInterruptTurnID();
+    if (threadArchived()) {
+      actions.push({
+        key: 'restore',
+        label: restorePending ? 'Restoring…' : 'Restore',
+        aria_label: 'Restore Codex thread',
+        onClick: () => void codex.restoreActiveThread(),
+        disabled: !summary().hostReady || restorePending,
+        disabled_reason: !summary().hostReady ? hostUnavailableReason : restorePending ? 'Restore in progress.' : '',
+      });
+      return actions;
+    }
+    actions.push({
+      key: 'archive',
+      label: archivePending ? 'Archiving…' : 'Archive',
+      aria_label: 'Archive Codex thread',
+      onClick: () => void codex.archiveActiveThread(),
+      disabled: !summary().hostReady || archivePending || !codex.supportsOperation('thread_archive'),
+      disabled_reason: !summary().hostReady
+        ? hostUnavailableReason
+        : !codex.supportsOperation('thread_archive')
+          ? 'Archive is unavailable on this host.'
+          : archivePending
+            ? 'Archive in progress.'
+            : '',
+    });
+    actions.push({
+      key: 'fork',
+      label: forkPending ? 'Forking…' : 'Fork',
+      aria_label: 'Fork Codex thread',
+      onClick: () => void codex.forkActiveThread(),
+      disabled: !summary().hostReady || forkPending || !codex.supportsOperation('thread_fork'),
+      disabled_reason: !summary().hostReady
+        ? hostUnavailableReason
+        : !codex.supportsOperation('thread_fork')
+          ? 'Fork is unavailable on this host.'
+          : forkPending
+            ? 'Fork in progress.'
+            : '',
+    });
+    actions.push({
+      key: 'review',
+      label: reviewPending ? 'Reviewing…' : 'Review',
+      aria_label: 'Review current workspace changes',
+      onClick: () => void codex.reviewActiveThread(),
+      disabled: !summary().hostReady || reviewPending || !codex.supportsOperation('review_start'),
+      disabled_reason: !summary().hostReady
+        ? hostUnavailableReason
+        : !codex.supportsOperation('review_start')
+          ? 'Review is unavailable on this host.'
+          : reviewPending
+            ? 'Review already in progress.'
+            : '',
+    });
+    if (String(codex.activeInterruptTurnID() ?? '').trim()) {
+      actions.push({
+        key: 'stop',
+        label: interruptPending ? 'Stopping…' : 'Stop',
+        aria_label: 'Stop active Codex turn',
+        onClick: () => void codex.interruptActiveTurn(),
+        disabled: !summary().hostReady || interruptPending || !codex.supportsOperation('turn_interrupt'),
+        disabled_reason: !summary().hostReady
+          ? hostUnavailableReason
+          : !codex.supportsOperation('turn_interrupt')
+            ? 'Turn interruption is unavailable on this host.'
+            : interruptPending
+              ? 'Stop request in progress.'
+              : '',
+      });
+    }
+    return actions;
+  });
 
   createEffect(() => {
     homePath();
@@ -189,9 +290,7 @@ export function CodexPageShell() {
     <div data-codex-surface="page-shell" class="codex-page-shell">
       <CodexHeaderBar
         summary={summary()}
-        canArchive={Boolean(codex.activeThreadID()) && codex.hasHostBinary()}
-        archiveDisabledReason={codex.activeThreadID() && !codex.hasHostBinary() ? codex.hostDisabledReason() : ''}
-        onArchive={() => void codex.archiveActiveThread()}
+        actions={headerActions()}
       />
 
       <div class="codex-page-main">
@@ -260,8 +359,8 @@ export function CodexPageShell() {
               capabilitiesLoading={codex.capabilitiesLoading()}
               composerText={codex.composerText()}
               submitting={codex.submitting()}
-              hostAvailable={summary().hostReady}
-              hostDisabledReason={codex.hostDisabledReason()}
+              hostAvailable={composerHostAvailable()}
+              hostDisabledReason={composerDisabledReason()}
               onOpenWorkingDirPicker={() => {
                 if (!canPickWorkingDir()) return;
                 setWorkingDirPickerOpen(true);

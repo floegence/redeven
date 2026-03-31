@@ -17,11 +17,15 @@ import (
 type stubCodexBackend struct {
 	status               func(ctx context.Context) codexbridge.Status
 	readCapabilities     func(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
-	listThreads          func(ctx context.Context, limit int) ([]codexbridge.Thread, error)
+	listThreads          func(ctx context.Context, req codexbridge.ListThreadsRequest) ([]codexbridge.Thread, error)
 	readThread           func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	startThread          func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	startTurn            func(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
 	archiveThread        func(ctx context.Context, threadID string) error
+	unarchiveThread      func(ctx context.Context, threadID string) error
+	forkThread           func(ctx context.Context, req codexbridge.ForkThreadRequest) (*codexbridge.ThreadDetail, error)
+	interruptTurn        func(ctx context.Context, req codexbridge.InterruptTurnRequest) error
+	startReview          func(ctx context.Context, req codexbridge.StartReviewRequest) (*codexbridge.ThreadDetail, error)
 	subscribeThreadEvent func(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error)
 	respondToRequest     func(ctx context.Context, threadID string, requestID string, resp codexbridge.PendingRequestResponse) error
 }
@@ -40,9 +44,9 @@ func (s *stubCodexBackend) ReadCapabilities(ctx context.Context, cwd string) (*c
 	return nil, nil
 }
 
-func (s *stubCodexBackend) ListThreads(ctx context.Context, limit int) ([]codexbridge.Thread, error) {
+func (s *stubCodexBackend) ListThreads(ctx context.Context, req codexbridge.ListThreadsRequest) ([]codexbridge.Thread, error) {
 	if s.listThreads != nil {
-		return s.listThreads(ctx, limit)
+		return s.listThreads(ctx, req)
 	}
 	return nil, nil
 }
@@ -73,6 +77,34 @@ func (s *stubCodexBackend) ArchiveThread(ctx context.Context, threadID string) e
 		return s.archiveThread(ctx, threadID)
 	}
 	return nil
+}
+
+func (s *stubCodexBackend) UnarchiveThread(ctx context.Context, threadID string) error {
+	if s.unarchiveThread != nil {
+		return s.unarchiveThread(ctx, threadID)
+	}
+	return nil
+}
+
+func (s *stubCodexBackend) ForkThread(ctx context.Context, req codexbridge.ForkThreadRequest) (*codexbridge.ThreadDetail, error) {
+	if s.forkThread != nil {
+		return s.forkThread(ctx, req)
+	}
+	return nil, nil
+}
+
+func (s *stubCodexBackend) InterruptTurn(ctx context.Context, req codexbridge.InterruptTurnRequest) error {
+	if s.interruptTurn != nil {
+		return s.interruptTurn(ctx, req)
+	}
+	return nil
+}
+
+func (s *stubCodexBackend) StartReview(ctx context.Context, req codexbridge.StartReviewRequest) (*codexbridge.ThreadDetail, error) {
+	if s.startReview != nil {
+		return s.startReview(ctx, req)
+	}
+	return nil, nil
 }
 
 func (s *stubCodexBackend) SubscribeThreadEvents(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error) {
@@ -164,8 +196,13 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 	var (
 		gotStartThread     codexbridge.StartThreadRequest
 		gotStartTurn       codexbridge.StartTurnRequest
+		gotListThreads     codexbridge.ListThreadsRequest
 		gotCapabilitiesCWD string
 		gotArchiveID       string
+		gotUnarchiveID     string
+		gotForkThread      codexbridge.ForkThreadRequest
+		gotInterruptTurn   codexbridge.InterruptTurnRequest
+		gotReviewStart     codexbridge.StartReviewRequest
 		gotRespondThread   string
 		gotRespondID       string
 		gotRespondBody     codexbridge.PendingRequestResponse
@@ -207,9 +244,18 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 						AllowedApprovalPolicies: []string{"on-request", "never"},
 						AllowedSandboxModes:     []string{"workspace-write", "danger-full-access"},
 					},
+					Operations: []codexbridge.OperationName{
+						codexbridge.OperationThreadArchive,
+						codexbridge.OperationThreadUnarchive,
+						codexbridge.OperationThreadFork,
+						codexbridge.OperationThreadListArchived,
+						codexbridge.OperationTurnInterrupt,
+						codexbridge.OperationReviewStart,
+					},
 				}, nil
 			},
-			listThreads: func(ctx context.Context, limit int) ([]codexbridge.Thread, error) {
+			listThreads: func(ctx context.Context, req codexbridge.ListThreadsRequest) ([]codexbridge.Thread, error) {
+				gotListThreads = req
 				return []codexbridge.Thread{thread}, nil
 			},
 			readThread: func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error) {
@@ -264,6 +310,50 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 				gotArchiveID = threadID
 				return nil
 			},
+			unarchiveThread: func(ctx context.Context, threadID string) error {
+				gotUnarchiveID = threadID
+				return nil
+			},
+			forkThread: func(ctx context.Context, req codexbridge.ForkThreadRequest) (*codexbridge.ThreadDetail, error) {
+				gotForkThread = req
+				return &codexbridge.ThreadDetail{
+					Thread: codexbridge.Thread{
+						ID:             "thread_forked",
+						Preview:        "Forked review",
+						ModelProvider:  "openai/gpt-5.4",
+						CreatedAtUnixS: 20,
+						UpdatedAtUnixS: 21,
+						Status:         "active",
+						CWD:            "/workspace",
+					},
+					RuntimeConfig: codexbridge.ThreadRuntimeConfig{
+						CWD:               "/workspace",
+						Model:             req.Model,
+						ApprovalPolicy:    req.ApprovalPolicy,
+						SandboxMode:       req.SandboxMode,
+						ApprovalsReviewer: req.ApprovalsReviewer,
+					},
+				}, nil
+			},
+			interruptTurn: func(ctx context.Context, req codexbridge.InterruptTurnRequest) error {
+				gotInterruptTurn = req
+				return nil
+			},
+			startReview: func(ctx context.Context, req codexbridge.StartReviewRequest) (*codexbridge.ThreadDetail, error) {
+				gotReviewStart = req
+				return &codexbridge.ThreadDetail{
+					Thread: thread,
+					RuntimeConfig: codexbridge.ThreadRuntimeConfig{
+						CWD:             "/workspace",
+						Model:           "gpt-5.4",
+						ApprovalPolicy:  "on-request",
+						SandboxMode:     "workspace-write",
+						ReasoningEffort: "medium",
+					},
+					LastAppliedSeq: 4,
+					ActiveStatus:   "running",
+				}, nil
+			},
 			subscribeThreadEvent: func(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error) {
 				gotAfterSeq = afterSeq
 				ch := make(chan codexbridge.Event)
@@ -301,7 +391,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 	})
 
 	t.Run("threads list", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/threads?limit=10", nil)
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/threads?limit=10&archived=true", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		gw.serveHTTP(rr, req)
@@ -311,6 +401,9 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		}
 		if !bytes.Contains(rr.Body.Bytes(), []byte(`"thread_1"`)) {
 			t.Fatalf("unexpected body: %s", rr.Body.String())
+		}
+		if gotListThreads.Limit != 10 || gotListThreads.Archived == nil || !*gotListThreads.Archived {
+			t.Fatalf("unexpected list thread request: %+v", gotListThreads)
 		}
 	})
 
@@ -326,7 +419,9 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		if gotCapabilitiesCWD != "/workspace/ui" {
 			t.Fatalf("ReadCapabilities cwd=%q, want=%q", gotCapabilitiesCWD, "/workspace/ui")
 		}
-		if !bytes.Contains(rr.Body.Bytes(), []byte(`"effective_config"`)) || !bytes.Contains(rr.Body.Bytes(), []byte(`"allowed_sandbox_modes"`)) {
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"effective_config"`)) ||
+			!bytes.Contains(rr.Body.Bytes(), []byte(`"allowed_sandbox_modes"`)) ||
+			!bytes.Contains(rr.Body.Bytes(), []byte(`"operations"`)) {
 			t.Fatalf("unexpected body: %s", rr.Body.String())
 		}
 	})
@@ -428,6 +523,77 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		}
 		if gotArchiveID != "thread_1" {
 			t.Fatalf("ArchiveThread=%q, want=%q", gotArchiveID, "thread_1")
+		}
+	})
+
+	t.Run("unarchive thread", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/unarchive", nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if gotUnarchiveID != "thread_1" {
+			t.Fatalf("UnarchiveThread=%q, want=%q", gotUnarchiveID, "thread_1")
+		}
+	})
+
+	t.Run("fork thread", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/fork", bytes.NewBufferString(`{
+				"model":"gpt-5.4",
+				"approval_policy":"on-request",
+				"sandbox_mode":"workspace-write",
+				"approvals_reviewer":"user"
+			}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if gotForkThread.ThreadID != "thread_1" ||
+			gotForkThread.Model != "gpt-5.4" ||
+			gotForkThread.ApprovalPolicy != "on-request" ||
+			gotForkThread.SandboxMode != "workspace-write" ||
+			gotForkThread.ApprovalsReviewer != "user" {
+			t.Fatalf("unexpected fork request: %+v", gotForkThread)
+		}
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"thread_forked"`)) {
+			t.Fatalf("unexpected body: %s", rr.Body.String())
+		}
+	})
+
+	t.Run("interrupt active turn", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/interrupt", bytes.NewBufferString(`{"turn_id":"turn_1"}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if gotInterruptTurn.ThreadID != "thread_1" || gotInterruptTurn.TurnID != "turn_1" {
+			t.Fatalf("unexpected interrupt request: %+v", gotInterruptTurn)
+		}
+	})
+
+	t.Run("start review", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/review", bytes.NewBufferString(`{"target":"uncommitted_changes"}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if gotReviewStart.ThreadID != "thread_1" || gotReviewStart.Target != "uncommitted_changes" {
+			t.Fatalf("unexpected review request: %+v", gotReviewStart)
+		}
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"last_applied_seq":4`)) {
+			t.Fatalf("unexpected body: %s", rr.Body.String())
 		}
 	})
 

@@ -5,10 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CodexHeaderBar } from './CodexHeaderBar';
 
-vi.mock('@floegence/floe-webapp-core/icons', () => ({
-  Trash: () => <span>trash</span>,
-}));
-
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button
@@ -39,7 +35,7 @@ describe('CodexHeaderBar', () => {
     vi.clearAllMocks();
   });
 
-  it('wraps the archive action with a tooltip reason when archiving is unavailable', () => {
+  it('wraps disabled actions with a tooltip reason', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -56,14 +52,21 @@ describe('CodexHeaderBar', () => {
           hostReady: false,
           pendingRequestCount: 0,
         }}
-        canArchive={false}
-        archiveDisabledReason="host codex binary not found on PATH"
-        onArchive={() => undefined}
+        actions={[
+          {
+            key: 'restore',
+            label: 'Restore',
+            aria_label: 'Restore Codex thread',
+            disabled: true,
+            disabled_reason: 'host codex binary not found on PATH',
+            onClick: () => undefined,
+          },
+        ]}
       />
     ), host);
 
-    const archiveButton = host.querySelector('button[aria-label="Archive Codex thread"]');
-    expect(archiveButton?.hasAttribute('disabled')).toBe(true);
-    expect(archiveButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toContain('host codex binary not found on PATH');
+    const restoreButton = host.querySelector('button[aria-label="Restore Codex thread"]');
+    expect(restoreButton?.hasAttribute('disabled')).toBe(true);
+    expect(restoreButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toContain('host codex binary not found on PATH');
   });
 });

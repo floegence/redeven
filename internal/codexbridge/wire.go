@@ -240,8 +240,9 @@ type wireThreadArchiveParams struct {
 }
 
 type wireThreadListParams struct {
-	Limit   int    `json:"limit,omitempty"`
-	SortKey string `json:"sortKey,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+	SortKey  string `json:"sortKey,omitempty"`
+	Archived *bool  `json:"archived,omitempty"`
 }
 
 type wireTurnStartParams struct {
@@ -257,6 +258,53 @@ type wireTurnStartParams struct {
 
 type wireTurnStartResponse struct {
 	Turn wireTurn `json:"turn"`
+}
+
+type wireThreadForkParams struct {
+	ThreadID               string  `json:"threadId"`
+	Model                  *string `json:"model,omitempty"`
+	ApprovalPolicy         *string `json:"approvalPolicy,omitempty"`
+	Sandbox                *string `json:"sandbox,omitempty"`
+	ApprovalsReviewer      *string `json:"approvalsReviewer,omitempty"`
+	PersistExtendedHistory bool    `json:"persistExtendedHistory"`
+}
+
+type wireThreadForkResponse struct {
+	Thread            wireThread        `json:"thread"`
+	Model             string            `json:"model"`
+	ModelProvider     string            `json:"modelProvider"`
+	CWD               string            `json:"cwd"`
+	ApprovalPolicy    json.RawMessage   `json:"approvalPolicy"`
+	ApprovalsReviewer string            `json:"approvalsReviewer"`
+	Sandbox           wireSandboxPolicy `json:"sandbox"`
+	ReasoningEffort   *string           `json:"reasoningEffort"`
+}
+
+type wireThreadUnarchiveParams struct {
+	ThreadID string `json:"threadId"`
+}
+
+type wireThreadUnarchiveResponse struct {
+	Thread wireThread `json:"thread"`
+}
+
+type wireTurnInterruptParams struct {
+	ThreadID string `json:"threadId"`
+	TurnID   string `json:"turnId"`
+}
+
+type wireReviewTarget struct {
+	Type string `json:"type"`
+}
+
+type wireReviewStartParams struct {
+	ThreadID string           `json:"threadId"`
+	Target   wireReviewTarget `json:"target"`
+}
+
+type wireReviewStartResponse struct {
+	Turn           wireTurn `json:"turn"`
+	ReviewThreadID string   `json:"reviewThreadId"`
 }
 
 type wireThreadStartedNotification struct {

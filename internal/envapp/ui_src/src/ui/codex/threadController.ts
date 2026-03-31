@@ -245,6 +245,14 @@ export function createCodexThreadController() {
     setLoadToken(null);
   };
 
+  const clearSelection = () => {
+    setBlankDraftActive(false);
+    setSelectedThreadID(null);
+    setDisplayedThreadID(null);
+    setLoadingThreadID(null);
+    setLoadToken(null);
+  };
+
   const beginThreadBootstrap = (threadID: string): CodexThreadLoadToken | null => {
     const normalizedThreadID = normalizeThreadID(threadID);
     if (!normalizedThreadID) return null;
@@ -409,6 +417,7 @@ export function createCodexThreadController() {
     updateSession,
     selectThread,
     startNewThreadDraft,
+    clearSelection,
     beginThreadBootstrap,
     resolveThreadBootstrap,
     failThreadBootstrap,
