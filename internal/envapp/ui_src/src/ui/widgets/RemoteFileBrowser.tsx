@@ -1,7 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
-import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Refresh, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
@@ -81,6 +81,7 @@ import {
   getParentDir,
   insertItemToTree,
   normalizePath,
+  removeCachePathPrefix,
   removeItemsFromTree,
   rewriteCachePathPrefix,
   rewriteSubtreePaths,
@@ -98,6 +99,8 @@ type PathLoadResult = {
   status: PathLoadStatus;
   message?: string;
 };
+
+type DirTargetLoadPolicy = 'use_cache' | 'revalidate_target' | 'force_reload';
 
 type BrowserPageMode = GitHistoryMode;
 
@@ -219,6 +222,35 @@ function visibleBrowserPath(path: string, rootPath: string): string {
   }
 
   return normalizedPath;
+}
+
+function buildFallbackDirectoryCandidates(path: string, rootPath: string, fallbackPath?: string): string[] {
+  const normalizedPath = normalizePath(path);
+  const normalizedRoot = normalizePath(rootPath);
+  const normalizedFallback = fallbackPath ? normalizePath(fallbackPath) : '';
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  let cursor = normalizedPath;
+  while (cursor !== normalizedRoot) {
+    cursor = getParentDir(cursor);
+    if (cursor !== normalizedRoot && !cursor.startsWith(`${normalizedRoot}/`)) {
+      break;
+    }
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
+    candidates.push(cursor);
+  }
+
+  if (
+    normalizedFallback
+    && (normalizedFallback === normalizedRoot || normalizedFallback.startsWith(`${normalizedRoot}/`))
+    && !seen.has(normalizedFallback)
+  ) {
+    candidates.push(normalizedFallback);
+  }
+
+  return candidates;
 }
 
 const ClipboardIcon = (props: { class?: string }) => (
@@ -348,6 +380,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [loading, setLoading] = createSignal(false);
+  const [pathLoadInFlight, setPathLoadInFlight] = createSignal('');
 
   let cache: DirCache = new Map();
 
@@ -2388,8 +2421,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const fileBrowserToolbarEndActions = () => (
-    <Dropdown
-      trigger={(
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        icon={Refresh}
+        class="cursor-pointer"
+        aria-label="Refresh current directory"
+        onClick={() => { void refreshCurrentDirectory({ forceReload: true }); }}
+        disabled={!currentBrowserPath().trim() || loading()}
+      >
+        Refresh
+      </Button>
+      <Dropdown
+        trigger={(
         <Button
           size="sm"
           variant="outline"
@@ -2400,11 +2445,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           <MoreHorizontal class="size-3.5" />
         </Button>
       )}
-      items={fileBrowserMoreItems()}
-      value={showHidden() ? SHOW_HIDDEN_DROPDOWN_ITEM_ID : undefined}
-      onSelect={handleFileBrowserMoreSelect}
-      align="end"
-    />
+        items={fileBrowserMoreItems()}
+        value={showHidden() ? SHOW_HIDDEN_DROPDOWN_ITEM_ID : undefined}
+        onSelect={handleFileBrowserMoreSelect}
+        align="end"
+      />
+    </>
   );
 
   createEffect(() => {
@@ -2439,12 +2485,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     previousEnvId = id;
   });
 
-  const loadDirOnce = async (path: string, seq: number): Promise<PathLoadResult> => {
+  const loadDirOnce = async (
+    path: string,
+    seq: number,
+    options: { forceReload?: boolean } = {},
+  ): Promise<PathLoadResult> => {
     if (seq !== dirReqSeq) return { status: 'canceled' };
 
     const p = normalizePath(path);
     const scopedRootPath = normalizePath(agentHomePathAbs() || p);
-    if (cache.has(p)) {
+    if (!options.forceReload && cache.has(p)) {
       if (seq === dirReqSeq) setFiles((prev) => withChildrenAtRoot(prev, p, cache.get(p)!, scopedRootPath));
       return { status: 'ok' };
     }
@@ -2472,40 +2522,45 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const loadPathChain = async (path: string): Promise<PathLoadResult> => {
-    if (!protocol.client()) {
-      return { status: 'transport_error', message: 'Connection is not ready.' };
-    }
-
-    let rootPath = '';
-    try {
-      rootPath = normalizePath(await resolveFsRootAbs());
-    } catch (e) {
-      return {
-        status: 'transport_error',
-        message: e instanceof Error ? e.message : 'Failed to resolve home directory.',
-      };
-    }
-
+  const loadPathChain = async (
+    path: string,
+    options: { targetPolicy?: DirTargetLoadPolicy } = {},
+  ): Promise<PathLoadResult> => {
     const seq = ++dirReqSeq;
-    const p = normalizePath(path);
-    if (p !== rootPath && !p.startsWith(`${rootPath}/`)) {
-      return { status: 'invalid_path', message: 'Path is outside the runtime home directory.' };
-    }
-
-    const rel = p === rootPath ? '' : p.slice(rootPath.length);
-    const parts = rel.split('/').filter(Boolean);
-    const chain: string[] = [rootPath];
-    let cursor = rootPath;
-    for (const part of parts) {
-      cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
-      chain.push(cursor);
-    }
-
     setLoading(true);
     try {
+      if (!protocol.client()) {
+        return { status: 'transport_error', message: 'Connection is not ready.' };
+      }
+
+      let rootPath = '';
+      try {
+        rootPath = normalizePath(await resolveFsRootAbs());
+      } catch (e) {
+        return {
+          status: 'transport_error',
+          message: e instanceof Error ? e.message : 'Failed to resolve home directory.',
+        };
+      }
+
+      const p = normalizePath(path);
+      if (p !== rootPath && !p.startsWith(`${rootPath}/`)) {
+        return { status: 'invalid_path', message: 'Path is outside the runtime home directory.' };
+      }
+
+      const rel = p === rootPath ? '' : p.slice(rootPath.length);
+      const parts = rel.split('/').filter(Boolean);
+      const chain: string[] = [rootPath];
+      let cursor = rootPath;
+      for (const part of parts) {
+        cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
+        chain.push(cursor);
+      }
+
+      const targetPolicy = options.targetPolicy ?? 'use_cache';
       for (const dir of chain) {
-        const step = await loadDirOnce(dir, seq);
+        const forceReload = dir === p && (targetPolicy === 'force_reload' || targetPolicy === 'revalidate_target');
+        const step = await loadDirOnce(dir, seq, { forceReload });
         if (step.status !== 'ok') return step;
       }
       setLastLoadedBrowserPath(p);
@@ -2526,30 +2581,83 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       fallbackPath?: string;
       persistEnvId?: string;
       resetOnFallback?: boolean;
+      targetPolicy?: DirTargetLoadPolicy;
     } = {},
   ): Promise<void> => {
     const normalizedRequestedPath = normalizePath(requestedPath);
     const normalizedFallbackPath = options.fallbackPath
       ? normalizePath(options.fallbackPath)
       : '';
-    const result = await loadPathChain(normalizedRequestedPath);
+    const result = await loadPathChain(normalizedRequestedPath, {
+      targetPolicy: options.targetPolicy ?? 'use_cache',
+    });
     if (result.status === 'ok' || result.status === 'canceled') return;
 
-    if (result.status === 'invalid_path' && normalizedFallbackPath && normalizedFallbackPath !== normalizedRequestedPath) {
-      if (options.persistEnvId) {
-        writePersistedLastPath(options.persistEnvId, normalizedFallbackPath);
-      }
-      setCurrentBrowserPath(normalizedFallbackPath);
-      if (options.resetOnFallback !== false) {
-        resetFileBrowser();
+    if (result.status === 'invalid_path') {
+      removeCachePathPrefix(cache, normalizedRequestedPath);
+      setFiles((prev) => removeItemsFromTree(prev, new Set([normalizedRequestedPath])));
+
+      let rootPath = '';
+      try {
+        rootPath = normalizePath(await resolveFsRootAbs());
+      } catch (error) {
+        notifyPathLoadFailure({
+          status: 'transport_error',
+          message: error instanceof Error ? error.message : 'Failed to resolve home directory.',
+        });
+        return;
       }
 
-      const fallbackResult = await loadPathChain(normalizedFallbackPath);
-      if (fallbackResult.status !== 'ok') notifyPathLoadFailure(fallbackResult);
+      const fallbackCandidates = buildFallbackDirectoryCandidates(normalizedRequestedPath, rootPath, normalizedFallbackPath);
+      for (const candidate of fallbackCandidates) {
+        const fallbackResult = await loadPathChain(candidate, { targetPolicy: 'force_reload' });
+        if (fallbackResult.status === 'ok') {
+          if (options.persistEnvId) {
+            writePersistedLastPath(options.persistEnvId, candidate);
+          }
+          setCurrentBrowserPath(candidate);
+          if (options.resetOnFallback !== false) {
+            resetFileBrowser();
+          }
+          return;
+        }
+        if (fallbackResult.status === 'canceled') return;
+        if (fallbackResult.status !== 'invalid_path') {
+          notifyPathLoadFailure(fallbackResult);
+          return;
+        }
+      }
+
+      if (rootPath) {
+        if (options.persistEnvId) {
+          writePersistedLastPath(options.persistEnvId, rootPath);
+        }
+        setCurrentBrowserPath(rootPath);
+      }
       return;
     }
 
     notifyPathLoadFailure(result);
+  };
+
+  const refreshCurrentDirectory = async (options: { forceReload?: boolean } = {}): Promise<void> => {
+    const id = envId();
+    const path = normalizeAbsolutePath(currentBrowserPath());
+    if (!id || !path) return;
+    const normalizedPath = normalizePath(path);
+    if (pathLoadInFlight() === normalizedPath) return;
+
+    setPathLoadInFlight(normalizedPath);
+    try {
+      await loadPathOrFallback(path, {
+        fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+        persistEnvId: id,
+        resetOnFallback: false,
+        targetPolicy: options.forceReload ? 'force_reload' : 'revalidate_target',
+      });
+    } finally {
+      setPathLoadInFlight((current) => (current === normalizedPath ? '' : current));
+    }
   };
 
   const applyLocalMove = (item: FileItem, destDir: string) => {
@@ -2657,6 +2765,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         const cached = cache.get(parentDir);
         if (cached) {
           cache.set(parentDir, cached.filter((c) => !pathsToRemove.has(normalizePath(c.path))));
+        }
+        if (item.type === 'folder') {
+          removeCachePathPrefix(cache, item.path);
         }
       }
 
@@ -2868,13 +2979,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!id || !client || mode !== 'files' || !path) return;
 
     const normalizedPath = normalizePath(path);
-    if (loading() || lastLoadedBrowserPath() === normalizedPath) return;
+    if (loading() || pathLoadInFlight() === normalizedPath || lastLoadedBrowserPath() === normalizedPath) return;
 
-    void loadPathOrFallback(normalizedPath, {
-      fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
-      persistEnvId: id,
-      resetOnFallback: false,
-    });
+    void refreshCurrentDirectory();
   });
 
   createEffect(() => {
@@ -3341,10 +3448,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                         const targetPath = normalizePath(path);
                         writePersistedLastPath(id, targetPath);
                         setCurrentBrowserPath(targetPath);
-                        void loadPathOrFallback(targetPath, {
-                          fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
-                          persistEnvId: id,
-                        });
                       }}
                       onPathChange={(_path, source) => {
                         if (source === 'user' && layout.isMobile()) {
