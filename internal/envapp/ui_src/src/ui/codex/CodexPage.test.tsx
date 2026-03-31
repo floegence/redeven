@@ -94,6 +94,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
   CardHeader: (props: any) => <div class={props.class}>{props.children}</div>,
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
+  HighlightBlock: (props: any) => (
+    <div class={`highlight-block highlight-block-${props.variant ?? 'note'} ${props.class ?? ''}`.trim()}>
+      <div class="highlight-block-header">
+        <span class="highlight-block-title">{props.title}</span>
+      </div>
+      <div class="highlight-block-content">{props.children}</div>
+    </div>
+  ),
   DirectoryPicker: (props: any) => (
     props.open
       ? (
@@ -521,6 +529,7 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Install Codex on the host');
     expect(host.textContent).toContain('There is no separate in-app Codex runtime toggle to manage here');
     expect(host.textContent).toContain('Redeven does not install Codex for you');
+    expect(host.querySelector('.highlight-block-warning')).not.toBeNull();
     expect(host.querySelector('.codex-empty-ornament')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-input-controls')).toBeNull();
@@ -720,6 +729,89 @@ describe('CodexPage', () => {
     workingDirChip?.click();
     await flushAsync();
     expect(host.querySelector('[data-testid="directory-picker"]')).toBeNull();
+  });
+
+  it('renders stream disconnect failures with the shared highlight block styling', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Codex stream retry',
+        preview: 'Reconnect after network hiccups',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Codex stream retry',
+        preview: 'Reconnect after network hiccups',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    connectCodexEventStreamMock.mockRejectedValue(new Error('network error'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    const streamError = host.querySelector('.highlight-block-error');
+    expect(streamError).not.toBeNull();
+    expect(streamError?.textContent).toContain('Live event stream');
+    expect(streamError?.textContent).toContain('Live event stream disconnected: network error');
   });
 
   it('applies a new-chat working-dir selection to the first send', async () => {
