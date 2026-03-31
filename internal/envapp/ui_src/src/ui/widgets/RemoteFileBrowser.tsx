@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createSignal, untrack } from 'solid-js';
+import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Refresh, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
@@ -93,7 +93,7 @@ import {
 
 type DirCache = Map<string, FileItem[]>;
 
-type PathLoadStatus = 'ok' | 'canceled' | 'invalid_path' | 'permission_denied' | 'transport_error';
+type PathLoadStatus = 'canceled' | 'invalid_path' | 'permission_denied' | 'transport_error';
 
 type PathLoadResult = {
   status: PathLoadStatus;
@@ -101,6 +101,36 @@ type PathLoadResult = {
 };
 
 type DirTargetLoadPolicy = 'use_cache' | 'revalidate_target' | 'force_reload';
+
+type PreparedDirectoryState = {
+  tree: FileItem[];
+  cache: DirCache;
+  rootPath: string;
+  committedPath: string;
+  lastLoadedPath: string;
+};
+
+type DirectoryStateSeed = {
+  tree: FileItem[];
+  cache: DirCache;
+};
+
+type DirectoryPrepareResult =
+  | { status: 'ok'; state: PreparedDirectoryState }
+  | (PathLoadResult & { rootPath?: string });
+
+type DirectoryNavigationResult =
+  | { status: 'ready' | 'fallback'; state: PreparedDirectoryState }
+  | { status: 'canceled' }
+  | { status: 'error'; result: PathLoadResult };
+
+type DirectoryNavigationOptions = {
+  fallbackPath?: string;
+  persistEnvId?: string;
+  persistOnReady?: boolean;
+  targetPolicy?: DirTargetLoadPolicy;
+  showBlockingOverlay?: boolean;
+};
 
 type BrowserPageMode = GitHistoryMode;
 
@@ -381,6 +411,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [pathLoadInFlight, setPathLoadInFlight] = createSignal('');
+  const [pendingBrowserPath, setPendingBrowserPath] = createSignal('');
 
   let cache: DirCache = new Map();
 
@@ -543,6 +574,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return Boolean(readGitCommitCacheEntry(contextKey)?.resolved);
   };
 
+  const cloneDirCache = (source: DirCache): DirCache => new Map(source);
+
+  const applyPreparedDirectoryState = (state: PreparedDirectoryState, options: { persistEnvId?: string } = {}) => {
+    batch(() => {
+      cache = state.cache;
+      setFiles(state.tree);
+      setLastLoadedBrowserPath(state.lastLoadedPath);
+      setCurrentBrowserPath(state.committedPath);
+      if (options.persistEnvId) {
+        writePersistedLastPath(options.persistEnvId, state.committedPath);
+      }
+    });
+  };
+
   const resetFileBrowser = () => {
     setFileBrowserResetSeq((value) => value + 1);
   };
@@ -552,6 +597,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     cache = new Map();
     setFiles([]);
     setLoading(false);
+    setPendingBrowserPath('');
+    setPathLoadInFlight('');
     setLastLoadedBrowserPath('');
   };
 
@@ -2406,22 +2453,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         : visibleBrowserPath(currentPath, rootPath);
 
       writePersistedShowHidden(id, nextShowHidden);
-      writePersistedLastPath(id, nextPath);
-      setShowHidden(nextShowHidden);
-      setCurrentBrowserPath(nextPath);
-      clearDirectoryState();
-      resetFileBrowser();
+      batch(() => {
+        clearDirectoryState();
+        setShowHidden(nextShowHidden);
+        setCurrentBrowserPath(nextPath);
+        setLoading(true);
+        resetFileBrowser();
+      });
 
-      await loadPathOrFallback(nextPath, {
+      await requestDirectoryNavigation(nextPath, {
         fallbackPath: rootPath,
         persistEnvId: id,
-        resetOnFallback: false,
+        persistOnReady: true,
+        showBlockingOverlay: true,
       });
     })();
   };
 
   const fileBrowserToolbarEndActions = () => (
     <>
+      <Show when={fileBrowserNavigationMessage()}>
+        <span class="shrink-0 text-[10px] text-muted-foreground">{fileBrowserNavigationMessage()}</span>
+      </Show>
       <Button
         size="sm"
         variant="outline"
@@ -2429,7 +2482,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         class="cursor-pointer"
         aria-label="Refresh current directory"
         onClick={() => { void refreshCurrentDirectory({ forceReload: true }); }}
-        disabled={!currentBrowserPath().trim() || loading()}
+        disabled={!currentBrowserPath().trim() || loading() || !!pendingBrowserPath().trim()}
       >
         Refresh
       </Button>
@@ -2485,159 +2538,183 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     previousEnvId = id;
   });
 
-  const loadDirOnce = async (
-    path: string,
-    seq: number,
-    options: { forceReload?: boolean } = {},
-  ): Promise<PathLoadResult> => {
-    if (seq !== dirReqSeq) return { status: 'canceled' };
-
-    const p = normalizePath(path);
-    const scopedRootPath = normalizePath(agentHomePathAbs() || p);
-    if (!options.forceReload && cache.has(p)) {
-      if (seq === dirReqSeq) setFiles((prev) => withChildrenAtRoot(prev, p, cache.get(p)!, scopedRootPath));
-      return { status: 'ok' };
-    }
-
-    if (!protocol.client()) {
-      return { status: 'transport_error', message: 'Connection is not ready.' };
-    }
-
-    try {
-      const resp = await rpc.fs.list({ path: p, showHidden: showHidden() });
-      if (seq !== dirReqSeq) return { status: 'canceled' };
-
-      const entries = resp?.entries ?? [];
-      const items = entries
-        .map(toFileItem)
-        .sort((a: FileItem, b: FileItem) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
-      if (seq !== dirReqSeq) return { status: 'canceled' };
-      cache.set(p, items);
-
-      if (seq === dirReqSeq) setFiles((prev) => withChildrenAtRoot(prev, p, items, scopedRootPath));
-      return { status: 'ok' };
-    } catch (e) {
-      if (seq !== dirReqSeq) return { status: 'canceled' };
-      return classifyPathLoadError(e);
-    }
-  };
-
-  const loadPathChain = async (
-    path: string,
-    options: { targetPolicy?: DirTargetLoadPolicy } = {},
-  ): Promise<PathLoadResult> => {
-    const seq = ++dirReqSeq;
-    setLoading(true);
-    try {
-      if (!protocol.client()) {
-        return { status: 'transport_error', message: 'Connection is not ready.' };
-      }
-
-      let rootPath = '';
-      try {
-        rootPath = normalizePath(await resolveFsRootAbs());
-      } catch (e) {
-        return {
-          status: 'transport_error',
-          message: e instanceof Error ? e.message : 'Failed to resolve home directory.',
-        };
-      }
-
-      const p = normalizePath(path);
-      if (p !== rootPath && !p.startsWith(`${rootPath}/`)) {
-        return { status: 'invalid_path', message: 'Path is outside the runtime home directory.' };
-      }
-
-      const rel = p === rootPath ? '' : p.slice(rootPath.length);
-      const parts = rel.split('/').filter(Boolean);
-      const chain: string[] = [rootPath];
-      let cursor = rootPath;
-      for (const part of parts) {
-        cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
-        chain.push(cursor);
-      }
-
-      const targetPolicy = options.targetPolicy ?? 'use_cache';
-      for (const dir of chain) {
-        const forceReload = dir === p && (targetPolicy === 'force_reload' || targetPolicy === 'revalidate_target');
-        const step = await loadDirOnce(dir, seq, { forceReload });
-        if (step.status !== 'ok') return step;
-      }
-      setLastLoadedBrowserPath(p);
-      return { status: 'ok' };
-    } finally {
-      if (seq === dirReqSeq) setLoading(false);
-    }
-  };
-
   const notifyPathLoadFailure = (result: PathLoadResult) => {
     if (result.status === 'canceled' || result.status === 'invalid_path') return;
     notification.error('Failed to load directory', result.message ?? 'Unable to load directory.');
   };
 
-  const loadPathOrFallback = async (
+  const prepareDirectoryState = async (
     requestedPath: string,
+    seq: number,
     options: {
-      fallbackPath?: string;
-      persistEnvId?: string;
-      resetOnFallback?: boolean;
       targetPolicy?: DirTargetLoadPolicy;
+      seed?: DirectoryStateSeed;
     } = {},
-  ): Promise<void> => {
+  ): Promise<DirectoryPrepareResult> => {
+    if (seq !== dirReqSeq) return { status: 'canceled' };
+
+    if (!protocol.client()) {
+      return { status: 'transport_error', message: 'Connection is not ready.' };
+    }
+
+    let rootPath = '';
+    try {
+      rootPath = normalizePath(await resolveFsRootAbs());
+    } catch (error) {
+      return {
+        status: 'transport_error',
+        message: error instanceof Error ? error.message : 'Failed to resolve home directory.',
+      };
+    }
+
     const normalizedRequestedPath = normalizePath(requestedPath);
+    if (normalizedRequestedPath !== rootPath && !normalizedRequestedPath.startsWith(`${rootPath}/`)) {
+      return {
+        status: 'invalid_path',
+        message: 'Path is outside the runtime home directory.',
+        rootPath,
+      };
+    }
+
+    const targetPolicy = options.targetPolicy ?? 'use_cache';
+    let nextTree = options.seed?.tree ?? files();
+    const nextCache = options.seed?.cache ?? cloneDirCache(cache);
+
+    const rel = normalizedRequestedPath === rootPath ? '' : normalizedRequestedPath.slice(rootPath.length);
+    const parts = rel.split('/').filter(Boolean);
+    const chain: string[] = [rootPath];
+    let cursor = rootPath;
+    for (const part of parts) {
+      cursor = cursor === '/' ? `/${part}` : `${cursor}/${part}`;
+      chain.push(cursor);
+    }
+
+    for (const dir of chain) {
+      if (seq !== dirReqSeq) return { status: 'canceled' };
+
+      const forceReload = dir === normalizedRequestedPath && (targetPolicy === 'force_reload' || targetPolicy === 'revalidate_target');
+      const cachedItems = !forceReload ? nextCache.get(dir) : undefined;
+      if (cachedItems) {
+        nextTree = withChildrenAtRoot(nextTree, dir, cachedItems, rootPath);
+        continue;
+      }
+
+      try {
+        const resp = await rpc.fs.list({ path: dir, showHidden: showHidden() });
+        if (seq !== dirReqSeq) return { status: 'canceled' };
+
+        const entries = resp?.entries ?? [];
+        const items = entries
+          .map(toFileItem)
+          .sort((a: FileItem, b: FileItem) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
+        nextCache.set(dir, items);
+        nextTree = withChildrenAtRoot(nextTree, dir, items, rootPath);
+      } catch (error) {
+        if (seq !== dirReqSeq) return { status: 'canceled' };
+        return {
+          ...classifyPathLoadError(error),
+          rootPath,
+        };
+      }
+    }
+
+    return {
+      status: 'ok',
+      state: {
+        tree: nextTree,
+        cache: nextCache,
+        rootPath,
+        committedPath: normalizedRequestedPath,
+        lastLoadedPath: normalizedRequestedPath,
+      },
+    };
+  };
+
+  const resolveDirectoryNavigation = async (
+    requestedPath: string,
+    seq: number,
+    options: Pick<DirectoryNavigationOptions, 'fallbackPath' | 'targetPolicy'> = {},
+  ): Promise<DirectoryNavigationResult> => {
+    const normalizedRequestedPath = normalizePath(requestedPath);
+    const prepared = await prepareDirectoryState(normalizedRequestedPath, seq, {
+      targetPolicy: options.targetPolicy ?? 'use_cache',
+    });
+    if (prepared.status === 'ok') {
+      return { status: 'ready', state: prepared.state };
+    }
+    if (prepared.status === 'canceled') {
+      return { status: 'canceled' };
+    }
+    if (prepared.status !== 'invalid_path') {
+      return { status: 'error', result: prepared };
+    }
+
+    const rootPath = normalizePath(prepared.rootPath || agentHomePathAbs() || '/');
     const normalizedFallbackPath = options.fallbackPath
       ? normalizePath(options.fallbackPath)
       : '';
-    const result = await loadPathChain(normalizedRequestedPath, {
-      targetPolicy: options.targetPolicy ?? 'use_cache',
-    });
-    if (result.status === 'ok' || result.status === 'canceled') return;
+    const nextCache = cloneDirCache(cache);
+    removeCachePathPrefix(nextCache, normalizedRequestedPath);
+    const nextTree = removeItemsFromTree(files(), new Set([normalizedRequestedPath]));
+    const fallbackCandidates = buildFallbackDirectoryCandidates(normalizedRequestedPath, rootPath, normalizedFallbackPath);
 
-    if (result.status === 'invalid_path') {
-      removeCachePathPrefix(cache, normalizedRequestedPath);
-      setFiles((prev) => removeItemsFromTree(prev, new Set([normalizedRequestedPath])));
-
-      let rootPath = '';
-      try {
-        rootPath = normalizePath(await resolveFsRootAbs());
-      } catch (error) {
-        notifyPathLoadFailure({
-          status: 'transport_error',
-          message: error instanceof Error ? error.message : 'Failed to resolve home directory.',
-        });
-        return;
+    for (const candidate of fallbackCandidates) {
+      const fallbackPrepared = await prepareDirectoryState(candidate, seq, {
+        targetPolicy: 'force_reload',
+        seed: {
+          tree: nextTree,
+          cache: cloneDirCache(nextCache),
+        },
+      });
+      if (fallbackPrepared.status === 'ok') {
+        return { status: 'fallback', state: fallbackPrepared.state };
       }
-
-      const fallbackCandidates = buildFallbackDirectoryCandidates(normalizedRequestedPath, rootPath, normalizedFallbackPath);
-      for (const candidate of fallbackCandidates) {
-        const fallbackResult = await loadPathChain(candidate, { targetPolicy: 'force_reload' });
-        if (fallbackResult.status === 'ok') {
-          if (options.persistEnvId) {
-            writePersistedLastPath(options.persistEnvId, candidate);
-          }
-          setCurrentBrowserPath(candidate);
-          if (options.resetOnFallback !== false) {
-            resetFileBrowser();
-          }
-          return;
-        }
-        if (fallbackResult.status === 'canceled') return;
-        if (fallbackResult.status !== 'invalid_path') {
-          notifyPathLoadFailure(fallbackResult);
-          return;
-        }
+      if (fallbackPrepared.status === 'canceled') {
+        return { status: 'canceled' };
       }
-
-      if (rootPath) {
-        if (options.persistEnvId) {
-          writePersistedLastPath(options.persistEnvId, rootPath);
-        }
-        setCurrentBrowserPath(rootPath);
+      if (fallbackPrepared.status !== 'invalid_path') {
+        return { status: 'error', result: fallbackPrepared };
       }
-      return;
     }
 
-    notifyPathLoadFailure(result);
+    return { status: 'error', result: prepared };
+  };
+
+  const requestDirectoryNavigation = async (
+    requestedPath: string,
+    options: DirectoryNavigationOptions = {},
+  ): Promise<void> => {
+    const normalizedRequestedPath = normalizePath(requestedPath);
+    if (pathLoadInFlight() === normalizedRequestedPath) return;
+
+    const seq = ++dirReqSeq;
+    setPendingBrowserPath(normalizedRequestedPath);
+    setPathLoadInFlight(normalizedRequestedPath);
+    if (options.showBlockingOverlay) {
+      setLoading(true);
+    }
+    try {
+      const result = await resolveDirectoryNavigation(normalizedRequestedPath, seq, {
+        fallbackPath: options.fallbackPath,
+        targetPolicy: options.targetPolicy,
+      });
+      if (seq !== dirReqSeq || result.status === 'canceled') return;
+      if (result.status === 'error') {
+        notifyPathLoadFailure(result.result);
+        return;
+      }
+      applyPreparedDirectoryState(result.state, {
+        persistEnvId: options.persistEnvId && (result.status === 'fallback' || options.persistOnReady === true)
+          ? options.persistEnvId
+          : undefined,
+      });
+    } finally {
+      if (seq === dirReqSeq) {
+        setPendingBrowserPath('');
+        setPathLoadInFlight('');
+        setLoading(false);
+      }
+    }
   };
 
   const refreshCurrentDirectory = async (options: { forceReload?: boolean } = {}): Promise<void> => {
@@ -2647,18 +2724,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const normalizedPath = normalizePath(path);
     if (pathLoadInFlight() === normalizedPath) return;
 
-    setPathLoadInFlight(normalizedPath);
-    try {
-      await loadPathOrFallback(path, {
-        fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
-        persistEnvId: id,
-        resetOnFallback: false,
-        targetPolicy: options.forceReload ? 'force_reload' : 'revalidate_target',
-      });
-    } finally {
-      setPathLoadInFlight((current) => (current === normalizedPath ? '' : current));
-    }
+    await requestDirectoryNavigation(path, {
+      fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+      persistEnvId: id,
+      targetPolicy: options.forceReload ? 'force_reload' : 'revalidate_target',
+      showBlockingOverlay: lastLoadedBrowserPath() === '',
+    });
   };
+
+  const fileBrowserNavigationMessage = createMemo(() => {
+    const pendingPath = normalizeAbsolutePath(pendingBrowserPath());
+    if (!pendingPath) return '';
+    const currentPath = normalizeAbsolutePath(currentBrowserPath());
+    return normalizePath(pendingPath) === normalizePath(currentPath) ? 'Refreshing...' : 'Opening...';
+  });
 
   const applyLocalMove = (item: FileItem, destDir: string) => {
     const from = normalizePath(item.path);
@@ -3446,8 +3525,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       toolbarEndActions={fileBrowserToolbarEndActions()}
                       onNavigate={(path) => {
                         const targetPath = normalizePath(path);
-                        writePersistedLastPath(id, targetPath);
-                        setCurrentBrowserPath(targetPath);
+                        void requestDirectoryNavigation(targetPath, {
+                          fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+                          persistEnvId: id,
+                          persistOnReady: true,
+                          targetPolicy: 'revalidate_target',
+                        });
                       }}
                       onPathChange={(_path, source) => {
                         if (source === 'user' && layout.isMobile()) {

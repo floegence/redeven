@@ -568,6 +568,16 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function createEnvContext(options?: { canExecute?: boolean }): EnvContextValue {
   return createEnvContextWithIdAccessor(() => 'env-1', options);
 }
@@ -958,6 +968,7 @@ describe('RemoteFileBrowser persistence', () => {
 
   it('revalidates a cached directory when navigating back into it', async () => {
     widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
       lastPathByEnv: { 'env-1': '/workspace/repo' },
       showHiddenByEnv: { 'env-1': false },
       pageModeByEnv: { 'env-1': 'files' },
@@ -1030,6 +1041,79 @@ describe('RemoteFileBrowser persistence', () => {
 
       const srcCalls = mockRpc.fs.list.mock.calls.filter((call) => call[0]?.path === '/workspace/repo/src');
       expect(srcCalls).toHaveLength(2);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the current directory rendered until the requested target directory is ready', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const srcLoad = deferred<{ entries: Array<Record<string, unknown>> }>();
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/src':
+          return srcLoad.promise;
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+
+      const navSrcButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-src') as HTMLButtonElement | undefined;
+      expect(navSrcButton).toBeTruthy();
+
+      navSrcButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
+      expect(host.textContent).toContain('Opening...');
+      expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
+
+      srcLoad.resolve({
+        entries: [
+          { name: 'fresh.txt', path: '/workspace/repo/src/fresh.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+        ],
+      });
+      await flush();
+      await flush();
+
+      expect(host.textContent).toContain('files:files:/workspace/repo/src:312:0');
+      expect(host.textContent).not.toContain('Opening...');
+      expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
     } finally {
       dispose();
     }
@@ -1115,6 +1199,95 @@ describe('RemoteFileBrowser persistence', () => {
         '/workspace/repo',
       ]);
       expect(host.textContent).toContain('files:files:/workspace/repo:');
+      expect(widgetStateStore.updateCalls).toContainEqual({
+        widgetId: 'widget-1',
+        key: 'lastPathByEnv',
+        value: { 'env-1': '/workspace/repo' },
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the deleted current directory rendered until the fallback ancestor is ready', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/missing' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    let missingDeleted = false;
+    let repoFallbackLoad = deferred<{ entries: Array<Record<string, unknown>> }>();
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          if (missingDeleted) {
+            return repoFallbackLoad.promise;
+          }
+          return {
+            entries: [
+              { name: 'missing', path: '/workspace/repo/missing', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/missing':
+          if (!missingDeleted) {
+            return {
+              entries: [
+                { name: 'nested.txt', path: '/workspace/repo/missing/nested.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+              ],
+            };
+          }
+          throw new RpcError({ typeId: 1001, code: 404, message: 'directory missing' });
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+
+      const refreshButton = host.querySelector('button[aria-label="Refresh current directory"]') as HTMLButtonElement | null;
+      expect(refreshButton).toBeTruthy();
+
+      missingDeleted = true;
+      refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(host.textContent).toContain('files:files:/workspace/repo/missing:312:0');
+      expect(host.textContent).toContain('Refreshing...');
+      expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
+
+      repoFallbackLoad.resolve({
+        entries: [
+          { name: 'renamed', path: '/workspace/repo/renamed', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+        ],
+      });
+      await flush();
+      await flush();
+
+      expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
+      expect(host.textContent).not.toContain('Refreshing...');
       expect(widgetStateStore.updateCalls).toContainEqual({
         widgetId: 'widget-1',
         key: 'lastPathByEnv',
@@ -1591,6 +1764,7 @@ describe('RemoteFileBrowser persistence', () => {
       const showHiddenItem = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.includes('Show hidden files')) as HTMLButtonElement | undefined;
       expect(showHiddenItem).toBeTruthy();
       showHiddenItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
       await flush();
 
       expect(mockRpc.fs.list).toHaveBeenLastCalledWith({ path: '/workspace/src', showHidden: false });
