@@ -1,8 +1,8 @@
 import type { MenuItemConstructorOptions } from 'electron';
 
 export type AppMenuActions = Readonly<{
-  connectToRedeven: () => void;
-  openDesktopSettings: () => void;
+  openConnectionCenter: () => void;
+  openAdvancedSettings: () => void;
   requestQuit: () => void;
 }>;
 
@@ -41,9 +41,9 @@ export function buildAppMenuTemplate(
     ? {
         label: 'Redeven Desktop',
         submenu: [
-          { label: 'Connect to Redeven...', click: actions.connectToRedeven },
+          { label: 'Connection Center...', click: actions.openConnectionCenter },
           { type: 'separator' },
-          { label: 'Desktop Settings...', accelerator: 'CommandOrControl+,', click: actions.openDesktopSettings },
+          { label: 'Advanced Settings...', accelerator: 'CommandOrControl+,', click: actions.openAdvancedSettings },
           { type: 'separator' },
           { label: 'Hide Redeven Desktop', role: 'hide' },
           { label: 'Hide Others', role: 'hideOthers' },
@@ -55,9 +55,9 @@ export function buildAppMenuTemplate(
     : {
         label: 'File',
         submenu: [
-          { label: 'Connect to Redeven...', click: actions.connectToRedeven },
+          { label: 'Connection Center...', click: actions.openConnectionCenter },
           { type: 'separator' },
-          { label: 'Desktop Settings...', accelerator: 'CommandOrControl+,', click: actions.openDesktopSettings },
+          { label: 'Advanced Settings...', accelerator: 'CommandOrControl+,', click: actions.openAdvancedSettings },
           { type: 'separator' },
           { label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
         ],

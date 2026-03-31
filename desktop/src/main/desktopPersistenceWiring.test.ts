@@ -38,8 +38,8 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('normalizeDesktopAskFlowerHandoffPayload');
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_WINDOW_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenWindowRequest');
-    expect(mainSrc).toContain('openConnectToRedevenWindow');
-    expect(mainSrc).toContain('openDesktopSettingsWindow');
+    expect(mainSrc).toContain('openConnectionCenterWindow');
+    expect(mainSrc).toContain('openAdvancedSettingsWindow');
     expect(mainSrc).toContain("const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });");
     expect(mainSrc).toContain('preload: browserPreloadPath,');
     expect(mainSrc).not.toContain('usesDesktopWindowThemeOverlay(process.platform)');

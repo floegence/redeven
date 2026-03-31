@@ -1,27 +1,27 @@
 import { Globe, Settings } from '@floegence/floe-webapp-core/icons';
 
 export type DesktopShellCommandPaletteActions = Readonly<{
-  openConnectToRedeven: () => Promise<void>;
-  openDesktopSettings: () => Promise<void>;
+  openConnectionCenter: () => Promise<void>;
+  openAdvancedSettings: () => Promise<void>;
 }>;
 
 export function buildDesktopShellCommandPaletteEntries(actions: DesktopShellCommandPaletteActions) {
   return [
     {
-      id: 'redeven.desktop.connectToRedeven',
-      title: 'Connect to Redeven...',
-      description: 'Open the Desktop target picker for This device or External Redeven.',
+      id: 'redeven.desktop.openConnectionCenter',
+      title: 'Open Connection Center...',
+      description: 'Open, share, or link This device, or switch Desktop to another Redeven device.',
       category: 'Desktop',
       icon: Globe,
-      execute: actions.openConnectToRedeven,
+      execute: actions.openConnectionCenter,
     },
     {
-      id: 'redeven.desktop.openDesktopSettings',
-      title: 'Open Desktop Settings...',
-      description: 'Open the Desktop startup and bootstrap settings window.',
+      id: 'redeven.desktop.openAdvancedSettings',
+      title: 'Open Advanced Settings...',
+      description: 'Open the raw Desktop startup, access, and one-shot bootstrap inputs.',
       category: 'Desktop',
       icon: Settings,
-      execute: actions.openDesktopSettings,
+      execute: actions.openAdvancedSettings,
     },
   ] as const;
 }

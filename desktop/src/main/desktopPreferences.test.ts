@@ -7,12 +7,14 @@ import { describe, expect, it } from 'vitest';
 import {
   activeDesktopTargetKey,
   clearPendingBootstrap,
+  rememberRecentExternalLocalUITarget,
   defaultDesktopPreferences,
   createPlaintextSecretCodec,
   defaultDesktopPreferencesPaths,
   desktopPreferencesToDraft,
   loadDesktopPreferences,
   managedDesktopLaunchKey,
+  normalizeRecentExternalLocalUIURLs,
   saveDesktopPreferences,
   validateDesktopSettingsDraft,
 } from './desktopPreferences';
@@ -35,6 +37,7 @@ describe('desktopPreferences', () => {
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       pending_bootstrap: null,
+      recent_external_local_ui_urls: [],
     });
   });
 
@@ -101,10 +104,11 @@ describe('desktopPreferences', () => {
         env_id: 'env_123',
         env_token: 'token-123',
       });
+      const preferencesWithRecents = rememberRecentExternalLocalUITarget(preferences, 'http://192.168.1.12:24000/');
 
-      await saveDesktopPreferences(paths, preferences, codec);
+      await saveDesktopPreferences(paths, preferencesWithRecents, codec);
       const loaded = await loadDesktopPreferences(paths, codec);
-      expect(loaded).toEqual(preferences);
+      expect(loaded).toEqual(preferencesWithRecents);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -146,6 +150,7 @@ describe('desktopPreferences', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         pending_bootstrap: null,
+        recent_external_local_ui_urls: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -190,6 +195,7 @@ describe('desktopPreferences', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         pending_bootstrap: null,
+        recent_external_local_ui_urls: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -297,5 +303,47 @@ describe('desktopPreferences', () => {
 
     expect(managedDesktopLaunchKey(rememberedExternalOnly)).toBe(managedDesktopLaunchKey(baseline));
     expect(managedDesktopLaunchKey(changedBind)).not.toBe(managedDesktopLaunchKey(baseline));
+  });
+
+  it('normalizes and caps remembered recent external targets', () => {
+    expect(normalizeRecentExternalLocalUIURLs([
+      'http://192.168.1.11:24000/',
+      'http://192.168.1.11:24000/_redeven_proxy/env/',
+      'http://192.168.1.12:24000/',
+      'bad',
+      'http://192.168.1.13:24000/',
+      'http://192.168.1.14:24000/',
+      'http://192.168.1.15:24000/',
+      'http://192.168.1.16:24000/',
+    ])).toEqual([
+      'http://192.168.1.11:24000/',
+      'http://192.168.1.12:24000/',
+      'http://192.168.1.13:24000/',
+      'http://192.168.1.14:24000/',
+      'http://192.168.1.15:24000/',
+    ]);
+  });
+
+  it('promotes the latest external target to the front of recents', () => {
+    const preferences = rememberRecentExternalLocalUITarget(
+      rememberRecentExternalLocalUITarget(
+        validateDesktopSettingsDraft({
+          target_kind: 'managed_local',
+          external_local_ui_url: '',
+          local_ui_bind: '127.0.0.1:0',
+          local_ui_password: '',
+          controlplane_url: '',
+          env_id: '',
+          env_token: '',
+        }),
+        'http://192.168.1.11:24000/',
+      ),
+      'http://192.168.1.12:24000/',
+    );
+
+    expect(rememberRecentExternalLocalUITarget(preferences, 'http://192.168.1.11:24000/').recent_external_local_ui_urls).toEqual([
+      'http://192.168.1.11:24000/',
+      'http://192.168.1.12:24000/',
+    ]);
   });
 });

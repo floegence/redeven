@@ -38,7 +38,7 @@ function blockedHeadline(report: LaunchBlockedReport): { title: string; body: st
   };
 }
 
-type BlockedPageAction = 'retry' | 'copy-diagnostics' | 'desktop-settings' | 'connect' | 'quit';
+type BlockedPageAction = 'retry' | 'copy-diagnostics' | 'advanced-settings' | 'connection-center' | 'quit';
 
 function actionURL(action: BlockedPageAction): string {
   return `${BLOCKED_ACTION_ORIGIN}/${action}`;
@@ -47,13 +47,13 @@ function actionURL(action: BlockedPageAction): string {
 function secondaryAction(report: LaunchBlockedReport): Readonly<{ action: BlockedPageAction; label: string }> {
   if (report.code === 'external_target_unreachable' || report.code === 'external_target_invalid') {
     return {
-      action: 'connect',
-      label: 'Connect to Redeven',
+      action: 'connection-center',
+      label: 'Connection Center',
     };
   }
   return {
-    action: 'desktop-settings',
-    label: 'Desktop Settings',
+    action: 'advanced-settings',
+    label: 'Advanced Settings',
   };
 }
 
@@ -71,10 +71,12 @@ export function blockedActionFromURL(rawURL: string): BlockedPageAction | null {
       return 'retry';
     case '/copy-diagnostics':
       return 'copy-diagnostics';
+    case '/advanced-settings':
     case '/desktop-settings':
-      return 'desktop-settings';
+      return 'advanced-settings';
+    case '/connection-center':
     case '/connect':
-      return 'connect';
+      return 'connection-center';
     case '/quit':
       return 'quit';
     default:

@@ -4,28 +4,28 @@ import { buildDesktopShellCommandPaletteEntries } from './desktopShellCommandPal
 
 describe('desktopShellCommandPalette', () => {
   it('builds Desktop command palette entries with stable copy and actions', async () => {
-    const openConnectToRedeven = vi.fn().mockResolvedValue(undefined);
-    const openDesktopSettings = vi.fn().mockResolvedValue(undefined);
+    const openConnectionCenter = vi.fn().mockResolvedValue(undefined);
+    const openAdvancedSettings = vi.fn().mockResolvedValue(undefined);
 
     const entries = buildDesktopShellCommandPaletteEntries({
-      openConnectToRedeven,
-      openDesktopSettings,
+      openConnectionCenter,
+      openAdvancedSettings,
     });
 
     expect(entries.map((entry) => entry.id)).toEqual([
-      'redeven.desktop.connectToRedeven',
-      'redeven.desktop.openDesktopSettings',
+      'redeven.desktop.openConnectionCenter',
+      'redeven.desktop.openAdvancedSettings',
     ]);
     expect(entries.map((entry) => entry.category)).toEqual(['Desktop', 'Desktop']);
     expect(entries.map((entry) => entry.title)).toEqual([
-      'Connect to Redeven...',
-      'Open Desktop Settings...',
+      'Open Connection Center...',
+      'Open Advanced Settings...',
     ]);
 
     await entries[0]?.execute();
     await entries[1]?.execute();
 
-    expect(openConnectToRedeven).toHaveBeenCalledTimes(1);
-    expect(openDesktopSettings).toHaveBeenCalledTimes(1);
+    expect(openConnectionCenter).toHaveBeenCalledTimes(1);
+    expect(openAdvancedSettings).toHaveBeenCalledTimes(1);
   });
 });

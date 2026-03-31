@@ -80,8 +80,8 @@ import { subscribeDesktopAskFlowerMainWindowHandoff, type DesktopAskFlowerMainWi
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
-  openDesktopConnectToRedeven,
-  openDesktopSettings,
+  openAdvancedSettings,
+  openConnectionCenter,
 } from './services/desktopShellBridge';
 import {
   fetchGatewayJSON,
@@ -1757,8 +1757,8 @@ export function EnvAppShell() {
 
     if (desktopShellAvailable) {
       list.push(...buildDesktopShellCommandPaletteEntries({
-        openConnectToRedeven: () => runDesktopShellCommand('Connect to Redeven', openDesktopConnectToRedeven),
-        openDesktopSettings: () => runDesktopShellCommand('Desktop Settings', openDesktopSettings),
+        openConnectionCenter: () => runDesktopShellCommand('Connection Center', openConnectionCenter),
+        openAdvancedSettings: () => runDesktopShellCommand('Advanced Settings', openAdvancedSettings),
       }));
     }
 

@@ -129,6 +129,8 @@ if (!preload) {
       && typeof window.redevenDesktopAskFlowerHandoff?.requestMainWindowHandoff === 'function'
       && typeof window.redevenDesktopAskFlowerHandoff?.onMainWindowHandoff === 'function',
     hasDesktopShellBridge: typeof window.redevenDesktopShell === 'object'
+      && typeof window.redevenDesktopShell?.openConnectionCenter === 'function'
+      && typeof window.redevenDesktopShell?.openAdvancedSettings === 'function'
       && typeof window.redevenDesktopShell?.openConnectToRedeven === 'function'
       && typeof window.redevenDesktopShell?.openDesktopSettings === 'function',
     hasStateStorageBridge: typeof window.redevenDesktopStateStorage === 'object',

@@ -1,6 +1,6 @@
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 
-export type DesktopPageMode = 'desktop_settings' | 'connect';
+export type DesktopPageMode = 'advanced_settings';
 export type DesktopTargetKind = DesktopSettingsDraft['target_kind'];
 export type DesktopStatusTone = 'local' | 'external';
 
@@ -10,8 +10,8 @@ export interface DesktopTargetPresentation {
   targetSummaryBody: string;
   hostStateNote: string;
   bootstrapStateNote: string;
-  desktopSettingsNotice: string;
-  saveLabel: Readonly<Record<DesktopPageMode, string>>;
+  advancedSettingsNotice: string;
+  saveLabel: string;
 }
 
 export interface DesktopSummaryItem {
@@ -32,7 +32,7 @@ export interface DesktopPageAlertModel {
 
 export interface DesktopPageChoiceModel {
   id: string;
-  value: DesktopTargetKind;
+  value: string;
   title: string;
   description: string;
 }
@@ -57,16 +57,16 @@ export interface DesktopPageCardModel {
   title: string;
   descriptionHTML: string;
   badge?: string;
-  stateNote?: Readonly<{
-    id: string;
-    text: string;
-  }>;
+  choices?: readonly DesktopPageChoiceModel[];
   choiceLegend?: string;
   choiceHint?: Readonly<{
     id: string;
     text: string;
   }>;
-  choices?: readonly DesktopPageChoiceModel[];
+  stateNote?: Readonly<{
+    id: string;
+    text: string;
+  }>;
   fields: readonly DesktopPageFieldModel[];
 }
 
@@ -87,8 +87,8 @@ export interface DesktopPageViewModel {
   saveLabel: string;
 }
 
-export function pageWindowTitle(mode: DesktopPageMode): string {
-  return mode === 'connect' ? 'Connect to Redeven' : 'Desktop Settings';
+export function pageWindowTitle(_mode: DesktopPageMode): string {
+  return 'Advanced Settings';
 }
 
 export const desktopTargetPresentations = {
@@ -98,40 +98,19 @@ export const desktopTargetPresentations = {
     targetSummaryBody: 'Desktop starts the bundled runtime on this machine.',
     hostStateNote: 'These values apply to desktop-managed starts on this machine.',
     bootstrapStateNote: 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.',
-    desktopSettingsNotice: 'Use Connect to Redeven... from the app menu when you want to switch between This device and External Redeven.',
-    saveLabel: {
-      desktop_settings: 'Save and apply',
-      connect: 'Use this device',
-    },
+    advancedSettingsNotice: 'Use Connection Center... when you want to switch between This device and Another device without editing the raw startup inputs below.',
+    saveLabel: 'Save and apply',
   },
   external_local_ui: {
-    statusLabel: 'External Redeven',
+    statusLabel: 'Another device',
     statusTone: 'external',
-    targetSummaryBody: 'Desktop opens another machine’s Local UI inside this shell.',
-    hostStateNote: 'Desktop is currently targeting External Redeven. These values stay saved for the next This device start.',
-    bootstrapStateNote: 'Desktop is currently targeting External Redeven. This request stays saved for the next This device start and is never sent to the external target.',
-    desktopSettingsNotice: 'Desktop is currently targeting External Redeven, so the values below are stored for the next time you switch back to This device.',
-    saveLabel: {
-      desktop_settings: 'Save for this device',
-      connect: 'Connect',
-    },
+    targetSummaryBody: "Desktop opens another device's Local UI inside this shell.",
+    hostStateNote: 'Desktop is currently targeting Another device. These values stay saved for the next This device start.',
+    bootstrapStateNote: 'Desktop is currently targeting Another device. This request stays saved for the next This device start and is never sent to the external target.',
+    advancedSettingsNotice: 'Desktop is currently targeting Another device, so the values below are stored for the next time you switch back to This device.',
+    saveLabel: 'Save for this device',
   },
 } as const satisfies Record<DesktopTargetKind, DesktopTargetPresentation>;
-
-const targetChoices = [
-  {
-    id: 'target-kind-managed-local',
-    value: 'managed_local',
-    title: 'This device',
-    description: 'Use the bundled Desktop-managed Redeven runtime on this machine.',
-  },
-  {
-    id: 'target-kind-external-local-ui',
-    value: 'external_local_ui',
-    title: 'External Redeven',
-    description: 'Open another machine’s Redeven Local UI directly inside this Desktop shell.',
-  },
-] as const satisfies readonly DesktopPageChoiceModel[];
 
 const hostFields = [
   {
@@ -190,83 +169,12 @@ export function buildSettingsPageViewModel(
 ): DesktopPageViewModel {
   const presentation = desktopTargetPresentations[targetKind] ?? desktopTargetPresentations.managed_local;
 
-  if (mode === 'connect') {
-    return {
-      windowTitle: pageWindowTitle(mode),
-      lead: 'Choose whether Desktop opens this machine or another Redeven Local UI endpoint.',
-      statusLabel: presentation.statusLabel,
-      statusTone: presentation.statusTone,
-      saveLabel: presentation.saveLabel.connect,
-      summaryItems: [
-        {
-          label: 'Current target',
-          value: presentation.statusLabel,
-          body: presentation.targetSummaryBody,
-          valueId: 'target-summary-value',
-          bodyId: 'target-summary-note',
-        },
-        {
-          label: 'Desktop settings',
-          value: 'Stay separate',
-          body: 'Host This Device and Register to Redeven on next start stay in Desktop Settings. Agent runtime configuration appears later inside Agent Settings after Local UI opens.',
-        },
-        {
-          label: 'External URLs',
-          value: 'IP or localhost only',
-          body: 'Paste a Local UI base URL using localhost or an IP literal. Hostnames are intentionally not supported.',
-        },
-      ],
-      alert: {
-        kicker: 'Desktop shell boundary',
-        title: 'Desktop Settings stay separate',
-        body: 'Host This Device and Register to Redeven on next start live in Desktop Settings. Agent runtime configuration appears later inside Agent Settings after Local UI opens.',
-        tone: 'info',
-      },
-      sections: [
-        {
-          id: 'connection',
-          title: 'Connection',
-          cards: [
-            {
-              id: 'connection-target-card',
-              kicker: 'Connection target',
-              title: 'Connect to Redeven',
-              descriptionHTML: 'Switch between this machine and another Redeven Local UI endpoint without mixing that choice into desktop-managed startup settings.',
-              badge: 'Connection target',
-              choiceLegend: 'Target',
-              choiceHint: {
-                id: 'target-kind-help',
-                text: 'Choose where Desktop opens the Redeven Local UI.',
-              },
-              choices: targetChoices,
-              fields: [
-                {
-                  id: 'external-local-ui-url',
-                  name: 'external_local_ui_url',
-                  label: 'Redeven URL',
-                  type: 'url',
-                  autocomplete: 'url',
-                  inputMode: 'url',
-                  placeholder: 'http://192.168.1.11:24000/',
-                  helpHTML: 'Paste the Local UI base URL. Hostnames are intentionally not supported; use localhost or an IP literal.',
-                  helpId: 'external-local-ui-url-help',
-                  describedBy: ['external-local-ui-url-help', 'settings-error'],
-                  hidden: targetKind !== 'external_local_ui',
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    };
-  }
-
   return {
     windowTitle: pageWindowTitle(mode),
-    lead: 'Configure how Desktop starts, exposes, and bootstraps the bundled Redeven runtime when this app is targeting this device.',
+    lead: 'Edit the low-level startup, access, and one-shot bootstrap inputs that back Connection Center.',
     statusLabel: presentation.statusLabel,
     statusTone: presentation.statusTone,
-    saveLabel: presentation.saveLabel.desktop_settings,
+    saveLabel: presentation.saveLabel,
     summaryItems: [
       {
         label: 'Current target',
@@ -289,9 +197,9 @@ export function buildSettingsPageViewModel(
       },
     ],
     alert: {
-      kicker: 'Connection target',
-      title: 'Connection target is managed separately',
-      body: presentation.desktopSettingsNotice,
+      kicker: 'Primary workflow',
+      title: 'Connection Center owns open, share, and link',
+      body: presentation.advancedSettingsNotice,
       bodyId: 'desktop-target-alert-body',
       tone: 'info',
     },

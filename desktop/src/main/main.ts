@@ -11,11 +11,14 @@ import {
   desktopPreferencesToDraft,
   loadDesktopPreferences,
   managedDesktopLaunchKey,
+  rememberRecentExternalLocalUITarget,
   saveDesktopPreferences,
   validateDesktopSettingsDraft,
   type DesktopPreferences,
 } from './desktopPreferences';
 import { buildDesktopAgentArgs, buildDesktopAgentEnvironment } from './desktopLaunch';
+import { buildDesktopConnectionCenterSnapshot } from './connectionCenterState';
+import { connectionCenterPageDataURL, connectionCenterWindowTitle } from './connectionCenterPage';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
@@ -141,6 +144,18 @@ function buildExternalTargetBlockedReport(
   };
 }
 
+function sameRecentTargets(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function presentAppWindow(win: BrowserWindow, options?: Readonly<{ stealAppFocus?: boolean }>): void {
   if (win.isMinimized()) {
     win.restore();
@@ -199,14 +214,7 @@ async function requestQuit(): Promise<void> {
   app.quit();
 }
 
-async function openDesktopPageWindow(
-  mode: DesktopPageMode,
-  draft?: DesktopSettingsDraft,
-  errorMessage = '',
-): Promise<void> {
-  const currentDraft = draft ?? desktopPreferencesToDraft(await loadDesktopPreferencesCached());
-  const windowTitle = pageWindowTitle(mode);
-
+async function openShellPageWindow(windowTitle: string, targetURL: string): Promise<void> {
   if (!settingsWindow) {
     const restoredState = desktopStateStore().getWindowState(SETTINGS_WINDOW_STATE_KEY);
     const restoredBounds = restoreBrowserWindowBounds(SETTINGS_WINDOW_SPEC, desktopStateStore(), SETTINGS_WINDOW_STATE_KEY);
@@ -253,26 +261,36 @@ async function openDesktopPageWindow(
   }
 
   settingsWindow.setTitle(windowTitle);
-  await settingsWindow.loadURL(settingsPageDataURL(currentDraft, errorMessage, process.platform, mode));
+  await settingsWindow.loadURL(targetURL);
   if (!settingsWindow.isVisible()) {
     settingsWindow.show();
   }
   settingsWindow.focus();
 }
 
-async function openDesktopSettingsWindow(): Promise<void> {
-  await openDesktopPageWindow('desktop_settings');
+async function openAdvancedSettingsWindow(
+  mode: DesktopPageMode = 'advanced_settings',
+  draft?: DesktopSettingsDraft,
+  errorMessage = '',
+): Promise<void> {
+  const currentDraft = draft ?? desktopPreferencesToDraft(await loadDesktopPreferencesCached());
+  await openShellPageWindow(
+    pageWindowTitle(mode),
+    settingsPageDataURL(currentDraft, errorMessage, process.platform, mode),
+  );
 }
 
-function buildConnectToRedevenDraft(preferences: DesktopPreferences): DesktopSettingsDraft {
-  return {
-    ...desktopPreferencesToDraft(preferences),
-    target_kind: 'external_local_ui',
-  };
-}
-
-async function openConnectToRedevenWindow(): Promise<void> {
-  await openDesktopPageWindow('connect', buildConnectToRedevenDraft(await loadDesktopPreferencesCached()));
+async function openConnectionCenterWindow(errorMessage = ''): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const snapshot = buildDesktopConnectionCenterSnapshot({
+    preferences,
+    managedStartup: managedAgent?.startup ?? null,
+    externalStartup: externalTargetStartup,
+  });
+  await openShellPageWindow(
+    connectionCenterWindowTitle(),
+    connectionCenterPageDataURL(snapshot, errorMessage, process.platform),
+  );
 }
 
 async function applySavedPreferences(previous: DesktopPreferences, next: DesktopPreferences): Promise<void> {
@@ -290,9 +308,9 @@ async function applySavedPreferences(previous: DesktopPreferences, next: Desktop
         type: 'info',
         buttons: ['OK'],
         defaultId: 0,
-        title: 'Desktop settings saved',
-        message: 'Desktop settings saved for the next This device start.',
-        detail: 'Desktop is currently targeting External Redeven, so the updated startup settings will apply after you switch back to This device.',
+        title: 'Advanced settings saved',
+        message: 'Advanced settings saved for the next This device start.',
+        detail: 'Desktop is currently targeting Another device, so the updated startup settings will apply after you switch back to This device.',
         normalizeAccessKeys: true,
       };
       if (mainWindow) {
@@ -316,8 +334,8 @@ async function applySavedPreferences(previous: DesktopPreferences, next: Desktop
       type: 'info',
       buttons: ['OK'],
       defaultId: 0,
-      title: 'Desktop settings saved',
-      message: 'Desktop settings saved for the next desktop-managed start.',
+      title: 'Advanced settings saved',
+      message: 'Advanced settings saved for the next desktop-managed start.',
       detail: 'Redeven Desktop is currently attached to an already-running agent, so the new startup settings will apply after that agent stops and Desktop starts a fresh desktop-managed runtime.',
       normalizeAccessKeys: true,
     };
@@ -353,17 +371,17 @@ function handleBlockedAction(url: string): boolean {
     }
     return true;
   }
-  if (action === 'desktop-settings') {
-    void openDesktopSettingsWindow().catch((error) => {
+  if (action === 'advanced-settings') {
+    void openAdvancedSettingsWindow().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      dialog.showErrorBox('Redeven Desktop failed to open Desktop Settings', message || 'Unknown desktop settings error.');
+      dialog.showErrorBox('Redeven Desktop failed to open Advanced Settings', message || 'Unknown advanced-settings error.');
     });
     return true;
   }
-  if (action === 'connect') {
-    void openConnectToRedevenWindow().catch((error) => {
+  if (action === 'connection-center') {
+    void openConnectionCenterWindow().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      dialog.showErrorBox('Redeven Desktop failed to open Connect to Redeven', message || 'Unknown connection settings error.');
+      dialog.showErrorBox('Redeven Desktop failed to open Connection Center', message || 'Unknown connection-center error.');
     });
     return true;
   }
@@ -559,6 +577,10 @@ async function ensureDesktopTargetReady(): Promise<string> {
       managedAgent = null;
       externalTargetStartup = startup;
       allowedBaseURL = startup.local_ui_url;
+      const nextPreferences = rememberRecentExternalLocalUITarget(preferences, startup.local_ui_url);
+      if (!sameRecentTargets(nextPreferences.recent_external_local_ui_urls, preferences.recent_external_local_ui_urls)) {
+        await persistDesktopPreferences(nextPreferences);
+      }
       await desktopDiagnostics.configureRuntime(startup, allowedBaseURL);
       await desktopDiagnostics.recordLifecycle(
         'external_target_connected',
@@ -736,8 +758,12 @@ if (!app.requestSingleInstanceLock()) {
 
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {
     try {
-      const next = validateDesktopSettingsDraft(draft);
       const previous = await loadDesktopPreferencesCached();
+      const validated = validateDesktopSettingsDraft(draft);
+      const next: DesktopPreferences = {
+        ...validated,
+        recent_external_local_ui_urls: previous.recent_external_local_ui_urls,
+      };
       await persistDesktopPreferences(next);
       await applySavedPreferences(previous, next);
       if (settingsWindow && !settingsWindow.isDestroyed()) {
@@ -757,12 +783,12 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
 
-    if (normalized.kind === 'connect') {
-      await openConnectToRedevenWindow();
+    if (normalized.kind === 'connection_center') {
+      await openConnectionCenterWindow();
       return;
     }
 
-    await openDesktopSettingsWindow();
+    await openAdvancedSettingsWindow();
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
     if (settingsWindow && !settingsWindow.isDestroyed()) {
@@ -791,16 +817,16 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     installDesktopDiagnosticsHooks();
     Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
-      connectToRedeven: () => {
-        void openConnectToRedevenWindow().catch((error) => {
+      openConnectionCenter: () => {
+        void openConnectionCenterWindow().catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open Connect to Redeven', message || 'Unknown connection settings error.');
+          dialog.showErrorBox('Redeven Desktop failed to open Connection Center', message || 'Unknown connection-center error.');
         });
       },
-      openDesktopSettings: () => {
-        void openDesktopSettingsWindow().catch((error) => {
+      openAdvancedSettings: () => {
+        void openAdvancedSettingsWindow().catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open Desktop Settings', message || 'Unknown desktop settings error.');
+          dialog.showErrorBox('Redeven Desktop failed to open Advanced Settings', message || 'Unknown advanced-settings error.');
         });
       },
       requestQuit: () => {

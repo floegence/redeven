@@ -155,7 +155,7 @@ export function buildSettingsPageHTML(
   draft: DesktopSettingsDraft,
   errorMessage = '',
   platform: NodeJS.Platform = process.platform,
-  mode: DesktopPageMode = 'desktop_settings',
+  mode: DesktopPageMode = 'advanced_settings',
 ): string {
   const error = String(errorMessage ?? '').trim();
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
@@ -686,11 +686,9 @@ export function buildSettingsPageHTML(
     </main>
 
     <script id="redeven-settings-state" type="application/json">${serializeJSON(draft)}</script>
-    <script id="redeven-settings-mode" type="application/json">${serializeJSON(mode)}</script>
     <script id="redeven-target-presentations" type="application/json">${serializeJSON(desktopTargetPresentations)}</script>
     <script>
       const state = JSON.parse(document.getElementById('redeven-settings-state').textContent || '{}');
-      const mode = JSON.parse(document.getElementById('redeven-settings-mode').textContent || '"desktop_settings"');
       const targetPresentations = JSON.parse(document.getElementById('redeven-target-presentations').textContent || '{}');
       const form = document.getElementById('settings-form');
       const errorEl = document.getElementById('settings-error');
@@ -730,11 +728,8 @@ export function buildSettingsPageHTML(
           targetSummaryBody: '',
           hostStateNote: '',
           bootstrapStateNote: '',
-          desktopSettingsNotice: '',
-          saveLabel: {
-            desktop_settings: 'Save and apply',
-            connect: 'Use this device',
-          },
+          advancedSettingsNotice: '',
+          saveLabel: 'Save and apply',
         };
       }
 
@@ -765,7 +760,7 @@ export function buildSettingsPageHTML(
           bootstrapSummaryNote.textContent = presentation.bootstrapStateNote;
         }
         if (desktopTargetAlertBody) {
-          desktopTargetAlertBody.textContent = presentation.desktopSettingsNotice;
+          desktopTargetAlertBody.textContent = presentation.advancedSettingsNotice;
         }
         if (externalLocalUIURLRow) {
           externalLocalUIURLRow.hidden = !externalMode;
@@ -774,7 +769,7 @@ export function buildSettingsPageHTML(
           fields.external_local_ui_url.disabled = !externalMode;
         }
         if (saveButton) {
-          saveButton.textContent = presentation.saveLabel[mode] || saveButton.textContent;
+          saveButton.textContent = presentation.saveLabel || saveButton.textContent;
         }
       }
 
@@ -853,7 +848,7 @@ export function settingsPageDataURL(
   draft: DesktopSettingsDraft,
   errorMessage = '',
   platform: NodeJS.Platform = process.platform,
-  mode: DesktopPageMode = 'desktop_settings',
+  mode: DesktopPageMode = 'advanced_settings',
 ): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(buildSettingsPageHTML(draft, errorMessage, platform, mode))}`;
 }

@@ -23,6 +23,7 @@ export type DesktopPreferences = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
   pending_bootstrap: PendingBootstrap | null;
+  recent_external_local_ui_urls: readonly string[];
 }>;
 
 export type DesktopPreferencesPaths = Readonly<{
@@ -42,6 +43,7 @@ type DesktopPreferencesFile = Readonly<{
     external_local_ui_url?: string;
   }>;
   local_ui_bind?: string;
+  recent_external_local_ui_urls?: readonly unknown[];
   pending_bootstrap?: Readonly<{
     controlplane_url?: string;
     env_id?: string;
@@ -110,6 +112,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
     pending_bootstrap: null,
+    recent_external_local_ui_urls: [],
   };
 }
 
@@ -138,6 +141,53 @@ function compact(value: unknown): string {
 
 function normalizeTargetKind(raw: unknown): DesktopTargetKind {
   return compact(raw) === 'external_local_ui' ? 'external_local_ui' : 'managed_local';
+}
+
+const MAX_RECENT_EXTERNAL_LOCAL_UI_URLS = 5;
+
+export function normalizeRecentExternalLocalUIURLs(values: readonly unknown[] | null | undefined): readonly string[] {
+  if (!Array.isArray(values) || values.length === 0) {
+    return [];
+  }
+
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const clean = compact(value);
+    if (clean === '') {
+      continue;
+    }
+    let url = '';
+    try {
+      url = normalizeLocalUIBaseURL(clean);
+    } catch {
+      continue;
+    }
+    if (seen.has(url)) {
+      continue;
+    }
+    seen.add(url);
+    normalized.push(url);
+    if (normalized.length >= MAX_RECENT_EXTERNAL_LOCAL_UI_URLS) {
+      break;
+    }
+  }
+  return normalized;
+}
+
+export function rememberRecentExternalLocalUITarget(
+  preferences: DesktopPreferences,
+  rawURL: string,
+): DesktopPreferences {
+  const url = normalizeLocalUIBaseURL(rawURL);
+  const recents = normalizeRecentExternalLocalUIURLs([
+    url,
+    ...preferences.recent_external_local_ui_urls,
+  ]);
+  return {
+    ...preferences,
+    recent_external_local_ui_urls: recents,
+  };
 }
 
 export function activeDesktopTargetKey(preferences: DesktopPreferences): string {
@@ -190,7 +240,7 @@ export function validateDesktopSettingsDraft(draft: DesktopSettingsDraft): Deskt
     }
   }
   if (targetKind === 'external_local_ui' && externalLocalUIURL === '') {
-    throw new Error('Redeven URL is required when Desktop Target is External Redeven.');
+    throw new Error('Redeven URL is required when Desktop Target is Another device.');
   }
 
   const localUIBind = compact(draft.local_ui_bind);
@@ -235,6 +285,7 @@ export function validateDesktopSettingsDraft(draft: DesktopSettingsDraft): Deskt
     local_ui_bind: localUIBind,
     local_ui_password: localUIPassword,
     pending_bootstrap: pendingBootstrap,
+    recent_external_local_ui_urls: [],
   };
 }
 
@@ -354,7 +405,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const preferencesFile = await readJSONFile<DesktopPreferencesFile>(paths.preferencesFile);
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
 
-  return validateDesktopSettingsDraft(recoverDesktopPreferencesDraft({
+  const recovered = validateDesktopSettingsDraft(recoverDesktopPreferencesDraft({
     target_kind: preferencesFile?.target?.kind as DesktopSettingsDraft['target_kind'] | undefined,
     external_local_ui_url: preferencesFile?.target?.external_local_ui_url ?? '',
     local_ui_bind: preferencesFile?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
@@ -363,6 +414,11 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     env_id: preferencesFile?.pending_bootstrap?.env_id ?? '',
     env_token: decodeOptionalSecret(codec, secretsFile?.pending_bootstrap?.env_token),
   }));
+
+  return {
+    ...recovered,
+    recent_external_local_ui_urls: normalizeRecentExternalLocalUIURLs(preferencesFile?.recent_external_local_ui_urls),
+  };
 }
 
 export async function saveDesktopPreferences(
@@ -378,6 +434,7 @@ export async function saveDesktopPreferences(
       external_local_ui_url: nextPreferences.target.external_local_ui_url || undefined,
     },
     local_ui_bind: nextPreferences.local_ui_bind,
+    recent_external_local_ui_urls: normalizeRecentExternalLocalUIURLs(preferences.recent_external_local_ui_urls),
     pending_bootstrap: nextPreferences.pending_bootstrap
       ? {
           controlplane_url: nextPreferences.pending_bootstrap.controlplane_url,

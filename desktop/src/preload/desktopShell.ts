@@ -9,8 +9,14 @@ import {
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
+    openConnectionCenter: async (): Promise<void> => {
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'connection_center' });
+    },
+    openAdvancedSettings: async (): Promise<void> => {
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'settings' });
+    },
     openConnectToRedeven: async (): Promise<void> => {
-      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'connect' });
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'connection_center' });
     },
     openDesktopSettings: async (): Promise<void> => {
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'settings' });

@@ -16,14 +16,14 @@ This document describes the public Electron desktop shell that is published toge
 - Desktop-owned startup settings are stored separately from runtime state, so the shell can control launch arguments without introducing a second runtime.
 - Desktop can either:
   - target `This device` and use the bundled runtime flow
-  - target `External Redeven` and open another machine's Local UI directly
+  - target `Another device` and open another machine's Local UI directly
 - The desktop shell waits for a machine-readable desktop launch report file from `redeven`.
 - If a compatible Local UI instance is already running from the same default state directory, the desktop shell reuses that reported Local UI URL instead of failing on the state-directory lock.
 - If the default state directory is locked by another runtime instance without an attachable Local UI, the desktop shell stays open and renders a blocked page instead of crashing with raw stderr.
 - Electron only allows navigation to the exact reported Local UI origin (`localhost` / loopback / explicit local IP) and opens all other URLs in the system browser.
 - Desktop exposes:
-  - a native `Connect to Redeven...` menu entry for target selection
-  - a native `Desktop Settings...` window for shell-owned startup configuration
+  - a native `Connection Center...` menu entry for open/share/link workflows
+  - a native `Advanced Settings...` window for shell-owned raw startup configuration
   - explicit quit accelerators (`CommandOrControl+,`, `CommandOrControl+Q`)
 
 ## Runtime contract
@@ -58,7 +58,7 @@ Behavior:
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
 
-When the desktop target is `External Redeven`, Desktop does not start the bundled binary.
+When the desktop target is `Another device`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 
 The ready/attached startup payload also carries:
@@ -80,13 +80,24 @@ The first stable blocked code is:
 
 That blocked payload includes lock owner metadata and the relevant state paths so Desktop can show actionable diagnostics without guessing from stderr text.
 
-## Desktop settings
+## Desktop shell preferences
 
-Desktop owns a small native settings model for launch-time configuration:
+Desktop owns two shell-managed surfaces over one native preferences model:
+
+- `Connection Center`
+  - opens `This device` or `Another device`
+  - exposes `Only this device`, `Local network`, and `Custom` share presets for `This device`
+  - queues a one-shot Redeven link request for the next successful `This device` start
+  - remembers recent external Local UI targets so switching devices is faster
+- `Advanced Settings`
+  - edits the raw bind, password, and bootstrap inputs behind Connection Center
+
+The persisted model contains:
 
 - Persistent target settings:
   - `desktop_target_kind`
   - `external_local_ui_url`
+  - `recent_external_local_ui_urls`
 - Persistent settings:
   - `local_ui_bind`
   - `local_ui_password`
@@ -99,10 +110,15 @@ Semantics:
 
 - `desktop_target_kind` chooses whether Desktop opens this machine or another Redeven Local UI endpoint.
 - `external_local_ui_url` stores the last explicit external target URL and is only active when `desktop_target_kind=external_local_ui`.
+- `recent_external_local_ui_urls` stores a small, normalized, de-duplicated list of successful external targets for Connection Center.
 - The Local UI bind and password apply to every future desktop-managed start.
 - The bootstrap triple is treated as a one-shot “register to Redeven on next successful start” request.
 - After a spawned desktop-managed start succeeds, Desktop clears the pending bootstrap request automatically so an expired environment token is not retried on every future launch.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
+- `Connection Center` presets intentionally map high-level tasks to the same runtime contract:
+  - `Only this device` -> `127.0.0.1:0` with no password
+  - `Local network` -> a LAN bind plus a required password baseline
+  - `Custom` -> raw bind/password editing
 
 Target validation rules:
 
@@ -111,19 +127,19 @@ Target validation rules:
 - The shell normalizes the configured target to the Local UI origin root.
 - Desktop does not implement a separate desktop-to-desktop protocol; it reuses the same Local UI contract that Env App already uses.
 
-Desktop settings live under the Electron user data directory, not inside the git checkout.
+Desktop shell preferences live under the Electron user data directory, not inside the git checkout.
 
 ## User entry points
 
-- `Connect to Redeven...` from the native app menu opens the target selection flow.
-- `Desktop Settings...` opens the desktop startup/settings window.
-- After Local UI opens inside Redeven Desktop, Env App also exposes `Connect to Redeven...` and `Open Desktop Settings...` in the command palette as shell-owned quick actions.
-- Desktop intentionally keeps connection targeting separate from `Desktop Settings...` so shell-owned startup state does not collide with Env App `Runtime Settings`.
-- The blocked page routes to either `Connect to Redeven` or `Desktop Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
-- The native `Connect to Redeven` / `Desktop Settings` pages use the same design-token naming and settings-surface hierarchy as Env App `Runtime Settings`, but they remain repository-owned Desktop HTML pages rather than shared browser components.
+- `Connection Center...` from the native app menu opens the high-level open/share/link workflow.
+- `Advanced Settings...` opens the raw desktop startup/settings window.
+- After Local UI opens inside Redeven Desktop, Env App also exposes `Open Connection Center...` and `Open Advanced Settings...` in the command palette as shell-owned quick actions.
+- Desktop intentionally keeps `Connection Center` and `Advanced Settings` separate from Env App `Runtime Settings` so shell-owned startup state does not collide with runtime-owned configuration.
+- The blocked page routes to either `Connection Center` or `Advanced Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
+- The native `Connection Center` / `Advanced Settings` pages use the same design-token naming and settings-surface hierarchy as Env App `Runtime Settings`, but they remain repository-owned Desktop HTML pages rather than shared browser components.
 - Responsibility split stays strict:
-  - `Connect to Redeven` owns target selection for the Desktop shell
-  - `Desktop Settings` owns shell-managed startup bind/password and one-shot registration bootstrap
+  - `Connection Center` owns the task-oriented open/share/link workflow for the Desktop shell
+  - `Advanced Settings` owns shell-managed raw bind/password and one-shot registration bootstrap inputs
   - Env App `Runtime Settings` only appears after Local UI opens and owns runtime configuration inside the running endpoint
 
 ## Accessibility behavior
@@ -141,7 +157,7 @@ The required contract for `settingsPage.ts` and `blockedPage.ts` is:
 
 Desktop-specific outcomes from this implementation:
 
-- The Desktop Settings / Connect page focuses the surfaced error region on validation failure or initial error rendering.
+- The Connection Center / Advanced Settings pages focus the surfaced error region on validation failure or initial error rendering.
 - The blocked page focuses its summary alert on load so the reason and next action are announced immediately.
 - The blocked action row is exposed as a labeled navigation landmark.
 
@@ -202,20 +218,20 @@ For release automation, the same preparation script can hydrate the bundle from 
 If another `redeven` process already holds `~/.redeven/agent.lock`, Desktop now behaves as follows:
 
 - If that process exposes a compatible Local UI, Desktop attaches automatically.
-- If that process does not expose Local UI (for example a `remote`-only run), Desktop shows a blocked page with `Retry`, `Desktop Settings`, `Copy diagnostics`, and `Quit`.
+- If that process does not expose Local UI (for example a `remote`-only run), Desktop shows a blocked page with `Retry`, `Advanced Settings`, `Copy diagnostics`, and `Quit`.
 
 Desktop can also open another machine directly:
 
-- Open `Connect to Redeven...` from the app menu.
-- Select `External Redeven`.
+- Open `Connection Center...` from the app menu.
+- Select `Another device`.
 - Enter the target Local UI base URL, for example `http://192.168.1.11:24000/`.
 - If that target uses a Local UI password, Env App will ask for it after the page loads.
-- To expose this machine for another Desktop instance, switch the local host bind to an explicit reachable address such as `0.0.0.0:24000` and set a Local UI password.
+- To expose this machine for another Desktop instance, choose `Local network` in Connection Center or switch the local host bind to an explicit reachable address such as `0.0.0.0:24000` in Advanced Settings and set a Local UI password.
 
 Desktop shortcuts:
 
-- `Connect to Redeven...` is available from the native app menu.
-- `CommandOrControl+,` opens `Desktop Settings...`.
+- `Connection Center...` is available from the native app menu.
+- `CommandOrControl+,` opens `Advanced Settings...`.
 - Env App command palette mirrors those shell-owned actions after a desktop-managed session is open.
 - `CommandOrControl+Q` asks for confirmation before quitting the desktop app.
 

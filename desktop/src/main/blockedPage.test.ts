@@ -24,7 +24,7 @@ describe('blockedPage', () => {
     expect(html).toContain('Redeven is already running');
     expect(html).toContain('without an attachable Local UI');
     expect(html).toContain('Default state directory: /Users/tester/.redeven');
-    expect(html).toContain('Desktop Settings');
+    expect(html).toContain('Advanced Settings');
     expect(html).not.toContain('gradient');
     expect(html).toContain('Skip to main content');
     expect(html).toContain('id="blocked-main"');
@@ -54,8 +54,10 @@ describe('blockedPage', () => {
   it('recognizes blocked page action urls', () => {
     expect(isBlockedActionURL('https://redeven-desktop.invalid/retry')).toBe(true);
     expect(blockedActionFromURL('https://redeven-desktop.invalid/copy-diagnostics')).toBe('copy-diagnostics');
-    expect(blockedActionFromURL('https://redeven-desktop.invalid/desktop-settings')).toBe('desktop-settings');
-    expect(blockedActionFromURL('https://redeven-desktop.invalid/connect')).toBe('connect');
+    expect(blockedActionFromURL('https://redeven-desktop.invalid/advanced-settings')).toBe('advanced-settings');
+    expect(blockedActionFromURL('https://redeven-desktop.invalid/desktop-settings')).toBe('advanced-settings');
+    expect(blockedActionFromURL('https://redeven-desktop.invalid/connection-center')).toBe('connection-center');
+    expect(blockedActionFromURL('https://redeven-desktop.invalid/connect')).toBe('connection-center');
     expect(blockedActionFromURL('https://example.com/quit')).toBeNull();
   });
 
@@ -71,7 +73,7 @@ describe('blockedPage', () => {
 
     expect(html).toContain('Redeven target is unavailable');
     expect(html).toContain('Target URL: http://192.168.1.11:24000/');
-    expect(html).toContain('Connect to Redeven');
+    expect(html).toContain('Connection Center');
     expect(html).toContain('aria-describedby="blocked-meta"');
   });
 });
