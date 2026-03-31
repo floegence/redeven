@@ -200,3 +200,19 @@ export function rewriteCachePathPrefix(cache: Map<string, FileItem[]>, fromPrefi
     cache.set(newKey, sortFileItems(items.map((item) => rewriteSubtreePaths(item, from, to))));
   }
 }
+
+export function removeCachePathPrefix(cache: Map<string, FileItem[]>, prefix: string): void {
+  const normalizedPrefix = normalizePath(prefix);
+  const keysToDelete: string[] = [];
+
+  for (const key of cache.keys()) {
+    const normalizedKey = normalizePath(key);
+    if (normalizedKey === normalizedPrefix || normalizedKey.startsWith(`${normalizedPrefix}/`)) {
+      keysToDelete.push(normalizedKey);
+    }
+  }
+
+  for (const key of keysToDelete) {
+    cache.delete(key);
+  }
+}

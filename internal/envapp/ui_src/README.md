@@ -26,6 +26,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - Terminal size reclaim is focus-driven after attach: when the same session is shown in different surfaces, only the focused surface is allowed to emit remote resize updates, and restoring focus re-fits plus re-emits the current viewport so the active surface can reclaim remote PTY ownership.
 - The Debug Console is a shell-level floating surface mounted in `EnvAppShell` instead of individual pages so it stays visible above page-local loading overlays and can keep streaming diagnostics while the settings page is busy.
 - Shared `DirectoryPicker` / `FileSavePicker` integrations in Env App are intentionally lazy-mounted on open so picker state always initializes from the latest `homePath` + `initialPath` pair. Downstream surfaces must keep picker-internal paths root-relative and convert back to absolute filesystem paths only at the boundary helpers.
+- File Browser directory navigation is cache-assisted but target-truthful: cached ancestors may render immediately for responsiveness, while the requested target directory is revalidated on user entry, explicit refresh force-reloads the current directory, and invalid cached targets recover by force-refreshing the nearest existing ancestor so external delete/rename changes do not strand stale tree content.
 
 Notes:
 

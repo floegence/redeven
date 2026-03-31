@@ -2,6 +2,7 @@
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
 import type { ContextMenuCallbacks, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { RpcError } from '@floegence/floe-webapp-protocol';
 import { createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -213,6 +214,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     toolbarEndActions?: JSX.Element;
     onModeChange?: (mode: string) => void;
     onResize?: (delta: number) => void;
+    onNavigate?: (path: string) => void;
     contextMenuCallbacks?: ContextMenuCallbacks;
     overrideContextMenuItems?: ContextMenuItem[];
     resolveOverrideContextMenuItems?: (items: FileItem[]) => ContextMenuItem[] | undefined;
@@ -257,6 +259,9 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
+        <button type="button" onClick={() => props.onNavigate?.('/workspace/repo')}>mock-nav-repo</button>
+        <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/src')}>mock-nav-src</button>
+        <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/missing')}>mock-nav-missing</button>
         {copyNameItems.some((item) => item.type === 'copy-name') ? (
           <button
             type="button"
@@ -946,6 +951,234 @@ describe('RemoteFileBrowser persistence', () => {
     try {
       await flush();
       expect(widgetStateStore.updateCalls).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('revalidates a cached directory when navigating back into it', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    let srcLoadCount = 0;
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/src':
+          srcLoadCount += 1;
+          return {
+            entries: [
+              {
+                name: srcLoadCount === 1 ? 'old.txt' : 'new.txt',
+                path: `/workspace/repo/src/${srcLoadCount === 1 ? 'old.txt' : 'new.txt'}`,
+                isDirectory: false,
+                size: 1,
+                modifiedAt: 1,
+                createdAt: 1,
+                permissions: '-rw-r--r--',
+              },
+            ],
+          };
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+
+      const navSrcButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-src') as HTMLButtonElement | undefined;
+      const navRepoButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-repo') as HTMLButtonElement | undefined;
+      expect(navSrcButton).toBeTruthy();
+      expect(navRepoButton).toBeTruthy();
+
+      navSrcButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      navRepoButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      navSrcButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      const srcCalls = mockRpc.fs.list.mock.calls.filter((call) => call[0]?.path === '/workspace/repo/src');
+      expect(srcCalls).toHaveLength(2);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('recovers to the nearest existing ancestor after a cached directory disappears', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    let missingLoadCount = 0;
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              {
+                name: missingLoadCount >= 2 ? 'renamed' : 'missing',
+                path: missingLoadCount >= 2 ? '/workspace/repo/renamed' : '/workspace/repo/missing',
+                isDirectory: true,
+                size: 0,
+                modifiedAt: 1,
+                createdAt: 1,
+                permissions: 'drwxr-xr-x',
+              },
+            ],
+          };
+        case '/workspace/repo/missing':
+          missingLoadCount += 1;
+          if (missingLoadCount === 1) {
+            return {
+              entries: [
+                { name: 'nested.txt', path: '/workspace/repo/missing/nested.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+              ],
+            };
+          }
+          throw new RpcError({ typeId: 1001, code: 404, message: 'not found' });
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const navMissingButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-missing') as HTMLButtonElement | undefined;
+      const navRepoButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-nav-repo') as HTMLButtonElement | undefined;
+      expect(navMissingButton).toBeTruthy();
+      expect(navRepoButton).toBeTruthy();
+
+      navMissingButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      navRepoButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      mockRpc.fs.list.mockClear();
+      navMissingButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.fs.list.mock.calls.map((call) => call[0]?.path)).toEqual([
+        '/workspace/repo/missing',
+        '/workspace/repo',
+      ]);
+      expect(host.textContent).toContain('files:files:/workspace/repo:');
+      expect(widgetStateStore.updateCalls).toContainEqual({
+        widgetId: 'widget-1',
+        key: 'lastPathByEnv',
+        value: { 'env-1': '/workspace/repo' },
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('refreshes the current directory explicitly even when the path stays the same', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/src':
+          return {
+            entries: [
+              { name: 'current.txt', path: '/workspace/repo/src/current.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+            ],
+          };
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+
+      const refreshButton = host.querySelector('button[aria-label="Refresh current directory"]') as HTMLButtonElement | null;
+      expect(refreshButton).toBeTruthy();
+      refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.fs.list.mock.calls.map((call) => call[0]?.path)).toEqual(['/workspace/repo/src']);
     } finally {
       dispose();
     }
