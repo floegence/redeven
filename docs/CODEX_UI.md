@@ -169,6 +169,10 @@ Current Env App behavior:
 - Codex transcript scrolling now has two explicit modes:
   - `following`: thread switch, bootstrap, and send intents keep the viewport pinned to the latest output, including later markdown/layout reflow;
   - `paused`: when the user scrolls away from the bottom, later transcript reflow preserves the visible anchor row instead of yanking the viewport back to the bottom.
+- Follow-bottom intent handling is Codex-local. `CodexProvider` emits explicit bottom-intent requests, and `createFollowBottomController()` resolves them without changing Flower-owned pages or shared Flower transcript selectors.
+- System restore intents such as `bootstrap` and `thread_switch` stay instant so thread hydration and late layout reconciliation converge deterministically without introducing extra motion.
+- Explicit user intents such as `send` and manual “return to bottom” requests use smooth convergence when reduced motion is not requested, so streaming output can keep advancing the viewport without the old jump/retry feel.
+- The controller now targets the real bottom scroll position (`scrollHeight - clientHeight`) instead of the raw content height, which keeps bottom-follow math correct for both instant and animated follow paths.
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.

@@ -1,8 +1,14 @@
 export type FollowBottomMode = 'following' | 'paused';
+export type FollowBottomRequestReason = 'bootstrap' | 'thread_switch' | 'send' | 'manual';
+export type FollowBottomRequestSource = 'system' | 'user';
+export type FollowBottomScrollBehavior = 'auto' | 'smooth';
+export type FollowBottomMotionMode = 'instant' | 'animated';
 
 export type FollowBottomRequest = Readonly<{
   seq: number;
-  reason: string;
+  reason: FollowBottomRequestReason;
+  source: FollowBottomRequestSource;
+  behavior: FollowBottomScrollBehavior;
 }>;
 
 export type FollowBottomViewportAnchor = Readonly<{
@@ -41,6 +47,7 @@ export type CreateFollowBottomControllerArgs = Readonly<{
   cancelAnimationFrame?: typeof cancelAnimationFrame;
   now?: () => number;
   eventTarget?: EventTargetLike | null;
+  getPrefersReducedMotion?: () => boolean;
 }>;
 
 const DEFAULT_FOLLOW_THRESHOLD_PX = 72;
@@ -48,6 +55,8 @@ const DEFAULT_EXPLICIT_SYNC_PASSES = 2;
 const DEFAULT_RECENT_USER_SCROLL_INTENT_MS = 640;
 const DEFAULT_ANCHOR_ATTRIBUTE = 'data-follow-bottom-anchor-id';
 const FOLLOW_RAF_PENDING = -1;
+const ANIMATED_FOLLOW_TIME_CONSTANT_MS = 120;
+const ANIMATED_FOLLOW_MIN_STEP_PX = 1;
 const USER_SCROLL_KEYS = new Set([
   'ArrowDown',
   'ArrowUp',
@@ -75,6 +84,10 @@ function fallbackCancelAnimationFrame(): void {
 
 function distanceFromBottom(element: HTMLElement): number {
   return Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
+}
+
+function bottomScrollTop(element: HTMLElement): number {
+  return Math.max(0, element.scrollHeight - element.clientHeight);
 }
 
 function readAnchorID(element: Element, anchorAttribute: string): string {
@@ -110,9 +123,16 @@ export function createFollowBottomController(
   const cancelFrame = args.cancelAnimationFrame ?? globalThis.cancelAnimationFrame ?? fallbackCancelAnimationFrame;
   const now = args.now ?? Date.now;
   const eventTarget = args.eventTarget ?? (typeof window !== 'undefined' ? window : null);
+  const getPrefersReducedMotion = args.getPrefersReducedMotion
+    ?? (() => (
+      typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ));
 
   let currentMode: FollowBottomMode = 'following';
   let currentDistanceToBottomPx = 0;
+  let currentMotionMode: FollowBottomMotionMode = 'instant';
   let scrollContainerEl: HTMLElement | null = null;
   let contentRootEl: HTMLElement | null = null;
   let viewportAnchor: FollowBottomViewportAnchor | null = null;
@@ -120,6 +140,9 @@ export function createFollowBottomController(
   let lastHandledRequestSeq = 0;
   let remainingSyncPasses = 0;
   let followRaf: number | null = null;
+  let animatedFollowRaf: number | null = null;
+  let animatedFollowTargetTop = 0;
+  let animatedFollowLastTimestamp = 0;
   let recentUserScrollIntentUntilMs = 0;
   let pointerScrollGestureActive = false;
   let disposeUserScrollIntentListeners: (() => void) | null = null;
@@ -198,6 +221,53 @@ export function createFollowBottomController(
     clearUserScrollIntent();
   };
 
+  const syncProgrammaticScroll = (target: HTMLElement): void => {
+    prevScrollTop = target.scrollTop;
+    updateDistanceToBottom(target);
+  };
+
+  const cancelScheduledInstantFollow = (): void => {
+    if (followRaf !== null) {
+      cancelFrame(followRaf);
+      followRaf = null;
+    }
+  };
+
+  const cancelAnimatedFollow = (): void => {
+    if (animatedFollowRaf !== null) {
+      cancelFrame(animatedFollowRaf);
+      animatedFollowRaf = null;
+    }
+    animatedFollowLastTimestamp = 0;
+  };
+
+  const setFollowMotionMode = (nextMode: FollowBottomMotionMode): void => {
+    if (currentMotionMode === nextMode) return;
+    currentMotionMode = nextMode;
+    if (nextMode === 'animated') {
+      cancelScheduledInstantFollow();
+    } else {
+      cancelAnimatedFollow();
+    }
+  };
+
+  const resolveFollowMotionMode = (behavior: FollowBottomScrollBehavior): FollowBottomMotionMode => (
+    behavior === 'smooth' && !getPrefersReducedMotion() ? 'animated' : 'instant'
+  );
+
+  const applyFollowingModeWithMotion = (nextMode?: FollowBottomMotionMode): void => {
+    applyFollowingMode();
+    if (nextMode) {
+      setFollowMotionMode(nextMode);
+    }
+  };
+
+  const applyPausedMode = (): void => {
+    currentMode = 'paused';
+    cancelScheduledInstantFollow();
+    setFollowMotionMode('instant');
+  };
+
   const captureViewportAnchor = (): FollowBottomViewportAnchor | null => {
     if (!scrollContainerEl || !contentRootEl) return null;
     const containerRect = scrollContainerEl.getBoundingClientRect();
@@ -221,7 +291,7 @@ export function createFollowBottomController(
     const delta = rect.top - containerRect.top - viewportAnchor.topOffsetPx;
     if (Math.abs(delta) <= 0.5) return;
     scrollContainerEl.scrollTop += delta;
-    prevScrollTop = scrollContainerEl.scrollTop;
+    syncProgrammaticScroll(scrollContainerEl);
   };
 
   const queueFollowFrame = (): void => {
@@ -242,17 +312,75 @@ export function createFollowBottomController(
       remainingSyncPasses = 0;
       return;
     }
-    scrollContainerEl.scrollTop = scrollContainerEl.scrollHeight;
-    prevScrollTop = scrollContainerEl.scrollTop;
-    updateDistanceToBottom(scrollContainerEl);
+    scrollContainerEl.scrollTop = bottomScrollTop(scrollContainerEl);
+    syncProgrammaticScroll(scrollContainerEl);
     remainingSyncPasses = Math.max(0, remainingSyncPasses - 1);
     if (remainingSyncPasses > 0) {
       queueFollowFrame();
     }
   };
 
-  const scheduleFollowBottom = (passes = 1): void => {
+  const queueAnimatedFollow = (): void => {
+    if (animatedFollowRaf !== null) return;
+    animatedFollowRaf = requestFrame((timestamp) => {
+      animatedFollowRaf = null;
+      const target = scrollContainerEl;
+      if (!target || currentMode !== 'following' || currentMotionMode !== 'animated') {
+        animatedFollowLastTimestamp = 0;
+        return;
+      }
+
+      animatedFollowTargetTop = bottomScrollTop(target);
+      const diff = animatedFollowTargetTop - target.scrollTop;
+      if (Math.abs(diff) <= 0.5) {
+        if (Math.abs(diff) > 0) {
+          target.scrollTop = animatedFollowTargetTop;
+          syncProgrammaticScroll(target);
+        } else {
+          updateDistanceToBottom(target);
+        }
+        animatedFollowLastTimestamp = 0;
+        return;
+      }
+
+      const deltaMs = animatedFollowLastTimestamp > 0
+        ? Math.min(64, Math.max(1, timestamp - animatedFollowLastTimestamp))
+        : 16;
+      animatedFollowLastTimestamp = timestamp;
+      const progress = 1 - Math.exp(-deltaMs / ANIMATED_FOLLOW_TIME_CONSTANT_MS);
+      const rawStep = diff * progress;
+      const minStep = Math.sign(diff) * ANIMATED_FOLLOW_MIN_STEP_PX;
+      const nextScrollTop = target.scrollTop + (
+        Math.abs(rawStep) >= ANIMATED_FOLLOW_MIN_STEP_PX ? rawStep : minStep
+      );
+
+      target.scrollTop = diff > 0
+        ? Math.min(animatedFollowTargetTop, nextScrollTop)
+        : Math.max(animatedFollowTargetTop, nextScrollTop);
+      syncProgrammaticScroll(target);
+      queueAnimatedFollow();
+    });
+  };
+
+  const requestAnimatedFollowToBottom = (target?: HTMLElement | null): void => {
+    const element = target ?? scrollContainerEl;
+    if (!element) return;
+    animatedFollowTargetTop = bottomScrollTop(element);
+    queueAnimatedFollow();
+  };
+
+  const scheduleFollowBottom = (
+    behavior?: FollowBottomScrollBehavior,
+    passes = 1,
+  ): void => {
     if (!scrollContainerEl) return;
+    if (behavior) {
+      setFollowMotionMode(resolveFollowMotionMode(behavior));
+    }
+    if (currentMotionMode === 'animated') {
+      requestAnimatedFollowToBottom(scrollContainerEl);
+      return;
+    }
     remainingSyncPasses = Math.max(remainingSyncPasses, Math.max(1, passes));
     queueFollowFrame();
   };
@@ -260,7 +388,7 @@ export function createFollowBottomController(
   const handleObservedLayoutChange = (): void => {
     if (!scrollContainerEl) return;
     if (currentMode === 'following') {
-      scheduleFollowBottom(1);
+      scheduleFollowBottom(undefined, 1);
       return;
     }
     restoreViewportAnchor();
@@ -289,7 +417,7 @@ export function createFollowBottomController(
       disposeUserScrollIntentListeners = attachUserScrollIntentListeners(scrollContainerEl);
       scrollContainerResizeObserver?.observe(scrollContainerEl);
       if (currentMode === 'following') {
-        scheduleFollowBottom(1);
+        scheduleFollowBottom(undefined, 1);
       }
     }
   };
@@ -302,7 +430,7 @@ export function createFollowBottomController(
     if (contentRootEl) {
       contentResizeObserver?.observe(contentRootEl);
       if (currentMode === 'following') {
-        scheduleFollowBottom(1);
+        scheduleFollowBottom(undefined, 1);
       }
     }
   };
@@ -315,10 +443,10 @@ export function createFollowBottomController(
       applyFollowingMode();
     } else if (Math.abs(nextScrollTop - prevScrollTop) > 0.5) {
       if (hasRecentUserScrollIntent()) {
-        currentMode = 'paused';
+        applyPausedMode();
         viewportAnchor = captureViewportAnchor();
       } else if (currentMode === 'following') {
-        scheduleFollowBottom(1);
+        scheduleFollowBottom(undefined, 1);
       }
     }
     prevScrollTop = nextScrollTop;
@@ -331,8 +459,10 @@ export function createFollowBottomController(
     if (request) {
       lastHandledRequestSeq = request.seq;
     }
-    applyFollowingMode();
-    scheduleFollowBottom(explicitSyncPasses);
+    const behavior = request?.behavior ?? 'auto';
+    const source = request?.source ?? 'system';
+    applyFollowingModeWithMotion(resolveFollowMotionMode(behavior));
+    scheduleFollowBottom(behavior, source === 'system' ? explicitSyncPasses : 1);
   };
 
   const dispose = (): void => {
@@ -340,10 +470,8 @@ export function createFollowBottomController(
     scrollContainerResizeObserver?.disconnect();
     disposeUserScrollIntentListeners?.();
     disposeUserScrollIntentListeners = null;
-    if (followRaf !== null) {
-      cancelFrame(followRaf);
-      followRaf = null;
-    }
+    cancelScheduledInstantFollow();
+    cancelAnimatedFollow();
     scrollContainerEl = null;
     contentRootEl = null;
     viewportAnchor = null;
