@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   createFollowBottomController,
+  type FollowBottomRequest,
+  type FollowBottomRequestReason,
 } from './createFollowBottomController';
 
 type ObserverRecord = {
@@ -30,21 +32,35 @@ function createObserverFactory(records: ObserverRecord[]) {
 }
 
 function createRafHarness() {
-  const queue: FrameRequestCallback[] = [];
+  const queue = new Map<number, FrameRequestCallback>();
+  let nextID = 1;
+  let nextTimestamp = 16;
+  const flushOne = (timestamp = nextTimestamp): void => {
+    const first = queue.entries().next().value as [number, FrameRequestCallback] | undefined;
+    if (!first) return;
+    const [id, callback] = first;
+    queue.delete(id);
+    callback(timestamp);
+    nextTimestamp = timestamp + 16;
+  };
+  const flushAll = (): void => {
+    while (queue.size > 0) {
+      flushOne();
+    }
+  };
+
   return {
     requestAnimationFrame(callback: FrameRequestCallback): number {
-      queue.push(callback);
-      return queue.length;
+      const id = nextID;
+      nextID += 1;
+      queue.set(id, callback);
+      return id;
     },
-    cancelAnimationFrame(): void {
-      // No-op for test harness.
+    cancelAnimationFrame(id: number): void {
+      queue.delete(id);
     },
-    flushAll(): void {
-      while (queue.length > 0) {
-        const callback = queue.shift();
-        callback?.(0);
-      }
-    },
+    flushOne,
+    flushAll,
   };
 }
 
@@ -103,6 +119,23 @@ function installRowRect(
   };
 }
 
+function followRequest(
+  seq: number,
+  reason: FollowBottomRequestReason,
+  options?: Partial<Pick<FollowBottomRequest, 'source' | 'behavior'>>,
+): FollowBottomRequest {
+  return {
+    seq,
+    reason,
+    source: options?.source ?? 'system',
+    behavior: options?.behavior ?? 'auto',
+  };
+}
+
+function expectedBottomScrollTop(scrollHeight: number, clientHeight = 120): number {
+  return Math.max(0, scrollHeight - clientHeight);
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
 });
@@ -113,7 +146,7 @@ describe('createFollowBottomController', () => {
     const controller = createFollowBottomController({
       createResizeObserver: createObserverFactory(observerRecords),
       requestAnimationFrame(callback) {
-        callback(0);
+        callback(16);
         return 1;
       },
       cancelAnimationFrame() {
@@ -135,16 +168,16 @@ describe('createFollowBottomController', () => {
 
     controller.setScrollContainer(scrollContainer);
     controller.setContentRoot(contentRoot);
-    controller.requestFollowBottom({ seq: 1, reason: 'thread_switch' });
+    controller.requestFollowBottom(followRequest(1, 'thread_switch'));
 
-    expect(scrollContainer.scrollTop).toBe(360);
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
     expect(controller.mode()).toBe('following');
 
     scrollContainer.scrollTop = 120;
     controller.handleScroll();
 
     expect(controller.mode()).toBe('following');
-    expect(scrollContainer.scrollTop).toBe(360);
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
     controller.dispose();
   });
 
@@ -153,7 +186,7 @@ describe('createFollowBottomController', () => {
     const controller = createFollowBottomController({
       createResizeObserver: createObserverFactory(observerRecords),
       requestAnimationFrame(callback) {
-        callback(0);
+        callback(16);
         return 1;
       },
       cancelAnimationFrame() {
@@ -174,7 +207,7 @@ describe('createFollowBottomController', () => {
 
     controller.setScrollContainer(scrollContainer);
     controller.setContentRoot(contentRoot);
-    controller.requestFollowBottom({ seq: 1, reason: 'thread_switch' });
+    controller.requestFollowBottom(followRequest(1, 'thread_switch'));
 
     scrollContainer.dispatchEvent(new Event('wheel'));
     scrollContainer.scrollTop = 120;
@@ -190,7 +223,7 @@ describe('createFollowBottomController', () => {
     const controller = createFollowBottomController({
       createResizeObserver: createObserverFactory(observerRecords),
       requestAnimationFrame(callback) {
-        callback(0);
+        callback(16);
         return 1;
       },
       cancelAnimationFrame() {
@@ -212,15 +245,15 @@ describe('createFollowBottomController', () => {
 
     controller.setScrollContainer(scrollContainer);
     controller.setContentRoot(contentRoot);
-    controller.requestFollowBottom({ seq: 1, reason: 'bootstrap' });
+    controller.requestFollowBottom(followRequest(1, 'bootstrap'));
 
-    expect(scrollContainer.scrollTop).toBe(240);
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
 
     scrollHeight = 360;
     const contentObserver = observerRecords.find((record) => record.target === contentRoot);
     contentObserver?.callback([], {} as ResizeObserver);
 
-    expect(scrollContainer.scrollTop).toBe(360);
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
 
     scrollContainer.dispatchEvent(new Event('wheel'));
     scrollContainer.scrollTop = 40;
@@ -228,14 +261,17 @@ describe('createFollowBottomController', () => {
     expect(controller.mode()).toBe('paused');
 
     scrollHeight = 420;
-    controller.requestFollowBottom({ seq: 2, reason: 'send' });
+    controller.requestFollowBottom(followRequest(2, 'send', {
+      source: 'user',
+      behavior: 'smooth',
+    }));
 
     expect(controller.mode()).toBe('following');
-    expect(scrollContainer.scrollTop).toBe(420);
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
     controller.dispose();
   });
 
-  it('follows the transcript bottom when an explicit request arrives', () => {
+  it('follows the transcript bottom when an explicit system request arrives', () => {
     const observerRecords: ObserverRecord[] = [];
     const raf = createRafHarness();
     const controller = createFollowBottomController({
@@ -259,11 +295,11 @@ describe('createFollowBottomController', () => {
 
     controller.setScrollContainer(scrollContainer);
     controller.setContentRoot(contentRoot);
-    controller.requestFollowBottom({ seq: 1, reason: 'thread_switch' });
+    controller.requestFollowBottom(followRequest(1, 'thread_switch'));
     raf.flushAll();
 
     expect(controller.mode()).toBe('following');
-    expect(scrollContainer.scrollTop).toBe(scrollHeight);
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
     expect(controller.distanceToBottomPx()).toBe(0);
 
     scrollHeight = 420;
@@ -271,7 +307,137 @@ describe('createFollowBottomController', () => {
     contentObserver?.callback([], {} as ResizeObserver);
     raf.flushAll();
 
-    expect(scrollContainer.scrollTop).toBe(scrollHeight);
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
+    controller.dispose();
+  });
+
+  it('animates user-owned bottom follow across repeated layout growth', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const raf = createRafHarness();
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+      getPrefersReducedMotion: () => false,
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    let scrollHeight = 320;
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => scrollHeight,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.requestFollowBottom(followRequest(1, 'send', {
+      source: 'user',
+      behavior: 'smooth',
+    }));
+
+    expect(scrollContainer.scrollTop).toBe(0);
+
+    raf.flushOne();
+    expect(scrollContainer.scrollTop).toBeGreaterThan(0);
+    expect(scrollContainer.scrollTop).toBeLessThan(expectedBottomScrollTop(scrollHeight));
+
+    raf.flushAll();
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
+
+    scrollHeight = 520;
+    const contentObserver = observerRecords.find((record) => record.target === contentRoot);
+    contentObserver?.callback([], {} as ResizeObserver);
+
+    const beforeGrowthAnimation = scrollContainer.scrollTop;
+    raf.flushOne();
+    expect(scrollContainer.scrollTop).toBeGreaterThan(beforeGrowthAnimation);
+    expect(scrollContainer.scrollTop).toBeLessThan(expectedBottomScrollTop(scrollHeight));
+
+    raf.flushAll();
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
+    controller.dispose();
+  });
+
+  it('cancels animated follow as soon as the user pauses the transcript', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const raf = createRafHarness();
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+      getPrefersReducedMotion: () => false,
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => 420,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.requestFollowBottom(followRequest(1, 'send', {
+      source: 'user',
+      behavior: 'smooth',
+    }));
+
+    raf.flushOne();
+    const animatedScrollTop = scrollContainer.scrollTop;
+    expect(animatedScrollTop).toBeGreaterThan(0);
+
+    scrollContainer.dispatchEvent(new Event('wheel'));
+    scrollContainer.scrollTop = 80;
+    controller.handleScroll();
+    expect(controller.mode()).toBe('paused');
+
+    raf.flushAll();
+    expect(scrollContainer.scrollTop).toBe(80);
+    controller.dispose();
+  });
+
+  it('downgrades smooth follow to instant when reduced motion is enabled', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const raf = createRafHarness();
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+      getPrefersReducedMotion: () => true,
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    const scrollHeight = 420;
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => scrollHeight,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.requestFollowBottom(followRequest(1, 'send', {
+      source: 'user',
+      behavior: 'smooth',
+    }));
+
+    raf.flushAll();
+
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
+    expect(controller.distanceToBottomPx()).toBe(0);
     controller.dispose();
   });
 

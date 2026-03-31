@@ -182,6 +182,39 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function createRafHarness() {
+  const queue = new Map<number, FrameRequestCallback>();
+  let nextID = 1;
+  let nextTimestamp = 16;
+  const flushOne = (timestamp = nextTimestamp): void => {
+    const first = queue.entries().next().value as [number, FrameRequestCallback] | undefined;
+    if (!first) return;
+    const [id, callback] = first;
+    queue.delete(id);
+    callback(timestamp);
+    nextTimestamp = timestamp + 16;
+  };
+  const flushAll = (): void => {
+    while (queue.size > 0) {
+      flushOne();
+    }
+  };
+
+  return {
+    requestAnimationFrame(callback: FrameRequestCallback): number {
+      const id = nextID;
+      nextID += 1;
+      queue.set(id, callback);
+      return id;
+    },
+    cancelAnimationFrame(id: number): void {
+      queue.delete(id);
+    },
+    flushOne,
+    flushAll,
+  };
+}
+
 function installResizeObserverHarness() {
   const records: ResizeObserverRecord[] = [];
   class MockResizeObserver {
@@ -264,6 +297,10 @@ function installTranscriptScrollMetrics(args: {
       delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
     }
   };
+}
+
+function expectedTranscriptBottomScrollTop(scrollHeight: number, clientHeight = 120): number {
+  return Math.max(0, scrollHeight - clientHeight);
 }
 
 function installScrollContainerRect(container: HTMLElement, top: number, height: number): void {
@@ -1090,7 +1127,7 @@ describe('CodexPage', () => {
       const transcriptRoot = host.querySelector('[data-codex-surface="transcript"]') as HTMLDivElement | null;
       expect(scrollRegion).not.toBeNull();
       expect(transcriptRoot).not.toBeNull();
-      expect(scrollRegion?.scrollTop).toBe(transcriptScrollHeight);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(transcriptScrollHeight));
 
       transcriptScrollHeight = 360;
       streamOnEvent({
@@ -1108,7 +1145,7 @@ describe('CodexPage', () => {
       }
       await flushAsync();
 
-      expect(scrollRegion?.scrollTop).toBe(transcriptScrollHeight);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(transcriptScrollHeight));
     } finally {
       restoreScrollMetrics();
     }
@@ -1242,7 +1279,7 @@ describe('CodexPage', () => {
 
       expect(scrollRegion).not.toBeNull();
       expect(transcriptRoot).not.toBeNull();
-      expect(scrollRegion?.scrollTop).toBe(240);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(240));
 
       transcriptScrollHeight = 300;
       codexContext.selectThread('thread_2');
@@ -1250,7 +1287,7 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(scrollRegion?.scrollTop).toBe(300);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(300));
 
       transcriptScrollHeight = 420;
       if (transcriptRoot) {
@@ -1258,18 +1295,16 @@ describe('CodexPage', () => {
       }
       await flushAsync();
 
-      expect(scrollRegion?.scrollTop).toBe(420);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(420));
     } finally {
       restoreScrollMetrics();
     }
   });
 
   it('resumes bottom follow after a paused scroll when the user sends a new turn', async () => {
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const raf = createRafHarness();
+    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
+    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
     installResizeObserverHarness();
 
     let transcriptScrollHeight = 240;
@@ -1376,10 +1411,11 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
       await flushAsync();
+      raf.flushAll();
 
       const scrollRegion = host.querySelector('[data-codex-transcript-scroll-region="true"]') as HTMLDivElement | null;
       expect(scrollRegion).not.toBeNull();
-      expect(scrollRegion?.scrollTop).toBe(240);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(240));
 
       if (scrollRegion) {
         scrollRegion.dispatchEvent(new Event('wheel'));
@@ -1395,7 +1431,14 @@ describe('CodexPage', () => {
       await flushAsync();
 
       expect(startCodexTurnMock).toHaveBeenCalledTimes(1);
-      expect(scrollRegion?.scrollTop).toBe(360);
+      expect(scrollRegion?.scrollTop).toBe(40);
+      raf.flushOne();
+      expect(scrollRegion?.scrollTop).toBe(40);
+      raf.flushOne();
+      expect(scrollRegion?.scrollTop).toBeGreaterThan(40);
+      expect(scrollRegion?.scrollTop).toBeLessThan(expectedTranscriptBottomScrollTop(360));
+      raf.flushAll();
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(360));
     } finally {
       restoreScrollMetrics();
     }
@@ -1521,7 +1564,7 @@ describe('CodexPage', () => {
       expect(scrollRegion).not.toBeNull();
       expect(transcriptRoot).not.toBeNull();
       expect(transcriptRows).toHaveLength(3);
-      expect(scrollRegion?.scrollTop).toBe(300);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(300));
 
       if (!scrollRegion) {
         throw new Error('scroll region not found');
@@ -1701,7 +1744,7 @@ describe('CodexPage', () => {
 
       expect(scrollRegion).not.toBeNull();
       expect(transcriptRoot).not.toBeNull();
-      expect(scrollRegion?.scrollTop).toBe(240);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(240));
 
       transcriptScrollHeight = 320;
       codexContext.selectThread('thread_2');
@@ -1709,7 +1752,7 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(scrollRegion?.scrollTop).toBe(320);
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(320));
 
       if (!scrollRegion || !transcriptRoot) {
         throw new Error('transcript not rendered');
@@ -1719,7 +1762,7 @@ describe('CodexPage', () => {
       scrollRegion.dispatchEvent(new Event('scroll'));
       await flushAsync();
 
-      expect(scrollRegion.scrollTop).toBe(320);
+      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(320));
 
       transcriptScrollHeight = 420;
       codexContext.selectThread('thread_3');
@@ -1727,17 +1770,17 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(scrollRegion.scrollTop).toBe(420);
+      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(420));
 
       transcriptScrollHeight = 520;
       resizeObserverHarness.notify(transcriptRoot);
       await flushAsync();
-      expect(scrollRegion.scrollTop).toBe(520);
+      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(520));
 
       scrollRegion.scrollTop = 260;
       scrollRegion.dispatchEvent(new Event('scroll'));
       await flushAsync();
-      expect(scrollRegion.scrollTop).toBe(520);
+      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(520));
 
       transcriptScrollHeight = 280;
       codexContext.selectThread('thread_1');
@@ -1745,7 +1788,7 @@ describe('CodexPage', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(scrollRegion.scrollTop).toBe(280);
+      expect(scrollRegion.scrollTop).toBe(expectedTranscriptBottomScrollTop(280));
     } finally {
       restoreScrollMetrics();
     }

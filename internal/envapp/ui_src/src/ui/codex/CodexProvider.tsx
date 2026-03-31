@@ -14,7 +14,10 @@ import {
 import { useLayout, useNotification } from '@floegence/floe-webapp-core';
 
 import { useEnvContext } from '../pages/EnvContext';
-import type { FollowBottomRequest } from '../chat/scroll/createFollowBottomController';
+import type {
+  FollowBottomRequest,
+  FollowBottomRequestReason,
+} from '../chat/scroll/createFollowBottomController';
 import {
   archiveCodexThread,
   connectCodexEventStream,
@@ -52,7 +55,28 @@ import type {
 type CodexRequestDrafts = Record<string, Record<string, string>>;
 type CodexThreadMap = Record<string, CodexThread>;
 type CodexOptimisticTurnMap = Record<string, CodexOptimisticUserTurn[]>;
-type CodexScrollToBottomReason = 'thread_switch' | 'send' | 'bootstrap' | 'manual';
+type CodexScrollToBottomReason = FollowBottomRequestReason;
+type CodexScrollIntentPolicy = Omit<FollowBottomRequest, 'seq'>;
+
+function codexScrollIntentPolicy(reason: CodexScrollToBottomReason): CodexScrollIntentPolicy {
+  switch (reason) {
+    case 'send':
+    case 'manual':
+      return {
+        reason,
+        source: 'user',
+        behavior: 'smooth',
+      };
+    case 'bootstrap':
+    case 'thread_switch':
+    default:
+      return {
+        reason,
+        source: 'system',
+        behavior: 'auto',
+      };
+  }
+}
 
 function createDraftEntryID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -310,9 +334,10 @@ export function CodexProvider(props: ParentProps) {
 
   const requestScrollToBottom = (reason: CodexScrollToBottomReason = 'manual'): void => {
     scrollToBottomRequestSeq += 1;
+    const policy = codexScrollIntentPolicy(reason);
     setScrollToBottomRequest({
       seq: scrollToBottomRequestSeq,
-      reason,
+      ...policy,
     });
   };
 

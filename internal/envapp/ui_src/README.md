@@ -12,6 +12,8 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - The optional Codex surface lives in `src/ui/codex/*` and intentionally follows the same high-level sidebar + transcript + bottom-dock rhythm as Flower while keeping all Codex-owned layout/state modules independent from Flower files.
 - Codex UI state is controller-based: `CodexProvider` stays as orchestration glue, `createCodexThreadController` owns selected/displayed thread reconciliation plus session cache/bootstrap guards, and `createCodexDraftController` owns per-owner drafts (`draft:new` vs `thread:<id>`).
 - Codex composer autosizing is also controller-based and page-local: `CodexComposerShell` delegates multiline height measurement to `createCodexComposerAutosizeController`, which lazy-loads `@chenglou/pretext` only for the Codex page and preserves a DOM fallback when font/runtime conditions are unsafe.
+- Codex transcript follow-bottom is also controller-based and page-local: `CodexProvider` emits explicit bottom intents, and `createFollowBottomController()` keeps system restore paths instant while allowing smooth user-initiated convergence on the Codex page only.
+- Codex follow-bottom targets the real bottom scroll position (`scrollHeight - clientHeight`) and preserves paused anchor restoration during late transcript reflow, so streaming growth no longer relies on repeated raw `scrollTop = scrollHeight` retries.
 - Codex transcript rendering is intentionally split by role semantics:
   - assistant/evidence rows may use markdown rendering;
   - user rows render through the structured `CodexUserMessageContent` path using `item.inputs`;
