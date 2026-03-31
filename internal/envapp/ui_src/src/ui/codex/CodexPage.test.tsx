@@ -27,6 +27,20 @@ const notification = {
   error: vi.fn(),
   info: vi.fn(),
 };
+const desktopStorageState = new Map<string, string>();
+
+if (typeof window !== 'undefined') {
+  window.redevenDesktopStateStorage = {
+    getItem: (key) => desktopStorageState.get(String(key ?? '')) ?? null,
+    setItem: (key, value) => {
+      desktopStorageState.set(String(key ?? ''), String(value ?? ''));
+    },
+    removeItem: (key) => {
+      desktopStorageState.delete(String(key ?? ''));
+    },
+    keys: () => Array.from(desktopStorageState.keys()).sort((left, right) => left.localeCompare(right)),
+  };
+}
 
 type ResizeObserverRecord = {
   callback: ResizeObserverCallback;
@@ -166,6 +180,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       onCompositionEnd={(event) => props.onCompositionEnd?.(event)}
     />
   ),
+  ProcessingIndicator: (props: any) => <div class={props.class}>{props.status}</div>,
 }));
 
 vi.mock('./api', () => ({
@@ -502,6 +517,7 @@ function renderPageWithHarness(
 
 afterEach(() => {
   document.body.innerHTML = '';
+  desktopStorageState.clear();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   rpcMocks.fs.list.mockReset();

@@ -1,7 +1,7 @@
 import { For, Index, Show, createMemo } from 'solid-js';
 import { Trash } from '@floegence/floe-webapp-core/icons';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Button, Tag } from '@floegence/floe-webapp-core/ui';
+import { Button, ProcessingIndicator, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
 import { Tooltip } from '../primitives/Tooltip';
@@ -73,6 +73,8 @@ function EmptyState() {
 function ThreadCard(props: {
   thread: CodexThread;
   active: boolean;
+  isRunning: boolean;
+  unread: boolean;
   canArchive: boolean;
   onClick: () => void;
   onArchive: () => void;
@@ -81,6 +83,11 @@ function ThreadCard(props: {
   const preview = () => threadPreview(props.thread);
   const timeLabel = () => formatRelativeThreadTime(props.thread.updated_at_unix_s);
   const archiveLabel = () => `Archive chat ${title()}`;
+  const indicatorMode = (): 'running' | 'unread' | 'none' => {
+    if (props.isRunning) return 'running';
+    if (props.unread) return 'unread';
+    return 'none';
+  };
 
   return (
     <div
@@ -102,10 +109,17 @@ function ThreadCard(props: {
         onClick={props.onClick}
         aria-current={props.active ? 'page' : undefined}
       >
-        <div class="relative mt-1.5 h-2 w-2 shrink-0">
-          <div class={`h-2 w-2 rounded-full ${threadStatusDotClass(props.thread.status)}`} title={displayStatus(props.thread.status, 'Idle')} />
-          <Show when={isWorkingStatus(props.thread.status)}>
-            <div class="absolute inset-0 h-2 w-2 rounded-full bg-primary/50 animate-pulse" />
+        <div class="relative mt-1.5 h-2 w-2 shrink-0" data-thread-indicator={indicatorMode()}>
+          <Show when={indicatorMode() === 'running'}>
+            <>
+              <div class={`h-2 w-2 rounded-full ${threadStatusDotClass(props.thread.status)}`} title={displayStatus(props.thread.status, 'Idle')} />
+              <Show when={isWorkingStatus(props.thread.status)}>
+                <div class="absolute inset-0 h-2 w-2 rounded-full bg-primary/50 animate-pulse" />
+              </Show>
+            </>
+          </Show>
+          <Show when={indicatorMode() === 'unread'}>
+            <div class="h-2 w-2 rounded-full bg-primary" title="Unread" />
           </Show>
         </div>
 
@@ -113,7 +127,12 @@ function ThreadCard(props: {
           <div class="flex min-w-0 items-center gap-1">
             <span class="flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
-          <p class="truncate text-[11px] leading-tight text-muted-foreground/60">{preview()}</p>
+          <Show
+            when={props.isRunning}
+            fallback={<p class="truncate text-[11px] leading-tight text-muted-foreground/60">{preview()}</p>}
+          >
+            <ProcessingIndicator variant="minimal" status="Working" class="h-3.5" />
+          </Show>
         </div>
       </button>
 
@@ -215,6 +234,8 @@ export function CodexSidebarShell() {
                           <ThreadCard
                             thread={thread}
                             active={thread.id === codex.activeThreadID()}
+                            isRunning={codex.isThreadRunning(thread.id)}
+                            unread={codex.isThreadUnread(thread.id)}
                             canArchive={thread.id === codex.activeThreadID()}
                             onClick={() => codex.selectThread(thread.id)}
                             onArchive={() => void codex.archiveThread(thread.id)}

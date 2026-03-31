@@ -14,6 +14,7 @@ import {
 import { useLayout, useNotification } from '@floegence/floe-webapp-core';
 
 import { useEnvContext } from '../pages/EnvContext';
+import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import type {
   FollowBottomRequest,
   FollowBottomRequestReason,
@@ -35,8 +36,16 @@ import {
   createCodexDraftController,
   type CodexRuntimeDraft,
 } from './draftController';
+import {
+  buildCodexThreadReadStateBaseline,
+  codexThreadHasUnreadFromSnapshot,
+  markCodexThreadReadFromSnapshot,
+  normalizeCodexThreadReadStateByThread,
+  type CodexThreadReadStateByThread,
+  type CodexThreadUnreadSnapshot,
+} from './codexThreadUnreadState';
 import { createCodexThreadController } from './threadController';
-import { codexUserInputTextSummary } from './presentation';
+import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
 import { codexSupportedReasoningEfforts } from './viewModel';
 import type {
   CodexCapabilitiesSnapshot,
@@ -57,6 +66,8 @@ type CodexThreadMap = Record<string, CodexThread>;
 type CodexOptimisticTurnMap = Record<string, CodexOptimisticUserTurn[]>;
 type CodexScrollToBottomReason = FollowBottomRequestReason;
 type CodexScrollIntentPolicy = Omit<FollowBottomRequest, 'seq'>;
+
+const CODEX_THREAD_READ_STATE_STORAGE_KEY_PREFIX = 'redeven_codex_thread_read_state_v1';
 
 function codexScrollIntentPolicy(reason: CodexScrollToBottomReason): CodexScrollIntentPolicy {
   switch (reason) {
@@ -250,6 +261,49 @@ function runtimeConfigKey(config: CodexThreadRuntimeConfig | null | undefined): 
   ].join('\u0001');
 }
 
+function normalizeStatusToken(value: string | null | undefined): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replaceAll('-', '_')
+    .replaceAll(' ', '_')
+    .toLowerCase();
+}
+
+function codexThreadActivitySignature(args: {
+  status: string | null | undefined;
+  pendingRequests?: readonly CodexPendingRequest[] | null | undefined;
+}): string | undefined {
+  const tokens: string[] = [];
+  const status = normalizeStatusToken(args.status);
+  if (status) {
+    tokens.push(`status:${status}`);
+  }
+  const requestIDs = Array.from(new Set(
+    [...(args.pendingRequests ?? [])]
+      .map((request) => String(request.id ?? '').trim())
+      .filter(Boolean),
+  )).sort();
+  for (const requestID of requestIDs) {
+    tokens.push(`request:${requestID}`);
+  }
+  return tokens.length > 0 ? tokens.join('\u001f') : undefined;
+}
+
+function threadShowsRunningIndicator(
+  status: string | null | undefined,
+  pendingRequests?: readonly CodexPendingRequest[] | null | undefined,
+): boolean {
+  const normalized = normalizeStatusToken(status);
+  if (isWorkingStatus(normalized)) {
+    return true;
+  }
+  if (normalized.includes('approval') || normalized.includes('waiting') || normalized.includes('input')) {
+    return true;
+  }
+  return (pendingRequests?.length ?? 0) > 0;
+}
+
 export type CodexContextValue = Readonly<{
   status: Accessor<CodexStatus | null | undefined>;
   statusLoading: Accessor<boolean>;
@@ -271,6 +325,8 @@ export type CodexContextValue = Readonly<{
   activeThreadError: Accessor<string | null>;
   threads: Accessor<CodexThread[]>;
   threadsLoading: Accessor<boolean>;
+  isThreadRunning: (threadID: string | null | undefined) => boolean;
+  isThreadUnread: (threadID: string | null | undefined) => boolean;
   transcriptItems: Accessor<CodexTranscriptItem[]>;
   pendingRequests: Accessor<CodexPendingRequest[]>;
   workingDirDraft: Accessor<string>;
@@ -328,6 +384,8 @@ export function CodexProvider(props: ParentProps) {
   const [streamError, setStreamError] = createSignal<string | null>(null);
   const [streamBinding, setStreamBinding] = createSignal<Readonly<{ threadID: string; afterSeq: number }> | null>(null);
   const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
+  const [threadReadStateByThread, setThreadReadStateByThread] = createSignal<CodexThreadReadStateByThread>({});
+  const [threadReadStateBootstrapped, setThreadReadStateBootstrapped] = createSignal(false);
   let scrollToBottomRequestSeq = 0;
 
   const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
@@ -352,25 +410,131 @@ export function CodexProvider(props: ParentProps) {
 
   const selectedThreadID = createMemo(() => threadController.selectedThreadID());
   const displayedThreadID = createMemo(() => threadController.displayedThreadID());
-
-  const threads = createMemo<CodexThread[]>(() => {
-    const merged = new Map<string, CodexThread>();
+  const listedThreadsByID = createMemo(() => {
+    const next = new Map<string, CodexThread>();
     for (const thread of threadsResource() ?? []) {
       const threadID = String(thread.id ?? '').trim();
       if (!threadID) continue;
+      next.set(threadID, thread);
+    }
+    return next;
+  });
+
+  const threads = createMemo<CodexThread[]>(() => {
+    const merged = new Map<string, CodexThread>();
+    for (const [threadID, thread] of listedThreadsByID()) {
       merged.set(threadID, thread);
     }
     for (const [threadID, thread] of Object.entries(optimisticThreadsByID())) {
       if (!threadID) continue;
       merged.set(threadID, thread);
     }
+    const selectedThread = String(selectedThreadID() ?? '').trim();
+    const displayedThread = String(displayedThreadID() ?? '').trim();
     for (const entry of Object.values(threadController.sessionEntriesByID())) {
       const thread = entry.session.thread;
       const threadID = String(thread.id ?? '').trim();
       if (!threadID) continue;
-      merged.set(threadID, patchThreadDisplayFallbacks(thread));
+      const existing = merged.get(threadID);
+      const sessionThread = patchThreadDisplayFallbacks(thread, existing?.preview, existing?.cwd);
+      if (!existing) {
+        merged.set(threadID, sessionThread);
+        continue;
+      }
+      const pinnedThread = threadID === selectedThread || threadID === displayedThread;
+      const existingUpdatedAt = Number(existing.updated_at_unix_s ?? 0) || 0;
+      const sessionUpdatedAt = Number(sessionThread.updated_at_unix_s ?? 0) || 0;
+      if (pinnedThread || sessionUpdatedAt > existingUpdatedAt) {
+        merged.set(threadID, sessionThread);
+      }
     }
     return sortThreads(Array.from(merged.values()));
+  });
+
+  const threadReadStateStorageKey = createMemo(() => {
+    const envID = String(env.env_id() ?? '').trim();
+    return envID ? `${CODEX_THREAD_READ_STATE_STORAGE_KEY_PREFIX}:${envID}` : '';
+  });
+
+  const unreadSnapshotForThread = (threadID: string | null | undefined): CodexThreadUnreadSnapshot => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) {
+      return { updatedAtUnixS: 0 };
+    }
+
+    const thread = (
+      threads().find((entry) => entry.id === normalizedThreadID) ??
+      threadController.sessionForThread(normalizedThreadID)?.thread ??
+      null
+    );
+    const session = threadController.sessionForThread(normalizedThreadID);
+    const pinnedThread = normalizedThreadID === String(selectedThreadID() ?? '').trim()
+      || normalizedThreadID === String(displayedThreadID() ?? '').trim();
+    const pendingRequests = pinnedThread ? Object.values(session?.pending_requests ?? {}) : [];
+    const status = pinnedThread
+      ? String(session?.active_status ?? thread?.status ?? '').trim()
+      : String(thread?.status ?? session?.thread.status ?? '').trim();
+
+    return {
+      updatedAtUnixS: Math.max(
+        0,
+        Math.floor(
+          Number(thread?.updated_at_unix_s ?? session?.thread.updated_at_unix_s ?? 0) || 0,
+        ),
+      ),
+      activitySignature: codexThreadActivitySignature({
+        status,
+        pendingRequests,
+      }),
+    };
+  };
+
+  createEffect(() => {
+    const key = threadReadStateStorageKey();
+    if (!key) {
+      setThreadReadStateByThread({});
+      setThreadReadStateBootstrapped(false);
+      return;
+    }
+
+    const raw = readUIStorageItem(key);
+    if (raw === null) {
+      setThreadReadStateByThread({});
+      setThreadReadStateBootstrapped(false);
+      return;
+    }
+
+    try {
+      setThreadReadStateByThread(normalizeCodexThreadReadStateByThread(JSON.parse(raw)));
+      setThreadReadStateBootstrapped(true);
+    } catch {
+      setThreadReadStateByThread({});
+      setThreadReadStateBootstrapped(false);
+    }
+  });
+
+  createEffect(() => {
+    const key = threadReadStateStorageKey();
+    if (!key || threadReadStateBootstrapped() || !codexVisible()) return;
+    if (threadsResource.loading || threadsResource.error) return;
+
+    const seeded = {
+      ...buildCodexThreadReadStateBaseline(
+        threads().map((thread) => ({
+          threadId: thread.id,
+          snapshot: unreadSnapshotForThread(thread.id),
+        })),
+      ),
+      ...threadReadStateByThread(),
+    };
+    setThreadReadStateByThread(seeded);
+    setThreadReadStateBootstrapped(true);
+  });
+
+  createEffect(() => {
+    const key = threadReadStateStorageKey();
+    if (!key || !threadReadStateBootstrapped()) return;
+    writeUIStorageItem(key, JSON.stringify(threadReadStateByThread()));
   });
 
   const selectedThread = createMemo<CodexThread | null>(() => {
@@ -631,6 +795,14 @@ export function CodexProvider(props: ParentProps) {
   ));
 
   createEffect(() => {
+    const normalizedThreadID = String(selectedThreadID() ?? '').trim();
+    if (!normalizedThreadID) return;
+    setThreadReadStateByThread((current) => (
+      markCodexThreadReadFromSnapshot(current, normalizedThreadID, unreadSnapshotForThread(normalizedThreadID))
+    ));
+  });
+
+  createEffect(() => {
     if (!codexVisible()) return;
     const threadID = String(displayedThreadID() ?? '').trim();
     if (!threadID) {
@@ -685,6 +857,42 @@ export function CodexProvider(props: ParentProps) {
     return statusError() || 'Install `codex` on the host machine and refresh diagnostics.';
   });
   const hasHostBinary = createMemo(() => Boolean(status()?.available));
+  const isThreadRunning = (threadID: string | null | undefined): boolean => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return false;
+    const thread = (
+      threads().find((entry) => entry.id === normalizedThreadID) ??
+      threadController.sessionForThread(normalizedThreadID)?.thread ??
+      null
+    );
+    const session = threadController.sessionForThread(normalizedThreadID);
+    const pinnedThread = normalizedThreadID === String(selectedThreadID() ?? '').trim()
+      || normalizedThreadID === String(displayedThreadID() ?? '').trim();
+    const pendingRequests = pinnedThread ? Object.values(session?.pending_requests ?? {}) : [];
+    const status = pinnedThread
+      ? String(session?.active_status ?? thread?.status ?? '').trim()
+      : String(thread?.status ?? session?.thread.status ?? '').trim();
+    return threadShowsRunningIndicator(status, pendingRequests);
+  };
+  const isThreadUnread = (threadID: string | null | undefined): boolean => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return false;
+    if (normalizedThreadID === String(selectedThreadID() ?? '').trim()) return false;
+    return codexThreadHasUnreadFromSnapshot(
+      threadReadStateByThread(),
+      normalizedThreadID,
+      unreadSnapshotForThread(normalizedThreadID),
+    );
+  };
+  const hasRunningThread = createMemo(() => threads().some((thread) => isThreadRunning(thread.id)));
+
+  createEffect(() => {
+    if (!codexVisible() || status.loading || !hasHostBinary() || !hasRunningThread()) return;
+    const timer = window.setInterval(() => {
+      void refetchThreads();
+    }, 1500);
+    onCleanup(() => window.clearInterval(timer));
+  });
 
   const activeThread = createMemo<CodexThread | null>(() => (
     selectedSession()?.thread ??
@@ -1084,6 +1292,12 @@ export function CodexProvider(props: ParentProps) {
       );
       draftController.removeOwner(codexOwnerIDForThread(normalizedThreadID));
       threadController.removeThreadState(normalizedThreadID);
+      setThreadReadStateByThread((current) => {
+        if (!(normalizedThreadID in current)) return current;
+        const next = { ...current };
+        delete next[normalizedThreadID];
+        return next;
+      });
       notify.success('Archived', 'The Codex thread has been archived.');
       await refetchThreads();
     } catch (error) {
@@ -1131,6 +1345,8 @@ export function CodexProvider(props: ParentProps) {
     activeThreadError: () => threadController.activeThreadError(),
     threads: () => threads() ?? [],
     threadsLoading: () => threadsResource.loading,
+    isThreadRunning,
+    isThreadUnread,
     transcriptItems,
     pendingRequests,
     workingDirDraft,

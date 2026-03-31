@@ -28,6 +28,21 @@ const notification = {
   error: vi.fn(),
   info: vi.fn(),
 };
+const CODEX_THREAD_READ_STATE_STORAGE_KEY = 'redeven_codex_thread_read_state_v1:env_1';
+const desktopStorageState = new Map<string, string>();
+
+if (typeof window !== 'undefined') {
+  window.redevenDesktopStateStorage = {
+    getItem: (key) => desktopStorageState.get(String(key ?? '')) ?? null,
+    setItem: (key, value) => {
+      desktopStorageState.set(String(key ?? ''), String(value ?? ''));
+    },
+    removeItem: (key) => {
+      desktopStorageState.delete(String(key ?? ''));
+    },
+    keys: () => Array.from(desktopStorageState.keys()).sort((left, right) => left.localeCompare(right)),
+  };
+}
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
@@ -102,6 +117,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   CardFooter: (props: any) => <div class={props.class}>{props.children}</div>,
   CardHeader: (props: any) => <div class={props.class}>{props.children}</div>,
   CardTitle: (props: any) => <div class={props.class}>{props.children}</div>,
+  HighlightBlock: (props: any) => (
+    <div class={`highlight-block highlight-block-${props.variant ?? 'note'} ${props.class ?? ''}`.trim()}>
+      <div class="highlight-block-header">
+        <span class="highlight-block-title">{props.title}</span>
+      </div>
+      <div class="highlight-block-content">{props.children}</div>
+    </div>
+  ),
   Input: (props: any) => (
     <input
       type={props.type}
@@ -139,6 +162,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       onCompositionEnd={(event) => props.onCompositionEnd?.(event)}
     />
   ),
+  ProcessingIndicator: (props: any) => <div class={props.class}>{props.status}</div>,
 }));
 
 vi.mock('./api', () => ({
@@ -177,6 +201,10 @@ function sidebarThreadIDs(host: ParentNode): string[] {
   return Array.from(host.querySelectorAll<HTMLElement>('[data-codex-surface="thread-card"]'))
     .map((node) => String(node.dataset.threadId ?? '').trim())
     .filter(Boolean);
+}
+
+function threadIndicatorMode(host: ParentNode, threadID: string): string | null {
+  return host.querySelector(`[data-thread-id="${threadID}"] [data-thread-indicator]`)?.getAttribute('data-thread-indicator') ?? null;
 }
 
 function renderSurface(host: HTMLDivElement) {
@@ -233,6 +261,7 @@ function renderSurface(host: HTMLDivElement) {
 
 afterEach(() => {
   document.body.innerHTML = '';
+  desktopStorageState.clear();
   vi.clearAllMocks();
 });
 
@@ -257,6 +286,310 @@ describe('CodexSidebar', () => {
     expect(newChatButton).toBeTruthy();
     expect(newChatButton?.hasAttribute('disabled')).toBe(true);
     expect(newChatButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toContain('host codex binary not found on PATH');
+  });
+
+  it('shows an unread dot when a completed thread has unseen activity after a prior running snapshot', async () => {
+    desktopStorageState.set(CODEX_THREAD_READ_STATE_STORAGE_KEY, JSON.stringify({
+      thread_2: {
+        lastReadUpdatedAtUnixS: 4,
+        lastSeenActivitySignature: 'status:running',
+      },
+    }));
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 20,
+        status: 'idle',
+        cwd: '/workspace',
+      },
+      {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'completed',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: {
+        id: threadID,
+        name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
+        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: threadID === 'thread_1' ? 1 : 3,
+        updated_at_unix_s: threadID === 'thread_1' ? 10 : 4,
+        status: threadID === 'thread_1' ? 'idle' : 'completed',
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: threadID === 'thread_1' ? 'idle' : 'completed',
+      active_status_flags: [],
+    }));
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+    await flushAsync();
+    await flushAsync();
+
+    expect(threadIndicatorMode(host, 'thread_1')).toBe('none');
+    expect(threadIndicatorMode(host, 'thread_2')).toBe('unread');
+  });
+
+  it('keeps the running indicator when a running thread also has unread activity', async () => {
+    desktopStorageState.set(CODEX_THREAD_READ_STATE_STORAGE_KEY, JSON.stringify({
+      thread_2: {
+        lastReadUpdatedAtUnixS: 3,
+        lastSeenActivitySignature: 'status:idle',
+      },
+    }));
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'idle',
+        cwd: '/workspace',
+      },
+      {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: {
+        id: threadID,
+        name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
+        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: threadID === 'thread_1' ? 1 : 3,
+        updated_at_unix_s: threadID === 'thread_1' ? 10 : 4,
+        status: threadID === 'thread_1' ? 'idle' : 'running',
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: threadID === 'thread_1' ? 'idle' : 'running',
+      active_status_flags: [],
+    }));
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+    await flushAsync();
+    await flushAsync();
+
+    expect(threadIndicatorMode(host, 'thread_2')).toBe('running');
+  });
+
+  it('clears the unread dot after selecting the thread', async () => {
+    desktopStorageState.set(CODEX_THREAD_READ_STATE_STORAGE_KEY, JSON.stringify({
+      thread_2: {
+        lastReadUpdatedAtUnixS: 4,
+        lastSeenActivitySignature: 'status:running',
+      },
+    }));
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'idle',
+        cwd: '/workspace',
+      },
+      {
+        id: 'thread_2',
+        name: 'UI polish',
+        preview: 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 3,
+        updated_at_unix_s: 4,
+        status: 'completed',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: {
+        id: threadID,
+        name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
+        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: threadID === 'thread_1' ? 1 : 3,
+        updated_at_unix_s: threadID === 'thread_1' ? 20 : 4,
+        status: threadID === 'thread_1' ? 'idle' : 'completed',
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: threadID === 'thread_1' ? 'idle' : 'completed',
+      active_status_flags: [],
+    }));
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+    await flushAsync();
+    await flushAsync();
+
+    expect(threadIndicatorMode(host, 'thread_2')).toBe('unread');
+
+    const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
+    if (!target) {
+      throw new Error('UI polish thread button not found');
+    }
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(threadIndicatorMode(host, 'thread_2')).toBe('none');
+    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
+    expect(JSON.parse(desktopStorageState.get(CODEX_THREAD_READ_STATE_STORAGE_KEY) ?? '{}')).toMatchObject({
+      thread_2: {
+        lastReadUpdatedAtUnixS: 4,
+        lastSeenActivitySignature: 'status:completed',
+      },
+    });
   });
 
   it('keeps the existing sidebar threads visible during a background refresh', async () => {
