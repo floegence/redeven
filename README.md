@@ -23,7 +23,7 @@
 
 Redeven runs on the user machine as the endpoint/runtime layer. Redeven Service issues grants, Flowersec carries encrypted bytes, and the endpoint hosts the real application surfaces and local capabilities.
 
-This repository stays open-source and auditable. It documents the public `redeven` runtime, its Local UI behavior, and the public GitHub Release contract. Private control-plane operations and downstream deployment work live in the sibling private repository `redeven-portal`.
+This repository stays open-source and auditable. It documents the public `redeven` runtime, its Local UI behavior, and the GitHub Release contract.
 
 ![Redeven architecture overview](docs/images/readme-architecture.svg)
 
@@ -196,4 +196,5 @@ Full details: [`docs/RELEASE.md`](docs/RELEASE.md)
 
 ## Open-source scope
 
-This public `redeven` repository describes the endpoint/runtime layer, Local UI behavior, and the public GitHub Release contract. Private control-plane operations and downstream deployment wrappers belong in the sibling private repository `redeven-portal`, not here.
+This public `redeven` repository describes the endpoint/runtime layer, Local UI behavior, and the GitHub Release contract.
+Organization-specific deployment automation and environment-specific wrappers are intentionally out of scope for this repository.

@@ -1,6 +1,6 @@
 <svg width="1200" height="640" viewBox="0 0 1200 640" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">Redeven Agent architecture overview</title>
-  <desc id="desc">Diagram showing Redeven Service issuing grants to Redeven Agent, while Browser or Desktop connects through Flowersec Tunnel and encrypted bytes stay on the user machine.</desc>
+  <title id="title">Redeven Runtime architecture overview</title>
+  <desc id="desc">Diagram showing Redeven Service issuing grants to Redeven runtime, while Browser or Desktop connects through Flowersec Tunnel and encrypted bytes stay on the user machine.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="640" gradientUnits="userSpaceOnUse">
       <stop stop-color="#F5F8FF"/>
@@ -21,7 +21,7 @@
   <rect width="1200" height="640" rx="32" fill="url(#bg)"/>
   <rect x="24" y="24" width="1152" height="592" rx="24" stroke="#D7E3F8" stroke-width="2"/>
 
-  <text x="70" y="72" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">Redeven Agent architecture overview</text>
+  <text x="70" y="72" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700">Redeven Runtime architecture overview</text>
   <text x="70" y="104" fill="#475569" font-family="Arial, Helvetica, sans-serif" font-size="18">Control traffic and encrypted application traffic are split by design.</text>
 
   <rect x="70" y="148" width="280" height="162" rx="24" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/>
@@ -38,7 +38,7 @@
 
   <rect x="670" y="150" width="450" height="392" rx="28" fill="url(#agent)"/>
   <text x="706" y="202" fill="#F8FAFC" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700">
-    <tspan x="706" dy="0">Redeven Agent</tspan>
+    <tspan x="706" dy="0">Redeven Runtime</tspan>
     <tspan x="706" dy="32">on the user machine</tspan>
   </text>
   <text x="706" y="268" fill="#CCFBF1" font-family="Arial, Helvetica, sans-serif" font-size="17">
@@ -93,6 +93,6 @@
   <rect x="70" y="548" width="1050" height="60" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
   <text x="96" y="571" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="14">
     <tspan x="96" dy="0">Control plane issues grants. Flowersec forwards encrypted traffic.</tspan>
-    <tspan x="96" dy="18">Redeven Agent terminates sessions on the endpoint and serves the real local capabilities.</tspan>
+    <tspan x="96" dy="18">Redeven runtime terminates sessions on the endpoint and serves the real local capabilities.</tspan>
   </text>
 </svg>

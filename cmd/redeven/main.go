@@ -338,7 +338,7 @@ func (c *cli) runCmd(args []string) int {
 					return exitCode
 				}
 			}
-			fmt.Fprintf(c.stderr, "another redeven agent is already using this state directory: %s\n", lockPath)
+			fmt.Fprintf(c.stderr, "another redeven runtime instance is already using this state directory: %s\n", lockPath)
 			fmt.Fprintf(c.stderr, "Hint: stop the existing agent process, or use a different environment/state directory before retrying.\n")
 			return 1
 		}

@@ -1,6 +1,6 @@
 # Release Process
 
-This document defines the release process for the public `redeven` repository. The public contract stops at GitHub Release artifacts and verification; private downstream mirroring or deployment belongs in the sibling private repository `redeven-portal`.
+This document defines the release process for the public `redeven` repository. The public contract stops at GitHub Release artifacts and verification.
 
 ## Goals
 
@@ -126,4 +126,4 @@ sha256sum -c SHA256SUMS
 - If the workflow identity changes (repo/path/workflow name), update the identity regex in:
   - `docs/RELEASE.md`
   - `scripts/install.sh`
-- Keep downstream packaging or deployment logic outside this public repository; that work belongs in the sibling private repository `redeven-portal`.
+- Keep organization-specific packaging or deployment automation outside this public repository.

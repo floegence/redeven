@@ -1,6 +1,6 @@
 # Env App (env details UI over Flowersec E2EE)
 
-This document describes the **Env App** implementation in the Redeven agent.
+This document describes the **Env App** implementation in the Redeven runtime.
 
 Key points:
 
@@ -10,7 +10,7 @@ Key points:
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
 - Agent Settings -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in agent settings.
 - The Codex sidebar/page use floe-webapp layout and form primitives for visual consistency, but Codex state, icon assets, thread navigation, transcript projection, and request handling stay implemented as a separate surface rather than as Flower extensions.
-- Shared highlight/callout visuals should continue to flow from released floe-webapp tokens. The downstream Env App must not re-theme generic accent tokens just to deepen `HighlightBlock`, because that would recouple unrelated shared primitives.
+- Shared highlight/callout visuals should continue to flow from released floe-webapp tokens. The product-owned Env App must not re-theme generic accent tokens just to deepen `HighlightBlock`, because that would recouple unrelated shared primitives.
 - The Codex surface is structured as a dedicated conversation navigator plus chat shell, intentionally following the same high-level sidebar + transcript + bottom composer rhythm as Flower while keeping the implementation fully Codex-local.
 - When host Codex is missing, the Codex surface remains navigable for diagnostics, but host-backed actions inside the surface switch into an explicitly disabled state with a shared reason instead of pretending a new chat can still start.
 - The Codex chat shell now reads a Codex-only capability snapshot from the gateway (`/_redeven_proxy/api/codex/capabilities`) so the composer can expose host-valid model, reasoning-effort, approval, and sandbox controls without borrowing Flower runtime state.

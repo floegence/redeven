@@ -13,6 +13,13 @@ import (
 
 var evidenceLinePattern = regexp.MustCompile(`^-\s*([a-z0-9][a-z0-9_.-]*):([^:\n]+):(\d+)(?:\s*-\s*(.+))?$`)
 
+var publicKnowledgeSourceRepos = map[string]struct{}{
+	"redeven":     {},
+	"flowersec":   {},
+	"floeterm":    {},
+	"floe-webapp": {},
+}
+
 type cardFrontmatter struct {
 	ID           string   `yaml:"id"`
 	Version      int      `yaml:"version"`
@@ -61,10 +68,12 @@ func LoadSourceManifest(sourceRoot string) (SourceManifest, []byte, error) {
 	if len(manifest.AllowedRepos) == 0 {
 		return SourceManifest{}, nil, fmt.Errorf("manifest requires allowed_repos")
 	}
+	allowedRepos := make(map[string]struct{}, len(manifest.AllowedRepos))
 	for _, repo := range manifest.AllowedRepos {
-		if strings.EqualFold(repo, "redeven-portal") {
-			return SourceManifest{}, nil, fmt.Errorf("allowed_repos must not contain redeven-portal")
+		if !isPublicKnowledgeSourceRepo(repo) {
+			return SourceManifest{}, nil, fmt.Errorf("allowed_repos contains unsupported repo %q", repo)
 		}
+		allowedRepos[repo] = struct{}{}
 	}
 	if len(manifest.SourceRefs) > 0 {
 		next := make(map[string]string, len(manifest.SourceRefs))
@@ -73,6 +82,9 @@ func LoadSourceManifest(sourceRoot string) (SourceManifest, []byte, error) {
 			ref = strings.TrimSpace(ref)
 			if repo == "" || ref == "" {
 				continue
+			}
+			if _, ok := allowedRepos[repo]; !ok {
+				return SourceManifest{}, nil, fmt.Errorf("source_refs contains unsupported repo %q", repo)
 			}
 			next[repo] = ref
 		}
@@ -329,6 +341,11 @@ func splitRepoPath(raw string) (string, string, error) {
 		return "", "", fmt.Errorf("path must be <repo>/<path>")
 	}
 	return parts[0], parts[1], nil
+}
+
+func isPublicKnowledgeSourceRepo(repo string) bool {
+	_, ok := publicKnowledgeSourceRepos[strings.ToLower(strings.TrimSpace(repo))]
+	return ok
 }
 
 func trimEmptyLines(lines []string) []string {

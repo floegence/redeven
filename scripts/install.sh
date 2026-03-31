@@ -1,7 +1,7 @@
 #!/bin/sh
 # Redeven CLI Installation Script
 #
-# This script downloads and installs the latest Redeven agent binary
+# This script downloads and installs the latest Redeven runtime binary
 # from the floegence/redeven GitHub repository.
 #
 # Usage: curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
@@ -92,7 +92,7 @@ validate_release_version() {
 determine_install_dir() {
     log_info "Determining installation directory..."
 
-    # Forced install directory: used for agent self-upgrade to ensure we overwrite the currently running binary path.
+    # Forced install directory: used for runtime self-upgrade to ensure we overwrite the currently running binary path.
     if [ -n "${REDEVEN_INSTALL_DIR:-}" ]; then
         INSTALL_DIR="$REDEVEN_INSTALL_DIR"
         log_info "Using forced install directory: $INSTALL_DIR"
@@ -161,7 +161,7 @@ detect_platform() {
             ;;
         msys*|mingw*|cygwin*)
             log_error "Windows native is not supported."
-            log_error "Please use WSL (Windows Subsystem for Linux) to run Redeven agent."
+            log_error "Please use WSL (Windows Subsystem for Linux) to run Redeven runtime."
             log_error ""
             log_error "To install WSL, run in PowerShell as Administrator:"
             log_error "  wsl --install"
@@ -450,10 +450,10 @@ install_redeven() {
 
     # Move binary to installation directory
     if [ -f "$TMP_DIR/$BINARY_NAME" ]; then
-        # In forced install dir mode (agent self-upgrade), do not attempt sudo or interactive escalation; fail fast if not writable.
+        # In forced install dir mode (runtime self-upgrade), do not attempt sudo or interactive escalation; fail fast if not writable.
         if [ -n "${REDEVEN_INSTALL_DIR:-}" ] && [ ! -w "$INSTALL_DIR" ]; then
             log_error "Forced install directory is not writable: $INSTALL_DIR"
-            log_error "Please reinstall the agent into a writable directory, or run the upgrade manually with appropriate permissions."
+            log_error "Please reinstall Redeven into a writable directory, or run the upgrade manually with appropriate permissions."
             exit 1
         fi
 
@@ -610,7 +610,7 @@ setup_path() {
     # Add PATH export with a comment
     {
         echo ""
-        echo "# Added by Redeven agent installer"
+        echo "# Added by Redeven installer"
         echo "$PATH_EXPORT"
     } >> "$SHELL_CONFIG"
 
@@ -706,9 +706,9 @@ print_summary() {
 # Main installation flow
 main() {
     if [ "$REDEVEN_INSTALL_MODE" = "upgrade" ]; then
-        log_info "Starting Redeven agent upgrade..."
+        log_info "Starting Redeven upgrade..."
     else
-        log_info "Starting Redeven agent installation..."
+        log_info "Starting Redeven installation..."
     fi
     echo ""
 
@@ -738,7 +738,7 @@ main() {
         setup_path
         print_summary
     else
-        log_info "Redeven agent upgraded successfully!"
+        log_info "Redeven upgraded successfully!"
         log_info "Binary: $INSTALL_DIR/$BINARY_NAME"
         log_info "Version: $LATEST_VERSION"
         log_info "Version source: $VERSION_SOURCE"

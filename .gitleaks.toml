@@ -1,4 +1,4 @@
-title = "redeven-agent gitleaks config"
+title = "redeven gitleaks config"
 
 [extend]
 useDefault = true
