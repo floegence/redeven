@@ -117,6 +117,7 @@ Desktop settings live under the Electron user data directory, not inside the git
 
 - `Connect to Redeven...` from the native app menu opens the target selection flow.
 - `Desktop Settings...` opens the desktop startup/settings window.
+- After Local UI opens inside Redeven Desktop, Env App also exposes `Connect to Redeven...` and `Open Desktop Settings...` in the command palette as shell-owned quick actions.
 - Desktop intentionally keeps connection targeting separate from `Desktop Settings...` so shell-owned startup state does not collide with Env App `Runtime Settings`.
 - The blocked page routes to either `Connect to Redeven` or `Desktop Settings` depending on whether the failure is about the selected target or the local desktop-managed startup state.
 - The native `Connect to Redeven` / `Desktop Settings` pages use the same design-token naming and settings-surface hierarchy as Env App `Runtime Settings`, but they remain repository-owned Desktop HTML pages rather than shared browser components.
@@ -215,6 +216,7 @@ Desktop shortcuts:
 
 - `Connect to Redeven...` is available from the native app menu.
 - `CommandOrControl+,` opens `Desktop Settings...`.
+- Env App command palette mirrors those shell-owned actions after a desktop-managed session is open.
 - `CommandOrControl+Q` asks for confirmation before quitting the desktop app.
 
 ## macOS distribution

@@ -123,11 +123,14 @@ if (!preload) {
   throw new Error('Missing ${electronRuntimePreloadEnvName}');
 }
 
-function snapshotBridgeState() {
+  function snapshotBridgeState() {
   return JSON.stringify({
     hasAskFlowerBridge: typeof window.redevenDesktopAskFlowerHandoff === 'object'
       && typeof window.redevenDesktopAskFlowerHandoff?.requestMainWindowHandoff === 'function'
       && typeof window.redevenDesktopAskFlowerHandoff?.onMainWindowHandoff === 'function',
+    hasDesktopShellBridge: typeof window.redevenDesktopShell === 'object'
+      && typeof window.redevenDesktopShell?.openConnectToRedeven === 'function'
+      && typeof window.redevenDesktopShell?.openDesktopSettings === 'function',
     hasStateStorageBridge: typeof window.redevenDesktopStateStorage === 'object',
   });
 }
@@ -186,13 +189,15 @@ app.whenReady().then(async () => {
     });
 
     const payload = JSON.parse(extractElectronRuntimePayload(stdout)) as {
-      main: { hasAskFlowerBridge: boolean; hasStateStorageBridge: boolean };
-      child: { hasAskFlowerBridge: boolean; hasStateStorageBridge: boolean };
+      main: { hasAskFlowerBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
+      child: { hasAskFlowerBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
     };
 
     expect(payload.main.hasAskFlowerBridge).toBe(true);
+    expect(payload.main.hasDesktopShellBridge).toBe(true);
     expect(payload.main.hasStateStorageBridge).toBe(true);
     expect(payload.child.hasAskFlowerBridge).toBe(true);
+    expect(payload.child.hasDesktopShellBridge).toBe(true);
     expect(payload.child.hasStateStorageBridge).toBe(true);
   }, electronRuntimeIntegrationTimeoutMs);
 });

@@ -77,6 +77,12 @@ import { createClientId } from './utils/clientId';
 import { buildFilePreviewAskFlowerIntent } from './utils/filePreviewAskFlower';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { subscribeDesktopAskFlowerMainWindowHandoff, type DesktopAskFlowerMainWindowHandoff } from './services/desktopAskFlowerBridge';
+import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
+import {
+  desktopShellBridgeAvailable,
+  openDesktopConnectToRedeven,
+  openDesktopSettings,
+} from './services/desktopShellBridge';
 import {
   fetchGatewayJSON,
   getGatewayAccessStatus,
@@ -1660,6 +1666,7 @@ export function EnvAppShell() {
   // Note: register commands once per Shell lifecycle to avoid duplicates during HMR/remount.
   createEffect(() => {
     const local = isLocalMode();
+    const desktopShellAvailable = desktopShellBridgeAvailable();
 
     const list: any[] = [
       {
@@ -1731,6 +1738,29 @@ export function EnvAppShell() {
       icon: CodexNavigationIcon,
       execute: () => goTab('codex'),
     });
+
+    const runDesktopShellCommand = async (
+      actionLabel: string,
+      action: () => Promise<boolean>,
+    ): Promise<void> => {
+      try {
+        const handled = await action();
+        if (handled) {
+          return;
+        }
+        notify.error('Desktop command unavailable', `${actionLabel} is only available in Redeven Desktop.`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        notify.error(`Failed to open ${actionLabel}`, message || 'Unknown desktop shell error.');
+      }
+    };
+
+    if (desktopShellAvailable) {
+      list.push(...buildDesktopShellCommandPaletteEntries({
+        openConnectToRedeven: () => runDesktopShellCommand('Connect to Redeven', openDesktopConnectToRedeven),
+        openDesktopSettings: () => runDesktopShellCommand('Desktop Settings', openDesktopSettings),
+      }));
+    }
 
     list.push(
       {

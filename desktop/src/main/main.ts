@@ -55,6 +55,10 @@ import {
   normalizeDesktopAskFlowerHandoffPayload,
   type DesktopAskFlowerHandoffPayload,
 } from '../shared/askFlowerHandoffIPC';
+import {
+  DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
+  normalizeDesktopShellOpenWindowRequest,
+} from '../shared/desktopShellWindowIPC';
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -746,6 +750,19 @@ if (!app.requestSingleInstanceLock()) {
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  });
+  ipcMain.handle(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, async (_event, request) => {
+    const normalized = normalizeDesktopShellOpenWindowRequest(request);
+    if (!normalized) {
+      return;
+    }
+
+    if (normalized.kind === 'connect') {
+      await openConnectToRedevenWindow();
+      return;
+    }
+
+    await openDesktopSettingsWindow();
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
     if (settingsWindow && !settingsWindow.isDestroyed()) {

@@ -13,6 +13,8 @@ describe('desktop persistence wiring', () => {
 
     expect(preloadSrc).toContain("import { bootstrapDesktopAskFlowerHandoffBridge } from './askFlowerHandoff';");
     expect(preloadSrc).toContain('bootstrapDesktopAskFlowerHandoffBridge();');
+    expect(preloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
+    expect(preloadSrc).toContain('bootstrapDesktopShellBridge();');
     expect(preloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
     expect(preloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
   });
@@ -34,6 +36,10 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopAskFlowerHandoffPayload');
+    expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_WINDOW_CHANNEL');
+    expect(mainSrc).toContain('normalizeDesktopShellOpenWindowRequest');
+    expect(mainSrc).toContain('openConnectToRedevenWindow');
+    expect(mainSrc).toContain('openDesktopSettingsWindow');
     expect(mainSrc).toContain("const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });");
     expect(mainSrc).toContain('preload: browserPreloadPath,');
     expect(mainSrc).not.toContain('usesDesktopWindowThemeOverlay(process.platform)');
