@@ -692,7 +692,7 @@ describe('CodexPage', () => {
     expect(host.querySelector('.codex-page-transcript-divider')).toBeNull();
     expect(host.textContent).toContain('Codex page polish review');
     expect(host.textContent).toContain('src/ui/codex/CodexPage.tsx');
-    expect(host.textContent).toContain('Command evidence');
+    expect(host.textContent).not.toContain('Command evidence');
     expect(host.textContent).toContain('Finalizing...');
     expect(host.textContent).not.toContain('Prompt ideas');
     expect(host.textContent).not.toContain('Review recent changes');

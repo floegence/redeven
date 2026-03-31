@@ -110,6 +110,14 @@ function CommandExecutionBody(props: { item: CodexTranscriptItem }) {
   );
 }
 
+function CommandExecutionRow(props: { item: CodexTranscriptItem }) {
+  return (
+    <CodexMessageLane role="assistant" contentClass="codex-chat-command-content">
+      <CommandExecutionBody item={props.item} />
+    </CodexMessageLane>
+  );
+}
+
 function FileChangeBody(props: { item: CodexTranscriptItem }) {
   return (
     <div class="space-y-3">
@@ -345,15 +353,11 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
         <div class="codex-chat-evidence-card">
           <EvidenceHeader item={props.item} />
           <div class="codex-chat-evidence-body">
-            <Show when={props.item.type === 'commandExecution'}>
-              <CommandExecutionBody item={props.item} />
-            </Show>
             <Show when={props.item.type === 'fileChange'}>
               <FileChangeBody item={props.item} />
             </Show>
             <Show
               when={
-                props.item.type !== 'commandExecution' &&
                 props.item.type !== 'fileChange' &&
                 props.item.type !== 'reasoning' &&
                 props.item.type !== 'plan' &&
@@ -561,6 +565,9 @@ function TranscriptRow(props: { item: CodexTranscriptItem; showAssistantAvatar?:
   }
   if (props.item.type === 'agentMessage') {
     return <AgentMessageRow item={props.item} showAvatar={props.showAssistantAvatar} />;
+  }
+  if (props.item.type === 'commandExecution') {
+    return <CommandExecutionRow item={props.item} />;
   }
   if (props.item.type === 'reasoning' || props.item.type === 'plan') {
     return <ReasoningRow item={props.item} />;

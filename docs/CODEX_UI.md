@@ -155,7 +155,8 @@ Current Env App behavior:
 - Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.
 - Later turns may still adjust model, reasoning effort, approval policy, and sandbox mode through the Codex composer controls.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
-- Transcript rows project user prompts, Codex replies, command evidence, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
+- Transcript rows project user prompts, Codex replies, command executions, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
+- Command execution rows render the collapsible shell block directly in the transcript lane instead of nesting it inside an extra evidence-card header chrome.
 - User-message rendering is intentionally separate from assistant/evidence markdown rendering:
   - assistant/evidence items still use the markdown renderer;
   - `userMessage` items render from structured `inputs[]` in original order;

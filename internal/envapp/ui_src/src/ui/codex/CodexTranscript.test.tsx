@@ -354,6 +354,27 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
+  it('renders command execution rows as direct shell blocks without the extra evidence header wrapper', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_command',
+        type: 'commandExecution',
+        command: 'pnpm test',
+        aggregated_output: 'PASS CodexTranscript.test.tsx',
+        status: 'completed',
+        exit_code: 0,
+        order: 0,
+      },
+    ]);
+
+    expect(host.textContent).toContain('pnpm test');
+    expect(host.textContent).toContain('PASS CodexTranscript.test.tsx');
+    expect(host.textContent).not.toContain('Command evidence');
+    expect(host.querySelector('.codex-chat-evidence-card')).toBeNull();
+
+    dispose();
+  });
+
   it('renders user-authored text as raw text instead of markdown or HTML', () => {
     const rawText = '<div class="demo">literal html</div>\n# not a heading\n[not a link](/tmp/demo.txt)';
     const { host, dispose } = renderTranscript([

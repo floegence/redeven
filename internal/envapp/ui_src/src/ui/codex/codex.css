@@ -795,6 +795,11 @@
   gap: 0.25rem;
 }
 
+.codex-chat-command-content {
+  width: min(100%, 42rem);
+  gap: 0;
+}
+
 .codex-assistant-lead-aligned-row .codex-chat-message-avatar {
   margin-top: 0;
 }
