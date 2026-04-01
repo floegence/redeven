@@ -5,6 +5,7 @@ import {
   resolveBrowserPreloadPath,
   resolveBundledAgentPath,
   resolveSettingsPreloadPath,
+  resolveWelcomeRendererPath,
 } from './paths';
 
 describe('paths', () => {
@@ -54,5 +55,11 @@ describe('paths', () => {
     expect(resolveBrowserPreloadPath({
       appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
     })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/browser.js');
+  });
+
+  it('resolves the bundled welcome renderer path', () => {
+    expect(resolveWelcomeRendererPath({
+      appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
+    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/welcome/index.html');
   });
 });

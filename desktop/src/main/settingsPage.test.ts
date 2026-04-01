@@ -3,10 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { buildSettingsPageHTML } from './settingsPage';
 
 describe('settingsPage', () => {
-  it('renders the This Device Options page with low-level startup sections', () => {
+  it('renders This Device Options as a launcher-owned advanced surface', () => {
     const html = buildSettingsPageHTML({
-      target_kind: 'managed_local',
-      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: 'https://region.example.invalid',
@@ -16,55 +14,26 @@ describe('settingsPage', () => {
 
     expect(html).toContain('<title>This Device Options</title>');
     expect(html).toContain('This Device Options');
-    expect(html).toContain('The device chooser owns machine selection');
+    expect(html).toContain('Machine selection stays in the welcome launcher');
     expect(html).toContain('Desktop-managed startup');
     expect(html).toContain('Next desktop-managed start');
     expect(html).toContain('Host This Device');
     expect(html).toContain('Register to Redeven on next start');
-    expect(html).toContain('--env-token-env');
-    expect(html).toContain('These values apply to desktop-managed starts on this machine.');
-    expect(html).toContain('id="host-this-device-state-note"');
-    expect(html).toContain('id="bootstrap-state-note"');
+    expect(html).toContain('stdin startup channel');
+    expect(html).toContain('This Device startup details');
+    expect(html).toContain('Save This Device Options');
     expect(html).toContain('Skip to main content');
     expect(html).toContain('id="settings-main"');
-    expect(html).toContain('settings-shell');
-    expect(html).toContain('summary-strip');
-    expect(html).toContain('section-group');
-    expect(html).toContain('settings-card');
     expect(html).toContain('id="page-status-badge"');
     expect(html).toContain('Desktop-managed Local UI');
-    expect(html).toContain('id="settings-error"');
-    expect(html).toContain('role="alert"');
-    expect(html).toContain('aria-describedby="local-ui-bind-help settings-error"');
-    expect(html).toContain('aria-describedby="env-token-help settings-error"');
-    expect(html).toContain('const targetPresentations = JSON.parse');
-    expect(html).toContain('presentation.saveLabel || saveButton.textContent');
-    expect(html).not.toContain('summary-grid');
-    expect(html).not.toContain('notice-panel');
-  });
-
-  it('keeps Another device copy focused on the next This device start', () => {
-    const html = buildSettingsPageHTML({
-      target_kind: 'external_local_ui',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    }, '', 'linux', 'advanced_settings');
-
-    expect(html).toContain('Another device');
-    expect(html).toContain('Save for this device');
-    expect(html).toContain('Desktop is currently targeting Another device');
-    expect(html).toContain('id="redeven-target-presentations"');
-    expect(html).toContain('This Device Options');
+    expect(html).toContain('const state = JSON.parse');
+    expect(html).not.toContain('targetPresentations');
+    expect(html).not.toContain('target_kind');
+    expect(html).not.toContain('external-local-ui-url');
   });
 
   it('keeps the page on a flat theme and exposes dark-mode tokens', () => {
     const html = buildSettingsPageHTML({
-      target_kind: 'managed_local',
-      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: '',
@@ -86,8 +55,6 @@ describe('settingsPage', () => {
 
   it('uses native spacing on macOS without titlebar safe-area CSS', () => {
     const html = buildSettingsPageHTML({
-      target_kind: 'managed_local',
-      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: '',
@@ -101,8 +68,6 @@ describe('settingsPage', () => {
 
   it('renders an inline error when validation fails', () => {
     const html = buildSettingsPageHTML({
-      target_kind: 'managed_local',
-      external_local_ui_url: '',
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: '',
       controlplane_url: '',

@@ -1,0 +1,28 @@
+@import '@fontsource/iosevka/400.css';
+
+@import 'tailwindcss';
+@import '@floegence/floe-webapp-core/tailwind';
+
+@source './**/*.{ts,html}';
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 18%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-background) 90%, transparent), var(--color-background));
+  color: var(--color-foreground);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.redeven-mono {
+  font-family: 'Iosevka', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+

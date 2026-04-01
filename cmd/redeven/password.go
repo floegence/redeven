@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -16,9 +17,11 @@ var (
 )
 
 type runPasswordOptions struct {
-	password     string
-	passwordEnv  string
-	passwordFile string
+	password      string
+	passwordStdin bool
+	passwordEnv   string
+	passwordFile  string
+	stdin         io.Reader
 }
 
 type resolvedRunPassword struct {
@@ -35,6 +38,8 @@ type passwordOptionErrorKind string
 
 const (
 	passwordOptionErrorMultipleSources passwordOptionErrorKind = "multiple_sources"
+	passwordOptionErrorStdinRead       passwordOptionErrorKind = "stdin_read"
+	passwordOptionErrorStdinEmpty      passwordOptionErrorKind = "stdin_empty"
 	passwordOptionErrorEnvNotSet       passwordOptionErrorKind = "env_not_set"
 	passwordOptionErrorEnvEmpty        passwordOptionErrorKind = "env_empty"
 	passwordOptionErrorFileRead        passwordOptionErrorKind = "file_read"
@@ -54,7 +59,11 @@ func (e *passwordOptionError) Error() string {
 	}
 	switch e.kind {
 	case passwordOptionErrorMultipleSources:
-		return "use only one of --password, --password-env, or --password-file"
+		return "use only one of --password, --password-stdin, --password-env, or --password-file"
+	case passwordOptionErrorStdinRead:
+		return fmt.Sprintf("read password from stdin: %v", e.cause)
+	case passwordOptionErrorStdinEmpty:
+		return "stdin password is empty"
 	case passwordOptionErrorEnvNotSet:
 		return fmt.Sprintf("password env var %q is not set", e.envName)
 	case passwordOptionErrorEnvEmpty:
@@ -83,6 +92,9 @@ func resolveRunPassword(opts runPasswordOptions) (resolvedRunPassword, error) {
 	if opts.password != "" {
 		sourceCount++
 	}
+	if opts.passwordStdin {
+		sourceCount++
+	}
 	if strings.TrimSpace(opts.passwordEnv) != "" {
 		sourceCount++
 	}
@@ -97,6 +109,21 @@ func resolveRunPassword(opts runPasswordOptions) (resolvedRunPassword, error) {
 	}
 	if opts.password != "" {
 		return resolvedRunPassword{password: opts.password}, nil
+	}
+	if opts.passwordStdin {
+		reader := opts.stdin
+		if reader == nil {
+			reader = os.Stdin
+		}
+		data, err := io.ReadAll(reader)
+		if err != nil {
+			return resolvedRunPassword{}, &passwordOptionError{kind: passwordOptionErrorStdinRead, cause: err}
+		}
+		value := strings.TrimRight(string(data), "\r\n")
+		if value == "" {
+			return resolvedRunPassword{}, &passwordOptionError{kind: passwordOptionErrorStdinEmpty}
+		}
+		return resolvedRunPassword{password: value}, nil
 	}
 	if name := strings.TrimSpace(opts.passwordEnv); name != "" {
 		value, ok := os.LookupEnv(name)

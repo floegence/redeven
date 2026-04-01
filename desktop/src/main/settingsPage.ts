@@ -1,11 +1,9 @@
 import { desktopDarkTheme, desktopLightTheme } from './desktopTheme';
 import {
   buildSettingsPageViewModel,
-  desktopTargetPresentations,
   pageWindowTitle,
   type DesktopPageAlertModel,
   type DesktopPageCardModel,
-  type DesktopPageChoiceModel,
   type DesktopPageFieldModel,
   type DesktopPageMode,
   type DesktopPageSectionModel,
@@ -44,18 +42,6 @@ function renderSummaryItem(item: DesktopSummaryItem): string {
   `;
 }
 
-function renderChoice(choice: DesktopPageChoiceModel): string {
-  return `
-    <label class="choice-option" for="${escapeHTML(choice.id)}">
-      <input id="${escapeHTML(choice.id)}" type="radio" name="target_kind" value="${escapeHTML(choice.value)}">
-      <span>
-        <span class="choice-title">${escapeHTML(choice.title)}</span>
-        <span class="choice-help">${escapeHTML(choice.description)}</span>
-      </span>
-    </label>
-  `;
-}
-
 function renderField(field: DesktopPageFieldModel): string {
   const typeAttr = field.type ? ` type="${escapeHTML(field.type)}"` : '';
   const autocompleteAttr = field.autocomplete ? ` autocomplete="${escapeHTML(field.autocomplete)}"` : '';
@@ -65,14 +51,13 @@ function renderField(field: DesktopPageFieldModel): string {
     ? ` aria-describedby="${escapeHTML(field.describedBy.join(' '))}"`
     : '';
   const hiddenAttr = field.hidden ? ' hidden' : '';
-  const fieldID = field.id === 'external-local-ui-url' ? ' id="external-local-ui-url-row"' : '';
   const spellcheckAttr = ' spellcheck="false"';
   const helpHTML = field.helpHTML && field.helpId
     ? `<div id="${escapeHTML(field.helpId)}" class="field-help">${field.helpHTML}</div>`
     : '';
 
   return `
-    <div${fieldID} class="field"${hiddenAttr}>
+    <div class="field"${hiddenAttr}>
       <label class="field-label" for="${escapeHTML(field.id)}">${escapeHTML(field.label)}</label>
       <input
         id="${escapeHTML(field.id)}"
@@ -87,17 +72,6 @@ function renderCard(card: DesktopPageCardModel): string {
   const badgeHTML = card.badge ? `<span class="settings-card-badge">${escapeHTML(card.badge)}</span>` : '';
   const stateNoteHTML = card.stateNote
     ? `<div id="${escapeHTML(card.stateNote.id)}" class="card-inline-note" aria-live="polite">${escapeHTML(card.stateNote.text)}</div>`
-    : '';
-  const choiceGroupHTML = card.choices?.length
-    ? `
-      <fieldset class="field">
-        <legend class="field-label">${escapeHTML(card.choiceLegend ?? 'Options')}</legend>
-        <div class="choice-grid">
-          ${card.choices.map(renderChoice).join('')}
-        </div>
-        ${card.choiceHint ? `<div id="${escapeHTML(card.choiceHint.id)}" class="field-help">${escapeHTML(card.choiceHint.text)}</div>` : ''}
-      </fieldset>
-    `
     : '';
 
   return `
@@ -114,7 +88,6 @@ function renderCard(card: DesktopPageCardModel): string {
       </div>
       <div class="settings-card-body">
         ${stateNoteHTML}
-        ${choiceGroupHTML}
         ${card.fields.map(renderField).join('')}
       </div>
     </section>
@@ -159,7 +132,7 @@ export function buildSettingsPageHTML(
 ): string {
   const error = String(errorMessage ?? '').trim();
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
-  const pageModel = buildSettingsPageViewModel(mode, draft.target_kind);
+  const pageModel = buildSettingsPageViewModel(mode);
 
   return `<!doctype html>
 <html lang="en">
@@ -686,102 +659,24 @@ export function buildSettingsPageHTML(
     </main>
 
     <script id="redeven-settings-state" type="application/json">${serializeJSON(draft)}</script>
-    <script id="redeven-target-presentations" type="application/json">${serializeJSON(desktopTargetPresentations)}</script>
     <script>
       const state = JSON.parse(document.getElementById('redeven-settings-state').textContent || '{}');
-      const targetPresentations = JSON.parse(document.getElementById('redeven-target-presentations').textContent || '{}');
       const form = document.getElementById('settings-form');
       const errorEl = document.getElementById('settings-error');
       const cancelButton = document.getElementById('cancel');
       const saveButton = document.getElementById('save');
       const fields = {
-        external_local_ui_url: document.getElementById('external-local-ui-url'),
         local_ui_bind: document.getElementById('local-ui-bind'),
         local_ui_password: document.getElementById('local-ui-password'),
         controlplane_url: document.getElementById('controlplane-url'),
         env_id: document.getElementById('env-id'),
         env_token: document.getElementById('env-token'),
       };
-      const targetKindInputs = Array.from(document.querySelectorAll('input[name="target_kind"]'));
-      const externalLocalUIURLRow = document.getElementById('external-local-ui-url-row');
-      const hostThisDeviceStateNote = document.getElementById('host-this-device-state-note');
-      const bootstrapStateNote = document.getElementById('bootstrap-state-note');
-      const pageStatusBadge = document.getElementById('page-status-badge');
-      const targetSummaryValue = document.getElementById('target-summary-value');
-      const targetSummaryNote = document.getElementById('target-summary-note');
-      const hostSummaryNote = document.getElementById('host-summary-note');
-      const bootstrapSummaryNote = document.getElementById('bootstrap-summary-note');
-      const desktopTargetAlertBody = document.getElementById('desktop-target-alert-body');
-
-      function selectedTargetKind() {
-        if (targetKindInputs.length === 0) {
-          return state.target_kind || 'managed_local';
-        }
-        const selected = targetKindInputs.find((input) => input.checked);
-        return selected ? selected.value : (state.target_kind || 'managed_local');
-      }
-
-      function resolvePresentation(targetKind) {
-        return targetPresentations[targetKind] || targetPresentations.managed_local || {
-          statusLabel: 'This device',
-          statusTone: 'local',
-          targetSummaryBody: '',
-          hostStateNote: '',
-          bootstrapStateNote: '',
-          advancedSettingsNotice: '',
-          saveLabel: 'Save and apply',
-        };
-      }
-
-      function syncTargetMode() {
-        const targetKind = selectedTargetKind();
-        const presentation = resolvePresentation(targetKind);
-        const externalMode = targetKind === 'external_local_ui';
-        if (pageStatusBadge) {
-          pageStatusBadge.textContent = presentation.statusLabel;
-          pageStatusBadge.setAttribute('data-tone', presentation.statusTone);
-        }
-        if (targetSummaryValue) {
-          targetSummaryValue.textContent = presentation.statusLabel;
-        }
-        if (targetSummaryNote) {
-          targetSummaryNote.textContent = presentation.targetSummaryBody;
-        }
-        if (hostThisDeviceStateNote) {
-          hostThisDeviceStateNote.textContent = presentation.hostStateNote;
-        }
-        if (hostSummaryNote) {
-          hostSummaryNote.textContent = presentation.hostStateNote;
-        }
-        if (bootstrapStateNote) {
-          bootstrapStateNote.textContent = presentation.bootstrapStateNote;
-        }
-        if (bootstrapSummaryNote) {
-          bootstrapSummaryNote.textContent = presentation.bootstrapStateNote;
-        }
-        if (desktopTargetAlertBody) {
-          desktopTargetAlertBody.textContent = presentation.advancedSettingsNotice;
-        }
-        if (externalLocalUIURLRow) {
-          externalLocalUIURLRow.hidden = !externalMode;
-        }
-        if (fields.external_local_ui_url) {
-          fields.external_local_ui_url.disabled = !externalMode;
-        }
-        if (saveButton) {
-          saveButton.textContent = presentation.saveLabel || saveButton.textContent;
-        }
-      }
 
       for (const [key, element] of Object.entries(fields)) {
         if (!element) continue;
         element.value = state[key] || '';
       }
-      for (const input of targetKindInputs) {
-        input.checked = input.value === (state.target_kind || 'managed_local');
-        input.addEventListener('change', syncTargetMode);
-      }
-      syncTargetMode();
 
       function setBusy(busy) {
         form.setAttribute('aria-busy', busy ? 'true' : 'false');
@@ -808,15 +703,12 @@ export function buildSettingsPageHTML(
         setBusy(true);
         setError('');
         const payload = {
-          target_kind: state.target_kind || 'managed_local',
-          external_local_ui_url: state.external_local_ui_url || '',
           local_ui_bind: state.local_ui_bind || '',
           local_ui_password: state.local_ui_password || '',
           controlplane_url: state.controlplane_url || '',
           env_id: state.env_id || '',
           env_token: state.env_token || '',
         };
-        payload.target_kind = selectedTargetKind();
         for (const [key, element] of Object.entries(fields)) {
           if (!element) continue;
           payload[key] = element.value || '';

@@ -30,6 +30,7 @@ describe('buildDesktopPreloads', () => {
     const settingsOutput = await fs.readFile(path.join(outDir, 'settings.js'), 'utf8');
 
     expect(browserOutput).toContain('redevenDesktopAskFlowerHandoff');
+    expect(browserOutput).toContain('redevenDesktopLauncher');
     expect(browserOutput).toContain('redevenDesktopSettings');
     expect(browserOutput).toContain('redevenDesktopShell');
     expect(browserOutput).toContain('redevenDesktopStateStorage');

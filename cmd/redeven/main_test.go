@@ -204,7 +204,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"non-loopback `--local-ui-bind` requires an access password",
-			"Hint: set exactly one of --password, --password-env, or --password-file.",
+			"Hint: set exactly one of --password, --password-stdin, --password-env, or --password-file.",
 			"REDEVEN_LOCAL_UI_PASSWORD=replace-with-a-long-password redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env REDEVEN_LOCAL_UI_PASSWORD",
 		)
 	})
@@ -215,7 +215,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid password flags: use only one of --password, --password-env, or --password-file",
+			"invalid password flags: use only one of --password, --password-stdin, --password-env, or --password-file",
 			"Hint: choose a single password source for one startup command.",
 		)
 	})
@@ -229,6 +229,17 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			"invalid password flags: password env var \"MISSING_PASSWORD\" is not set",
 			"Hint: export MISSING_PASSWORD with a non-empty password before running `redeven run`.",
 			"MISSING_PASSWORD=replace-with-a-long-password redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env MISSING_PASSWORD",
+		)
+	})
+
+	t.Run("empty password stdin gets a non-interactive hint", func(t *testing.T) {
+		code, _, stderr := runCLITestWithStdin(t, "\n", "run", "--mode", "local", "--password-stdin")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"invalid password flags: stdin password is empty",
+			"Hint: pipe a non-empty access password into `redeven run --password-stdin` and retry.",
 		)
 	})
 
@@ -286,13 +297,17 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 }
 
 func runCLITest(t *testing.T, args ...string) (int, string, string) {
+	return runCLITestWithStdin(t, "", args...)
+}
+
+func runCLITestWithStdin(t *testing.T, stdinText string, args ...string) (int, string, string) {
 	t.Helper()
 
 	t.Setenv("HOME", t.TempDir())
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := runCLI(args, &stdout, &stderr)
+	code := runCLI(args, strings.NewReader(stdinText), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
 }
 

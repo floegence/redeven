@@ -1,18 +1,7 @@
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 
 export type DesktopPageMode = 'advanced_settings';
-export type DesktopTargetKind = DesktopSettingsDraft['target_kind'];
-export type DesktopStatusTone = 'local' | 'external';
-
-export interface DesktopTargetPresentation {
-  statusLabel: string;
-  statusTone: DesktopStatusTone;
-  targetSummaryBody: string;
-  hostStateNote: string;
-  bootstrapStateNote: string;
-  advancedSettingsNotice: string;
-  saveLabel: string;
-}
+export type DesktopStatusTone = 'local';
 
 export interface DesktopSummaryItem {
   label: string;
@@ -21,20 +10,12 @@ export interface DesktopSummaryItem {
   valueId?: string;
   bodyId?: string;
 }
-
 export interface DesktopPageAlertModel {
   kicker: string;
   title: string;
   body: string;
   bodyId?: string;
   tone?: 'info' | 'default';
-}
-
-export interface DesktopPageChoiceModel {
-  id: string;
-  value: string;
-  title: string;
-  description: string;
 }
 
 export interface DesktopPageFieldModel {
@@ -57,12 +38,6 @@ export interface DesktopPageCardModel {
   title: string;
   descriptionHTML: string;
   badge?: string;
-  choices?: readonly DesktopPageChoiceModel[];
-  choiceLegend?: string;
-  choiceHint?: Readonly<{
-    id: string;
-    text: string;
-  }>;
   stateNote?: Readonly<{
     id: string;
     text: string;
@@ -91,34 +66,13 @@ export function pageWindowTitle(_mode: DesktopPageMode): string {
   return 'This Device Options';
 }
 
-export const desktopTargetPresentations = {
-  managed_local: {
-    statusLabel: 'This device',
-    statusTone: 'local',
-    targetSummaryBody: 'Desktop starts the bundled runtime on this machine.',
-    hostStateNote: 'These values apply to desktop-managed starts on this machine.',
-    bootstrapStateNote: 'If saved, the next successful desktop-managed start on this device will consume and clear them automatically.',
-    advancedSettingsNotice: 'Use Switch Device... when you want to choose This device or Another device without editing the raw startup inputs below.',
-    saveLabel: 'Save and apply',
-  },
-  external_local_ui: {
-    statusLabel: 'Another device',
-    statusTone: 'external',
-    targetSummaryBody: "Desktop opens another device's Local UI inside this shell.",
-    hostStateNote: 'Desktop is currently targeting Another device. These values stay saved for the next This device start.',
-    bootstrapStateNote: 'Desktop is currently targeting Another device. This request stays saved for the next This device start and is never sent to the external target.',
-    advancedSettingsNotice: 'Desktop is currently targeting Another device, so the values below stay scoped to the next This device start.',
-    saveLabel: 'Save for this device',
-  },
-} as const satisfies Record<DesktopTargetKind, DesktopTargetPresentation>;
-
 const hostFields = [
   {
     id: 'local-ui-bind',
     name: 'local_ui_bind',
     label: 'Local UI bind address',
     autocomplete: 'off',
-    helpHTML: 'Non-loopback Local UI binds require a Local UI password.',
+    helpHTML: 'Use <code>127.0.0.1:0</code> for the default private bind. Non-loopback binds require a Local UI password.',
     helpId: 'local-ui-bind-help',
     describedBy: ['local-ui-bind-help', 'settings-error'],
   },
@@ -128,7 +82,7 @@ const hostFields = [
     label: 'Local UI password',
     type: 'password',
     autocomplete: 'new-password',
-    helpHTML: 'Desktop stores this secret locally and passes it through <code>--password-env</code>.',
+    helpHTML: 'Desktop stores this secret locally and forwards it through a non-interactive stdin startup channel.',
     helpId: 'local-ui-password-help',
     describedBy: ['local-ui-password-help', 'settings-error'],
   },
@@ -157,49 +111,44 @@ const bootstrapFields = [
     label: 'Environment token',
     type: 'password',
     autocomplete: 'off',
-    helpHTML: 'Desktop passes this secret through <code>--env-token-env</code> instead of putting it in the process arguments.',
+    helpHTML: 'Desktop stores this request locally and consumes it on the next successful desktop-managed start.',
     helpId: 'env-token-help',
     describedBy: ['env-token-help', 'settings-error'],
   },
 ] as const satisfies readonly DesktopPageFieldModel[];
 
-export function buildSettingsPageViewModel(
-  mode: DesktopPageMode,
-  targetKind: DesktopTargetKind,
-): DesktopPageViewModel {
-  const presentation = desktopTargetPresentations[targetKind] ?? desktopTargetPresentations.managed_local;
-
+export function buildSettingsPageViewModel(mode: DesktopPageMode): DesktopPageViewModel {
   return {
     windowTitle: pageWindowTitle(mode),
-    lead: 'Edit the low-level This device startup, access, and one-shot bootstrap inputs that sit behind the device chooser.',
-    statusLabel: presentation.statusLabel,
-    statusTone: presentation.statusTone,
-    saveLabel: presentation.saveLabel,
+    lead: 'Edit the low-level This Device startup, access, and one-shot bootstrap inputs that sit behind the Desktop welcome launcher.',
+    statusLabel: 'This device',
+    statusTone: 'local',
+    saveLabel: 'Save This Device Options',
     summaryItems: [
       {
-        label: 'Current target',
-        value: presentation.statusLabel,
-        body: presentation.targetSummaryBody,
+        label: 'Launcher model',
+        value: 'Choose a machine on launch',
+        body: 'Desktop always opens the welcome launcher first. These settings only affect future opens of This Device.',
         valueId: 'target-summary-value',
         bodyId: 'target-summary-note',
       },
       {
         label: 'Host This Device',
         value: 'Desktop-managed Local UI',
-        body: presentation.hostStateNote,
+        body: 'These values apply only when you open This Device from the welcome launcher.',
         bodyId: 'host-summary-note',
       },
       {
         label: 'Next start',
         value: 'One-shot bootstrap',
-        body: presentation.bootstrapStateNote,
+        body: 'If provided, Desktop will consume and clear this bootstrap request after the next successful This Device startup.',
         bodyId: 'bootstrap-summary-note',
       },
     ],
     alert: {
       kicker: 'Primary workflow',
-      title: 'The device chooser owns machine selection',
-      body: presentation.advancedSettingsNotice,
+      title: 'Machine selection stays in the welcome launcher',
+      body: 'Use Switch Device... or the startup welcome page when you want to choose This Device or another machine. This screen only edits This Device startup details.',
       bodyId: 'desktop-target-alert-body',
       tone: 'info',
     },
@@ -212,11 +161,11 @@ export function buildSettingsPageViewModel(
             id: 'host-this-device-card',
             kicker: 'Desktop startup',
             title: 'Host This Device',
-            descriptionHTML: 'Use <code>127.0.0.1:0</code> for the default loopback-only dynamic port, or an explicit bind such as <code>0.0.0.0:24000</code> to make this Desktop reachable on your LAN.',
-            badge: 'Desktop shell',
+            descriptionHTML: 'Set the Local UI bind and access password that Desktop should use when it starts the bundled runtime on this machine.',
+            badge: 'This device',
             stateNote: {
               id: 'host-this-device-state-note',
-              text: presentation.hostStateNote,
+              text: 'These values are saved locally and applied the next time you open This Device.',
             },
             fields: hostFields,
           },
@@ -234,7 +183,7 @@ export function buildSettingsPageViewModel(
             badge: 'One-shot request',
             stateNote: {
               id: 'bootstrap-state-note',
-              text: presentation.bootstrapStateNote,
+              text: 'This request is never sent until a future This Device start succeeds.',
             },
             fields: bootstrapFields,
           },

@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import type { Readable } from 'node:stream';
+import type { Readable, Writable } from 'node:stream';
 
 import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from './launchReport';
 import { defaultRuntimeStatePath, loadAttachableRuntimeState } from './runtimeState';
@@ -15,7 +15,7 @@ const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS = 1_500;
 const MAX_RECENT_LOG_CHARS = 8_000;
 
-type SpawnedAgentProcess = ChildProcessByStdio<null, Readable, Readable>;
+type SpawnedAgentProcess = ChildProcessByStdio<Writable, Readable, Readable>;
 
 export type ManagedAgent = Readonly<{
   child: SpawnedAgentProcess | null;
@@ -35,6 +35,7 @@ export type StartManagedAgentArgs = Readonly<{
   stopTimeoutMs?: number;
   runtimeStateFile?: string;
   runtimeAttachTimeoutMs?: number;
+  passwordStdin?: string;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
 
@@ -186,6 +187,29 @@ async function stopChildProcess(child: SpawnedAgentProcess, timeoutMs: number): 
   }
 }
 
+async function writePasswordToStdin(child: SpawnedAgentProcess, password: string): Promise<void> {
+  const stdin = child.stdin;
+  if (!stdin || stdin.destroyed || !stdin.writable) {
+    throw new Error('redeven stdin pipe is unavailable for password-stdin startup');
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    stdin.write(`${password}\n`, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      stdin.end((endError?: Error | null) => {
+        if (endError) {
+          reject(endError);
+          return;
+        }
+        resolve();
+      });
+    });
+  });
+}
+
 export async function startManagedAgent(args: StartManagedAgentArgs): Promise<ManagedAgentLaunch> {
   const mergedEnv = {
     ...process.env,
@@ -212,7 +236,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
   const reportDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-desktop-'));
   const reportFile = path.join(reportDir, 'startup-report.json');
   const child = spawn(args.executablePath, [...args.agentArgs, '--startup-report-file', reportFile], {
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
     env: mergedEnv,
   });
   let spawnError: Error | null = null;
@@ -232,6 +256,20 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
     recentLogs.stderr = appendRecentLog(recentLogs.stderr, chunk);
     args.onLog?.('stderr', chunk);
   });
+
+  const passwordStdin = String(args.passwordStdin ?? '');
+  if (passwordStdin !== '') {
+    try {
+      await writePasswordToStdin(child, passwordStdin);
+    } catch (error) {
+      await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
+      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      const message = error instanceof Error ? error.message : String(error);
+      throw readinessFailure(`Failed to send redeven startup password: ${message}`, recentLogs);
+    }
+  } else {
+    child.stdin.end();
+  }
 
   try {
     const launchReport = await waitForLaunchReport(

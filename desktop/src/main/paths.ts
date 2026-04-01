@@ -72,3 +72,7 @@ export function resolveSettingsPreloadPath(args: ResolvePreloadPathArgs): string
 export function resolveBrowserPreloadPath(args: ResolvePreloadPathArgs): string {
   return path.join(args.appPath, 'dist', 'preload', 'browser.js');
 }
+
+export function resolveWelcomeRendererPath(args: ResolvePreloadPathArgs): string {
+  return path.join(args.appPath, 'dist', 'welcome', 'index.html');
+}

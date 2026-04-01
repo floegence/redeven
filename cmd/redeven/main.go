@@ -30,17 +30,18 @@ var (
 )
 
 type cli struct {
+	stdin  io.Reader
 	stdout io.Writer
 	stderr io.Writer
 }
 
 func main() {
-	os.Exit(runCLI(os.Args[1:], os.Stdout, os.Stderr))
+	os.Exit(runCLI(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-func runCLI(args []string, stdout, stderr io.Writer) int {
+func runCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	cleanupLegacyHomeDir()
-	return (&cli{stdout: stdout, stderr: stderr}).run(args)
+	return (&cli{stdin: stdin, stdout: stdout, stderr: stderr}).run(args)
 }
 
 func (c *cli) run(args []string) int {
@@ -205,6 +206,7 @@ func (c *cli) runCmd(args []string) int {
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
 	password := fs.String("password", "", "Access password (not recommended; prefer --password-env or --password-file)")
+	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
 	passwordEnv := fs.String("password-env", "", "Environment variable name holding the access password")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
@@ -353,9 +355,11 @@ func (c *cli) runCmd(args []string) int {
 	}
 
 	runPassword, err := resolveRunPassword(runPasswordOptions{
-		password:     *password,
-		passwordEnv:  *passwordEnv,
-		passwordFile: *passwordFile,
+		password:      *password,
+		passwordStdin: *passwordStdin,
+		passwordEnv:   *passwordEnv,
+		passwordFile:  *passwordFile,
+		stdin:         c.stdin,
 	})
 	if err != nil {
 		message, details := translatePasswordOptionError(err)
@@ -374,7 +378,7 @@ func (c *cli) runCmd(args []string) int {
 			c.stderr,
 			"non-loopback `--local-ui-bind` requires an access password",
 			[]string{
-				"Hint: set exactly one of --password, --password-env, or --password-file.",
+				"Hint: set exactly one of --password, --password-stdin, --password-env, or --password-file.",
 				fmt.Sprintf(
 					"Example: %s=replace-with-a-long-password redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %s",
 					examplePasswordEnv,

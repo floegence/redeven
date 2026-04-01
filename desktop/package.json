@@ -9,8 +9,8 @@
   "scripts": {
     "prepare:bundled-agent": "../scripts/build_desktop_bundled_agent.sh",
     "start": "npm run build && npm run prepare:bundled-agent && electron .",
-    "build": "tsc -p tsconfig.json && node dist/build/buildPreloads.js",
-    "lint": "eslint \"src/**/*.ts\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" --max-warnings=0",
+    "build": "tsc -p tsconfig.json && node dist/build/buildPreloads.js && vite build --config vite.welcome.config.mjs",
+    "lint": "eslint \"src/**/*.ts\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" \"vite.welcome.config.mjs\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "package": "npm run build && npm run prepare:bundled-agent && electron-builder --config electron-builder.config.mjs --publish never"
@@ -22,6 +22,9 @@
     "picomatch": "^4.0.4"
   },
   "devDependencies": {
+    "@floegence/floe-webapp-core": "^0.35.32",
+    "@fontsource/iosevka": "^5.2.5",
+    "@tailwindcss/vite": "^4.0.0",
     "@eslint/js": "^9.39.4",
     "@types/node": "^20.19.24",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
@@ -32,7 +35,9 @@
     "electron-builder-squirrel-windows": "26.8.1",
     "eslint": "^9.39.4",
     "globals": "^17.4.0",
+    "tailwindcss": "^4.0.0",
     "typescript": "^5.9.3",
+    "vite": "^6.0.7",
     "vitest": "^3.2.4"
   }
 }
