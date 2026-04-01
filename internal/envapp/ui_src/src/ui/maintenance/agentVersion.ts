@@ -47,6 +47,6 @@ export function compareReleaseVersionCore(leftRaw: string | null | undefined, ri
 
 export function resolvePreferredTargetVersion(meta: AgentLatestVersion | null | undefined): string {
   const recommended = normalizeReleaseVersion(meta?.recommended_version);
-  if (recommended) return recommended;
+  if (isReleaseVersion(recommended)) return recommended;
   return normalizeReleaseVersion(meta?.latest_version);
 }

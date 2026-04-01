@@ -17,6 +17,7 @@ describe('agentVersion helpers', () => {
 
   it('prefers recommended_version before latest_version', () => {
     expect(resolvePreferredTargetVersion({ latest_version: 'v1.4.0', recommended_version: 'v1.3.9' })).toBe('v1.3.9');
+    expect(resolvePreferredTargetVersion({ latest_version: 'v1.4.0', recommended_version: 'main' })).toBe('v1.4.0');
     expect(resolvePreferredTargetVersion({ latest_version: 'v1.4.0' })).toBe('v1.4.0');
     expect(resolvePreferredTargetVersion(null)).toBe('');
   });

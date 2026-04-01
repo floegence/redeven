@@ -51,6 +51,19 @@ function normalizeProcessStartedAtMs(value: unknown): number | null {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
+function resolveMaintenanceFailure(
+  kind: MaintenanceKind,
+  snapshot: SysPingResponse['maintenance'] | null | undefined,
+): string | null {
+  if (!snapshot) return null;
+  if (String(snapshot.kind ?? '').trim() !== kind) return null;
+  if (String(snapshot.state ?? '').trim() !== 'failed') return null;
+
+  const message = String(snapshot.message ?? '').trim();
+  if (message) return message;
+  return kind === 'upgrade' ? 'Update failed.' : 'Restart failed.';
+}
+
 export function createAgentMaintenanceController(args: CreateAgentMaintenanceControllerArgs): AgentMaintenanceController {
   const loadEnvironment = args.getEnvironment ?? getEnvironment;
 
@@ -229,6 +242,16 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
       if (String(args.protocolStatus() ?? '').trim() === 'connected') {
         try {
           const ping = await args.refetchCurrentVersion();
+          const maintenanceFailure = resolveMaintenanceFailure(nextKind, ping?.maintenance);
+          if (maintenanceFailure) {
+            setError(maintenanceFailure);
+            setKind(null);
+            setPolledStatus(null);
+            setTargetVersion('');
+            args.notify.error(nextKind === 'upgrade' ? 'Update failed' : 'Restart failed', maintenanceFailure);
+            return;
+          }
+
           const nextVersion = String(ping?.version ?? '').trim();
           const nextProcessStartedAtMs = normalizeProcessStartedAtMs(ping?.processStartedAtMs);
           const restarted = previousProcessStartedAtMs !== null

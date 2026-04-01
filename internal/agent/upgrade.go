@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"regexp"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	defaultUpgradeInstallScriptURL = "https://install.example.invalid/install.sh"
+	defaultUpgradeInstallScriptURL = "https://redeven.com/install.sh"
 	upgradeInstallScriptURLEnvKey  = "REDEVEN_UPGRADE_INSTALL_SCRIPT_URL"
 	upgradeTimeout                 = 10 * time.Minute
 )
@@ -76,8 +77,8 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
 	}
 
-	if !a.maintenance.CompareAndSwap(maintenanceOpNone, maintenanceOpUpgrade) {
-		switch a.maintenance.Load() {
+	if !a.maintenanceOp.CompareAndSwap(maintenanceOpNone, maintenanceOpUpgrade) {
+		switch a.maintenanceOp.Load() {
 		case maintenanceOpUpgrade:
 			return &syssvc.UpgradeResponse{OK: false, Message: "Upgrade already in progress."}, nil
 		case maintenanceOpRestart:
@@ -102,6 +103,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		"local_ui_bind", plan.localUIBind,
 		"target_version", targetVersion,
 	)
+	a.markMaintenanceRunning(syssvc.MaintenanceKindUpgrade, targetVersion, "Downloading and installing update...")
 
 	go a.runSelfUpgrade(plan, userPublicID, channelID, targetVersion)
 
@@ -136,6 +138,7 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 	cmd.Stderr = &out
 
 	if err := cmd.Run(); err != nil {
+		failureMessage := summarizeUpgradeFailure(err, out.String())
 		a.log.Error("sys_upgrade: install failed",
 			"user_public_id", userPublicID,
 			"channel_id", channelID,
@@ -144,7 +147,8 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 			"output_len", out.Len(),
 			"output_snippet", truncateForLog(out.String(), 8_000),
 		)
-		a.maintenance.Store(maintenanceOpNone)
+		a.markMaintenanceFailed(syssvc.MaintenanceKindUpgrade, targetVersion, failureMessage)
+		a.maintenanceOp.Store(maintenanceOpNone)
 		return
 	}
 
@@ -172,14 +176,71 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 	)
 
 	if err := syscall.Exec(plan.exePath, plan.argv, os.Environ()); err != nil {
+		failureMessage := summarizeExecFailure("Upgrade restart failed", err)
 		a.log.Error("sys_upgrade: exec failed",
 			"user_public_id", userPublicID,
 			"channel_id", channelID,
 			"error", err,
 		)
-		a.maintenance.Store(maintenanceOpNone)
+		a.markMaintenanceFailed(syssvc.MaintenanceKindUpgrade, targetVersion, failureMessage)
+		a.maintenanceOp.Store(maintenanceOpNone)
 		return
 	}
+}
+
+func summarizeUpgradeFailure(err error, output string) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "Install failed: the upgrade installer timed out."
+	}
+	if trimmed := compactUserFacingOutput(output); trimmed != "" {
+		return "Install failed: " + trimmed
+	}
+	if err != nil {
+		return "Install failed: " + strings.TrimSpace(err.Error())
+	}
+	return "Install failed."
+}
+
+func summarizeExecFailure(prefix string, err error) string {
+	cleanPrefix := strings.TrimSpace(prefix)
+	if err == nil {
+		if cleanPrefix == "" {
+			return "Runtime restart failed."
+		}
+		return cleanPrefix + "."
+	}
+	if cleanPrefix == "" {
+		return strings.TrimSpace(err.Error())
+	}
+	return cleanPrefix + ": " + strings.TrimSpace(err.Error())
+}
+
+func compactUserFacingOutput(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return ""
+	}
+
+	lines := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return r == '\n' || r == '\r'
+	})
+	parts := make([]string, 0, len(lines))
+	for _, line := range lines {
+		clean := strings.TrimSpace(line)
+		if clean == "" {
+			continue
+		}
+		parts = append(parts, clean)
+		if len(parts) >= 3 {
+			break
+		}
+	}
+
+	out := strings.Join(parts, " | ")
+	if len(out) > 240 {
+		return out[:240] + "...(truncated)"
+	}
+	return out
 }
 
 func truncateForLog(s string, max int) string {

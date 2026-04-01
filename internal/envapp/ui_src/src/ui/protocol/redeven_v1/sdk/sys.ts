@@ -1,3 +1,12 @@
+export type SysMaintenanceSnapshot = {
+  kind?: 'upgrade' | 'restart';
+  state?: 'running' | 'failed';
+  targetVersion?: string;
+  message?: string;
+  startedAtMs?: number;
+  updatedAtMs?: number;
+};
+
 export type SysPingResponse = {
   serverTimeMs: number;
   agentInstanceId?: string;
@@ -5,6 +14,7 @@ export type SysPingResponse = {
   version?: string;
   commit?: string;
   buildTime?: string;
+  maintenance?: SysMaintenanceSnapshot;
 };
 
 export type SysUpgradeRequest = {

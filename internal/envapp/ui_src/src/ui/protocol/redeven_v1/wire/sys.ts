@@ -7,6 +7,14 @@ export type wire_sys_ping_resp = {
   version?: string;
   commit?: string;
   build_time?: string;
+  maintenance?: {
+    kind?: string;
+    state?: string;
+    target_version?: string;
+    message?: string;
+    started_at_ms?: number;
+    updated_at_ms?: number;
+  };
 };
 
 export type wire_sys_upgrade_req = {

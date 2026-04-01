@@ -35,8 +35,8 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
 	}
 
-	if !a.maintenance.CompareAndSwap(maintenanceOpNone, maintenanceOpRestart) {
-		switch a.maintenance.Load() {
+	if !a.maintenanceOp.CompareAndSwap(maintenanceOpNone, maintenanceOpRestart) {
+		switch a.maintenanceOp.Load() {
 		case maintenanceOpUpgrade:
 			return &syssvc.RestartResponse{OK: false, Message: "Upgrade is in progress."}, nil
 		case maintenanceOpRestart:
@@ -59,6 +59,7 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 		"exe_path", plan.exePath,
 		"local_ui_bind", plan.localUIBind,
 	)
+	a.markMaintenanceRunning(syssvc.MaintenanceKindRestart, "", "Restarting runtime...")
 
 	go a.runSelfRestart(plan, userPublicID, channelID)
 
@@ -89,12 +90,14 @@ func (a *Agent) runSelfRestart(plan selfExecPlan, userPublicID string, channelID
 	)
 
 	if err := syscall.Exec(plan.exePath, plan.argv, os.Environ()); err != nil {
+		failureMessage := summarizeExecFailure("Runtime restart failed", err)
 		a.log.Error("sys_restart: exec failed",
 			"user_public_id", userPublicID,
 			"channel_id", channelID,
 			"error", err,
 		)
-		a.maintenance.Store(maintenanceOpNone)
+		a.markMaintenanceFailed(syssvc.MaintenanceKindRestart, "", failureMessage)
+		a.maintenanceOp.Store(maintenanceOpNone)
 		return
 	}
 }

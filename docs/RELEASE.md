@@ -103,6 +103,12 @@ The installer script source of truth is in this repository:
 - GitHub Release assets only
 - Latest version resolved via GitHub Releases API unless `REDEVEN_VERSION` is explicitly provided
 - Installer script can be fetched directly from this repository (for example via raw GitHub content)
+- The public install worker endpoint is `https://redeven.com/install.sh`
+- Runtime self-upgrade resolves latest-version metadata from `https://version.agent.redeven.com/v1/manifest.json`
+- Manifest contract:
+  - `latest` must always be a valid release tag
+  - `recommended` may be omitted, but if present it must also be a valid release tag
+  - clients must fall back from an invalid/missing `recommended` value to `latest`
 
 ## Local verification example
 

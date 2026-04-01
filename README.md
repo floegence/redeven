@@ -93,6 +93,8 @@ curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/inst
 
 If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven/releases).
 
+The public installer endpoint used by runtime self-upgrade is [https://redeven.com/install.sh](https://redeven.com/install.sh).
+
 ### 2. Bootstrap once
 
 ```bash

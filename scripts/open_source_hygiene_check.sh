@@ -35,7 +35,8 @@ cd "$repo_root"
 
 selected_files="$(mktemp)"
 existing_files="$(mktemp)"
-trap 'rm -f "$selected_files" "$existing_files"' EXIT
+domain_matches="$(mktemp)"
+trap 'rm -f "$selected_files" "$existing_files" "$domain_matches"' EXIT
 
 if [ "$mode" = "--all" ]; then
   git ls-files -z >"$selected_files"
@@ -50,7 +51,7 @@ fi
 
 while IFS= read -r -d '' file_path; do
   case "$file_path" in
-    scripts/open_source_hygiene_check.sh|.githooks/pre-commit)
+    scripts/open_source_hygiene_check.sh|scripts/test_open_source_hygiene_check.sh|.githooks/pre-commit)
       continue
       ;;
   esac
@@ -73,13 +74,41 @@ run_pattern_check() {
   fi
 }
 
+check_public_domain_literals() {
+  if [ ! -s "$existing_files" ]; then
+    return 0
+  fi
+
+  : >"$domain_matches"
+  if ! xargs -0 rg -n --pcre2 "(?i)\\b(redeven\\.com|version\\.agent\\.redeven\\.com|agent\\.package\\.redeven\\.com)\\b" <"$existing_files" >"$domain_matches"; then
+    if [ ! -s "$domain_matches" ]; then
+      return 0
+    fi
+  fi
+
+  local domain_failed=0
+  while IFS=: read -r file_path line_number line_text; do
+    local cleaned_line="$line_text"
+    cleaned_line="${cleaned_line//https:\/\/redeven.com\/install.sh/}"
+    cleaned_line="${cleaned_line//https:\/\/version.agent.redeven.com\/v1\/manifest.json/}"
+    if printf '%s\n' "$cleaned_line" | rg -q --pcre2 "(?i)\\b(redeven\\.com|version\\.agent\\.redeven\\.com|agent\\.package\\.redeven\\.com)\\b"; then
+      printf '%s:%s:%s\n' "$file_path" "$line_number" "$line_text"
+      domain_failed=1
+    fi
+  done <"$domain_matches"
+
+  if [ "$domain_failed" -ne 0 ]; then
+    echo "[ERROR] Only the public runtime endpoint literals https://redeven.com/install.sh and https://version.agent.redeven.com/v1/manifest.json may appear in this public repository." >&2
+    failed=1
+  fi
+}
+
 # Rule 1: block browser storage writes for token-like secret fields.
 run_pattern_check "(?i)(sessionStorage|localStorage)\\.setItem\\([^\\n]*(token|secret|ticket|api[_-]?key)" \
   "Token-like secrets must not be persisted via sessionStorage/localStorage."
 
-# Rule 2: block production domain literals.
-run_pattern_check "(?i)\\b(redeven\\.com|version\\.agent\\.redeven\\.com|agent\\.package\\.redeven\\.com)\\b" \
-  "Production domain literals are not allowed in this public repository."
+# Rule 2: only the public runtime endpoint literals may appear.
+check_public_domain_literals
 
 # Rule 3: block internal delivery pipeline vocabulary from the public repo.
 run_pattern_check "(?i)\\b(release hook|package mirror|delivery branch|version endpoint|installer wrapper)\\b|REDEVEN_[A-Z_]*(DISPATCH|TARGET)_[A-Z_]*" \

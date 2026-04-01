@@ -21,7 +21,7 @@ type Meta struct {
 	CanExecute        bool   `json:"can_execute"`
 	// CanAdmin gates management actions on the data plane (e.g. codespace create/delete/rename).
 	//
-		// NOTE: this is the namespace-level "admin" bit computed service-side and delivered by the control plane.
+	// NOTE: this is the namespace-level "admin" bit computed service-side and delivered by the control plane.
 	// It is NOT part of the local permission_policy RWX clamp.
 	CanAdmin        bool  `json:"can_admin"`
 	CreatedAtUnixMs int64 `json:"created_at_unix_ms"`

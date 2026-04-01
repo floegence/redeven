@@ -60,6 +60,7 @@ type Options struct {
 	BuildTime          string
 	Upgrader           Upgrader
 	Restarter          Restarter
+	Maintenance        MaintenanceSnapshotProvider
 }
 
 type Service struct {
@@ -69,8 +70,9 @@ type Service struct {
 	commit             string
 	buildTime          string
 
-	upgrader  Upgrader
-	restarter Restarter
+	upgrader    Upgrader
+	restarter   Restarter
+	maintenance MaintenanceSnapshotProvider
 }
 
 func NewService(opts Options) *Service {
@@ -82,6 +84,7 @@ func NewService(opts Options) *Service {
 		buildTime:          strings.TrimSpace(opts.BuildTime),
 		upgrader:           opts.Upgrader,
 		restarter:          opts.Restarter,
+		maintenance:        opts.Maintenance,
 	}
 }
 
@@ -95,6 +98,10 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 	}
 
 	accessgate.RegisterTyped[pingReq, pingResp](r, TypeID_SYS_PING, gate, meta, accessgate.RPCAccessPublic, func(_ctx context.Context, _ *pingReq) (*pingResp, error) {
+		var maintenance *MaintenanceSnapshot
+		if s.maintenance != nil {
+			maintenance = s.maintenance.CurrentMaintenanceSnapshot()
+		}
 		return &pingResp{
 			ServerTimeMs:       time.Now().UnixMilli(),
 			AgentInstanceID:    s.agentInstanceID,
@@ -102,6 +109,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			Version:            s.version,
 			Commit:             s.commit,
 			BuildTime:          s.buildTime,
+			Maintenance:        maintenance,
 		}, nil
 	})
 
@@ -135,10 +143,32 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 type pingReq struct{}
 
 type pingResp struct {
-	ServerTimeMs       int64  `json:"server_time_ms,omitempty"`
-	AgentInstanceID    string `json:"agent_instance_id,omitempty"`
-	ProcessStartedAtMs int64  `json:"process_started_at_ms,omitempty"`
-	Version            string `json:"version,omitempty"`
-	Commit             string `json:"commit,omitempty"`
-	BuildTime          string `json:"build_time,omitempty"`
+	ServerTimeMs       int64                `json:"server_time_ms,omitempty"`
+	AgentInstanceID    string               `json:"agent_instance_id,omitempty"`
+	ProcessStartedAtMs int64                `json:"process_started_at_ms,omitempty"`
+	Version            string               `json:"version,omitempty"`
+	Commit             string               `json:"commit,omitempty"`
+	BuildTime          string               `json:"build_time,omitempty"`
+	Maintenance        *MaintenanceSnapshot `json:"maintenance,omitempty"`
+}
+
+const (
+	MaintenanceKindUpgrade = "upgrade"
+	MaintenanceKindRestart = "restart"
+
+	MaintenanceStateRunning = "running"
+	MaintenanceStateFailed  = "failed"
+)
+
+type MaintenanceSnapshot struct {
+	Kind          string `json:"kind,omitempty"`
+	State         string `json:"state,omitempty"`
+	TargetVersion string `json:"target_version,omitempty"`
+	Message       string `json:"message,omitempty"`
+	StartedAtMs   int64  `json:"started_at_ms,omitempty"`
+	UpdatedAtMs   int64  `json:"updated_at_ms,omitempty"`
+}
+
+type MaintenanceSnapshotProvider interface {
+	CurrentMaintenanceSnapshot() *MaintenanceSnapshot
 }

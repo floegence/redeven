@@ -118,7 +118,8 @@ type Agent struct {
 	sys  *syssvc.Service
 	code *codeapp.Service
 
-	maintenance atomic.Int32
+	maintenanceOp    atomic.Int32
+	maintenanceState maintenanceSnapshotStore
 
 	mu       sync.Mutex
 	sessions map[string]*activeSession // channel_id -> session
@@ -238,6 +239,7 @@ func New(opts Options) (*Agent, error) {
 		BuildTime:          opts.BuildTime,
 		Upgrader:           upgrader,
 		Restarter:          &sysRestarter{a: a},
+		Maintenance:        a,
 	})
 
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
@@ -438,8 +440,8 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 }
 
 func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) {
-	if a != nil && a.maintenance.Load() != maintenanceOpNone {
-		a.log.Debug("maintenance in progress; ignoring grant_server notify", "op", a.maintenance.Load())
+	if a != nil && a.maintenanceOp.Load() != maintenanceOpNone {
+		a.log.Debug("maintenance in progress; ignoring grant_server notify", "op", a.maintenanceOp.Load())
 		return
 	}
 
