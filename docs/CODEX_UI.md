@@ -151,6 +151,7 @@ When the target thread is not currently live-loaded on the bridge connection, th
 Current Env App behavior:
 
 - Codex shows as a separate activity-bar item, not inside Flower.
+- Desktop navigation between Codex/Flower and full-screen Env App pages suppresses the shell sidebar width transition for that one visibility change, but explicit re-click collapse/reopen on the active Codex/Flower activity item still uses the shared smooth animation; mobile behavior is unchanged.
 - If host `codex` is unavailable, the entry point still stays visible and the Codex surface shows inline host diagnostics instead of a separate disabled/settings-jump flow.
 - When host `codex` is unavailable, Codex keeps the page-level diagnostics visible but disables host-backed actions such as `New Chat`, archive, send, attachments, and working-directory editing rather than leaving a half-interactive shell.
 - The Codex sidebar is a dedicated conversation navigator for Codex threads plus compact host/runtime context; it mirrors the same overall layout rhythm as Flower without reusing Flower-owned UI modules.

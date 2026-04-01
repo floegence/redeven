@@ -40,6 +40,7 @@ const accessStatusMock = vi.fn(async () => ({ passwordRequired: false, unlocked:
 const accessResumeMock = vi.fn(async () => undefined);
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {} }),
   useLayout: () => ({
     isMobile: () => false,

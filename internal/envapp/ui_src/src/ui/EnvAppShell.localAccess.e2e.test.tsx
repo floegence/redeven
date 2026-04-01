@@ -49,6 +49,7 @@ const setSidebarActiveTabMock = vi.fn((tab: string) => {
 const setSidebarCollapsedMock = vi.fn();
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {} }),
   useLayout: () => ({
     isMobile: () => layoutIsMobile,
@@ -78,8 +79,18 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   PanelContent: (props: any) => <div>{props.children}</div>,
   Shell: (props: any) => (
     <div>
+      <div data-testid="shell-sidebar" class={props.slotClassNames?.sidebar} />
       {props.logo}
       {props.topBarActions}
+      <div>
+        {Array.isArray(props.activityItems)
+          ? props.activityItems.map((item: any) => (
+              <button type="button" data-activity-id={item.id} onClick={item.onClick}>
+                {item.label}
+              </button>
+            ))
+          : null}
+      </div>
       <div>
         {Array.isArray(props.activityBottomItems)
           ? props.activityBottomItems.map((item: any) => (
@@ -384,6 +395,38 @@ describe('EnvAppShell top bar affordances', () => {
       const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
       expect(toggleThemeButton).toBeTruthy();
       expect(toggleThemeButton?.getAttribute('data-tooltip')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('suppresses the desktop sidebar width transition for one frame when opening Codex from a full-screen tab', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const shellSidebar = host.querySelector('[data-testid="shell-sidebar"]');
+      const codexButton = findButtonByText(host, 'Codex');
+
+      expect(shellSidebar?.className).not.toContain('transition-none');
+      expect(codexButton).toBeTruthy();
+
+      codexButton?.click();
+
+      expect(setSidebarActiveTabMock).toHaveBeenCalledWith('codex', { openSidebar: true });
+      expect(shellSidebar?.className).toContain('transition-none');
+
+      await flushAsync();
+
+      expect(shellSidebar?.className).not.toContain('transition-none');
     } finally {
       dispose();
     }

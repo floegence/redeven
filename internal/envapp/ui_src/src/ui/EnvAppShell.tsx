@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
-import { type FloeComponent, useCommand, useLayout, useNotification, useTheme, useWidgetRegistry } from '@floegence/floe-webapp-core';
+import { deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme, useWidgetRegistry } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import {
   Activity,
@@ -76,6 +76,7 @@ import { normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './uti
 import { createClientId } from './utils/clientId';
 import { buildFilePreviewAskFlowerIntent } from './utils/filePreviewAskFlower';
 import { reloadCurrentPage } from './utils/windowNavigation';
+import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar, type EnvSidebarVisibilityMotion } from './envSidebarVisibilityMotion';
 import { subscribeDesktopAskFlowerMainWindowHandoff, type DesktopAskFlowerMainWindowHandoff } from './services/desktopAskFlowerBridge';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
@@ -433,7 +434,9 @@ export function EnvAppShell() {
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
+  const [sidebarVisibilityMotion, setSidebarVisibilityMotion] = createSignal<EnvSidebarVisibilityMotion>('animated');
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
+  let sidebarVisibilityMotionRevision = 0;
   let initialTab: EnvNavTab | null = null;
 
   const [askFlowerIntentSeq, setAskFlowerIntentSeq] = createSignal(0);
@@ -464,7 +467,7 @@ export function EnvAppShell() {
       setSettingsFocusSection(section);
       setSettingsFocusSeq((n) => n + 1);
     }
-    layout.setSidebarActiveTab('settings', { openSidebar: false });
+    activateEnvTab('settings', { persist: false });
   };
 
   const openDebugConsole = () => {
@@ -1490,6 +1493,38 @@ export function EnvAppShell() {
   const [persistReady, setPersistReady] = createSignal(false);
   let skipPersistOnce = false;
 
+  const queueSidebarVisibilityMotion = (motion: EnvSidebarVisibilityMotion) => {
+    if (motion !== 'instant') {
+      return;
+    }
+    sidebarVisibilityMotionRevision += 1;
+    const revision = sidebarVisibilityMotionRevision;
+    setSidebarVisibilityMotion('instant');
+    deferAfterPaint(() => {
+      if (sidebarVisibilityMotionRevision !== revision) {
+        return;
+      }
+      setSidebarVisibilityMotion('animated');
+    });
+  };
+
+  const activateEnvTab = (tab: EnvNavTab | 'settings', opts?: { persist?: boolean }) => {
+    if (opts?.persist !== false && tab !== 'settings') {
+      persistActiveTab(tab);
+    }
+    let next = tab;
+    if (layout.isMobile() && next === 'deck') next = 'terminal';
+    if (layout.isMobile() && tab === 'deck' && next === 'terminal') skipPersistOnce = true;
+
+    queueSidebarVisibilityMotion(resolveEnvSidebarVisibilityMotion({
+      currentTab: layout.sidebarActiveTab(),
+      nextTab: next,
+      isMobile: layout.isMobile(),
+    }));
+
+    layout.setSidebarActiveTab(next, { openSidebar: shouldEnvTabOpenSidebar(next) });
+  };
+
   const goTab = (tab: EnvNavTab) => {
     if (tab === 'ai' && !canUseFlower()) {
       notify.error('Permission denied', 'Read/write/execute permission required.');
@@ -1499,13 +1534,7 @@ export function EnvAppShell() {
       notify.error('Permission denied', 'Read/write/execute permission required.');
       return;
     }
-    // Persist the user's preference; the runtime may downgrade it on mobile (deck -> terminal).
-    persistActiveTab(tab);
-    let next = tab;
-    if (layout.isMobile() && next === 'deck') next = 'terminal';
-    // Prevent the downgraded "terminal" tab from overriding the user's persisted preference ("deck").
-    if (layout.isMobile() && tab === 'deck' && next === 'terminal') skipPersistOnce = true;
-    layout.setSidebarActiveTab(next, { openSidebar: next === 'ai' || next === 'codex' });
+    activateEnvTab(tab);
   };
 
   // If the user preferred Flower and the session has RWX, open it once after permissions load.
@@ -1545,14 +1574,14 @@ export function EnvAppShell() {
     if (layout.sidebarActiveTab() !== 'ai') return;
     if (canUseFlower()) return;
     const fallback = layout.isMobile() ? 'terminal' : 'deck';
-    layout.setSidebarActiveTab(fallback, { openSidebar: false });
+    activateEnvTab(fallback, { persist: false });
   });
 
   createEffect(() => {
     if (layout.sidebarActiveTab() !== 'codex') return;
     if (canUseCodex()) return;
     const fallback = layout.isMobile() ? 'terminal' : 'deck';
-    layout.setSidebarActiveTab(fallback, { openSidebar: false });
+    activateEnvTab(fallback, { persist: false });
   });
 
   createEffect(() => {
@@ -1632,7 +1661,23 @@ export function EnvAppShell() {
         collapseBehavior: 'toggle',
       });
     }
-    return items;
+    return items.map((item) => {
+      if (item.onClick) {
+        return item;
+      }
+      const nextTab = item.id as EnvNavTab;
+      if (resolveEnvSidebarVisibilityMotion({
+        currentTab: layout.sidebarActiveTab(),
+        nextTab,
+        isMobile: layout.isMobile(),
+      }) !== 'instant') {
+        return item;
+      }
+      return {
+        ...item,
+        onClick: () => activateEnvTab(nextTab),
+      };
+    });
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
@@ -2054,6 +2099,9 @@ export function EnvAppShell() {
   const renderMainShell = () => (
     <Shell
       sidebarMode="auto"
+      slotClassNames={{
+        sidebar: sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
+      }}
       sidebarContent={(activeTab) =>
         activeTab === 'ai' && canUseFlower()
           ? <AIChatSidebar />
