@@ -27,7 +27,7 @@ export function CodexHeaderBar(props: {
     <Button
       size="sm"
       variant="ghost"
-      class="codex-page-header-action cursor-pointer"
+      class="codex-page-header-action shrink-0 cursor-pointer"
       onClick={action.onClick}
       disabled={action.disabled}
       aria-label={action.aria_label}
@@ -58,40 +58,56 @@ export function CodexHeaderBar(props: {
         </div>
 
         <div class="codex-page-header-rail">
-          <Show when={shouldShowStatusTag()}>
-            <Tag variant={statusTagVariant(props.summary.statusLabel)} tone="soft" size="sm">
-              {props.summary.statusLabel}
-            </Tag>
-          </Show>
-          <Show when={!props.summary.hostReady}>
-            <Tag variant="warning" tone="soft" size="sm">
-              Install required
-            </Tag>
-          </Show>
-          <Show when={props.summary.pendingRequestCount > 0}>
-            <Tag variant="warning" tone="soft" size="sm">
-              {props.summary.pendingRequestCount} pending
-            </Tag>
-          </Show>
-          <Show when={props.summary.statusFlags.length > 0}>
-            <Tag variant="info" tone="soft" size="sm">
-              {props.summary.statusFlags[0]}
-            </Tag>
-          </Show>
-          <Index each={props.actions}>
-            {(action) => (
-              <Show
-                when={action().disabled && action().disabled_reason}
-                fallback={renderActionButton(action())}
-              >
-                <Tooltip content={action().disabled_reason || ''} placement="bottom" delay={0}>
-                  <span class="inline-flex">
-                    {renderActionButton(action())}
-                  </span>
-                </Tooltip>
+          <Show
+            when={
+              shouldShowStatusTag() ||
+              !props.summary.hostReady ||
+              props.summary.pendingRequestCount > 0 ||
+              props.summary.statusFlags.length > 0
+            }
+          >
+            <div class="codex-page-header-badges">
+              <Show when={shouldShowStatusTag()}>
+                <Tag class="codex-page-header-tag cursor-default" variant={statusTagVariant(props.summary.statusLabel)} tone="soft" size="sm">
+                  {props.summary.statusLabel}
+                </Tag>
               </Show>
-            )}
-          </Index>
+              <Show when={!props.summary.hostReady}>
+                <Tag class="codex-page-header-tag cursor-default" variant="warning" tone="soft" size="sm">
+                  Install required
+                </Tag>
+              </Show>
+              <Show when={props.summary.pendingRequestCount > 0}>
+                <Tag class="codex-page-header-tag cursor-default" variant="warning" tone="soft" size="sm">
+                  {props.summary.pendingRequestCount} pending
+                </Tag>
+              </Show>
+              <Show when={props.summary.statusFlags.length > 0}>
+                <Tag class="codex-page-header-tag cursor-default" variant="info" tone="soft" size="sm">
+                  {props.summary.statusFlags[0]}
+                </Tag>
+              </Show>
+            </div>
+          </Show>
+
+          <Show when={props.actions.length > 0}>
+            <div class="codex-page-header-actions">
+              <Index each={props.actions}>
+                {(action) => (
+                  <Show
+                    when={action().disabled && action().disabled_reason}
+                    fallback={renderActionButton(action())}
+                  >
+                    <Tooltip content={action().disabled_reason || ''} placement="bottom" delay={0}>
+                      <span class="inline-flex">
+                        {renderActionButton(action())}
+                      </span>
+                    </Tooltip>
+                  </Show>
+                )}
+              </Index>
+            </div>
+          </Show>
         </div>
       </div>
     </div>

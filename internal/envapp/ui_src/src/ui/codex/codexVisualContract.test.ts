@@ -43,6 +43,14 @@ describe('Codex visual contract', () => {
     expect(src).toMatch(/\.codex-empty-hero \+ \.codex-empty-suggestions \{[\s\S]*margin-top: 2rem;/);
   });
 
+  it('keeps header controls compact and wrap-friendly for narrow Codex layouts', () => {
+    const src = readCodexCss();
+
+    expect(src).toMatch(/\.codex-page-header-rail \{[\s\S]*max-width: min\(100%, 32rem\);[\s\S]*justify-content: flex-end;[\s\S]*flex-wrap: wrap;/);
+    expect(src).toMatch(/\.codex-page-header-rail \.codex-page-header-action \{[\s\S]*width: auto;[\s\S]*height: 1\.5rem;[\s\S]*font-size: 0\.6875rem;/);
+    expect(src).toMatch(/@media \(max-width: 960px\) \{[\s\S]*\.codex-page-header-main \{[\s\S]*flex-wrap: wrap;[\s\S]*\.codex-page-header-rail \{[\s\S]*justify-content: flex-start;/);
+  });
+
   it('keeps Codex markdown blockquotes aligned with the floe-webapp quote block shape', () => {
     const src = readCodexCss();
 

@@ -69,4 +69,45 @@ describe('CodexHeaderBar', () => {
     expect(restoreButton?.hasAttribute('disabled')).toBe(true);
     expect(restoreButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toContain('host codex binary not found on PATH');
   });
+
+  it('separates compact status badges from text actions in the header rail', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <CodexHeaderBar
+        summary={{
+          threadTitle: 'New chat',
+          workspaceLabel: '/workspace',
+          modelLabel: 'GPT-5.4',
+          statusLabel: 'not loaded',
+          statusFlags: ['workspace dirty'],
+          contextLabel: 'Workspace',
+          contextDetail: '/workspace',
+          hostReady: true,
+          pendingRequestCount: 2,
+        }}
+        actions={[
+          {
+            key: 'archive',
+            label: 'Archive',
+            aria_label: 'Archive Codex thread',
+            onClick: () => undefined,
+          },
+          {
+            key: 'review',
+            label: 'Review',
+            aria_label: 'Review current workspace changes',
+            onClick: () => undefined,
+          },
+        ]}
+      />
+    ), host);
+
+    expect(host.querySelector('.codex-page-header-badges')).not.toBeNull();
+    expect(host.querySelectorAll('.codex-page-header-tag').length).toBe(3);
+    expect(host.querySelector('.codex-page-header-actions')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Review current workspace changes"]')).not.toBeNull();
+  });
 });
