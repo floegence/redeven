@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "built_at": "2026-02-19T00:00:00Z",
+  "built_at": "2026-04-01T00:00:00Z",
   "knowledge_id": "redeven-core",
   "knowledge_name": "Redeven Runtime Knowledge",
   "allowed_repos": [
@@ -10,17 +10,17 @@
     "redeven"
   ],
   "source_refs": {
-    "floe-webapp": "workspace",
-    "floeterm": "workspace",
-    "flowersec": "workspace",
-    "redeven": "main"
+    "floe-webapp": "cf205e46d2f1bbf5de11e3e33025f3d2072049f0",
+    "floeterm": "5b1b48958358d60931e281c9ac55f4fdb2445c7e",
+    "flowersec": "92e438b6c438c8e694b0cdd9fcac3bb8a378e58b",
+    "redeven": "5747429801be3e0ccb04f0c72d18682daa6c80cd"
   },
-  "source_sha256": "5c5c0d4bfd887a3572c5c1ee6d3093dab1f515a752c4364e9856f2b0baf8fbd5",
+  "source_sha256": "a118d81e9098bb9b0fa555815a5dfe2fdce9facc08bd4dca51fbd84e24aaf419",
   "cards": [
     {
       "id": "K-AGENT-001",
-      "version": 1,
-      "title": "Runtime session permissions are enforced by session metadata and local policy",
+      "version": 2,
+      "title": "Runtime validates session metadata and clamps granted permissions before opening sessions",
       "status": "stable",
       "owners": [
         "backend"
@@ -30,198 +30,446 @@
         "security",
         "session_security"
       ],
-      "summary": "The runtime accepts authoritative session metadata and always clamps granted permissions with the local permission policy before serving a session.",
-      "mechanism": "When a grant arrives, the runtime validates channel and app metadata, intersects granted read/write/execute permissions with the local cap, and persists the effective permission set into the session snapshot.",
-      "boundaries": "Any attempt to trust browser-reported permissions instead of the session metadata and local cap would bypass endpoint-side permission enforcement.",
-      "invalid_conditions": "This card becomes invalid if session startup skips permission intersection or starts accepting browser-side permission claims as authoritative.",
+      "summary": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward.",
+      "mechanism": "When `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements.",
+      "boundaries": "Browser or UI-side permission claims remain non-authoritative. This card only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.",
+      "invalid_conditions": "This card becomes invalid if session startup begins trusting browser-side permission state, skips local cap intersection, or stops doing per-app validation before opening data sessions.",
       "evidence": [
         {
           "repo": "redeven",
-          "path": "README.md",
-          "line": 106,
-          "note": "The security model states that browser-claimed permissions are not trusted."
+          "path": "internal/config/permission_policy.go",
+          "line": 13,
+          "note": "PermissionPolicy is documented as clamping control-plane session metadata to a user-approved local maximum."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/config/permission_policy.go",
+          "line": 74,
+          "note": "ResolveCap intersects global, per-user, and per-app caps."
         },
         {
           "repo": "redeven",
           "path": "internal/agent/agent.go",
-          "line": 430,
-          "note": "Unsupported floe_app values are rejected before session setup."
+          "line": 473,
+          "note": "Unsupported floe_app values are rejected before runtime session startup."
         },
         {
           "repo": "redeven",
           "path": "internal/agent/agent.go",
-          "line": 435,
-          "note": "Permission clamp intersects grants with local policy."
+          "line": 485,
+          "note": "Granted permissions are intersected with the resolved local cap."
         },
         {
           "repo": "redeven",
           "path": "internal/agent/agent.go",
-          "line": 459,
-          "note": "Effective permissions overwrite session metadata fields."
+          "line": 502,
+          "note": "Effective permissions overwrite the session metadata snapshot used by the runtime."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/agent/agent.go",
+          "line": 508,
+          "note": "Code App sessions require a valid codespace id and full read/write/execute access."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/agent/agent.go",
+          "line": 531,
+          "note": "Port Forward sessions require a valid forward id and execute capability."
         }
       ],
       "source_card_id": "K-AGENT-001"
     },
     {
       "id": "K-DEP-001",
-      "version": 1,
-      "title": "Agent runtime depends on Flowersec transport and Floeterm terminal engine",
+      "version": 2,
+      "title": "Runtime transport rides Flowersec sessions while terminal lifecycle rides Floeterm managers",
       "status": "stable",
       "owners": [
         "backend"
       ],
       "tags": [
         "architecture",
-        "dependencies"
+        "dependencies",
+        "terminal"
       ],
-      "summary": "Redeven runtime is coupled to Flowersec for transport/control primitives and Floeterm for terminal session orchestration.",
-      "mechanism": "Go module dependencies pin both SDKs, while runtime packages import Flowersec endpoint/rpc layers and Floeterm manager APIs for terminal lifecycle handling.",
-      "boundaries": "Upgrading either dependency without validating protocol and runtime behavior can break control/data session compatibility.",
-      "invalid_conditions": "This card becomes invalid if runtime terminal or transport stacks stop depending on these libraries or move to a different integration contract.",
+      "summary": "Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager.",
+      "mechanism": "Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The agent connects the control channel through `fsclient.ConnectDirect`, opens data sessions through `endpoint.ConnectTunnel`, and wraps `termgo.NewManager` so terminal sessions, PTY activation, and lifecycle bookkeeping stay inside Floeterm's manager abstraction.",
+      "boundaries": "Compatibility depends on these transport and terminal interfaces staying aligned across released versions. Replacing or bypassing them can break control and data channel behavior, stream semantics, or terminal session lifecycle.",
+      "invalid_conditions": "This card becomes invalid if runtime transport no longer uses Flowersec client and endpoint session abstractions or terminal lifecycle moves off Floeterm manager semantics.",
       "evidence": [
         {
           "repo": "redeven",
           "path": "go.mod",
-          "line": 7,
-          "note": "Floeterm terminal-go dependency is pinned in the runtime module."
+          "line": 8,
+          "note": "Redeven pins floeterm terminal-go in the runtime module."
         },
         {
           "repo": "redeven",
           "path": "go.mod",
-          "line": 8,
-          "note": "Flowersec-go dependency is pinned in the runtime module."
+          "line": 9,
+          "note": "Redeven pins flowersec-go in the runtime module."
         },
         {
           "repo": "redeven",
           "path": "internal/agent/agent.go",
           "line": 20,
-          "note": "Agent runtime imports Flowersec client and endpoint packages."
+          "note": "Agent imports Flowersec client, endpoint, proxy, and RPC packages."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/agent/agent.go",
+          "line": 380,
+          "note": "The control channel connects through fsclient.ConnectDirect."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/agent/agent.go",
+          "line": 688,
+          "note": "Runtime data sessions connect through endpoint.ConnectTunnel."
         },
         {
           "repo": "redeven",
           "path": "internal/terminal/manager.go",
-          "line": 16,
-          "note": "Terminal manager imports Floeterm terminal-go manager."
+          "line": 14,
+          "note": "Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/terminal/manager.go",
+          "line": 98,
+          "note": "Runtime instantiates termgo.NewManager with Redeven shell and logging config."
+        },
+        {
+          "repo": "floeterm",
+          "path": "terminal-go/manager.go",
+          "line": 12,
+          "note": "Floeterm exposes the terminal manager constructor Redeven embeds."
+        },
+        {
+          "repo": "floeterm",
+          "path": "terminal-go/manager.go",
+          "line": 43,
+          "note": "Floeterm manages dormant logical terminal sessions before PTY activation."
+        },
+        {
+          "repo": "flowersec",
+          "path": "flowersec-go/client/client.go",
+          "line": 17,
+          "note": "Flowersec client sessions expose RPC, stream opening, ping, and close semantics."
+        },
+        {
+          "repo": "flowersec",
+          "path": "flowersec-go/endpoint/session.go",
+          "line": 19,
+          "note": "Flowersec endpoint sessions expose ServeStreams and OpenStream over the secure mux."
         }
       ],
       "source_card_id": "K-DEP-001"
     },
     {
       "id": "K-KNOW-001",
-      "version": 1,
-      "title": "Knowledge bundle build path is deterministic and source-driven",
+      "version": 2,
+      "title": "Knowledge bundle source is curated, deterministic, and embedded into the runtime binary",
       "status": "stable",
       "owners": [
         "ai"
       ],
       "tags": [
         "knowledge",
+        "provenance",
         "release"
       ],
-      "summary": "Knowledge bundle artifacts are built directly from checked-in source files without local model generation.",
-      "mechanism": "The build script invokes the bundle command with source and dist roots, and the command supports source validation plus deterministic bundle verification/write behavior.",
-      "boundaries": "Reintroducing model-generated intermediate artifacts into the release path would break determinism and make bundle provenance harder to audit.",
-      "invalid_conditions": "This card becomes invalid if release-critical knowledge artifacts depend on ad-hoc local model generation instead of deterministic source compilation.",
+      "summary": "Redeven builds its knowledge bundle from curated source files under `internal/knowledge/source`, verifies deterministic dist outputs, and embeds the resulting bundle into the binary used by runtime and AI features.",
+      "mechanism": "`build_assets.sh` invokes `build_knowledge_bundle.sh`, which runs `cmd/knowledge-bundle` against explicit source and dist roots. The builder loads the manifest, cards, and indices, hashes the full source tree into `source_sha256`, writes bundle plus manifest plus sha outputs, CI validates source integrity and stale dist, and `go:embed` makes the bundle available to runtime search code.",
+      "boundaries": "The bundle remains auditable only while source cards are the sole authoring surface and `internal/knowledge/dist/*` stays a generated verification artifact set rather than hand-edited truth.",
+      "invalid_conditions": "This card becomes invalid if build-time knowledge starts depending on ad-hoc model output, if checked-in dist diverges from source without verification failures, or if runtime stops using embedded bundle assets.",
       "evidence": [
         {
           "repo": "redeven",
           "path": "scripts/build_assets.sh",
-          "line": 112,
-          "note": "Asset build includes a dedicated knowledge bundle stage."
+          "line": 53,
+          "note": "Embedded asset builds always include the knowledge bundle stage."
         },
         {
           "repo": "redeven",
           "path": "scripts/build_knowledge_bundle.sh",
-          "line": 23,
-          "note": "Bundle script calls cmd/knowledge-bundle with source root."
+          "line": 19,
+          "note": "Bundle script resolves dedicated source and dist roots under internal/knowledge."
         },
         {
           "repo": "redeven",
           "path": "cmd/knowledge-bundle/main.go",
-          "line": 14,
-          "note": "Bundle command defaults to internal knowledge source directory."
+          "line": 20,
+          "note": "Bundle command always rebuilds from source before validate, verify, or write modes."
         },
         {
           "repo": "redeven",
-          "path": "cmd/knowledge-bundle/main.go",
-          "line": 17,
-          "note": "Bundle command supports source-only validation and dist verification modes."
+          "path": "internal/knowledge/builder.go",
+          "line": 22,
+          "note": "BuildFromSource assembles the bundle from manifest, cards, and indices."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/knowledge/builder.go",
+          "line": 49,
+          "note": "Source tree hashing is recorded as source_sha256 provenance."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/knowledge/builder.go",
+          "line": 131,
+          "note": "VerifyDistFiles rejects stale checked-in dist artifacts."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/knowledge/embed.go",
+          "line": 8,
+          "note": "knowledge_bundle.json and its manifest are embedded into the Go binary."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/knowledge/search.go",
+          "line": 38,
+          "note": "Runtime search loads the embedded bundle lazily from embed FS."
+        },
+        {
+          "repo": "redeven",
+          "path": "scripts/knowledge/check_source_integrity.sh",
+          "line": 7,
+          "note": "Integrity checks require the source manifest and index files before validation."
+        },
+        {
+          "repo": "redeven",
+          "path": ".github/workflows/ci-check.yml",
+          "line": 26,
+          "note": "CI runs source integrity plus dist verification on every main and PR check."
         }
       ],
       "source_card_id": "K-KNOW-001"
     },
     {
       "id": "K-REL-001",
-      "version": 1,
-      "title": "Release pipeline ships knowledge bundle verification assets",
+      "version": 2,
+      "title": "Release workflow publishes knowledge verification assets alongside CLI and desktop artifacts",
       "status": "stable",
       "owners": [
         "deployment"
       ],
       "tags": [
         "release",
-        "security"
+        "security",
+        "supply_chain"
       ],
-      "summary": "Release builds publish knowledge bundle manifest and checksum files alongside release checksums and signatures.",
-      "mechanism": "Release workflow collects bundle verification files into artifacts and signs combined checksums so downstream consumers can verify integrity from GitHub Release alone.",
-      "boundaries": "If manifest/checksum artifacts are omitted, downstream installers lose auditable integrity guarantees.",
-      "invalid_conditions": "This card becomes invalid if release workflows stop publishing knowledge bundle verification artifacts.",
+      "summary": "GitHub releases ship `knowledge_bundle.manifest.json` and `knowledge_bundle.sha256` together with CLI tarballs, desktop packages, and signed `SHA256SUMS`.",
+      "mechanism": "Build jobs copy the knowledge verification files into per-platform package artifacts. The release job recollects them, includes them in `SHA256SUMS`, signs the checksum file with Cosign keyless OIDC, and uploads the knowledge files as standalone GitHub Release assets.",
+      "boundaries": "Downstream verification relies on releases containing both the standalone knowledge verification files and the signed aggregate checksum set.",
+      "invalid_conditions": "This card becomes invalid if releases stop shipping knowledge verification assets, omit them from `SHA256SUMS`, or stop signing the release checksum set.",
       "evidence": [
         {
           "repo": "redeven",
           "path": ".github/workflows/release.yml",
           "line": 49,
-          "note": "Release build collects knowledge bundle assets."
+          "note": "Build jobs collect the knowledge manifest and sha files into dist."
         },
         {
           "repo": "redeven",
           "path": ".github/workflows/release.yml",
-          "line": 109,
-          "note": "Release checksums include bundle manifest and hash files."
+          "line": 77,
+          "note": "Package artifacts upload those knowledge files alongside CLI tarballs."
+        },
+        {
+          "repo": "redeven",
+          "path": ".github/workflows/release.yml",
+          "line": 255,
+          "note": "The release job recopies downloaded knowledge verification assets into dist."
+        },
+        {
+          "repo": "redeven",
+          "path": ".github/workflows/release.yml",
+          "line": 270,
+          "note": "SHA256SUMS includes knowledge bundle manifest and sha files."
+        },
+        {
+          "repo": "redeven",
+          "path": ".github/workflows/release.yml",
+          "line": 279,
+          "note": "Release checksums are signed with Cosign keyless OIDC."
+        },
+        {
+          "repo": "redeven",
+          "path": ".github/workflows/release.yml",
+          "line": 347,
+          "note": "GitHub release upload includes the knowledge verification files."
         }
       ],
       "source_card_id": "K-REL-001"
     },
     {
-      "id": "K-WEB-001",
+      "id": "K-TOOL-001",
       "version": 1,
-      "title": "Env App UI binds floe-webapp, floeterm web terminal, and flowersec web SDKs",
+      "title": "knowledge.search is a read-only AI and chat surface over the embedded bundle",
+      "status": "stable",
+      "owners": [
+        "ai"
+      ],
+      "tags": [
+        "ai",
+        "knowledge",
+        "ui"
+      ],
+      "summary": "Redeven exposes the embedded knowledge bundle through a read-only `knowledge.search` builtin tool, and Env App renders structured knowledge-search results inside the chat tool UI.",
+      "mechanism": "Runtime knowledge code loads the embedded bundle once, scores cards in memory, builtin tool registration advertises `knowledge.search` as a non-mutating tool, tool execution dispatches to `knowledge.Search` behind a read-permission gate, and `ToolCallBlock` renders query, match, repo, and summary details for the result set.",
+      "boundaries": "The tool returns scoped summaries rather than raw file-level evidence details and does not mutate the knowledge source or dist artifacts.",
+      "invalid_conditions": "This card becomes invalid if knowledge queries stop reading the embedded bundle, expose raw file-level evidence by default, or bypass the read-permission gate.",
+      "evidence": [
+        {
+          "repo": "redeven",
+          "path": "internal/knowledge/search.go",
+          "line": 38,
+          "note": "LoadEmbeddedBundle reads the embedded bundle lazily from embed FS."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/knowledge/search.go",
+          "line": 58,
+          "note": "Search ranks cards in memory and caps the result count."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/ai/builtin_tool_handlers.go",
+          "line": 481,
+          "note": "Builtin tool registry declares knowledge.search as a non-mutating knowledge tool."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/ai/run.go",
+          "line": 3092,
+          "note": "Tool execution enforces read permission and dispatches to knowledge.Search."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx",
+          "line": 1949,
+          "note": "Chat UI builds a dedicated knowledge display model from tool args and results."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx",
+          "line": 2743,
+          "note": "Tool call rendering includes a dedicated Knowledge result surface in chat."
+        }
+      ],
+      "source_card_id": "K-TOOL-001"
+    },
+    {
+      "id": "K-WEB-001",
+      "version": 2,
+      "title": "Env App composes floe-webapp runtime and protocol with Floeterm terminal-web and Flowersec browser helpers",
       "status": "stable",
       "owners": [
         "frontend"
       ],
       "tags": [
+        "architecture",
         "dependencies",
+        "protocol",
         "ui"
       ],
-      "summary": "The embedded Env App UI composes floe-webapp, floeterm terminal web bindings, and flowersec web libraries as first-class frontend dependencies.",
-      "mechanism": "The UI package declares floe-webapp core/protocol, floeterm terminal web, and flowersec core dependencies, then ships them through the Vite build embedded into the agent.",
-      "boundaries": "Removing or unsafely changing these packages can break protocol rendering, terminal interop, or secure channel behavior in the UI.",
-      "invalid_conditions": "This card becomes invalid if Env App UI no longer uses these dependency families for protocol and terminal rendering.",
+      "summary": "Env App is built as a Redeven-specific shell on top of floe-webapp UI and runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec browser grant helpers.",
+      "mechanism": "The UI package pins released versions of all four upstream packages. `EnvAppShell` imports floe-webapp providers, layout primitives, icons, and protocol hooks; terminal surfaces use Floeterm `TerminalCore` and session coordination; controlplane services call Flowersec browser helpers to exchange entry tickets for channel grants; and the upstream sibling packages define the exported interfaces these Redeven surfaces consume.",
+      "boundaries": "This card only holds while Env App continues to consume published upstream packages instead of local ad-hoc replacements for protocol, terminal, and grant handling.",
+      "invalid_conditions": "This card becomes invalid if Env App stops using these upstream package interfaces or replaces controlplane, terminal, and UI semantics with unrelated local implementations.",
       "evidence": [
         {
           "repo": "redeven",
           "path": "internal/envapp/ui_src/package.json",
-          "line": 13,
-          "note": "floe-webapp-core is a declared dependency."
+          "line": 18,
+          "note": "Env App pins floe-webapp-core."
         },
         {
           "repo": "redeven",
           "path": "internal/envapp/ui_src/package.json",
+          "line": 19,
+          "note": "Env App pins floe-webapp-protocol."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/package.json",
+          "line": 20,
+          "note": "Env App pins floeterm terminal-web."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/package.json",
+          "line": 21,
+          "note": "Env App pins flowersec-core."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
+          "line": 2,
+          "note": "Env App shell imports floe-webapp runtime and layout primitives."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
+          "line": 24,
+          "note": "Env App shell consumes Flowersec observer typing for runtime connections."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
+          "line": 25,
+          "note": "Env App shell consumes the floe-webapp protocol hook."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
+          "line": 9,
+          "note": "Terminal panel consumes Floeterm TerminalCore and terminal session abstractions."
+        },
+        {
+          "repo": "redeven",
+          "path": "internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
+          "line": 2,
+          "note": "Controlplane services request entry channel grants through flowersec-core/browser."
+        },
+        {
+          "repo": "floe-webapp",
+          "path": "packages/core/package.json",
           "line": 14,
-          "note": "floe-webapp-protocol is a declared dependency."
+          "note": "floe-webapp-core publishes app, layout, ui, and file-browser subpath exports used by Redeven."
         },
         {
-          "repo": "redeven",
-          "path": "internal/envapp/ui_src/package.json",
-          "line": 15,
-          "note": "floeterm terminal web package is a declared dependency."
+          "repo": "floe-webapp",
+          "path": "packages/protocol/src/client.tsx",
+          "line": 3,
+          "note": "floe-webapp protocol provider is built around Flowersec client, RPC, and reconnect primitives."
         },
         {
-          "repo": "redeven",
-          "path": "internal/envapp/ui_src/package.json",
-          "line": 16,
-          "note": "flowersec core package is a declared dependency."
+          "repo": "floe-webapp",
+          "path": "packages/protocol/src/index.ts",
+          "line": 5,
+          "note": "floe-webapp protocol exports grant helpers to downstream consumers."
+        },
+        {
+          "repo": "floeterm",
+          "path": "terminal-web/src/index.ts",
+          "line": 1,
+          "note": "terminal-web exports TerminalCore and session coordination APIs consumed by Env App."
+        },
+        {
+          "repo": "floeterm",
+          "path": "terminal-web/src/sessions/TerminalSessionsCoordinator.ts",
+          "line": 47,
+          "note": "terminal-web maintains UI-facing terminal session reconciliation."
+        },
+        {
+          "repo": "flowersec",
+          "path": "flowersec-ts/src/browser/controlplane.ts",
+          "line": 127,
+          "note": "Flowersec browser helpers exchange entry tickets for channel grants."
         }
       ],
       "source_card_id": "K-WEB-001"
@@ -229,20 +477,29 @@
   ],
   "indices": {
     "topics": {
+      "ai": [
+        "K-TOOL-001"
+      ],
       "architecture": [
         "K-AGENT-001",
         "K-DEP-001",
-        "K-KNOW-001"
+        "K-WEB-001"
       ],
       "control_plane": [
-        "K-AGENT-001"
+        "K-AGENT-001",
+        "K-WEB-001"
       ],
       "dependencies": [
         "K-DEP-001",
         "K-WEB-001"
       ],
       "knowledge": [
-        "K-KNOW-001"
+        "K-KNOW-001",
+        "K-TOOL-001"
+      ],
+      "provenance": [
+        "K-KNOW-001",
+        "K-REL-001"
       ],
       "release": [
         "K-KNOW-001",
@@ -252,19 +509,58 @@
         "K-AGENT-001",
         "K-REL-001"
       ],
+      "terminal": [
+        "K-DEP-001",
+        "K-WEB-001"
+      ],
       "ui": [
+        "K-TOOL-001",
         "K-WEB-001"
       ]
     },
     "code_paths": {
+      "floe-webapp/packages/core/package.json": [
+        "K-WEB-001"
+      ],
+      "floe-webapp/packages/protocol/src/client.tsx": [
+        "K-WEB-001"
+      ],
+      "floe-webapp/packages/protocol/src/index.ts": [
+        "K-WEB-001"
+      ],
+      "floeterm/terminal-go/manager.go": [
+        "K-DEP-001"
+      ],
+      "floeterm/terminal-web/src/index.ts": [
+        "K-WEB-001"
+      ],
+      "floeterm/terminal-web/src/sessions/TerminalSessionsCoordinator.ts": [
+        "K-WEB-001"
+      ],
+      "flowersec/flowersec-go/client/client.go": [
+        "K-DEP-001"
+      ],
+      "flowersec/flowersec-go/endpoint/session.go": [
+        "K-DEP-001"
+      ],
+      "flowersec/flowersec-ts/src/browser/controlplane.ts": [
+        "K-WEB-001"
+      ],
+      "redeven/.github/workflows/ci-check.yml": [
+        "K-KNOW-001"
+      ],
       "redeven/.github/workflows/release.yml": [
         "K-REL-001"
       ],
       "redeven/README.md": [
-        "K-AGENT-001"
+        "K-KNOW-001"
       ],
       "redeven/cmd/knowledge-bundle/main.go": [
         "K-KNOW-001"
+      ],
+      "redeven/docs/KNOWLEDGE.md": [
+        "K-KNOW-001",
+        "K-TOOL-001"
       ],
       "redeven/go.mod": [
         "K-DEP-001"
@@ -273,8 +569,40 @@
         "K-AGENT-001",
         "K-DEP-001"
       ],
+      "redeven/internal/ai/builtin_tool_handlers.go": [
+        "K-TOOL-001"
+      ],
+      "redeven/internal/ai/run.go": [
+        "K-TOOL-001"
+      ],
+      "redeven/internal/config/permission_policy.go": [
+        "K-AGENT-001"
+      ],
       "redeven/internal/envapp/ui_src/package.json": [
         "K-WEB-001"
+      ],
+      "redeven/internal/envapp/ui_src/src/ui/EnvAppShell.tsx": [
+        "K-WEB-001"
+      ],
+      "redeven/internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx": [
+        "K-TOOL-001"
+      ],
+      "redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts": [
+        "K-WEB-001"
+      ],
+      "redeven/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx": [
+        "K-WEB-001"
+      ],
+      "redeven/internal/knowledge/builder.go": [
+        "K-KNOW-001"
+      ],
+      "redeven/internal/knowledge/embed.go": [
+        "K-KNOW-001",
+        "K-TOOL-001"
+      ],
+      "redeven/internal/knowledge/search.go": [
+        "K-KNOW-001",
+        "K-TOOL-001"
       ],
       "redeven/internal/terminal/manager.go": [
         "K-DEP-001"
@@ -283,6 +611,9 @@
         "K-KNOW-001"
       ],
       "redeven/scripts/build_knowledge_bundle.sh": [
+        "K-KNOW-001"
+      ],
+      "redeven/scripts/knowledge/check_source_integrity.sh": [
         "K-KNOW-001"
       ]
     }

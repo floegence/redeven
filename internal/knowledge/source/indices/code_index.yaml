@@ -1,8 +1,31 @@
 paths:
+  floe-webapp/packages/core/package.json:
+    - K-WEB-001
+  floe-webapp/packages/protocol/src/client.tsx:
+    - K-WEB-001
+  floe-webapp/packages/protocol/src/index.ts:
+    - K-WEB-001
+  floeterm/terminal-go/manager.go:
+    - K-DEP-001
+  floeterm/terminal-web/src/index.ts:
+    - K-WEB-001
+  floeterm/terminal-web/src/sessions/TerminalSessionsCoordinator.ts:
+    - K-WEB-001
+  flowersec/flowersec-go/client/client.go:
+    - K-DEP-001
+  flowersec/flowersec-go/endpoint/session.go:
+    - K-DEP-001
+  flowersec/flowersec-ts/src/browser/controlplane.ts:
+    - K-WEB-001
+  redeven/.github/workflows/ci-check.yml:
+    - K-KNOW-001
   redeven/.github/workflows/release.yml:
     - K-REL-001
+  redeven/docs/KNOWLEDGE.md:
+    - K-KNOW-001
+    - K-TOOL-001
   redeven/README.md:
-    - K-AGENT-001
+    - K-KNOW-001
   redeven/cmd/knowledge-bundle/main.go:
     - K-KNOW-001
   redeven/go.mod:
@@ -10,11 +33,35 @@ paths:
   redeven/internal/agent/agent.go:
     - K-AGENT-001
     - K-DEP-001
+  redeven/internal/ai/builtin_tool_handlers.go:
+    - K-TOOL-001
+  redeven/internal/ai/run.go:
+    - K-TOOL-001
+  redeven/internal/config/permission_policy.go:
+    - K-AGENT-001
   redeven/internal/envapp/ui_src/package.json:
     - K-WEB-001
+  redeven/internal/envapp/ui_src/src/ui/EnvAppShell.tsx:
+    - K-WEB-001
+  redeven/internal/envapp/ui_src/src/ui/chat/blocks/ToolCallBlock.tsx:
+    - K-TOOL-001
+  redeven/internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:
+    - K-WEB-001
+  redeven/internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:
+    - K-WEB-001
+  redeven/internal/knowledge/builder.go:
+    - K-KNOW-001
+  redeven/internal/knowledge/embed.go:
+    - K-KNOW-001
+    - K-TOOL-001
+  redeven/internal/knowledge/search.go:
+    - K-KNOW-001
+    - K-TOOL-001
   redeven/internal/terminal/manager.go:
     - K-DEP-001
   redeven/scripts/build_assets.sh:
     - K-KNOW-001
   redeven/scripts/build_knowledge_bundle.sh:
+    - K-KNOW-001
+  redeven/scripts/knowledge/check_source_integrity.sh:
     - K-KNOW-001

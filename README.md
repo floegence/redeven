@@ -157,6 +157,7 @@ Pick the shortest path to what you need. 📚
 | Package or operate the desktop shell | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | Configure Flower and its settings | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
 | Understand the optional Codex host-runtime integration | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
+| Refresh or audit the embedded knowledge bundle | [`docs/KNOWLEDGE.md`](docs/KNOWLEDGE.md) |
 | Review the permission contract | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md), [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md) |
 | Verify releases and artifacts | [`docs/RELEASE.md`](docs/RELEASE.md) |
 
@@ -192,7 +193,7 @@ go build -o redeven ./cmd/redeven
 Notes:
 
 - `internal/**/dist/` assets are generated and embedded via Go `embed`.
-- Generated `dist` assets are not checked into git.
+- Frontend `dist` assets are not checked into git. The tracked exception is `internal/knowledge/dist/*`, which stays committed as verifiable knowledge bundle release metadata.
 - `./scripts/lint_ui.sh` validates the Env App and Code App source packages before asset bundling.
 - `./scripts/check_desktop.sh` validates the Electron desktop shell package.
 - `cd desktop && npm run start` and `cd desktop && npm run package` prepare `desktop/.bundle/<goos>-<goarch>/redeven` from the current repository before Electron starts or packages the desktop shell.

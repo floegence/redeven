@@ -1,20 +1,31 @@
 topics:
+  ai:
+    - K-TOOL-001
   architecture:
     - K-AGENT-001
     - K-DEP-001
-    - K-KNOW-001
+    - K-WEB-001
   control_plane:
     - K-AGENT-001
+    - K-WEB-001
   dependencies:
     - K-DEP-001
     - K-WEB-001
   knowledge:
     - K-KNOW-001
+    - K-TOOL-001
+  provenance:
+    - K-KNOW-001
+    - K-REL-001
   release:
     - K-KNOW-001
     - K-REL-001
   security:
     - K-AGENT-001
     - K-REL-001
+  terminal:
+    - K-DEP-001
+    - K-WEB-001
   ui:
+    - K-TOOL-001
     - K-WEB-001

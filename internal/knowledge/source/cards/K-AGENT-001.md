@@ -1,7 +1,7 @@
 ---
 id: K-AGENT-001
-version: 1
-title: Runtime session permissions are enforced by session metadata and local policy
+version: 2
+title: Runtime validates session metadata and clamps granted permissions before opening sessions
 status: stable
 owners:
   - backend
@@ -14,23 +14,26 @@ source_card_id: K-AGENT-001
 
 ## Conclusion
 
-The runtime accepts authoritative session metadata and always clamps granted permissions with the local permission policy before serving a session.
+Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward.
 
 ## Mechanism
 
-When a grant arrives, the runtime validates channel and app metadata, intersects granted read/write/execute permissions with the local cap, and persists the effective permission set into the session snapshot.
+When `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements.
 
 ## Boundaries
 
-Any attempt to trust browser-reported permissions instead of the session metadata and local cap would bypass endpoint-side permission enforcement.
+Browser or UI-side permission claims remain non-authoritative. This card only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.
 
 ## Evidence
 
-- redeven:README.md:106 - The security model states that browser-claimed permissions are not trusted.
-- redeven:internal/agent/agent.go:430 - Unsupported floe_app values are rejected before session setup.
-- redeven:internal/agent/agent.go:435 - Permission clamp intersects grants with local policy.
-- redeven:internal/agent/agent.go:459 - Effective permissions overwrite session metadata fields.
+- redeven:internal/config/permission_policy.go:13 - PermissionPolicy is documented as clamping control-plane session metadata to a user-approved local maximum.
+- redeven:internal/config/permission_policy.go:74 - ResolveCap intersects global, per-user, and per-app caps.
+- redeven:internal/agent/agent.go:473 - Unsupported floe_app values are rejected before runtime session startup.
+- redeven:internal/agent/agent.go:485 - Granted permissions are intersected with the resolved local cap.
+- redeven:internal/agent/agent.go:502 - Effective permissions overwrite the session metadata snapshot used by the runtime.
+- redeven:internal/agent/agent.go:508 - Code App sessions require a valid codespace id and full read/write/execute access.
+- redeven:internal/agent/agent.go:531 - Port Forward sessions require a valid forward id and execute capability.
 
 ## Invalid Conditions
 
-This card becomes invalid if session startup skips permission intersection or starts accepting browser-side permission claims as authoritative.
+This card becomes invalid if session startup begins trusting browser-side permission state, skips local cap intersection, or stops doing per-app validation before opening data sessions.
