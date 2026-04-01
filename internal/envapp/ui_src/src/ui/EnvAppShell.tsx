@@ -1681,7 +1681,19 @@ export function EnvAppShell() {
   };
 
   const activityBottomItems = (): ActivityBarItem[] => {
-    return [{ id: 'settings', icon: Settings, label: 'Runtime Settings', onClick: () => openSettings() }];
+    const items: ActivityBarItem[] = [];
+    if (desktopShellBridgeAvailable()) {
+      items.push({
+        id: 'switch-machine',
+        icon: Search,
+        label: 'Switch Machine',
+        onClick: () => {
+          void openConnectionCenter();
+        },
+      });
+    }
+    items.push({ id: 'settings', icon: Settings, label: 'Runtime Settings', onClick: () => openSettings() });
+    return items;
   };
 
   const envName = () => {

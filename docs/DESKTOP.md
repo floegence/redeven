@@ -15,9 +15,11 @@ This document describes the public Electron desktop shell that ships with each `
 - Electron is a thin shell around Redeven Local UI.
 - `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
 - The main BrowserWindow has three shell-owned surfaces:
-  - `Welcome launcher`
-  - `This Device Options`
+  - `Machine chooser`
+  - `This Device settings`
   - `Active target`
+- The desktop-owned `Machine chooser` and `This Device settings` surfaces render inside the same Floe workbench shell instance.
+- The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before a machine is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
   - `This Device`
@@ -79,31 +81,35 @@ That blocked payload includes lock owner metadata and relevant state paths so De
 
 ## Welcome Launcher
 
-The welcome launcher is the primary shell-owned UX.
+The machine chooser is the primary shell-owned startup surface.
 
 Visual hierarchy:
 
-- page title: `Open a machine`
-- primary card: `This Device`
-- secondary list: `Recent Devices`
+- shell title: `Redeven Desktop`
+- shell surface title: `Choose a machine`
+- primary section: `This Device`
+- secondary list: `Recent Machines`
 - secondary form: `Connect Another Device`
-- support path: `This Device Options`
+- utility entrypoints in the Activity Bar bottom area:
+  - `Switch Machine`
+  - `Settings`
 
 Interaction rules:
 
 - Cold launch never auto-opens a remembered target.
 - Machine choice is always a launcher action, never a side effect of saving settings.
 - `This Device` is the primary path and behaves like a workbench-style open action.
-- `This Device Options` contains low-level bind, password, and one-shot bootstrap fields.
+- `Settings` opens `This Device settings` inside the same shell frame.
 - Recent remote devices stay one click away after a successful connection.
 - Validation errors and startup failures render inline on the launcher.
+- Workbench activity items remain visible before connection; clicking them returns the user to the chooser with guidance instead of opening an empty page.
 - The launcher close action means:
   - `Quit` when no device is open yet
   - `Back to current device` when a target is already open
 
-## This Device Options
+## This Device Settings
 
-`This Device Options` is a launcher-owned advanced surface, not a second launcher.
+`This Device settings` is a launcher-owned advanced surface inside the same desktop shell, not a second page or window.
 
 It edits only future startup behavior for `This Device`:
 
@@ -157,8 +163,9 @@ Desktop shell preferences live under the Electron user data directory, not insid
 - Cold app launch opens the welcome launcher in the main window.
 - The native app menu exposes one primary shell action: `Switch Device...`
 - Legacy shell entrypoints such as `connect`, `device_chooser`, and `switch_device` route to the same welcome launcher.
-- Legacy advanced-settings entrypoints route to `This Device Options`.
+- Legacy advanced-settings entrypoints route to `This Device settings`.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
+- Env App exposes `Switch Machine` and `Runtime Settings` in the Activity Bar bottom utility area when the desktop shell bridge is available.
 - Env App `Runtime Settings` stays separate from shell-owned device selection and desktop-managed startup state.
 
 ## Error Recovery
@@ -171,7 +178,7 @@ Desktop shell preferences live under the Electron user data directory, not insid
 
 ## Accessibility Behavior
 
-Desktop-owned HTML pages target the same WCAG 2.2 AA baseline as Env App, but they do so with repository-owned markup instead of shared browser components.
+Desktop-owned startup surfaces target the same WCAG 2.2 AA baseline as Env App and now reuse Floe workbench layout primitives for shell chrome.
 
 The required contract is:
 

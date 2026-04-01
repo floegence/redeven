@@ -46,12 +46,15 @@ export default [
     rules: js.configs.recommended.rules,
   },
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
       },
       globals: globals.node,
     },
@@ -61,7 +64,15 @@ export default [
     rules: baseTypeScriptRules,
   },
   {
-    files: ['src/**/*.test.ts'],
+    files: ['src/welcome/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+  {
+    files: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     languageOptions: {
       globals: {
         ...globals.node,

@@ -1,9 +1,11 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { parseLocalUIBind } from './localUIBind';
-import type { DesktopPreferences } from './desktopPreferences';
+import { desktopPreferencesToDraft, type DesktopPreferences } from './desktopPreferences';
 import type { DesktopSessionTarget } from './desktopTarget';
+import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type { StartupReport } from './startup';
 import {
+  type DesktopLauncherSurface,
   type DesktopLinkState,
   type DesktopRecentDeviceCard,
   type DesktopSharePreset,
@@ -19,6 +21,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   managedStartup?: StartupReport | null;
   externalStartup?: StartupReport | null;
   activeSessionTarget?: DesktopSessionTarget | null;
+  surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
 }>;
@@ -272,8 +275,10 @@ export function buildDesktopWelcomeSnapshot(
   const sharePreset = resolveDesktopSharePreset(preferences.local_ui_bind, preferences.local_ui_password);
   const linkState = resolveDesktopLinkState(preferences, activeRuntimeRemoteEnabled);
   const issue = args.issue ?? null;
+  const surface = args.surface ?? 'machine_chooser';
 
   return {
+    surface,
     entry_reason: args.entryReason ?? 'app_launch',
     current_session_target_kind: activeSessionTarget?.kind ?? null,
     current_session_local_ui_url: activeSessionLocalUIURL(activeSessionTarget, managedStartup, externalStartup),
@@ -290,5 +295,8 @@ export function buildDesktopWelcomeSnapshot(
     recent_devices: recentDevices,
     suggested_remote_url: suggestedRemoteURL(issue, activeSessionTarget, recentDevices),
     issue,
+    settings_surface: surface === 'this_device_settings'
+      ? buildDesktopSettingsSurfaceSnapshot('advanced_settings', desktopPreferencesToDraft(preferences))
+      : null,
   };
 }

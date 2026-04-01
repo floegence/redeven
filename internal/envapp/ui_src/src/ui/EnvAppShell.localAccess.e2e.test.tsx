@@ -334,6 +334,35 @@ describe('EnvAppShell top bar affordances', () => {
     }
   });
 
+  it('renders Switch Machine in the bottom activity area when the desktop bridge is available', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const openDeviceChooserMock = vi.fn().mockResolvedValue(undefined);
+    window.redevenDesktopShell = {
+      openDeviceChooser: openDeviceChooserMock,
+    };
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).toContain('Switch Machine');
+      const switchMachineButton = host.querySelector('[data-activity-id="switch-machine"]');
+      expect(switchMachineButton).toBeTruthy();
+
+      (switchMachineButton as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(openDeviceChooserMock).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+      delete window.redevenDesktopShell;
+    }
+  });
+
   it('uses the dark-mode svg variant for the original redeven logo mark', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

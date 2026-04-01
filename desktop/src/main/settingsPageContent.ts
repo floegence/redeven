@@ -1,66 +1,9 @@
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
-
-export type DesktopPageMode = 'advanced_settings';
-export type DesktopStatusTone = 'local';
-
-export interface DesktopSummaryItem {
-  label: string;
-  value: string;
-  body: string;
-  valueId?: string;
-  bodyId?: string;
-}
-export interface DesktopPageAlertModel {
-  kicker: string;
-  title: string;
-  body: string;
-  bodyId?: string;
-  tone?: 'info' | 'default';
-}
-
-export interface DesktopPageFieldModel {
-  id: string;
-  name: keyof DesktopSettingsDraft;
-  label: string;
-  type?: 'text' | 'password' | 'url';
-  autocomplete?: string;
-  inputMode?: 'url';
-  placeholder?: string;
-  helpHTML?: string;
-  helpId?: string;
-  describedBy?: readonly string[];
-  hidden?: boolean;
-}
-
-export interface DesktopPageCardModel {
-  id: string;
-  kicker: string;
-  title: string;
-  descriptionHTML: string;
-  badge?: string;
-  stateNote?: Readonly<{
-    id: string;
-    text: string;
-  }>;
-  fields: readonly DesktopPageFieldModel[];
-}
-
-export interface DesktopPageSectionModel {
-  id: string;
-  title: string;
-  cards: readonly DesktopPageCardModel[];
-}
-
-export interface DesktopPageViewModel {
-  windowTitle: string;
-  lead: string;
-  statusLabel: string;
-  statusTone: DesktopStatusTone;
-  summaryItems: readonly DesktopSummaryItem[];
-  alert: DesktopPageAlertModel;
-  sections: readonly DesktopPageSectionModel[];
-  saveLabel: string;
-}
+import type {
+  DesktopPageFieldModel,
+  DesktopPageMode,
+  DesktopSettingsSurfaceSnapshot,
+} from '../shared/desktopSettingsSurface';
 
 export function pageWindowTitle(_mode: DesktopPageMode): string {
   return 'This Device Options';
@@ -117,14 +60,18 @@ const bootstrapFields = [
   },
 ] as const satisfies readonly DesktopPageFieldModel[];
 
-export function buildSettingsPageViewModel(mode: DesktopPageMode): DesktopPageViewModel {
+export function buildDesktopSettingsSurfaceSnapshot(
+  mode: DesktopPageMode,
+  draft: DesktopSettingsDraft,
+): DesktopSettingsSurfaceSnapshot {
   return {
-    windowTitle: pageWindowTitle(mode),
+    mode,
+    window_title: pageWindowTitle(mode),
     lead: 'Edit the low-level This Device startup, access, and one-shot bootstrap inputs that sit behind the Desktop welcome launcher.',
-    statusLabel: 'This device',
-    statusTone: 'local',
-    saveLabel: 'Save This Device Options',
-    summaryItems: [
+    status_label: 'This device',
+    status_tone: 'local',
+    save_label: 'Save This Device Options',
+    summary_items: [
       {
         label: 'Launcher model',
         value: 'Choose a machine on launch',
@@ -190,5 +137,6 @@ export function buildSettingsPageViewModel(mode: DesktopPageMode): DesktopPageVi
         ],
       },
     ],
+    draft,
   };
 }

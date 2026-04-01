@@ -30,6 +30,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {");
+    expect(mainSrc).toContain("surface: 'this_device_settings'");
     expect(mainSrc).toContain("case 'open_advanced_settings':");
     expect(mainSrc).toContain("await openAdvancedSettingsWindow('welcome');");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
@@ -40,6 +41,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('activeSessionTarget: currentSessionTarget');
+    expect(mainSrc).toContain('surface: desktopWelcomeViewState.surface');
     expect(mainSrc).toContain('entryReason: overrides.entryReason ?? desktopWelcomeViewState.entryReason');
     expect(mainSrc).toContain('issue: overrides.issue ?? desktopWelcomeViewState.issue');
   });

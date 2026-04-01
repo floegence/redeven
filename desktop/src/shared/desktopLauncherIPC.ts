@@ -1,11 +1,14 @@
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
 
+import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
+
 export type DesktopTargetKind = 'managed_local' | 'external_local_ui';
 export type DesktopSharePreset = 'this_device' | 'local_network' | 'custom';
 export type DesktopLinkState = 'idle' | 'pending' | 'connected';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_device' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'this_device' | 'remote_device' | 'startup';
+export type DesktopLauncherSurface = 'machine_chooser' | 'this_device_settings';
 export type DesktopWelcomeActionKind =
   | 'open_this_device'
   | 'open_remote_device'
@@ -27,6 +30,7 @@ export type DesktopRecentDeviceCard = Readonly<{
 }>;
 
 export type DesktopWelcomeSnapshot = Readonly<{
+  surface: DesktopLauncherSurface;
   entry_reason: DesktopWelcomeEntryReason;
   current_session_target_kind: DesktopTargetKind | null;
   current_session_local_ui_url: string;
@@ -43,6 +47,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
   recent_devices: readonly DesktopRecentDeviceCard[];
   suggested_remote_url: string;
   issue: DesktopWelcomeIssue | null;
+  settings_surface: DesktopSettingsSurfaceSnapshot | null;
 }>;
 
 export type DesktopLauncherActionRequest = Readonly<

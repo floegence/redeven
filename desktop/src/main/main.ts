@@ -7,7 +7,6 @@ import {
   clearPendingBootstrap,
   createSafeStorageSecretCodec,
   defaultDesktopPreferencesPaths,
-  desktopPreferencesToDraft,
   loadDesktopPreferences,
   rememberRecentExternalLocalUITarget,
   saveDesktopPreferences,
@@ -27,7 +26,6 @@ import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
-import { settingsPageDataURL } from './settingsPage';
 import type { StartupReport } from './startup';
 import {
   applyRestoredWindowState,
@@ -69,11 +67,13 @@ import {
   DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
   normalizeDesktopLauncherActionRequest,
   type DesktopLauncherActionRequest,
+  type DesktopLauncherSurface,
   type DesktopWelcomeEntryReason,
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
 
 type OpenDesktopWelcomeOptions = Readonly<{
+  surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
   stealAppFocus?: boolean;
@@ -119,9 +119,11 @@ const desktopDiagnostics = new DesktopDiagnosticsRecorder();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 const pendingMainWindowAskFlowerHandoffs: DesktopAskFlowerHandoffPayload[] = [];
 let desktopWelcomeViewState: Readonly<{
+  surface: DesktopLauncherSurface;
   entryReason: DesktopWelcomeEntryReason;
   issue: DesktopWelcomeIssue | null;
 }> = {
+  surface: 'machine_chooser',
   entryReason: 'app_launch',
   issue: null,
 };
@@ -277,6 +279,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
     managedStartup: managedAgent?.startup ?? null,
     externalStartup: externalTargetStartup,
     activeSessionTarget: currentSessionTarget,
+    surface: desktopWelcomeViewState.surface,
     entryReason: overrides.entryReason ?? desktopWelcomeViewState.entryReason,
     issue: overrides.issue ?? desktopWelcomeViewState.issue,
   });
@@ -284,6 +287,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
 
 async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {}): Promise<void> {
   desktopWelcomeViewState = {
+    surface: options.surface ?? 'machine_chooser',
     entryReason: options.entryReason ?? (currentSessionTarget ? 'switch_device' : 'app_launch'),
     issue: options.issue ?? null,
   };
@@ -296,12 +300,11 @@ async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {})
 
 async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {
   settingsReturnSurface = returnSurface;
-  const preferences = await loadDesktopPreferencesCached();
-  await loadURLInMainWindow(
-    settingsPageDataURL(desktopPreferencesToDraft(preferences), '', process.platform),
-    'welcome',
-    { stealAppFocus: true },
-  );
+  await openDesktopWelcomeWindow({
+    surface: 'this_device_settings',
+    entryReason: desktopWelcomeViewState.entryReason,
+    stealAppFocus: true,
+  });
 }
 
 async function returnMainWindowToCurrentTarget(options?: Readonly<{ stealAppFocus?: boolean }>): Promise<void> {

@@ -62,6 +62,7 @@ describe('desktopWelcomeState', () => {
       ),
     });
 
+    expect(snapshot.surface).toBe('machine_chooser');
     expect(snapshot.entry_reason).toBe('switch_device');
     expect(snapshot.current_session_target_kind).toBe('external_local_ui');
     expect(snapshot.current_session_local_ui_url).toBe('http://192.168.1.12:24000/');
@@ -81,6 +82,35 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that device');
+    expect(snapshot.settings_surface).toBeNull();
+  });
+
+  it('builds a shared settings surface snapshot when requested by the desktop shell', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: {
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        pending_bootstrap: {
+          controlplane_url: 'https://region.example.invalid',
+          env_id: 'env_123',
+          env_token: 'token-123',
+        },
+        recent_external_local_ui_urls: [],
+      },
+      surface: 'this_device_settings',
+    });
+
+    expect(snapshot.surface).toBe('this_device_settings');
+    expect(snapshot.settings_surface).not.toBeNull();
+    expect(snapshot.settings_surface?.window_title).toBe('This Device Options');
+    expect(snapshot.settings_surface?.save_label).toBe('Save This Device Options');
+    expect(snapshot.settings_surface?.draft).toEqual({
+      local_ui_bind: '127.0.0.1:0',
+      local_ui_password: '',
+      controlplane_url: 'https://region.example.invalid',
+      env_id: 'env_123',
+      env_token: 'token-123',
+    });
   });
 
   it('turns blocked local-runtime reports into This Device recovery copy', () => {
