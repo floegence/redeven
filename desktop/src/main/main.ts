@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
+import { pathToFileURL } from 'node:url';
 
 import { launchStartedFreshManagedRuntime, startManagedAgent, type ManagedAgent } from './agentProcess';
 import { buildAppMenuTemplate } from './appMenu';
@@ -6,28 +7,27 @@ import {
   clearPendingBootstrap,
   createSafeStorageSecretCodec,
   defaultDesktopPreferencesPaths,
+  desktopPreferencesToDraft,
   loadDesktopPreferences,
-  managedDesktopLaunchKey,
   rememberRecentExternalLocalUITarget,
   saveDesktopPreferences,
   validateDesktopSettingsDraft,
   type DesktopPreferences,
-  type DesktopTargetPreferences,
 } from './desktopPreferences';
+import type { DesktopSessionTarget } from './desktopTarget';
 import { buildDesktopAgentArgs, buildDesktopAgentEnvironment } from './desktopLaunch';
 import {
   buildBlockedLaunchIssue,
-  buildDesktopConnectionCenterSnapshot,
+  buildDesktopWelcomeSnapshot,
   buildRemoteConnectionIssue,
-  type DesktopConnectionCenterEntryReason,
-  type DesktopConnectionCenterIssue,
-} from './connectionCenterState';
-import { connectionCenterPageDataURL } from './connectionCenterPage';
+  type BuildDesktopWelcomeSnapshotArgs,
+} from './desktopWelcomeState';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { isAllowedAppNavigation } from './navigation';
-import { resolveBrowserPreloadPath, resolveBundledAgentPath } from './paths';
+import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
+import { settingsPageDataURL } from './settingsPage';
 import type { StartupReport } from './startup';
 import {
   applyRestoredWindowState,
@@ -64,11 +64,18 @@ import {
   DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWindowRequest,
 } from '../shared/desktopShellWindowIPC';
+import {
+  DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
+  normalizeDesktopLauncherActionRequest,
+  type DesktopLauncherActionRequest,
+  type DesktopWelcomeEntryReason,
+  type DesktopWelcomeIssue,
+} from '../shared/desktopLauncherIPC';
 
-type OpenConnectionCenterOptions = Readonly<{
-  entryReason?: DesktopConnectionCenterEntryReason;
-  issue?: DesktopConnectionCenterIssue | null;
-  advancedSectionOpen?: boolean;
+type OpenDesktopWelcomeOptions = Readonly<{
+  entryReason?: DesktopWelcomeEntryReason;
+  issue?: DesktopWelcomeIssue | null;
   stealAppFocus?: boolean;
 }>;
 
@@ -79,8 +86,8 @@ type PreparedExternalTargetResult = Readonly<
     }
   | {
       ok: false;
-      entryReason: DesktopConnectionCenterEntryReason;
-      issue: DesktopConnectionCenterIssue;
+      entryReason: DesktopWelcomeEntryReason;
+      issue: DesktopWelcomeIssue;
     }
 >;
 
@@ -93,15 +100,15 @@ type PreparedManagedTargetResult = Readonly<
     }
   | {
       ok: false;
-      entryReason: DesktopConnectionCenterEntryReason;
-      issue: DesktopConnectionCenterIssue;
+      entryReason: DesktopWelcomeEntryReason;
+      issue: DesktopWelcomeIssue;
     }
 >;
 
 let mainWindow: BrowserWindow | null = null;
 let managedAgent: ManagedAgent | null = null;
 let externalTargetStartup: StartupReport | null = null;
-let currentSessionTarget: DesktopTargetPreferences | null = null;
+let currentSessionTarget: DesktopSessionTarget | null = null;
 let allowedBaseURL = '';
 let quitPhase: 'idle' | 'requested' | 'shutting_down' = 'idle';
 const childWindows = new Set<BrowserWindow>();
@@ -111,6 +118,14 @@ let desktopStateStoreCache: DesktopStateStore | null = null;
 const desktopDiagnostics = new DesktopDiagnosticsRecorder();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 const pendingMainWindowAskFlowerHandoffs: DesktopAskFlowerHandoffPayload[] = [];
+let desktopWelcomeViewState: Readonly<{
+  entryReason: DesktopWelcomeEntryReason;
+  issue: DesktopWelcomeIssue | null;
+}> = {
+  entryReason: 'app_launch',
+  issue: null,
+};
+let settingsReturnSurface: 'welcome' | 'current_target' = 'welcome';
 
 function preferencesPaths() {
   return defaultDesktopPreferencesPaths(app.getPath('userData'));
@@ -200,25 +215,6 @@ function openExternal(url: string): void {
   void shell.openExternal(url);
 }
 
-function sameDesktopTarget(
-  left: DesktopTargetPreferences | null,
-  right: DesktopTargetPreferences | null,
-): boolean {
-  if (!left || !right) {
-    return left === right;
-  }
-  return left.kind === right.kind && left.external_local_ui_url === right.external_local_ui_url;
-}
-
-async function showInfoMessage(options: MessageBoxOptions): Promise<void> {
-  const parentWindow = mainWindow ?? BrowserWindow.getFocusedWindow() ?? undefined;
-  if (parentWindow) {
-    await dialog.showMessageBox(parentWindow, options);
-    return;
-  }
-  await dialog.showMessageBox(options);
-}
-
 async function requestQuit(): Promise<void> {
   if (quitPhase !== 'idle') {
     return;
@@ -249,7 +245,7 @@ async function requestQuit(): Promise<void> {
 
 async function loadURLInMainWindow(
   targetURL: string,
-  _route: 'connection_center' | 'target',
+  _route: 'welcome' | 'target',
   options?: Readonly<{ stealAppFocus?: boolean }>,
 ): Promise<void> {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -268,35 +264,49 @@ async function loadURLInMainWindow(
   }
 }
 
-async function openConnectionCenterWindow(options: OpenConnectionCenterOptions = {}): Promise<void> {
+function desktopWelcomePageURL(): string {
+  return pathToFileURL(resolveWelcomeRendererPath({ appPath: app.getAppPath() })).toString();
+}
+
+async function buildCurrentDesktopWelcomeSnapshot(
+  overrides: Partial<Pick<BuildDesktopWelcomeSnapshotArgs, 'entryReason' | 'issue'>> = {},
+) {
   const preferences = await loadDesktopPreferencesCached();
-  const snapshot = buildDesktopConnectionCenterSnapshot({
+  return buildDesktopWelcomeSnapshot({
     preferences,
     managedStartup: managedAgent?.startup ?? null,
     externalStartup: externalTargetStartup,
     activeSessionTarget: currentSessionTarget,
-    entryReason: options.entryReason,
-    issue: options.issue ?? null,
-    advancedSectionOpen: options.advancedSectionOpen,
+    entryReason: overrides.entryReason ?? desktopWelcomeViewState.entryReason,
+    issue: overrides.issue ?? desktopWelcomeViewState.issue,
   });
+}
+
+async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {}): Promise<void> {
+  desktopWelcomeViewState = {
+    entryReason: options.entryReason ?? (currentSessionTarget ? 'switch_device' : 'app_launch'),
+    issue: options.issue ?? null,
+  };
   await loadURLInMainWindow(
-    connectionCenterPageDataURL(snapshot, '', process.platform),
-    'connection_center',
+    desktopWelcomePageURL(),
+    'welcome',
     { stealAppFocus: options.stealAppFocus },
   );
 }
 
-async function openAdvancedSettingsWindow(): Promise<void> {
-  await openConnectionCenterWindow({
-    entryReason: currentSessionTarget ? 'switch_device' : 'app_launch',
-    advancedSectionOpen: true,
-    stealAppFocus: true,
-  });
+async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {
+  settingsReturnSurface = returnSurface;
+  const preferences = await loadDesktopPreferencesCached();
+  await loadURLInMainWindow(
+    settingsPageDataURL(desktopPreferencesToDraft(preferences), '', process.platform),
+    'welcome',
+    { stealAppFocus: true },
+  );
 }
 
 async function returnMainWindowToCurrentTarget(options?: Readonly<{ stealAppFocus?: boolean }>): Promise<void> {
   if (!currentSessionTarget || !allowedBaseURL) {
-    await openConnectionCenterWindow({
+    await openDesktopWelcomeWindow({
       entryReason: 'app_launch',
       stealAppFocus: options?.stealAppFocus,
     });
@@ -371,6 +381,7 @@ async function prepareManagedTarget(preferences: DesktopPreferences): Promise<Pr
     executablePath,
     agentArgs: buildDesktopAgentArgs(preferences),
     env: buildDesktopAgentEnvironment(preferences),
+    passwordStdin: preferences.local_ui_password,
     tempRoot: app.getPath('temp'),
     onLog: (stream, chunk) => {
       const text = String(chunk ?? '').trim();
@@ -402,7 +413,6 @@ async function activateManagedTarget(launch: ManagedTargetLaunch, preferences: D
   externalTargetStartup = null;
   currentSessionTarget = {
     kind: 'managed_local',
-    external_local_ui_url: '',
   };
   allowedBaseURL = managedAgent.startup.local_ui_url;
 
@@ -418,129 +428,94 @@ async function activateManagedTarget(launch: ManagedTargetLaunch, preferences: D
   );
 }
 
-async function showCurrentPreferenceTarget(): Promise<void> {
-  const preferences = await loadDesktopPreferencesCached();
-  if (preferences.target.kind === 'external_local_ui') {
-    const prepared = await prepareExternalTarget(preferences.target.external_local_ui_url);
-    if (!prepared.ok) {
-      await openConnectionCenterWindow({
-        entryReason: prepared.entryReason,
-        issue: prepared.issue,
-        advancedSectionOpen: true,
-      });
-      return;
-    }
-    await activateExternalTarget(prepared.startup, preferences);
-    await loadURLInMainWindow(prepared.startup.local_ui_url, 'target');
+async function openThisDeviceFromWelcome(): Promise<void> {
+  if (currentSessionTarget?.kind === 'managed_local' && allowedBaseURL) {
+    await returnMainWindowToCurrentTarget({ stealAppFocus: true });
     return;
   }
 
+  const preferences = await loadDesktopPreferencesCached();
   const prepared = await prepareManagedTarget(preferences);
   if (!prepared.ok) {
-    await openConnectionCenterWindow({
+    await openDesktopWelcomeWindow({
       entryReason: prepared.entryReason,
       issue: prepared.issue,
-      advancedSectionOpen: true,
+      stealAppFocus: true,
     });
     return;
+  }
+  if (currentSessionTarget?.kind === 'external_local_ui') {
+    await disconnectCurrentTarget();
   }
   await activateManagedTarget(prepared.launch, preferences);
   await loadURLInMainWindow(prepared.launch.managedAgent.startup.local_ui_url, 'target');
 }
 
-async function applySavedPreferences(previous: DesktopPreferences, next: DesktopPreferences): Promise<void> {
-  const managedLaunchChanged = managedDesktopLaunchKey(previous) !== managedDesktopLaunchKey(next);
-
-  if (!currentSessionTarget) {
-    await showCurrentPreferenceTarget();
+async function openRemoteDeviceFromWelcome(targetURL: string): Promise<void> {
+  const normalizedTargetURL = String(targetURL ?? '').trim();
+  if (!normalizedTargetURL) {
+    throw new Error('Redeven URL is required to open another device.');
+  }
+  if (
+    currentSessionTarget?.kind === 'external_local_ui'
+    && currentSessionTarget.external_local_ui_url === normalizedTargetURL
+    && allowedBaseURL
+  ) {
+    await returnMainWindowToCurrentTarget({ stealAppFocus: true });
     return;
   }
 
-  if (sameDesktopTarget(currentSessionTarget, next.target)) {
-    if (currentSessionTarget.kind === 'external_local_ui') {
-      if (managedLaunchChanged) {
-        await showInfoMessage({
-          type: 'info',
-          buttons: ['OK'],
-          defaultId: 0,
-          title: 'This device options saved',
-          message: 'This device options are saved for the next This device start.',
-          detail: 'Desktop is currently showing Another device, so the updated This device startup settings will apply after you switch back.',
-          normalizeAccessKeys: true,
-        });
+  const preferences = await loadDesktopPreferencesCached();
+  const prepared = await prepareExternalTarget(normalizedTargetURL);
+  if (!prepared.ok) {
+    await openDesktopWelcomeWindow({
+      entryReason: prepared.entryReason,
+      issue: prepared.issue,
+      stealAppFocus: true,
+    });
+    return;
+  }
+  if (currentSessionTarget) {
+    await disconnectCurrentTarget();
+  }
+  await activateExternalTarget(prepared.startup, preferences);
+  await loadURLInMainWindow(prepared.startup.local_ui_url, 'target');
+}
+
+async function closeSettingsSurface(): Promise<void> {
+  if (settingsReturnSurface === 'current_target' && currentSessionTarget) {
+    await returnMainWindowToCurrentTarget({ stealAppFocus: true });
+    return;
+  }
+  await openDesktopWelcomeWindow({
+    entryReason: currentSessionTarget ? 'switch_device' : 'app_launch',
+    stealAppFocus: true,
+  });
+}
+
+async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<void> {
+  switch (request.kind) {
+    case 'open_this_device':
+      await openThisDeviceFromWelcome();
+      return;
+    case 'open_remote_device':
+      await openRemoteDeviceFromWelcome(request.external_local_ui_url);
+      return;
+    case 'open_advanced_settings':
+      await openAdvancedSettingsWindow('welcome');
+      return;
+    case 'return_to_current_device':
+      if (currentSessionTarget) {
+        await returnMainWindowToCurrentTarget({ stealAppFocus: true });
+        return;
       }
-      await returnMainWindowToCurrentTarget();
+      await requestQuit();
       return;
+    default: {
+      const exhaustive: never = request;
+      throw new Error(`Unsupported desktop launcher action: ${JSON.stringify(exhaustive)}`);
     }
-
-    if (!managedLaunchChanged) {
-      await returnMainWindowToCurrentTarget();
-      return;
-    }
-
-    if (managedAgent?.attached) {
-      await showInfoMessage({
-        type: 'info',
-        buttons: ['OK'],
-        defaultId: 0,
-        title: 'This device options saved',
-        message: 'This device options are saved for the next desktop-managed start.',
-        detail: 'Redeven Desktop is currently attached to an already-running agent, so the new startup settings will apply after that agent stops and Desktop starts a fresh desktop-managed runtime.',
-        normalizeAccessKeys: true,
-      });
-      await returnMainWindowToCurrentTarget();
-      return;
-    }
-
-    await disconnectCurrentTarget();
-    const prepared = await prepareManagedTarget(next);
-    if (!prepared.ok) {
-      await openConnectionCenterWindow({
-        entryReason: prepared.entryReason,
-        issue: prepared.issue,
-        advancedSectionOpen: true,
-      });
-      return;
-    }
-    await activateManagedTarget(prepared.launch, next);
-    await loadURLInMainWindow(prepared.launch.managedAgent.startup.local_ui_url, 'target');
-    return;
   }
-
-  if (next.target.kind === 'external_local_ui') {
-    const prepared = await prepareExternalTarget(next.target.external_local_ui_url);
-    if (!prepared.ok) {
-      await openConnectionCenterWindow({
-        entryReason: prepared.entryReason,
-        issue: prepared.issue,
-        advancedSectionOpen: true,
-      });
-      return;
-    }
-    await disconnectCurrentTarget();
-    await activateExternalTarget(prepared.startup, next);
-    await loadURLInMainWindow(prepared.startup.local_ui_url, 'target');
-    return;
-  }
-
-  if (currentSessionTarget.kind === 'external_local_ui') {
-    const prepared = await prepareManagedTarget(next);
-    if (!prepared.ok) {
-      await openConnectionCenterWindow({
-        entryReason: prepared.entryReason,
-        issue: prepared.issue,
-        advancedSectionOpen: true,
-      });
-      return;
-    }
-    await disconnectCurrentTarget();
-    await activateManagedTarget(prepared.launch, next);
-    await loadURLInMainWindow(prepared.launch.managedAgent.startup.local_ui_url, 'target');
-    return;
-  }
-
-  await disconnectCurrentTarget();
-  await showCurrentPreferenceTarget();
 }
 
 function focusAuxiliaryWindow(win: BrowserWindow): void {
@@ -701,7 +676,7 @@ async function ensureMainWindowCreated(): Promise<BrowserWindow> {
     mainWindow = createMainBrowserWindow(allowedBaseURL);
     return mainWindow;
   }
-  await openConnectionCenterWindow({ entryReason: 'app_launch' });
+  await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
   if (!mainWindow) {
     throw new Error('main window was not created');
   }
@@ -774,7 +749,7 @@ if (!app.requestSingleInstanceLock()) {
       void returnMainWindowToCurrentTarget({ stealAppFocus: true });
       return;
     }
-    void openConnectionCenterWindow({ entryReason: 'app_launch', stealAppFocus: true });
+    void openDesktopWelcomeWindow({ entryReason: 'app_launch', stealAppFocus: true });
   });
 
   ipcMain.on(DESKTOP_STATE_GET_CHANNEL, (event, key) => {
@@ -808,7 +783,7 @@ if (!app.requestSingleInstanceLock()) {
         recent_external_local_ui_urls: previous.recent_external_local_ui_urls,
       };
       await persistDesktopPreferences(next);
-      await applySavedPreferences(previous, next);
+      await closeSettingsSurface();
       return { ok: true };
     } catch (error) {
       return {
@@ -817,6 +792,14 @@ if (!app.requestSingleInstanceLock()) {
       };
     }
   });
+  ipcMain.handle(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL, async () => buildCurrentDesktopWelcomeSnapshot());
+  ipcMain.handle(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, async (_event, request) => {
+    const normalized = normalizeDesktopLauncherActionRequest(request);
+    if (!normalized) {
+      throw new Error('Invalid desktop launcher action.');
+    }
+    await performDesktopLauncherAction(normalized);
+  });
   ipcMain.handle(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, async (_event, request) => {
     const normalized = normalizeDesktopShellOpenWindowRequest(request);
     if (!normalized) {
@@ -824,21 +807,17 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     if (normalized.kind === 'connection_center') {
-      await openConnectionCenterWindow({
+      await openDesktopWelcomeWindow({
         entryReason: currentSessionTarget ? 'switch_device' : 'app_launch',
         stealAppFocus: true,
       });
       return;
     }
 
-    await openAdvancedSettingsWindow();
+    await openAdvancedSettingsWindow('current_target');
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
-    if (currentSessionTarget) {
-      void returnMainWindowToCurrentTarget({ stealAppFocus: true });
-      return;
-    }
-    void requestQuit();
+    void closeSettingsSurface();
   });
   ipcMain.on(REPORT_DESKTOP_WINDOW_THEME_CHANNEL, (event, snapshot) => {
     const normalized = normalizeDesktopWindowThemeSnapshot(snapshot);
@@ -863,16 +842,16 @@ if (!app.requestSingleInstanceLock()) {
     installDesktopDiagnosticsHooks();
     Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
       openConnectionCenter: () => {
-        void openConnectionCenterWindow({
+        void openDesktopWelcomeWindow({
           entryReason: currentSessionTarget ? 'switch_device' : 'app_launch',
           stealAppFocus: true,
         }).catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open the device chooser', message || 'Unknown chooser error.');
+          dialog.showErrorBox('Redeven Desktop failed to open the launcher', message || 'Unknown launcher error.');
         });
       },
       openAdvancedSettings: () => {
-        void openAdvancedSettingsWindow().catch((error) => {
+        void openAdvancedSettingsWindow('current_target').catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
           dialog.showErrorBox('Redeven Desktop failed to open advanced options', message || 'Unknown advanced-options error.');
         });
@@ -883,7 +862,7 @@ if (!app.requestSingleInstanceLock()) {
     })));
 
     try {
-      await openConnectionCenterWindow({ entryReason: 'app_launch' });
+      await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to start', message || 'Unknown startup error.');
@@ -904,9 +883,9 @@ if (!app.requestSingleInstanceLock()) {
       });
       return;
     }
-    void openConnectionCenterWindow({ entryReason: 'app_launch' }).catch((error) => {
+    void openDesktopWelcomeWindow({ entryReason: 'app_launch' }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      dialog.showErrorBox('Redeven Desktop failed to restore the device chooser', message || 'Unknown restore error.');
+      dialog.showErrorBox('Redeven Desktop failed to restore the launcher', message || 'Unknown restore error.');
       app.quit();
     });
   });

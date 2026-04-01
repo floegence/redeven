@@ -5,16 +5,15 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
-  activeDesktopTargetKey,
   clearPendingBootstrap,
-  rememberRecentExternalLocalUITarget,
-  defaultDesktopPreferences,
   createPlaintextSecretCodec,
+  defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
   desktopPreferencesToDraft,
   loadDesktopPreferences,
   managedDesktopLaunchKey,
   normalizeRecentExternalLocalUIURLs,
+  rememberRecentExternalLocalUITarget,
   saveDesktopPreferences,
   validateDesktopSettingsDraft,
 } from './desktopPreferences';
@@ -22,18 +21,12 @@ import {
 describe('desktopPreferences', () => {
   it('validates a loopback-only draft without a password', () => {
     expect(validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: '',
       env_id: '',
       env_token: '',
     })).toEqual({
-      target: {
-        kind: 'managed_local',
-        external_local_ui_url: '',
-      },
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       pending_bootstrap: null,
@@ -43,8 +36,6 @@ describe('desktopPreferences', () => {
 
   it('requires a password for non-loopback binds', () => {
     expect(() => validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: '',
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: '',
       controlplane_url: '',
@@ -55,8 +46,6 @@ describe('desktopPreferences', () => {
 
   it('requires a complete bootstrap set when any bootstrap field is provided', () => {
     expect(() => validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: '',
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: 'https://region.example.invalid',
@@ -65,50 +54,25 @@ describe('desktopPreferences', () => {
     })).toThrow('Environment ID is required when bootstrap settings are provided.');
   });
 
-  it('requires a valid Redeven URL when the desktop target is external', () => {
-    expect(() => validateDesktopSettingsDraft({
-      target_kind: 'external_local_ui',
-      external_local_ui_url: 'http://example.com:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    })).toThrow('Redeven URL must use localhost or an IP literal.');
-
-    expect(validateDesktopSettingsDraft({
-      target_kind: 'external_local_ui',
-      external_local_ui_url: 'http://192.168.1.11:24000/_redeven_proxy/env/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    }).target).toEqual({
-      kind: 'external_local_ui',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-    });
-  });
-
   it('round-trips preferences through the local files', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
     try {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
-      const preferences = validateDesktopSettingsDraft({
-        target_kind: 'external_local_ui',
-        external_local_ui_url: 'http://192.168.1.11:24000/',
-        local_ui_bind: '0.0.0.0:24000',
-        local_ui_password: 'super-secret',
-        controlplane_url: 'https://region.example.invalid',
-        env_id: 'env_123',
-        env_token: 'token-123',
-      });
-      const preferencesWithRecents = rememberRecentExternalLocalUITarget(preferences, 'http://192.168.1.12:24000/');
+      const preferences = {
+        ...validateDesktopSettingsDraft({
+          local_ui_bind: '0.0.0.0:24000',
+          local_ui_password: 'super-secret',
+          controlplane_url: 'https://region.example.invalid',
+          env_id: 'env_123',
+          env_token: 'token-123',
+        }),
+        recent_external_local_ui_urls: ['http://192.168.1.12:24000/'],
+      };
 
-      await saveDesktopPreferences(paths, preferencesWithRecents, codec);
+      await saveDesktopPreferences(paths, preferences, codec);
       const loaded = await loadDesktopPreferences(paths, codec);
-      expect(loaded).toEqual(preferencesWithRecents);
+      expect(loaded).toEqual(preferences);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -133,20 +97,12 @@ describe('desktopPreferences', () => {
       const paths = defaultDesktopPreferencesPaths(root);
       await fs.writeFile(paths.preferencesFile, JSON.stringify({
         version: 1,
-        target: {
-          kind: 'external_local_ui',
-          external_local_ui_url: 'http://192.168.1.11:24000/',
-        },
         local_ui_bind: '127.0.0.1:0',
       }), 'utf8');
       await fs.writeFile(paths.secretsFile, '{"broken"', 'utf8');
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual({
-        target: {
-          kind: 'external_local_ui',
-          external_local_ui_url: 'http://192.168.1.11:24000/',
-        },
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         pending_bootstrap: null,
@@ -163,9 +119,6 @@ describe('desktopPreferences', () => {
       const paths = defaultDesktopPreferencesPaths(root);
       await fs.writeFile(paths.preferencesFile, JSON.stringify({
         version: 1,
-        target: {
-          kind: 'managed_local',
-        },
         local_ui_bind: '127.0.0.1:0',
         pending_bootstrap: {
           controlplane_url: 'https://region.example.invalid',
@@ -188,10 +141,6 @@ describe('desktopPreferences', () => {
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual({
-        target: {
-          kind: 'managed_local',
-          external_local_ui_url: '',
-        },
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         pending_bootstrap: null,
@@ -208,109 +157,46 @@ describe('desktopPreferences', () => {
       const paths = defaultDesktopPreferencesPaths(root);
       await fs.writeFile(paths.preferencesFile, JSON.stringify({
         version: 1,
-        target: {
-          kind: 'external_local_ui',
-          external_local_ui_url: 'http://example.com:24000/',
-        },
         local_ui_bind: 'bad-bind',
         pending_bootstrap: {
           controlplane_url: 'not-a-url',
           env_id: 'env_123',
         },
+        recent_external_local_ui_urls: [
+          'http://192.168.1.11:24000/_redeven_proxy/env/',
+          'not-a-url',
+        ],
       }), 'utf8');
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
-      expect(loaded).toEqual(defaultDesktopPreferences());
+      expect(loaded).toEqual({
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        pending_bootstrap: null,
+        recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+      });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
 
-  it('clears the one-shot bootstrap after a successful launch', () => {
-    const preferences = validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: 'https://region.example.invalid',
-      env_id: 'env_123',
-      env_token: 'token-123',
-    });
-    expect(desktopPreferencesToDraft(clearPendingBootstrap(preferences))).toEqual({
-      target_kind: 'managed_local',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    });
-  });
+  it('normalizes recent device urls, preserves order, and caps the list', () => {
+    const preferences = rememberRecentExternalLocalUITarget(
+      rememberRecentExternalLocalUITarget(
+        rememberRecentExternalLocalUITarget(defaultDesktopPreferences(), 'http://192.168.1.11:24000/_redeven_proxy/env/'),
+        'http://192.168.1.12:24000/',
+      ),
+      'http://192.168.1.11:24000/',
+    );
 
-  it('tracks the active desktop target separately from remembered host settings', () => {
-    const managedLocal = validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    });
-    const external = validateDesktopSettingsDraft({
-      target_kind: 'external_local_ui',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    });
+    expect(preferences.recent_external_local_ui_urls).toEqual([
+      'http://192.168.1.11:24000/',
+      'http://192.168.1.12:24000/',
+    ]);
 
-    expect(activeDesktopTargetKey(managedLocal)).toBe('managed_local');
-    expect(activeDesktopTargetKey(external)).toBe('external_local_ui:http://192.168.1.11:24000/');
-    expect(managedDesktopLaunchKey(managedLocal)).toBe(managedDesktopLaunchKey(external));
-  });
-
-  it('changes the managed launch key only when desktop-managed startup inputs change', () => {
-    const baseline = validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    });
-    const rememberedExternalOnly = validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: 'http://192.168.1.12:24000/',
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    });
-    const changedBind = validateDesktopSettingsDraft({
-      target_kind: 'managed_local',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      local_ui_bind: '0.0.0.0:24000',
-      local_ui_password: 'secret',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    });
-
-    expect(managedDesktopLaunchKey(rememberedExternalOnly)).toBe(managedDesktopLaunchKey(baseline));
-    expect(managedDesktopLaunchKey(changedBind)).not.toBe(managedDesktopLaunchKey(baseline));
-  });
-
-  it('normalizes and caps remembered recent external targets', () => {
     expect(normalizeRecentExternalLocalUIURLs([
       'http://192.168.1.11:24000/',
-      'http://192.168.1.11:24000/_redeven_proxy/env/',
       'http://192.168.1.12:24000/',
-      'bad',
       'http://192.168.1.13:24000/',
       'http://192.168.1.14:24000/',
       'http://192.168.1.15:24000/',
@@ -324,26 +210,57 @@ describe('desktopPreferences', () => {
     ]);
   });
 
-  it('promotes the latest external target to the front of recents', () => {
-    const preferences = rememberRecentExternalLocalUITarget(
-      rememberRecentExternalLocalUITarget(
-        validateDesktopSettingsDraft({
-          target_kind: 'managed_local',
-          external_local_ui_url: '',
-          local_ui_bind: '127.0.0.1:0',
-          local_ui_password: '',
-          controlplane_url: '',
-          env_id: '',
-          env_token: '',
-        }),
-        'http://192.168.1.11:24000/',
-      ),
-      'http://192.168.1.12:24000/',
-    );
+  it('serializes this-device settings into a settings draft', () => {
+    expect(desktopPreferencesToDraft({
+      local_ui_bind: '0.0.0.0:24000',
+      local_ui_password: 'secret',
+      pending_bootstrap: {
+        controlplane_url: 'https://region.example.invalid',
+        env_id: 'env_123',
+        env_token: 'token-123',
+      },
+      recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+    })).toEqual({
+      local_ui_bind: '0.0.0.0:24000',
+      local_ui_password: 'secret',
+      controlplane_url: 'https://region.example.invalid',
+      env_id: 'env_123',
+      env_token: 'token-123',
+    });
+  });
 
-    expect(rememberRecentExternalLocalUITarget(preferences, 'http://192.168.1.11:24000/').recent_external_local_ui_urls).toEqual([
-      'http://192.168.1.11:24000/',
-      'http://192.168.1.12:24000/',
-    ]);
+  it('clears pending bootstrap without changing other fields', () => {
+    expect(clearPendingBootstrap({
+      local_ui_bind: '127.0.0.1:0',
+      local_ui_password: '',
+      pending_bootstrap: {
+        controlplane_url: 'https://region.example.invalid',
+        env_id: 'env_123',
+        env_token: 'token-123',
+      },
+      recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+    })).toEqual({
+      local_ui_bind: '127.0.0.1:0',
+      local_ui_password: '',
+      pending_bootstrap: null,
+      recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+    });
+  });
+
+  it('includes this-device startup inputs in the managed launch key', () => {
+    const left = managedDesktopLaunchKey({
+      local_ui_bind: '127.0.0.1:0',
+      local_ui_password: '',
+      pending_bootstrap: null,
+      recent_external_local_ui_urls: [],
+    });
+    const right = managedDesktopLaunchKey({
+      local_ui_bind: '0.0.0.0:24000',
+      local_ui_password: 'secret',
+      pending_bootstrap: null,
+      recent_external_local_ui_urls: [],
+    });
+
+    expect(left).not.toBe(right);
   });
 });

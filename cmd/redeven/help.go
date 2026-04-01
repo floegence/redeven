@@ -122,7 +122,7 @@ Local UI bind rules:
   - Non-loopback binds require an access password.
 
 Password rules:
-  - Set exactly one of --password, --password-env, or --password-file.
+  - Set exactly one of --password, --password-stdin, --password-env, or --password-file.
   - --password-env and --password-file trigger startup verification in an interactive terminal.
 
 Flags:
@@ -135,6 +135,7 @@ Flags:
   --env-token-env <env_name>        Read the environment token from an environment variable.
   --permission-policy <preset>      Local permission policy when bootstrapping inline.
   --password <password>             Access password for the Local UI.
+  --password-stdin                  Read the Local UI password from stdin.
   --password-env <env_name>         Read the Local UI password from an environment variable.
   --password-file <path>            Read the Local UI password from a file.
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
@@ -398,8 +399,17 @@ func translatePasswordOptionError(err error) (string, []string) {
 	if errors.As(err, &optErr) {
 		switch optErr.kind {
 		case passwordOptionErrorMultipleSources:
-			return "invalid password flags: use only one of --password, --password-env, or --password-file",
+			return "invalid password flags: use only one of --password, --password-stdin, --password-env, or --password-file",
 				[]string{"Hint: choose a single password source for one startup command."}
+		case passwordOptionErrorStdinRead:
+			return "invalid password flags: could not read password from stdin",
+				[]string{
+					"Hint: pipe the full access password into `redeven run --password-stdin` and retry.",
+					fmt.Sprintf("Details: %v", optErr.cause),
+				}
+		case passwordOptionErrorStdinEmpty:
+			return "invalid password flags: stdin password is empty",
+				[]string{"Hint: pipe a non-empty access password into `redeven run --password-stdin` and retry."}
 		case passwordOptionErrorEnvNotSet:
 			return fmt.Sprintf("invalid password flags: password env var %q is not set", optErr.envName),
 				[]string{
@@ -445,7 +455,7 @@ func translatePasswordVerificationError(err error) (string, []string) {
 	switch {
 	case errors.Is(err, errPasswordPromptRequiresTTY):
 		return "password verification requires an interactive terminal",
-			[]string{"Hint: rerun in an interactive terminal, or use --password for non-interactive startup."}
+			[]string{"Hint: rerun in an interactive terminal, or use --password or --password-stdin for non-interactive startup."}
 	case errors.Is(err, errAccessPasswordVerificationFailed):
 		return "password verification failed: access password verification failed",
 			[]string{"Hint: enter the same password configured in --password-env or --password-file."}

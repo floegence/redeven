@@ -1,11 +1,11 @@
 import type { DesktopPreferences } from './desktopPreferences';
 
-export const LOCAL_UI_PASSWORD_ENV_NAME = 'REDEVEN_DESKTOP_LOCAL_UI_PASSWORD';
 export const ENV_TOKEN_ENV_NAME = 'REDEVEN_DESKTOP_ENV_TOKEN';
 
 export type DesktopAgentSpawnPlan = Readonly<{
   args: string[];
   env: NodeJS.ProcessEnv;
+  password_stdin: string;
   uses_pending_bootstrap: boolean;
 }>;
 
@@ -20,7 +20,7 @@ export function buildDesktopAgentArgs(preferences: DesktopPreferences): string[]
   ];
 
   if (String(preferences.local_ui_password ?? '') !== '') {
-    args.push('--password-env', LOCAL_UI_PASSWORD_ENV_NAME);
+    args.push('--password-stdin');
   }
 
   if (preferences.pending_bootstrap) {
@@ -45,12 +45,6 @@ export function buildDesktopAgentEnvironment(
     ...baseEnv,
   };
 
-  if (String(preferences.local_ui_password ?? '') !== '') {
-    env[LOCAL_UI_PASSWORD_ENV_NAME] = preferences.local_ui_password;
-  } else {
-    delete env[LOCAL_UI_PASSWORD_ENV_NAME];
-  }
-
   if (preferences.pending_bootstrap) {
     env[ENV_TOKEN_ENV_NAME] = preferences.pending_bootstrap.env_token;
   } else {
@@ -68,10 +62,12 @@ export function buildDesktopAgentSpawnPlan(
   const args = buildDesktopAgentArgs(preferences);
   const env = buildDesktopAgentEnvironment(preferences, baseEnv);
   const usesPendingBootstrap = preferences.pending_bootstrap !== null;
+  const passwordStdin = String(preferences.local_ui_password ?? '');
   args.push('--startup-report-file', startupReportFile);
   return {
     args,
     env,
+    password_stdin: passwordStdin,
     uses_pending_bootstrap: usesPendingBootstrap,
   };
 }
