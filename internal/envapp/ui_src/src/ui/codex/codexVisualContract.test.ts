@@ -36,6 +36,13 @@ describe('Codex visual contract', () => {
     expect(src).not.toContain('radial-gradient(');
   });
 
+  it('keeps the Codex empty hero visually centered without phantom bottom spacing', () => {
+    const src = readCodexCss();
+
+    expect(src).toMatch(/\.codex-empty-hero \{[\s\S]*margin: 0;[\s\S]*text-align: center;/);
+    expect(src).toMatch(/\.codex-empty-hero \+ \.codex-empty-suggestions \{[\s\S]*margin-top: 2rem;/);
+  });
+
   it('keeps Codex markdown blockquotes aligned with the floe-webapp quote block shape', () => {
     const src = readCodexCss();
 

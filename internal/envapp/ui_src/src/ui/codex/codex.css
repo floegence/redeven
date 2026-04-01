@@ -696,8 +696,12 @@
 
 .codex-empty-hero {
   max-width: 32rem;
-  margin-bottom: 2rem;
+  margin: 0;
   text-align: center;
+}
+
+.codex-empty-hero + .codex-empty-suggestions {
+  margin-top: 2rem;
 }
 
 .codex-empty-ornament {
