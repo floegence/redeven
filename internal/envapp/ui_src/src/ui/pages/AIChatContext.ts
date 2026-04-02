@@ -25,14 +25,6 @@ import {
   type AskUserDraft,
   type AskUserQuestion,
 } from '../chat/askUserContract';
-import {
-  buildThreadReadStateBaseline,
-  markThreadReadFromSnapshot,
-  normalizeThreadReadStateByThread,
-  threadHasUnreadFromSnapshot,
-  type ThreadReadStateByThread,
-  type ThreadUnreadSnapshot,
-} from './aiThreadUnreadState';
 
 // ---- API response types (shared between sidebar and main page) ----
 
@@ -66,6 +58,22 @@ export type WaitingPromptView = Readonly<{
 
 export type StructuredPromptAnswerDraft = AskUserDraft;
 
+export type ThreadReadSnapshot = Readonly<{
+  last_message_at_unix_ms: number;
+  waiting_prompt_id?: string;
+}>;
+
+export type ThreadReadState = Readonly<{
+  last_read_message_at_unix_ms: number;
+  last_seen_waiting_prompt_id?: string;
+}>;
+
+export type ThreadReadStatus = Readonly<{
+  is_unread: boolean;
+  snapshot: ThreadReadSnapshot;
+  read_state: ThreadReadState;
+}>;
+
 export type ThreadView = Readonly<{
   thread_id: string;
   title: string;
@@ -83,6 +91,7 @@ export type ThreadView = Readonly<{
   updated_at_unix_ms: number;
   last_message_at_unix_ms: number;
   last_message_preview: string;
+  read_status?: ThreadReadStatus;
 }>;
 
 export type ListThreadsResponse = Readonly<{
@@ -105,7 +114,6 @@ export type ListThreadMessagesResponse = Readonly<{
 
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const DRAFT_WORKING_DIR_STORAGE_KEY = 'redeven_ai_draft_working_dir';
-const THREAD_READ_STATE_STORAGE_KEY_PREFIX = 'redeven_ai_thread_read_state_v1';
 
 function readPersistedActiveThreadId(): string | null {
   const v = String(readUIStorageItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
@@ -180,6 +188,64 @@ function normalizeWaitingPrompt(raw: any): WaitingPromptView | null {
     containsSecret: Boolean((raw as any).contains_secret ?? (raw as any).containsSecret),
     questions: questions.length > 0 ? questions : undefined,
   };
+}
+
+function normalizeThreadReadStatus(raw: any, thread?: ThreadView | null | undefined): ThreadReadStatus {
+  const waitingPrompt = normalizeWaitingPrompt((thread as any)?.waiting_prompt);
+  const fallbackSnapshot: ThreadReadSnapshot = {
+    last_message_at_unix_ms: Math.max(0, Math.floor(Number(thread?.last_message_at_unix_ms ?? 0) || 0)),
+    waiting_prompt_id: String(waitingPrompt?.promptId ?? '').trim() || undefined,
+  };
+  const snapshotRaw = raw && typeof raw === 'object' ? (raw as any).snapshot : null;
+  const readStateRaw = raw && typeof raw === 'object' ? (raw as any).read_state : null;
+  const snapshot: ThreadReadSnapshot = {
+    last_message_at_unix_ms: Math.max(
+      0,
+      Math.floor(Number(snapshotRaw?.last_message_at_unix_ms ?? fallbackSnapshot.last_message_at_unix_ms ?? 0) || 0),
+    ),
+    waiting_prompt_id: String(snapshotRaw?.waiting_prompt_id ?? fallbackSnapshot.waiting_prompt_id ?? '').trim() || undefined,
+  };
+  const readState: ThreadReadState = {
+    last_read_message_at_unix_ms: Math.max(
+      0,
+      Math.floor(Number(readStateRaw?.last_read_message_at_unix_ms ?? snapshot.last_message_at_unix_ms ?? 0) || 0),
+    ),
+    last_seen_waiting_prompt_id: String(readStateRaw?.last_seen_waiting_prompt_id ?? snapshot.waiting_prompt_id ?? '').trim() || undefined,
+  };
+  const inferredUnread = (
+    snapshot.last_message_at_unix_ms > readState.last_read_message_at_unix_ms ||
+    (
+      !!snapshot.waiting_prompt_id &&
+      snapshot.waiting_prompt_id !== readState.last_seen_waiting_prompt_id
+    )
+  );
+  return {
+    is_unread: Boolean(raw?.is_unread ?? inferredUnread),
+    snapshot,
+    read_state: readState,
+  };
+}
+
+function patchThreadReadStatus(thread: ThreadView, readStatus: ThreadReadStatus): ThreadView {
+  return {
+    ...thread,
+    read_status: {
+      ...readStatus,
+      snapshot: { ...readStatus.snapshot },
+      read_state: { ...readStatus.read_state },
+    },
+  };
+}
+
+function threadNeedsReadMark(readStatus: ThreadReadStatus | null | undefined): boolean {
+  if (!readStatus) return false;
+  return (
+    readStatus.snapshot.last_message_at_unix_ms > readStatus.read_state.last_read_message_at_unix_ms ||
+    (
+      !!readStatus.snapshot.waiting_prompt_id &&
+      readStatus.snapshot.waiting_prompt_id !== readStatus.read_state.last_seen_waiting_prompt_id
+    )
+  );
 }
 
 function isActiveRunStatus(status: ThreadRunStatus): boolean {
@@ -355,7 +421,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     return threadsSeq();
   });
 
-  const [threads] = createResource<ListThreadsResponse | null, number | null>(
+  const [threads, { mutate: mutateThreads }] = createResource<ListThreadsResponse | null, number | null>(
     () => threadsKey(),
     async (k) =>
       k == null
@@ -370,15 +436,9 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
   const [waitingPromptByThread, setWaitingPromptByThread] = createSignal<Record<string, WaitingPromptView | null>>({});
   const [structuredPromptDraftsByPrompt, setStructuredPromptDraftsByPrompt] = createSignal<Record<string, Record<string, StructuredPromptAnswerDraft>>>({});
-  const [threadReadStateByThread, setThreadReadStateByThread] = createSignal<ThreadReadStateByThread>({});
-  const [threadReadStateBootstrapped, setThreadReadStateBootstrapped] = createSignal(false);
+  const [markingReadKeyByThread, setMarkingReadKeyByThread] = createSignal<Record<string, string>>({});
 
   const realtimeListeners = new Set<(event: AIRealtimeEvent) => void>();
-
-  const threadReadStateStorageKey = createMemo(() => {
-    const envID = String(env.env_id() ?? '').trim();
-    return envID ? `${THREAD_READ_STATE_STORAGE_KEY_PREFIX}:${envID}` : '';
-  });
 
   const emitRealtimeEvent = (event: AIRealtimeEvent) => {
     for (const handler of realtimeListeners) {
@@ -449,71 +509,87 @@ export function createAIChatContextValue(): AIChatContextValue {
     return normalizeWaitingPrompt((th as any)?.waiting_prompt);
   };
 
-  const unreadSnapshotForThread = (threadId: string | null | undefined): ThreadUnreadSnapshot => {
+  const threadReadStatusForThread = (threadId: string | null | undefined): ThreadReadStatus => {
     const tid = String(threadId ?? '').trim();
     if (!tid) {
-      return { lastMessageAtUnixMs: 0 };
+      return normalizeThreadReadStatus(null, null);
     }
 
     const thread = threadById().get(tid);
-    const waitingPrompt = waitingPromptForThread(tid);
+    const normalized = normalizeThreadReadStatus((thread as any)?.read_status, thread);
+    const waitingPromptID = String(waitingPromptForThread(tid)?.promptId ?? '').trim();
+    if (!waitingPromptID || waitingPromptID === normalized.snapshot.waiting_prompt_id) {
+      return normalized;
+    }
+    const next = {
+      ...normalized,
+      snapshot: {
+        ...normalized.snapshot,
+        waiting_prompt_id: waitingPromptID,
+      },
+    };
     return {
-      lastMessageAtUnixMs: Math.max(0, Math.floor(Number(thread?.last_message_at_unix_ms ?? 0) || 0)),
-      waitingPromptId: String(waitingPrompt?.promptId ?? '').trim() || undefined,
+      ...next,
+      is_unread: threadNeedsReadMark(next),
     };
   };
 
-  createEffect(() => {
-    const key = threadReadStateStorageKey();
-    if (!key) {
-      setThreadReadStateByThread({});
-      setThreadReadStateBootstrapped(false);
-      return;
-    }
+  const updateThreadReadStatus = (threadId: string, readStatus: ThreadReadStatus): void => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid) return;
+    mutateThreads((current) => {
+      if (!current) return current;
+      let changed = false;
+      const nextThreads = current.threads.map((thread) => {
+        if (String(thread.thread_id ?? '').trim() !== tid) return thread;
+        changed = true;
+        return patchThreadReadStatus(thread, readStatus);
+      });
+      if (!changed) return current;
+      return {
+        ...current,
+        threads: nextThreads,
+      };
+    });
+  };
 
-    const raw = readUIStorageItem(key);
-    if (raw === null) {
-      setThreadReadStateByThread({});
-      setThreadReadStateBootstrapped(false);
-      return;
-    }
+  const markThreadRead = async (threadId: string, readStatus: ThreadReadStatus): Promise<void> => {
+    const tid = String(threadId ?? '').trim();
+    if (!tid || !threadNeedsReadMark(readStatus)) return;
 
+    const requestKey = [
+      tid,
+      String(readStatus.snapshot.last_message_at_unix_ms ?? 0),
+      String(readStatus.snapshot.waiting_prompt_id ?? '').trim(),
+    ].join('\u001f');
+    if (markingReadKeyByThread()[tid] === requestKey) return;
+
+    setMarkingReadKeyByThread((prev) => ({ ...prev, [tid]: requestKey }));
     try {
-      setThreadReadStateByThread(normalizeThreadReadStateByThread(JSON.parse(raw)));
-      setThreadReadStateBootstrapped(true);
-    } catch {
-      setThreadReadStateByThread({});
-      setThreadReadStateBootstrapped(false);
-    }
-  });
-
-  createEffect(() => {
-    const key = threadReadStateStorageKey();
-    if (!key || threadReadStateBootstrapped()) return;
-    if (threads.loading || threads.error) return;
-
-    const list = threads();
-    if (!list) return;
-
-    const seeded = {
-      ...buildThreadReadStateBaseline(list.threads.map((thread) => ({
-        threadId: thread.thread_id,
-        snapshot: {
-          lastMessageAtUnixMs: thread.last_message_at_unix_ms,
-          waitingPromptId: normalizeWaitingPrompt((thread as any)?.waiting_prompt)?.promptId,
+      const resp = await fetchGatewayJSON<Readonly<{ read_status: ThreadReadStatus }>>(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/read`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            snapshot: {
+              last_message_at_unix_ms: readStatus.snapshot.last_message_at_unix_ms,
+              waiting_prompt_id: readStatus.snapshot.waiting_prompt_id,
+            },
+          }),
         },
-      }))),
-      ...threadReadStateByThread(),
-    };
-    setThreadReadStateByThread(seeded);
-    setThreadReadStateBootstrapped(true);
-  });
-
-  createEffect(() => {
-    const key = threadReadStateStorageKey();
-    if (!key || !threadReadStateBootstrapped()) return;
-    writeUIStorageItem(key, JSON.stringify(threadReadStateByThread()));
-  });
+      );
+      updateThreadReadStatus(tid, normalizeThreadReadStatus(resp?.read_status, threadById().get(tid) ?? null));
+    } catch {
+      // Best effort; future list refreshes can retry.
+    } finally {
+      setMarkingReadKeyByThread((prev) => {
+        if (prev[tid] !== requestKey) return prev;
+        const next = { ...prev };
+        delete next[tid];
+        return next;
+      });
+    }
+  };
 
   const waitingPromptKey = (threadId: string, promptId: string): string => {
     const tid = String(threadId ?? '').trim();
@@ -703,7 +779,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const tid = String(threadId ?? '').trim();
     if (!tid) return false;
     if (tid === String(activeThreadId() ?? '').trim()) return false;
-    return threadHasUnreadFromSnapshot(threadReadStateByThread(), tid, unreadSnapshotForThread(tid));
+    return threadReadStatusForThread(tid).is_unread;
   };
 
   const onRealtimeEvent = (handler: (event: AIRealtimeEvent) => void) => {
@@ -865,6 +941,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     setPendingRunByThread({});
     setWaitingPromptByThread({});
     setStructuredPromptDraftsByPrompt({});
+    setMarkingReadKeyByThread({});
   });
 
   // Reconcile run state with the thread list so UI never gets stuck if realtime events are dropped.
@@ -946,8 +1023,8 @@ export function createAIChatContextValue(): AIChatContextValue {
   createEffect(() => {
     const tid = String(activeThreadId() ?? '').trim();
     if (!tid) return;
-
-    setThreadReadStateByThread((prev) => markThreadReadFromSnapshot(prev, tid, unreadSnapshotForThread(tid)));
+    const readStatus = threadReadStatusForThread(tid);
+    void markThreadRead(tid, readStatus);
   });
 
   // Subscribe to full-fidelity events for the currently active thread only.

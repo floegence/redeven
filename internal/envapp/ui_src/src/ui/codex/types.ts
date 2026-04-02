@@ -134,6 +134,22 @@ export type CodexThreadTokenUsage = Readonly<{
   model_context_window?: number;
 }>;
 
+export type CodexThreadReadSnapshot = Readonly<{
+  updated_at_unix_s: number;
+  activity_signature?: string;
+}>;
+
+export type CodexThreadReadState = Readonly<{
+  last_read_updated_at_unix_s: number;
+  last_seen_activity_signature?: string;
+}>;
+
+export type CodexThreadReadStatus = Readonly<{
+  is_unread: boolean;
+  snapshot: CodexThreadReadSnapshot;
+  read_state: CodexThreadReadState;
+}>;
+
 export type CodexItem = Readonly<{
   id: string;
   type: string;
@@ -183,6 +199,7 @@ export type CodexThread = Readonly<{
   agent_role?: string;
   name?: string;
   turns?: CodexTurn[];
+  read_status?: CodexThreadReadStatus;
 }>;
 
 export type CodexPermissionProfile = Readonly<{

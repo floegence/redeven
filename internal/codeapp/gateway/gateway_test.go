@@ -19,8 +19,10 @@ import (
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
+	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 type stubBackend struct {
@@ -169,6 +171,29 @@ func writeTestConfigWithAI(t *testing.T) string {
 		t.Fatalf("write config: %v", err)
 	}
 	return p
+}
+
+func openTestThreadReadStateStore(t *testing.T) *threadreadstate.Store {
+	t.Helper()
+
+	store, err := threadreadstate.Open(filepath.Join(t.TempDir(), "thread_read_state.sqlite"))
+	if err != nil {
+		t.Fatalf("threadreadstate.Open: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+	return store
+}
+
+func performGatewayRequest(gw *Gateway, method string, path string, origin string, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+	return rr
 }
 
 func envOriginWithChannel(channelID string) string {
@@ -1189,6 +1214,476 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 		if _, ok := direct["e2ee_psk_b64u"]; ok {
 			t.Fatalf("secret leaked: e2ee_psk_b64u must not be returned")
 		}
+	}
+}
+
+func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfig(t)
+	store := openTestThreadReadStateStore(t)
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+	})
+	if err != nil {
+		t.Fatalf("ai.NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = aiSvc.Close()
+	})
+
+	metaByChannel := map[string]session.Meta{
+		"ch_test_ai_read_state_user_1": {
+			EndpointID:   "env_read_state",
+			UserPublicID: "user_1",
+			UserEmail:    "user1@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+		"ch_test_ai_read_state_user_2": {
+			EndpointID:   "env_read_state",
+			UserPublicID: "user_2",
+			UserEmail:    "user2@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+	}
+
+	resolveMeta := func(channelID string) (*session.Meta, bool) {
+		meta, ok := metaByChannel[strings.TrimSpace(channelID)]
+		if !ok {
+			return nil, false
+		}
+		meta.ChannelID = strings.TrimSpace(channelID)
+		return &meta, true
+	}
+
+	creatorMeta := metaByChannel["ch_test_ai_read_state_user_1"]
+	thread, err := aiSvc.CreateThread(context.Background(), &creatorMeta, "Thread read state", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := aiSvc.AppendThreadMessage(context.Background(), &creatorMeta, thread.ThreadID, "user", "First prompt", "markdown"); err != nil {
+		t.Fatalf("AppendThreadMessage(first): %v", err)
+	}
+
+	gw, err := New(Options{
+		Backend:              &stubBackend{},
+		DistFS:               dist,
+		ListenAddr:           "127.0.0.1:0",
+		AI:                   aiSvc,
+		ConfigPath:           cfgPath,
+		ThreadReadStateStore: store,
+		ResolveSessionMeta:   resolveMeta,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	type aiThreadReadStatusSnapshot struct {
+		LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
+		WaitingPromptID     string `json:"waiting_prompt_id"`
+	}
+	type aiThreadReadStatusState struct {
+		LastReadMessageAtUnixMs int64  `json:"last_read_message_at_unix_ms"`
+		LastSeenWaitingPromptID string `json:"last_seen_waiting_prompt_id"`
+	}
+	type aiThreadReadStatus struct {
+		IsUnread  bool                       `json:"is_unread"`
+		Snapshot  aiThreadReadStatusSnapshot `json:"snapshot"`
+		ReadState aiThreadReadStatusState    `json:"read_state"`
+	}
+	type aiThreadView struct {
+		ThreadID   string             `json:"thread_id"`
+		ReadStatus aiThreadReadStatus `json:"read_status"`
+	}
+	type aiListResponse struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Threads []aiThreadView `json:"threads"`
+		} `json:"data"`
+	}
+	type aiDetailResponse struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Thread aiThreadView `json:"thread"`
+		} `json:"data"`
+	}
+	type aiMarkReadResponse struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			ReadStatus aiThreadReadStatus `json:"read_status"`
+		} `json:"data"`
+	}
+
+	channelUser1 := "ch_test_ai_read_state_user_1"
+	channelUser2 := "ch_test_ai_read_state_user_2"
+	originUser1 := envOriginWithChannel(channelUser1)
+	originUser2 := envOriginWithChannel(channelUser2)
+
+	readList := func(origin string) aiListResponse {
+		t.Helper()
+		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/ai/threads?limit=20", origin, "")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET /api/ai/threads status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp aiListResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal list response: %v", err)
+		}
+		return resp
+	}
+
+	readDetail := func(origin string) aiDetailResponse {
+		t.Helper()
+		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), origin, "")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp aiDetailResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal detail response: %v", err)
+		}
+		return resp
+	}
+
+	performAIMarkRead := func(origin string, snapshot aiThreadReadStatusSnapshot) *httptest.ResponseRecorder {
+		t.Helper()
+		bodyBytes, err := json.Marshal(map[string]any{
+			"snapshot": map[string]any{
+				"last_message_at_unix_ms": snapshot.LastMessageAtUnixMs,
+				"waiting_prompt_id":       snapshot.WaitingPromptID,
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal mark-read body: %v", err)
+		}
+		rr := performGatewayRequest(
+			gw,
+			http.MethodPost,
+			"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID)+"/read",
+			origin,
+			string(bodyBytes),
+		)
+		return rr
+	}
+
+	markRead := func(origin string, snapshot aiThreadReadStatusSnapshot) aiMarkReadResponse {
+		t.Helper()
+		rr := performAIMarkRead(origin, snapshot)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("POST /api/ai/threads/:id/read status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp aiMarkReadResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal mark-read response: %v", err)
+		}
+		return resp
+	}
+
+	firstUserOneList := readList(originUser1)
+	if len(firstUserOneList.Data.Threads) != 1 {
+		t.Fatalf("user1 thread count=%d, want=1", len(firstUserOneList.Data.Threads))
+	}
+	if firstUserOneList.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user1 first list is_unread=true, want=false")
+	}
+
+	firstUserTwoList := readList(originUser2)
+	if len(firstUserTwoList.Data.Threads) != 1 {
+		t.Fatalf("user2 thread count=%d, want=1", len(firstUserTwoList.Data.Threads))
+	}
+	if firstUserTwoList.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user2 first list is_unread=true, want=false")
+	}
+
+	if err := aiSvc.AppendThreadMessage(context.Background(), &creatorMeta, thread.ThreadID, "user", "Second prompt", "markdown"); err != nil {
+		t.Fatalf("AppendThreadMessage(second): %v", err)
+	}
+
+	detail := readDetail(originUser1)
+	if !detail.Data.Thread.ReadStatus.IsUnread {
+		t.Fatalf("user1 detail is_unread=false after new message, want=true")
+	}
+
+	invalidRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
+		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs + 1,
+		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID,
+	})
+	if invalidRead.Code != http.StatusBadRequest {
+		t.Fatalf("future ai mark-read status=%d, want=%d body=%s", invalidRead.Code, http.StatusBadRequest, invalidRead.Body.String())
+	}
+	if !readDetail(originUser1).Data.Thread.ReadStatus.IsUnread {
+		t.Fatalf("user1 detail is_unread=false after rejected future mark-read, want=true")
+	}
+
+	marked := markRead(originUser1, detail.Data.Thread.ReadStatus.Snapshot)
+	if marked.Data.ReadStatus.IsUnread {
+		t.Fatalf("mark-read response is_unread=true, want=false")
+	}
+	if marked.Data.ReadStatus.ReadState.LastReadMessageAtUnixMs != detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs {
+		t.Fatalf("mark-read last_read_message_at_unix_ms=%d, want=%d", marked.Data.ReadStatus.ReadState.LastReadMessageAtUnixMs, detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs)
+	}
+
+	userOneAfterRead := readList(originUser1)
+	if userOneAfterRead.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user1 list is_unread=true after mark-read, want=false")
+	}
+
+	userTwoAfterRead := readList(originUser2)
+	if !userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user2 list is_unread=false after user1 mark-read, want=true")
+	}
+}
+
+func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfig(t)
+	store := openTestThreadReadStateStore(t)
+
+	metaByChannel := map[string]session.Meta{
+		"ch_test_codex_read_state_user_1": {
+			EndpointID:   "env_read_state",
+			UserPublicID: "user_1",
+			UserEmail:    "user1@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+		"ch_test_codex_read_state_user_2": {
+			EndpointID:   "env_read_state",
+			UserPublicID: "user_2",
+			UserEmail:    "user2@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+	}
+	resolveMeta := func(channelID string) (*session.Meta, bool) {
+		meta, ok := metaByChannel[strings.TrimSpace(channelID)]
+		if !ok {
+			return nil, false
+		}
+		meta.ChannelID = strings.TrimSpace(channelID)
+		return &meta, true
+	}
+
+	thread := codexbridge.Thread{
+		ID:             "thread_1",
+		Preview:        "Investigate repo state",
+		ModelProvider:  "openai",
+		CreatedAtUnixS: 90,
+		UpdatedAtUnixS: 100,
+		Status:         "idle",
+		CWD:            "/workspace",
+	}
+	pendingRequests := []codexbridge.PendingRequest{}
+
+	codexBackend := &stubCodexBackend{
+		status: func(ctx context.Context) codexbridge.Status {
+			return codexbridge.Status{Available: true, Ready: true}
+		},
+		listThreads: func(ctx context.Context, req codexbridge.ListThreadsRequest) ([]codexbridge.Thread, error) {
+			return []codexbridge.Thread{thread}, nil
+		},
+		readThread: func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error) {
+			return &codexbridge.ThreadDetail{
+				Thread:          thread,
+				PendingRequests: append([]codexbridge.PendingRequest(nil), pendingRequests...),
+				LastAppliedSeq:  7,
+				ActiveStatus:    thread.Status,
+			}, nil
+		},
+	}
+
+	gw, err := New(Options{
+		Backend:              &stubBackend{},
+		DistFS:               dist,
+		ListenAddr:           "127.0.0.1:0",
+		Codex:                codexBackend,
+		ConfigPath:           cfgPath,
+		ThreadReadStateStore: store,
+		ResolveSessionMeta:   resolveMeta,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	type codexReadStatusSnapshot struct {
+		UpdatedAtUnixS    int64  `json:"updated_at_unix_s"`
+		ActivitySignature string `json:"activity_signature"`
+	}
+	type codexReadStatusState struct {
+		LastReadUpdatedAtUnixS    int64  `json:"last_read_updated_at_unix_s"`
+		LastSeenActivitySignature string `json:"last_seen_activity_signature"`
+	}
+	type codexReadStatus struct {
+		IsUnread  bool                    `json:"is_unread"`
+		Snapshot  codexReadStatusSnapshot `json:"snapshot"`
+		ReadState codexReadStatusState    `json:"read_state"`
+	}
+	type codexThreadView struct {
+		ID         string          `json:"id"`
+		ReadStatus codexReadStatus `json:"read_status"`
+	}
+	type codexListResponse struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Threads []codexThreadView `json:"threads"`
+		} `json:"data"`
+	}
+	type codexDetailResponse struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Thread codexThreadView `json:"thread"`
+		} `json:"data"`
+	}
+	type codexMarkReadResponse struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			ReadStatus codexReadStatus `json:"read_status"`
+		} `json:"data"`
+	}
+
+	channelUser1 := "ch_test_codex_read_state_user_1"
+	channelUser2 := "ch_test_codex_read_state_user_2"
+	originUser1 := envOriginWithChannel(channelUser1)
+	originUser2 := envOriginWithChannel(channelUser2)
+
+	readList := func(origin string) codexListResponse {
+		t.Helper()
+		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/codex/threads?limit=20", origin, "")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET /api/codex/threads status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp codexListResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal codex list response: %v", err)
+		}
+		return resp
+	}
+
+	readDetail := func(origin string) codexDetailResponse {
+		t.Helper()
+		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/codex/threads/"+url.PathEscape(thread.ID), origin, "")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET /api/codex/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp codexDetailResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal codex detail response: %v", err)
+		}
+		return resp
+	}
+
+	performCodexMarkRead := func(origin string, snapshot codexReadStatusSnapshot) *httptest.ResponseRecorder {
+		t.Helper()
+		bodyBytes, err := json.Marshal(map[string]any{
+			"snapshot": map[string]any{
+				"updated_at_unix_s":  snapshot.UpdatedAtUnixS,
+				"activity_signature": snapshot.ActivitySignature,
+			},
+		})
+		if err != nil {
+			t.Fatalf("marshal codex mark-read body: %v", err)
+		}
+		rr := performGatewayRequest(
+			gw,
+			http.MethodPost,
+			"/_redeven_proxy/api/codex/threads/"+url.PathEscape(thread.ID)+"/read",
+			origin,
+			string(bodyBytes),
+		)
+		return rr
+	}
+
+	markRead := func(origin string, snapshot codexReadStatusSnapshot) codexMarkReadResponse {
+		t.Helper()
+		rr := performCodexMarkRead(origin, snapshot)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("POST /api/codex/threads/:id/read status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp codexMarkReadResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal codex mark-read response: %v", err)
+		}
+		return resp
+	}
+
+	firstUserOneList := readList(originUser1)
+	if len(firstUserOneList.Data.Threads) != 1 {
+		t.Fatalf("user1 codex thread count=%d, want=1", len(firstUserOneList.Data.Threads))
+	}
+	if firstUserOneList.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user1 first codex list is_unread=true, want=false")
+	}
+
+	firstUserTwoList := readList(originUser2)
+	if len(firstUserTwoList.Data.Threads) != 1 {
+		t.Fatalf("user2 codex thread count=%d, want=1", len(firstUserTwoList.Data.Threads))
+	}
+	if firstUserTwoList.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user2 first codex list is_unread=true, want=false")
+	}
+
+	thread.UpdatedAtUnixS = 101
+	thread.Status = "waitingUser"
+	pendingRequests = []codexbridge.PendingRequest{{
+		ID:       "req_1",
+		Type:     "user_input",
+		ThreadID: thread.ID,
+	}}
+
+	detail := readDetail(originUser1)
+	if !detail.Data.Thread.ReadStatus.IsUnread {
+		t.Fatalf("user1 codex detail is_unread=false after activity, want=true")
+	}
+	if detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature != "status:waiting_user\u001frequest:req_1" {
+		t.Fatalf("codex detail activity_signature=%q, want detailed signature", detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature)
+	}
+
+	invalidCodexRead := performCodexMarkRead(originUser1, codexReadStatusSnapshot{
+		UpdatedAtUnixS:    detail.Data.Thread.ReadStatus.Snapshot.UpdatedAtUnixS + 1,
+		ActivitySignature: detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature,
+	})
+	if invalidCodexRead.Code != http.StatusBadRequest {
+		t.Fatalf("future codex mark-read status=%d, want=%d body=%s", invalidCodexRead.Code, http.StatusBadRequest, invalidCodexRead.Body.String())
+	}
+	if !readDetail(originUser1).Data.Thread.ReadStatus.IsUnread {
+		t.Fatalf("user1 codex detail is_unread=false after rejected future mark-read, want=true")
+	}
+
+	marked := markRead(originUser1, detail.Data.Thread.ReadStatus.Snapshot)
+	if marked.Data.ReadStatus.IsUnread {
+		t.Fatalf("codex mark-read response is_unread=true, want=false")
+	}
+	if marked.Data.ReadStatus.ReadState.LastReadUpdatedAtUnixS != 101 {
+		t.Fatalf("codex mark-read last_read_updated_at_unix_s=%d, want=101", marked.Data.ReadStatus.ReadState.LastReadUpdatedAtUnixS)
+	}
+
+	userOneAfterRead := readList(originUser1)
+	if userOneAfterRead.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user1 codex list is_unread=true after mark-read, want=false")
+	}
+
+	userTwoAfterRead := readList(originUser2)
+	if !userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user2 codex list is_unread=false after user1 mark-read, want=true")
 	}
 }
 

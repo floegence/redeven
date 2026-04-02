@@ -180,6 +180,12 @@ Behavior summary:
 - The live assistant surface is intentionally outside transcript virtualization so streaming markdown growth, phase-label changes, and context telemetry ornament updates do not thrash transcript row measurement or remount settled history during a run.
 - The realtime sink may coalesce low-priority assistant/context updates, but the active thread UI must still converge to the canonical persisted assistant transcript when the run reaches a terminal state, even if some tail realtime frames were missed.
 - Subagents are for parallelizable or independently reviewable work. Simple local inspection tasks should stay in the main Flower run instead of spawning subagents.
+- Flower thread read/unread state is runtime-authoritative, not browser-local:
+  - the gateway persists a per-user watermark keyed by `endpoint_id + user_public_id + surface + thread_id`;
+  - thread list/detail payloads include `read_status` with `{is_unread, snapshot, read_state}`;
+  - `POST /_redeven_proxy/api/ai/threads/:id/read` advances the user's read watermark monotonically from the browser-visible snapshot;
+  - the gateway validates that submitted read snapshots do not move beyond the current backend thread state;
+  - when a user has no stored watermark yet, the runtime seeds the current snapshot as the initial baseline so historical threads do not all light up as unread after rollout.
 
 Installer note:
 
@@ -191,6 +197,7 @@ Installer note:
 - Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.
 - The current shipped schema keeps semantic memory in `memory_items`. Redeven does not currently ship a separate persistent embeddings table until the runtime fully owns that lifecycle.
+- Per-user thread read watermarks are intentionally stored outside the shared Flower threadstore because unread state is a user/session concern rather than collaborative thread content.
 
 ## Behavioral evaluation
 

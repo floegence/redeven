@@ -14,7 +14,6 @@ import {
 import { useLayout, useNotification } from '@floegence/floe-webapp-core';
 
 import { useEnvContext } from '../pages/EnvContext';
-import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import type {
   FollowBottomRequest,
   FollowBottomRequestReason,
@@ -27,6 +26,7 @@ import {
   forkCodexThread,
   interruptCodexTurn,
   listCodexThreads,
+  markCodexThreadRead,
   openCodexThread,
   respondToCodexRequest,
   startCodexThread,
@@ -40,14 +40,6 @@ import {
   createCodexDraftController,
   type CodexRuntimeDraft,
 } from './draftController';
-import {
-  buildCodexThreadReadStateBaseline,
-  codexThreadHasUnreadFromSnapshot,
-  markCodexThreadReadFromSnapshot,
-  normalizeCodexThreadReadStateByThread,
-  type CodexThreadReadStateByThread,
-  type CodexThreadUnreadSnapshot,
-} from './codexThreadUnreadState';
 import { createCodexThreadController } from './threadController';
 import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
 import {
@@ -65,6 +57,7 @@ import type {
   CodexStatus,
   CodexThread,
   CodexThreadListFilter,
+  CodexThreadReadStatus,
   CodexThreadTokenUsage,
   CodexThreadRuntimeConfig,
   CodexTranscriptItem,
@@ -76,8 +69,6 @@ type CodexThreadMap = Record<string, CodexThread>;
 type CodexOptimisticTurnMap = Record<string, CodexOptimisticUserTurn[]>;
 type CodexScrollToBottomReason = FollowBottomRequestReason;
 type CodexScrollIntentPolicy = Omit<FollowBottomRequest, 'seq'>;
-
-const CODEX_THREAD_READ_STATE_STORAGE_KEY_PREFIX = 'redeven_codex_thread_read_state_v1';
 
 function codexScrollIntentPolicy(reason: CodexScrollToBottomReason): CodexScrollIntentPolicy {
   switch (reason) {
@@ -155,6 +146,7 @@ function patchThreadDisplayFallbacks(
   thread: CodexThread,
   fallbackPreview?: string,
   fallbackCWD?: string,
+  fallbackReadStatus?: CodexThreadReadStatus | null,
 ): CodexThread {
   const normalizedPreview = String(thread.preview ?? '').trim() || String(fallbackPreview ?? '').trim();
   const normalizedCWD = String(thread.cwd ?? '').trim() || String(fallbackCWD ?? '').trim();
@@ -162,6 +154,7 @@ function patchThreadDisplayFallbacks(
     ...thread,
     preview: normalizedPreview,
     cwd: normalizedCWD,
+    read_status: thread.read_status ?? fallbackReadStatus ?? undefined,
   };
 }
 
@@ -322,6 +315,78 @@ function codexThreadActivitySignature(args: {
   return tokens.length > 0 ? tokens.join('\u001f') : undefined;
 }
 
+function normalizeCodexThreadReadStatus(
+  raw: CodexThreadReadStatus | null | undefined,
+  thread?: CodexThread | null | undefined,
+  pendingRequests?: readonly CodexPendingRequest[] | null | undefined,
+): CodexThreadReadStatus {
+  const fallbackSnapshot = {
+    updated_at_unix_s: Math.max(0, Math.floor(Number(thread?.updated_at_unix_s ?? 0) || 0)),
+    activity_signature: codexThreadActivitySignature({
+      status: String(thread?.status ?? '').trim(),
+      pendingRequests,
+    }),
+  };
+  const snapshot = {
+    updated_at_unix_s: Math.max(
+      0,
+      Math.floor(Number(raw?.snapshot?.updated_at_unix_s ?? fallbackSnapshot.updated_at_unix_s ?? 0) || 0),
+    ),
+    activity_signature: String(
+      raw?.snapshot?.activity_signature ??
+      fallbackSnapshot.activity_signature ??
+      '',
+    ).trim() || undefined,
+  };
+  const readState = {
+    last_read_updated_at_unix_s: Math.max(
+      0,
+      Math.floor(Number(raw?.read_state?.last_read_updated_at_unix_s ?? snapshot.updated_at_unix_s ?? 0) || 0),
+    ),
+    last_seen_activity_signature: String(
+      raw?.read_state?.last_seen_activity_signature ??
+      snapshot.activity_signature ??
+      '',
+    ).trim() || undefined,
+  };
+  const inferredUnread = (
+    snapshot.updated_at_unix_s > readState.last_read_updated_at_unix_s ||
+    (
+      !!snapshot.activity_signature &&
+      snapshot.activity_signature !== readState.last_seen_activity_signature &&
+      !String(readState.last_seen_activity_signature ?? '').startsWith(`${snapshot.activity_signature}\u001f`)
+    )
+  );
+  return {
+    is_unread: Boolean(raw?.is_unread ?? inferredUnread),
+    snapshot,
+    read_state: readState,
+  };
+}
+
+function patchCodexThreadReadStatus(thread: CodexThread, readStatus: CodexThreadReadStatus): CodexThread {
+  return {
+    ...thread,
+    read_status: {
+      ...readStatus,
+      snapshot: { ...readStatus.snapshot },
+      read_state: { ...readStatus.read_state },
+    },
+  };
+}
+
+function codexThreadNeedsReadMark(readStatus: CodexThreadReadStatus | null | undefined): boolean {
+  if (!readStatus) return false;
+  if (readStatus.snapshot.updated_at_unix_s > readStatus.read_state.last_read_updated_at_unix_s) {
+    return true;
+  }
+  if (!readStatus.snapshot.activity_signature) return false;
+  if (readStatus.snapshot.activity_signature === readStatus.read_state.last_seen_activity_signature) {
+    return false;
+  }
+  return !String(readStatus.read_state.last_seen_activity_signature ?? '').startsWith(`${readStatus.snapshot.activity_signature}\u001f`);
+}
+
 function threadShowsRunningIndicator(
   status: string | null | undefined,
   pendingRequests?: readonly CodexPendingRequest[] | null | undefined,
@@ -436,8 +501,7 @@ export function CodexProvider(props: ParentProps) {
   const [reviewingThreadID, setReviewingThreadID] = createSignal<string | null>(null);
   const [streamBinding, setStreamBinding] = createSignal<Readonly<{ threadID: string; afterSeq: number }> | null>(null);
   const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
-  const [threadReadStateByThread, setThreadReadStateByThread] = createSignal<CodexThreadReadStateByThread>({});
-  const [threadReadStateBootstrapped, setThreadReadStateBootstrapped] = createSignal(false);
+  const [markingReadKeyByThread, setMarkingReadKeyByThread] = createSignal<Record<string, string>>({});
   let scrollToBottomRequestSeq = 0;
 
   const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
@@ -455,7 +519,7 @@ export function CodexProvider(props: ParentProps) {
     () => (codexVisible() ? env.settingsSeq() : null),
     async (settingsSeq) => (settingsSeq === null ? null : fetchCodexStatus()),
   );
-  const [threadsResource, { refetch: refetchThreads }] = createResource(
+  const [threadsResource, { refetch: refetchThreads, mutate: mutateThreads }] = createResource(
     () => (codexVisible() && !status.loading && status()?.available ? `${env.settingsSeq()}::${threadFilter()}` : null),
     async (key) => {
       if (!status()?.available) return [];
@@ -498,7 +562,7 @@ export function CodexProvider(props: ParentProps) {
       const threadID = String(thread.id ?? '').trim();
       if (!threadID) continue;
       const existing = merged.get(threadID);
-      const sessionThread = patchThreadDisplayFallbacks(thread, existing?.preview, existing?.cwd);
+      const sessionThread = patchThreadDisplayFallbacks(thread, existing?.preview, existing?.cwd, existing?.read_status ?? null);
       if (!existing) {
         merged.set(threadID, sessionThread);
         continue;
@@ -515,15 +579,10 @@ export function CodexProvider(props: ParentProps) {
 
   const threads = createMemo<CodexThread[]>(() => allThreads().filter((thread) => matchesThreadFilter(thread, threadFilter())));
 
-  const threadReadStateStorageKey = createMemo(() => {
-    const envID = String(env.env_id() ?? '').trim();
-    return envID ? `${CODEX_THREAD_READ_STATE_STORAGE_KEY_PREFIX}:${envID}` : '';
-  });
-
-  const unreadSnapshotForThread = (threadID: string | null | undefined): CodexThreadUnreadSnapshot => {
+  const threadReadStatusForThread = (threadID: string | null | undefined): CodexThreadReadStatus => {
     const normalizedThreadID = String(threadID ?? '').trim();
     if (!normalizedThreadID) {
-      return { updatedAtUnixS: 0 };
+      return normalizeCodexThreadReadStatus(undefined, null);
     }
 
     const thread = (
@@ -539,67 +598,78 @@ export function CodexProvider(props: ParentProps) {
       ? String(session?.active_status ?? thread?.status ?? '').trim()
       : String(thread?.status ?? session?.thread.status ?? '').trim();
 
-    return {
-      updatedAtUnixS: Math.max(
-        0,
-        Math.floor(
-          Number(thread?.updated_at_unix_s ?? session?.thread.updated_at_unix_s ?? 0) || 0,
+    return normalizeCodexThreadReadStatus(
+      thread?.read_status,
+      thread ? {
+        ...thread,
+        updated_at_unix_s: Math.max(
+          0,
+          Math.floor(Number(thread?.updated_at_unix_s ?? session?.thread.updated_at_unix_s ?? 0) || 0),
         ),
-      ),
-      activitySignature: codexThreadActivitySignature({
         status,
-        pendingRequests,
-      }),
-    };
+      } : null,
+      pendingRequests,
+    );
   };
 
-  createEffect(() => {
-    const key = threadReadStateStorageKey();
-    if (!key) {
-      setThreadReadStateByThread({});
-      setThreadReadStateBootstrapped(false);
-      return;
-    }
+  const updateThreadReadStatus = (threadID: string, readStatus: CodexThreadReadStatus): void => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return;
+    mutateThreads((current) => (
+      Array.isArray(current)
+        ? current.map((thread) => (
+          String(thread.id ?? '').trim() === normalizedThreadID
+            ? patchCodexThreadReadStatus(thread, readStatus)
+            : thread
+        ))
+        : current
+    ));
+    setOptimisticThreadsByID((current) => {
+      const existing = current[normalizedThreadID];
+      if (!existing) return current;
+      return {
+        ...current,
+        [normalizedThreadID]: patchCodexThreadReadStatus(existing, readStatus),
+      };
+    });
+    threadController.updateSession(normalizedThreadID, (session) => ({
+      ...session,
+      thread: patchCodexThreadReadStatus(session.thread, readStatus),
+    }));
+  };
 
-    const raw = readUIStorageItem(key);
-    if (raw === null) {
-      setThreadReadStateByThread({});
-      setThreadReadStateBootstrapped(false);
-      return;
-    }
+  const markThreadRead = async (threadID: string, readStatus: CodexThreadReadStatus): Promise<void> => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID || !codexThreadNeedsReadMark(readStatus)) return;
 
+    const requestKey = [
+      normalizedThreadID,
+      String(readStatus.snapshot.updated_at_unix_s ?? 0),
+      String(readStatus.snapshot.activity_signature ?? '').trim(),
+    ].join('\u001f');
+    if (markingReadKeyByThread()[normalizedThreadID] === requestKey) return;
+
+    setMarkingReadKeyByThread((current) => ({ ...current, [normalizedThreadID]: requestKey }));
     try {
-      setThreadReadStateByThread(normalizeCodexThreadReadStateByThread(JSON.parse(raw)));
-      setThreadReadStateBootstrapped(true);
+      const nextReadStatus = await markCodexThreadRead({
+        threadID: normalizedThreadID,
+        snapshot: readStatus.snapshot,
+      });
+      updateThreadReadStatus(
+        normalizedThreadID,
+        normalizeCodexThreadReadStatus(nextReadStatus, threadController.sessionForThread(normalizedThreadID)?.thread ?? null),
+      );
     } catch {
-      setThreadReadStateByThread({});
-      setThreadReadStateBootstrapped(false);
+      // Best effort; upcoming list/detail refreshes will retry as needed.
+    } finally {
+      setMarkingReadKeyByThread((current) => {
+        if (current[normalizedThreadID] !== requestKey) return current;
+        const next = { ...current };
+        delete next[normalizedThreadID];
+        return next;
+      });
     }
-  });
-
-  createEffect(() => {
-    const key = threadReadStateStorageKey();
-    if (!key || threadReadStateBootstrapped() || !codexVisible()) return;
-    if (threadsResource.loading || threadsResource.error) return;
-
-    const seeded = {
-      ...buildCodexThreadReadStateBaseline(
-        threads().map((thread) => ({
-          threadId: thread.id,
-          snapshot: unreadSnapshotForThread(thread.id),
-        })),
-      ),
-      ...threadReadStateByThread(),
-    };
-    setThreadReadStateByThread(seeded);
-    setThreadReadStateBootstrapped(true);
-  });
-
-  createEffect(() => {
-    const key = threadReadStateStorageKey();
-    if (!key || !threadReadStateBootstrapped()) return;
-    writeUIStorageItem(key, JSON.stringify(threadReadStateByThread()));
-  });
+  };
 
   const selectedThread = createMemo<CodexThread | null>(() => {
     const threadID = String(selectedThreadID() ?? '').trim();
@@ -752,10 +822,10 @@ export function CodexProvider(props: ParentProps) {
     },
   ));
 
-  const upsertOptimisticThread = (thread: CodexThread | null | undefined, fallbackPreview?: string, fallbackCWD?: string) => {
+  const upsertOptimisticThread = (thread: CodexThread | null | undefined, fallbackPreview?: string, fallbackCWD?: string, fallbackReadStatus?: CodexThreadReadStatus | null) => {
     const normalizedThreadID = String(thread?.id ?? '').trim();
     if (!normalizedThreadID || !thread) return;
-    const normalizedThread = patchThreadDisplayFallbacks(thread, fallbackPreview, fallbackCWD);
+    const normalizedThread = patchThreadDisplayFallbacks(thread, fallbackPreview, fallbackCWD, fallbackReadStatus);
     setOptimisticThreadsByID((current) => ({
       ...current,
       [normalizedThreadID]: normalizedThread,
@@ -871,9 +941,8 @@ export function CodexProvider(props: ParentProps) {
   createEffect(() => {
     const normalizedThreadID = String(selectedThreadID() ?? '').trim();
     if (!normalizedThreadID) return;
-    setThreadReadStateByThread((current) => (
-      markCodexThreadReadFromSnapshot(current, normalizedThreadID, unreadSnapshotForThread(normalizedThreadID))
-    ));
+    const readStatus = threadReadStatusForThread(normalizedThreadID);
+    void markThreadRead(normalizedThreadID, readStatus);
   });
 
   createEffect(() => {
@@ -953,11 +1022,7 @@ export function CodexProvider(props: ParentProps) {
     const normalizedThreadID = String(threadID ?? '').trim();
     if (!normalizedThreadID) return false;
     if (normalizedThreadID === String(selectedThreadID() ?? '').trim()) return false;
-    return codexThreadHasUnreadFromSnapshot(
-      threadReadStateByThread(),
-      normalizedThreadID,
-      unreadSnapshotForThread(normalizedThreadID),
-    );
+    return threadReadStatusForThread(normalizedThreadID).is_unread;
   };
   const hasRunningThread = createMemo(() => threads().some((thread) => isThreadRunning(thread.id)));
 
@@ -1380,12 +1445,6 @@ export function CodexProvider(props: ParentProps) {
       );
       draftController.removeOwner(codexOwnerIDForThread(normalizedThreadID));
       threadController.removeThreadState(normalizedThreadID);
-      setThreadReadStateByThread((current) => {
-        if (!(normalizedThreadID in current)) return current;
-        const next = { ...current };
-        delete next[normalizedThreadID];
-        return next;
-      });
       notify.success('Archived', 'The Codex thread has been archived.');
       await refetchThreads();
     } catch (error) {

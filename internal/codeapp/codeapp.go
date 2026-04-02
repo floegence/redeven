@@ -25,6 +25,7 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 const (
@@ -77,6 +78,7 @@ type Service struct {
 	runtime *codeserver.RuntimeManager
 	ai      *ai.Service
 	codex   *codexbridge.Manager
+	reads   *threadreadstate.Store
 	gw      *gateway.Gateway
 }
 
@@ -204,6 +206,16 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	threadReadStatePath := filepath.Join(stateAbs, "gateway", "thread_read_state.sqlite")
+	threadReadStateStore, err := threadreadstate.Open(threadReadStatePath)
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = aiSvc.Close()
+		_ = codexSvc.Close()
+		return nil, err
+	}
+
 	gw, err := gateway.New(gateway.Options{
 		Logger:                  logger,
 		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
@@ -217,6 +229,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ResolveSessionTunnelURL: opts.ResolveSessionTunnelURL,
 		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
 		SecretsStore:            secrets,
+		ThreadReadStateStore:    threadReadStateStore,
 		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {
@@ -224,6 +237,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = aiSvc.Close()
 		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	if err := gw.Start(ctx); err != nil {
@@ -231,11 +245,13 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = aiSvc.Close()
 		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	svc.gw = gw
 	svc.ai = aiSvc
 	svc.codex = codexSvc
+	svc.reads = threadReadStateStore
 
 	return svc, nil
 }
@@ -258,6 +274,9 @@ func (s *Service) Close() error {
 	}
 	if s.ai != nil {
 		_ = s.ai.Close()
+	}
+	if s.reads != nil {
+		_ = s.reads.Close()
 	}
 	if s.codex != nil {
 		_ = s.codex.Close()

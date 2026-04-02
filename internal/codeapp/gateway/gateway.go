@@ -34,6 +34,7 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 type Options struct {
@@ -54,6 +55,8 @@ type Options struct {
 	// SecretsStore holds user-managed secrets (such as AI provider API keys).
 	// If nil, the gateway will derive a default secrets path from ConfigPath.
 	SecretsStore *settings.SecretsStore
+	// ThreadReadStateStore persists per-user per-surface thread read watermarks.
+	ThreadReadStateStore *threadreadstate.Store
 }
 
 type Backend interface {
@@ -140,6 +143,7 @@ type Gateway struct {
 	localPermissionCap *config.PermissionSet
 	configMu           sync.Mutex
 	secrets            *settings.SecretsStore
+	threadReadState    *threadreadstate.Store
 
 	distFS fs.FS
 	dist   http.Handler
@@ -249,6 +253,7 @@ func New(opts Options) (*Gateway, error) {
 		stateDir:                stateDir,
 		localPermissionCap:      &localPermissionCap,
 		secrets:                 secrets,
+		threadReadState:         opts.ThreadReadStateStore,
 		distFS:                  opts.DistFS,
 		dist:                    dist,
 		addr:                    addr,
@@ -1505,7 +1510,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/codex/threads":
-		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
 			return
 		}
 		if g.codex == nil {
@@ -1535,7 +1541,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeCodexError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"threads": threads}})
+		view, err := g.buildCodexThreadListView(r.Context(), meta, threads)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"threads": view}})
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/codex/threads":
@@ -1602,15 +1613,47 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
 			detail, err := g.codex.ReadThread(r.Context(), threadID)
 			if err != nil {
 				writeCodexError(w, err)
 				return
 			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: detail})
+			view, err := g.buildCodexThreadDetailView(r.Context(), meta, detail)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 		}
 		switch {
+		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "read":
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body codexMarkThreadReadRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			resp, err := g.markCodexThreadRead(r.Context(), meta, threadID, body)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+			return
 		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "archive":
 			if err := g.codex.ArchiveThread(r.Context(), threadID); err != nil {
 				writeCodexError(w, err)
@@ -2420,7 +2463,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+		view, err := g.buildAIListThreadsView(r.Context(), meta, out)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/threads":
@@ -2449,7 +2497,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: ai.CreateThreadResponse{Thread: *th}})
+		view, err := g.buildAIThreadEnvelope(r.Context(), meta, th)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 		return
 
 	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/threads/"):
@@ -2490,7 +2543,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
 				return
 			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"thread": th}})
+			view, err := g.buildAIThreadEnvelope(r.Context(), meta, th)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
 		case action == "" && r.Method == http.MethodPatch:
@@ -2559,7 +2617,36 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
 				return
 			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"thread": th}})
+			view, err := g.buildAIThreadEnvelope(r.Context(), meta, th)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			return
+
+		case action == "read" && r.Method == http.MethodPost:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body aiMarkThreadReadRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			resp, err := g.markAIThreadRead(r.Context(), meta, threadID, body)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
 		case action == "cancel" && r.Method == http.MethodPost:

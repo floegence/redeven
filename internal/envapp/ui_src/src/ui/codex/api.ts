@@ -4,6 +4,7 @@ import type {
   CodexEvent,
   CodexForkThreadRequest,
   CodexInterruptTurnRequest,
+  CodexThreadReadStatus,
   CodexReviewStartRequest,
   CodexStatus,
   CodexThread,
@@ -47,6 +48,29 @@ export async function listCodexThreads(args: {
 export async function openCodexThread(threadID: string): Promise<CodexThreadDetail> {
   const id = encodeURIComponent(String(threadID ?? '').trim());
   return fetchGatewayJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}`, { method: 'GET' });
+}
+
+export async function markCodexThreadRead(args: {
+  threadID: string;
+  snapshot: {
+    updated_at_unix_s: number;
+    activity_signature?: string;
+  };
+}): Promise<CodexThreadReadStatus> {
+  const threadID = encodeURIComponent(String(args.threadID ?? '').trim());
+  const out = await fetchGatewayJSON<Readonly<{ read_status: CodexThreadReadStatus }>>(
+    `/_redeven_proxy/api/codex/threads/${threadID}/read`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        snapshot: {
+          updated_at_unix_s: Math.max(0, Math.floor(Number(args.snapshot.updated_at_unix_s ?? 0) || 0)),
+          activity_signature: String(args.snapshot.activity_signature ?? '').trim() || undefined,
+        },
+      }),
+    },
+  );
+  return out.read_status;
 }
 
 export async function startCodexThread(args: {

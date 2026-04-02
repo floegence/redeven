@@ -279,7 +279,10 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
   switch (event.type) {
     case 'thread_started':
       if (event.thread) {
-        next.thread = { ...event.thread };
+        next.thread = {
+          ...event.thread,
+          read_status: event.thread.read_status ?? next.thread.read_status,
+        };
         next.active_status = String(event.thread.status ?? '').trim();
         next.active_status_flags = [...(event.thread.active_flags ?? [])];
       }

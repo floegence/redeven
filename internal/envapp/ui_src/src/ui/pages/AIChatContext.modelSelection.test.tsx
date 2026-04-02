@@ -43,7 +43,6 @@ const fetchGatewayJSONMock = hoisted.fetchGatewayJSONMock;
 const STORAGE_KEYS = [
   'redeven_ai_active_thread_id',
   'redeven_ai_draft_working_dir',
-  'redeven_ai_thread_read_state_v1:env-1',
 ];
 
 type MutableModelsResponse = {
@@ -72,6 +71,15 @@ const makeThread = (overrides: Partial<ThreadView> = {}): ThreadView => ({
   updated_at_unix_ms: 1000,
   last_message_at_unix_ms: 1000,
   last_message_preview: 'preview',
+  read_status: {
+    is_unread: false,
+    snapshot: {
+      last_message_at_unix_ms: 1000,
+    },
+    read_state: {
+      last_read_message_at_unix_ms: 1000,
+    },
+  },
   ...overrides,
 });
 
@@ -188,6 +196,25 @@ describe('AIChatContext model selection', () => {
         return { thread };
       }
       if (url.startsWith('/_redeven_proxy/api/ai/threads/')) {
+        if (url.endsWith('/read')) {
+          const parts = url.split('/');
+          const threadId = decodeURIComponent(parts[parts.length - 2] ?? '');
+          const thread = threadsState.find((entry) => entry.thread_id === threadId) ?? makeThread({ thread_id: threadId });
+          return {
+            read_status: {
+              is_unread: false,
+              snapshot: thread.read_status?.snapshot ?? { last_message_at_unix_ms: thread.last_message_at_unix_ms },
+              read_state: thread.read_status?.snapshot
+                ? {
+                    last_read_message_at_unix_ms: thread.read_status.snapshot.last_message_at_unix_ms,
+                    last_seen_waiting_prompt_id: thread.read_status.snapshot.waiting_prompt_id,
+                  }
+                : {
+                    last_read_message_at_unix_ms: thread.last_message_at_unix_ms,
+                  },
+            },
+          };
+        }
         const threadId = decodeURIComponent(url.split('/').pop() ?? '');
         const body = JSON.parse(String(init?.body ?? '{}')) as { model_id?: string };
         threadPatchRequests.push({ threadId, body });

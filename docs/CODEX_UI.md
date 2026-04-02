@@ -79,6 +79,7 @@ The current browser-facing contract is:
 - `GET /_redeven_proxy/api/codex/threads`
 - `POST /_redeven_proxy/api/codex/threads`
 - `GET /_redeven_proxy/api/codex/threads/:id`
+- `POST /_redeven_proxy/api/codex/threads/:id/read`
 - `POST /_redeven_proxy/api/codex/threads/:id/archive`
 - `POST /_redeven_proxy/api/codex/threads/:id/unarchive`
 - `POST /_redeven_proxy/api/codex/threads/:id/fork`
@@ -104,6 +105,18 @@ The event stream endpoint is SSE and is used for live transcript / approval upda
 - `last_applied_seq`
 - `active_status`
 - `active_status_flags`
+
+Codex thread list/detail payloads also include per-thread `read_status` on `thread` objects:
+
+- `is_unread`
+- `snapshot`
+  - `updated_at_unix_s`
+  - `activity_signature`
+- `read_state`
+  - `last_read_updated_at_unix_s`
+  - `last_seen_activity_signature`
+
+`POST /_redeven_proxy/api/codex/threads/:id/read` accepts the browser-visible `snapshot`, validates that it does not move beyond the current backend thread state, and advances the per-user read watermark monotonically. The runtime persists that watermark by `endpoint_id + user_public_id + surface + thread_id`, so unread state survives device switches and refreshes instead of living in browser-local storage.
 
 `last_applied_seq` means the returned bootstrap has already applied all bridge-projected events up to that sequence number. The browser must resume SSE from that exact sequence so refreshes do not lose live work state.
 
@@ -165,6 +178,7 @@ Current Env App behavior:
 - The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
 - The sidebar now exposes `Active` and `Archived` thread filters instead of treating archive as a one-way disappearance from the browser surface.
 - Sidebar thread order changes only for real thread activity such as new-thread creation, user turn sends, or live lifecycle updates. Clicking an existing thread to read/bootstrap it must not reorder the list by itself.
+- Codex unread state is server-backed. Opening a thread marks the current browser-visible snapshot as read through the gateway instead of writing unread state to desktop/local browser storage.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
 - Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
 - Switching to an existing Codex thread explicitly re-enters follow-bottom mode, so the transcript converges to the newest output instead of staying at a stale mid-thread scroll offset.

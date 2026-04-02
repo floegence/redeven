@@ -22,6 +22,17 @@ const interruptCodexTurnMock = vi.fn();
 const startCodexReviewMock = vi.fn();
 const respondToCodexRequestMock = vi.fn();
 const connectCodexEventStreamMock = vi.fn();
+const markCodexThreadReadMock = vi.fn(async (args: any) => ({
+  is_unread: false,
+  snapshot: {
+    updated_at_unix_s: Math.max(0, Math.floor(Number(args?.snapshot?.updated_at_unix_s ?? 0) || 0)),
+    activity_signature: String(args?.snapshot?.activity_signature ?? '').trim() || undefined,
+  },
+  read_state: {
+    last_read_updated_at_unix_s: Math.max(0, Math.floor(Number(args?.snapshot?.updated_at_unix_s ?? 0) || 0)),
+    last_seen_activity_signature: String(args?.snapshot?.activity_signature ?? '').trim() || undefined,
+  },
+}));
 const rpcMocks = {
   fs: {
     list: vi.fn(),
@@ -32,7 +43,6 @@ const notification = {
   error: vi.fn(),
   info: vi.fn(),
 };
-const CODEX_THREAD_READ_STATE_STORAGE_KEY = 'redeven_codex_thread_read_state_v1:env_1';
 const desktopStorageState = new Map<string, string>();
 
 if (typeof window !== 'undefined') {
@@ -181,6 +191,7 @@ vi.mock('./api', () => ({
   forkCodexThread: (...args: any[]) => forkCodexThreadMock(...args),
   interruptCodexTurn: (...args: any[]) => interruptCodexTurnMock(...args),
   startCodexReview: (...args: any[]) => startCodexReviewMock(...args),
+  markCodexThreadRead: (args: any) => markCodexThreadReadMock(args),
   respondToCodexRequest: (...args: any[]) => respondToCodexRequestMock(...args),
   connectCodexEventStream: (...args: any[]) => connectCodexEventStreamMock(...args),
 }));
@@ -297,12 +308,6 @@ describe('CodexSidebar', () => {
   });
 
   it('shows an unread dot when a completed thread has unseen activity after a prior running snapshot', async () => {
-    desktopStorageState.set(CODEX_THREAD_READ_STATE_STORAGE_KEY, JSON.stringify({
-      thread_2: {
-        lastReadUpdatedAtUnixS: 4,
-        lastSeenActivitySignature: 'status:running',
-      },
-    }));
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -340,6 +345,11 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: 20,
         status: 'idle',
         cwd: '/workspace',
+        read_status: {
+          is_unread: false,
+          snapshot: { updated_at_unix_s: 20, activity_signature: 'status:idle' },
+          read_state: { last_read_updated_at_unix_s: 20, last_seen_activity_signature: 'status:idle' },
+        },
       },
       {
         id: 'thread_2',
@@ -351,6 +361,11 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: 4,
         status: 'completed',
         cwd: '/workspace/ui',
+        read_status: {
+          is_unread: true,
+          snapshot: { updated_at_unix_s: 4, activity_signature: 'status:completed' },
+          read_state: { last_read_updated_at_unix_s: 4, last_seen_activity_signature: 'status:running' },
+        },
       },
     ]);
     openCodexThreadMock.mockImplementation(async (threadID: string) => ({
@@ -364,6 +379,17 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: threadID === 'thread_1' ? 10 : 4,
         status: threadID === 'thread_1' ? 'idle' : 'completed',
         cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        read_status: threadID === 'thread_1'
+          ? {
+              is_unread: false,
+              snapshot: { updated_at_unix_s: 10, activity_signature: 'status:idle' },
+              read_state: { last_read_updated_at_unix_s: 10, last_seen_activity_signature: 'status:idle' },
+            }
+          : {
+              is_unread: true,
+              snapshot: { updated_at_unix_s: 4, activity_signature: 'status:completed' },
+              read_state: { last_read_updated_at_unix_s: 4, last_seen_activity_signature: 'status:running' },
+            },
         turns: [],
       },
       runtime_config: {
@@ -392,13 +418,6 @@ describe('CodexSidebar', () => {
   });
 
   it('keeps the running indicator when a running thread also has unread activity', async () => {
-    desktopStorageState.set(CODEX_THREAD_READ_STATE_STORAGE_KEY, JSON.stringify({
-      thread_2: {
-        lastReadUpdatedAtUnixS: 3,
-        lastSeenActivitySignature: 'status:idle',
-      },
-    }));
-
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -436,6 +455,11 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: 10,
         status: 'idle',
         cwd: '/workspace',
+        read_status: {
+          is_unread: false,
+          snapshot: { updated_at_unix_s: 10, activity_signature: 'status:idle' },
+          read_state: { last_read_updated_at_unix_s: 10, last_seen_activity_signature: 'status:idle' },
+        },
       },
       {
         id: 'thread_2',
@@ -447,6 +471,11 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: 4,
         status: 'running',
         cwd: '/workspace/ui',
+        read_status: {
+          is_unread: true,
+          snapshot: { updated_at_unix_s: 4, activity_signature: 'status:running' },
+          read_state: { last_read_updated_at_unix_s: 3, last_seen_activity_signature: 'status:idle' },
+        },
       },
     ]);
     openCodexThreadMock.mockImplementation(async (threadID: string) => ({
@@ -460,6 +489,17 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: threadID === 'thread_1' ? 10 : 4,
         status: threadID === 'thread_1' ? 'idle' : 'running',
         cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        read_status: threadID === 'thread_1'
+          ? {
+              is_unread: false,
+              snapshot: { updated_at_unix_s: 10, activity_signature: 'status:idle' },
+              read_state: { last_read_updated_at_unix_s: 10, last_seen_activity_signature: 'status:idle' },
+            }
+          : {
+              is_unread: true,
+              snapshot: { updated_at_unix_s: 4, activity_signature: 'status:running' },
+              read_state: { last_read_updated_at_unix_s: 3, last_seen_activity_signature: 'status:idle' },
+            },
         turns: [],
       },
       runtime_config: {
@@ -487,13 +527,6 @@ describe('CodexSidebar', () => {
   });
 
   it('clears the unread dot after selecting the thread', async () => {
-    desktopStorageState.set(CODEX_THREAD_READ_STATE_STORAGE_KEY, JSON.stringify({
-      thread_2: {
-        lastReadUpdatedAtUnixS: 4,
-        lastSeenActivitySignature: 'status:running',
-      },
-    }));
-
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -531,6 +564,11 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: 10,
         status: 'idle',
         cwd: '/workspace',
+        read_status: {
+          is_unread: false,
+          snapshot: { updated_at_unix_s: 10, activity_signature: 'status:idle' },
+          read_state: { last_read_updated_at_unix_s: 10, last_seen_activity_signature: 'status:idle' },
+        },
       },
       {
         id: 'thread_2',
@@ -542,6 +580,11 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: 4,
         status: 'completed',
         cwd: '/workspace/ui',
+        read_status: {
+          is_unread: true,
+          snapshot: { updated_at_unix_s: 4, activity_signature: 'status:completed' },
+          read_state: { last_read_updated_at_unix_s: 4, last_seen_activity_signature: 'status:running' },
+        },
       },
     ]);
     openCodexThreadMock.mockImplementation(async (threadID: string) => ({
@@ -555,6 +598,17 @@ describe('CodexSidebar', () => {
         updated_at_unix_s: threadID === 'thread_1' ? 20 : 4,
         status: threadID === 'thread_1' ? 'idle' : 'completed',
         cwd: threadID === 'thread_1' ? '/workspace' : '/workspace/ui',
+        read_status: threadID === 'thread_1'
+          ? {
+              is_unread: false,
+              snapshot: { updated_at_unix_s: 20, activity_signature: 'status:idle' },
+              read_state: { last_read_updated_at_unix_s: 20, last_seen_activity_signature: 'status:idle' },
+            }
+          : {
+              is_unread: true,
+              snapshot: { updated_at_unix_s: 4, activity_signature: 'status:completed' },
+              read_state: { last_read_updated_at_unix_s: 4, last_seen_activity_signature: 'status:running' },
+            },
         turns: [],
       },
       runtime_config: {
@@ -591,10 +645,11 @@ describe('CodexSidebar', () => {
 
     expect(threadIndicatorMode(host, 'thread_2')).toBe('none');
     expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
-    expect(JSON.parse(desktopStorageState.get(CODEX_THREAD_READ_STATE_STORAGE_KEY) ?? '{}')).toMatchObject({
-      thread_2: {
-        lastReadUpdatedAtUnixS: 4,
-        lastSeenActivitySignature: 'status:completed',
+    expect(markCodexThreadReadMock).toHaveBeenCalledWith({
+      threadID: 'thread_2',
+      snapshot: {
+        updated_at_unix_s: 4,
+        activity_signature: 'status:completed',
       },
     });
   });
