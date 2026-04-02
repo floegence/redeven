@@ -28,14 +28,14 @@ import {
 describe('desktopPreferences', () => {
   it('validates a loopback-only draft without a password', () => {
     expect(validateDesktopSettingsDraft({
-      local_ui_bind: '127.0.0.1:0',
+      local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
       controlplane_url: '',
       env_id: '',
       env_token: '',
     })).toEqual({
-      local_ui_bind: '127.0.0.1:0',
+      local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_configured: false,
       pending_bootstrap: null,
@@ -46,7 +46,7 @@ describe('desktopPreferences', () => {
 
   it('requires a password for non-loopback binds', () => {
     expect(() => validateDesktopSettingsDraft({
-      local_ui_bind: '0.0.0.0:24000',
+      local_ui_bind: '0.0.0.0:23998',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
       controlplane_url: '',
@@ -57,7 +57,7 @@ describe('desktopPreferences', () => {
 
   it('requires a complete bootstrap set when any bootstrap field is provided', () => {
     expect(() => validateDesktopSettingsDraft({
-      local_ui_bind: '127.0.0.1:0',
+      local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
       controlplane_url: 'https://region.example.invalid',
@@ -73,7 +73,7 @@ describe('desktopPreferences', () => {
       const codec = createPlaintextSecretCodec();
       const preferences: DesktopPreferences = {
         ...validateDesktopSettingsDraft({
-          local_ui_bind: '0.0.0.0:24000',
+          local_ui_bind: '0.0.0.0:23998',
           local_ui_password: 'super-secret',
           local_ui_password_mode: 'replace',
           controlplane_url: 'https://region.example.invalid',
@@ -237,7 +237,7 @@ describe('desktopPreferences', () => {
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual({
-        local_ui_bind: '127.0.0.1:0',
+        local_ui_bind: 'localhost:23998',
         local_ui_password: '',
         local_ui_password_configured: false,
         pending_bootstrap: null,
@@ -444,7 +444,7 @@ describe('desktopPreferences', () => {
 
   it('serializes local-environment settings into a settings draft', () => {
     expect(desktopPreferencesToDraft({
-      local_ui_bind: '0.0.0.0:24000',
+      local_ui_bind: '0.0.0.0:23998',
       local_ui_password: 'secret',
       local_ui_password_configured: true,
       pending_bootstrap: {
@@ -463,7 +463,7 @@ describe('desktopPreferences', () => {
       ],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
     })).toEqual({
-      local_ui_bind: '0.0.0.0:24000',
+      local_ui_bind: '0.0.0.0:23998',
       local_ui_password: '',
       local_ui_password_mode: 'keep',
       controlplane_url: 'https://region.example.invalid',

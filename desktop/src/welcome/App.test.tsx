@@ -75,9 +75,9 @@ describe('DesktopWelcomeShell', () => {
     expect(snapshot.settings_surface.draft.local_ui_password_mode).toBe('keep');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'bind_address',
-        value: '0.0.0.0:24000',
-        detail: 'Local network preset',
+        id: 'next_start_address',
+        value: 'Your device IP:24000',
+        detail: 'Other devices on your local network can open the Local Environment.',
       }),
       expect.objectContaining({
         id: 'password_state',

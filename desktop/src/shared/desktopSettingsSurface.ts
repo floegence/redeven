@@ -5,7 +5,7 @@ export type DesktopAccessMode = 'local_only' | 'shared_local_network' | 'custom_
 export type DesktopSettingsSummaryTone = 'default' | 'warning' | 'success' | 'primary';
 
 export interface DesktopSettingsSummaryItem {
-  id: 'access_mode' | 'bind_address' | 'password_state' | 'next_start';
+  id: 'visibility' | 'next_start_address' | 'password_state' | 'next_start';
   label: string;
   value: string;
   detail?: string;
@@ -39,7 +39,8 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   access_mode: DesktopAccessMode;
   access_mode_label: string;
   access_mode_options: readonly DesktopAccessModeOption[];
-  access_bind_display: string;
+  next_start_address_display: string;
+  current_runtime_url: string;
   password_state_label: string;
   password_state_tone: 'default' | 'warning' | 'success';
   local_ui_password_configured: boolean;

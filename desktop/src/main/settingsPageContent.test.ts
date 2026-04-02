@@ -1,28 +1,34 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopSettingsSurfaceSnapshot, desktopAccessModeForDraft } from './settingsPageContent';
+import type { DesktopSettingsDraft } from '../shared/settingsIPC';
+
+function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
+  return {
+    local_ui_bind: 'localhost:23998',
+    local_ui_password: '',
+    local_ui_password_mode: 'replace',
+    controlplane_url: '',
+    env_id: '',
+    env_token: '',
+    ...overrides,
+  };
+}
 
 describe('settingsPageContent', () => {
   it('derives the local-only access mode from the default loopback draft', () => {
-    expect(desktopAccessModeForDraft({
+    expect(desktopAccessModeForDraft(draft({
       local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    })).toBe('local_only');
+    }))).toBe('local_only');
   });
 
   it('derives shared local network mode and marks bootstrap as pending when queued', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', {
-      local_ui_bind: '0.0.0.0:24000',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', draft({
+      local_ui_bind: '0.0.0.0:23998',
       controlplane_url: 'https://region.example.invalid',
       env_id: 'env_123',
       env_token: 'token-123',
-    });
+    }));
 
     expect(snapshot.access_mode).toBe('shared_local_network');
     expect(snapshot.password_state_tone).toBe('warning');
@@ -30,8 +36,12 @@ describe('settingsPageContent', () => {
     expect(snapshot.bootstrap_status_label).toBe('Registration queued for next start');
     expect(snapshot.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'access_mode',
+        id: 'visibility',
         value: 'Shared on your local network',
+      }),
+      expect.objectContaining({
+        id: 'next_start_address',
+        value: 'Your device IP:23998',
       }),
       expect.objectContaining({
         id: 'password_state',
@@ -47,23 +57,19 @@ describe('settingsPageContent', () => {
   });
 
   it('treats non-preset binds as custom exposure', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', {
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', draft({
       local_ui_bind: '10.0.0.12:25000',
       local_ui_password: 'secret',
-      local_ui_password_mode: 'replace',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    });
+    }));
 
     expect(snapshot.access_mode).toBe('custom_exposure');
     expect(snapshot.password_state_tone).toBe('success');
-    expect(snapshot.access_bind_display).toBe('10.0.0.12:25000');
+    expect(snapshot.next_start_address_display).toBe('10.0.0.12:25000');
     expect(snapshot.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'bind_address',
+        id: 'next_start_address',
         value: '10.0.0.12:25000',
-        detail: 'Custom bind',
+        detail: 'Custom bind and password rules.',
       }),
       expect.objectContaining({
         id: 'password_state',
@@ -74,14 +80,10 @@ describe('settingsPageContent', () => {
   });
 
   it('treats a configured stored password as write-only keep state', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', {
-      local_ui_bind: '0.0.0.0:24000',
-      local_ui_password: '',
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', draft({
+      local_ui_bind: '0.0.0.0:23998',
       local_ui_password_mode: 'keep',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    }, {
+    }), {
       local_ui_password_configured: true,
     });
 
@@ -92,14 +94,10 @@ describe('settingsPageContent', () => {
   });
 
   it('describes replacing a stored password before save', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', {
-      local_ui_bind: '0.0.0.0:24000',
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', draft({
+      local_ui_bind: '0.0.0.0:23998',
       local_ui_password: 'next-secret',
-      local_ui_password_mode: 'replace',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    }, {
+    }), {
       local_ui_password_configured: true,
     });
 
@@ -108,14 +106,9 @@ describe('settingsPageContent', () => {
   });
 
   it('explains when the current runtime needs a password that Desktop has not stored yet', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', {
-      local_ui_bind: '0.0.0.0:24000',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    }, {
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', draft({
+      local_ui_bind: '0.0.0.0:23998',
+    }), {
       runtime_password_required: true,
     });
 

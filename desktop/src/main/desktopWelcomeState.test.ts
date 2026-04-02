@@ -157,7 +157,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.bootstrap_pending).toBe(true);
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'access_mode',
+        id: 'visibility',
         value: 'Local only',
       }),
       expect.objectContaining({
@@ -174,6 +174,30 @@ describe('desktopWelcomeState', () => {
       env_id: 'env_123',
       env_token: 'token-123',
     });
+  });
+
+  it('threads the current managed runtime url into the settings surface when Local Environment is active', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: {
+        local_ui_bind: 'localhost:23998',
+        local_ui_password: '',
+        local_ui_password_configured: false,
+        pending_bootstrap: null,
+        saved_environments: [],
+        recent_external_local_ui_urls: [],
+      },
+      managedStartup: {
+        local_ui_url: 'http://localhost:23998/',
+        local_ui_urls: ['http://localhost:23998/'],
+      },
+      activeSessionTarget: {
+        kind: 'managed_local',
+      },
+      surface: 'local_environment_settings',
+    });
+
+    expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
+    expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 
   it('turns blocked local-runtime reports into Local Environment recovery copy', () => {

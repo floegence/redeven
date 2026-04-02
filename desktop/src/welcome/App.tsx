@@ -22,6 +22,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Checkbox,
   CommandPalette,
   ConfirmDialog,
   Dialog,
@@ -48,6 +49,14 @@ import {
   type DesktopSettingsDraft,
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
+import {
+  applyDesktopAccessAutoPortToDraft,
+  applyDesktopAccessFixedPortToDraft,
+  applyDesktopAccessModeToDraft,
+  buildDesktopBootstrapStatus,
+  buildDesktopSettingsSummaryItems,
+  deriveDesktopAccessDraftModel,
+} from '../shared/desktopAccessModel';
 import {
   buildDesktopWelcomeShellViewModel,
   capabilityUnavailableMessage,
@@ -626,18 +635,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function applyAccessMode(mode: DesktopAccessMode): void {
     setDraft((current) => {
       const storedPasswordConfigured = snapshot().settings_surface.local_ui_password_configured;
+      const nextDraft = applyDesktopAccessModeToDraft(current, mode);
       if (mode === 'local_only') {
         return {
-          ...current,
-          local_ui_bind: '127.0.0.1:0',
+          ...nextDraft,
           local_ui_password: '',
           local_ui_password_mode: 'clear',
         };
       }
       if (mode === 'shared_local_network') {
         return {
-          ...current,
-          local_ui_bind: '0.0.0.0:24000',
+          ...nextDraft,
           local_ui_password_mode: normalizeDesktopLocalUIPasswordMode(
             current.local_ui_password_mode,
             defaultLocalUIPasswordMode(storedPasswordConfigured),
@@ -646,8 +654,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             : current.local_ui_password_mode,
         };
       }
-      return current;
+      return nextDraft;
     });
+  }
+
+  function applyAccessFixedPort(portText: string): void {
+    setDraft((current) => applyDesktopAccessFixedPortToDraft(current, portText));
+  }
+
+  function toggleAutoPort(enabled: boolean): void {
+    setDraft((current) => applyDesktopAccessAutoPortToDraft(current, enabled));
   }
 
   function clearStoredLocalUIPassword(): void {
@@ -896,6 +912,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }}
         updateDraftField={updateDraftField}
         applyAccessMode={applyAccessMode}
+        applyAccessFixedPort={applyAccessFixedPort}
+        toggleAutoPort={toggleAutoPort}
         clearBootstrapDraft={clearBootstrapDraft}
         saveSettings={saveSettings}
         cancelSettings={cancelSettings}
@@ -1179,7 +1197,7 @@ function SummaryItemTile(props: Readonly<{
       <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{props.item.label}</div>
       <div class={cn(
         'mt-1 text-sm font-medium text-foreground',
-        props.item.id === 'bind_address' && 'break-all font-mono text-xs',
+        props.item.id === 'next_start_address' && 'break-all font-mono text-xs',
       )}>
         {props.item.value}
       </div>
@@ -1422,17 +1440,35 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   settingsErrorRef: (value: HTMLElement) => void;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   applyAccessMode: (mode: DesktopAccessMode) => void;
+  applyAccessFixedPort: (portText: string) => void;
+  toggleAutoPort: (enabled: boolean) => void;
   clearBootstrapDraft: () => void;
   saveSettings: () => Promise<void>;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
 }>) {
   const [advancedOpen, setAdvancedOpen] = createSignal(props.snapshot.bootstrap_pending);
-  const selectedOption = createMemo(() => props.snapshot.access_mode_options.find((option) => option.value === props.snapshot.access_mode) ?? null);
-  const nextStartSummary = createMemo(() => props.snapshot.summary_items.find((item) => item.id === 'next_start') ?? null);
+  const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
+  const accessModelOptions = createMemo(() => ({
+    current_runtime_url: props.snapshot.current_runtime_url,
+    local_ui_password_configured: props.snapshot.local_ui_password_configured,
+    runtime_password_required: props.snapshot.runtime_password_required,
+    mode_override: accessModeOverride(),
+  }));
+  const accessModel = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessModelOptions()));
+  const liveSummaryItems = createMemo(() => buildDesktopSettingsSummaryItems(props.draft, accessModelOptions()));
+  const liveBootstrapStatus = createMemo(() => buildDesktopBootstrapStatus(props.draft));
+  const selectedOption = createMemo(() => props.snapshot.access_mode_options.find((option) => option.value === accessModel().access_mode) ?? null);
+  const nextStartSummary = createMemo(() => liveSummaryItems().find((item) => item.id === 'next_start') ?? null);
 
   createEffect(() => {
     setAdvancedOpen(props.snapshot.bootstrap_pending);
+  });
+
+  createEffect(() => {
+    if (!props.open) {
+      setAccessModeOverride(null);
+    }
   });
 
   return (
@@ -1463,22 +1499,40 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
       )}
     >
       <div class="space-y-5">
+        <Show when={accessModel().current_runtime_url !== ''}>
+          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Current runtime address</div>
+            <div class="mt-1 break-all font-mono text-xs text-foreground">{accessModel().current_runtime_url}</div>
+            <div class="mt-1 text-xs leading-5 text-muted-foreground">
+              This is the address the managed Local Environment is using right now.
+            </div>
+          </div>
+        </Show>
+
         <div class="grid gap-3 sm:grid-cols-2">
-          <For each={props.snapshot.summary_items}>
+          <For each={liveSummaryItems()}>
             {(item) => <SummaryItemTile item={item} />}
           </For>
         </div>
 
         <div class="space-y-3">
           <div>
-            <div class="text-sm font-medium text-foreground">Access mode</div>
+            <div class="text-sm font-medium text-foreground">Visibility</div>
             <div class="mt-1 text-xs leading-5 text-muted-foreground">
               {selectedOption()?.description}
             </div>
           </div>
           <SegmentedControl
-            value={props.snapshot.access_mode}
-            onChange={(value) => props.applyAccessMode(value as DesktopAccessMode)}
+            value={accessModel().access_mode}
+            onChange={(value) => {
+              const nextMode = value as DesktopAccessMode;
+              if (nextMode === 'custom_exposure') {
+                setAccessModeOverride('custom_exposure');
+                return;
+              }
+              setAccessModeOverride(null);
+              props.applyAccessMode(nextMode);
+            }}
             options={props.snapshot.access_mode_options.map((option) => ({
               value: option.value,
               label: option.label,
@@ -1487,7 +1541,51 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           />
         </div>
 
-        <Show when={props.snapshot.access_mode === 'custom_exposure'}>
+        <Show when={accessModel().access_mode !== 'custom_exposure'}>
+          <div class="grid gap-4 md:grid-cols-2">
+            <label class="grid gap-1.5">
+              <span class="text-xs font-medium text-foreground">Port</span>
+              <Input
+                value={accessModel().fixed_port_value}
+                inputMode="numeric"
+                disabled={accessModel().port_mode === 'auto'}
+                size="sm"
+                class="w-full"
+                onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
+              />
+              <span class="text-xs leading-5 text-muted-foreground">
+                {accessModel().access_mode === 'local_only'
+                  ? 'Use a fixed localhost port when you want a predictable Desktop address.'
+                  : 'Use the same fixed port that other devices on your local network will open.'}
+              </span>
+            </label>
+
+            <Show
+              when={accessModel().access_mode === 'shared_local_network'}
+              fallback={(
+                <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+                  <Checkbox
+                    checked={accessModel().port_mode === 'auto'}
+                    onChange={props.toggleAutoPort}
+                    label="Auto-select an available port"
+                    size="sm"
+                  />
+                  <div class="mt-2 text-xs leading-5 text-muted-foreground">
+                    Use this only when you do not need a predictable localhost address. Turning it off restores the fixed Desktop port.
+                  </div>
+                </div>
+              )}
+            >
+              <SettingsFieldInput
+                field={props.snapshot.host_fields[1]!}
+                value={props.draft.local_ui_password}
+                updateDraftField={props.updateDraftField}
+              />
+            </Show>
+          </div>
+        </Show>
+
+        <Show when={accessModel().access_mode === 'custom_exposure'}>
           <div class="grid gap-4 md:grid-cols-2">
             <SettingsFieldInput
               field={props.snapshot.host_fields[0]!}
@@ -1502,23 +1600,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             />
           </div>
         </Show>
-
-        <Show when={props.snapshot.access_mode === 'shared_local_network'}>
-          <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
-              <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Preset bind</div>
-              <div class="mt-1 break-all font-mono text-xs text-foreground">0.0.0.0:24000</div>
-              <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.snapshot.password_state_label}</div>
-            </div>
-            <LocalUIPasswordField
-              snapshot={props.snapshot}
-              draft={props.draft}
-              updateDraftField={props.updateDraftField}
-              clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
-            />
-          </div>
-        </Show>
-
         <div class="overflow-hidden rounded-lg border border-border/70">
           <button
             type="button"
@@ -1532,12 +1613,12 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               </div>
             </div>
             <Tag
-              variant={props.snapshot.bootstrap_pending ? 'primary' : 'neutral'}
+              variant={liveBootstrapStatus().pending ? 'primary' : 'neutral'}
               tone="soft"
               size="sm"
               class="cursor-default whitespace-nowrap"
             >
-              {nextStartSummary()?.value ?? props.snapshot.bootstrap_status_label}
+              {nextStartSummary()?.value ?? liveBootstrapStatus().label}
             </Tag>
           </button>
 
@@ -1554,7 +1635,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                   )}
                 </For>
               </div>
-              <Show when={props.snapshot.bootstrap_pending}>
+              <Show when={liveBootstrapStatus().pending}>
                 <div class="flex justify-end">
                   <Button size="sm" variant="outline" onClick={props.clearBootstrapDraft}>
                     Clear queued request

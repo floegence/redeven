@@ -234,6 +234,7 @@ export function buildDesktopWelcomeSnapshot(
     suggested_remote_url: suggestedRemoteURL(issue, activeSessionTarget, environments),
     issue,
     settings_surface: buildDesktopSettingsSurfaceSnapshot('local_environment_settings', desktopPreferencesToDraft(preferences), {
+      current_runtime_url: activeSessionTarget?.kind === 'managed_local' ? managedStartup?.local_ui_url ?? '' : '',
       local_ui_password_configured: preferences.local_ui_password_configured,
       runtime_password_required: runtimePasswordRequired,
     }),

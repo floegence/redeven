@@ -124,8 +124,8 @@ Expected result:
 | --- | --- |
 | Local UI only on this machine | `redeven run --mode local` |
 | Local UI plus remote control channel | `redeven run --mode hybrid` |
-| Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0` |
-| Expose Local UI to another trusted machine | `REDEVEN_LOCAL_UI_PASSWORD=<long-password> redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env REDEVEN_LOCAL_UI_PASSWORD` |
+| Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --local-ui-bind localhost:23998` |
+| Expose Local UI to another trusted machine | `REDEVEN_LOCAL_UI_PASSWORD=<long-password> redeven run --mode hybrid --local-ui-bind 0.0.0.0:23998 --password-env REDEVEN_LOCAL_UI_PASSWORD` |
 
 ## Security at a glance
 

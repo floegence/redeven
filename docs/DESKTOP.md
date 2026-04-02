@@ -38,7 +38,7 @@ The base launch shape is:
 redeven run \
   --mode desktop \
   --desktop-managed \
-  --local-ui-bind 127.0.0.1:0 \
+  --local-ui-bind localhost:23998 \
   --startup-report-file <temp-path>
 ```
 
@@ -59,7 +59,7 @@ Behavior:
 - Remote control is enabled only when the local config is already bootstrapped and remote-valid.
 - `--desktop-managed` disables CLI self-upgrade semantics.
 - Desktop-owned managed-runtime restart stays available, but it is owned by Electron main rather than runtime self-`exec`.
-- Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind is dynamic such as `127.0.0.1:0`.
+- Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
@@ -139,12 +139,13 @@ Rules:
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
 - The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
 - Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
-- The dialog starts with a compact summary grid for access mode, bind address, password state, and next start status.
-- The first decision is an access intent, not a raw bind field:
+- The dialog starts with a compact summary grid for visibility, next-start address, password state, and next start status.
+- The first decision is a visibility intent, not a raw bind field:
   - `Local only`
   - `Shared on your local network`
   - `Custom exposure`
-- The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving.
+- The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving, but it keeps port selection as a separate control instead of hiding it inside the scope preset.
+- The settings dialog also shows the current managed runtime URL separately from the next-start configuration when the local environment is already running.
 - The one-shot bootstrap request stays in a compact `Advanced` section so the main settings flow stays focused on common local access decisions.
 
 ## Desktop Preferences
@@ -168,11 +169,18 @@ Semantics:
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 
-Launcher-oriented sharing presets intentionally map high-level user intent to the same runtime contract:
+Desktop maps user-facing local-access decisions back onto the same runtime contract:
 
-- `Local only` -> `127.0.0.1:0` with no password
-- `Shared on your local network` -> `0.0.0.0:24000` with a password baseline
+- Default `Local only` -> `localhost:23998` with no password
+- Default `Shared on your local network` -> `0.0.0.0:23998` with a password baseline
 - `Custom exposure` -> raw bind/password editing
+- Advanced `Local only` may opt into `127.0.0.1:0`, which the UI presents as `Auto-select an available port` instead of surfacing `:0` directly
+
+Desktop semantics:
+
+- Visibility scope and port selection are separate controls.
+- `Local only` and `Shared on your local network` share the same fixed default port baseline.
+- The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
 
 Target validation rules:
 

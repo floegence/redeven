@@ -1,6 +1,8 @@
 import net from 'node:net';
 
-export const DEFAULT_DESKTOP_LOCAL_UI_BIND = '127.0.0.1:0';
+import { DEFAULT_DESKTOP_LOCAL_UI_BIND } from '../shared/desktopAccessModel';
+
+export { DEFAULT_DESKTOP_LOCAL_UI_BIND };
 
 export type LocalUIBindFamily = 'ipv4' | 'ipv6';
 

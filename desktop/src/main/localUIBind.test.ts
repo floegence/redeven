@@ -21,7 +21,7 @@ describe('localUIBind', () => {
   });
 
   it('accepts wildcard lan exposure', () => {
-    const bind = parseLocalUIBind('0.0.0.0:24000');
+    const bind = parseLocalUIBind('0.0.0.0:23998');
     expect(bind.wildcard).toBe(true);
     expect(isLoopbackOnlyBind(bind)).toBe(false);
   });
