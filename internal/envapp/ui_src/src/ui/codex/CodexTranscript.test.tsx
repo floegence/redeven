@@ -286,7 +286,7 @@ describe('CodexTranscript', () => {
     expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
     expect(host.textContent).not.toContain('Reasoning note');
     expect(host.querySelector('.codex-chat-reasoning-card')).toBeNull();
-    expect(host.querySelector('.codex-chat-reasoning-kicker')).toBeTruthy();
+    expect(host.querySelector('.codex-chat-reasoning-toggle .codex-chat-reasoning-kicker')).toBeTruthy();
     expect(host.querySelector('.codex-chat-reasoning-markdown')).toBeTruthy();
 
     setItems([

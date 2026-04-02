@@ -291,9 +291,6 @@ function ReasoningRow(props: { item: CodexTranscriptItem }) {
         class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
       >
         <div class="codex-chat-reasoning-inline">
-          <span class="codex-chat-reasoning-kicker" aria-hidden="true">
-            <Sparkles />
-          </span>
           <div class="codex-chat-reasoning-copy">
             <button
               type="button"
@@ -302,6 +299,9 @@ function ReasoningRow(props: { item: CodexTranscriptItem }) {
               aria-controls={bodyId()}
               onClick={() => setExpanded((current) => !current)}
             >
+              <span class="codex-chat-reasoning-kicker" aria-hidden="true">
+                <Sparkles />
+              </span>
               <span class="codex-chat-reasoning-preview">{preview()}</span>
               <Show when={isActive()}>
                 <span class="codex-chat-reasoning-cursor">
