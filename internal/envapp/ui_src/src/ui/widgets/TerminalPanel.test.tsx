@@ -585,6 +585,9 @@ vi.mock('./PermissionEmptyState', () => ({
 
 vi.mock('../utils/askFlowerPath', () => ({
   normalizeAbsolutePath: (value: string) => value,
+  expandHomeDisplayPath: (value: string) => value,
+  toHomeDisplayPath: (value: string) => value,
+  resolveSuggestedWorkingDirAbsolute: ({ suggestedWorkingDirAbs }: { suggestedWorkingDirAbs?: string | null }) => suggestedWorkingDirAbs ?? '',
 }));
 
 vi.mock('../utils/clipboard', () => ({
@@ -611,6 +614,14 @@ function emitTerminalData(sessionId: string, data: string, sequence?: number) {
   for (const handler of handlers) {
     handler(event);
   }
+}
+
+function findTerminalTab(host: HTMLElement, label: string): HTMLButtonElement | undefined {
+  return Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(label)) as HTMLButtonElement | undefined;
+}
+
+function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread' | 'none'): Element | null {
+  return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
 describe('TerminalPanel', () => {
@@ -764,6 +775,7 @@ describe('TerminalPanel', () => {
     layoutState.mobile = false;
     terminalEnvPermissionsState.canRead = true;
     terminalEnvPermissionsState.canExecute = true;
+    vi.useRealTimers();
     Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
       configurable: true,
       value: originalGetBoundingClientRect,
@@ -1003,6 +1015,141 @@ describe('TerminalPanel', () => {
     terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
+  });
+
+  it('switches a background interactive session from running spinner to an unread dot after output goes quiet', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    emitTerminalData('session-2', 'working...\n', 2);
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 3_800));
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+  });
+
+  it('lets a quiet background command drop its spinner after the start grace window when no new output arrives', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 1_700));
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+  });
+
+  it('lets explicit program activity markers override the tab spinner and fall back to unread when the tool goes idle', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;P;RedevenActivity=busy\u0007', 1);
+    emitTerminalData('session-2', 'thinking...\n', 2);
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+
+    emitTerminalData('session-2', '\x1b]633;P;RedevenActivity=idle\u0007', 3);
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {

@@ -187,11 +187,18 @@ const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
 const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
 
 type TerminalCommandPhase = 'idle' | 'running';
+type TerminalProgramActivityPhase = 'unknown' | 'busy' | 'idle';
+
+const TERMINAL_OUTPUT_ACTIVITY_GRACE_MS = 1_500;
+const TERMINAL_OUTPUT_ACTIVITY_QUIET_MS = 3_500;
 
 type TerminalSessionTabState = {
   commandPhase: TerminalCommandPhase;
+  programActivityPhase: TerminalProgramActivityPhase;
   unread: boolean;
   hasShellIntegration: boolean;
+  hasProgramActivityIntegration: boolean;
+  outputActivityUntilMs: number | null;
 };
 
 type TerminalSessionTabStateMap = Record<string, TerminalSessionTabState>;
@@ -224,13 +231,49 @@ function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number):
 function createEmptyTerminalSessionTabState(): TerminalSessionTabState {
   return {
     commandPhase: 'idle',
+    programActivityPhase: 'unknown',
     unread: false,
     hasShellIntegration: false,
+    hasProgramActivityIntegration: false,
+    outputActivityUntilMs: null,
   };
 }
 
-function terminalTabVisualState(state: TerminalSessionTabState | undefined): 'none' | 'running' | 'unread' {
-  if (state?.commandPhase === 'running') return 'running';
+function terminalSessionTabStatesEqual(left: TerminalSessionTabState, right: TerminalSessionTabState): boolean {
+  return left.commandPhase === right.commandPhase
+    && left.programActivityPhase === right.programActivityPhase
+    && left.unread === right.unread
+    && left.hasShellIntegration === right.hasShellIntegration
+    && left.hasProgramActivityIntegration === right.hasProgramActivityIntegration
+    && left.outputActivityUntilMs === right.outputActivityUntilMs;
+}
+
+function isTerminalOutputActivityActive(state: TerminalSessionTabState | undefined, nowMs: number): boolean {
+  if (!state || state.commandPhase !== 'running') {
+    return false;
+  }
+  return typeof state.outputActivityUntilMs === 'number' && state.outputActivityUntilMs > nowMs;
+}
+
+function nextTerminalOutputActivityExpiryMs(states: TerminalSessionTabStateMap, nowMs: number): number | null {
+  let nextExpiryMs: number | null = null;
+  for (const state of Object.values(states)) {
+    if (state.commandPhase !== 'running') {
+      continue;
+    }
+    if (typeof state.outputActivityUntilMs !== 'number' || state.outputActivityUntilMs <= nowMs) {
+      continue;
+    }
+    if (nextExpiryMs == null || state.outputActivityUntilMs < nextExpiryMs) {
+      nextExpiryMs = state.outputActivityUntilMs;
+    }
+  }
+  return nextExpiryMs;
+}
+
+function terminalTabVisualState(state: TerminalSessionTabState | undefined, nowMs: number): 'none' | 'running' | 'unread' {
+  if (state?.programActivityPhase === 'busy') return 'running';
+  if (isTerminalOutputActivityActive(state, nowMs)) return 'running';
   if (state?.unread) return 'unread';
   return 'none';
 }
@@ -960,6 +1003,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardPathEntries, setMobileKeyboardPathEntries] = createSignal<TerminalMobileKeyboardPathEntry[]>([]);
   const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
   const [tabStateBySession, setTabStateBySession] = createSignal<TerminalSessionTabStateMap>({});
+  const [terminalActivityNowMs, setTerminalActivityNowMs] = createSignal(Date.now());
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'execute')) return false;
@@ -1079,18 +1123,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) return;
 
+    updateSessionTabState(normalizedSessionId, (current) => {
+      if (!current.unread) {
+        return current;
+      }
+      return {
+        ...current,
+        unread: false,
+      };
+    });
+  };
+
+  const updateSessionTabState = (
+    sessionId: string,
+    updater: (current: TerminalSessionTabState) => TerminalSessionTabState,
+  ) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) {
+      return;
+    }
+
     setTabStateBySession((prev) => {
-      const current = prev[normalizedSessionId];
-      if (!current?.unread) {
+      const current = prev[normalizedSessionId] ?? createEmptyTerminalSessionTabState();
+      const next = updater(current);
+      if (terminalSessionTabStatesEqual(current, next)) {
         return prev;
       }
-
       return {
         ...prev,
-        [normalizedSessionId]: {
-          ...current,
-          unread: false,
-        },
+        [normalizedSessionId]: next,
       };
     });
   };
@@ -1101,9 +1162,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return;
     }
 
-    const sessionList = sessions();
-    const sessionIndex = sessionList.findIndex((session) => session.id === normalizedSessionId);
-    if (sessionIndex < 0) {
+    if (!sessions().some((session) => session.id === normalizedSessionId)) {
       return;
     }
 
@@ -1113,42 +1172,68 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return;
     }
 
-    setTabStateBySession((prev) => {
-      const current = prev[normalizedSessionId] ?? createEmptyTerminalSessionTabState();
+    updateSessionTabState(normalizedSessionId, (current) => {
       if (current.unread) {
-        return prev;
+        return current;
       }
-
       return {
-        ...prev,
-        [normalizedSessionId]: {
-          ...current,
-          unread: true,
-        },
+        ...current,
+        unread: true,
       };
     });
   };
 
-  const updateSessionCommandPhase = (sessionId: string, phase: TerminalCommandPhase) => {
-    const normalizedSessionId = String(sessionId ?? '').trim();
-    if (!normalizedSessionId) return;
-
-    setTabStateBySession((prev) => {
-      const current = prev[normalizedSessionId] ?? createEmptyTerminalSessionTabState();
-      if (current.commandPhase === phase && current.hasShellIntegration) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [normalizedSessionId]: {
-          ...current,
-          commandPhase: phase,
-          hasShellIntegration: true,
-        },
-      };
-    });
+  const setSessionCommandPhase = (
+    sessionId: string,
+    phase: TerminalCommandPhase,
+    options?: {
+      outputActivityUntilMs?: number | null;
+      resetProgramActivityPhase?: boolean;
+      programActivityPhase?: TerminalProgramActivityPhase;
+    },
+  ) => {
+    updateSessionTabState(sessionId, (current) => ({
+      ...current,
+      commandPhase: phase,
+      programActivityPhase: typeof options?.programActivityPhase !== 'undefined'
+        ? options.programActivityPhase
+        : options?.resetProgramActivityPhase
+          ? 'unknown'
+          : current.programActivityPhase,
+      hasShellIntegration: true,
+      outputActivityUntilMs: typeof options?.outputActivityUntilMs === 'undefined'
+        ? current.outputActivityUntilMs
+        : options.outputActivityUntilMs,
+    }));
   };
+
+  const setSessionProgramActivityPhase = (
+    sessionId: string,
+    phase: Exclude<TerminalProgramActivityPhase, 'unknown'>,
+  ) => {
+    updateSessionTabState(sessionId, (current) => ({
+      ...current,
+      programActivityPhase: phase,
+      hasProgramActivityIntegration: true,
+      outputActivityUntilMs: phase === 'idle' ? null : current.outputActivityUntilMs,
+    }));
+  };
+
+  createEffect(() => {
+    const nextExpiryMs = nextTerminalOutputActivityExpiryMs(tabStateBySession(), terminalActivityNowMs());
+    if (nextExpiryMs == null) {
+      return;
+    }
+
+    const delayMs = Math.max(0, nextExpiryMs - Date.now());
+    const timer = setTimeout(() => {
+      setTerminalActivityNowMs(Date.now());
+    }, delayMs + 1);
+
+    onCleanup(() => {
+      clearTimeout(timer);
+    });
+  });
 
   const handleShellIntegrationEvent = (
     sessionId: string,
@@ -1156,15 +1241,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     source: 'history' | 'live',
   ) => {
     if (event.kind === 'command-start') {
-      updateSessionCommandPhase(sessionId, 'running');
+      setSessionCommandPhase(sessionId, 'running', {
+        outputActivityUntilMs: Date.now() + TERMINAL_OUTPUT_ACTIVITY_GRACE_MS,
+        resetProgramActivityPhase: true,
+      });
       return;
     }
 
     if (event.kind === 'command-finish' || event.kind === 'prompt-ready') {
-      updateSessionCommandPhase(sessionId, 'idle');
+      setSessionCommandPhase(sessionId, 'idle', {
+        outputActivityUntilMs: null,
+        programActivityPhase: 'idle',
+      });
       if (event.kind === 'command-finish' && source === 'live') {
         markSessionUnread(sessionId);
       }
+      return;
+    }
+
+    if (event.kind === 'program-activity') {
+      setSessionProgramActivityPhase(sessionId, event.phase);
     }
   };
 
@@ -1172,6 +1268,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (source !== 'live' || byteLength <= 0) {
       return;
     }
+    updateSessionTabState(sessionId, (current) => {
+      if (current.commandPhase !== 'running') {
+        return current;
+      }
+      return {
+        ...current,
+        outputActivityUntilMs: Date.now() + TERMINAL_OUTPUT_ACTIVITY_QUIET_MS,
+      };
+    });
     markSessionUnread(sessionId);
   };
 
@@ -1688,10 +1793,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const tabItems = createMemo<TabItem[]>(() => {
     const list = sessions();
     const tabStates = tabStateBySession();
+    const nowMs = terminalActivityNowMs();
     return list.map((s, index) => ({
       id: s.id,
       label: buildTerminalSessionLabel(s, index),
-      icon: <TerminalTabStatusIcon state={terminalTabVisualState(tabStates[s.id])} />,
+      icon: <TerminalTabStatusIcon state={terminalTabVisualState(tabStates[s.id], nowMs)} />,
       closable: true,
     }));
   });

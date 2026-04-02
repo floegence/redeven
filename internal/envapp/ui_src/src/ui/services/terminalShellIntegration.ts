@@ -1,7 +1,8 @@
 export type TerminalShellIntegrationEvent =
   | { kind: 'prompt-ready' }
   | { kind: 'command-start' }
-  | { kind: 'command-finish'; exitCode: number | null };
+  | { kind: 'command-finish'; exitCode: number | null }
+  | { kind: 'program-activity'; phase: 'busy' | 'idle' };
 
 export type TerminalShellIntegrationParseResult = {
   displayData: Uint8Array;
@@ -98,9 +99,14 @@ function findOscTerminator(data: Uint8Array, start: number): { payloadEnd: numbe
 
 function parseShellIntegrationPayload(payload: Uint8Array): TerminalShellIntegrationEvent | null {
   const text = decodeAscii(payload);
-  const body = text.startsWith(OSC_633_PREFIX)
-    ? text.slice(OSC_633_PREFIX.length)
+  const protocol = text.startsWith(OSC_633_PREFIX)
+    ? '633'
     : text.startsWith(OSC_133_PREFIX)
+      ? '133'
+      : null;
+  const body = protocol === '633'
+    ? text.slice(OSC_633_PREFIX.length)
+    : protocol === '133'
       ? text.slice(OSC_133_PREFIX.length)
       : null;
 
@@ -123,6 +129,12 @@ function parseShellIntegrationPayload(payload: Uint8Array): TerminalShellIntegra
       kind: 'command-finish',
       exitCode: Number.isFinite(exitCode) ? exitCode : null,
     };
+  }
+  if (protocol === '633' && body === 'P;RedevenActivity=busy') {
+    return { kind: 'program-activity', phase: 'busy' };
+  }
+  if (protocol === '633' && body === 'P;RedevenActivity=idle') {
+    return { kind: 'program-activity', phase: 'idle' };
   }
   return null;
 }

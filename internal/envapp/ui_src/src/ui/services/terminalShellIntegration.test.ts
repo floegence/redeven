@@ -53,6 +53,19 @@ describe('TerminalShellIntegrationParser', () => {
     expect(result.events).toEqual([]);
   });
 
+  it('parses optional explicit program activity markers without leaking them to display output', () => {
+    const parser = new TerminalShellIntegrationParser();
+    const input = encoder.encode('x\x1b]633;P;RedevenActivity=busy\u0007y\x1b]633;P;RedevenActivity=idle\u0007z');
+
+    const result = parser.parse(input);
+
+    expect(decode(result.displayData)).toBe('xyz');
+    expect(result.events).toEqual([
+      { kind: 'program-activity', phase: 'busy' },
+      { kind: 'program-activity', phase: 'idle' },
+    ]);
+  });
+
   it('accepts command-finish markers without an exit code payload', () => {
     const parser = new TerminalShellIntegrationParser();
     const input = encoder.encode('\x1b]633;D\u0007');
