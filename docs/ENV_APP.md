@@ -287,7 +287,10 @@ When opening a codespace, the Env App mints a one-time ticket for `com.floegence
 Notes:
 
 - Codespace/3rd-party app windows never receive `boot_ticket` or `env_session`. They only get one-time `entry_ticket`.
+- In normal browser sessions, Env App still uses a pre-opened popup/tab so user-triggered navigation stays within browser popup-blocker rules.
+- In Redeven Desktop, Codespaces `Open` does not stay inside Electron. Env App asks the desktop shell bridge to open the final Codespaces URL in the system browser, while keeping the same one-time `entry_ticket` bootstrap contract.
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
+- If the desktop-opened browser window no longer has an opener, the trusted launcher still keeps `?env=` so the existing independent-open recovery flow can redirect back through Portal / Env App bootstrap when needed.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
 - Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install latest` or `Update to latest`.
 - Runtime Settings -> `Codespaces & Tooling` also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:

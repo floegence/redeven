@@ -71,6 +71,11 @@ import {
   type DesktopShellRuntimeActionResponse,
 } from '../shared/desktopShellRuntimeIPC';
 import {
+  DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL,
+  normalizeDesktopShellOpenExternalURLRequest,
+  type DesktopShellOpenExternalURLResponse,
+} from '../shared/desktopShellExternalURLIPC';
+import {
   DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL,
   DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
   normalizeDesktopLauncherActionRequest,
@@ -206,11 +211,15 @@ function focusMainWindow(options?: Readonly<{ stealAppFocus?: boolean }>): void 
   presentAppWindow(mainWindow, options);
 }
 
-function openExternal(url: string): void {
+async function openExternalURL(url: string): Promise<void> {
   if (!url || url === 'about:blank') {
     return;
   }
-  void shell.openExternal(url);
+  await shell.openExternal(url);
+}
+
+function openExternal(url: string): void {
+  void openExternalURL(url);
 }
 
 async function requestQuit(): Promise<void> {
@@ -932,6 +941,27 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     await openAdvancedSettingsWindow('current_target');
+  });
+  ipcMain.handle(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL, async (_event, request): Promise<DesktopShellOpenExternalURLResponse> => {
+    const normalized = normalizeDesktopShellOpenExternalURLRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid external URL.',
+      };
+    }
+
+    try {
+      await openExternalURL(normalized.url);
+      return {
+        ok: true,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
   });
   ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, async (_event, request): Promise<DesktopShellRuntimeActionResponse> => {
     const normalized = normalizeDesktopShellRuntimeActionRequest(request);

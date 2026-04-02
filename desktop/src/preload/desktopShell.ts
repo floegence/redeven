@@ -10,6 +10,10 @@ import {
   DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
   normalizeDesktopShellRuntimeActionResponse,
 } from '../shared/desktopShellRuntimeIPC';
+import {
+  DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL,
+  normalizeDesktopShellOpenExternalURLResponse,
+} from '../shared/desktopShellExternalURLIPC';
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
@@ -38,6 +42,9 @@ export function bootstrapDesktopShellBridge(): void {
       }
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: normalized });
     },
+    openExternalURL: async (url: string) => normalizeDesktopShellOpenExternalURLResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL, { url }),
+    ),
     restartManagedRuntime: async () => normalizeDesktopShellRuntimeActionResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, { action: 'restart_managed_runtime' }),
     ),

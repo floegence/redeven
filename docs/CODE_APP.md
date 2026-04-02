@@ -20,6 +20,7 @@ This document describes the **Code App** implementation in the Redeven runtime:
   - The controller origin loads the actual app in an `app-*` iframe, so the untrusted app is not same-origin with the runtime/controller window.
   - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the controller runtime.
   - The injected script patches same-origin `WebSocket` so it also goes through `flowersec-proxy/ws`, but it now uses `registerCodeAppProxyBridge()` instead of reading `window.top.__flowersecProxyRuntime`.
+  - In Redeven Desktop, Env App requests the desktop shell to open Codespaces in the system browser, but the browser-facing bootstrap contract stays the same: the first load still starts from the trusted launcher with a one-time `entry_ticket`.
 
 - Runtime side:
   - The runtime starts one `code-server` process per `code_space_id` (localhost only).

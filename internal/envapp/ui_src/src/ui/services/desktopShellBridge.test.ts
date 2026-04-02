@@ -3,11 +3,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  desktopShellExternalURLOpenAvailable,
   desktopShellBridgeAvailable,
   openAdvancedSettings,
   openConnectionCenter,
   openDesktopConnectToRedeven,
   openDesktopSettings,
+  openExternalURLInDesktopShell,
   restartDesktopManagedRuntime,
 } from './desktopShellBridge';
 
@@ -75,5 +77,23 @@ describe('desktopShellBridge', () => {
       message: 'Desktop restarted the managed runtime.',
     });
     expect(restartManagedRuntimeBridge).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards external browser requests when the desktop bridge exposes them', async () => {
+    const openExternalURLBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      message: 'Opened in the system browser.',
+    });
+    window.redevenDesktopShell = {
+      openConnectionCenter: vi.fn().mockResolvedValue(undefined),
+      openExternalURL: openExternalURLBridge,
+    };
+
+    expect(desktopShellExternalURLOpenAvailable()).toBe(true);
+    await expect(openExternalURLInDesktopShell('http://127.0.0.1:43123/cs/demo/')).resolves.toEqual({
+      ok: true,
+      message: 'Opened in the system browser.',
+    });
+    expect(openExternalURLBridge).toHaveBeenCalledWith('http://127.0.0.1:43123/cs/demo/');
   });
 });

@@ -36,6 +36,12 @@ const gatewayMocks = vi.hoisted(() => ({
   fetchGatewayJSON: vi.fn(),
 }));
 
+const controlplaneMocks = vi.hoisted(() => ({
+  getEnvPublicIDFromSession: vi.fn(),
+  getLocalRuntime: vi.fn(),
+  mintEnvEntryTicketForApp: vi.fn(),
+}));
+
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' '),
   useNotification: () => notificationMocks,
@@ -108,9 +114,9 @@ vi.mock('../protocol/redeven_v1', () => ({
 }));
 
 vi.mock('../services/controlplaneApi', () => ({
-  getEnvPublicIDFromSession: vi.fn(),
-  getLocalRuntime: vi.fn(),
-  mintEnvEntryTicketForApp: vi.fn(),
+  getEnvPublicIDFromSession: controlplaneMocks.getEnvPublicIDFromSession,
+  getLocalRuntime: controlplaneMocks.getLocalRuntime,
+  mintEnvEntryTicketForApp: controlplaneMocks.mintEnvEntryTicketForApp,
 }));
 
 vi.mock('../services/floeproxyContract', () => ({
@@ -200,6 +206,12 @@ describe('EnvCodespacesPage', () => {
     protocolMocks.client.mockReturnValue(null);
     rpcMocks.fs.getPathContext.mockReset();
     rpcMocks.fs.list.mockReset();
+    controlplaneMocks.getEnvPublicIDFromSession.mockReset();
+    controlplaneMocks.getEnvPublicIDFromSession.mockReturnValue('env_local');
+    controlplaneMocks.getLocalRuntime.mockReset();
+    controlplaneMocks.getLocalRuntime.mockResolvedValue(null);
+    controlplaneMocks.mintEnvEntryTicketForApp.mockReset();
+    controlplaneMocks.mintEnvEntryTicketForApp.mockResolvedValue('entry-ticket-123');
     runtimeStatusResponse = makeRuntimeStatus();
     gatewayMocks.fetchGatewayJSON.mockReset();
     gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
@@ -270,6 +282,7 @@ describe('EnvCodespacesPage', () => {
   });
 
   afterEach(() => {
+    delete window.redevenDesktopShell;
     host.remove();
     document.body.innerHTML = '';
   });
@@ -456,6 +469,101 @@ describe('EnvCodespacesPage', () => {
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
     expect(host.textContent).toContain('Install latest');
     expect(host.textContent).toContain('Pending action: Start codespace after install');
+
+    windowOpenSpy.mockRestore();
+  });
+
+  it('opens a local-runtime codespace in the system browser when the desktop shell bridge is available', async () => {
+    controlplaneMocks.getLocalRuntime.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+    });
+    const openExternalURLBridge = vi.fn().mockResolvedValue({ ok: true });
+    window.redevenDesktopShell = {
+      openConnectionCenter: vi.fn().mockResolvedValue(undefined),
+      openExternalURL: openExternalURLBridge,
+    };
+
+    const windowOpenSpy = vi.spyOn(window, 'open');
+    windowOpenSpy.mockImplementation(() => null);
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open');
+    expect(openButton).toBeTruthy();
+
+    openButton?.click();
+    await flushPage();
+
+    expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(openExternalURLBridge).toHaveBeenCalledTimes(1);
+    expect(openExternalURLBridge.mock.calls[0]?.[0]).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+    expect(controlplaneMocks.mintEnvEntryTicketForApp).not.toHaveBeenCalled();
+
+    windowOpenSpy.mockRestore();
+  });
+
+  it('opens a trusted-launcher codespace in the system browser when the desktop shell bridge is available', async () => {
+    const openExternalURLBridge = vi.fn().mockResolvedValue({ ok: true });
+    window.redevenDesktopShell = {
+      openConnectionCenter: vi.fn().mockResolvedValue(undefined),
+      openExternalURL: openExternalURLBridge,
+    };
+
+    const windowOpenSpy = vi.spyOn(window, 'open');
+    windowOpenSpy.mockImplementation(() => null);
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open');
+    expect(openButton).toBeTruthy();
+
+    openButton?.click();
+    await flushPage();
+
+    expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(controlplaneMocks.mintEnvEntryTicketForApp).toHaveBeenCalledWith({
+      envId: 'env_local',
+      floeApp: 'com.floegence.redeven.code',
+      codeSpaceId: 'space-1',
+    });
+    expect(openExternalURLBridge).toHaveBeenCalledTimes(1);
+    const targetURL = String(openExternalURLBridge.mock.calls[0]?.[0] ?? '');
+    expect(targetURL).toContain('https://codespace.test/_redeven_boot/?env=env_local#redeven=');
+
+    windowOpenSpy.mockRestore();
+  });
+
+  it('falls back to the browser popup path when the desktop shell bridge is unavailable', async () => {
+    controlplaneMocks.getLocalRuntime.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+    });
+
+    const assign = vi.fn();
+    const close = vi.fn();
+    const popupWindow = {
+      location: { assign },
+      close,
+    } as unknown as Window;
+    const windowOpenSpy = vi.spyOn(window, 'open');
+    windowOpenSpy.mockImplementation(() => popupWindow);
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open');
+    expect(openButton).toBeTruthy();
+
+    openButton?.click();
+    await flushPage();
+
+    expect(windowOpenSpy).toHaveBeenCalledWith('about:blank', 'redeven_codespace_space-1');
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(String(assign.mock.calls[0]?.[0] ?? '')).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+    expect(close).not.toHaveBeenCalled();
 
     windowOpenSpy.mockRestore();
   });

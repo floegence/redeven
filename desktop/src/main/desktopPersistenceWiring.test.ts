@@ -45,6 +45,8 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('normalizeDesktopLauncherActionRequest');
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_WINDOW_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenWindowRequest');
+    expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
+    expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
     expect(mainSrc).toContain('openDesktopWelcomeWindow');
     expect(mainSrc).toContain('openAdvancedSettingsWindow');
     expect(mainSrc).toContain('resolveWelcomeRendererPath');
