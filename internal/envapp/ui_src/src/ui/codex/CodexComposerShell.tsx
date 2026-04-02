@@ -164,6 +164,10 @@ export function CodexComposerShell(props: {
   capabilitiesLoading: boolean;
   composerText: string;
   submitting: boolean;
+  showStopAction: boolean;
+  stopPending: boolean;
+  stopDisabled: boolean;
+  stopDisabledReason: string;
   hostAvailable: boolean;
   hostDisabledReason: string;
   onOpenWorkingDirPicker: () => void;
@@ -183,6 +187,7 @@ export function CodexComposerShell(props: {
   onResetComposer: () => void;
   onStartNewThreadDraft: () => void;
   onSend: () => void;
+  onStop: () => void;
 }) {
   const rpc = useRedevenRpc();
   const fileIndex = createCodexComposerFileIndex({
@@ -346,6 +351,7 @@ export function CodexComposerShell(props: {
   });
 
   const sendLabel = () => 'Send to Codex';
+  const stopLabel = () => (props.stopPending ? 'Stopping...' : 'Stop');
   const canOpenWorkingDirPicker = () => props.hostAvailable && !props.workingDirDisabled && !props.workingDirLocked;
   const workingDirChipTitle = () => {
     const absolutePath = String(props.workingDirTitle ?? '').trim() || 'Working directory';
@@ -358,20 +364,6 @@ export function CodexComposerShell(props: {
     return absolutePath;
   };
   const workingDirChipLabel = () => String(props.workingDirLabel ?? '').trim() || compactPathLabel(props.workingDirPath, 'Working dir');
-  const attachmentSupportNote = () => {
-    if (!props.hostAvailable) return '';
-    if (props.capabilitiesLoading) return 'Checking image support...';
-    if (
-      isFocused() &&
-      props.supportsImages &&
-      !String(props.composerText ?? '').trim() &&
-      props.attachments.length === 0 &&
-      props.mentions.length === 0
-    ) {
-      return 'Type @ for file context, / for commands, or paste an image.';
-    }
-    return '';
-  };
   const statusNote = () => {
     if (!props.hostAvailable) {
       return String(props.hostDisabledReason ?? '').trim() || 'Install `codex` on the host to enable Codex chat.';
@@ -380,6 +372,38 @@ export function CodexComposerShell(props: {
       return 'The selected model does not currently accept image input.';
     }
     return '';
+  };
+  const composerPlaceholder = () => {
+    const guidance = props.supportsImages || props.capabilitiesLoading
+      ? 'Use @ for file context, / for commands, or paste an image.'
+      : 'Use @ for file context or / for commands.';
+    return `Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step. ${guidance}`;
+  };
+  const primaryActionKind = () => (props.showStopAction ? 'stop' : 'send');
+  const primaryActionDisabled = () => (
+    primaryActionKind() === 'stop'
+      ? props.stopDisabled
+      : !canSend()
+  );
+  const primaryActionTitle = () => {
+    if (primaryActionKind() === 'stop') {
+      return String(props.stopDisabledReason ?? '').trim() || stopLabel();
+    }
+    return props.submitting ? 'Sending...' : sendLabel();
+  };
+  const primaryActionAriaLabel = () => (
+    primaryActionKind() === 'stop'
+      ? 'Stop active Codex turn'
+      : sendLabel()
+  );
+  const primaryActionActive = () => props.showStopAction || canSend();
+  const handlePrimaryAction = () => {
+    if (primaryActionKind() === 'stop') {
+      if (props.stopDisabled) return;
+      props.onStop();
+      return;
+    }
+    props.onSend();
   };
 
   const applyComposerText = (nextText: string, nextSelection?: number) => {
@@ -551,7 +575,7 @@ export function CodexComposerShell(props: {
               if (!isComposing() && handlePopupKeydown(event)) return;
               if (!shouldSubmitOnEnterKeydown({ event, isComposing: isComposing() })) return;
               event.preventDefault();
-              props.onSend();
+              handlePrimaryAction();
             }}
             onKeyUp={() => {
               setDismissedPopupSignature('');
@@ -571,7 +595,7 @@ export function CodexComposerShell(props: {
             }}
             onBlur={() => setIsFocused(false)}
             rows={2}
-            placeholder="Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step..."
+            placeholder={composerPlaceholder()}
             class="chat-input-textarea codex-chat-input-textarea"
           />
 
@@ -580,57 +604,36 @@ export function CodexComposerShell(props: {
               type="button"
               class={cn(
                 'chat-input-send-btn codex-chat-input-send-btn',
-                canSend() && 'chat-input-send-btn-active',
+                primaryActionActive() && 'chat-input-send-btn-active',
+                props.showStopAction && 'chat-input-send-btn-expanded codex-chat-input-send-btn-expanded codex-chat-input-send-btn-stop',
               )}
-              onClick={props.onSend}
-              disabled={!canSend()}
-              aria-label={sendLabel()}
-              title={props.submitting ? 'Sending...' : sendLabel()}
+              onClick={handlePrimaryAction}
+              disabled={primaryActionDisabled()}
+              aria-label={primaryActionAriaLabel()}
+              title={primaryActionTitle()}
             >
-              <Send class="h-[18px] w-[18px]" />
+              <Show
+                when={props.showStopAction}
+                fallback={<Send class="h-[18px] w-[18px]" />}
+              >
+                <StopIcon />
+                <span class="chat-input-send-btn-label">{stopLabel()}</span>
+              </Show>
             </button>
           </div>
         </div>
 
         <Show when={popupVisible()}>
-          <div
-            class="codex-chat-popup"
-            data-codex-popup-kind={popupKind()}
-            role="listbox"
-            aria-label={popupKind() === 'file-mentions' ? 'File reference suggestions' : 'Command suggestions'}
-          >
-            <Show when={popupKind() === 'file-mentions'} fallback={(
-              <For each={slashCommands()}>
-                {(command, index) => (
-                  <button
-                    type="button"
-                    role="option"
-                    class={cn(
-                      'codex-chat-popup-item',
-                      activePopupIndex() === index() && 'codex-chat-popup-item-active',
-                    )}
-                    aria-selected={activePopupIndex() === index()}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => runSlashCommand(command)}
-                  >
-                    <span class="codex-chat-popup-item-title">{command.title}</span>
-                    <span class="codex-chat-popup-item-detail">{command.description}</span>
-                  </button>
-                )}
-              </For>
-            )}>
-              <Show
-                when={fileMentionCandidates().length > 0}
-                fallback={(
-                  <div class="codex-chat-popup-empty">
-                    {fileIndexLoading()
-                      ? 'Indexing files in the current working directory...'
-                      : 'No matching files found in the current working directory.'}
-                  </div>
-                )}
-              >
-                <For each={fileMentionCandidates()}>
-                  {(entry, index) => (
+          <div class="codex-chat-popup-overlay">
+            <div
+              class="codex-chat-popup"
+              data-codex-popup-kind={popupKind()}
+              role="listbox"
+              aria-label={popupKind() === 'file-mentions' ? 'File reference suggestions' : 'Command suggestions'}
+            >
+              <Show when={popupKind() === 'file-mentions'} fallback={(
+                <For each={slashCommands()}>
+                  {(command, index) => (
                     <button
                       type="button"
                       role="option"
@@ -640,15 +643,45 @@ export function CodexComposerShell(props: {
                       )}
                       aria-selected={activePopupIndex() === index()}
                       onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => commitFileMention(entry)}
+                      onClick={() => runSlashCommand(command)}
                     >
-                      <span class="codex-chat-popup-item-title">{entry.name}</span>
-                      <span class="codex-chat-popup-item-detail">{compactPathLabel(entry.parent, entry.parent)}</span>
+                      <span class="codex-chat-popup-item-title">{command.title}</span>
+                      <span class="codex-chat-popup-item-detail">{command.description}</span>
                     </button>
                   )}
                 </For>
+              )}>
+                <Show
+                  when={fileMentionCandidates().length > 0}
+                  fallback={(
+                    <div class="codex-chat-popup-empty">
+                      {fileIndexLoading()
+                        ? 'Indexing files in the current working directory...'
+                        : 'No matching files found in the current working directory.'}
+                    </div>
+                  )}
+                >
+                  <For each={fileMentionCandidates()}>
+                    {(entry, index) => (
+                      <button
+                        type="button"
+                        role="option"
+                        class={cn(
+                          'codex-chat-popup-item',
+                          activePopupIndex() === index() && 'codex-chat-popup-item-active',
+                        )}
+                        aria-selected={activePopupIndex() === index()}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => commitFileMention(entry)}
+                      >
+                        <span class="codex-chat-popup-item-title">{entry.name}</span>
+                        <span class="codex-chat-popup-item-detail">{compactPathLabel(entry.parent, entry.parent)}</span>
+                      </button>
+                    )}
+                  </For>
+                </Show>
               </Show>
-            </Show>
+            </div>
           </div>
         </Show>
 
@@ -762,11 +795,8 @@ export function CodexComposerShell(props: {
             </div>
           </div>
 
-          <Show when={attachmentSupportNote() || statusNote()}>
+          <Show when={statusNote()}>
             <div class="codex-chat-input-support">
-              <Show when={attachmentSupportNote()}>
-                <div class="codex-chat-input-inline-note">{attachmentSupportNote()}</div>
-              </Show>
               <Show when={statusNote()}>
                 <div class={cn(
                   'codex-chat-input-status',
@@ -823,5 +853,11 @@ const LockIcon: Component = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <rect x="4" y="11" width="16" height="10" rx="2" />
     <path d="M8 11V7a4 4 0 1 1 8 0v4" />
+  </svg>
+);
+
+const StopIcon: Component = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <rect x="6.5" y="6.5" width="11" height="11" rx="2.25" />
   </svg>
 );

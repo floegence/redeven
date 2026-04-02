@@ -67,6 +67,11 @@ function renderComposer(options?: {
   workingDirDisabled?: boolean;
   supportsImages?: boolean;
   capabilitiesLoading?: boolean;
+  submitting?: boolean;
+  showStopAction?: boolean;
+  stopPending?: boolean;
+  stopDisabled?: boolean;
+  stopDisabledReason?: string;
   attachments?: ReadonlyArray<{
     id: string;
     name: string;
@@ -83,6 +88,7 @@ function renderComposer(options?: {
     is_image: boolean;
   }>;
   onSend?: () => void;
+  onStop?: () => void;
   onOpenWorkingDirPicker?: () => void;
   onAddAttachments?: (files: readonly File[]) => Promise<void>;
   onAddFileMentions?: (mentions: ReadonlyArray<{ name: string; path: string; is_image: boolean }>) => void;
@@ -90,6 +96,7 @@ function renderComposer(options?: {
   onStartNewThreadDraft?: () => void;
 }) {
   const onSend = options?.onSend ?? vi.fn();
+  const onStop = options?.onStop ?? vi.fn();
   const onOpenWorkingDirPicker = options?.onOpenWorkingDirPicker ?? vi.fn();
   const onAddAttachments = options?.onAddAttachments ?? vi.fn(async () => undefined);
   const onAddFileMentions = options?.onAddFileMentions ?? vi.fn();
@@ -120,7 +127,11 @@ function renderComposer(options?: {
         supportsImages={options?.supportsImages ?? true}
         capabilitiesLoading={options?.capabilitiesLoading ?? false}
         composerText={text()}
-        submitting={false}
+        submitting={options?.submitting ?? false}
+        showStopAction={options?.showStopAction ?? false}
+        stopPending={options?.stopPending ?? false}
+        stopDisabled={options?.stopDisabled ?? false}
+        stopDisabledReason={options?.stopDisabledReason ?? ''}
         hostAvailable={options?.hostAvailable ?? true}
         hostDisabledReason={options?.hostDisabledReason ?? ''}
         onOpenWorkingDirPicker={onOpenWorkingDirPicker}
@@ -136,6 +147,7 @@ function renderComposer(options?: {
         onResetComposer={onResetComposer}
         onStartNewThreadDraft={onStartNewThreadDraft}
         onSend={onSend}
+        onStop={onStop}
       />
     );
   }, host);
@@ -144,6 +156,7 @@ function renderComposer(options?: {
     host,
     dispose,
     onSend,
+    onStop,
     onOpenWorkingDirPicker,
     onAddAttachments,
     onAddFileMentions,
@@ -248,16 +261,17 @@ describe('CodexComposerShell', () => {
     dispose();
   });
 
-  it('only shows the generic onboarding note while the empty composer is focused', async () => {
+  it('keeps the empty-state guidance inside the textarea placeholder instead of a separate support row', async () => {
     const { host, dispose } = renderComposer();
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     if (!textarea) throw new Error('textarea not found');
 
+    expect(textarea.placeholder).toContain('Use @ for file context, / for commands, or paste an image.');
     expect(host.textContent).not.toContain('Type @ for file context, / for commands, or paste an image.');
 
     textarea.dispatchEvent(new Event('focus'));
     await flushAsync();
-    expect(host.textContent).toContain('Type @ for file context, / for commands, or paste an image.');
+    expect(host.textContent).not.toContain('Type @ for file context, / for commands, or paste an image.');
 
     textarea.value = 'Review this diff';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -382,7 +396,7 @@ describe('CodexComposerShell', () => {
     await flushAsync();
     await flushAsync();
 
-    const popup = host.querySelector('[data-codex-popup-kind="file-mentions"]');
+    const popup = host.querySelector('.codex-chat-popup-overlay [data-codex-popup-kind="file-mentions"]');
     expect(popup).not.toBeNull();
 
     const option = Array.from(host.querySelectorAll('.codex-chat-popup-item')).find((node) => (
@@ -398,6 +412,26 @@ describe('CodexComposerShell', () => {
       is_image: false,
     }]);
     expect(textarea.value).toBe('Review ');
+    dispose();
+  });
+
+  it('replaces the send action with a stop action when an active turn is running', () => {
+    const onStop = vi.fn();
+    const { host, dispose } = renderComposer({
+      initialText: 'Review this diff',
+      showStopAction: true,
+      onStop,
+    });
+
+    const stopButton = host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
+    if (!stopButton) throw new Error('stop button not found');
+
+    expect(stopButton.textContent).toContain('Stop');
+    expect(host.querySelector('button[aria-label="Send to Codex"]')).toBeNull();
+
+    stopButton.click();
+
+    expect(onStop).toHaveBeenCalledTimes(1);
     dispose();
   });
 

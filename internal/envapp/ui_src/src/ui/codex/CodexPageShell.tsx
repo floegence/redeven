@@ -157,6 +157,10 @@ export function CodexPageShell() {
       isWorkingStatus(codex.activeStatus())
     )
   ));
+  const activeInterruptTurnID = createMemo(() => String(codex.activeInterruptTurnID() ?? '').trim());
+  const interruptPending = createMemo(() => (
+    !!activeInterruptTurnID() && codex.interruptingTurnID() === activeInterruptTurnID()
+  ));
   const threadArchived = createMemo(() => String(codex.activeThread()?.status ?? '').trim().toLowerCase() === 'archived');
   const archivedBrowseMode = createMemo(() => codex.threadFilter() === 'archived' && !codex.activeThreadID());
   const composerHostAvailable = createMemo(() => summary().hostReady && !threadArchived() && !archivedBrowseMode());
@@ -169,6 +173,29 @@ export function CodexPageShell() {
         ? 'Restore the archived thread before sending another turn.'
         : ''
   ));
+  const composerStopVisible = createMemo(() => codex.submitting() || !!activeInterruptTurnID());
+  const composerStopDisabledReason = createMemo(() => {
+    if (!composerStopVisible()) return '';
+    if (!summary().hostReady) {
+      return composerDisabledReason() || codex.hostDisabledReason();
+    }
+    if (interruptPending()) {
+      return 'Stop request in progress.';
+    }
+    if (!activeInterruptTurnID()) {
+      return codex.submitting()
+        ? 'Waiting for the active turn to start.'
+        : 'No active turn is available to stop.';
+    }
+    if (!codex.supportsOperation('turn_interrupt')) {
+      return 'Turn interruption is unavailable on this host.';
+    }
+    return '';
+  });
+  const composerStopDisabled = createMemo(() => {
+    if (!composerStopVisible()) return true;
+    return Boolean(composerStopDisabledReason());
+  });
   const headerActions = createMemo<CodexHeaderAction[]>(() => {
     const threadID = String(codex.activeThreadID() ?? '').trim();
     if (!threadID) return [];
@@ -178,7 +205,6 @@ export function CodexPageShell() {
     const restorePending = codex.restoringThreadID() === threadID;
     const forkPending = codex.forkingThreadID() === threadID;
     const reviewPending = codex.reviewingThreadID() === threadID;
-    const interruptPending = codex.interruptingTurnID() === codex.activeInterruptTurnID();
     if (threadArchived()) {
       actions.push({
         key: 'restore',
@@ -232,18 +258,18 @@ export function CodexPageShell() {
             ? 'Review already in progress.'
             : '',
     });
-    if (String(codex.activeInterruptTurnID() ?? '').trim()) {
+    if (activeInterruptTurnID()) {
       actions.push({
         key: 'stop',
-        label: interruptPending ? 'Stopping…' : 'Stop',
+        label: interruptPending() ? 'Stopping…' : 'Stop',
         aria_label: 'Stop active Codex turn',
         onClick: () => void codex.interruptActiveTurn(),
-        disabled: !summary().hostReady || interruptPending || !codex.supportsOperation('turn_interrupt'),
+        disabled: !summary().hostReady || interruptPending() || !codex.supportsOperation('turn_interrupt'),
         disabled_reason: !summary().hostReady
           ? hostUnavailableReason
           : !codex.supportsOperation('turn_interrupt')
             ? 'Turn interruption is unavailable on this host.'
-            : interruptPending
+            : interruptPending()
               ? 'Stop request in progress.'
               : '',
       });
@@ -336,8 +362,8 @@ export function CodexPageShell() {
           <div class="codex-page-bottom-support">
             <Show when={codex.pendingRequests().length > 0}>
               <div class="codex-page-bottom-support-lane">
-                <div class="codex-page-bottom-support-track">
-                  <div class="codex-page-bottom-support-content">
+                <div class="codex-page-bottom-support-track codex-page-bottom-support-track-thread">
+                  <div class="codex-page-bottom-support-content codex-page-bottom-support-content-thread">
                     <CodexPendingRequestsPanel
                       requests={codex.pendingRequests()}
                       requestDraftValue={codex.requestDraftValue}
@@ -350,8 +376,8 @@ export function CodexPageShell() {
             </Show>
 
             <div class="codex-page-bottom-support-lane">
-              <div class="codex-page-bottom-support-track">
-                <div class="codex-page-bottom-support-content">
+              <div class="codex-page-bottom-support-track codex-page-bottom-support-track-page">
+                <div class="codex-page-bottom-support-content codex-page-bottom-support-content-page">
                   <CodexComposerShell
                     workingDirPath={workingDirPath()}
                     workingDirLabel={workingDirValue()}
@@ -372,6 +398,10 @@ export function CodexPageShell() {
                     capabilitiesLoading={codex.capabilitiesLoading()}
                     composerText={codex.composerText()}
                     submitting={codex.submitting()}
+                    showStopAction={composerStopVisible()}
+                    stopPending={interruptPending()}
+                    stopDisabled={composerStopDisabled()}
+                    stopDisabledReason={composerStopDisabledReason()}
                     hostAvailable={composerHostAvailable()}
                     hostDisabledReason={composerDisabledReason()}
                     onOpenWorkingDirPicker={() => {
@@ -390,6 +420,7 @@ export function CodexPageShell() {
                     onResetComposer={codex.resetComposer}
                     onStartNewThreadDraft={codex.startNewThreadDraft}
                     onSend={() => void codex.sendTurn()}
+                    onStop={() => void codex.interruptActiveTurn()}
                   />
                 </div>
               </div>

@@ -916,6 +916,8 @@ describe('CodexPage', () => {
     expect(host.querySelector('.codex-page-bottom-support-lane')).not.toBeNull();
     expect(host.querySelector('.codex-page-bottom-support-track')).not.toBeNull();
     expect(host.querySelector('.codex-page-bottom-support-content')).not.toBeNull();
+    expect(host.querySelector('.codex-page-bottom-support-track-page')).not.toBeNull();
+    expect(host.querySelector('.codex-page-bottom-support-content-page')).not.toBeNull();
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-variant="value"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-variant="policy"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
@@ -1024,6 +1026,103 @@ describe('CodexPage', () => {
       approval_policy: 'never',
       sandbox_mode: 'danger-full-access',
     }));
+  });
+
+  it('promotes the composer primary action to stop after sending a new turn', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_stop_after_send',
+        name: 'Stop after send',
+        preview: 'Stop after send',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_stop_after_send',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      token_usage: null,
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        reasoning_effort: 'medium',
+      },
+      operations: [
+        'thread_archive',
+        'thread_unarchive',
+        'thread_fork',
+        'thread_list_archived',
+        'turn_interrupt',
+        'review_start',
+      ],
+      requirements: {
+        allowed_approval_policies: ['never'],
+        allowed_sandbox_modes: ['danger-full-access'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+    await flushAsync();
+    await flushAsync();
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const sendButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!textarea || !sendButton) throw new Error('composer send controls not found');
+
+    textarea.value = 'Need a visible stop action';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    sendButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    const stopButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
+    if (!stopButton) throw new Error('composer stop button not found');
+
+    expect(stopButton.textContent).toContain('Stop');
+    expect(startCodexThreadMock).toHaveBeenCalledTimes(1);
   });
 
   it('renders stream disconnect failures with the shared highlight block styling', async () => {
