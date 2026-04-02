@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterCodexSlashCommands } from './composerCommands';
+import { codexSlashCommands, filterCodexSlashCommands } from './composerCommands';
 
 describe('composerCommands', () => {
   it('returns all available commands for an empty query', () => {
@@ -46,5 +46,25 @@ describe('composerCommands', () => {
       query: '',
       context: { hostAvailable: true, workingDirEditable: false },
     }).map((entry) => entry.command)).not.toContain('cwd');
+  });
+
+  it('marks runtime config commands as parameter commands', () => {
+    const commands = codexSlashCommands();
+    expect(commands.find((entry) => entry.id === 'model')).toMatchObject({
+      kind: 'parameter',
+      parameter_target: 'model',
+    });
+    expect(commands.find((entry) => entry.id === 'effort')).toMatchObject({
+      kind: 'parameter',
+      parameter_target: 'effort',
+    });
+    expect(commands.find((entry) => entry.id === 'approval')).toMatchObject({
+      kind: 'parameter',
+      parameter_target: 'approval',
+    });
+    expect(commands.find((entry) => entry.id === 'sandbox')).toMatchObject({
+      kind: 'parameter',
+      parameter_target: 'sandbox',
+    });
   });
 });

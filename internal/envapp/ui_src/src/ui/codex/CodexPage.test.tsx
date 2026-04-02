@@ -1383,6 +1383,129 @@ describe('CodexPage', () => {
     }));
   });
 
+  it('submits slash-selected model changes through the existing thread and turn requests', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_new',
+        name: 'Workspace review',
+        preview: 'Review this folder',
+        ephemeral: false,
+        model_provider: 'gpt-5.5',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'active',
+        cwd: '/workspace/ui',
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.5',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'high',
+      },
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'idle',
+      active_status_flags: [],
+    };
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+        {
+          id: 'gpt-5.5',
+          display_name: 'GPT-5.5',
+          description: 'Higher reasoning ceiling',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) throw new Error('textarea not found');
+
+    textarea.focus();
+    textarea.value = '/model';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.setSelectionRange(6, 6);
+    textarea.dispatchEvent(new Event('select', { bubbles: true }));
+    await flushAsync();
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushAsync();
+
+    const option = Array.from(host.querySelectorAll('.codex-chat-popup-item')).find((node) => (
+      node.textContent?.includes('GPT-5.5')
+    )) as HTMLButtonElement | undefined;
+    if (!option) throw new Error('model option not found');
+    option.click();
+    await flushAsync();
+    await flushAsync();
+
+    expect((host.querySelector('select[aria-label="Model"]') as HTMLSelectElement | null)?.value).toBe('gpt-5.5');
+    expect((host.querySelector('select[aria-label="Effort"]') as HTMLSelectElement | null)?.value).toBe('high');
+
+    textarea.value = 'Review this folder';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!sendButton) throw new Error('send button not found');
+    sendButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(startCodexThreadMock).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: '/workspace/ui',
+      model: 'gpt-5.5',
+      approval_policy: 'on-request',
+      sandbox_mode: 'workspace-write',
+    }));
+    expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadID: 'thread_new',
+      inputText: 'Review this folder',
+      cwd: '/workspace/ui',
+      model: 'gpt-5.5',
+      effort: 'high',
+    }));
+  });
+
   it('renders pending request cards inside the Codex dock support lane', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: true,

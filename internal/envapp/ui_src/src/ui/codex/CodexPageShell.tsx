@@ -18,6 +18,10 @@ import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
 import { CodexStatusBannerStack } from './CodexStatusBannerStack';
 import { CodexTranscript } from './CodexTranscript';
 import { CodexWorkingDirPickerDialog } from './CodexWorkingDirPickerDialog';
+import type {
+  CodexComposerControlOption,
+  CodexComposerControlSpec,
+} from './composerControls';
 import { isWorkingStatus } from './presentation';
 import {
   resolveCodexApprovalPolicyValue,
@@ -33,11 +37,6 @@ import {
   codexSandboxModeLabel,
   codexSupportedReasoningEfforts,
 } from './viewModel';
-
-type ComposerOption = Readonly<{
-  value: string;
-  label: string;
-}>;
 
 type DirCache = Map<string, FileItem[]>;
 
@@ -104,19 +103,23 @@ export function CodexPageShell() {
   const workingDirDisabled = createMemo(() => !summary().hostReady || codex.submitting() || !homePath());
   const canPickWorkingDir = createMemo(() => !workingDirLocked() && !workingDirDisabled());
   const workingDirPickerInitialPath = createMemo(() => toPickerTreePath(workingDirPath(), homePath()));
-  const modelOptions = createMemo<ComposerOption[]>(() => {
+  const modelOptions = createMemo<CodexComposerControlOption[]>(() => {
     const items = (codex.capabilities()?.models ?? []).map((model) => ({
       value: String(model.id ?? '').trim(),
       label: String(model.display_name ?? model.id ?? '').trim() || String(model.id ?? '').trim(),
+      description: String(model.description ?? '').trim() || undefined,
     })).filter((option) => option.value);
     if (items.length > 0) return items;
     const fallbackValue = modelValue();
     if (!fallbackValue) return [];
-    return [{ value: fallbackValue, label: codexModelLabel(codex.capabilities(), fallbackValue) || fallbackValue }];
+    return [{
+      value: fallbackValue,
+      label: codexModelLabel(codex.capabilities(), fallbackValue) || fallbackValue,
+    }];
   });
-  const effortOptions = createMemo<ComposerOption[]>(() => {
+  const effortOptions = createMemo<CodexComposerControlOption[]>(() => {
     const seen = new Set<string>();
-    const out: ComposerOption[] = [];
+    const out: CodexComposerControlOption[] = [];
     for (const value of codexSupportedReasoningEfforts(codex.capabilities(), modelValue())) {
       const normalized = String(value ?? '').trim();
       if (!normalized || seen.has(normalized)) continue;
@@ -128,9 +131,9 @@ export function CodexPageShell() {
     }
     return out;
   });
-  const approvalPolicyOptions = createMemo<ComposerOption[]>(() => {
+  const approvalPolicyOptions = createMemo<CodexComposerControlOption[]>(() => {
     const seen = new Set<string>();
-    const out: ComposerOption[] = [];
+    const out: CodexComposerControlOption[] = [];
     for (const value of [...codexAllowedApprovalPolicies(codex.capabilities()), approvalPolicyValue()]) {
       const normalized = String(value ?? '').trim();
       if (!normalized || seen.has(normalized)) continue;
@@ -139,9 +142,9 @@ export function CodexPageShell() {
     }
     return out;
   });
-  const sandboxModeOptions = createMemo<ComposerOption[]>(() => {
+  const sandboxModeOptions = createMemo<CodexComposerControlOption[]>(() => {
     const seen = new Set<string>();
-    const out: ComposerOption[] = [];
+    const out: CodexComposerControlOption[] = [];
     for (const value of [...codexAllowedSandboxModes(codex.capabilities()), sandboxModeValue()]) {
       const normalized = String(value ?? '').trim();
       if (!normalized || seen.has(normalized)) continue;
@@ -173,6 +176,48 @@ export function CodexPageShell() {
         ? 'Restore the archived thread before sending another turn.'
         : ''
   ));
+  const runtimeControls = createMemo<readonly CodexComposerControlSpec[]>(() => ([
+    {
+      id: 'model',
+      label: 'Model',
+      value: modelValue(),
+      options: modelOptions(),
+      placeholder: 'Default',
+      disabled: !composerHostAvailable() || modelOptions().length === 0,
+      variant: 'value',
+      onChange: codex.setModelDraft,
+    },
+    {
+      id: 'effort',
+      label: 'Effort',
+      value: effortValue(),
+      options: effortOptions(),
+      placeholder: 'Default',
+      disabled: !composerHostAvailable() || effortOptions().length === 0,
+      variant: 'value',
+      onChange: codex.setEffortDraft,
+    },
+    {
+      id: 'approval',
+      label: 'Approval',
+      value: approvalPolicyValue(),
+      options: approvalPolicyOptions(),
+      placeholder: 'Never',
+      disabled: !composerHostAvailable() || approvalPolicyOptions().length === 0,
+      variant: 'policy',
+      onChange: codex.setApprovalPolicyDraft,
+    },
+    {
+      id: 'sandbox',
+      label: 'Sandbox',
+      value: sandboxModeValue(),
+      options: sandboxModeOptions(),
+      placeholder: 'Full access',
+      disabled: !composerHostAvailable() || sandboxModeOptions().length === 0,
+      variant: 'policy',
+      onChange: codex.setSandboxModeDraft,
+    },
+  ]));
   const composerStopVisible = createMemo(() => codex.submitting() || !!activeInterruptTurnID());
   const composerStopDisabledReason = createMemo(() => {
     if (!composerStopVisible()) return '';
@@ -384,14 +429,7 @@ export function CodexPageShell() {
                     workingDirTitle={workingDirPath() || workingDirValue() || 'Working directory'}
                     workingDirLocked={workingDirLocked()}
                     workingDirDisabled={workingDirDisabled()}
-                    modelValue={modelValue()}
-                    modelOptions={modelOptions()}
-                    effortValue={effortValue()}
-                    effortOptions={effortOptions()}
-                    approvalPolicyValue={approvalPolicyValue()}
-                    approvalPolicyOptions={approvalPolicyOptions()}
-                    sandboxModeValue={sandboxModeValue()}
-                    sandboxModeOptions={sandboxModeOptions()}
+                    runtimeControls={runtimeControls()}
                     attachments={codex.attachments()}
                     mentions={codex.mentions()}
                     supportsImages={supportsImages()}
@@ -408,10 +446,6 @@ export function CodexPageShell() {
                       if (!canPickWorkingDir()) return;
                       setWorkingDirPickerOpen(true);
                     }}
-                    onModelChange={codex.setModelDraft}
-                    onEffortChange={codex.setEffortDraft}
-                    onApprovalPolicyChange={codex.setApprovalPolicyDraft}
-                    onSandboxModeChange={codex.setSandboxModeDraft}
                     onAddAttachments={codex.addImageAttachments}
                     onRemoveAttachment={codex.removeAttachment}
                     onAddFileMentions={codex.addFileMentions}

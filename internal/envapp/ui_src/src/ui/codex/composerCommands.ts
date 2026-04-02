@@ -1,3 +1,5 @@
+import type { CodexComposerControlID } from './composerControls';
+
 export type CodexSlashCommandID =
   | 'mention'
   | 'new'
@@ -12,11 +14,9 @@ export type CodexSlashCommandAction =
   | 'insert-mention-trigger'
   | 'start-new-thread'
   | 'clear-composer'
-  | 'focus-working-dir'
-  | 'focus-model'
-  | 'focus-effort'
-  | 'focus-approval'
-  | 'focus-sandbox';
+  | 'open-working-dir-picker';
+
+export type CodexSlashCommandKind = 'immediate' | 'parameter';
 
 export type CodexSlashCommandContext = Readonly<{
   hostAvailable: boolean;
@@ -28,7 +28,9 @@ export type CodexSlashCommandSpec = Readonly<{
   command: string;
   title: string;
   description: string;
-  action: CodexSlashCommandAction;
+  kind: CodexSlashCommandKind;
+  action?: CodexSlashCommandAction;
+  parameter_target?: CodexComposerControlID;
   aliases?: readonly string[];
   requires_host?: boolean;
   requires_working_dir_editable?: boolean;
@@ -40,6 +42,7 @@ const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
     command: 'mention',
     title: '/mention',
     description: 'Insert @ and open the file reference picker.',
+    kind: 'immediate',
     action: 'insert-mention-trigger',
   },
   {
@@ -47,6 +50,7 @@ const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
     command: 'new',
     title: '/new',
     description: 'Start a fresh Codex thread draft.',
+    kind: 'immediate',
     action: 'start-new-thread',
     requires_host: true,
   },
@@ -55,6 +59,7 @@ const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
     command: 'clear',
     title: '/clear',
     description: 'Clear the current composer text, attachments, and file references.',
+    kind: 'immediate',
     action: 'clear-composer',
   },
   {
@@ -62,7 +67,8 @@ const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
     command: 'cwd',
     title: '/cwd',
     description: 'Open the working directory picker for a new chat.',
-    action: 'focus-working-dir',
+    kind: 'immediate',
+    action: 'open-working-dir-picker',
     aliases: ['workdir'],
     requires_working_dir_editable: true,
   },
@@ -70,24 +76,27 @@ const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
     id: 'model',
     command: 'model',
     title: '/model',
-    description: 'Focus the model selector.',
-    action: 'focus-model',
+    description: 'Choose the model for the next Codex turn.',
+    kind: 'parameter',
+    parameter_target: 'model',
     requires_host: true,
   },
   {
     id: 'effort',
     command: 'effort',
     title: '/effort',
-    description: 'Focus the reasoning effort selector.',
-    action: 'focus-effort',
+    description: 'Choose the reasoning effort for the next Codex turn.',
+    kind: 'parameter',
+    parameter_target: 'effort',
     requires_host: true,
   },
   {
     id: 'approval',
     command: 'approval',
     title: '/approval',
-    description: 'Focus the approval policy selector.',
-    action: 'focus-approval',
+    description: 'Choose the approval policy for the next Codex turn.',
+    kind: 'parameter',
+    parameter_target: 'approval',
     aliases: ['permissions'],
     requires_host: true,
   },
@@ -95,8 +104,9 @@ const CODEX_SLASH_COMMANDS: readonly CodexSlashCommandSpec[] = [
     id: 'sandbox',
     command: 'sandbox',
     title: '/sandbox',
-    description: 'Focus the sandbox selector.',
-    action: 'focus-sandbox',
+    description: 'Choose the sandbox mode for the next Codex turn.',
+    kind: 'parameter',
+    parameter_target: 'sandbox',
     requires_host: true,
   },
 ] as const;

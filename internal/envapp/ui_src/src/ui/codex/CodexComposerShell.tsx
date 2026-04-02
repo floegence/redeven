@@ -15,6 +15,12 @@ import {
   type CodexSlashCommandSpec,
 } from './composerCommands';
 import {
+  findCodexComposerControlSpec,
+  type CodexComposerControlID,
+  type CodexComposerControlOption,
+  type CodexComposerControlSpec,
+} from './composerControls';
+import {
   createCodexComposerFileIndex,
   type CodexFileSearchEntry,
 } from './composerFileIndex';
@@ -25,32 +31,34 @@ import type {
   CodexComposerMentionDraft,
 } from './types';
 
-type SelectOption = Readonly<{
-  value: string;
-  label: string;
+type ComposerPopupKind =
+  | 'none'
+  | 'file-mentions'
+  | 'slash-commands'
+  | 'slash-parameter-options';
+
+type ComposerSlashParameterSession = Readonly<{
+  commandID: CodexSlashCommandSpec['id'];
+  controlID: CodexComposerControlID;
 }>;
 
-type ComposerPopupKind = 'none' | 'file-mentions' | 'slash-commands';
 type ComposerSelectVariant = 'value' | 'policy';
 type ComposerSelectLabelMode = 'always' | 'auto';
 
 function ComposerSelectChip(props: {
   label: string;
   value: string;
-  options: readonly SelectOption[];
+  options: readonly CodexComposerControlOption[];
   placeholder: string;
   disabled: boolean;
   variant: ComposerSelectVariant;
   labelMode?: ComposerSelectLabelMode;
   onChange: (value: string) => void;
-  containerRef?: (element: HTMLDivElement) => void;
 }) {
   const hasValue = () => String(props.value ?? '').trim().length > 0;
   const showLabel = () => (props.labelMode ?? 'auto') === 'always' || !hasValue();
   return (
     <div
-      ref={props.containerRef}
-      data-codex-command-focus={props.label.toLowerCase()}
       data-codex-select-variant={props.variant}
       data-codex-select-collapsed={showLabel() ? 'false' : 'true'}
       class={cn(
@@ -138,26 +146,13 @@ function MentionChip(props: {
   );
 }
 
-function focusFirstInteractiveDescendant(container: HTMLElement | undefined) {
-  if (!container) return;
-  const target = container.querySelector<HTMLElement>('input, select, textarea, button, [tabindex]:not([tabindex="-1"])');
-  target?.focus();
-}
-
 export function CodexComposerShell(props: {
   workingDirPath: string;
   workingDirLabel: string;
   workingDirTitle: string;
   workingDirLocked: boolean;
   workingDirDisabled: boolean;
-  modelValue: string;
-  modelOptions: readonly SelectOption[];
-  effortValue: string;
-  effortOptions: readonly SelectOption[];
-  approvalPolicyValue: string;
-  approvalPolicyOptions: readonly SelectOption[];
-  sandboxModeValue: string;
-  sandboxModeOptions: readonly SelectOption[];
+  runtimeControls: readonly CodexComposerControlSpec[];
   attachments: readonly CodexComposerAttachmentDraft[];
   mentions: readonly CodexComposerMentionDraft[];
   supportsImages: boolean;
@@ -171,10 +166,6 @@ export function CodexComposerShell(props: {
   hostAvailable: boolean;
   hostDisabledReason: string;
   onOpenWorkingDirPicker: () => void;
-  onModelChange: (value: string) => void;
-  onEffortChange: (value: string) => void;
-  onApprovalPolicyChange: (value: string) => void;
-  onSandboxModeChange: (value: string) => void;
   onAddAttachments: (files: readonly File[]) => Promise<void>;
   onRemoveAttachment: (attachmentID: string) => void;
   onAddFileMentions: (mentions: ReadonlyArray<{
@@ -202,14 +193,11 @@ export function CodexComposerShell(props: {
   const [selectionEnd, setSelectionEnd] = createSignal(0);
   const [activePopupIndex, setActivePopupIndex] = createSignal(0);
   const [dismissedPopupSignature, setDismissedPopupSignature] = createSignal('');
+  const [slashParameterSession, setSlashParameterSession] = createSignal<ComposerSlashParameterSession | null>(null);
   const [fileIndexRevision, setFileIndexRevision] = createSignal(0);
   let textareaRef: HTMLTextAreaElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   let workingDirChipRef: HTMLButtonElement | undefined;
-  let modelContainerRef: HTMLDivElement | undefined;
-  let effortContainerRef: HTMLDivElement | undefined;
-  let approvalContainerRef: HTMLDivElement | undefined;
-  let sandboxContainerRef: HTMLDivElement | undefined;
   const autosizeController = createCodexComposerAutosizeController();
 
   const canSend = () =>
@@ -257,14 +245,33 @@ export function CodexComposerShell(props: {
 
   const popupKind = createMemo<ComposerPopupKind>(() => {
     if (mentionToken()) return 'file-mentions';
+    if (slashParameterSession()) return 'slash-parameter-options';
     if (slashCommandToken()) return 'slash-commands';
     return 'none';
+  });
+
+  const activeSlashParameterControl = createMemo(() => {
+    const session = slashParameterSession();
+    if (!session) return null;
+    return findCodexComposerControlSpec(props.runtimeControls, session.controlID);
   });
 
   const popupSignature = createMemo(() => {
     if (popupKind() === 'file-mentions') {
       const token = mentionToken();
       return token ? `file:${props.workingDirPath}:${token.range.start}:${token.query}` : '';
+    }
+    if (popupKind() === 'slash-parameter-options') {
+      const session = slashParameterSession();
+      const control = activeSlashParameterControl();
+      if (!session || !control) return '';
+      return [
+        'param',
+        session.commandID,
+        session.controlID,
+        control.value,
+        control.options.map((option) => option.value).join(','),
+      ].join(':');
     }
     if (popupKind() === 'slash-commands') {
       const token = slashCommandToken();
@@ -288,6 +295,12 @@ export function CodexComposerShell(props: {
             workingDirEditable: props.hostAvailable && !props.workingDirLocked && !props.workingDirDisabled,
           },
         })
+      : []
+  ));
+
+  const slashParameterOptions = createMemo<CodexComposerControlOption[]>(() => (
+    popupKind() === 'slash-parameter-options'
+      ? [...(activeSlashParameterControl()?.options ?? [])]
       : []
   ));
 
@@ -321,10 +334,20 @@ export function CodexComposerShell(props: {
     return fileIndex.getSnapshot(cwd)?.complete === false;
   });
 
+  createEffect(() => {
+    const session = slashParameterSession();
+    if (!session) return;
+    const control = activeSlashParameterControl();
+    if (control && !control.disabled && control.options.length > 0) return;
+    setSlashParameterSession(null);
+  });
+
   const popupItemCount = createMemo(() => (
     popupKind() === 'file-mentions'
       ? fileMentionCandidates().length
-      : slashCommands().length
+      : popupKind() === 'slash-parameter-options'
+        ? slashParameterOptions().length
+        : slashCommands().length
   ));
 
   createEffect(() => {
@@ -337,6 +360,16 @@ export function CodexComposerShell(props: {
 
   createEffect(() => {
     popupSignature();
+    if (popupKind() === 'slash-parameter-options') {
+      const control = activeSlashParameterControl();
+      if (!control) {
+        setActivePopupIndex(0);
+        return;
+      }
+      const selectedIndex = control.options.findIndex((option) => option.value === control.value);
+      setActivePopupIndex(selectedIndex >= 0 ? selectedIndex : 0);
+      return;
+    }
     setActivePopupIndex(0);
   });
 
@@ -348,6 +381,22 @@ export function CodexComposerShell(props: {
   onCleanup(() => {
     autosizeController.dispose();
     fileIndex.dispose();
+  });
+
+  const valueControls = createMemo(() => props.runtimeControls.filter((control) => control.variant === 'value'));
+  const policyControls = createMemo(() => props.runtimeControls.filter((control) => control.variant === 'policy'));
+  const popupAriaLabel = createMemo(() => {
+    switch (popupKind()) {
+      case 'file-mentions':
+        return 'File reference suggestions';
+      case 'slash-parameter-options': {
+        const control = activeSlashParameterControl();
+        return control ? `${control.label} options` : 'Command parameter options';
+      }
+      case 'slash-commands':
+      default:
+        return 'Command suggestions';
+    }
   });
 
   const sendLabel = () => 'Send to Codex';
@@ -364,6 +413,14 @@ export function CodexComposerShell(props: {
     return absolutePath;
   };
   const workingDirChipLabel = () => String(props.workingDirLabel ?? '').trim() || compactPathLabel(props.workingDirPath, 'Working dir');
+  const slashParameterOptionDetail = (option: CodexComposerControlOption) => {
+    const description = String(option.description ?? '').trim();
+    if (description) return description;
+    const value = String(option.value ?? '').trim();
+    const label = String(option.label ?? '').trim();
+    if (value && value !== label) return value;
+    return '';
+  };
   const statusNote = () => {
     if (!props.hostAvailable) {
       return String(props.hostDisabledReason ?? '').trim() || 'Install `codex` on the host to enable Codex chat.';
@@ -426,6 +483,15 @@ export function CodexComposerShell(props: {
     applyComposerText(result.text, result.selection);
   };
 
+  const commitSlashParameterOption = (option: CodexComposerControlOption) => {
+    const control = activeSlashParameterControl();
+    if (!control) return;
+    control.onChange(String(option.value ?? ''));
+    setDismissedPopupSignature('');
+    setSlashParameterSession(null);
+    requestAnimationFrame(() => textareaRef?.focus());
+  };
+
   const runSlashCommand = (command: CodexSlashCommandSpec) => {
     let nextText = props.composerText;
     let nextSelection = selectionStart();
@@ -437,23 +503,39 @@ export function CodexComposerShell(props: {
     }
     setDismissedPopupSignature('');
 
+    if (command.kind === 'parameter') {
+      const controlID = command.parameter_target;
+      const control = controlID ? findCodexComposerControlSpec(props.runtimeControls, controlID) : null;
+      applyComposerText(nextText, nextSelection);
+      if (!controlID || !control || control.disabled || control.options.length === 0) return;
+      setSlashParameterSession({
+        commandID: command.id,
+        controlID,
+      });
+      return;
+    }
+
     switch (command.action) {
       case 'insert-mention-trigger': {
+        setSlashParameterSession(null);
         const result = replaceComposerTextRange(nextText, { start: nextSelection, end: nextSelection }, '@');
         applyComposerText(result.text, result.selection);
         return;
       }
       case 'start-new-thread': {
+        setSlashParameterSession(null);
         applyComposerText(nextText);
         props.onStartNewThreadDraft();
         return;
       }
       case 'clear-composer': {
+        setSlashParameterSession(null);
         props.onResetComposer();
         restoreSelection(0);
         return;
       }
-      case 'focus-working-dir': {
+      case 'open-working-dir-picker': {
+        setSlashParameterSession(null);
         applyComposerText(nextText, nextSelection);
         requestAnimationFrame(() => {
           if (canOpenWorkingDirPicker()) {
@@ -464,29 +546,18 @@ export function CodexComposerShell(props: {
         });
         return;
       }
-      case 'focus-model': {
-        applyComposerText(nextText, nextSelection);
-        requestAnimationFrame(() => focusFirstInteractiveDescendant(modelContainerRef));
-        return;
-      }
-      case 'focus-effort': {
-        applyComposerText(nextText, nextSelection);
-        requestAnimationFrame(() => focusFirstInteractiveDescendant(effortContainerRef));
-        return;
-      }
-      case 'focus-approval': {
-        applyComposerText(nextText, nextSelection);
-        requestAnimationFrame(() => focusFirstInteractiveDescendant(approvalContainerRef));
-        return;
-      }
-      case 'focus-sandbox': {
-        applyComposerText(nextText, nextSelection);
-        requestAnimationFrame(() => focusFirstInteractiveDescendant(sandboxContainerRef));
-        return;
-      }
       default:
         return;
     }
+  };
+
+  const dismissActivePopup = () => {
+    if (popupKind() === 'slash-parameter-options') {
+      setSlashParameterSession(null);
+      requestAnimationFrame(() => textareaRef?.focus());
+      return;
+    }
+    setDismissedPopupSignature(popupSignature());
   };
 
   const handlePopupKeydown = (event: KeyboardEvent): boolean => {
@@ -495,7 +566,7 @@ export function CodexComposerShell(props: {
     const itemCount = popupItemCount();
     if (event.key === 'Escape') {
       event.preventDefault();
-      setDismissedPopupSignature(popupSignature());
+      dismissActivePopup();
       return true;
     }
     if (itemCount <= 0) {
@@ -525,6 +596,13 @@ export function CodexComposerShell(props: {
         }
         return true;
       }
+      if (popupKind() === 'slash-parameter-options') {
+        const option = slashParameterOptions()[activePopupIndex()];
+        if (option) {
+          commitSlashParameterOption(option);
+        }
+        return true;
+      }
       const command = slashCommands()[activePopupIndex()];
       if (command) {
         runSlashCommand(command);
@@ -549,6 +627,7 @@ export function CodexComposerShell(props: {
             value={props.composerText}
             disabled={!props.hostAvailable}
             onInput={(event) => {
+              setSlashParameterSession(null);
               props.onComposerInput(event.currentTarget.value);
               setDismissedPopupSignature('');
               syncSelection();
@@ -629,27 +708,55 @@ export function CodexComposerShell(props: {
               class="codex-chat-popup"
               data-codex-popup-kind={popupKind()}
               role="listbox"
-              aria-label={popupKind() === 'file-mentions' ? 'File reference suggestions' : 'Command suggestions'}
+              aria-label={popupAriaLabel()}
             >
               <Show when={popupKind() === 'file-mentions'} fallback={(
-                <For each={slashCommands()}>
-                  {(command, index) => (
-                    <button
-                      type="button"
-                      role="option"
-                      class={cn(
-                        'codex-chat-popup-item',
-                        activePopupIndex() === index() && 'codex-chat-popup-item-active',
+                <Show when={popupKind() === 'slash-parameter-options'} fallback={(
+                  <For each={slashCommands()}>
+                    {(command, index) => (
+                      <button
+                        type="button"
+                        role="option"
+                        class={cn(
+                          'codex-chat-popup-item',
+                          activePopupIndex() === index() && 'codex-chat-popup-item-active',
+                        )}
+                        aria-selected={activePopupIndex() === index()}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => runSlashCommand(command)}
+                      >
+                        <span class="codex-chat-popup-item-title">{command.title}</span>
+                        <span class="codex-chat-popup-item-detail">{command.description}</span>
+                      </button>
+                    )}
+                  </For>
+                )}>
+                  <Show
+                    when={slashParameterOptions().length > 0}
+                    fallback={<div class="codex-chat-popup-empty">No options are available for this command.</div>}
+                  >
+                    <For each={slashParameterOptions()}>
+                      {(option, index) => (
+                        <button
+                          type="button"
+                          role="option"
+                          class={cn(
+                            'codex-chat-popup-item',
+                            activePopupIndex() === index() && 'codex-chat-popup-item-active',
+                          )}
+                          aria-selected={activePopupIndex() === index()}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => commitSlashParameterOption(option)}
+                        >
+                          <span class="codex-chat-popup-item-title">{option.label}</span>
+                          <Show when={slashParameterOptionDetail(option)}>
+                            <span class="codex-chat-popup-item-detail">{slashParameterOptionDetail(option)}</span>
+                          </Show>
+                        </button>
                       )}
-                      aria-selected={activePopupIndex() === index()}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => runSlashCommand(command)}
-                    >
-                      <span class="codex-chat-popup-item-title">{command.title}</span>
-                      <span class="codex-chat-popup-item-detail">{command.description}</span>
-                    </button>
-                  )}
-                </For>
+                    </For>
+                  </Show>
+                </Show>
               )}>
                 <Show
                   when={fileMentionCandidates().length > 0}
@@ -742,59 +849,35 @@ export function CodexComposerShell(props: {
 
             <div class="codex-chat-input-meta-group codex-chat-input-meta-group-strategy">
               <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-values">
-                <ComposerSelectChip
-                  label="Model"
-                  value={props.modelValue}
-                  options={props.modelOptions}
-                  placeholder="Default"
-                  disabled={!props.hostAvailable || props.modelOptions.length === 0}
-                  variant="value"
-                  onChange={props.onModelChange}
-                  containerRef={(element) => {
-                    modelContainerRef = element;
-                  }}
-                />
-
-                <ComposerSelectChip
-                  label="Effort"
-                  value={props.effortValue}
-                  options={props.effortOptions}
-                  placeholder="Default"
-                  disabled={!props.hostAvailable || props.effortOptions.length === 0}
-                  variant="value"
-                  onChange={props.onEffortChange}
-                  containerRef={(element) => {
-                    effortContainerRef = element;
-                  }}
-                />
+                <For each={valueControls()}>
+                  {(control) => (
+                    <ComposerSelectChip
+                      label={control.label}
+                      value={control.value}
+                      options={control.options}
+                      placeholder={control.placeholder}
+                      disabled={control.disabled}
+                      variant={control.variant}
+                      onChange={control.onChange}
+                    />
+                  )}
+                </For>
               </div>
 
               <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-policies">
-                <ComposerSelectChip
-                  label="Approval"
-                  value={props.approvalPolicyValue}
-                  options={props.approvalPolicyOptions}
-                  placeholder="Never"
-                  disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
-                  variant="policy"
-                  onChange={props.onApprovalPolicyChange}
-                  containerRef={(element) => {
-                    approvalContainerRef = element;
-                  }}
-                />
-
-                <ComposerSelectChip
-                  label="Sandbox"
-                  value={props.sandboxModeValue}
-                  options={props.sandboxModeOptions}
-                  placeholder="Full access"
-                  disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
-                  variant="policy"
-                  onChange={props.onSandboxModeChange}
-                  containerRef={(element) => {
-                    sandboxContainerRef = element;
-                  }}
-                />
+                <For each={policyControls()}>
+                  {(control) => (
+                    <ComposerSelectChip
+                      label={control.label}
+                      value={control.value}
+                      options={control.options}
+                      placeholder={control.placeholder}
+                      disabled={control.disabled}
+                      variant={control.variant}
+                      onChange={control.onChange}
+                    />
+                  )}
+                </For>
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createSignal } from 'solid-js';
+import { createMemo, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -94,6 +94,18 @@ function renderComposer(options?: {
   onAddFileMentions?: (mentions: ReadonlyArray<{ name: string; path: string; is_image: boolean }>) => void;
   onResetComposer?: () => void;
   onStartNewThreadDraft?: () => void;
+  modelValue?: string;
+  modelOptions?: ReadonlyArray<{ value: string; label: string; description?: string }>;
+  onModelChange?: (value: string) => void;
+  effortValue?: string;
+  effortOptions?: ReadonlyArray<{ value: string; label: string; description?: string }>;
+  onEffortChange?: (value: string) => void;
+  approvalPolicyValue?: string;
+  approvalPolicyOptions?: ReadonlyArray<{ value: string; label: string; description?: string }>;
+  onApprovalPolicyChange?: (value: string) => void;
+  sandboxModeValue?: string;
+  sandboxModeOptions?: ReadonlyArray<{ value: string; label: string; description?: string }>;
+  onSandboxModeChange?: (value: string) => void;
 }) {
   const onSend = options?.onSend ?? vi.fn();
   const onStop = options?.onStop ?? vi.fn();
@@ -102,11 +114,75 @@ function renderComposer(options?: {
   const onAddFileMentions = options?.onAddFileMentions ?? vi.fn();
   const onResetComposer = options?.onResetComposer ?? vi.fn();
   const onStartNewThreadDraft = options?.onStartNewThreadDraft ?? vi.fn();
+  const onModelChange = options?.onModelChange ?? vi.fn();
+  const onEffortChange = options?.onEffortChange ?? vi.fn();
+  const onApprovalPolicyChange = options?.onApprovalPolicyChange ?? vi.fn();
+  const onSandboxModeChange = options?.onSandboxModeChange ?? vi.fn();
 
   const host = document.createElement('div');
   document.body.append(host);
   const dispose = render(() => {
     const [text, setText] = createSignal(options?.initialText ?? '');
+    const [modelValue, setModelValue] = createSignal(options?.modelValue ?? 'gpt-5.4');
+    const [effortValue, setEffortValue] = createSignal(options?.effortValue ?? 'medium');
+    const [approvalPolicyValue, setApprovalPolicyValue] = createSignal(options?.approvalPolicyValue ?? 'on-request');
+    const [sandboxModeValue, setSandboxModeValue] = createSignal(options?.sandboxModeValue ?? 'workspace-write');
+    const runtimeControls = createMemo(() => ([
+      {
+        id: 'model' as const,
+        label: 'Model',
+        value: modelValue(),
+        options: options?.modelOptions ?? [
+          { value: 'gpt-5.4', label: 'GPT-5.4', description: 'Default host model' },
+        ],
+        placeholder: 'Default',
+        disabled: !(options?.hostAvailable ?? true),
+        variant: 'value' as const,
+        onChange: (value: string) => {
+          onModelChange(value);
+          setModelValue(value);
+        },
+      },
+      {
+        id: 'effort' as const,
+        label: 'Effort',
+        value: effortValue(),
+        options: options?.effortOptions ?? [{ value: 'medium', label: 'MEDIUM' }],
+        placeholder: 'Default',
+        disabled: !(options?.hostAvailable ?? true),
+        variant: 'value' as const,
+        onChange: (value: string) => {
+          onEffortChange(value);
+          setEffortValue(value);
+        },
+      },
+      {
+        id: 'approval' as const,
+        label: 'Approval',
+        value: approvalPolicyValue(),
+        options: options?.approvalPolicyOptions ?? [{ value: 'on-request', label: 'On request' }],
+        placeholder: 'Never',
+        disabled: !(options?.hostAvailable ?? true),
+        variant: 'policy' as const,
+        onChange: (value: string) => {
+          onApprovalPolicyChange(value);
+          setApprovalPolicyValue(value);
+        },
+      },
+      {
+        id: 'sandbox' as const,
+        label: 'Sandbox',
+        value: sandboxModeValue(),
+        options: options?.sandboxModeOptions ?? [{ value: 'workspace-write', label: 'Workspace write' }],
+        placeholder: 'Full access',
+        disabled: !(options?.hostAvailable ?? true),
+        variant: 'policy' as const,
+        onChange: (value: string) => {
+          onSandboxModeChange(value);
+          setSandboxModeValue(value);
+        },
+      },
+    ]));
     return (
       <CodexComposerShell
         workingDirPath={options?.workingDirPath ?? '/workspace'}
@@ -114,14 +190,7 @@ function renderComposer(options?: {
         workingDirTitle={options?.workingDirTitle ?? '/workspace'}
         workingDirLocked={options?.workingDirLocked ?? false}
         workingDirDisabled={options?.workingDirDisabled ?? false}
-        modelValue="gpt-5.4"
-        modelOptions={[{ value: 'gpt-5.4', label: 'GPT-5.4' }]}
-        effortValue="medium"
-        effortOptions={[{ value: 'medium', label: 'MEDIUM' }]}
-        approvalPolicyValue="on-request"
-        approvalPolicyOptions={[{ value: 'on-request', label: 'On request' }]}
-        sandboxModeValue="workspace-write"
-        sandboxModeOptions={[{ value: 'workspace-write', label: 'Workspace write' }]}
+        runtimeControls={runtimeControls()}
         attachments={options?.attachments ?? []}
         mentions={options?.mentions ?? []}
         supportsImages={options?.supportsImages ?? true}
@@ -135,10 +204,6 @@ function renderComposer(options?: {
         hostAvailable={options?.hostAvailable ?? true}
         hostDisabledReason={options?.hostDisabledReason ?? ''}
         onOpenWorkingDirPicker={onOpenWorkingDirPicker}
-        onModelChange={() => undefined}
-        onEffortChange={() => undefined}
-        onApprovalPolicyChange={() => undefined}
-        onSandboxModeChange={() => undefined}
         onAddAttachments={onAddAttachments}
         onRemoveAttachment={() => undefined}
         onAddFileMentions={onAddFileMentions}
@@ -162,6 +227,10 @@ function renderComposer(options?: {
     onAddFileMentions,
     onResetComposer,
     onStartNewThreadDraft,
+    onModelChange,
+    onEffortChange,
+    onApprovalPolicyChange,
+    onSandboxModeChange,
   };
 }
 
@@ -368,6 +437,107 @@ describe('CodexComposerShell', () => {
 
     expect(onResetComposer).toHaveBeenCalled();
     expect(onSend).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it('opens slash parameter options for /model and commits the highlighted value with the keyboard', async () => {
+    const onModelChange = vi.fn();
+    const { host, dispose } = renderComposer({
+      initialText: '/model',
+      modelOptions: [
+        { value: 'gpt-5.4', label: 'GPT-5.4', description: 'Default host model' },
+        { value: 'gpt-5.5', label: 'GPT-5.5', description: 'Faster coding model' },
+      ],
+      onModelChange,
+    });
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) throw new Error('textarea not found');
+
+    textarea.focus();
+    textarea.setSelectionRange(6, 6);
+    textarea.dispatchEvent(new Event('select', { bubbles: true }));
+    await flushAsync();
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushAsync();
+
+    const parameterPopup = host.querySelector('[data-codex-popup-kind="slash-parameter-options"]');
+    expect(parameterPopup).not.toBeNull();
+    expect(parameterPopup?.textContent).toContain('Default host model');
+    expect(textarea.value).toBe('');
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushAsync();
+
+    expect(onModelChange).toHaveBeenCalledWith('gpt-5.5');
+    expect((host.querySelector('select[aria-label="Model"]') as HTMLSelectElement | null)?.value).toBe('gpt-5.5');
+    expect(host.querySelector('[data-codex-popup-kind="slash-parameter-options"]')).toBeNull();
+    dispose();
+  });
+
+  it('commits slash parameter options with the mouse and keeps the footer control synchronized', async () => {
+    const onApprovalPolicyChange = vi.fn();
+    const { host, dispose } = renderComposer({
+      initialText: '/approval',
+      approvalPolicyOptions: [
+        { value: 'on-request', label: 'On request' },
+        { value: 'never', label: 'Never' },
+      ],
+      onApprovalPolicyChange,
+    });
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) throw new Error('textarea not found');
+
+    textarea.focus();
+    textarea.setSelectionRange(9, 9);
+    textarea.dispatchEvent(new Event('select', { bubbles: true }));
+    await flushAsync();
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushAsync();
+
+    const option = Array.from(host.querySelectorAll('.codex-chat-popup-item')).find((node) => (
+      node.textContent?.includes('Never')
+    )) as HTMLButtonElement | undefined;
+    if (!option) throw new Error('approval option not found');
+    option.click();
+    await flushAsync();
+
+    expect(onApprovalPolicyChange).toHaveBeenCalledWith('never');
+    expect((host.querySelector('select[aria-label="Approval"]') as HTMLSelectElement | null)?.value).toBe('never');
+    expect(host.querySelector('[data-codex-popup-kind="slash-parameter-options"]')).toBeNull();
+    dispose();
+  });
+
+  it('dismisses slash parameter options with escape without changing the runtime draft', async () => {
+    const onSandboxModeChange = vi.fn();
+    const { host, dispose } = renderComposer({
+      initialText: '/sandbox',
+      sandboxModeOptions: [
+        { value: 'workspace-write', label: 'Workspace write' },
+        { value: 'danger-full-access', label: 'Full access' },
+      ],
+      onSandboxModeChange,
+    });
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) throw new Error('textarea not found');
+
+    textarea.focus();
+    textarea.setSelectionRange(8, 8);
+    textarea.dispatchEvent(new Event('select', { bubbles: true }));
+    await flushAsync();
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flushAsync();
+    expect(host.querySelector('[data-codex-popup-kind="slash-parameter-options"]')).not.toBeNull();
+
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await flushAsync();
+
+    expect(onSandboxModeChange).not.toHaveBeenCalled();
+    expect((host.querySelector('select[aria-label="Sandbox"]') as HTMLSelectElement | null)?.value).toBe('workspace-write');
+    expect(host.querySelector('[data-codex-popup-kind="slash-parameter-options"]')).toBeNull();
     dispose();
   });
 
