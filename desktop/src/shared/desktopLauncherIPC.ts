@@ -5,18 +5,18 @@ import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
 
 export type DesktopTargetKind = 'managed_local' | 'external_local_ui';
-export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_device' | 'connect_failed' | 'blocked';
-export type DesktopWelcomeIssueScope = 'this_device' | 'remote_device' | 'startup';
-export type DesktopLauncherSurface = 'connect_environment' | 'this_device_settings';
-export type DesktopEnvironmentEntryKind = 'this_device' | 'external_local_ui';
-export type DesktopEnvironmentEntryTag = 'Current' | 'Recent' | 'Saved' | 'This Device' | '';
-export type DesktopEnvironmentEntryCategory = 'this_device' | 'current_unsaved' | DesktopSavedEnvironmentSource;
+export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
+export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
+export type DesktopLauncherSurface = 'connect_environment' | 'local_environment_settings';
+export type DesktopEnvironmentEntryKind = 'local_environment' | 'external_local_ui';
+export type DesktopEnvironmentEntryTag = 'Current' | 'Recent' | 'Saved' | 'Local' | '';
+export type DesktopEnvironmentEntryCategory = 'local_environment' | 'current_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopWelcomeActionKind =
-  | 'open_this_device'
-  | 'open_remote_device'
+  | 'open_local_environment'
+  | 'open_remote_environment'
   | 'upsert_saved_environment'
   | 'delete_saved_environment'
-  | 'return_to_current_device';
+  | 'return_to_current_environment';
 
 export type DesktopWelcomeIssue = Readonly<{
   scope: DesktopWelcomeIssueScope;
@@ -58,10 +58,10 @@ export type DesktopWelcomeSnapshot = Readonly<{
 
 export type DesktopLauncherActionRequest = Readonly<
   | {
-      kind: 'open_this_device';
+      kind: 'open_local_environment';
     }
   | {
-      kind: 'open_remote_device';
+      kind: 'open_remote_environment';
       external_local_ui_url: string;
     }
   | {
@@ -75,7 +75,7 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
     }
   | {
-      kind: 'return_to_current_device';
+      kind: 'return_to_current_environment';
     }
 >;
 
@@ -91,10 +91,10 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopWelcomeActionKind;
   switch (kind) {
-    case 'open_this_device':
-    case 'return_to_current_device':
+    case 'open_local_environment':
+    case 'return_to_current_environment':
       return { kind };
-    case 'open_remote_device':
+    case 'open_remote_environment':
       return {
         kind,
         external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),

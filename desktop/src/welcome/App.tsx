@@ -82,9 +82,9 @@ declare global {
 
 type BusyAction =
   | ''
-  | 'open_this_device'
-  | 'open_remote_device'
-  | 'return_to_current_device'
+  | 'open_local_environment'
+  | 'open_remote_environment'
+  | 'return_to_current_environment'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -158,10 +158,10 @@ function formatTimestamp(unixMS: number): string {
 
 function issueKicker(issue: DesktopWelcomeIssue): string {
   switch (issue.scope) {
-    case 'remote_device':
+    case 'remote_environment':
       return 'Remote Environment';
-    case 'this_device':
-      return 'This Device';
+    case 'local_environment':
+      return 'Local Environment';
     default:
       return 'Desktop startup';
   }
@@ -213,7 +213,7 @@ function environmentSourceLabel(environment: DesktopEnvironmentEntry): string {
     case 'saved':
       return 'Saved';
     default:
-      return 'This Device';
+      return 'Local Environment';
   }
 }
 
@@ -259,8 +259,8 @@ function DesktopCommandRegistrar(props: Readonly<{
   showConnectEnvironment: (message?: string) => void;
   openCreateConnectionDialog: (message?: string) => void;
   openSettingsSurface: () => void;
-  openThisDevice: () => Promise<void>;
-  openRemoteDevice: (targetURL: string) => Promise<boolean>;
+  openLocalEnvironment: () => Promise<void>;
+  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
   returnOrQuit: () => Promise<void>;
 }>): null {
   const cmd = useCommand();
@@ -279,19 +279,19 @@ function DesktopCommandRegistrar(props: Readonly<{
         execute: () => props.showConnectEnvironment(),
       },
       {
-        id: 'redeven.desktop.openThisDevice',
-        title: 'Open This Device',
+        id: 'redeven.desktop.openLocalEnvironment',
+        title: 'Open Local Environment',
         description: 'Open the desktop-managed Environment on this machine',
         category: 'Desktop',
         keybind: 'mod+enter',
         icon: Globe,
         execute: () => {
-          void props.openThisDevice();
+          void props.openLocalEnvironment();
         },
       },
       {
-        id: 'redeven.desktop.openThisDeviceOptions',
-        title: 'This Device Options',
+        id: 'redeven.desktop.openLocalEnvironmentSettings',
+        title: 'Local Environment Settings',
         description: 'Edit local startup, access, and bootstrap settings',
         category: 'Desktop',
         keybind: 'mod+,',
@@ -345,7 +345,7 @@ function DesktopCommandRegistrar(props: Readonly<{
         category: 'Recent Environments',
         icon: Globe,
         execute: () => {
-          void props.openRemoteDevice(environment.local_ui_url);
+          void props.openRemoteEnvironment(environment.local_ui_url);
         },
       });
     }
@@ -372,8 +372,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const cmd = useCommand();
   const theme = useTheme();
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
-  const [surfaceMode, setSurfaceMode] = createSignal<SurfaceMode>(props.snapshot.surface === 'this_device_settings' ? 'root' : 'local');
-  const [localSurface, setLocalSurface] = createSignal<DesktopLauncherSurface>(props.snapshot.surface === 'this_device_settings' ? 'this_device_settings' : 'connect_environment');
+  const [surfaceMode, setSurfaceMode] = createSignal<SurfaceMode>(props.snapshot.surface === 'local_environment_settings' ? 'root' : 'local');
+  const [localSurface, setLocalSurface] = createSignal<DesktopLauncherSurface>(props.snapshot.surface === 'local_environment_settings' ? 'local_environment_settings' : 'connect_environment');
   const [feedback, setFeedback] = createSignal('');
   const [connectError, setConnectError] = createSignal('');
   const [settingsError, setSettingsError] = createSignal('');
@@ -397,7 +397,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const currentSessionSubtitle = createMemo(() => (
     trimString(snapshot().current_session_local_ui_url) || snapshot().current_session_description
   ));
-  const isMainOwnedSettingsSurface = createMemo(() => surfaceMode() === 'root' && snapshot().surface === 'this_device_settings');
+  const isMainOwnedSettingsSurface = createMemo(() => surfaceMode() === 'root' && snapshot().surface === 'local_environment_settings');
   const activityItems = createMemo<ActivityBarItem[]>(() => ([
     {
       id: 'connect_environment',
@@ -429,7 +429,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function refreshSnapshot(): Promise<void> {
     const nextSnapshot = await props.runtime.launcher.getSnapshot();
     setSnapshot(nextSnapshot);
-    if (surfaceMode() === 'root' && nextSnapshot.surface !== 'this_device_settings') {
+    if (surfaceMode() === 'root' && nextSnapshot.surface !== 'local_environment_settings') {
       setSurfaceMode('local');
       setLocalSurface(nextSnapshot.surface);
     }
@@ -454,7 +454,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openSettingsSurface(): void {
     setSurfaceMode('local');
-    setLocalSurface('this_device_settings');
+    setLocalSurface('local_environment_settings');
     setConnectionDialogState(null);
     setFeedback('');
     setConnectError('');
@@ -512,7 +512,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function performNavigationAction(request: Extract<DesktopLauncherActionRequest, Readonly<{
-    kind: 'open_this_device' | 'open_remote_device' | 'return_to_current_device';
+    kind: 'open_local_environment' | 'open_remote_environment' | 'return_to_current_environment';
   }>>, errorTarget: 'connect' | 'settings' | 'dialog' = 'connect'): Promise<boolean> {
     resetMessages();
     setBusyAction(request.kind);
@@ -527,11 +527,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function openThisDevice(): Promise<void> {
-    await performNavigationAction({ kind: 'open_this_device' }, visibleSurface() === 'this_device_settings' ? 'settings' : 'connect');
+  async function openLocalEnvironment(): Promise<void> {
+    await performNavigationAction({ kind: 'open_local_environment' }, visibleSurface() === 'local_environment_settings' ? 'settings' : 'connect');
   }
 
-  async function openRemoteDevice(
+  async function openRemoteEnvironment(
     targetURL: string,
     errorTarget: 'connect' | 'dialog' = 'connect',
   ): Promise<boolean> {
@@ -541,7 +541,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
     const opened = await performNavigationAction({
-      kind: 'open_remote_device',
+      kind: 'open_remote_environment',
       external_local_ui_url: normalizedTargetURL,
     }, errorTarget);
     if (opened && errorTarget === 'dialog') {
@@ -551,7 +551,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function returnOrQuit(): Promise<void> {
-    await performNavigationAction({ kind: 'return_to_current_device' });
+    await performNavigationAction({ kind: 'return_to_current_environment' });
   }
 
   function updateDraftField(name: keyof DesktopSettingsDraft, value: string): void {
@@ -563,7 +563,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function applyAccessMode(mode: DesktopAccessMode): void {
     setDraft((current) => {
-      if (mode === 'private_device') {
+      if (mode === 'local_only') {
         return {
           ...current,
           local_ui_bind: '127.0.0.1:0',
@@ -605,7 +605,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       await refreshSnapshot();
       setSurfaceMode('local');
       setLocalSurface('connect_environment');
-      setFeedback('This Device options saved.');
+      setFeedback('Local Environment settings saved.');
     } catch (error) {
       setSettingsError(getErrorMessage(error));
     } finally {
@@ -695,7 +695,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!state) {
       return;
     }
-    await openRemoteDevice(state.external_local_ui_url, 'dialog');
+    await openRemoteEnvironment(state.external_local_ui_url, 'dialog');
   }
 
   async function deleteEnvironment(): Promise<void> {
@@ -727,8 +727,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         showConnectEnvironment={showConnectEnvironment}
         openCreateConnectionDialog={openCreateConnectionDialog}
         openSettingsSurface={openSettingsSurface}
-        openThisDevice={openThisDevice}
-        openRemoteDevice={openRemoteDevice}
+        openLocalEnvironment={openLocalEnvironment}
+        openRemoteEnvironment={openRemoteEnvironment}
         returnOrQuit={returnOrQuit}
       />
       <Shell
@@ -792,10 +792,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           issueRef={(value) => {
             issueRef = value;
           }}
-          openThisDevice={openThisDevice}
+          openLocalEnvironment={openLocalEnvironment}
           openSettingsSurface={openSettingsSurface}
           openCreateConnectionDialog={openCreateConnectionDialog}
-          openRemoteDevice={openRemoteDevice}
+          openRemoteEnvironment={openRemoteEnvironment}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
           editEnvironment={startEditingEnvironment}
           deleteEnvironment={setDeleteTarget}
@@ -807,8 +807,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         />
       </Shell>
 
-      <ThisDeviceSettingsDialog
-        open={visibleSurface() === 'this_device_settings'}
+      <LocalEnvironmentSettingsDialog
+        open={visibleSurface() === 'local_environment_settings'}
         snapshot={settingsSurface()}
         draft={draft()}
         busyAction={busyAction()}
@@ -873,21 +873,21 @@ function ConnectEnvironmentSurface(props: Readonly<{
   setLibraryFilter: (value: EnvironmentLibraryFilter) => void;
   setLibraryQuery: (value: string) => void;
   issueRef: (value: HTMLElement) => void;
-  openThisDevice: () => Promise<void>;
+  openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: () => void;
   openCreateConnectionDialog: (message?: string) => void;
-  openRemoteDevice: (targetURL: string) => Promise<boolean>;
+  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   returnOrQuit: () => Promise<void>;
   copyDiagnostics: () => Promise<void>;
 }>) {
-  const thisDeviceIssue = createMemo(() => (
-    props.snapshot.issue?.scope === 'this_device' ? props.snapshot.issue : null
+  const localEnvironmentIssue = createMemo(() => (
+    props.snapshot.issue?.scope === 'local_environment' ? props.snapshot.issue : null
   ));
-  const remoteIssue = createMemo(() => (
-    props.snapshot.issue?.scope === 'remote_device' ? props.snapshot.issue : null
+  const remoteEnvironmentIssue = createMemo(() => (
+    props.snapshot.issue?.scope === 'remote_environment' ? props.snapshot.issue : null
   ));
   const libraryFilterOptions = createMemo(() => (
     LIBRARY_FILTERS.map((filter) => ({
@@ -915,27 +915,27 @@ function ConnectEnvironmentSurface(props: Readonly<{
 
         <div class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.85fr)]">
           <div class="space-y-4">
-            <ThisDeviceLauncherCard
+            <LocalEnvironmentLauncherCard
               snapshot={props.snapshot}
               settingsSurface={props.settingsSurface}
               busyAction={props.busyAction}
-              openThisDevice={props.openThisDevice}
+              openLocalEnvironment={props.openLocalEnvironment}
               openSettingsSurface={props.openSettingsSurface}
             />
 
-            <Show when={thisDeviceIssue()}>
+            <Show when={localEnvironmentIssue()}>
               {(issue) => (
                 <IssueCard
                   issue={issue()}
                   issueRef={props.issueRef}
                   primaryAction={(
-                    <Button size="sm" variant="default" onClick={() => { void props.openThisDevice(); }}>
-                      Open This Device
+                    <Button size="sm" variant="default" onClick={() => { void props.openLocalEnvironment(); }}>
+                      Open Local Environment
                     </Button>
                   )}
                   secondaryAction={(
                     <Button size="sm" variant="outline" onClick={props.openSettingsSurface}>
-                      This Device Options
+                      Local Environment Settings
                     </Button>
                   )}
                   tertiaryAction={(
@@ -948,7 +948,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               )}
             </Show>
 
-            <Show when={remoteIssue()}>
+            <Show when={remoteEnvironmentIssue()}>
               {(issue) => (
                 <IssueCard
                   issue={issue()}
@@ -958,7 +958,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       size="sm"
                       variant="default"
                       onClick={() => {
-                        void props.openRemoteDevice(issue().target_url);
+                        void props.openRemoteEnvironment(issue().target_url);
                       }}
                     >
                       Retry
@@ -985,7 +985,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
             setFilter={props.setLibraryFilter}
             setQuery={props.setLibraryQuery}
             openCreateConnectionDialog={props.openCreateConnectionDialog}
-            openRemoteDevice={props.openRemoteDevice}
+            openRemoteEnvironment={props.openRemoteEnvironment}
             saveEnvironment={props.saveEnvironmentFromLibrary}
             editEnvironment={props.editEnvironment}
             deleteEnvironment={props.deleteEnvironment}
@@ -1023,11 +1023,11 @@ function CurrentSessionStrip(props: Readonly<{
   );
 }
 
-function ThisDeviceLauncherCard(props: Readonly<{
+function LocalEnvironmentLauncherCard(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
   settingsSurface: DesktopSettingsSurfaceSnapshot;
   busyAction: BusyAction;
-  openThisDevice: () => Promise<void>;
+  openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: () => void;
 }>) {
   const isCurrent = createMemo(() => props.snapshot.current_session_target_kind === 'managed_local');
@@ -1037,8 +1037,8 @@ function ThisDeviceLauncherCard(props: Readonly<{
       <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div class="min-w-0">
-            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Local runtime</div>
-            <CardTitle class="mt-1 text-xl tracking-tight">This Device</CardTitle>
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Local environment</div>
+            <CardTitle class="mt-1 text-xl tracking-tight">Local Environment</CardTitle>
             <CardDescription class="mt-1 text-sm">Desktop-managed environment on this machine.</CardDescription>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -1075,16 +1075,16 @@ function ThisDeviceLauncherCard(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'open_this_device'}
+            loading={props.busyAction === 'open_local_environment'}
             onClick={() => {
-              void props.openThisDevice();
+              void props.openLocalEnvironment();
             }}
           >
-            {isCurrent() ? 'Return to This Device' : 'Open This Device'}
+            {isCurrent() ? 'Return to Local Environment' : 'Open Local Environment'}
           </Button>
           <Button size="sm" variant="outline" onClick={props.openSettingsSurface}>
             <Settings class="mr-1 h-3.5 w-3.5" />
-            This Device Options
+            Local Environment Settings
           </Button>
         </div>
       </CardContent>
@@ -1154,7 +1154,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
   setFilter: (value: EnvironmentLibraryFilter) => void;
   setQuery: (value: string) => void;
   openCreateConnectionDialog: (message?: string) => void;
-  openRemoteDevice: (targetURL: string) => Promise<boolean>;
+  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1225,7 +1225,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
                     <EnvironmentLibraryRow
                       environment={environment}
                       busyAction={props.busyAction}
-                      openRemoteDevice={props.openRemoteDevice}
+                      openRemoteEnvironment={props.openRemoteEnvironment}
                       saveEnvironment={props.saveEnvironment}
                       editEnvironment={props.editEnvironment}
                       deleteEnvironment={props.deleteEnvironment}
@@ -1244,7 +1244,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
 function EnvironmentLibraryRow(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
-  openRemoteDevice: (targetURL: string) => Promise<boolean>;
+  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1284,9 +1284,9 @@ function EnvironmentLibraryRow(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'open_remote_device'}
+            loading={props.busyAction === 'open_remote_environment'}
             onClick={() => {
-              void props.openRemoteDevice(props.environment.local_ui_url);
+              void props.openRemoteEnvironment(props.environment.local_ui_url);
             }}
           >
             {openLabel()}
@@ -1334,7 +1334,7 @@ function EnvironmentLibraryRow(props: Readonly<{
   );
 }
 
-function ThisDeviceSettingsDialog(props: Readonly<{
+function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
   draft: DesktopSettingsDraft;
@@ -1535,7 +1535,7 @@ function ConnectionDialog(props: Readonly<{
             <Button
               size="sm"
               variant="default"
-              loading={props.busyAction === 'open_remote_device'}
+              loading={props.busyAction === 'open_remote_environment'}
               onClick={() => {
                 void props.onConnect();
               }}

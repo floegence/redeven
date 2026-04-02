@@ -4,7 +4,7 @@ export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
   surface_title: string;
   connect_heading: 'Connect Environment';
-  primary_action_label: 'Open This Device';
+  primary_action_label: 'Open Local Environment';
   settings_save_label: string;
 }>;
 
@@ -15,7 +15,7 @@ export function capabilityUnavailableMessage(label: string): string {
 }
 
 export function surfaceTitle(surface: DesktopLauncherSurface): string {
-  return surface === 'this_device_settings' ? 'This Device Options' : 'Connect Environment';
+  return surface === 'local_environment_settings' ? 'Local Environment Settings' : 'Connect Environment';
 }
 
 export function shellStatus(snapshot: DesktopWelcomeSnapshot): Readonly<{
@@ -48,7 +48,7 @@ export function buildDesktopWelcomeShellViewModel(
     shell_title: 'Redeven Desktop',
     surface_title: surfaceTitle(visibleSurface),
     connect_heading: 'Connect Environment',
-    primary_action_label: 'Open This Device',
+    primary_action_label: 'Open Local Environment',
     settings_save_label: snapshot.settings_surface.save_label,
   };
 }

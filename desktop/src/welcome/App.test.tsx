@@ -34,8 +34,8 @@ describe('DesktopWelcomeShell', () => {
       shell_title: 'Redeven Desktop',
       surface_title: 'Connect Environment',
       connect_heading: 'Connect Environment',
-      primary_action_label: 'Open This Device',
-      settings_save_label: 'Save This Device Options',
+      primary_action_label: 'Open Local Environment',
+      settings_save_label: 'Save Local Environment Settings',
     });
     expect(shellStatus(snapshot)).toEqual({
       tone: 'disconnected',
@@ -43,7 +43,7 @@ describe('DesktopWelcomeShell', () => {
     });
   });
 
-  it('describes This Device Options inside the same shell model', () => {
+  it('describes Local Environment Settings inside the same shell model', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '0.0.0.0:24000',
@@ -56,17 +56,17 @@ describe('DesktopWelcomeShell', () => {
         saved_environments: [],
         recent_external_local_ui_urls: [],
       },
-      surface: 'this_device_settings',
+      surface: 'local_environment_settings',
     });
 
     expect(buildDesktopWelcomeShellViewModel(snapshot)).toEqual({
       shell_title: 'Redeven Desktop',
-      surface_title: 'This Device Options',
+      surface_title: 'Local Environment Settings',
       connect_heading: 'Connect Environment',
-      primary_action_label: 'Open This Device',
-      settings_save_label: 'Save This Device Options',
+      primary_action_label: 'Open Local Environment',
+      settings_save_label: 'Save Local Environment Settings',
     });
-    expect(snapshot.settings_surface.window_title).toBe('This Device Options');
+    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
     expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([

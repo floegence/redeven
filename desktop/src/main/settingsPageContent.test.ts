@@ -3,18 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopSettingsSurfaceSnapshot, desktopAccessModeForDraft } from './settingsPageContent';
 
 describe('settingsPageContent', () => {
-  it('derives the private device access mode from the default loopback draft', () => {
+  it('derives the local-only access mode from the default loopback draft', () => {
     expect(desktopAccessModeForDraft({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: '',
       env_id: '',
       env_token: '',
-    })).toBe('private_device');
+    })).toBe('local_only');
   });
 
   it('derives shared local network mode and marks bootstrap as pending when queued', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('advanced_settings', {
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', {
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: '',
       controlplane_url: 'https://region.example.invalid',
@@ -33,7 +33,7 @@ describe('settingsPageContent', () => {
       }),
       expect.objectContaining({
         id: 'password_state',
-        value: 'Password required before the next open of This Device',
+        value: 'Password required before the next open of Local Environment',
         tone: 'warning',
       }),
       expect.objectContaining({
@@ -45,7 +45,7 @@ describe('settingsPageContent', () => {
   });
 
   it('treats non-preset binds as custom exposure', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('advanced_settings', {
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', {
       local_ui_bind: '10.0.0.12:25000',
       local_ui_password: 'secret',
       controlplane_url: '',

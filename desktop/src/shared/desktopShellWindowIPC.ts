@@ -12,7 +12,7 @@ function compact(value: unknown): string {
 
 export function normalizeDesktopShellWindowKind(value: unknown): DesktopShellWindowKind | '' {
   const kind = compact(value);
-  if (kind === 'connection_center' || kind === 'connect' || kind === 'device_chooser' || kind === 'switch_device') {
+  if (kind === 'connection_center' || kind === 'connect') {
     return 'connection_center';
   }
   if (kind === 'settings' || kind === 'advanced_settings') {

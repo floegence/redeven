@@ -1,7 +1,7 @@
 import type { DesktopSettingsDraft } from './settingsIPC';
 
-export type DesktopPageMode = 'advanced_settings';
-export type DesktopAccessMode = 'private_device' | 'shared_local_network' | 'custom_exposure';
+export type DesktopPageMode = 'local_environment_settings';
+export type DesktopAccessMode = 'local_only' | 'shared_local_network' | 'custom_exposure';
 export type DesktopSettingsSummaryTone = 'default' | 'warning' | 'success' | 'primary';
 
 export interface DesktopSettingsSummaryItem {

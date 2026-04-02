@@ -352,9 +352,9 @@ describe('EnvAppShell top bar affordances', () => {
   it('renders Switch Machine in the bottom activity area when the desktop bridge is available', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const openDeviceChooserMock = vi.fn().mockResolvedValue(undefined);
+    const openConnectionCenterMock = vi.fn().mockResolvedValue(undefined);
     window.redevenDesktopShell = {
-      openDeviceChooser: openDeviceChooserMock,
+      openConnectionCenter: openConnectionCenterMock,
     };
 
     const { EnvAppShell } = await import('./EnvAppShell');
@@ -371,7 +371,7 @@ describe('EnvAppShell top bar affordances', () => {
       (switchMachineButton as HTMLButtonElement).click();
       await flushAsync();
 
-      expect(openDeviceChooserMock).toHaveBeenCalledTimes(1);
+      expect(openConnectionCenterMock).toHaveBeenCalledTimes(1);
     } finally {
       dispose();
       delete window.redevenDesktopShell;

@@ -7,8 +7,6 @@ import {
   desktopShellBridgeAvailable,
   openAdvancedSettings,
   openConnectionCenter,
-  openDesktopConnectToRedeven,
-  openDesktopSettings,
   openExternalURLInDesktopShell,
   restartDesktopManagedRuntime,
 } from './desktopShellBridge';
@@ -22,12 +20,10 @@ describe('desktopShellBridge', () => {
     expect(desktopShellBridgeAvailable()).toBe(false);
   });
 
-  it('prefers the canonical chooser and advanced bridge methods', async () => {
-    const openDeviceChooserBridge = vi.fn().mockResolvedValue(undefined);
+  it('prefers the canonical launcher and settings bridge methods', async () => {
     const openConnectionCenterBridge = vi.fn().mockResolvedValue(undefined);
     const openAdvancedSettingsBridge = vi.fn().mockResolvedValue(undefined);
     window.redevenDesktopShell = {
-      openDeviceChooser: openDeviceChooserBridge,
       openConnectionCenter: openConnectionCenterBridge,
       openAdvancedSettings: openAdvancedSettingsBridge,
     };
@@ -36,28 +32,23 @@ describe('desktopShellBridge', () => {
     await expect(openConnectionCenter()).resolves.toBe(true);
     await expect(openAdvancedSettings()).resolves.toBe(true);
 
-    expect(openDeviceChooserBridge).toHaveBeenCalledTimes(1);
-    expect(openConnectionCenterBridge).toHaveBeenCalledTimes(0);
+    expect(openConnectionCenterBridge).toHaveBeenCalledTimes(1);
     expect(openAdvancedSettingsBridge).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to switch-device and legacy aliases for compatibility', async () => {
-    const switchDeviceBridge = vi.fn().mockResolvedValue(undefined);
-    const openConnectToRedevenBridge = vi.fn().mockResolvedValue(undefined);
-    const openDesktopSettingsBridge = vi.fn().mockResolvedValue(undefined);
+  it('falls back to the generic openWindow bridge when explicit methods are unavailable', async () => {
+    const openWindowBridge = vi.fn().mockResolvedValue(undefined);
     window.redevenDesktopShell = {
-      switchDevice: switchDeviceBridge,
-      openConnectToRedeven: openConnectToRedevenBridge,
-      openDesktopSettings: openDesktopSettingsBridge,
+      openWindow: openWindowBridge,
     };
 
     expect(desktopShellBridgeAvailable()).toBe(true);
-    await expect(openDesktopConnectToRedeven()).resolves.toBe(true);
-    await expect(openDesktopSettings()).resolves.toBe(true);
+    await expect(openConnectionCenter()).resolves.toBe(true);
+    await expect(openAdvancedSettings()).resolves.toBe(true);
 
-    expect(switchDeviceBridge).toHaveBeenCalledTimes(1);
-    expect(openConnectToRedevenBridge).toHaveBeenCalledTimes(0);
-    expect(openDesktopSettingsBridge).toHaveBeenCalledTimes(1);
+    expect(openWindowBridge).toHaveBeenNthCalledWith(1, 'connection_center');
+    expect(openWindowBridge).toHaveBeenNthCalledWith(2, 'settings');
+    expect(openWindowBridge).toHaveBeenCalledTimes(2);
   });
 
   it('forwards managed runtime restart when the desktop bridge exposes it', async () => {
