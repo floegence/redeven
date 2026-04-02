@@ -20,6 +20,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
   - working directory keeps the stronger path-chip treatment;
   - `model` / `reasoning effort` collapse to lighter value-first controls at rest;
   - `approval policy` / `sandbox mode` keep compact tag-like strategy pills;
+  - narrow composer widths restack into `context -> values -> policy pills`, and policy pills should only collapse from two columns to one when the composer itself becomes truly narrow;
   - mentions / attachments belong to a lower-priority draft-object lane instead of the strategy lane.
 - Codex transcript follow-bottom is also controller-based and page-local: `CodexProvider` emits explicit bottom intents, and `createFollowBottomController()` keeps system restore paths instant while allowing smooth user-initiated convergence on the Codex page only.
 - Codex follow-bottom targets the real bottom scroll position (`scrollHeight - clientHeight`) and preserves paused anchor restoration during late transcript reflow, so streaming growth no longer relies on repeated raw `scrollTop = scrollHeight` retries.

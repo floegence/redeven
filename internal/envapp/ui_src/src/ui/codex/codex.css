@@ -650,6 +650,8 @@
 
 .codex-chat-input-meta-rail {
   display: flex;
+  container-type: inline-size;
+  container-name: codex-composer-meta;
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
@@ -1734,6 +1736,66 @@
   }
 }
 
+@container codex-composer-meta (max-width: 38rem) {
+  .codex-chat-input-meta-rail {
+    gap: 0.5rem;
+  }
+
+  .codex-chat-input-meta-group-context,
+  .codex-chat-input-meta-group-strategy {
+    flex-basis: 100%;
+  }
+
+  .codex-chat-input-meta-group-context {
+    flex-wrap: wrap;
+  }
+
+  .codex-chat-input-meta-group-strategy {
+    justify-content: flex-start;
+    gap: 0.5rem;
+  }
+
+  .codex-chat-input-meta-subgroup-values,
+  .codex-chat-input-meta-subgroup-policies {
+    width: 100%;
+  }
+
+  .codex-chat-input-meta-subgroup-values {
+    flex-wrap: wrap;
+  }
+
+  .codex-chat-input-meta-subgroup-values > .codex-chat-select-chip-value {
+    min-width: 0;
+    flex: 0 1 auto;
+  }
+
+  .codex-chat-input-meta-subgroup-policies {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-inline-start: 0;
+  }
+
+  .codex-chat-input-meta-subgroup-policies > .codex-chat-select-chip-policy {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .codex-chat-working-dir-chip {
+    flex: 0 0 auto;
+    max-width: min(14rem, 64vw);
+  }
+
+  .codex-chat-select-chip-control-policy {
+    max-width: 100%;
+  }
+}
+
+@container codex-composer-meta (max-width: 25rem) {
+  .codex-chat-input-meta-subgroup-policies {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 640px) {
   .codex-page-header {
     padding: 0.375rem 0.5rem;
@@ -1826,43 +1888,9 @@
     padding-top: 0.5rem;
   }
 
-  .codex-chat-input-meta-group-context,
-  .codex-chat-input-meta-group-strategy {
-    flex-basis: 100%;
-  }
-
-  .codex-chat-input-meta-group-context {
-    flex-wrap: wrap;
-  }
-
-  .codex-chat-input-meta-group-strategy {
-    justify-content: flex-start;
-  }
-
-  .codex-chat-input-meta-subgroup-policies {
-    margin-inline-start: 0;
-    flex-wrap: wrap;
-  }
-
-  .codex-chat-working-dir-chip {
-    flex: 0 0 auto;
-    max-width: min(14rem, 64vw);
-  }
-
   .codex-chat-chip {
     height: 1.875rem;
     padding-inline: 0.6875rem;
-  }
-
-  .codex-chat-select-chip {
-    min-width: calc(50% - 0.1875rem);
-    flex: 1 1 calc(50% - 0.1875rem);
-  }
-
-  .codex-chat-select-chip-value {
-    justify-content: flex-end;
-    min-width: 0;
-    flex: 0 1 auto;
   }
 
   .codex-chat-select-chip-control {
