@@ -1,10 +1,11 @@
 import { Index, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Copy, Folder, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, Dropdown, type DropdownItem, Input, MobileKeyboard, Tabs, TabPanel, type TabItem } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   TerminalCore,
@@ -2165,7 +2166,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         id: 'ask-flower',
         kind: 'action',
         label: 'Ask Flower',
-        icon: Sparkles,
+        icon: FlowerContextMenuIcon,
         onSelect: askFlowerFromTerminal,
       },
     ];

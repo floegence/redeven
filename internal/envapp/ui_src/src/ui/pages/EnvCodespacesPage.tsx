@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification } from "@floegence/floe-webapp-core";
-import { Sparkles, Terminal } from "@floegence/floe-webapp-core/icons";
+import { Terminal } from "@floegence/floe-webapp-core/icons";
 import type { FileItem } from "@floegence/floe-webapp-core/file-browser";
 import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
 import { LoadingOverlay, SnakeLoader } from "@floegence/floe-webapp-core/loading";
@@ -20,6 +20,7 @@ import {
 } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useEnvContext } from "./EnvContext";
+import { FlowerContextMenuIcon } from "../icons/FlowerSoftAuraIcon";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { Tooltip } from "../primitives/Tooltip";
 import {
@@ -1252,7 +1253,7 @@ export function EnvCodespacesPage() {
         id: "ask-flower",
         kind: "action",
         label: "Ask Flower",
-        icon: Sparkles,
+        icon: FlowerContextMenuIcon,
         onSelect: handleAskFlowerFromCodespace,
       },
     ];

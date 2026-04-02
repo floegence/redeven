@@ -1,7 +1,7 @@
 import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
-import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Plus, Refresh, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
   type ContextMenuCallbacks,
   type ContextMenuEvent,
@@ -52,6 +52,7 @@ import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
+import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { GitStashWindow, type GitStashReviewState } from './GitStashWindow';
 import { GitWorkspace } from './GitWorkspace';
 import {
@@ -3658,7 +3659,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     id: 'ask-flower',
     label: 'Ask Flower',
     type: 'custom',
-    icon: (props) => <Sparkles class={props.class} />,
+    icon: (props) => <FlowerContextMenuIcon class={props.class} />,
     separator: options?.separator,
     onAction: (items, event) => {
       if (options?.onAction) {

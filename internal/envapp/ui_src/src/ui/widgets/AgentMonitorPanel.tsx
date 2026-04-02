@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
-import { Sparkles, Trash } from '@floegence/floe-webapp-core/icons';
+import { Trash } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { MonitoringChart } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc, type ActiveSession, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
 import {
@@ -406,7 +407,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
       id: 'ask-flower',
       kind: 'action',
       label: 'Ask Flower',
-      icon: Sparkles,
+      icon: FlowerContextMenuIcon,
       onSelect: handleAskFlowerFromProcess,
     },
     {
