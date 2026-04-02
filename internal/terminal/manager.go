@@ -72,6 +72,17 @@ func (r fixedShellResolver) ResolveShell(logger termgo.Logger) string {
 	return termgo.DefaultShellResolver{}.ResolveShell(logger)
 }
 
+func newTerminalGoManagerConfig(shell string, log *slog.Logger) termgo.ManagerConfig {
+	shellInitBaseDir := defaultRedevenShellInitBaseDir()
+	return termgo.ManagerConfig{
+		Logger:            slogTerminalLogger{log: log},
+		EnvProvider:       redevenShellInitEnvProvider{base: termgo.DefaultEnvProvider{}},
+		ShellResolver:     fixedShellResolver{shell: shell},
+		ShellArgsProvider: termgo.DefaultShellArgsProvider{ShellInitBaseDir: shellInitBaseDir},
+		ShellInitWriter:   redevenShellInitWriter{BaseDir: shellInitBaseDir},
+	}
+}
+
 func NewManager(shell string, agentHomeAbs string, log *slog.Logger) *Manager {
 	resolved, err := pathutil.CanonicalizeExistingDirAbs(agentHomeAbs)
 	if err != nil {
@@ -91,11 +102,7 @@ func NewManager(shell string, agentHomeAbs string, log *slog.Logger) *Manager {
 		deleteRequested: make(map[string]struct{}),
 	}
 
-	cfg := termgo.ManagerConfig{
-		Logger:        slogTerminalLogger{log: log},
-		ShellResolver: fixedShellResolver{shell: shell},
-	}
-	m.term = termgo.NewManager(cfg)
+	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, log))
 	m.term.SetEventHandler(&eventHandler{m: m})
 
 	return m

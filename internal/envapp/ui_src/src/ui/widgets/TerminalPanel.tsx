@@ -57,6 +57,7 @@ import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
+import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
@@ -168,6 +169,8 @@ type terminal_session_view_props = {
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: { reload: () => Promise<void> } | null) => void;
   onBell?: (sessionId: string) => void;
+  onShellIntegrationEvent?: (sessionId: string, event: TerminalShellIntegrationEvent, source: 'history' | 'live') => void;
+  onVisibleOutput?: (sessionId: string, source: 'history' | 'live', byteLength: number) => void;
   onTerminalFileLinkOpen?: (target: TerminalResolvedLinkTarget) => Promise<void> | void;
   onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
 };
@@ -181,11 +184,16 @@ const TERMINAL_SELECTION_FOREGROUND = '#000000';
 const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
 const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
 const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
-type TerminalBellAttentionState = {
-  pending: boolean;
+
+type TerminalCommandPhase = 'idle' | 'running';
+
+type TerminalSessionTabState = {
+  commandPhase: TerminalCommandPhase;
+  unread: boolean;
+  hasShellIntegration: boolean;
 };
 
-type TerminalBellAttentionMap = Record<string, TerminalBellAttentionState>;
+type TerminalSessionTabStateMap = Record<string, TerminalSessionTabState>;
 
 type terminal_touch_scroll_target = {
   scrollLines?: (amount: number) => void;
@@ -211,6 +219,48 @@ function readTerminalSelectionText(core: TerminalCore | null): string {
 function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number): string {
   return session.name?.trim() ? session.name.trim() : `Terminal ${index + 1}`;
 }
+
+function createEmptyTerminalSessionTabState(): TerminalSessionTabState {
+  return {
+    commandPhase: 'idle',
+    unread: false,
+    hasShellIntegration: false,
+  };
+}
+
+function terminalTabVisualState(state: TerminalSessionTabState | undefined): 'none' | 'running' | 'unread' {
+  if (state?.commandPhase === 'running') return 'running';
+  if (state?.unread) return 'unread';
+  return 'none';
+}
+
+const TerminalTabStatusIcon = (props: { state: 'none' | 'running' | 'unread' }) => {
+  if (props.state === 'running') {
+    return (
+      <span class="inline-flex h-3 w-3 items-center justify-center text-muted-foreground" data-terminal-tab-status="running" aria-hidden="true">
+        <svg
+          class="h-3 w-3 animate-spin"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <circle cx="12" cy="12" r="8" class="opacity-20" stroke="currentColor" stroke-width="3" />
+          <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (props.state === 'unread') {
+    return (
+      <span class="inline-flex h-3 w-3 items-center justify-center" data-terminal-tab-status="unread" aria-hidden="true">
+        <span class="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_0_1px_rgba(0,0,0,0.18)]" />
+      </span>
+    );
+  }
+
+  return <span class="inline-block h-3 w-3 opacity-0" data-terminal-tab-status="none" aria-hidden="true" />;
+};
 
 const PlusIcon = (props: { class?: string }) => (
   <svg
@@ -306,6 +356,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let historyMaxSeq = 0;
   let replaying = false;
   let bufferedLive: Array<{ sequence?: number; data: Uint8Array }> = [];
+  const shellIntegrationParser = new TerminalShellIntegrationParser();
 
   let queued: Uint8Array[] = [];
   let flushScheduled = false;
@@ -358,6 +409,17 @@ function TerminalSessionView(props: terminal_session_view_props) {
     core.endHistoryReplay();
   };
 
+  const consumeTerminalChunk = (data: Uint8Array, source: 'history' | 'live'): Uint8Array => {
+    const result = shellIntegrationParser.parse(data);
+    for (const event of result.events) {
+      props.onShellIntegrationEvent?.(sessionId(), event, source);
+    }
+    if (result.displayData.byteLength > 0) {
+      props.onVisibleOutput?.(sessionId(), source, result.displayData.byteLength);
+    }
+    return result.displayData;
+  };
+
   let reloadSeq = 0;
   const disposeTerminal = () => {
     clearOutputSubscription();
@@ -368,6 +430,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     bufferedLive = [];
     replaying = false;
     historyMaxSeq = 0;
+    shellIntegrationParser.reset();
     setReadyOnce(false);
     props.registerCore(sessionId(), null);
   };
@@ -518,7 +581,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
           return;
         }
         if (typeof ev.sequence === 'number' && ev.sequence > 0 && ev.sequence <= historyMaxSeq) return;
-        queued.push(ev.data);
+        const displayData = consumeTerminalChunk(ev.data, 'live');
+        if (displayData.byteLength === 0) return;
+        queued.push(displayData);
         scheduleFlush();
       });
 
@@ -540,7 +605,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
       const sorted = [...history].sort((a, b) => a.sequence - b.sequence);
       historyMaxSeq = sorted.length > 0 ? sorted[sorted.length - 1]!.sequence : 0;
 
-      await replayHistory(sorted.map((c) => c.data));
+      await replayHistory(sorted
+        .map((chunk) => consumeTerminalChunk(chunk.data, 'history'))
+        .filter((chunk) => chunk.byteLength > 0));
       if (seq !== initSeq) return;
 
       replaying = false;
@@ -549,7 +616,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
         .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
       bufferedLive = [];
       for (const c of liveSorted) {
-        queued.push(c.data);
+        const displayData = consumeTerminalChunk(c.data, 'live');
+        if (displayData.byteLength === 0) continue;
+        queued.push(displayData);
       }
       if (queued.length > 0) scheduleFlush();
 
@@ -889,7 +958,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardHistoryBySession, setMobileKeyboardHistoryBySession] = createSignal<Record<string, string[]>>({});
   const [mobileKeyboardPathEntries, setMobileKeyboardPathEntries] = createSignal<TerminalMobileKeyboardPathEntry[]>([]);
   const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
-  const [bellAttentionBySession, setBellAttentionBySession] = createSignal<TerminalBellAttentionMap>({});
+  const [tabStateBySession, setTabStateBySession] = createSignal<TerminalSessionTabStateMap>({});
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'execute')) return false;
@@ -1005,13 +1074,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   });
 
-  const clearBellAttention = (sessionId: string | null) => {
+  const clearSessionUnread = (sessionId: string | null) => {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) return;
 
-    setBellAttentionBySession((prev) => {
+    setTabStateBySession((prev) => {
       const current = prev[normalizedSessionId];
-      if (!current?.pending) {
+      if (!current?.unread) {
         return prev;
       }
 
@@ -1019,13 +1088,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         ...prev,
         [normalizedSessionId]: {
           ...current,
-          pending: false,
+          unread: false,
         },
       };
     });
   };
 
-  const handleSessionBell = (sessionId: string) => {
+  const markSessionUnread = (sessionId: string) => {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) {
       return;
@@ -1037,39 +1106,76 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return;
     }
 
-    const shouldHoldAttention = activeSessionId() !== normalizedSessionId || !viewActive();
+    const shouldMarkUnread = activeSessionId() !== normalizedSessionId || !viewActive();
 
-    setBellAttentionBySession((prev) => {
-      const current = prev[normalizedSessionId] ?? {
-        pending: false,
-      };
+    if (!shouldMarkUnread) {
+      return;
+    }
 
-      if (!shouldHoldAttention) {
-        if (!current.pending) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          [normalizedSessionId]: {
-            pending: false,
-          },
-        };
-      }
-
-      const nextState: TerminalBellAttentionState = {
-        pending: true,
-      };
-
-      if (current.pending === nextState.pending) {
+    setTabStateBySession((prev) => {
+      const current = prev[normalizedSessionId] ?? createEmptyTerminalSessionTabState();
+      if (current.unread) {
         return prev;
       }
 
       return {
         ...prev,
-        [normalizedSessionId]: nextState,
+        [normalizedSessionId]: {
+          ...current,
+          unread: true,
+        },
       };
     });
+  };
+
+  const updateSessionCommandPhase = (sessionId: string, phase: TerminalCommandPhase) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+
+    setTabStateBySession((prev) => {
+      const current = prev[normalizedSessionId] ?? createEmptyTerminalSessionTabState();
+      if (current.commandPhase === phase && current.hasShellIntegration) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [normalizedSessionId]: {
+          ...current,
+          commandPhase: phase,
+          hasShellIntegration: true,
+        },
+      };
+    });
+  };
+
+  const handleShellIntegrationEvent = (
+    sessionId: string,
+    event: TerminalShellIntegrationEvent,
+    source: 'history' | 'live',
+  ) => {
+    if (event.kind === 'command-start') {
+      updateSessionCommandPhase(sessionId, 'running');
+      return;
+    }
+
+    if (event.kind === 'command-finish' || event.kind === 'prompt-ready') {
+      updateSessionCommandPhase(sessionId, 'idle');
+      if (event.kind === 'command-finish' && source === 'live') {
+        markSessionUnread(sessionId);
+      }
+    }
+  };
+
+  const handleVisibleOutput = (sessionId: string, source: 'history' | 'live', byteLength: number) => {
+    if (source !== 'live' || byteLength <= 0) {
+      return;
+    }
+    markSessionUnread(sessionId);
+  };
+
+  const handleSessionBell = (sessionId: string) => {
+    markSessionUnread(sessionId);
   };
 
   const openTerminalFileLinkTarget = async (target: TerminalResolvedLinkTarget) => {
@@ -1545,7 +1651,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     if (!viewActive()) return;
-    clearBellAttention(activeSessionId());
+    clearSessionUnread(activeSessionId());
   });
 
   createEffect(() => {
@@ -1560,9 +1666,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return changed ? next : prev;
     });
 
-    setBellAttentionBySession((prev) => {
+    setTabStateBySession((prev) => {
       let changed = false;
-      const next: TerminalBellAttentionMap = {};
+      const next: TerminalSessionTabStateMap = {};
       for (const [id, state] of Object.entries(prev)) {
         if (ids.has(id)) {
           next[id] = state;
@@ -1580,10 +1686,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const tabItems = createMemo<TabItem[]>(() => {
     const list = sessions();
-    const attention = bellAttentionBySession();
+    const tabStates = tabStateBySession();
     return list.map((s, index) => ({
       id: s.id,
-      label: attention[s.id]?.pending ? `! ${buildTerminalSessionLabel(s, index)}` : buildTerminalSessionLabel(s, index),
+      label: buildTerminalSessionLabel(s, index),
+      icon: <TerminalTabStatusIcon state={terminalTabVisualState(tabStates[s.id])} />,
       closable: true,
     }));
   });
@@ -2385,14 +2492,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   <Show when={mountedSessionIds().has(session().id)}>
                     <TabPanel active={activeSessionId() === session().id} keepMounted class="h-full">
                       <TerminalSessionView
-	                        session={session()}
-	                        active={() => activeSessionId() === session().id}
-	                        connected={connected}
-	                        protocolClient={() => protocol.client()}
-	                        viewActive={viewActive}
-	                        autoFocus={shouldAutoFocus}
-	                        themeName={terminalThemeName}
-	                        themeColors={terminalThemeColors}
+                        session={session()}
+                        active={() => activeSessionId() === session().id}
+                        connected={connected}
+                        protocolClient={() => protocol.client()}
+                        viewActive={viewActive}
+                        autoFocus={shouldAutoFocus}
+                        themeName={terminalThemeName}
+                        themeColors={terminalThemeColors}
                         fontSize={fontSize}
                         fontFamily={fontFamily}
                         agentHomePathAbs={agentHomePathAbs}
@@ -2405,6 +2512,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                         registerSurfaceElement={registerSurfaceElement}
                         registerActions={registerActions}
                         onBell={handleSessionBell}
+                        onShellIntegrationEvent={handleShellIntegrationEvent}
+                        onVisibleOutput={handleVisibleOutput}
                         onTerminalFileLinkOpen={openTerminalFileLinkTarget}
                         onNameUpdate={handleNameUpdate}
                       />

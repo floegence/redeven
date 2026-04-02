@@ -115,6 +115,22 @@ const transportMocks = vi.hoisted(() => ({
   clear: vi.fn().mockResolvedValue(undefined),
 }));
 
+const terminalEventSourceState = vi.hoisted(() => ({
+  dataHandlers: new Map<string, Set<(event: {
+    sessionId: string;
+    data: Uint8Array;
+    sequence?: number;
+    timestampMs?: number;
+    echoOfInput?: boolean;
+    originalSource?: string;
+  }) => void>>(),
+  nameHandlers: new Map<string, Set<(event: {
+    sessionId: string;
+    newName: string;
+    workingDir: string;
+  }) => void>>(),
+}));
+
 const terminalSessionsState = vi.hoisted(() => ({
   sessions: [
     {
@@ -338,6 +354,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     <div>
       {props.items.map((item: any) => (
         <button type="button" onClick={() => props.onChange?.(item.id)}>
+          {item.icon}
           {item.label}
         </button>
       ))}
@@ -458,8 +475,24 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
 vi.mock('../services/terminalTransport', () => ({
   createRedevenTerminalTransport: () => transportMocks,
   createRedevenTerminalEventSource: () => ({
-    onTerminalData: () => () => undefined,
-    onTerminalNameUpdate: () => () => undefined,
+    onTerminalData: (sessionId: string, handler: any) => {
+      const current = terminalEventSourceState.dataHandlers.get(sessionId) ?? new Set();
+      current.add(handler);
+      terminalEventSourceState.dataHandlers.set(sessionId, current);
+      return () => {
+        const next = terminalEventSourceState.dataHandlers.get(sessionId);
+        next?.delete(handler);
+      };
+    },
+    onTerminalNameUpdate: (sessionId: string, handler: any) => {
+      const current = terminalEventSourceState.nameHandlers.get(sessionId) ?? new Set();
+      current.add(handler);
+      terminalEventSourceState.nameHandlers.set(sessionId, current);
+      return () => {
+        const next = terminalEventSourceState.nameHandlers.get(sessionId);
+        next?.delete(handler);
+      };
+    },
   }),
   getOrCreateTerminalConnId: () => 'conn-1',
 }));
@@ -559,11 +592,25 @@ vi.mock('../utils/clipboard', () => ({
 }));
 
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+const textEncoder = new TextEncoder();
 
 async function settleTerminalPanel() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function emitTerminalData(sessionId: string, data: string, sequence?: number) {
+  const handlers = terminalEventSourceState.dataHandlers.get(sessionId);
+  if (!handlers) return;
+  const event = {
+    sessionId,
+    data: textEncoder.encode(data),
+    sequence,
+  };
+  for (const handler of handlers) {
+    handler(event);
+  }
 }
 
 describe('TerminalPanel', () => {
@@ -595,6 +642,8 @@ describe('TerminalPanel', () => {
     terminalConfigState.values = [];
     terminalBufferLinesState.lines = new Map();
     terminalCoreInstances.splice(0, terminalCoreInstances.length);
+    terminalEventSourceState.dataHandlers = new Map();
+    terminalEventSourceState.nameHandlers = new Map();
     notificationMocks.error.mockClear();
     notificationMocks.info.mockClear();
     notificationMocks.success.mockClear();
@@ -861,7 +910,7 @@ describe('TerminalPanel', () => {
     });
   });
 
-  it('marks inactive sessions after a bell without raising a toast and clears the marker when the session becomes active', async () => {
+  it('marks inactive sessions after a bell with an unread dot and clears it when the session becomes active', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -899,12 +948,61 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(notificationMocks.info).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('! Terminal 2');
+    const terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('! Terminal 2');
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === '! Terminal 2')?.click();
+    terminal2Tab?.click();
     await settleTerminalPanel();
 
-    expect(host.textContent).not.toContain('! Terminal 2');
+    const activeTerminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    expect(activeTerminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).toBeNull();
+  });
+
+  it('shows a running spinner for a background command and switches to an unread dot when it finishes', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    let terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).not.toBeNull();
+
+    emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
+    await settleTerminalPanel();
+
+    terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
+    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {

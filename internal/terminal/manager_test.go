@@ -3,6 +3,7 @@ package terminal
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,63 @@ func TestAttachSessionActivatesDormantSessionAndKeepsResizeWorking(t *testing.T)
 	waitForPTYSize(t, sess, 95, 29, 2*time.Second)
 }
 
+func TestRedevenShellInitEnvProviderInjectsSentinelWhenPathPrependIsEmpty(t *testing.T) {
+	provider := redevenShellInitEnvProvider{base: termgo.DefaultEnvProvider{}}
+
+	env, pathPrepend, err := provider.BuildEnv("/bin/zsh", "/tmp")
+	if err != nil {
+		t.Fatalf("BuildEnv() error = %v", err)
+	}
+	if len(env) == 0 {
+		t.Fatalf("expected environment to be preserved")
+	}
+	if pathPrepend != redevenShellInitPathPrependSentinel {
+		t.Fatalf("pathPrepend = %q, want sentinel %q", pathPrepend, redevenShellInitPathPrependSentinel)
+	}
+}
+
+func TestRedevenShellInitWriterGeneratesLifecycleHooks(t *testing.T) {
+	paths := newRedevenShellInitPaths(t.TempDir())
+	writer := redevenShellInitWriter{BaseDir: paths.BaseDir()}
+
+	if err := writer.EnsureShellInitFiles(""); err != nil {
+		t.Fatalf("EnsureShellInitFiles() error = %v", err)
+	}
+
+	assertFileContains(t, paths.BashRC(), "__redeven_terminal_command_start")
+	assertFileContains(t, paths.BashRC(), "__redeven_terminal_precmd")
+	assertFileContains(t, paths.ZshRC(), "__redeven_terminal_preexec")
+	assertFileContains(t, paths.ZshRC(), "add-zsh-hook preexec __redeven_terminal_preexec")
+	assertFileContains(t, paths.FishConfig(), "function __redeven_terminal_fish_preexec --on-event fish_preexec")
+	assertFileContains(t, paths.FishConfig(), "function fish_prompt")
+	assertFileContains(t, paths.PosixRC(), "do not inject command lifecycle markers")
+	assertFileContains(t, paths.BashRC(), redevenShellInitPathPrependSentinel)
+}
+
+func TestNewTerminalGoManagerConfigUsesRedevenShellIntegration(t *testing.T) {
+	cfg := newTerminalGoManagerConfig("/bin/zsh", nil)
+
+	if _, ok := cfg.EnvProvider.(redevenShellInitEnvProvider); !ok {
+		t.Fatalf("EnvProvider = %T, want redevenShellInitEnvProvider", cfg.EnvProvider)
+	}
+
+	argsProvider, ok := cfg.ShellArgsProvider.(termgo.DefaultShellArgsProvider)
+	if !ok {
+		t.Fatalf("ShellArgsProvider = %T, want termgo.DefaultShellArgsProvider", cfg.ShellArgsProvider)
+	}
+	if strings.TrimSpace(argsProvider.ShellInitBaseDir) == "" {
+		t.Fatalf("expected ShellArgsProvider.ShellInitBaseDir to be set")
+	}
+
+	writer, ok := cfg.ShellInitWriter.(redevenShellInitWriter)
+	if !ok {
+		t.Fatalf("ShellInitWriter = %T, want redevenShellInitWriter", cfg.ShellInitWriter)
+	}
+	if writer.BaseDir != argsProvider.ShellInitBaseDir {
+		t.Fatalf("shell init base dir mismatch: writer=%q args=%q", writer.BaseDir, argsProvider.ShellInitBaseDir)
+	}
+}
+
 func newQuietTestManager(t *testing.T, root string) *Manager {
 	t.Helper()
 
@@ -129,4 +187,16 @@ func waitForPTYSize(t *testing.T, session *termgo.Session, expectedCols int, exp
 	}
 
 	t.Fatalf("timeout waiting for PTY size %dx%d", expectedCols, expectedRows)
+}
+
+func assertFileContains(t *testing.T, path string, needle string) {
+	t.Helper()
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	if !strings.Contains(string(content), needle) {
+		t.Fatalf("expected %q to contain %q", path, needle)
+	}
 }
