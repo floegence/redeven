@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import {
   Code,
@@ -31,7 +31,7 @@ import {
   type CodeRuntimeStatus,
 } from '../services/codeRuntimeApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
-import { CodexIcon, CodexNavigationIcon } from '../icons/CodexIcon';
+import { CodexIcon } from '../icons/CodexIcon';
 import { useEnvContext, type EnvSettingsSection } from './EnvContext';
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 import { AIProviderDialog } from './settings/AIProviderDialog';
@@ -73,6 +73,7 @@ import {
   ViewToggle,
   type ViewMode,
 } from './settings/SettingsPrimitives';
+import { SETTINGS_GROUP_META, SETTINGS_NAV_ITEMS, settingsSectionElementID } from './settings/settingsStructure';
 import { SkillsCatalogTable } from './settings/SkillsCatalogTable';
 import type {
   AgentSettingsResponse,
@@ -111,30 +112,6 @@ import type {
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
 const DEFAULT_CODE_SERVER_PORT_MAX = 21000;
 const AUTO_SAVE_DELAY_MS = 700;
-
-type SettingsNavItem = Readonly<{
-  id: EnvSettingsSection;
-  label: string;
-  icon: (props: { class?: string }) => JSX.Element;
-}>;
-
-const SETTINGS_NAV_ITEMS: readonly SettingsNavItem[] = [
-  { id: 'config', label: 'Config File', icon: FileCode },
-  { id: 'connection', label: 'Connection', icon: Globe },
-  { id: 'agent', label: 'Runtime', icon: Zap },
-  { id: 'runtime', label: 'Runtime', icon: Terminal },
-  { id: 'logging', label: 'Logging', icon: Database },
-  { id: 'debug_console', label: 'Debug Console', icon: RefreshIcon },
-  { id: 'codespaces', label: 'Codespaces', icon: Code },
-  { id: 'permission_policy', label: 'Permission Policy', icon: Shield },
-  { id: 'skills', label: 'Skills', icon: Layers },
-  { id: 'ai', label: 'Flower', icon: FlowerIcon },
-  { id: 'codex', label: 'Codex', icon: CodexNavigationIcon },
-];
-
-function settingsSectionElementID(section: EnvSettingsSection): string {
-  return `redeven-settings-${section}`;
-}
 
 function formatSavedTime(unixMs: number | null): string {
   if (!unixMs) return '';
@@ -2513,9 +2490,9 @@ export function EnvSettingsPage() {
           </div>
         </Show>
 
-        {/* ── Information (read-only) ── */}
-        <SectionGroup title="Information">
-          <div id={settingsSectionElementID('config')} class="scroll-mt-6">
+        {/* ── Overview (read-only) ── */}
+        <SectionGroup title={SETTINGS_GROUP_META.overview.title} groupId={SETTINGS_GROUP_META.overview.id}>
+          <div id={settingsSectionElementID('config')} data-settings-section="config" class="scroll-mt-6">
             <SettingsCard
               icon={FileCode}
               title="Config File"
@@ -2538,7 +2515,7 @@ export function EnvSettingsPage() {
             </SettingsCard>
           </div>
 
-          <div id={settingsSectionElementID('connection')} class="scroll-mt-6">
+          <div id={settingsSectionElementID('connection')} data-settings-section="connection" class="scroll-mt-6">
             <SettingsCard
               icon={Globe}
               title="Connection"
@@ -2596,15 +2573,12 @@ export function EnvSettingsPage() {
               </Show>
             </SettingsCard>
           </div>
-        </SectionGroup>
 
-        {/* ── Runtime Management ── */}
-        <SectionGroup title="Runtime Management">
-          <div id={settingsSectionElementID('agent')} class="scroll-mt-6">
+          <div id={settingsSectionElementID('agent')} data-settings-section="agent" class="scroll-mt-6">
             <SettingsCard
               icon={Zap}
-              title="Runtime"
-              description="Version and maintenance actions."
+              title="Runtime Status"
+              description="Version, health, update, and restart controls for this runtime."
               badge={agentCardBadge()}
               badgeVariant={agentCardBadgeVariant()}
               error={maintenanceError()}
@@ -2725,13 +2699,13 @@ export function EnvSettingsPage() {
           </div>
         </SectionGroup>
 
-        {/* ── Configuration ── */}
-        <SectionGroup title="Configuration">
-          <div id={settingsSectionElementID('runtime')} class="scroll-mt-6">
+        {/* ── Runtime Configuration ── */}
+        <SectionGroup title={SETTINGS_GROUP_META.runtime_configuration.title} groupId={SETTINGS_GROUP_META.runtime_configuration.id}>
+          <div id={settingsSectionElementID('runtime')} data-settings-section="runtime" class="scroll-mt-6">
             <SettingsCard
               icon={Terminal}
-              title="Runtime"
-              description="Shell and working directory configuration."
+              title="Shell & Workspace"
+              description="Default shell and working directory for runtime-backed tools."
               badge="Manual restart required"
               badgeVariant="warning"
               error={runtimeError()}
@@ -2811,7 +2785,7 @@ export function EnvSettingsPage() {
             </SettingsCard>
           </div>
 
-          <div id={settingsSectionElementID('logging')} class="scroll-mt-6">
+          <div id={settingsSectionElementID('logging')} data-settings-section="logging" class="scroll-mt-6">
             <SettingsCard
               icon={Database}
               title="Logging"
@@ -2905,22 +2879,11 @@ export function EnvSettingsPage() {
             </SettingsCard>
           </div>
 
-          <div id={settingsSectionElementID('debug_console')} class="scroll-mt-6">
-            <SettingsCard
-              icon={RefreshIcon}
-              title="Debug Console"
-              description="Frontend-only diagnostics controls for the floating request and UI-performance console."
-              actions={<SettingsPill tone="success">Local UI state</SettingsPill>}
-            >
-              <EnvDebugConsoleSettingsPanel
-                enabled={debugConsoleEnabled()}
-                canInteract={canInteract()}
-                onEnabledChange={(value) => env.setDebugConsoleEnabled(value)}
-              />
-            </SettingsCard>
-          </div>
+        </SectionGroup>
 
-          <div id={settingsSectionElementID('codespaces')} class="scroll-mt-6">
+        {/* ── Codespaces & Tooling ── */}
+        <SectionGroup title={SETTINGS_GROUP_META.codespaces_tooling.title} groupId={SETTINGS_GROUP_META.codespaces_tooling.id}>
+          <div id={settingsSectionElementID('codespaces')} data-settings-section="codespaces" class="scroll-mt-6">
             <div class="space-y-4">
               <CodeRuntimeSettingsCard
                 status={codeRuntimeStatus()}
@@ -3052,9 +3015,9 @@ export function EnvSettingsPage() {
           </div>
         </SectionGroup>
 
-        {/* ── Security & AI ── */}
-        <SectionGroup title="Security & AI">
-          <div id={settingsSectionElementID('permission_policy')} class="scroll-mt-6">
+        {/* ── Security ── */}
+        <SectionGroup title={SETTINGS_GROUP_META.security.title} groupId={SETTINGS_GROUP_META.security.id}>
+          <div id={settingsSectionElementID('permission_policy')} data-settings-section="permission_policy" class="scroll-mt-6">
             <SettingsCard
               icon={Shield}
               title="Permission Policy"
@@ -3199,106 +3162,15 @@ export function EnvSettingsPage() {
             </SettingsCard>
           </div>
 
-          <div id={settingsSectionElementID('skills')} class="scroll-mt-6">
-            <SettingsCard
-              icon={Layers}
-              title="Skills"
-              description="Manage Flower skills: install from GitHub, browse skill files, toggle enable state, and maintain local skills."
-              badge={skillsReloading() || skillsLoading() ? 'Loading' : `${skillsCatalog()?.skills?.length ?? 0} skills`}
-              error={skillsError()}
-              actions={
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void refreshSkillsCatalog(true)}
-                    loading={skillsReloading()}
-                    disabled={!canInteract()}
-                  >
-                    Reload
-                  </Button>
-                  <Button size="sm" variant="default" onClick={() => openInstallDialog()} disabled={!canInteract() || !canAdmin()}>
-                    Install from GitHub
-                  </Button>
-                  <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!canInteract() || !canAdmin()}>
-                    Create Skill
-                  </Button>
-                </>
-              }
-            >
-              <div class="space-y-4">
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div class="md:col-span-2">
-                    <FieldLabel>Search</FieldLabel>
-                    <Input
-                      value={skillQuery()}
-                      onInput={(event) => setSkillQuery(event.currentTarget.value)}
-                      placeholder="Search by name, description, or path"
-                      size="sm"
-                      class="w-full"
-                      disabled={!canInteract()}
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel>Scope</FieldLabel>
-                    <Select
-                      value={skillScopeFilter()}
-                      onChange={(value) => setSkillScopeFilter(value as 'all' | 'user' | 'user_agents')}
-                      disabled={!canInteract()}
-                      options={[
-                        { value: 'all', label: 'All scopes' },
-                        { value: 'user', label: 'User (.redeven)' },
-                        { value: 'user_agents', label: 'User (.agents)' },
-                      ]}
-                      class="w-full"
-                    />
-                  </div>
-                </div>
+        </SectionGroup>
 
-                <SkillsCatalogTable
-                  skills={filteredSkills()}
-                  sources={skillSources()}
-                  loading={skillsLoading()}
-                  canInteract={canInteract()}
-                  canAdmin={canAdmin()}
-                  toggleSaving={skillToggleSaving()}
-                  reinstalling={skillReinstalling()}
-                  onToggle={(entry, enabled) => {
-                    void toggleSkill(entry, enabled);
-                  }}
-                  onBrowse={openSkillBrowse}
-                  onReinstall={(entry) => {
-                    void reinstallSkill(entry);
-                  }}
-                  onDelete={askDeleteSkill}
-                />
-
-                <Show when={(skillsCatalog()?.conflicts?.length ?? 0) > 0}>
-                  <div class="space-y-1 rounded-lg border border-warning/40 bg-warning/10 p-3">
-                    <div class="text-xs font-semibold text-warning">Conflicts detected: {skillsCatalog()?.conflicts?.length ?? 0}</div>
-                    <For each={(skillsCatalog()?.conflicts ?? []).slice(0, 5)}>
-                      {(item) => <div class="break-all text-[11px] text-warning">{item.name}: {item.path}</div>}
-                    </For>
-                  </div>
-                </Show>
-
-                <Show when={(skillsCatalog()?.errors?.length ?? 0) > 0}>
-                  <div class="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
-                    <div class="text-xs font-semibold text-destructive">Catalog errors: {skillsCatalog()?.errors?.length ?? 0}</div>
-                    <For each={(skillsCatalog()?.errors ?? []).slice(0, 5)}>
-                      {(item) => <div class="break-all text-[11px] text-destructive">{item.path}: {item.message}</div>}
-                    </For>
-                  </div>
-                </Show>
-              </div>
-            </SettingsCard>
-          </div>
-
-          <div id={settingsSectionElementID('ai')} class="scroll-mt-6">
+        {/* ── AI & Extensions ── */}
+        <SectionGroup title={SETTINGS_GROUP_META.ai_extensions.title} groupId={SETTINGS_GROUP_META.ai_extensions.id}>
+          <div id={settingsSectionElementID('ai')} data-settings-section="ai" class="scroll-mt-6">
             <SettingsCard
               icon={FlowerIcon}
               title="Flower"
-              description="Configure Flower: providers, models, and API keys. Changes are auto-saved when the form is valid."
+              description="Configure Flower providers, models, execution safeguards, and local AI secrets. Changes are auto-saved when the form is valid."
               badge={aiEnabled() ? 'Enabled' : 'Disabled'}
               badgeVariant={aiEnabled() ? 'success' : 'default'}
               error={aiError()}
@@ -3592,11 +3464,106 @@ export function EnvSettingsPage() {
             </SettingsCard>
           </div>
 
-          <div id={settingsSectionElementID('codex')} class="scroll-mt-6">
+          <div id={settingsSectionElementID('skills')} data-settings-section="skills" class="scroll-mt-6">
+            <SettingsCard
+              icon={Layers}
+              title="Skills"
+              description="Manage Flower skills: install from GitHub, browse skill files, toggle enable state, and maintain local skills."
+              badge={skillsReloading() || skillsLoading() ? 'Loading' : `${skillsCatalog()?.skills?.length ?? 0} skills`}
+              error={skillsError()}
+              actions={
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void refreshSkillsCatalog(true)}
+                    loading={skillsReloading()}
+                    disabled={!canInteract()}
+                  >
+                    Reload
+                  </Button>
+                  <Button size="sm" variant="default" onClick={() => openInstallDialog()} disabled={!canInteract() || !canAdmin()}>
+                    Install from GitHub
+                  </Button>
+                  <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!canInteract() || !canAdmin()}>
+                    Create Skill
+                  </Button>
+                </>
+              }
+            >
+              <div class="space-y-4">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div class="md:col-span-2">
+                    <FieldLabel>Search</FieldLabel>
+                    <Input
+                      value={skillQuery()}
+                      onInput={(event) => setSkillQuery(event.currentTarget.value)}
+                      placeholder="Search by name, description, or path"
+                      size="sm"
+                      class="w-full"
+                      disabled={!canInteract()}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Scope</FieldLabel>
+                    <Select
+                      value={skillScopeFilter()}
+                      onChange={(value) => setSkillScopeFilter(value as 'all' | 'user' | 'user_agents')}
+                      disabled={!canInteract()}
+                      options={[
+                        { value: 'all', label: 'All scopes' },
+                        { value: 'user', label: 'User (.redeven)' },
+                        { value: 'user_agents', label: 'User (.agents)' },
+                      ]}
+                      class="w-full"
+                    />
+                  </div>
+                </div>
+
+                <SkillsCatalogTable
+                  skills={filteredSkills()}
+                  sources={skillSources()}
+                  loading={skillsLoading()}
+                  canInteract={canInteract()}
+                  canAdmin={canAdmin()}
+                  toggleSaving={skillToggleSaving()}
+                  reinstalling={skillReinstalling()}
+                  onToggle={(entry, enabled) => {
+                    void toggleSkill(entry, enabled);
+                  }}
+                  onBrowse={openSkillBrowse}
+                  onReinstall={(entry) => {
+                    void reinstallSkill(entry);
+                  }}
+                  onDelete={askDeleteSkill}
+                />
+
+                <Show when={(skillsCatalog()?.conflicts?.length ?? 0) > 0}>
+                  <div class="space-y-1 rounded-lg border border-warning/40 bg-warning/10 p-3">
+                    <div class="text-xs font-semibold text-warning">Conflicts detected: {skillsCatalog()?.conflicts?.length ?? 0}</div>
+                    <For each={(skillsCatalog()?.conflicts ?? []).slice(0, 5)}>
+                      {(item) => <div class="break-all text-[11px] text-warning">{item.name}: {item.path}</div>}
+                    </For>
+                  </div>
+                </Show>
+
+                <Show when={(skillsCatalog()?.errors?.length ?? 0) > 0}>
+                  <div class="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+                    <div class="text-xs font-semibold text-destructive">Catalog errors: {skillsCatalog()?.errors?.length ?? 0}</div>
+                    <For each={(skillsCatalog()?.errors ?? []).slice(0, 5)}>
+                      {(item) => <div class="break-all text-[11px] text-destructive">{item.path}: {item.message}</div>}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+            </SettingsCard>
+          </div>
+
+          <div id={settingsSectionElementID('codex')} data-settings-section="codex" class="scroll-mt-6">
             <SettingsCard
               icon={CodexIcon}
               title="Codex"
-              description="Redeven uses the host machine's `codex` binary directly. This section is diagnostics-only; there is no separate in-app Codex runtime toggle to maintain."
+              description="Host-managed Codex diagnostics. Redeven reads the host `codex` binary status here but does not persist Codex runtime settings."
               badge={codexStatus()?.available ? 'Host detected' : 'Needs host install'}
               badgeVariant={codexStatus()?.available ? 'success' : 'default'}
               error={codexStatusError()}
@@ -3636,6 +3603,24 @@ export function EnvSettingsPage() {
                   </div>
                 </div>
               </div>
+            </SettingsCard>
+          </div>
+        </SectionGroup>
+
+        {/* ── Diagnostics ── */}
+        <SectionGroup title={SETTINGS_GROUP_META.diagnostics.title} groupId={SETTINGS_GROUP_META.diagnostics.id}>
+          <div id={settingsSectionElementID('debug_console')} data-settings-section="debug_console" class="scroll-mt-6">
+            <SettingsCard
+              icon={RefreshIcon}
+              title="Debug Console"
+              description="Frontend-only diagnostics controls for the floating request and UI-performance console."
+              actions={<SettingsPill tone="success">Local UI state</SettingsPill>}
+            >
+              <EnvDebugConsoleSettingsPanel
+                enabled={debugConsoleEnabled()}
+                canInteract={canInteract()}
+                onEnabledChange={(value) => env.setDebugConsoleEnabled(value)}
+              />
             </SettingsCard>
           </div>
         </SectionGroup>

@@ -154,9 +154,9 @@ export function CodeBadge(props: { children: string }) {
   return <code class="rounded bg-muted px-1.5 py-0.5 text-xs font-mono">{props.children}</code>;
 }
 
-export function SectionGroup(props: { title: string; children: JSX.Element }) {
+export function SectionGroup(props: { title: string; children: JSX.Element; groupId?: string }) {
   return (
-    <div class="space-y-4">
+    <div class="space-y-4" data-settings-group={props.groupId}>
       <div class="flex items-center gap-3 pt-2">
         <h2 class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{props.title}</h2>
         <div class="h-px flex-1 bg-border/50" />
