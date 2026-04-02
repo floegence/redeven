@@ -1,7 +1,7 @@
 import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
-import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Refresh, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Plus, Refresh, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { type ContextMenuCallbacks, type ContextMenuEvent, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
@@ -3644,6 +3644,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     id: 'new',
     label: 'New',
     type: 'custom',
+    icon: (props) => <Plus class={props.class} />,
     separator,
     children: [
       {
