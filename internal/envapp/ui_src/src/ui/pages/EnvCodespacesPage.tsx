@@ -39,6 +39,7 @@ import { fetchGatewayJSON } from "../services/gatewayApi";
 import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
+import { desktopShellExternalURLOpenAvailable, openExternalURLInDesktopShell } from "../services/desktopShellBridge";
 import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
@@ -71,6 +72,20 @@ type PendingCodespaceIntent = Readonly<{
   code_space_id: string;
   name: string;
 }> | null;
+
+type CodespaceOpenStrategy =
+  | Readonly<{ kind: "desktop_external_browser" }>
+  | Readonly<{ kind: "browser_popup"; win: Window }>;
+
+type CodespaceTrustedLauncherTarget = Readonly<{
+  url: string;
+  sandbox: Readonly<{
+    origin: string;
+    floe_app: typeof FLOE_APP_CODE;
+    code_space_id: string;
+    app_path: string;
+  }>;
+}>;
 
 function fmtTime(ms: number): string {
   if (!ms) return "Never";
@@ -119,6 +134,12 @@ function codespaceOrigin(codeSpaceID: string): string {
   return trustedLauncherOriginFromSandboxLocation(window.location, "cs", codeSpaceID);
 }
 
+function absoluteURLFromCurrentLocation(rawURL: string): string {
+  const raw = String(rawURL ?? "").trim();
+  if (!raw) throw new Error("Invalid codespace URL.");
+  return new URL(raw, window.location.href).toString();
+}
+
 function base64UrlEncode(raw: string): string {
   const b64 = btoa(raw);
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -138,70 +159,120 @@ function validateMeta(name: string, description: string): string | null {
   return null;
 }
 
+function resolveCodespaceOpenStrategy(codeSpaceID: string): CodespaceOpenStrategy {
+  if (desktopShellExternalURLOpenAvailable()) {
+    return { kind: "desktop_external_browser" };
+  }
+
+  const win = window.open("about:blank", `redeven_codespace_${codeSpaceID}`);
+  if (!win) throw new Error("Popup was blocked. Please allow popups and try again.");
+  return { kind: "browser_popup", win };
+}
+
+function closeCodespaceOpenStrategyOnError(strategy: CodespaceOpenStrategy): void {
+  if (strategy.kind !== "browser_popup") {
+    return;
+  }
+  try {
+    strategy.win.close();
+  } catch {
+    // ignore
+  }
+}
+
+async function commitCodespaceOpenStrategy(args: Readonly<{
+  strategy: CodespaceOpenStrategy;
+  url: string;
+  sandbox?: CodespaceTrustedLauncherTarget["sandbox"];
+}>): Promise<void> {
+  if (args.strategy.kind === "desktop_external_browser") {
+    const out = await openExternalURLInDesktopShell(args.url);
+    if (!out?.ok) {
+      throw new Error(out?.message || "Desktop failed to open the system browser.");
+    }
+    return;
+  }
+
+  if (args.sandbox) {
+    registerSandboxWindow(args.strategy.win, args.sandbox);
+  }
+  args.strategy.win.location.assign(args.url);
+}
+
+function buildLocalCodespaceURL(codeSpaceID: string, workspacePath: string): string {
+  const folder = String(workspacePath ?? "").trim();
+  const basePath = `/cs/${encodeURIComponent(codeSpaceID)}/`;
+  const rawURL = appendLocalAccessResumeQuery(folder ? `${basePath}?folder=${encodeURIComponent(folder)}` : basePath);
+  return absoluteURLFromCurrentLocation(rawURL);
+}
+
+function buildTrustedLauncherCodespaceTarget(args: Readonly<{
+  envPublicID: string;
+  codeSpaceID: string;
+  workspacePath: string;
+  entryTicket: string;
+}>): CodespaceTrustedLauncherTarget {
+  const origin = codespaceOrigin(args.codeSpaceID);
+  const bootURL = `${origin}/_redeven_boot/?env=${encodeURIComponent(args.envPublicID)}`;
+  const folder = String(args.workspacePath ?? "").trim();
+  const appPath = folder ? `/?folder=${encodeURIComponent(folder)}` : "/";
+  const init = {
+    v: 2,
+    env_public_id: args.envPublicID,
+    floe_app: FLOE_APP_CODE,
+    code_space_id: args.codeSpaceID,
+    app_path: appPath,
+    entry_ticket: args.entryTicket,
+  };
+  const encoded = base64UrlEncode(JSON.stringify(init));
+
+  return {
+    url: `${bootURL}#redeven=${encoded}`,
+    sandbox: {
+      origin,
+      floe_app: FLOE_APP_CODE,
+      code_space_id: args.codeSpaceID,
+      app_path: appPath,
+    },
+  };
+}
+
 async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
   if (!envPublicID) throw new Error("Missing env context. Please reopen from the Redeven Portal.");
 
-  const local = await getLocalRuntime();
-  if (local) {
-    const win = window.open("about:blank", `redeven_codespace_${codeSpaceID}`);
-    if (!win) throw new Error("Popup was blocked. Please allow popups and try again.");
-
-    try {
-      setStatus("Starting codespace...");
-      const sp = await fetchGatewayJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(codeSpaceID)}/start`, { method: "POST" });
-      const folder = String(sp?.workspace_path ?? "").trim();
-      const basePath = `/cs/${encodeURIComponent(codeSpaceID)}/`;
-      const url = appendLocalAccessResumeQuery(folder ? `${basePath}?folder=${encodeURIComponent(folder)}` : basePath);
-      setStatus("Opening...");
-      win.location.assign(url);
-      return;
-    } catch (e) {
-      try {
-        win.close();
-      } catch {
-        // ignore
-      }
-      throw e;
-    }
-  }
-
-  const origin = codespaceOrigin(codeSpaceID);
-  // Keep `?env=` in the final URL so users can copy/paste the link and reopen the codespace later.
-  const bootURL = `${origin}/_redeven_boot/?env=${encodeURIComponent(envPublicID)}`;
-
-  const win = window.open("about:blank", `redeven_codespace_${codeSpaceID}`);
-  if (!win) throw new Error("Popup was blocked. Please allow popups and try again.");
+  const strategy = resolveCodespaceOpenStrategy(codeSpaceID);
 
   try {
+    const local = await getLocalRuntime();
     setStatus("Starting codespace...");
     const sp = await fetchGatewayJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(codeSpaceID)}/start`, { method: "POST" });
-
     const folder = String(sp?.workspace_path ?? "").trim();
-    const appPath = folder ? `/?folder=${encodeURIComponent(folder)}` : "/";
-    registerSandboxWindow(win, { origin, floe_app: FLOE_APP_CODE, code_space_id: codeSpaceID, app_path: appPath });
+
+    if (local) {
+      const url = buildLocalCodespaceURL(codeSpaceID, folder);
+      setStatus("Opening...");
+      await commitCodespaceOpenStrategy({ strategy, url });
+      return;
+    }
 
     setStatus("Requesting entry ticket...");
     const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: FLOE_APP_CODE, codeSpaceId: codeSpaceID });
-
-    const init = {
-      v: 2,
-      env_public_id: envPublicID,
-      floe_app: FLOE_APP_CODE,
-      code_space_id: codeSpaceID,
-      app_path: appPath,
-      entry_ticket: entryTicket,
-    };
-    const encoded = base64UrlEncode(JSON.stringify(init));
+    const target = buildTrustedLauncherCodespaceTarget({
+      envPublicID,
+      codeSpaceID,
+      workspacePath: folder,
+      entryTicket,
+    });
 
     setStatus("Opening...");
-    win.location.assign(`${bootURL}#redeven=${encoded}`);
+    await commitCodespaceOpenStrategy({
+      strategy,
+      url: target.url,
+      sandbox: target.sandbox,
+    });
   } catch (e) {
-    try {
-      win.close();
-    } catch {
-      // ignore
-    }
+    closeCodespaceOpenStrategyOnError(strategy);
     throw e;
   }
 }

@@ -38,6 +38,9 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("case 'open_advanced_settings':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain("await openAdvancedSettingsWindow('current_target');");
+    expect(mainSrc).toContain('ipcMain.handle(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
+    expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
+    expect(mainSrc).toContain("message: 'Invalid external URL.'");
     expect(mainSrc).toContain('ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL');
     expect(mainSrc).toContain("if (normalized.action === 'restart_managed_runtime') {");
     expect(mainSrc).toContain('return restartManagedRuntimeFromShell();');

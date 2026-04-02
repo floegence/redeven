@@ -185,7 +185,9 @@ Desktop shell preferences live under the Electron user data directory, not insid
 - Legacy advanced-settings entrypoints route to `This Device Options`.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
+- The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
 - Env App exposes `Connect Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
+- Env App Codespaces uses that external-URL bridge when the desktop shell is present, so `Open` launches the selected codespace in the system browser instead of an Electron child window.
 - Env App `Runtime Settings` stays separate from shell-owned Environment selection and desktop-managed startup state.
 
 ## Error Recovery

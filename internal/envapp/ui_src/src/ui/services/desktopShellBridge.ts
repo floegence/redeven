@@ -1,3 +1,8 @@
+export type DesktopShellExternalURLOpenResult = Readonly<{
+  ok: boolean;
+  message?: string;
+}>;
+
 export type DesktopManagedRuntimeRestartResult = Readonly<{
   ok: boolean;
   started: boolean;
@@ -12,6 +17,7 @@ export interface DesktopShellBridge {
   openConnectToRedeven?: () => Promise<void>;
   openDesktopSettings?: () => Promise<void>;
   openWindow?: (kind: unknown) => Promise<void>;
+  openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
 }
 
@@ -34,6 +40,11 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.switchDevice !== 'function'
       && typeof candidate.openConnectionCenter !== 'function'
       && typeof candidate.openConnectToRedeven !== 'function'
+      && typeof candidate.openAdvancedSettings !== 'function'
+      && typeof candidate.openDesktopSettings !== 'function'
+      && typeof candidate.openWindow !== 'function'
+      && typeof candidate.openExternalURL !== 'function'
+      && typeof candidate.restartManagedRuntime !== 'function'
     )
   ) {
     return null;
@@ -91,6 +102,19 @@ export async function openDesktopConnectToRedeven(): Promise<boolean> {
 
 export async function openDesktopSettings(): Promise<boolean> {
   return openAdvancedSettings();
+}
+
+export function desktopShellExternalURLOpenAvailable(): boolean {
+  const bridge = desktopShellBridge();
+  return Boolean(bridge && typeof bridge.openExternalURL === 'function');
+}
+
+export async function openExternalURLInDesktopShell(url: string): Promise<DesktopShellExternalURLOpenResult | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge || typeof bridge.openExternalURL !== 'function') {
+    return null;
+  }
+  return bridge.openExternalURL(url);
 }
 
 export async function restartDesktopManagedRuntime(): Promise<DesktopManagedRuntimeRestartResult | null> {
