@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
-import { buildDesktopWelcomeShellViewModel, capabilityUnavailableMessage, shellStatus } from './viewModel';
+import {
+  buildDesktopWelcomeShellViewModel,
+  capabilityUnavailableMessage,
+  environmentLibraryCount,
+  filterEnvironmentLibrary,
+  shellStatus,
+} from './viewModel';
 
 describe('DesktopWelcomeShell', () => {
   it('describes Connect Environment inside the shared shell model', () => {
@@ -15,6 +21,7 @@ describe('DesktopWelcomeShell', () => {
             id: 'http://192.168.1.11:24000/',
             label: '192.168.1.11:24000',
             local_ui_url: 'http://192.168.1.11:24000/',
+            source: 'saved',
             last_used_at_ms: 10,
           },
         ],
@@ -36,7 +43,7 @@ describe('DesktopWelcomeShell', () => {
     });
   });
 
-  it('describes This Device settings inside the same shell model', () => {
+  it('describes This Device Options inside the same shell model', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '0.0.0.0:24000',
@@ -54,13 +61,77 @@ describe('DesktopWelcomeShell', () => {
 
     expect(buildDesktopWelcomeShellViewModel(snapshot)).toEqual({
       shell_title: 'Redeven Desktop',
-      surface_title: 'This Device Settings',
+      surface_title: 'This Device Options',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open This Device',
       settings_save_label: 'Save This Device Options',
     });
     expect(snapshot.settings_surface.window_title).toBe('This Device Options');
-    expect(snapshot.settings_surface.alert.title).toBe('Environment selection stays in Connect Environment');
+    expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
+    expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
+  });
+
+  it('filters the Environment Library by current, recent, and saved connections', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: {
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        pending_bootstrap: null,
+        saved_environments: [
+          {
+            id: 'http://192.168.1.12:24000/',
+            label: 'Staging',
+            local_ui_url: 'http://192.168.1.12:24000/',
+            source: 'saved',
+            last_used_at_ms: 20,
+          },
+          {
+            id: 'http://192.168.1.11:24000/',
+            label: 'Laptop',
+            local_ui_url: 'http://192.168.1.11:24000/',
+            source: 'recent_auto',
+            last_used_at_ms: 10,
+          },
+        ],
+        recent_external_local_ui_urls: [
+          'http://192.168.1.12:24000/',
+          'http://192.168.1.11:24000/',
+        ],
+      },
+      externalStartup: {
+        local_ui_url: 'http://192.168.1.12:24000/',
+        local_ui_urls: ['http://192.168.1.12:24000/'],
+      },
+      activeSessionTarget: {
+        kind: 'external_local_ui',
+        external_local_ui_url: 'http://192.168.1.12:24000/',
+      },
+    });
+
+    expect(environmentLibraryCount(snapshot, 'all')).toBe(2);
+    expect(environmentLibraryCount(snapshot, 'current')).toBe(1);
+    expect(environmentLibraryCount(snapshot, 'recent')).toBe(1);
+    expect(environmentLibraryCount(snapshot, 'saved')).toBe(1);
+
+    expect(filterEnvironmentLibrary(snapshot, 'current')).toEqual([
+      expect.objectContaining({
+        id: 'http://192.168.1.12:24000/',
+        category: 'saved',
+        is_current: true,
+      }),
+    ]);
+    expect(filterEnvironmentLibrary(snapshot, 'recent')).toEqual([
+      expect.objectContaining({
+        id: 'http://192.168.1.11:24000/',
+        category: 'recent_auto',
+      }),
+    ]);
+    expect(filterEnvironmentLibrary(snapshot, 'saved', 'stag')).toEqual([
+      expect.objectContaining({
+        id: 'http://192.168.1.12:24000/',
+        label: 'Staging',
+      }),
+    ]);
   });
 
   it('uses Environment guidance copy when a capability is unavailable before connection', () => {

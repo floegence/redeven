@@ -495,6 +495,7 @@ async function upsertSavedEnvironmentFromWelcome(
     environment_id: environmentID,
     label,
     local_ui_url: externalLocalUIURL,
+    source: 'saved',
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
   await persistDesktopPreferences(next);

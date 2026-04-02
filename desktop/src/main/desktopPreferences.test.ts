@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   clearPendingBootstrap,
   createPlaintextSecretCodec,
+  type DesktopPreferences,
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
   defaultSavedEnvironmentLabel,
@@ -66,7 +67,7 @@ describe('desktopPreferences', () => {
     try {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
-      const preferences = {
+      const preferences: DesktopPreferences = {
         ...validateDesktopSettingsDraft({
           local_ui_bind: '0.0.0.0:24000',
           local_ui_password: 'super-secret',
@@ -79,6 +80,7 @@ describe('desktopPreferences', () => {
             id: 'http://192.168.1.12:24000/',
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
+            source: 'saved',
             last_used_at_ms: 100,
           },
         ],
@@ -202,6 +204,7 @@ describe('desktopPreferences', () => {
             id: 'http://192.168.1.11:24000/',
             label: 'Recovered target',
             local_ui_url: 'http://192.168.1.11:24000/',
+            source: 'saved',
             last_used_at_ms: 20,
           },
         ],
@@ -224,12 +227,14 @@ describe('desktopPreferences', () => {
         id: 'http://192.168.1.11:24000/',
         label: '192.168.1.11:24000',
         local_ui_url: 'http://192.168.1.11:24000/',
+        source: 'recent_auto',
         last_used_at_ms: 2,
       },
       {
         id: 'http://192.168.1.12:24000/',
         label: '192.168.1.12:24000',
         local_ui_url: 'http://192.168.1.12:24000/',
+        source: 'recent_auto',
         last_used_at_ms: 1,
       },
     ]);
@@ -260,12 +265,14 @@ describe('desktopPreferences', () => {
         id: 'http://192.168.1.11:24000/',
         label: 'Laptop Updated',
         local_ui_url: 'http://192.168.1.11:24000/',
+        source: 'saved',
         last_used_at_ms: 300,
       },
       {
         id: 'http://192.168.1.12:24000/',
         label: defaultSavedEnvironmentLabel('http://192.168.1.12:24000/'),
         local_ui_url: 'http://192.168.1.12:24000/',
+        source: 'saved',
         last_used_at_ms: 200,
       },
     ]);
@@ -281,11 +288,44 @@ describe('desktopPreferences', () => {
           id: 'http://192.168.1.11:24000/',
           label: 'Laptop Updated',
           local_ui_url: 'http://192.168.1.11:24000/',
+          source: 'saved',
           last_used_at_ms: 300,
         },
       ],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
     });
+  });
+
+  it('upgrades recent_auto environments into saved entries when the user saves them', () => {
+    const remembered = rememberRecentExternalLocalUITarget(
+      defaultDesktopPreferences(),
+      'http://192.168.1.11:24000/',
+    );
+
+    expect(remembered.saved_environments).toEqual([
+      expect.objectContaining({
+        id: 'http://192.168.1.11:24000/',
+        source: 'recent_auto',
+      }),
+    ]);
+
+    const promoted = upsertSavedEnvironment(remembered, {
+      environment_id: desktopEnvironmentID('http://192.168.1.11:24000/'),
+      label: 'Laptop',
+      local_ui_url: 'http://192.168.1.11:24000/',
+      source: 'saved',
+      last_used_at_ms: 500,
+    });
+
+    expect(promoted.saved_environments).toEqual([
+      {
+        id: 'http://192.168.1.11:24000/',
+        label: 'Laptop',
+        local_ui_url: 'http://192.168.1.11:24000/',
+        source: 'saved',
+        last_used_at_ms: 500,
+      },
+    ]);
   });
 
   it('remembers recent environment targets through the saved catalog', () => {
@@ -301,10 +341,12 @@ describe('desktopPreferences', () => {
       expect.objectContaining({
         id: 'http://192.168.1.11:24000/',
         local_ui_url: 'http://192.168.1.11:24000/',
+        source: 'recent_auto',
       }),
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         local_ui_url: 'http://192.168.1.12:24000/',
+        source: 'recent_auto',
       }),
     ]);
     expect(preferences.recent_external_local_ui_urls).toEqual([
@@ -334,18 +376,21 @@ describe('desktopPreferences', () => {
         id: 'env-c',
         label: 'C',
         local_ui_url: 'http://192.168.1.13:24000/',
+        source: 'saved',
         last_used_at_ms: 10,
       },
       {
         id: 'env-a',
         label: 'A',
         local_ui_url: 'http://192.168.1.11:24000/',
+        source: 'saved',
         last_used_at_ms: 30,
       },
       {
         id: 'env-b',
         label: 'B',
         local_ui_url: 'http://192.168.1.12:24000/',
+        source: 'recent_auto',
         last_used_at_ms: 20,
       },
     ])).toEqual([
@@ -369,6 +414,7 @@ describe('desktopPreferences', () => {
           id: 'http://192.168.1.11:24000/',
           label: 'Laptop',
           local_ui_url: 'http://192.168.1.11:24000/',
+          source: 'saved',
           last_used_at_ms: 100,
         },
       ],
@@ -396,6 +442,7 @@ describe('desktopPreferences', () => {
           id: 'http://192.168.1.11:24000/',
           label: 'Laptop',
           local_ui_url: 'http://192.168.1.11:24000/',
+          source: 'saved',
           last_used_at_ms: 100,
         },
       ],
@@ -409,6 +456,7 @@ describe('desktopPreferences', () => {
           id: 'http://192.168.1.11:24000/',
           label: 'Laptop',
           local_ui_url: 'http://192.168.1.11:24000/',
+          source: 'saved',
           last_used_at_ms: 100,
         },
       ],

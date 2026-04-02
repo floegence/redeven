@@ -2,21 +2,14 @@ import type { DesktopSettingsDraft } from './settingsIPC';
 
 export type DesktopPageMode = 'advanced_settings';
 export type DesktopStatusTone = 'local';
-
-export interface DesktopSummaryItem {
-  label: string;
-  value: string;
-  body: string;
-  valueId?: string;
-  bodyId?: string;
-}
+export type DesktopAccessMode = 'private_device' | 'shared_local_network' | 'custom_exposure';
 
 export interface DesktopPageAlertModel {
   kicker: string;
   title: string;
   body: string;
   bodyId?: string;
-  tone?: 'info' | 'default';
+  tone?: 'info' | 'default' | 'warning';
 }
 
 export interface DesktopPageFieldModel {
@@ -33,23 +26,10 @@ export interface DesktopPageFieldModel {
   hidden?: boolean;
 }
 
-export interface DesktopPageCardModel {
-  id: string;
-  kicker: string;
-  title: string;
-  descriptionHTML: string;
-  badge?: string;
-  stateNote?: Readonly<{
-    id: string;
-    text: string;
-  }>;
-  fields: readonly DesktopPageFieldModel[];
-}
-
-export interface DesktopPageSectionModel {
-  id: string;
-  title: string;
-  cards: readonly DesktopPageCardModel[];
+export interface DesktopAccessModeOption {
+  value: DesktopAccessMode;
+  label: string;
+  description: string;
 }
 
 export type DesktopSettingsSurfaceSnapshot = Readonly<{
@@ -59,8 +39,18 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   status_label: string;
   status_tone: DesktopStatusTone;
   save_label: string;
-  summary_items: readonly DesktopSummaryItem[];
+  access_mode: DesktopAccessMode;
+  access_mode_label: string;
+  access_mode_description: string;
+  access_mode_options: readonly DesktopAccessModeOption[];
+  access_bind_display: string;
+  password_state_label: string;
+  password_state_tone: 'default' | 'warning' | 'success';
+  bootstrap_pending: boolean;
+  bootstrap_status_label: string;
+  bootstrap_status_detail: string;
   alert: DesktopPageAlertModel;
-  sections: readonly DesktopPageSectionModel[];
+  host_fields: readonly DesktopPageFieldModel[];
+  bootstrap_fields: readonly DesktopPageFieldModel[];
   draft: DesktopSettingsDraft;
 }>;

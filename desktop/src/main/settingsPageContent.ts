@@ -1,5 +1,7 @@
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import type {
+  DesktopAccessMode,
+  DesktopAccessModeOption,
   DesktopPageFieldModel,
   DesktopPageMode,
   DesktopSettingsSurfaceSnapshot,
@@ -8,6 +10,24 @@ import type {
 export function pageWindowTitle(_mode: DesktopPageMode): string {
   return 'This Device Options';
 }
+
+export const DESKTOP_ACCESS_MODE_OPTIONS: readonly DesktopAccessModeOption[] = [
+  {
+    value: 'private_device',
+    label: 'Private to this device',
+    description: 'Keep Redeven on loopback for this machine only.',
+  },
+  {
+    value: 'shared_local_network',
+    label: 'Shared on your local network',
+    description: 'Expose Redeven on your LAN and require a password.',
+  },
+  {
+    value: 'custom_exposure',
+    label: 'Custom exposure',
+    description: 'Edit the bind address and password directly.',
+  },
+] as const;
 
 const hostFields = [
   {
@@ -60,83 +80,116 @@ const bootstrapFields = [
   },
 ] as const satisfies readonly DesktopPageFieldModel[];
 
+function trimString(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+export function desktopAccessModeForDraft(draft: DesktopSettingsDraft): DesktopAccessMode {
+  const bind = trimString(draft.local_ui_bind);
+  const hasPassword = trimString(draft.local_ui_password) !== '';
+  if (bind === '127.0.0.1:0' && !hasPassword) {
+    return 'private_device';
+  }
+  if (bind === '0.0.0.0:24000') {
+    return 'shared_local_network';
+  }
+  return 'custom_exposure';
+}
+
+function desktopAccessModeLabel(mode: DesktopAccessMode): string {
+  return DESKTOP_ACCESS_MODE_OPTIONS.find((option) => option.value === mode)?.label ?? 'Custom exposure';
+}
+
+function desktopAccessModeDescription(mode: DesktopAccessMode): string {
+  switch (mode) {
+    case 'private_device':
+      return 'Redeven only listens on loopback and keeps This Device private until you choose a broader exposure.';
+    case 'shared_local_network':
+      return 'Redeven listens on your LAN-facing interface and expects a password before the next This Device open.';
+    default:
+      return 'Redeven uses the raw bind and password values shown below.';
+  }
+}
+
+function passwordState(mode: DesktopAccessMode, draft: DesktopSettingsDraft): Readonly<{
+  label: string;
+  tone: 'default' | 'warning' | 'success';
+}> {
+  const hasPassword = trimString(draft.local_ui_password) !== '';
+  if (mode === 'private_device') {
+    return {
+      label: 'No password required',
+      tone: 'default',
+    };
+  }
+  if (hasPassword) {
+    return {
+      label: 'Password configured',
+      tone: 'success',
+    };
+  }
+  return {
+    label: 'Password required before the next open of This Device',
+    tone: 'warning',
+  };
+}
+
+function bootstrapStatus(draft: DesktopSettingsDraft): Readonly<{
+  pending: boolean;
+  label: string;
+  detail: string;
+}> {
+  const hasBootstrap = trimString(draft.controlplane_url) !== ''
+    || trimString(draft.env_id) !== ''
+    || trimString(draft.env_token) !== '';
+  if (hasBootstrap) {
+    return {
+      pending: true,
+      label: 'Registration queued for next start',
+      detail: 'Desktop will consume and clear this bootstrap request after the next successful This Device startup.',
+    };
+  }
+  return {
+    pending: false,
+    label: 'No bootstrap request queued',
+    detail: 'Add a one-shot control plane registration only when the next desktop-managed start needs it.',
+  };
+}
+
 export function buildDesktopSettingsSurfaceSnapshot(
   mode: DesktopPageMode,
   draft: DesktopSettingsDraft,
 ): DesktopSettingsSurfaceSnapshot {
+  const accessMode = desktopAccessModeForDraft(draft);
+  const password = passwordState(accessMode, draft);
+  const bootstrap = bootstrapStatus(draft);
+
   return {
     mode,
     window_title: pageWindowTitle(mode),
-    lead: 'Edit the This Device startup, access, and one-shot bootstrap inputs that sit behind the Desktop Connect Environment flow.',
+    lead: 'Edit the startup, access, and one-shot bootstrap behavior that applies the next time you open This Device from Connect Environment.',
     status_label: 'This device',
     status_tone: 'local',
     save_label: 'Save This Device Options',
-    summary_items: [
-      {
-        label: 'Startup flow',
-        value: 'Connect Environment first',
-        body: 'Desktop always opens Connect Environment first. These settings only affect future opens of This Device.',
-        valueId: 'target-summary-value',
-        bodyId: 'target-summary-note',
-      },
-      {
-        label: 'Host This Device',
-        value: 'Desktop-managed Local UI',
-        body: 'These values apply only when you open This Device from the welcome launcher.',
-        bodyId: 'host-summary-note',
-      },
-      {
-        label: 'Next start',
-        value: 'One-shot bootstrap',
-        body: 'If provided, Desktop will consume and clear this bootstrap request after the next successful This Device startup.',
-        bodyId: 'bootstrap-summary-note',
-      },
-    ],
+    access_mode: accessMode,
+    access_mode_label: desktopAccessModeLabel(accessMode),
+    access_mode_description: desktopAccessModeDescription(accessMode),
+    access_mode_options: DESKTOP_ACCESS_MODE_OPTIONS,
+    access_bind_display: trimString(draft.local_ui_bind) || '127.0.0.1:0',
+    password_state_label: password.label,
+    password_state_tone: password.tone,
+    bootstrap_pending: bootstrap.pending,
+    bootstrap_status_label: bootstrap.label,
+    bootstrap_status_detail: bootstrap.detail,
     alert: {
       kicker: 'Primary workflow',
       title: 'Environment selection stays in Connect Environment',
-      body: 'Use Connect Environment when you want to choose This Device or another Environment. This screen only edits This Device startup details.',
+      body: 'Use Connect Environment when you want to choose This Device or another Environment. This screen only changes future This Device startup behavior.',
       bodyId: 'desktop-target-alert-body',
       tone: 'info',
     },
-    sections: [
-      {
-        id: 'desktop-startup',
-        title: 'Desktop-managed startup',
-        cards: [
-          {
-            id: 'host-this-device-card',
-            kicker: 'Desktop startup',
-            title: 'Host This Device',
-            descriptionHTML: 'Set the Local UI bind and access password that Desktop should use when it starts the bundled runtime on this machine.',
-            badge: 'This device',
-            stateNote: {
-              id: 'host-this-device-state-note',
-              text: 'These values are saved locally and applied the next time you open This Device.',
-            },
-            fields: hostFields,
-          },
-        ],
-      },
-      {
-        id: 'desktop-bootstrap',
-        title: 'Next desktop-managed start',
-        cards: [
-          {
-            id: 'register-next-start-card',
-            kicker: 'One-shot request',
-            title: 'Register to Redeven on next start',
-            descriptionHTML: 'Queue a one-shot bootstrap request for the next successful desktop-managed start on this device. Desktop clears the request automatically after a successful startup.',
-            badge: 'One-shot request',
-            stateNote: {
-              id: 'bootstrap-state-note',
-              text: 'This request is never sent until a future This Device start succeeds.',
-            },
-            fields: bootstrapFields,
-          },
-        ],
-      },
-    ],
+    host_fields: hostFields,
+    bootstrap_fields: bootstrapFields,
     draft,
   };
 }

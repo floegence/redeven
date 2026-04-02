@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { DEFAULT_DESKTOP_LOCAL_UI_BIND, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 import { normalizeLocalUIBaseURL } from './localUIURL';
+import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionTypes';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 
 export type PendingBootstrap = Readonly<{
@@ -15,6 +16,7 @@ export type DesktopSavedEnvironment = Readonly<{
   id: string;
   label: string;
   local_ui_url: string;
+  source: DesktopSavedEnvironmentSource;
   last_used_at_ms: number;
 }>;
 
@@ -40,6 +42,7 @@ type DesktopSavedEnvironmentFile = Readonly<{
   id?: unknown;
   label?: unknown;
   local_ui_url?: unknown;
+  source?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -77,6 +80,7 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   environment_id: string;
   label: string;
   local_ui_url: string;
+  source?: DesktopSavedEnvironmentSource;
   last_used_at_ms?: number;
 }>;
 
@@ -125,6 +129,13 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     saved_environments: [],
     recent_external_local_ui_urls: [],
   };
+}
+
+function normalizeSavedEnvironmentSource(
+  value: unknown,
+  fallback: DesktopSavedEnvironmentSource = 'saved',
+): DesktopSavedEnvironmentSource {
+  return value === 'recent_auto' ? 'recent_auto' : fallback;
 }
 
 export function defaultDesktopPreferencesPaths(userDataDir: string): DesktopPreferencesPaths {
@@ -202,6 +213,7 @@ function normalizeSavedEnvironmentCandidate(
     id: environmentID,
     label,
     local_ui_url: normalizedURL,
+    source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
 }
@@ -223,6 +235,7 @@ function legacyRecentURLsToSavedEnvironments(values: readonly unknown[]): readon
         id: desktopEnvironmentID(normalizedURL),
         label: defaultSavedEnvironmentLabel(normalizedURL),
         local_ui_url: normalizedURL,
+        source: 'recent_auto',
         last_used_at_ms: values.length - index,
       });
     } catch {
@@ -310,10 +323,15 @@ export function upsertSavedEnvironment(
     environment.id === environmentID || environment.local_ui_url === normalizedURL
   ));
   const label = compact(input.label) || existing?.label || defaultSavedEnvironmentLabel(normalizedURL);
+  const requestedSource = input.source;
+  const source: DesktopSavedEnvironmentSource = existing?.source === 'saved' || requestedSource === 'saved'
+    ? 'saved'
+    : normalizeSavedEnvironmentSource(requestedSource, existing?.source ?? 'saved');
   const nextEnvironment: DesktopSavedEnvironment = {
     id: environmentID,
     label,
     local_ui_url: normalizedURL,
+    source,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
   };
 
@@ -352,6 +370,7 @@ export function rememberRecentExternalLocalUITarget(
     environment_id: desktopEnvironmentID(rawURL),
     label: '',
     local_ui_url: rawURL,
+    source: 'recent_auto',
     last_used_at_ms: Date.now(),
   });
 }
@@ -557,12 +576,13 @@ export async function saveDesktopPreferences(
   const recentExternalLocalUIURLs = deriveRecentExternalLocalUIURLs(savedEnvironments);
 
   const preferencesFile: DesktopPreferencesFile = {
-    version: 2,
+    version: 3,
     local_ui_bind: nextPreferences.local_ui_bind,
     saved_environments: savedEnvironments.map((environment) => ({
       id: environment.id,
       label: environment.label,
       local_ui_url: environment.local_ui_url,
+      source: environment.source,
       last_used_at_ms: environment.last_used_at_ms,
     })),
     recent_external_local_ui_urls: recentExternalLocalUIURLs,

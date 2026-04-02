@@ -3,6 +3,7 @@ import {
   defaultSavedEnvironmentLabel,
   desktopEnvironmentID,
   desktopPreferencesToDraft,
+  type DesktopSavedEnvironment,
   type DesktopPreferences,
 } from './desktopPreferences';
 import type { DesktopSessionTarget } from './desktopTarget';
@@ -141,9 +142,11 @@ function buildEnvironmentEntries(
       local_ui_url: managedStartup?.local_ui_url ?? '',
       secondary_text: managedStartup?.local_ui_url || 'Open the desktop-managed Environment on this machine.',
       tag: currentManaged ? 'Current' : 'This Device',
+      category: 'this_device',
       is_current: currentManaged,
       can_edit: true,
       can_delete: false,
+      can_save: false,
       last_used_at_ms: currentManaged ? Date.now() : 0,
     },
   ];
@@ -158,30 +161,39 @@ function buildEnvironmentEntries(
       local_ui_url: currentExternalURL,
       secondary_text: currentExternalURL,
       tag: 'Current',
+      category: 'current_unsaved',
       is_current: true,
       can_edit: true,
       can_delete: false,
+      can_save: true,
       last_used_at_ms: Date.now(),
     });
   }
-  for (let index = 0; index < catalog.length; index += 1) {
-    const environment = catalog[index];
-    const isCurrent = currentExternalURL !== '' && environment.local_ui_url === currentExternalURL;
-    entries.push({
-      id: environment.id,
-      kind: 'external_local_ui',
-      label: environment.label,
-      local_ui_url: environment.local_ui_url,
-      secondary_text: environment.local_ui_url,
-      tag: isCurrent ? 'Current' : index < 3 ? 'Recent' : 'Saved',
-      is_current: isCurrent,
-      can_edit: true,
-      can_delete: true,
-      last_used_at_ms: environment.last_used_at_ms,
-    });
+  for (const environment of catalog) {
+    entries.push(buildSavedEnvironmentEntry(environment, currentExternalURL !== '' && environment.local_ui_url === currentExternalURL));
   }
 
   return entries;
+}
+
+function buildSavedEnvironmentEntry(
+  environment: DesktopSavedEnvironment,
+  isCurrent: boolean,
+): DesktopEnvironmentEntry {
+  return {
+    id: environment.id,
+    kind: 'external_local_ui',
+    label: environment.label,
+    local_ui_url: environment.local_ui_url,
+    secondary_text: environment.local_ui_url,
+    tag: isCurrent ? 'Current' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',
+    category: environment.source,
+    is_current: isCurrent,
+    can_edit: true,
+    can_delete: true,
+    can_save: environment.source === 'recent_auto',
+    last_used_at_ms: environment.last_used_at_ms,
+  };
 }
 
 function suggestedRemoteURL(

@@ -1,10 +1,13 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
 import {
+  AlertCircle,
+  Clock,
   Copy,
   Globe,
   Moon,
   Pencil,
+  Save,
   Search,
   Settings,
   Sun,
@@ -22,10 +25,11 @@ import {
   ConfirmDialog,
   Dialog,
   Input,
+  SegmentedControl,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
 
-import type { DesktopSettingsSurfaceSnapshot } from '../shared/desktopSettingsSurface';
+import type { DesktopAccessMode, DesktopSettingsSurfaceSnapshot } from '../shared/desktopSettingsSurface';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherActionRequest,
@@ -34,10 +38,13 @@ import type {
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopSettingsDraft, SaveDesktopSettingsResult } from '../shared/settingsIPC';
-import { redevenDividerRoleClass, redevenSurfaceRoleClass } from './redevenSurfaceRoles';
 import {
   buildDesktopWelcomeShellViewModel,
   capabilityUnavailableMessage,
+  environmentLibraryCount,
+  filterEnvironmentLibrary,
+  libraryFilterLabel,
+  type EnvironmentLibraryFilter,
   shellStatus,
 } from './viewModel';
 
@@ -75,6 +82,7 @@ type BusyAction =
   | 'return_to_current_device'
   | 'save_settings'
   | 'save_environment'
+  | 'save_quick_connect'
   | 'delete_environment';
 
 type SurfaceMode = 'root' | 'local';
@@ -119,6 +127,8 @@ const DESKTOP_FLOE_CONFIG = {
   },
 } as const;
 
+const LIBRARY_FILTERS: readonly EnvironmentLibraryFilter[] = ['all', 'current', 'recent', 'saved'];
+
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -158,6 +168,19 @@ function environmentTagVariant(tag: DesktopEnvironmentEntry['tag']): 'neutral' |
       return 'success';
     case 'Recent':
       return 'primary';
+    default:
+      return 'neutral';
+  }
+}
+
+function passwordStateTagVariant(
+  tone: DesktopSettingsSurfaceSnapshot['password_state_tone'],
+): 'neutral' | 'warning' | 'success' {
+  switch (tone) {
+    case 'warning':
+      return 'warning';
+    case 'success':
+      return 'success';
     default:
       return 'neutral';
   }
@@ -217,7 +240,7 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.connectEnvironment',
         title: 'Connect Environment',
-        description: 'Show the Environment connection page',
+        description: 'Show the desktop connection center',
         category: 'Desktop',
         keybind: 'mod+shift+o',
         icon: Globe,
@@ -235,8 +258,8 @@ function DesktopCommandRegistrar(props: Readonly<{
         },
       },
       {
-        id: 'redeven.desktop.openThisDeviceSettings',
-        title: 'This Device Settings',
+        id: 'redeven.desktop.openThisDeviceOptions',
+        title: 'This Device Options',
         description: 'Edit local startup, access, and bootstrap settings',
         category: 'Desktop',
         keybind: 'mod+,',
@@ -249,7 +272,7 @@ function DesktopCommandRegistrar(props: Readonly<{
         description: 'Focus the Environment URL input',
         category: 'Desktop',
         icon: Search,
-        execute: () => props.showConnectEnvironment('Enter an Environment URL or choose a recent Environment.', true),
+        execute: () => props.showConnectEnvironment('Enter an Environment URL or choose a saved connection.', true),
       },
       {
         id: 'redeven.desktop.returnOrQuit',
@@ -320,6 +343,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [surfaceMode, setSurfaceMode] = createSignal<SurfaceMode>(props.snapshot.surface === 'this_device_settings' ? 'root' : 'local');
   const [localSurface, setLocalSurface] = createSignal<DesktopLauncherSurface>(props.snapshot.surface === 'this_device_settings' ? 'this_device_settings' : 'connect_environment');
   const [remoteURL, setRemoteURL] = createSignal(props.snapshot.suggested_remote_url);
+  const [quickConnectLabel, setQuickConnectLabel] = createSignal('');
   const [feedback, setFeedback] = createSignal('');
   const [connectError, setConnectError] = createSignal('');
   const [settingsError, setSettingsError] = createSignal('');
@@ -330,6 +354,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [editorURL, setEditorURL] = createSignal('');
   const [editorError, setEditorError] = createSignal('');
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [libraryFilter, setLibraryFilter] = createSignal<EnvironmentLibraryFilter>('all');
+  const [libraryQuery, setLibraryQuery] = createSignal('');
   let issueRef: HTMLElement | undefined;
   let settingsErrorRef: HTMLElement | undefined;
   let remoteInputRef: HTMLInputElement | undefined;
@@ -353,6 +379,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       onClick: () => showConnectEnvironment(),
     },
   ]));
+  const libraryEntries = createMemo(() => filterEnvironmentLibrary(snapshot(), libraryFilter(), libraryQuery()));
 
   createEffect(() => {
     setDraft(snapshot().settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
@@ -366,8 +393,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
 
   createEffect(() => {
-    const error = settingsError();
-    if (!error) {
+    if (!settingsError()) {
       return;
     }
     queueMicrotask(() => settingsErrorRef?.focus());
@@ -436,6 +462,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setConnectError('Environment URL is required.');
       return;
     }
+    setRemoteURL(normalizedTargetURL);
     await performNavigationAction({
       kind: 'open_remote_device',
       external_local_ui_url: normalizedTargetURL,
@@ -450,6 +477,34 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setDraft((current) => ({
       ...current,
       [name]: value,
+    }));
+  }
+
+  function applyAccessMode(mode: DesktopAccessMode): void {
+    setDraft((current) => {
+      if (mode === 'private_device') {
+        return {
+          ...current,
+          local_ui_bind: '127.0.0.1:0',
+          local_ui_password: '',
+        };
+      }
+      if (mode === 'shared_local_network') {
+        return {
+          ...current,
+          local_ui_bind: '0.0.0.0:24000',
+        };
+      }
+      return current;
+    });
+  }
+
+  function clearBootstrapDraft(): void {
+    setDraft((current) => ({
+      ...current,
+      controlplane_url: '',
+      env_id: '',
+      env_token: '',
     }));
   }
 
@@ -469,7 +524,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       await refreshSnapshot();
       setSurfaceMode('local');
       setLocalSurface('connect_environment');
-      setFeedback('This Device settings saved.');
+      setFeedback('This Device options saved.');
     } catch (error) {
       setSettingsError(getErrorMessage(error));
     } finally {
@@ -498,29 +553,88 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setEditorError('');
   }
 
+  async function upsertSavedEnvironment(
+    request: Readonly<{
+      environment_id: string;
+      label: string;
+      external_local_ui_url: string;
+      busy: Extract<BusyAction, 'save_environment' | 'save_quick_connect'>;
+      successMessage: string;
+    }>,
+  ): Promise<boolean> {
+    const normalizedTargetURL = trimString(request.external_local_ui_url);
+    if (!normalizedTargetURL) {
+      setConnectError('Environment URL is required.');
+      return false;
+    }
+
+    setConnectError('');
+    setEditorError('');
+    setBusyAction(request.busy);
+    try {
+      await props.runtime.launcher.performAction({
+        kind: 'upsert_saved_environment',
+        environment_id: trimString(request.environment_id),
+        label: trimString(request.label),
+        external_local_ui_url: normalizedTargetURL,
+      });
+      await refreshSnapshot();
+      setFeedback(request.successMessage);
+      return true;
+    } catch (error) {
+      const message = getErrorMessage(error);
+      if (request.busy === 'save_environment') {
+        setEditorError(message);
+      } else {
+        setConnectError(message);
+      }
+      return false;
+    } finally {
+      setBusyAction('');
+    }
+  }
+
+  async function saveQuickConnect(): Promise<void> {
+    const saved = await upsertSavedEnvironment({
+      environment_id: '',
+      label: quickConnectLabel(),
+      external_local_ui_url: remoteURL(),
+      busy: 'save_quick_connect',
+      successMessage: 'Connection saved to Environment Library.',
+    });
+    if (saved) {
+      setQuickConnectLabel('');
+    }
+  }
+
+  async function saveEnvironmentFromLibrary(environment: DesktopEnvironmentEntry): Promise<void> {
+    await upsertSavedEnvironment({
+      environment_id: environment.id,
+      label: environment.label,
+      external_local_ui_url: environment.local_ui_url,
+      busy: 'save_environment',
+      successMessage: environment.category === 'saved'
+        ? 'Connection updated.'
+        : 'Connection saved to Environment Library.',
+    });
+  }
+
   async function saveEnvironment(): Promise<void> {
     const state = editorState();
     if (!state) {
       return;
     }
-    setEditorError('');
-    setBusyAction('save_environment');
-    try {
-      await props.runtime.launcher.performAction({
-        kind: 'upsert_saved_environment',
-        environment_id: state.environment_id,
-        label: trimString(editorLabel()),
-        external_local_ui_url: trimString(editorURL()),
-      });
-      await refreshSnapshot();
+    const saved = await upsertSavedEnvironment({
+      environment_id: state.environment_id,
+      label: editorLabel(),
+      external_local_ui_url: editorURL(),
+      busy: 'save_environment',
+      successMessage: 'Connection saved to Environment Library.',
+    });
+    if (saved) {
       setEditorState(null);
       setEditorLabel('');
       setEditorURL('');
-      setFeedback('Environment updated.');
-    } catch (error) {
-      setEditorError(getErrorMessage(error));
-    } finally {
-      setBusyAction('');
     }
   }
 
@@ -537,7 +651,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
       await refreshSnapshot();
       setDeleteTarget(null);
-      setFeedback('Environment removed.');
+      setFeedback('Connection removed from Environment Library.');
     } catch (error) {
       setConnectError(getErrorMessage(error));
     } finally {
@@ -608,11 +722,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           fallback={(
             <ConnectEnvironmentSurface
               snapshot={snapshot()}
+              settingsSurface={settingsSurface()}
               feedback={feedback()}
               error={connectError()}
               busyAction={busyAction()}
               remoteURL={remoteURL()}
+              quickConnectLabel={quickConnectLabel()}
+              libraryFilter={libraryFilter()}
+              libraryQuery={libraryQuery()}
+              libraryEntries={libraryEntries()}
               setRemoteURL={setRemoteURL}
+              setQuickConnectLabel={setQuickConnectLabel}
+              setLibraryFilter={setLibraryFilter}
+              setLibraryQuery={setLibraryQuery}
               remoteInputRef={(value) => {
                 remoteInputRef = value;
               }}
@@ -622,8 +744,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               openThisDevice={openThisDevice}
               openSettingsSurface={openSettingsSurface}
               openRemoteDevice={openRemoteDevice}
+              saveQuickConnect={saveQuickConnect}
+              saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
               editEnvironment={startEditingEnvironment}
               deleteEnvironment={setDeleteTarget}
+              returnOrQuit={returnOrQuit}
               copyDiagnostics={async () => {
                 await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
                 setFeedback('Diagnostics copied to the clipboard.');
@@ -640,6 +765,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               settingsErrorRef = value;
             }}
             updateDraftField={updateDraftField}
+            applyAccessMode={applyAccessMode}
+            clearBootstrapDraft={clearBootstrapDraft}
             saveSettings={saveSettings}
             cancelSettings={cancelSettings}
           />
@@ -654,13 +781,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setEditorError('');
           }
         }}
-        title="Edit Environment"
+        title="Edit Connection"
         footer={(
           <div class="flex justify-end gap-2">
             <Button
               size="sm"
               variant="outline"
-              class={redevenSurfaceRoleClass('control')}
               disabled={busyAction() === 'save_environment'}
               onClick={() => {
                 setEditorState(null);
@@ -677,7 +803,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 void saveEnvironment();
               }}
             >
-              Save Environment
+              Save Connection
             </Button>
           </div>
         )}
@@ -721,17 +847,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteTarget(null);
           }
         }}
-        title="Delete Environment"
-        confirmText="Delete Environment"
+        title="Delete Connection"
+        confirmText="Delete Connection"
         variant="destructive"
         loading={busyAction() === 'delete_environment'}
         onConfirm={() => void deleteEnvironment()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Remove <span class="font-semibold">{deleteTarget()?.label}</span> from saved Environments?
+            Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
           </p>
-          <p class="text-xs text-muted-foreground">This only removes the saved entry from Desktop. It does not stop the Environment.</p>
+          <p class="text-xs text-muted-foreground">This only removes the saved Desktop entry. It does not stop the remote Environment.</p>
         </div>
       </ConfirmDialog>
     </>
@@ -740,80 +866,48 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
 function ConnectEnvironmentSurface(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
+  settingsSurface: DesktopSettingsSurfaceSnapshot;
   feedback: string;
   error: string;
   busyAction: BusyAction;
   remoteURL: string;
+  quickConnectLabel: string;
+  libraryFilter: EnvironmentLibraryFilter;
+  libraryQuery: string;
+  libraryEntries: readonly DesktopEnvironmentEntry[];
   setRemoteURL: (value: string) => void;
+  setQuickConnectLabel: (value: string) => void;
+  setLibraryFilter: (value: EnvironmentLibraryFilter) => void;
+  setLibraryQuery: (value: string) => void;
   remoteInputRef: (value: HTMLInputElement) => void;
   issueRef: (value: HTMLElement) => void;
   openThisDevice: () => Promise<void>;
   openSettingsSurface: () => void;
   openRemoteDevice: (targetURL: string) => Promise<void>;
+  saveQuickConnect: () => Promise<void>;
+  saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  returnOrQuit: () => Promise<void>;
   copyDiagnostics: () => Promise<void>;
 }>) {
+  const thisDeviceIssue = createMemo(() => (
+    props.snapshot.issue?.scope === 'this_device' ? props.snapshot.issue : null
+  ));
+  const remoteIssue = createMemo(() => (
+    props.snapshot.issue?.scope === 'remote_device' ? props.snapshot.issue : null
+  ));
+  const libraryFilterOptions = createMemo(() => (
+    LIBRARY_FILTERS.map((filter) => ({
+      value: filter,
+      label: `${libraryFilterLabel(filter)} (${environmentLibraryCount(props.snapshot, filter)})`,
+    }))
+  ));
+
   return (
     <div class="h-full min-h-0 overflow-auto bg-background">
-      <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <Card class={cn('overflow-hidden shadow-sm', redevenSurfaceRoleClass('panelStrong'))}>
-          <CardHeader class={cn('gap-3 border-b px-4 py-4 sm:px-5', redevenDividerRoleClass('strong'))}>
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div class="min-w-0">
-                <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Welcome</div>
-                <CardTitle class="mt-1 text-xl tracking-tight sm:text-2xl">{buildDesktopWelcomeShellViewModel(props.snapshot).connect_heading}</CardTitle>
-                <CardDescription class="mt-2 max-w-3xl text-sm leading-6">
-                  Choose a saved Environment or enter a Local UI URL to open another Environment in this Desktop shell.
-                </CardDescription>
-              </div>
-              <Show when={props.snapshot.current_session_target_kind}>
-                <Tag variant="success" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                  Current session available
-                </Tag>
-              </Show>
-            </div>
-          </CardHeader>
-          <CardContent class="space-y-3 px-4 py-4 sm:px-5">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <Input
-                ref={props.remoteInputRef}
-                value={props.remoteURL}
-                onInput={(event) => props.setRemoteURL(event.currentTarget.value)}
-                placeholder="http://192.168.1.11:24000/"
-                size="sm"
-                class="w-full font-mono"
-                spellcheck={false}
-              />
-              <div class="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="default"
-                  loading={props.busyAction === 'open_remote_device'}
-                  onClick={() => {
-                    void props.openRemoteDevice(props.remoteURL);
-                  }}
-                >
-                  Connect
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class={redevenSurfaceRoleClass('control')}
-                  loading={props.busyAction === 'open_this_device'}
-                  onClick={() => {
-                    void props.openThisDevice();
-                  }}
-                >
-                  Open This Device
-                </Button>
-              </div>
-            </div>
-            <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{props.snapshot.current_session_description}</span>
-            </div>
-          </CardContent>
-        </Card>
+      <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <CurrentSessionStrip snapshot={props.snapshot} returnOrQuit={props.returnOrQuit} />
 
         <Show when={props.feedback}>
           <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
@@ -827,183 +921,477 @@ function ConnectEnvironmentSurface(props: Readonly<{
           </div>
         </Show>
 
-        <Show when={props.snapshot.issue}>
-          {(issue) => (
-            <div
-              ref={props.issueRef}
-              tabindex="-1"
-              class="outline-none"
+        <div class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.85fr)]">
+          <div class="space-y-4">
+            <ThisDeviceLauncherCard
+              snapshot={props.snapshot}
+              settingsSurface={props.settingsSurface}
+              busyAction={props.busyAction}
+              openThisDevice={props.openThisDevice}
+              openSettingsSurface={props.openSettingsSurface}
+            />
+
+            <Show when={thisDeviceIssue()}>
+              {(issue) => (
+                <IssueCard
+                  issue={issue()}
+                  issueRef={props.issueRef}
+                  primaryAction={(
+                    <Button size="sm" variant="default" onClick={() => { void props.openThisDevice(); }}>
+                      Open This Device
+                    </Button>
+                  )}
+                  secondaryAction={(
+                    <Button size="sm" variant="outline" onClick={props.openSettingsSurface}>
+                      This Device Options
+                    </Button>
+                  )}
+                  tertiaryAction={(
+                    <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
+                      <Copy class="mr-1 h-3.5 w-3.5" />
+                      Copy Diagnostics
+                    </Button>
+                  )}
+                />
+              )}
+            </Show>
+
+            <QuickConnectCard
+              remoteURL={props.remoteURL}
+              quickConnectLabel={props.quickConnectLabel}
+              busyAction={props.busyAction}
+              remoteInputRef={props.remoteInputRef}
+              setRemoteURL={props.setRemoteURL}
+              setQuickConnectLabel={props.setQuickConnectLabel}
+              openRemoteDevice={props.openRemoteDevice}
+              saveQuickConnect={props.saveQuickConnect}
+            />
+
+            <Show when={remoteIssue()}>
+              {(issue) => (
+                <IssueCard
+                  issue={issue()}
+                  issueRef={props.issueRef}
+                  primaryAction={(
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => {
+                        void props.openRemoteDevice(issue().target_url);
+                      }}
+                    >
+                      Retry
+                    </Button>
+                  )}
+                  tertiaryAction={(
+                    <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
+                      <Copy class="mr-1 h-3.5 w-3.5" />
+                      Copy Diagnostics
+                    </Button>
+                  )}
+                />
+              )}
+            </Show>
+          </div>
+
+          <EnvironmentLibraryPanel
+            snapshot={props.snapshot}
+            filter={props.libraryFilter}
+            query={props.libraryQuery}
+            entries={props.libraryEntries}
+            filterOptions={libraryFilterOptions()}
+            busyAction={props.busyAction}
+            setFilter={props.setLibraryFilter}
+            setQuery={props.setLibraryQuery}
+            openRemoteDevice={props.openRemoteDevice}
+            saveEnvironment={props.saveEnvironmentFromLibrary}
+            editEnvironment={props.editEnvironment}
+            deleteEnvironment={props.deleteEnvironment}
+          />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function CurrentSessionStrip(props: Readonly<{
+  snapshot: DesktopWelcomeSnapshot;
+  returnOrQuit: () => Promise<void>;
+}>) {
+  return (
+    <Card class="overflow-hidden border-border/80 bg-card/75 shadow-sm">
+      <CardContent class="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div class="min-w-0">
+          <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Current Session</div>
+          <div class="mt-1 text-sm font-medium text-foreground">{props.snapshot.current_session_label}</div>
+          <div class="mt-1 truncate text-xs text-muted-foreground">{props.snapshot.current_session_description}</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <Show when={props.snapshot.current_session_target_kind}>
+            <Tag variant="success" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              Session available
+            </Tag>
+          </Show>
+          <Button size="sm" variant="outline" onClick={() => { void props.returnOrQuit(); }}>
+            {props.snapshot.close_action_label}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ThisDeviceLauncherCard(props: Readonly<{
+  snapshot: DesktopWelcomeSnapshot;
+  settingsSurface: DesktopSettingsSurfaceSnapshot;
+  busyAction: BusyAction;
+  openThisDevice: () => Promise<void>;
+  openSettingsSurface: () => void;
+}>) {
+  const isCurrent = createMemo(() => props.snapshot.current_session_target_kind === 'managed_local');
+
+  return (
+    <Card class="overflow-hidden shadow-sm">
+      <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div class="min-w-0">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Primary target</div>
+            <CardTitle class="mt-1 text-xl tracking-tight">This Device</CardTitle>
+            <CardDescription class="mt-2 max-w-3xl text-sm leading-6">
+              Open the desktop-managed Redeven runtime on this machine with your preferred local access settings.
+            </CardDescription>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Tag variant={isCurrent() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {props.settingsSurface.access_mode_label}
+            </Tag>
+            <Tag
+              variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
+              tone="soft"
+              size="sm"
+              class="cursor-default whitespace-nowrap"
             >
-              <Card class={cn('overflow-hidden border-destructive/25 shadow-sm', redevenSurfaceRoleClass('panel'))}>
-                <CardHeader class="gap-2 pb-3">
-                  <div class="text-[11px] font-semibold uppercase tracking-widest text-destructive">{issueKicker(issue())}</div>
-                  <CardTitle class="text-lg">{issue().title}</CardTitle>
-                  <CardDescription class="text-sm leading-6">{issue().message}</CardDescription>
-                </CardHeader>
-                <Show when={issue().diagnostics_copy}>
-                  <CardContent class="space-y-3 pt-0">
-                    <pre class="overflow-auto rounded-lg border border-border/70 bg-background px-3 py-3 text-xs leading-6 text-muted-foreground">
-                      {issue().diagnostics_copy}
-                    </pre>
-                    <div class="flex flex-wrap gap-2">
-                      <Show when={issue().scope === 'this_device'}>
-                        <Button size="sm" variant="default" onClick={() => { void props.openThisDevice(); }}>
-                          Open This Device
-                        </Button>
-                        <Button size="sm" variant="outline" class={redevenSurfaceRoleClass('control')} onClick={props.openSettingsSurface}>
-                          This Device Settings
-                        </Button>
-                      </Show>
-                      <Show when={issue().scope === 'remote_device' && issue().target_url}>
-                        <Button size="sm" variant="default" onClick={() => { void props.openRemoteDevice(issue().target_url); }}>
-                          Retry
-                        </Button>
-                      </Show>
-                      <Button size="sm" variant="outline" class={redevenSurfaceRoleClass('control')} onClick={() => { void props.copyDiagnostics(); }}>
-                        <Copy class="mr-1 h-3.5 w-3.5" />
-                        Copy Diagnostics
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Show>
-              </Card>
+              {props.settingsSurface.password_state_label}
+            </Tag>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-4 px-4 py-4 sm:px-5">
+        <div class="grid gap-3 text-sm md:grid-cols-3">
+          <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Access mode</div>
+            <div class="mt-1 font-medium text-foreground">{props.settingsSurface.access_mode_label}</div>
+            <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.settingsSurface.access_mode_description}</div>
+          </div>
+          <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Bind address</div>
+            <div class="mt-1 break-all font-mono text-xs text-foreground">{props.settingsSurface.access_bind_display}</div>
+            <div class="mt-1 text-xs leading-5 text-muted-foreground">Applies the next time you open This Device from Desktop.</div>
+          </div>
+          <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Next start</div>
+            <div class="mt-1 font-medium text-foreground">{props.settingsSurface.bootstrap_status_label}</div>
+            <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.settingsSurface.bootstrap_status_detail}</div>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="default"
+            loading={props.busyAction === 'open_this_device'}
+            onClick={() => {
+              void props.openThisDevice();
+            }}
+          >
+            {isCurrent() ? 'Return to This Device' : 'Open This Device'}
+          </Button>
+          <Button size="sm" variant="outline" onClick={props.openSettingsSurface}>
+            <Settings class="mr-1 h-3.5 w-3.5" />
+            This Device Options
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickConnectCard(props: Readonly<{
+  remoteURL: string;
+  quickConnectLabel: string;
+  busyAction: BusyAction;
+  remoteInputRef: (value: HTMLInputElement) => void;
+  setRemoteURL: (value: string) => void;
+  setQuickConnectLabel: (value: string) => void;
+  openRemoteDevice: (targetURL: string) => Promise<void>;
+  saveQuickConnect: () => Promise<void>;
+}>) {
+  return (
+    <Card class="overflow-hidden shadow-sm">
+      <CardHeader class="gap-2 border-b border-border/70 px-4 py-4 sm:px-5">
+        <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Quick connect</div>
+        <CardTitle class="text-lg">Connect another Environment</CardTitle>
+        <CardDescription class="text-sm leading-6">
+          Enter a Redeven Local UI URL to open it now, or save it into the Environment Library for future sessions.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4 px-4 py-4 sm:px-5">
+        <div class="grid gap-3 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <label class="grid gap-1.5">
+            <span class="text-xs font-medium text-foreground">Label (optional)</span>
+            <Input
+              value={props.quickConnectLabel}
+              onInput={(event) => props.setQuickConnectLabel(event.currentTarget.value)}
+              placeholder="Staging laptop"
+              size="sm"
+              class="w-full"
+            />
+          </label>
+          <label class="grid gap-1.5">
+            <span class="text-xs font-medium text-foreground">Environment URL</span>
+            <Input
+              ref={props.remoteInputRef}
+              value={props.remoteURL}
+              onInput={(event) => props.setRemoteURL(event.currentTarget.value)}
+              placeholder="http://192.168.1.11:24000/"
+              size="sm"
+              class="w-full font-mono"
+              spellcheck={false}
+            />
+          </label>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="default"
+            loading={props.busyAction === 'open_remote_device'}
+            onClick={() => {
+              void props.openRemoteDevice(props.remoteURL);
+            }}
+          >
+            Connect
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={props.busyAction === 'save_quick_connect'}
+            onClick={() => {
+              void props.saveQuickConnect();
+            }}
+          >
+            <Save class="mr-1 h-3.5 w-3.5" />
+            Save Connection
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function IssueCard(props: Readonly<{
+  issue: DesktopWelcomeIssue;
+  issueRef: (value: HTMLElement) => void;
+  primaryAction?: JSX.Element;
+  secondaryAction?: JSX.Element;
+  tertiaryAction?: JSX.Element;
+}>) {
+  return (
+    <div ref={props.issueRef} tabIndex={-1} class="outline-none">
+      <Card class="overflow-hidden border-destructive/25 shadow-sm">
+        <CardHeader class="gap-2 border-b border-destructive/20 bg-destructive/5">
+          <div class="flex items-center gap-2 text-destructive">
+            <AlertCircle class="h-4 w-4" />
+            <div class="text-[11px] font-semibold uppercase tracking-widest">{issueKicker(props.issue)}</div>
+          </div>
+          <CardTitle class="text-lg">{props.issue.title}</CardTitle>
+          <CardDescription class="text-sm leading-6">{props.issue.message}</CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-3 px-4 py-4">
+          <Show when={props.issue.diagnostics_copy}>
+            <pre class="overflow-auto rounded-lg border border-border/70 bg-background px-3 py-3 text-xs leading-6 text-muted-foreground">
+              {props.issue.diagnostics_copy}
+            </pre>
+          </Show>
+          <div class="flex flex-wrap gap-2">
+            {props.primaryAction}
+            {props.secondaryAction}
+            {props.tertiaryAction}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function EnvironmentLibraryPanel(props: Readonly<{
+  snapshot: DesktopWelcomeSnapshot;
+  filter: EnvironmentLibraryFilter;
+  query: string;
+  entries: readonly DesktopEnvironmentEntry[];
+  filterOptions: readonly Readonly<{ value: string; label: string }>[];
+  busyAction: BusyAction;
+  setFilter: (value: EnvironmentLibraryFilter) => void;
+  setQuery: (value: string) => void;
+  openRemoteDevice: (targetURL: string) => Promise<void>;
+  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
+  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+}>) {
+  return (
+    <Card class="overflow-hidden shadow-sm">
+      <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div class="min-w-0">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Connection management</div>
+            <CardTitle class="mt-1 text-lg">Environment Library</CardTitle>
+            <CardDescription class="mt-2 text-sm leading-6">
+              Browse current, recent, and saved remote Environments without leaving the Desktop shell.
+            </CardDescription>
+          </div>
+          <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+            {environmentLibraryCount(props.snapshot, 'all')} remote connections
+          </Tag>
+        </div>
+        <div class="grid gap-3 pt-1">
+          <Input
+            value={props.query}
+            onInput={(event) => props.setQuery(event.currentTarget.value)}
+            placeholder="Search label or Environment URL"
+            size="sm"
+            class="w-full"
+          />
+          <SegmentedControl
+            value={props.filter}
+            onChange={(value) => props.setFilter(value as EnvironmentLibraryFilter)}
+            options={props.filterOptions.map((option) => ({
+              value: option.value,
+              label: option.label,
+            }))}
+            size="sm"
+          />
+        </div>
+      </CardHeader>
+      <CardContent class="px-0 py-0">
+        <Show
+          when={props.entries.length > 0}
+          fallback={(
+            <div class="px-4 py-10 text-center sm:px-5">
+              <div class="text-sm font-medium text-foreground">No connections match this view.</div>
+              <div class="mt-1 text-xs leading-5 text-muted-foreground">Try another filter or save a new Environment from Quick Connect.</div>
             </div>
           )}
-        </Show>
-
-        <section class="space-y-3">
-          <div class="flex items-center gap-3 px-1">
-            <h2 class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Recommended</h2>
-            <div class="h-px flex-1 bg-border/60" />
-          </div>
-          <div class="grid gap-3">
-            <For each={props.snapshot.environments}>
+        >
+          <div class="divide-y divide-border/70">
+            <For each={props.entries}>
               {(environment) => (
-                <EnvironmentCard
+                <EnvironmentLibraryRow
                   environment={environment}
                   busyAction={props.busyAction}
-                  openThisDevice={props.openThisDevice}
-                  openSettingsSurface={props.openSettingsSurface}
                   openRemoteDevice={props.openRemoteDevice}
+                  saveEnvironment={props.saveEnvironment}
                   editEnvironment={props.editEnvironment}
                   deleteEnvironment={props.deleteEnvironment}
                 />
               )}
             </For>
           </div>
-        </section>
-      </main>
-    </div>
+        </Show>
+      </CardContent>
+    </Card>
   );
 }
 
-function EnvironmentCard(props: Readonly<{
+function EnvironmentLibraryRow(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
-  openThisDevice: () => Promise<void>;
-  openSettingsSurface: () => void;
   openRemoteDevice: (targetURL: string) => Promise<void>;
+  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
-  const targetLabel = createMemo(() => (
-    props.environment.kind === 'this_device'
-      ? props.environment.local_ui_url || props.environment.secondary_text
-      : props.environment.local_ui_url
-  ));
-  const isExternal = createMemo(() => props.environment.kind === 'external_local_ui');
+  const openLabel = createMemo(() => props.environment.is_current ? 'Return' : 'Open');
+  const metaLabel = createMemo(() => {
+    if (props.environment.category === 'current_unsaved') {
+      return 'Current connection, not yet saved to Desktop';
+    }
+    if (props.environment.category === 'recent_auto') {
+      return 'Auto-remembered recent connection';
+    }
+    return 'Saved connection';
+  });
 
   return (
-    <Card
-      class={cn(
-        'overflow-hidden shadow-sm transition-colors',
-        props.environment.is_current ? redevenSurfaceRoleClass('panelStrong') : redevenSurfaceRoleClass('panelInteractive'),
-      )}
-    >
-      <CardHeader class="gap-3 pb-3">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <CardTitle class="text-sm truncate">{props.environment.label}</CardTitle>
-              <Show when={props.environment.tag}>
-                <Tag
-                  variant={environmentTagVariant(props.environment.tag)}
-                  tone="soft"
-                  size="sm"
-                  class="cursor-default whitespace-nowrap"
-                >
-                  {props.environment.tag}
-                </Tag>
-              </Show>
-            </div>
-            <CardDescription class="mt-1 break-all text-xs leading-5">{props.environment.secondary_text}</CardDescription>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="default"
-              loading={props.environment.kind === 'this_device' && props.busyAction === 'open_this_device'}
-              onClick={() => {
-                if (props.environment.kind === 'this_device') {
-                  void props.openThisDevice();
-                  return;
-                }
-                void props.openRemoteDevice(props.environment.local_ui_url);
-              }}
-            >
-              {props.environment.kind === 'this_device' ? 'Open This Device' : 'Open'}
-            </Button>
-            <Show when={props.environment.kind === 'this_device'}>
-              <Button
-                size="sm"
-                variant="outline"
-                class={redevenSurfaceRoleClass('control')}
-                onClick={props.openSettingsSurface}
-              >
-                <Settings class="mr-1 h-3.5 w-3.5" />
-                This Device Settings
-              </Button>
-            </Show>
-            <Show when={isExternal() && props.environment.can_edit}>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="text-muted-foreground"
-                onClick={() => props.editEnvironment(props.environment)}
-                aria-label={`Edit ${props.environment.label}`}
-                title="Edit Environment"
-              >
-                <Pencil class="h-3.5 w-3.5" />
-              </Button>
-            </Show>
-            <Show when={isExternal() && props.environment.can_delete}>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="text-muted-foreground hover:text-destructive"
-                onClick={() => props.deleteEnvironment(props.environment)}
-                aria-label={`Delete ${props.environment.label}`}
-                title="Delete Environment"
-              >
-                <Trash class="h-3.5 w-3.5" />
-              </Button>
-            </Show>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent class="pt-0">
-        <div class="grid gap-y-1 text-[11px] sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-x-3">
-          <div class="text-muted-foreground">Target</div>
-          <div class="min-w-0 truncate font-mono text-foreground" title={targetLabel()}>
-            {targetLabel()}
-          </div>
-          <Show when={props.environment.last_used_at_ms > 0 && isExternal()}>
-            <div class="text-muted-foreground">Last used</div>
-            <div class="text-foreground">{formatTimestamp(props.environment.last_used_at_ms)}</div>
+    <div class="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5">
+      <div class="min-w-0">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="truncate text-sm font-medium text-foreground">{props.environment.label}</div>
+          <Show when={props.environment.tag}>
+            <Tag variant={environmentTagVariant(props.environment.tag)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {props.environment.tag}
+            </Tag>
           </Show>
         </div>
-      </CardContent>
-    </Card>
+        <div class="mt-1 break-all font-mono text-xs text-muted-foreground">{props.environment.local_ui_url}</div>
+        <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <span>{metaLabel()}</span>
+          <Show when={props.environment.last_used_at_ms > 0}>
+            <span class="inline-flex items-center gap-1">
+              <Clock class="h-3.5 w-3.5" />
+              Last used {formatTimestamp(props.environment.last_used_at_ms)}
+            </span>
+          </Show>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+        <Button
+          size="sm"
+          variant="default"
+          loading={props.busyAction === 'open_remote_device'}
+          onClick={() => {
+            void props.openRemoteDevice(props.environment.local_ui_url);
+          }}
+        >
+          {openLabel()}
+        </Button>
+        <Show when={props.environment.can_save}>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={props.busyAction === 'save_environment'}
+            onClick={() => {
+              void props.saveEnvironment(props.environment);
+            }}
+          >
+            <Save class="mr-1 h-3.5 w-3.5" />
+            Save
+          </Button>
+        </Show>
+        <Show when={props.environment.can_edit}>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="text-muted-foreground"
+            onClick={() => props.editEnvironment(props.environment)}
+            aria-label={`Edit ${props.environment.label}`}
+            title="Edit connection"
+          >
+            <Pencil class="h-3.5 w-3.5" />
+          </Button>
+        </Show>
+        <Show when={props.environment.can_delete}>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="text-muted-foreground hover:text-destructive"
+            onClick={() => props.deleteEnvironment(props.environment)}
+            aria-label={`Delete ${props.environment.label}`}
+            title="Delete connection"
+          >
+            <Trash class="h-3.5 w-3.5" />
+          </Button>
+        </Show>
+      </div>
+    </div>
   );
 }
 
@@ -1014,61 +1402,183 @@ function ThisDeviceSettingsSurface(props: Readonly<{
   settingsError: string;
   settingsErrorRef: (value: HTMLElement) => void;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
+  applyAccessMode: (mode: DesktopAccessMode) => void;
+  clearBootstrapDraft: () => void;
   saveSettings: () => Promise<void>;
   cancelSettings: () => void;
 }>) {
+  const accessModeCards = createMemo(() => props.snapshot.access_mode_options.map((option) => ({
+    ...option,
+    selected: option.value === props.snapshot.access_mode,
+  })));
+
   return (
     <div class="h-full min-h-0 overflow-auto bg-background">
-      <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <Card class={cn('overflow-hidden shadow-sm', redevenSurfaceRoleClass('panelStrong'))}>
-          <CardHeader class={cn('gap-3 border-b px-4 py-4 sm:px-5', redevenDividerRoleClass('strong'))}>
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 pb-28 sm:px-6 lg:px-8">
+        <Card class="overflow-hidden shadow-sm">
+          <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div class="min-w-0">
                 <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">This Device</div>
                 <CardTitle class="mt-1 text-xl tracking-tight sm:text-2xl">{props.snapshot.window_title}</CardTitle>
                 <CardDescription class="mt-2 max-w-3xl text-sm leading-6">{props.snapshot.lead}</CardDescription>
               </div>
               <div class="flex flex-wrap gap-2">
-                <Button
+                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                  {props.snapshot.access_mode_label}
+                </Tag>
+                <Tag
+                  variant={passwordStateTagVariant(props.snapshot.password_state_tone)}
+                  tone="soft"
                   size="sm"
-                  variant="outline"
-                  class={redevenSurfaceRoleClass('control')}
-                  onClick={props.cancelSettings}
+                  class="cursor-default whitespace-nowrap"
                 >
-                  Back
-                </Button>
-                <Button
+                  {props.snapshot.password_state_label}
+                </Tag>
+                <Tag
+                  variant={props.snapshot.bootstrap_pending ? 'primary' : 'neutral'}
+                  tone="soft"
                   size="sm"
-                  variant="default"
-                  loading={props.busyAction === 'save_settings'}
-                  onClick={() => {
-                    void props.saveSettings();
-                  }}
+                  class="cursor-default whitespace-nowrap"
                 >
-                  {props.snapshot.save_label}
-                </Button>
+                  {props.snapshot.bootstrap_status_label}
+                </Tag>
               </div>
             </div>
           </CardHeader>
-          <CardContent class="grid gap-3 px-4 py-4 sm:px-5 md:grid-cols-3">
-            <For each={props.snapshot.summary_items}>
-              {(item) => (
-                <Card class={cn('shadow-none', redevenSurfaceRoleClass('panel'))}>
-                  <CardHeader class="gap-1 pb-2">
-                    <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{item.label}</div>
-                    <CardTitle class="text-sm">{item.value}</CardTitle>
-                  </CardHeader>
-                  <CardContent class="pt-0 text-xs leading-5 text-muted-foreground">
-                    {item.body}
-                  </CardContent>
-                </Card>
-              )}
-            </For>
+        </Card>
+
+        <Card class="overflow-hidden shadow-sm">
+          <CardHeader class="gap-2 border-b border-border/70">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Access mode</div>
+            <CardTitle class="text-lg">{props.snapshot.access_mode_label}</CardTitle>
+            <CardDescription class="text-sm leading-6">{props.snapshot.access_mode_description}</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4 px-4 py-4 sm:px-5">
+            <SegmentedControl
+              value={props.snapshot.access_mode}
+              onChange={(value) => props.applyAccessMode(value as DesktopAccessMode)}
+              options={props.snapshot.access_mode_options.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+              size="sm"
+            />
+            <div class="grid gap-3 md:grid-cols-3">
+              <For each={accessModeCards()}>
+                {(option) => (
+                  <div class={cn(
+                    'rounded-lg border px-3 py-3 transition-colors',
+                    option.selected
+                      ? 'border-primary/25 bg-primary/5'
+                      : 'border-border/70 bg-background',
+                  )}>
+                    <div class="text-sm font-medium text-foreground">{option.label}</div>
+                    <div class="mt-1 text-xs leading-5 text-muted-foreground">{option.description}</div>
+                  </div>
+                )}
+              </For>
+            </div>
           </CardContent>
         </Card>
 
-        <Card class={cn('overflow-hidden shadow-sm', redevenSurfaceRoleClass('panel'))}>
-          <CardHeader class="gap-2 pb-3">
+        <Card class="overflow-hidden shadow-sm">
+          <CardHeader class="gap-2 border-b border-border/70">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Host settings</div>
+            <CardTitle class="text-lg">How Desktop opens This Device</CardTitle>
+            <CardDescription class="text-sm leading-6">
+              Desktop maps your selected access mode onto the same runtime contract every time you open This Device.
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4 px-4 py-4 sm:px-5">
+            <div class="grid gap-3 text-sm md:grid-cols-3">
+              <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+                <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Bind address</div>
+                <div class="mt-1 break-all font-mono text-xs text-foreground">{props.snapshot.access_bind_display}</div>
+              </div>
+              <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+                <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Password state</div>
+                <div class="mt-1 text-sm font-medium text-foreground">{props.snapshot.password_state_label}</div>
+              </div>
+              <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+                <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Applies on</div>
+                <div class="mt-1 text-sm font-medium text-foreground">Next open of This Device</div>
+                <div class="mt-1 text-xs leading-5 text-muted-foreground">Saving here never switches the current Environment.</div>
+              </div>
+            </div>
+
+            <Show when={props.snapshot.access_mode === 'custom_exposure'}>
+              <div class="grid gap-4 md:grid-cols-2">
+                <SettingsFieldInput
+                  field={props.snapshot.host_fields[0]!}
+                  value={props.draft.local_ui_bind}
+                  updateDraftField={props.updateDraftField}
+                />
+                <SettingsFieldInput
+                  field={props.snapshot.host_fields[1]!}
+                  value={props.draft.local_ui_password}
+                  updateDraftField={props.updateDraftField}
+                />
+              </div>
+            </Show>
+
+            <Show when={props.snapshot.access_mode === 'shared_local_network'}>
+              <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+                <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
+                  <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Preset bind</div>
+                  <div class="mt-1 break-all font-mono text-xs text-foreground">0.0.0.0:24000</div>
+                  <div class="mt-1 text-xs leading-5 text-muted-foreground">Desktop exposes Redeven on your local network. Set a password before the next open.</div>
+                </div>
+                <SettingsFieldInput
+                  field={props.snapshot.host_fields[1]!}
+                  value={props.draft.local_ui_password}
+                  updateDraftField={props.updateDraftField}
+                />
+              </div>
+            </Show>
+          </CardContent>
+        </Card>
+
+        <Card class="overflow-hidden shadow-sm">
+          <CardHeader class="gap-2 border-b border-border/70">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Next desktop-managed start</div>
+              <Tag
+                variant={props.snapshot.bootstrap_pending ? 'primary' : 'neutral'}
+                tone="soft"
+                size="sm"
+                class="cursor-default whitespace-nowrap"
+              >
+                {props.snapshot.bootstrap_status_label}
+              </Tag>
+            </div>
+            <CardTitle class="text-lg">One-shot bootstrap request</CardTitle>
+            <CardDescription class="text-sm leading-6">{props.snapshot.bootstrap_status_detail}</CardDescription>
+          </CardHeader>
+          <CardContent class="space-y-4 px-4 py-4 sm:px-5">
+            <div class="grid gap-4 md:grid-cols-2">
+              <For each={props.snapshot.bootstrap_fields}>
+                {(field) => (
+                  <SettingsFieldInput
+                    field={field}
+                    value={props.draft[field.name]}
+                    updateDraftField={props.updateDraftField}
+                  />
+                )}
+              </For>
+            </div>
+            <Show when={props.snapshot.bootstrap_pending}>
+              <div class="flex justify-end">
+                <Button size="sm" variant="outline" onClick={props.clearBootstrapDraft}>
+                  Clear queued request
+                </Button>
+              </div>
+            </Show>
+          </CardContent>
+        </Card>
+
+        <Card class="overflow-hidden border-primary/15 shadow-sm">
+          <CardHeader class="gap-2 bg-primary/5">
             <div class="text-[11px] font-semibold uppercase tracking-widest text-primary">{props.snapshot.alert.kicker}</div>
             <CardTitle class="text-lg">{props.snapshot.alert.title}</CardTitle>
             <CardDescription class="text-sm leading-6">{props.snapshot.alert.body}</CardDescription>
@@ -1078,7 +1588,7 @@ function ThisDeviceSettingsSurface(props: Readonly<{
         <Show when={props.settingsError}>
           <div
             ref={props.settingsErrorRef}
-            tabindex="-1"
+            tabIndex={-1}
             id="settings-error"
             role="alert"
             class="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none"
@@ -1086,76 +1596,55 @@ function ThisDeviceSettingsSurface(props: Readonly<{
             {props.settingsError}
           </div>
         </Show>
-
-        <For each={props.snapshot.sections}>
-          {(section) => (
-            <section class="space-y-3">
-              <div class="flex items-center gap-3 px-1">
-                <h2 class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{section.title}</h2>
-                <div class="h-px flex-1 bg-border/60" />
-              </div>
-              <div class="grid gap-3">
-                <For each={section.cards}>
-                  {(card) => (
-                    <Card class={cn('overflow-hidden shadow-sm', redevenSurfaceRoleClass('panelStrong'))}>
-                      <CardHeader class={cn('gap-2 border-b px-4 py-4 sm:px-5', redevenDividerRoleClass('strong'))}>
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                          <div class="min-w-0">
-                            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{card.kicker}</div>
-                            <div class="mt-1 flex flex-wrap items-center gap-2">
-                              <CardTitle class="text-lg">{card.title}</CardTitle>
-                              <Show when={card.badge}>
-                                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default">
-                                  {card.badge}
-                                </Tag>
-                              </Show>
-                            </div>
-                            <div class="mt-2 text-sm leading-6 text-muted-foreground" innerHTML={card.descriptionHTML} />
-                          </div>
-                          <Show when={card.stateNote}>
-                            {(stateNote) => (
-                              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-normal text-left">
-                                {stateNote().text}
-                              </Tag>
-                            )}
-                          </Show>
-                        </div>
-                      </CardHeader>
-                      <CardContent class="grid gap-4 px-4 py-4 sm:px-5 md:grid-cols-2">
-                        <For each={card.fields}>
-                          {(field) => (
-                            <label classList={{ hidden: field.hidden }} class="grid gap-1.5">
-                              <span class="text-xs font-medium text-foreground">{field.label}</span>
-                              <Input
-                                id={field.id}
-                                name={field.name}
-                                value={props.draft[field.name]}
-                                type={field.type ?? 'text'}
-                                autocomplete={field.autocomplete}
-                                inputMode={field.inputMode}
-                                placeholder={field.placeholder}
-                                spellcheck={false}
-                                aria-describedby={field.describedBy?.join(' ') || undefined}
-                                size="sm"
-                                class="w-full"
-                                onInput={(event) => props.updateDraftField(field.name, event.currentTarget.value)}
-                              />
-                              <Show when={field.helpHTML && field.helpId}>
-                                <div id={field.helpId!} class="text-xs leading-5 text-muted-foreground" innerHTML={field.helpHTML!} />
-                              </Show>
-                            </label>
-                          )}
-                        </For>
-                      </CardContent>
-                    </Card>
-                  )}
-                </For>
-              </div>
-            </section>
-          )}
-        </For>
       </main>
+
+      <div class="sticky bottom-0 z-10 border-t border-border/70 bg-background/92 backdrop-blur">
+        <div class="mx-auto flex w-full max-w-5xl items-center justify-end gap-2 px-4 py-3 sm:px-6 lg:px-8">
+          <Button size="sm" variant="outline" onClick={props.cancelSettings}>
+            Back
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            loading={props.busyAction === 'save_settings'}
+            onClick={() => {
+              void props.saveSettings();
+            }}
+          >
+            {props.snapshot.save_label}
+          </Button>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function SettingsFieldInput(props: Readonly<{
+  field: DesktopSettingsSurfaceSnapshot['host_fields'][number];
+  value: string;
+  updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
+}>) {
+  return (
+    <label classList={{ hidden: props.field.hidden }} class="grid gap-1.5">
+      <span class="text-xs font-medium text-foreground">{props.field.label}</span>
+      <Input
+        id={props.field.id}
+        name={props.field.name}
+        value={props.value}
+        type={props.field.type ?? 'text'}
+        autocomplete={props.field.autocomplete}
+        inputMode={props.field.inputMode}
+        placeholder={props.field.placeholder}
+        spellcheck={false}
+        aria-describedby={props.field.describedBy?.join(' ') || undefined}
+        size="sm"
+        class="w-full"
+        onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
+      />
+      <Show when={props.field.helpHTML && props.field.helpId}>
+        <div id={props.field.helpId!} class="text-xs leading-5 text-muted-foreground" innerHTML={props.field.helpHTML!} />
+      </Show>
+    </label>
   );
 }
 

@@ -18,12 +18,14 @@ describe('desktopWelcomeState', () => {
             id: 'http://192.168.1.12:24000/',
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
+            source: 'saved',
             last_used_at_ms: 200,
           },
           {
             id: 'http://192.168.1.11:24000/',
             label: 'Laptop',
             local_ui_url: 'http://192.168.1.11:24000/',
+            source: 'recent_auto',
             last_used_at_ms: 100,
           },
         ],
@@ -60,8 +62,10 @@ describe('desktopWelcomeState', () => {
         kind: 'this_device',
         label: 'This Device',
         tag: 'This Device',
+        category: 'this_device',
         can_edit: true,
         can_delete: false,
+        can_save: false,
       }),
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
@@ -69,9 +73,11 @@ describe('desktopWelcomeState', () => {
         label: 'Staging',
         local_ui_url: 'http://192.168.1.12:24000/',
         tag: 'Current',
+        category: 'saved',
         is_current: true,
         can_edit: true,
         can_delete: true,
+        can_save: false,
       }),
       expect.objectContaining({
         id: 'http://192.168.1.11:24000/',
@@ -79,9 +85,11 @@ describe('desktopWelcomeState', () => {
         label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
         tag: 'Recent',
+        category: 'recent_auto',
         is_current: false,
         can_edit: true,
         can_delete: true,
+        can_save: true,
       }),
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
@@ -114,8 +122,10 @@ describe('desktopWelcomeState', () => {
         id: 'http://192.168.1.77:24000/',
         kind: 'external_local_ui',
         tag: 'Current',
+        category: 'current_unsaved',
         can_edit: true,
         can_delete: false,
+        can_save: true,
       }),
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.77:24000/');
@@ -140,6 +150,8 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.surface).toBe('this_device_settings');
     expect(snapshot.settings_surface.window_title).toBe('This Device Options');
     expect(snapshot.settings_surface.save_label).toBe('Save This Device Options');
+    expect(snapshot.settings_surface.access_mode).toBe('private_device');
+    expect(snapshot.settings_surface.bootstrap_pending).toBe(true);
     expect(snapshot.settings_surface.draft).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',

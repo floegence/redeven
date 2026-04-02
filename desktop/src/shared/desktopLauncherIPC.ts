@@ -2,6 +2,7 @@ export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-g
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
 
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
+import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
 
 export type DesktopTargetKind = 'managed_local' | 'external_local_ui';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_device' | 'connect_failed' | 'blocked';
@@ -9,6 +10,7 @@ export type DesktopWelcomeIssueScope = 'this_device' | 'remote_device' | 'startu
 export type DesktopLauncherSurface = 'connect_environment' | 'this_device_settings';
 export type DesktopEnvironmentEntryKind = 'this_device' | 'external_local_ui';
 export type DesktopEnvironmentEntryTag = 'Current' | 'Recent' | 'Saved' | 'This Device' | '';
+export type DesktopEnvironmentEntryCategory = 'this_device' | 'current_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopWelcomeActionKind =
   | 'open_this_device'
   | 'open_remote_device'
@@ -32,9 +34,11 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_ui_url: string;
   secondary_text: string;
   tag: DesktopEnvironmentEntryTag;
+  category: DesktopEnvironmentEntryCategory;
   is_current: boolean;
   can_edit: boolean;
   can_delete: boolean;
+  can_save: boolean;
   last_used_at_ms: number;
 }>;
 
