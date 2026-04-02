@@ -26,8 +26,10 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    ChevronRight: Icon,
     Code: Icon,
     FileText: Icon,
+    Sparkles: Icon,
     Terminal: Icon,
   };
 });
@@ -283,6 +285,8 @@ describe('CodexTranscript', () => {
 
     expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
     expect(host.textContent).not.toContain('Reasoning note');
+    expect(host.querySelector('.codex-chat-reasoning-card')).toBeNull();
+    expect(host.querySelector('.codex-chat-reasoning-kicker')).toBeTruthy();
     expect(host.querySelector('.codex-chat-reasoning-markdown')).toBeTruthy();
 
     setItems([

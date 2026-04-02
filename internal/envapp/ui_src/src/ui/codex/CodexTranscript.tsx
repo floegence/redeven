@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { ChevronRight, Sparkles } from '@floegence/floe-webapp-core/icons';
 import { Tag } from '@floegence/floe-webapp-core/ui';
 
 import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
@@ -260,35 +261,11 @@ function workingPhaseLabel(label: string, flags: readonly string[]): string {
   }
 }
 
-function ThinkingGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M8 2.125 9.188 5.03l3.112.42-2.248 2.067.547 3.045L8 9.96l-2.599 1.601.547-3.045L3.7 5.45l3.112-.42L8 2.125Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
-function ChevronGlyph() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="m6 3.75 4 4.25-4 4.25"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
-  );
-}
-
 function ReasoningRow(props: { item: CodexTranscriptItem }) {
   const markdown = createMemo(() => reasoningMarkdown(props.item));
   const preview = createMemo(() => reasoningPreview(props.item));
   const isActive = createMemo(() => isWorkingStatus(props.item.status));
+  const bodyId = createMemo(() => `codex-reasoning-body-${props.item.id}`);
   const [expanded, setExpanded] = createSignal(false);
 
   createEffect<boolean | undefined>((wasActive) => {
@@ -313,37 +290,40 @@ function ReasoningRow(props: { item: CodexTranscriptItem }) {
         data-codex-reasoning-expanded={expanded() ? 'true' : 'false'}
         class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant"
       >
-        <div class="codex-chat-reasoning-card">
-          <button
-            type="button"
-            class="codex-chat-reasoning-toggle"
-            aria-expanded={expanded() ? 'true' : 'false'}
-            onClick={() => setExpanded((current) => !current)}
-          >
-            <span class="codex-chat-reasoning-kicker">
-              <ThinkingGlyph />
-            </span>
-            <span class="codex-chat-reasoning-preview">{preview()}</span>
-            <Show when={isActive()}>
-              <span class="codex-chat-reasoning-cursor">
-                <StreamingCursor />
+        <div class="codex-chat-reasoning-inline">
+          <span class="codex-chat-reasoning-kicker" aria-hidden="true">
+            <Sparkles />
+          </span>
+          <div class="codex-chat-reasoning-copy">
+            <button
+              type="button"
+              class="codex-chat-reasoning-toggle"
+              aria-expanded={expanded() ? 'true' : 'false'}
+              aria-controls={bodyId()}
+              onClick={() => setExpanded((current) => !current)}
+            >
+              <span class="codex-chat-reasoning-preview">{preview()}</span>
+              <Show when={isActive()}>
+                <span class="codex-chat-reasoning-cursor">
+                  <StreamingCursor />
+                </span>
+              </Show>
+              <span class="codex-chat-reasoning-chevron" aria-hidden="true">
+                <ChevronRight />
               </span>
-            </Show>
-            <span class="codex-chat-reasoning-chevron" aria-hidden="true">
-              <ChevronGlyph />
-            </span>
-          </button>
+            </button>
 
-          <Show when={expanded() && markdown()}>
-            <div class="codex-chat-reasoning-body">
-              <MarkdownBlock
-                content={markdown()}
-                streaming={isActive()}
-                class="codex-chat-markdown-block codex-chat-reasoning-markdown"
-                rendererVariant="codex"
-              />
-            </div>
-          </Show>
+            <Show when={expanded() && markdown()}>
+              <div id={bodyId()} class="codex-chat-reasoning-body">
+                <MarkdownBlock
+                  content={markdown()}
+                  streaming={isActive()}
+                  class="codex-chat-markdown-block codex-chat-reasoning-markdown"
+                  rendererVariant="codex"
+                />
+              </div>
+            </Show>
+          </div>
         </div>
       </div>
     </CodexMessageLane>
