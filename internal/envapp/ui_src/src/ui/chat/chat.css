@@ -478,15 +478,20 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-code-diff-stats { font-size: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: #e6edf3; }
 .chat-code-diff-stats span { color: inherit; }
 .chat-code-diff-actions { display: flex; align-items: center; gap: 0.5rem; }
+.chat-code-diff-toggle-btn { padding: 0.25rem 0.625rem; font-size: 0.6875rem; cursor: pointer; border: none; background: transparent; color: #8b949e; transition: all 150ms; }
+.chat-code-diff-toggle-btn:hover { background-color: #30363d; color: #e6edf3; }
+.chat-code-diff-toggle-btn-active { background-color: #30363d; color: #e6edf3; }
 .chat-code-diff-view-toggle { display: flex; border-radius: 0.375rem; overflow: hidden; border: 1px solid #30363d; }
 .chat-code-diff-view-btn { padding: 0.25rem 0.625rem; font-size: 0.6875rem; cursor: pointer; border: none; background: transparent; color: #8b949e; transition: all 150ms; }
 .chat-code-diff-view-btn:hover { background-color: #30363d; color: #e6edf3; }
 .chat-code-diff-view-btn.active { background-color: #30363d; color: #e6edf3; }
 .chat-code-diff-content { overflow-x: auto; font-size: 0.6875rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; line-height: 1.5; color: #e6edf3; background-color: #0d1117; }
-.chat-diff-unified, .chat-diff-split { min-width: 100%; color: #e6edf3; }
-.chat-diff-split { display: flex; }
-.chat-diff-split-side { flex: 1; border-right: 1px solid #30363d; }
-.chat-diff-split-side:last-child { border-right: none; }
+.chat-code-diff-content-virtualized { overflow: hidden; }
+.chat-code-diff-viewport { overflow: auto; }
+.chat-code-diff-unified, .chat-code-diff-split, .chat-diff-unified, .chat-diff-split { min-width: 100%; color: #e6edf3; }
+.chat-code-diff-split, .chat-diff-split { display: flex; min-width: max-content; }
+.chat-code-diff-split-panel, .chat-diff-split-side { flex: 1 0 0; min-width: 20rem; border-right: 1px solid #30363d; }
+.chat-code-diff-split-panel:last-child, .chat-diff-split-side:last-child { border-right: none; }
 .chat-diff-line { display: flex; color: #e6edf3; background-color: #0d1117; }
 .chat-diff-line span { color: inherit; }
 .chat-diff-line-number { width: 3rem; padding: 0 0.5rem; text-align: right; color: #6e7681; background-color: #161b22; user-select: none; flex-shrink: 0; }

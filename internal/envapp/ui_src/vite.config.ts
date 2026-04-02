@@ -21,4 +21,7 @@ export default defineConfig({
     port: 8096,
     strictPort: true,
   },
+  worker: {
+    format: 'es',
+  },
 });
