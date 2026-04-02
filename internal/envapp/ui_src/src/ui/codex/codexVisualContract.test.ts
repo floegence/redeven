@@ -51,6 +51,26 @@ describe('Codex visual contract', () => {
     expect(src).toMatch(/@media \(max-width: 960px\) \{[\s\S]*\.codex-page-header-main \{[\s\S]*flex-wrap: wrap;[\s\S]*\.codex-page-header-rail \{[\s\S]*justify-content: flex-start;/);
   });
 
+  it('keeps the composer dock softly floating over the transcript tail', () => {
+    const src = readCodexCss();
+
+    expect(src).toContain('--flower-chat-transcript-overlay-bottom-inset: calc(7.5rem + env(safe-area-inset-bottom, 0px));');
+    expect(src).toMatch(/\.codex-page-bottom-dock \{[^}]*background: transparent;/);
+    expect(src).not.toMatch(/\.codex-page-bottom-dock \{[^}]*border-top:/);
+    expect(src).toMatch(/\.codex-page-bottom-dock::before \{[^}]*box-shadow: 0 -20px 32px -28px/);
+    expect(src).toMatch(/\.codex-chat-input\.chat-input-container \{[^}]*backdrop-filter: blur\(14px\);/);
+  });
+
+  it('keeps composer metadata grouped by layout role and carrier semantics', () => {
+    const src = readCodexCss();
+
+    expect(src).toMatch(/\.codex-chat-input-meta-rail \{[^}]*justify-content: space-between;[^}]*flex-wrap: wrap;/);
+    expect(src).toMatch(/\.codex-chat-input-meta-group-context \{[^}]*justify-content: flex-start;/);
+    expect(src).toMatch(/\.codex-chat-input-meta-group-strategy \{[^}]*justify-content: flex-end;/);
+    expect(src).toMatch(/\.codex-chat-select-chip-policy \{[^}]*border-color:/);
+    expect(src).toMatch(/\.codex-chat-draft-objects \{[^}]*flex-direction: column;/);
+  });
+
   it('keeps Codex markdown blockquotes aligned with the floe-webapp quote block shape', () => {
     const src = readCodexCss();
 

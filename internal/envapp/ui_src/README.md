@@ -12,6 +12,15 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - The optional Codex surface lives in `src/ui/codex/*` and intentionally follows the same high-level sidebar + transcript + bottom-dock rhythm as Flower while keeping all Codex-owned layout/state modules independent from Flower files.
 - Codex UI state is controller-based: `CodexProvider` stays as orchestration glue, `createCodexThreadController` owns selected/displayed thread reconciliation plus session cache/bootstrap guards, and `createCodexDraftController` owns per-owner drafts (`draft:new` vs `thread:<id>`).
 - Codex composer autosizing is also controller-based and page-local: `CodexComposerShell` delegates multiline height measurement to `createCodexComposerAutosizeController`, which lazy-loads `@chenglou/pretext` only for the Codex page and preserves a DOM fallback when font/runtime conditions are unsafe.
+- Codex composer information layout is intentionally asymmetric:
+  - the prompt stays primary;
+  - draft context stays left-aligned (`attachments`, working directory, draft objects);
+  - execution strategy stays right-aligned (`model`, `reasoning effort`, `approval policy`, `sandbox mode`).
+- Codex composer controls are intentionally not one-style-fits-all:
+  - working directory keeps the stronger path-chip treatment;
+  - `model` / `reasoning effort` collapse to lighter value-first controls at rest;
+  - `approval policy` / `sandbox mode` keep compact tag-like strategy pills;
+  - mentions / attachments belong to a lower-priority draft-object lane instead of the strategy lane.
 - Codex transcript follow-bottom is also controller-based and page-local: `CodexProvider` emits explicit bottom intents, and `createFollowBottomController()` keeps system restore paths instant while allowing smooth user-initiated convergence on the Codex page only.
 - Codex follow-bottom targets the real bottom scroll position (`scrollHeight - clientHeight`) and preserves paused anchor restoration during late transcript reflow, so streaming growth no longer relies on repeated raw `scrollTop = scrollHeight` retries.
 - Codex transcript rendering is intentionally split by role semantics:
@@ -20,6 +29,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
   - user `text` inputs must stay raw text only, with preserved line breaks and no markdown/HTML rendering;
   - user `localImage` / `skill` inputs should reuse the shared file-preview surface instead of introducing a second preview modal.
 - Codex chat rows and the Codex send bar should align with Flower's message-lane and composer geometry through Codex-local implementation, not by patching Flower-owned selectors.
+- The Codex send bar should read as floating over the transcript tail, so transcript and composer boundaries should prefer soft shadow/inset separation over an explicit full-width hard divider.
 - Codex-specific visual adjustments belong in the namespaced `src/ui/codex/codex.css` layer instead of patching Flower selectors in `src/styles/redeven.css`.
 - Git Browser branch detail tabs treat `Status` and `History` as a local mode switch: same-branch history toggles should preserve mounted UI state, reuse cached commit data when available, and keep loading indicators local to the history surface instead of replacing the whole browser shell.
 - Git Browser helper shortcuts such as `Ask Flower`, `Terminal`, and `Files` are intentionally styled as elevated orb actions inside a glass dock so they read as optional cross-surface capabilities rather than primary Git mutations.

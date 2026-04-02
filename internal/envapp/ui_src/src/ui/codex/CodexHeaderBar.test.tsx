@@ -105,9 +105,39 @@ describe('CodexHeaderBar', () => {
     ), host);
 
     expect(host.querySelector('.codex-page-header-badges')).not.toBeNull();
-    expect(host.querySelectorAll('.codex-page-header-tag').length).toBe(3);
+    expect(host.querySelectorAll('.codex-page-header-tag').length).toBe(2);
+    expect(host.textContent).toContain('not loaded');
+    expect(host.textContent).toContain('2 pending');
+    expect(host.textContent).not.toContain('workspace dirty');
     expect(host.querySelector('.codex-page-header-actions')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Archive Codex thread"]')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Review current workspace changes"]')).not.toBeNull();
+  });
+
+  it('prefers the install-required badge over pending counts and status flags when host access is unavailable', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <CodexHeaderBar
+        summary={{
+          threadTitle: 'New chat',
+          workspaceLabel: '/workspace',
+          modelLabel: 'GPT-5.4',
+          statusLabel: 'idle',
+          statusFlags: ['workspace dirty'],
+          contextLabel: 'Workspace',
+          contextDetail: '/workspace',
+          hostReady: false,
+          pendingRequestCount: 3,
+        }}
+        actions={[]}
+      />
+    ), host);
+
+    expect(host.querySelectorAll('.codex-page-header-tag').length).toBe(1);
+    expect(host.textContent).toContain('Install required');
+    expect(host.textContent).not.toContain('3 pending');
+    expect(host.textContent).not.toContain('workspace dirty');
   });
 });
