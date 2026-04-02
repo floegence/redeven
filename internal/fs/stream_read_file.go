@@ -90,8 +90,28 @@ func (s *Service) ServeReadFileStreamWithAccessGate(ctx context.Context, stream 
 		return
 	}
 
-	realPath, err := s.resolveExistingPath(req.Path)
+	realPath, _, err := s.resolveReadableFilePath(req.Path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+				Ok: false,
+				Error: &fsStreamError{
+					Code:    404,
+					Message: "not found",
+				},
+			})
+			return
+		}
+		if errors.Is(err, errFSPathIsDirectory) {
+			_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
+				Ok: false,
+				Error: &fsStreamError{
+					Code:    400,
+					Message: "path is a directory",
+				},
+			})
+			return
+		}
 		_ = jsonframe.WriteJSONFrame(stream, fsReadFileStreamRespMeta{
 			Ok: false,
 			Error: &fsStreamError{

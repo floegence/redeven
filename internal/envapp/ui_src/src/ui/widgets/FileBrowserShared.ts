@@ -1,9 +1,14 @@
-import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { FileItem, FileItemLinkMeta } from '@floegence/floe-webapp-core/file-browser';
+
+export type FileSystemEntryType = 'file' | 'folder' | 'symlink';
+export type FileSystemResolvedType = 'file' | 'folder' | 'broken' | 'unknown';
 
 export type FileSystemEntry = {
   name: string;
   path: string;
   isDirectory: boolean;
+  entryType?: FileSystemEntryType;
+  resolvedType?: FileSystemResolvedType;
   size?: number;
   modifiedAt?: number;
 };
@@ -34,6 +39,45 @@ export function validateFileBrowserEntryName(name: string): string | null {
   return null;
 }
 
+function normalizeEntryType(entry: FileSystemEntry): FileSystemEntryType {
+  return entry.entryType ?? (entry.isDirectory ? 'folder' : 'file');
+}
+
+function normalizeResolvedType(entry: FileSystemEntry): FileSystemResolvedType {
+  return entry.resolvedType ?? (entry.isDirectory ? 'folder' : 'file');
+}
+
+function toInteractionType(entry: FileSystemEntry): FileItem['type'] {
+  const entryType = normalizeEntryType(entry);
+  const resolvedType = normalizeResolvedType(entry);
+  if (entryType === 'symlink') {
+    return resolvedType === 'folder' ? 'folder' : 'file';
+  }
+  return entry.isDirectory ? 'folder' : 'file';
+}
+
+function toLinkMeta(entry: FileSystemEntry): FileItemLinkMeta | undefined {
+  if (normalizeEntryType(entry) !== 'symlink') return undefined;
+  return {
+    kind: 'symbolic',
+    targetType: normalizeResolvedType(entry),
+  };
+}
+
+export function getFilePreviewBlockReason(item: Pick<FileItem, 'type' | 'link'>): string | null {
+  if (item.type === 'folder') {
+    return 'Cannot preview a directory.';
+  }
+  const targetType = item.link?.kind === 'symbolic' ? item.link.targetType : undefined;
+  if (targetType === 'folder') {
+    return 'Cannot preview a directory link.';
+  }
+  if (targetType === 'broken' || targetType === 'unknown') {
+    return 'This symbolic link target is unavailable.';
+  }
+  return null;
+}
+
 export function buildChildPath(parentPath: string, name: string): string {
   const normalizedParent = normalizePath(parentPath);
   const trimmedName = String(name ?? '').trim();
@@ -42,20 +86,20 @@ export function buildChildPath(parentPath: string, name: string): string {
   }
   return `${normalizedParent}/${trimmedName}`;
 }
-
 export function toFileItem(entry: FileSystemEntry): FileItem {
-  const isDir = !!entry.isDirectory;
+  const type = toInteractionType(entry);
   const name = String(entry.name ?? '');
   const path = String(entry.path ?? '');
   const modifiedAtMs = Number(entry.modifiedAt ?? 0);
   return {
     id: path,
     name,
-    type: isDir ? 'folder' : 'file',
+    type,
     path,
     size: Number.isFinite(entry.size) ? entry.size : undefined,
     modifiedAt: Number.isFinite(modifiedAtMs) && modifiedAtMs > 0 ? new Date(modifiedAtMs) : undefined,
-    extension: isDir ? undefined : extNoDot(name),
+    extension: type === 'folder' ? undefined : extNoDot(name),
+    link: toLinkMeta(entry),
   };
 }
 

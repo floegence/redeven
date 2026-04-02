@@ -12,6 +12,7 @@ import {
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
 import { openReadFileStreamChannel, readFileBytesOnce } from '../utils/fileStreamReader';
+import { getFilePreviewBlockReason } from './FileBrowserShared';
 
 const MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
 const MAX_TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
@@ -199,6 +200,17 @@ export function createFilePreviewController(params: {
   };
 
   const loadPreview = async (item: FileItem) => {
+    const blockedReason = getFilePreviewBlockReason(item);
+    if (blockedReason) {
+      clearPendingAction();
+      cleanupPreviewContent();
+      setPreviewItem(item);
+      setPreviewOpen(true);
+      setPreviewDescriptor({ mode: 'unsupported' });
+      setPreviewError(blockedReason);
+      setPreviewMessage(blockedReason);
+      return;
+    }
     if (item.type !== 'file') return;
 
     const seq = (previewReqSeq += 1);

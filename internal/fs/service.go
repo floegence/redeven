@@ -59,38 +59,13 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
-		dirAbs, err := s.resolveExistingDir(req.Path)
-		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
-		}
-
-		ents, err := os.ReadDir(dirAbs)
-		if err != nil {
-			return nil, &rpc.Error{Code: 404, Message: "not found"}
-		}
-
 		showHidden := req.ShowHidden != nil && *req.ShowHidden
-		out := make([]fsFileInfo, 0, len(ents))
-		for _, e := range ents {
-			name := e.Name()
-			if !showHidden && strings.HasPrefix(name, ".") {
-				continue
+		out, err := s.listDirectoryEntries(req.Path, showHidden)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, &rpc.Error{Code: 404, Message: "not found"}
 			}
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			full := filepath.Join(dirAbs, name)
-			mod := info.ModTime()
-			out = append(out, fsFileInfo{
-				Name:        name,
-				Path:        full,
-				IsDirectory: info.IsDir(),
-				Size:        info.Size(),
-				ModifiedAt:  mod.UnixMilli(),
-				CreatedAt:   mod.UnixMilli(),
-				Permissions: fileModeString(info.Mode()),
-			})
+			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
 		return &fsListResp{Entries: out}, nil
 	})
@@ -99,8 +74,14 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanRead {
 			return nil, &rpc.Error{Code: 403, Message: "read permission denied"}
 		}
-		p, err := s.resolveExistingPath(req.Path)
+		p, _, err := s.resolveReadableFilePath(req.Path)
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, &rpc.Error{Code: 404, Message: "not found"}
+			}
+			if errors.Is(err, errFSPathIsDirectory) {
+				return nil, &rpc.Error{Code: 400, Message: "path is a directory"}
+			}
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
 		b, err := os.ReadFile(p)
@@ -170,17 +151,13 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		p, err := s.resolveExistingPath(req.Path)
-		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
-		}
-		if req.Recursive != nil && *req.Recursive {
-			if err := os.RemoveAll(p); err != nil {
-				return nil, &rpc.Error{Code: 500, Message: "delete failed"}
+		if err := s.deleteEntry(req.Path, req.Recursive != nil && *req.Recursive); err != nil {
+			if os.IsNotExist(err) {
+				return nil, &rpc.Error{Code: 404, Message: "not found"}
 			}
-			return &fsDeleteResp{Success: true}, nil
-		}
-		if err := os.Remove(p); err != nil {
+			if errors.Is(err, errFSInvalidPath) {
+				return nil, &rpc.Error{Code: 400, Message: "invalid path"}
+			}
 			return nil, &rpc.Error{Code: 500, Message: "delete failed"}
 		}
 		return &fsDeleteResp{Success: true}, nil
@@ -190,85 +167,46 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		pOld, err := s.resolveExistingPath(req.OldPath)
+		newPath, err := s.renameEntry(req.OldPath, req.NewPath)
 		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid old_path"}
+			switch {
+			case os.IsNotExist(err):
+				return nil, &rpc.Error{Code: 404, Message: "source not found"}
+			case errors.Is(err, errFSDestinationExists):
+				return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
+			case errors.Is(err, errFSInvalidNewPath):
+				return nil, &rpc.Error{Code: 400, Message: "invalid new_path"}
+			case errors.Is(err, errFSInvalidOldPath):
+				return nil, &rpc.Error{Code: 400, Message: "invalid old_path"}
+			default:
+				return nil, &rpc.Error{Code: 500, Message: "rename failed"}
+			}
 		}
-		pNew, err := s.resolveTargetPath(req.NewPath)
-		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid new_path"}
-		}
-		// Source must exist
-		if _, err := os.Stat(pOld); os.IsNotExist(err) {
-			return nil, &rpc.Error{Code: 404, Message: "source not found"}
-		}
-		// Destination must not exist (prevent accidental overwrite)
-		if _, err := os.Stat(pNew); err == nil {
-			return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
-		}
-		// Ensure parent directory of destination exists
-		destDir := filepath.Dir(pNew)
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
-			return nil, &rpc.Error{Code: 500, Message: "failed to create destination directory"}
-		}
-		// Perform rename (works across directories)
-		if err := os.Rename(pOld, pNew); err != nil {
-			return nil, &rpc.Error{Code: 500, Message: "rename failed"}
-		}
-		return &fsRenameResp{Success: true, NewPath: pNew}, nil
+		return &fsRenameResp{Success: true, NewPath: newPath}, nil
 	})
 
 	accessgate.RegisterTyped[fsCopyReq, fsCopyResp](r, TypeID_FS_COPY, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsCopyReq) (*fsCopyResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
 		}
-		pSrc, err := s.resolveExistingPath(req.SourcePath)
-		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid source_path"}
-		}
-		pDest, err := s.resolveTargetPath(req.DestPath)
-		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid dest_path"}
-		}
-		srcInfo, err := os.Stat(pSrc)
-		if os.IsNotExist(err) {
-			return nil, &rpc.Error{Code: 404, Message: "source not found"}
-		}
-		if err != nil {
-			return nil, &rpc.Error{Code: 500, Message: "failed to stat source"}
-		}
-		// Check destination existence
 		overwrite := req.Overwrite != nil && *req.Overwrite
-		if _, err := os.Stat(pDest); err == nil && !overwrite {
-			return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
-		}
-		// Ensure parent directory of destination exists
-		destDir := filepath.Dir(pDest)
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
-			return nil, &rpc.Error{Code: 500, Message: "failed to create destination directory"}
-		}
-		// Copy file or directory
-		if srcInfo.IsDir() {
-			if err := copyDir(pSrc, pDest); err != nil {
-				return nil, &rpc.Error{Code: 500, Message: "copy failed: " + err.Error()}
-			}
-		} else {
-			if err := copyFile(pSrc, pDest); err != nil {
+		newPath, err := s.copyEntry(req.SourcePath, req.DestPath, overwrite)
+		if err != nil {
+			switch {
+			case os.IsNotExist(err):
+				return nil, &rpc.Error{Code: 404, Message: "source not found"}
+			case errors.Is(err, errFSDestinationExists):
+				return nil, &rpc.Error{Code: 409, Message: "destination already exists"}
+			case errors.Is(err, errFSInvalidSourcePath):
+				return nil, &rpc.Error{Code: 400, Message: "invalid source_path"}
+			case errors.Is(err, errFSInvalidDestPath):
+				return nil, &rpc.Error{Code: 400, Message: "invalid dest_path"}
+			default:
 				return nil, &rpc.Error{Code: 500, Message: "copy failed: " + err.Error()}
 			}
 		}
-		return &fsCopyResp{Success: true, NewPath: pDest}, nil
+		return &fsCopyResp{Success: true, NewPath: newPath}, nil
 	})
-}
-
-func (s *Service) resolveExistingPath(path string) (string, error) {
-	if s == nil {
-		return "", errors.New("nil service")
-	}
-	if strings.TrimSpace(path) == "" {
-		path = s.agentHomeAbs
-	}
-	return pathutil.ResolveExistingScopedPath(path, s.agentHomeAbs)
 }
 
 func (s *Service) resolveExistingDir(path string) (string, error) {
@@ -360,13 +298,15 @@ type fsListResp struct {
 }
 
 type fsFileInfo struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	IsDirectory bool   `json:"is_directory"`
-	Size        int64  `json:"size"`
-	ModifiedAt  int64  `json:"modified_at"`
-	CreatedAt   int64  `json:"created_at"`
-	Permissions string `json:"permissions,omitempty"`
+	Name         string `json:"name"`
+	Path         string `json:"path"`
+	IsDirectory  bool   `json:"is_directory"`
+	EntryType    string `json:"entry_type,omitempty"`
+	ResolvedType string `json:"resolved_type,omitempty"`
+	Size         int64  `json:"size"`
+	ModifiedAt   int64  `json:"modified_at"`
+	CreatedAt    int64  `json:"created_at"`
+	Permissions  string `json:"permissions,omitempty"`
 }
 
 type fsReadFileReq struct {
@@ -485,6 +425,13 @@ func copyDir(src, dst string) error {
 	for _, entry := range entries {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.Type()&os.ModeSymlink != 0 {
+			if err := copySymbolicLink(srcPath, dstPath, false); err != nil {
+				return err
+			}
+			continue
+		}
 
 		if entry.IsDir() {
 			if err := copyDir(srcPath, dstPath); err != nil {

@@ -22,8 +22,10 @@ import type {
   FsCopyResponse,
   FsDeleteRequest,
   FsDeleteResponse,
+  FsEntryType,
   FsPathContextResponse,
   FsListRequest,
+  FsResolvedType,
   FsListResponse,
   FsReadFileRequest,
   FsReadFileResponse,
@@ -40,18 +42,35 @@ export function toWireFsListRequest(req: FsListRequest): wire_fs_list_req {
   };
 }
 
+function decodeFsEntryType(value: unknown, isDirectory: boolean): FsEntryType {
+  return value === 'file' || value === 'folder' || value === 'symlink'
+    ? value
+    : (isDirectory ? 'folder' : 'file');
+}
+
+function decodeFsResolvedType(value: unknown, isDirectory: boolean): FsResolvedType {
+  return value === 'file' || value === 'folder' || value === 'broken' || value === 'unknown'
+    ? value
+    : (isDirectory ? 'folder' : 'file');
+}
+
 export function fromWireFsListResponse(resp: wire_fs_list_resp): FsListResponse {
   const entries = Array.isArray(resp?.entries) ? resp.entries : [];
   return {
-    entries: entries.map((e) => ({
-      name: String(e?.name ?? ''),
-      path: String(e?.path ?? ''),
-      isDirectory: Boolean(e?.is_directory ?? false),
-      size: Number(e?.size ?? 0),
-      modifiedAt: Number(e?.modified_at ?? 0),
-      createdAt: Number(e?.created_at ?? 0),
-      permissions: typeof e?.permissions === 'string' ? e.permissions : undefined,
-    })),
+    entries: entries.map((e) => {
+      const isDirectory = Boolean(e?.is_directory ?? false);
+      return {
+        name: String(e?.name ?? ''),
+        path: String(e?.path ?? ''),
+        isDirectory,
+        entryType: decodeFsEntryType(e?.entry_type, isDirectory),
+        resolvedType: decodeFsResolvedType(e?.resolved_type, isDirectory),
+        size: Number(e?.size ?? 0),
+        modifiedAt: Number(e?.modified_at ?? 0),
+        createdAt: Number(e?.created_at ?? 0),
+        permissions: typeof e?.permissions === 'string' ? e.permissions : undefined,
+      };
+    }),
   };
 }
 
