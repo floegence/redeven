@@ -32,8 +32,9 @@
   },
   "overrides": {
     "@floegence/flowersec-core": "^0.17.1",
-    "dompurify": "^3.3.2",
+    "dompurify": "^3.3.3",
     "flatted": "^3.4.2",
+    "lodash-es": "^4.18.1",
     "minimatch@^3.0.0": "^3.1.4",
     "minimatch@^5.0.0": "^5.1.8",
     "picomatch": "^4.0.4",
@@ -42,8 +43,9 @@
   "pnpm": {
     "overrides": {
       "@floegence/flowersec-core": "^0.17.1",
-      "dompurify": "^3.3.2",
+      "dompurify": "^3.3.3",
       "flatted": "^3.4.2",
+      "lodash-es": "^4.18.1",
       "minimatch@^3.0.0": "^3.1.4",
       "minimatch@^5.0.0": "^5.1.8",
       "picomatch": "^4.0.4",
