@@ -8,8 +8,15 @@ Key points:
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex).
 - In Redeven Desktop, the command palette also exposes a shell-owned `Connect Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
+- Runtime Settings uses an explicit information architecture so users can find endpoint controls by intent rather than by implementation detail:
+  - `Overview`: `Config File`, `Connection`, `Runtime Status`
+  - `Runtime Configuration`: `Shell & Workspace`, `Logging`
+  - `Codespaces & Tooling`: `code-server Runtime`, `Codespaces Ports`
+  - `Security`: `Permission Policy`
+  - `AI & Extensions`: `Flower`, `Skills`, `Codex`
+  - `Diagnostics`: `Debug Console`
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
-- Runtime Settings -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in runtime settings.
+- Runtime Settings -> `AI & Extensions` -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in runtime settings.
 - The Codex sidebar/page use floe-webapp layout and form primitives for visual consistency, but Codex state, icon assets, thread navigation, transcript projection, and request handling stay implemented as a separate surface rather than as Flower extensions.
 - Shared highlight/callout visuals should continue to flow from released floe-webapp tokens. The product-owned Env App must not re-theme generic accent tokens just to deepen `HighlightBlock`, because that would recouple unrelated shared primitives.
 - The Codex surface is structured as a dedicated conversation navigator plus chat shell, intentionally following the same high-level sidebar + transcript + bottom composer rhythm as Flower while keeping the implementation fully Codex-local.
@@ -251,7 +258,7 @@ Behavior:
   - `X-Redeven-Debug-Trace-ID`
 - Local UI and gateway also expose the runtime collector state through:
   - `X-Redeven-Debug-Console-Enabled`
-- Runtime Settings exposes a dedicated Debug Console section separate from Logging, and the floating console reads data through:
+- Runtime Settings exposes `Debug Console` under the dedicated `Diagnostics` group instead of mixing it into Logging, and the floating console reads data through:
   - `GET /_redeven_proxy/api/debug/diagnostics`
   - `GET /_redeven_proxy/api/debug/diagnostics/export`
   - `GET /_redeven_proxy/api/debug/diagnostics/stream`
@@ -283,7 +290,7 @@ Notes:
 - If a codespace window is refreshed after the hash is cleared, it can request a fresh `entry_ticket` from the opener Env App via `postMessage` handshake.
 - Codespaces cards also expose right-click `Ask Flower` and `Open in Terminal` actions. `Ask Flower` stays first to match the broader Env App handoff ordering, while `Open in Terminal` opens a terminal session rooted at `workspace_path`. The `Ask Flower` action sends that same `workspace_path` as directory context so the composer keeps the same folder-oriented prompt copy used by File Browser directory launches.
 - Codespaces does **not** auto-install `code-server`. When the runtime is missing or unusable, Env App shows an explicit install UI and waits for the user to click `Install latest` or `Update to latest`.
-- Runtime Settings also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
+- Runtime Settings -> `Codespaces & Tooling` also exposes a dedicated `code-server Runtime` management card. It separates steady runtime status from transient management activity:
   - when no usable runtime is available, Settings renders a compact installable state instead of a dense `Not detected` table dump,
   - while install or uninstall is running, Settings switches to a focused operation panel with optional recent output,
   - after a successful install or uninstall, Settings returns to the normal steady state instead of leaving a persistent success audit block on screen,

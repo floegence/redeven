@@ -91,6 +91,7 @@ For each run the Go runtime:
 
 Current Runtime Settings UI behavior is:
 
+- Flower lives under Runtime Settings -> `AI & Extensions` as its own card, while permission policy and diagnostics stay in separate top-level groups.
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).
@@ -130,4 +131,4 @@ Current behavior:
 - Execution mode is stored per thread and enforced server-side.
 - If a task in `plan` requires edits, Flower must ask for a mode switch when interaction is allowed.
 
-The execution-policy UI is exposed under Runtime Settings → Flower → Execution policy.
+The execution-policy UI is exposed under Runtime Settings -> `AI & Extensions` -> Flower -> Execution policy.

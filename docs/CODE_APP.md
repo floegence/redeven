@@ -191,12 +191,12 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Open the codespace from the Redeven Env App (Codespaces page). Do not open the sandbox subdomain directly.
 
 - "code-server binary not found":
-  - Open Env App -> Runtime Settings -> `code-server Runtime` -> `Install latest`.
+  - Open Env App -> Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime` -> `Install latest`.
   - If you intentionally manage `code-server` yourself, set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
 
 - "code-server binary is present but unusable":
   - Redeven detected a `code-server` binary, but the runtime probe failed on this host.
-  - Update the Redeven-managed runtime to latest from Env App -> Runtime Settings -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
+  - Update the Redeven-managed runtime to latest from Env App -> Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
 
 - "code-server did not start listening on 127.0.0.1:PORT":
   - Check the per-codespace logs under:

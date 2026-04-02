@@ -7,7 +7,7 @@ This integration is intentionally independent from Flower:
 - Codex has its own activity-bar entry in Env App.
 - Codex uses its own gateway namespace: `/_redeven_proxy/api/codex/*`.
 - Codex UI state, request handling, and thread lifecycle do not reuse Flower thread/runtime contracts.
-- Runtime Settings only shows read-only Codex host/runtime status; it does not persist Codex runtime settings.
+- Runtime Settings groups Codex under `AI & Extensions` and only shows read-only host/runtime status there; it does not persist Codex runtime settings.
 - The Codex surface uses official OpenAI Codex branding assets and floe-webapp primitives without coupling Codex implementation details back to Flower.
 
 ## Architecture
@@ -62,7 +62,7 @@ Redeven resolves `codex` like this:
 3. Inherit the runtime process environment as-is and let the user's shell startup files resolve host-specific settings such as `PATH`, `CODEX_HOME`, and related Codex runtime configuration.
 4. Let the local Codex installation keep its own defaults for model, approvals, sandboxing, and other runtime behavior unless the user explicitly overrides a field in the Codex page request itself.
 
-Runtime Settings -> Codex is diagnostic-only and currently shows:
+Runtime Settings -> `AI & Extensions` -> Codex is diagnostic-only and currently shows:
 
 - `available`
 - `ready`
@@ -224,7 +224,7 @@ Current Env App behavior:
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.
 - Codex icon rendering prefers a bundled official artwork asset, but it now also keeps an inline fallback glyph so embedded builds never surface the browser's broken-image placeholder if artwork loading fails.
-- Env Settings -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
+- Env Settings -> `AI & Extensions` -> Codex does not edit approval policy, sandbox, or model defaults; it only reports host capability and bridge status.
 
 ## Permissions
 
