@@ -8,6 +8,7 @@ import {
   openConnectionCenter,
   openDesktopConnectToRedeven,
   openDesktopSettings,
+  restartDesktopManagedRuntime,
 } from './desktopShellBridge';
 
 afterEach(() => {
@@ -55,5 +56,24 @@ describe('desktopShellBridge', () => {
     expect(switchDeviceBridge).toHaveBeenCalledTimes(1);
     expect(openConnectToRedevenBridge).toHaveBeenCalledTimes(0);
     expect(openDesktopSettingsBridge).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards managed runtime restart when the desktop bridge exposes it', async () => {
+    const restartManagedRuntimeBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      started: true,
+      message: 'Desktop restarted the managed runtime.',
+    });
+    window.redevenDesktopShell = {
+      openConnectionCenter: vi.fn().mockResolvedValue(undefined),
+      restartManagedRuntime: restartManagedRuntimeBridge,
+    };
+
+    await expect(restartDesktopManagedRuntime()).resolves.toEqual({
+      ok: true,
+      started: true,
+      message: 'Desktop restarted the managed runtime.',
+    });
+    expect(restartManagedRuntimeBridge).toHaveBeenCalledTimes(1);
   });
 });

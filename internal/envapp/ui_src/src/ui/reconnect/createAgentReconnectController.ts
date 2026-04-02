@@ -1,7 +1,5 @@
 import { createSignal, createEffect, onCleanup, type Accessor } from 'solid-js';
 
-import type { EnvironmentDetail } from '../services/controlplaneApi';
-
 const WAIT_DELAYS_MS = [2_000, 3_000, 5_000, 8_000, 12_000, 15_000] as const;
 
 export const REMOTE_FAST_RECONNECT_POLICY = {
@@ -11,7 +9,17 @@ export const REMOTE_FAST_RECONNECT_POLICY = {
   maxDelayMs: 3_000,
 } as const;
 
-export type ReconnectPhase = 'idle' | 'transport_retry' | 'waiting_for_agent' | 'reconnecting';
+export const LOCAL_FAST_RECONNECT_POLICY = REMOTE_FAST_RECONNECT_POLICY;
+
+export type ReconnectAvailabilityStatus = 'online' | 'offline' | 'unknown';
+export type ReconnectAccessStatus = 'ready' | 'locked' | 'unknown';
+
+export type ReconnectAvailability = Readonly<{
+  status: ReconnectAvailabilityStatus;
+  access?: ReconnectAccessStatus;
+}>;
+
+export type ReconnectPhase = 'idle' | 'transport_retry' | 'waiting_for_runtime' | 'reconnecting';
 
 export type ReconnectFailureKind = 'agent_offline' | 'agent_unavailable' | 'transport' | 'fatal';
 
@@ -23,7 +31,7 @@ export type ReconnectFailure = Readonly<{
 export type AgentReconnectController = Readonly<{
   phase: Accessor<ReconnectPhase>;
   failure: Accessor<ReconnectFailure | null>;
-  controlplaneStatus: Accessor<string | null>;
+  availabilityStatus: Accessor<ReconnectAvailabilityStatus | null>;
   nextRetryAtMs: Accessor<number | null>;
   activateWaiting: (failure: ReconnectFailure) => void;
   noteTransportRetry: () => void;
@@ -35,8 +43,7 @@ export type AgentReconnectController = Readonly<{
 
 type CreateAgentReconnectControllerArgs = Readonly<{
   enabled: Accessor<boolean>;
-  envId: Accessor<string>;
-  getEnvironment: (envId: string) => Promise<EnvironmentDetail | null>;
+  probeAvailability: () => Promise<ReconnectAvailability>;
   reconnect: () => Promise<void>;
 }>;
 
@@ -44,9 +51,18 @@ function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function normalizeStatus(value: unknown): string | null {
+function normalizeAvailabilityStatus(value: unknown): ReconnectAvailabilityStatus {
   const status = trimString(value).toLowerCase();
-  return status ? status : null;
+  if (status === 'online') return 'online';
+  if (status === 'offline') return 'offline';
+  return 'unknown';
+}
+
+function normalizeAccessStatus(value: unknown): ReconnectAccessStatus {
+  const status = trimString(value).toLowerCase();
+  if (status === 'ready') return 'ready';
+  if (status === 'locked') return 'locked';
+  return 'unknown';
 }
 
 function nextWaitDelayMs(attempt: number): number {
@@ -115,7 +131,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
 export function createAgentReconnectController(args: CreateAgentReconnectControllerArgs): AgentReconnectController {
   const [phase, setPhase] = createSignal<ReconnectPhase>('idle');
   const [failure, setFailure] = createSignal<ReconnectFailure | null>(null);
-  const [controlplaneStatus, setControlplaneStatus] = createSignal<string | null>(null);
+  const [availabilityStatus, setAvailabilityStatus] = createSignal<ReconnectAvailabilityStatus | null>(null);
   const [nextRetryAtMs, setNextRetryAtMs] = createSignal<number | null>(null);
 
   let waitAttempt = 0;
@@ -138,7 +154,7 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
     lastFailureKey = '';
     setPhase('idle');
     setFailure(null);
-    setControlplaneStatus(null);
+    setAvailabilityStatus(null);
   };
 
   const scheduleTick = (delayMs: number, forceReconnect: boolean) => {
@@ -157,22 +173,17 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
   const runTick = async (forceReconnect: boolean) => {
     if (!args.enabled() || tickInFlight) return;
 
-    const envId = trimString(args.envId());
-    if (!envId) {
-      resetState();
-      return;
-    }
-
     tickInFlight = true;
     clearWaitTimer();
 
     try {
-      let nextStatus: string | null = null;
+      let nextAvailability: ReconnectAvailability = { status: 'unknown', access: 'unknown' };
       try {
-        const detail = await args.getEnvironment(envId);
-        nextStatus = normalizeStatus(detail?.status);
+        nextAvailability = args.probeAvailability
+          ? await args.probeAvailability()
+          : { status: 'unknown', access: 'unknown' };
       } catch {
-        nextStatus = null;
+        nextAvailability = { status: 'unknown', access: 'unknown' };
       }
 
       if (!args.enabled()) {
@@ -180,13 +191,18 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
         return;
       }
 
-      if (nextStatus) {
-        setControlplaneStatus(nextStatus);
+      const nextStatus = normalizeAvailabilityStatus(nextAvailability.status);
+      const nextAccess = normalizeAccessStatus(nextAvailability.access);
+      setAvailabilityStatus(nextStatus === 'unknown' ? null : nextStatus);
+
+      if (nextAccess === 'locked') {
+        setPhase('idle');
+        return;
       }
 
       const shouldReconnect = forceReconnect || nextStatus !== 'offline';
       if (!shouldReconnect) {
-        setPhase('waiting_for_agent');
+        setPhase('waiting_for_runtime');
         scheduleTick(nextWaitDelayMs(waitAttempt), false);
         waitAttempt += 1;
         return;
@@ -215,7 +231,7 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
   return {
     phase,
     failure,
-    controlplaneStatus,
+    availabilityStatus,
     nextRetryAtMs,
     activateWaiting: (nextFailure) => {
       if (!args.enabled()) return;
@@ -235,14 +251,14 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
 
       if (
         lastFailureKey === failureKey
-        && (phase() === 'waiting_for_agent' || phase() === 'reconnecting')
+        && (phase() === 'waiting_for_runtime' || phase() === 'reconnecting')
       ) {
         return;
       }
 
       lastFailureKey = failureKey;
       setFailure(normalizedFailure);
-      setPhase('waiting_for_agent');
+      setPhase('waiting_for_runtime');
       scheduleTick(nextWaitDelayMs(waitAttempt), false);
       waitAttempt += 1;
     },
@@ -262,7 +278,7 @@ export function createAgentReconnectController(args: CreateAgentReconnectControl
     requestImmediateTick: () => {
       if (!args.enabled()) return;
       if (tickInFlight) return;
-      setPhase('waiting_for_agent');
+      setPhase('waiting_for_runtime');
       scheduleTick(0, false);
     },
     requestReconnectNow: () => {

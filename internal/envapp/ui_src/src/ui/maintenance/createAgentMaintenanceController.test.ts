@@ -31,9 +31,6 @@ describe('createAgentMaintenanceController', () => {
     const [currentProcessStartedAtMs] = createSignal<number | null>(100);
     const [currentVersion] = createSignal('v1.0.0');
 
-    const connect = vi.fn(async () => {
-      setProtocolStatus('connected');
-    });
     const upgrade = vi.fn(async (req?: { targetVersion?: string }) => {
       const targetVersion = req?.targetVersion;
       expect(targetVersion).toBe('v1.1.0');
@@ -42,7 +39,10 @@ describe('createAgentMaintenanceController', () => {
     });
     const getEnvironment = vi.fn()
       .mockResolvedValueOnce({ status: 'offline' })
-      .mockResolvedValueOnce({ status: 'online' });
+      .mockImplementationOnce(async () => {
+        setProtocolStatus('connected');
+        return { status: 'online' };
+      });
     const refetchCurrentVersion = vi.fn()
       .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.0.0', processStartedAtMs: 100 })
       .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.1.0', processStartedAtMs: 200 });
@@ -63,7 +63,6 @@ describe('createAgentMaintenanceController', () => {
         protocolStatus,
         currentProcessStartedAtMs,
         currentVersion,
-        connect,
         notify,
         rpc: {
           sys: {
@@ -89,7 +88,6 @@ describe('createAgentMaintenanceController', () => {
 
       expect(upgrade).toHaveBeenCalledTimes(1);
       expect(getEnvironment).toHaveBeenCalledTimes(2);
-      expect(connect).toHaveBeenCalledTimes(1);
       expect(refetchCurrentVersion).toHaveBeenCalledTimes(2);
       expect(refetchEnvironment).toHaveBeenCalledTimes(1);
       expect(controller.kind()).toBe(null);
@@ -124,7 +122,6 @@ describe('createAgentMaintenanceController', () => {
         protocolStatus,
         currentProcessStartedAtMs,
         currentVersion,
-        connect: async () => undefined,
         notify,
         rpc: {
           sys: {
@@ -162,7 +159,6 @@ describe('createAgentMaintenanceController', () => {
     const [currentProcessStartedAtMs] = createSignal<number | null>(100);
     const [currentVersion] = createSignal('v1.0.0');
 
-    const connect = vi.fn(async () => undefined);
     const restart = vi.fn(async () => ({ ok: true }));
     const getEnvironment = vi.fn()
       .mockResolvedValueOnce({ status: 'online' })
@@ -181,7 +177,6 @@ describe('createAgentMaintenanceController', () => {
         protocolStatus,
         currentProcessStartedAtMs,
         currentVersion,
-        connect,
         notify,
         rpc: {
           sys: {
@@ -205,7 +200,6 @@ describe('createAgentMaintenanceController', () => {
       await promise;
 
       expect(restart).toHaveBeenCalledTimes(1);
-      expect(connect).not.toHaveBeenCalled();
       expect(controller.kind()).toBe(null);
       expect(controller.error()).toBe(null);
       expect(notify.success).toHaveBeenCalledWith('Reconnected', 'The runtime is back online.');
@@ -253,7 +247,6 @@ describe('createAgentMaintenanceController', () => {
         protocolStatus,
         currentProcessStartedAtMs,
         currentVersion,
-        connect: async () => undefined,
         notify,
         rpc: {
           sys: {

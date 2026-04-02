@@ -52,6 +52,7 @@ describe('runtimeState', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
+        pid: 4242,
       }), 'utf8');
 
       const startup = await loadAttachableRuntimeState(runtimeStateFile);
@@ -61,6 +62,7 @@ describe('runtimeState', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
+        pid: 4242,
       });
     } finally {
       await new Promise<void>((resolve, reject) => {

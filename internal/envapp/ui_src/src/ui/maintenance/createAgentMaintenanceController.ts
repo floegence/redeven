@@ -38,9 +38,9 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
   protocolStatus: Accessor<string>;
   currentProcessStartedAtMs: Accessor<number | null>;
   currentVersion: Accessor<string>;
-  connect: () => Promise<void>;
   notify: NotificationApi;
   rpc: MaintenanceRpc;
+  startRestartRequest?: () => Promise<SysRestartResponse>;
   refetchCurrentVersion: () => Promise<SysPingResponse | null>;
   refetchEnvironment?: () => Promise<EnvironmentDetail | null>;
   getEnvironment?: (envId: string) => Promise<EnvironmentDetail | null>;
@@ -163,7 +163,7 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
       const response: SysUpgradeResponse | SysRestartResponse =
         nextKind === 'upgrade'
           ? await args.rpc.sys.upgrade({ targetVersion: cleanTargetVersion })
-          : await args.rpc.sys.restart();
+          : await (args.startRestartRequest ? args.startRestartRequest() : args.rpc.sys.restart());
 
       if (!response?.ok) {
         const message = response?.message
@@ -229,14 +229,6 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
         if (nextStatus) setPolledStatus(nextStatus);
       } catch {
         // Ignore transient control plane failures while maintenance is running.
-      }
-
-      if (sawDisconnect && displayedStatus().trim().toLowerCase() === 'online') {
-        try {
-          await args.connect();
-        } catch {
-          // Keep polling until the connection is healthy again.
-        }
       }
 
       if (String(args.protocolStatus() ?? '').trim() === 'connected') {

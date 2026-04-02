@@ -9,14 +9,19 @@ export type DesktopAgentSpawnPlan = Readonly<{
   uses_pending_bootstrap: boolean;
 }>;
 
-export function buildDesktopAgentArgs(preferences: DesktopPreferences): string[] {
+type BuildDesktopAgentArgsOptions = Readonly<{
+  localUIBind?: string;
+}>;
+
+export function buildDesktopAgentArgs(preferences: DesktopPreferences, options?: BuildDesktopAgentArgsOptions): string[] {
+  const localUIBind = String(options?.localUIBind ?? preferences.local_ui_bind).trim() || preferences.local_ui_bind;
   const args = [
     'run',
     '--mode',
     'desktop',
     '--desktop-managed',
     '--local-ui-bind',
-    preferences.local_ui_bind,
+    localUIBind,
   ];
 
   if (String(preferences.local_ui_password ?? '') !== '') {

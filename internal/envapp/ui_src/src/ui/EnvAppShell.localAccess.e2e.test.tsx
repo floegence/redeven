@@ -545,9 +545,9 @@ describe('EnvAppShell local access gate', () => {
         getDirectInfo: expect.any(Function),
         autoReconnect: {
           enabled: true,
-          maxAttempts: 1_000_000,
+          maxAttempts: 3,
           initialDelayMs: 500,
-          maxDelayMs: 30_000,
+          maxDelayMs: 3_000,
         },
       });
       expect(localConnectConfig).not.toHaveProperty('directInfo');
@@ -626,6 +626,83 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
+  it('switches local direct reconnect into runtime waiting and reconnects after the runtime comes back', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockReset();
+    getLocalAccessStatusMock
+      .mockResolvedValueOnce({ password_required: true, unlocked: true })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ password_required: true, unlocked: true });
+    connectMock.mockImplementationOnce(async () => {
+      protocolStatus = 'error';
+      protocolClient = null;
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'No agent connected' };
+    });
+    reconnectMock.mockImplementationOnce(async () => {
+      protocolStatus = 'connected';
+      protocolClient = { id: 'client-local-recovered' };
+      protocolError = null;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).toContain('Waiting for runtime');
+
+      await vi.advanceTimersByTimeAsync(12_000);
+      await flushAsync();
+
+      expect(getLocalAccessStatusMock.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(reconnectMock).toHaveBeenCalledTimes(1);
+      expect(host.textContent).toContain('activity main');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('returns to the local password prompt after restart invalidates the local access session', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockReset();
+    getLocalAccessStatusMock
+      .mockResolvedValueOnce({ password_required: true, unlocked: true })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ password_required: true, unlocked: false });
+    connectMock.mockImplementationOnce(async () => {
+      protocolStatus = 'error';
+      protocolClient = null;
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'No agent connected' };
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).toContain('Waiting for runtime');
+
+      await vi.advanceTimersByTimeAsync(12_000);
+      await flushAsync();
+
+      expect(host.textContent).toContain('Unlock local runtime');
+      expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
+      expect(host.querySelector('input[type="password"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('restores the persisted Codex tab after refresh once permissions are ready', async () => {
     const storage = createStorageMock();
     storage.setItem('redeven_envapp_active_tab', 'codex');
@@ -639,6 +716,8 @@ describe('EnvAppShell local access gate', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
+      await flushAsync();
+      await flushAsync();
       await flushAsync();
       await flushAsync();
       await flushAsync();

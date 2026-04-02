@@ -17,6 +17,7 @@ import {
 } from './desktopPreferences';
 import type { DesktopSessionTarget } from './desktopTarget';
 import { buildDesktopAgentArgs, buildDesktopAgentEnvironment } from './desktopLaunch';
+import { parseLocalUIBind } from './localUIBind';
 import {
   buildBlockedLaunchIssue,
   buildDesktopWelcomeSnapshot,
@@ -64,6 +65,11 @@ import {
   DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWindowRequest,
 } from '../shared/desktopShellWindowIPC';
+import {
+  DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
+  normalizeDesktopShellRuntimeActionRequest,
+  type DesktopShellRuntimeActionResponse,
+} from '../shared/desktopShellRuntimeIPC';
 import {
   DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL,
   DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
@@ -362,7 +368,14 @@ async function activateExternalTarget(startup: StartupReport, preferences: Deskt
   );
 }
 
-async function prepareManagedTarget(preferences: DesktopPreferences): Promise<PreparedManagedTargetResult> {
+type PrepareManagedTargetOptions = Readonly<{
+  localUIBind?: string;
+}>;
+
+async function prepareManagedTarget(
+  preferences: DesktopPreferences,
+  options?: PrepareManagedTargetOptions,
+): Promise<PreparedManagedTargetResult> {
   const executablePath = resolveBundledAgentPath({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -370,7 +383,7 @@ async function prepareManagedTarget(preferences: DesktopPreferences): Promise<Pr
   });
   const launch = await startManagedAgent({
     executablePath,
-    agentArgs: buildDesktopAgentArgs(preferences),
+    agentArgs: buildDesktopAgentArgs(preferences, { localUIBind: options?.localUIBind }),
     env: buildDesktopAgentEnvironment(preferences),
     passwordStdin: preferences.local_ui_password,
     tempRoot: app.getPath('temp'),
@@ -417,6 +430,93 @@ async function activateManagedTarget(launch: ManagedTargetLaunch, preferences: D
       effective_run_mode: managedAgent.startup.effective_run_mode ?? '',
     },
   );
+}
+
+function formatBindHostPort(host: string, port: number): string {
+  const cleanHost = String(host ?? '').trim();
+  if (!cleanHost || !Number.isInteger(port) || port <= 0) {
+    throw new Error('invalid bind host/port');
+  }
+  if (cleanHost.includes(':') && !cleanHost.startsWith('[')) {
+    return `[${cleanHost}]:${port}`;
+  }
+  return `${cleanHost}:${port}`;
+}
+
+function resolveManagedRestartBindOverride(preferences: DesktopPreferences, startup: StartupReport): string | null {
+  try {
+    const configuredBind = parseLocalUIBind(preferences.local_ui_bind);
+    if (configuredBind.port !== 0) {
+      return null;
+    }
+
+    const currentURL = new URL(startup.local_ui_url);
+    const hostname = String(currentURL.hostname ?? '').trim();
+    const port = Number.parseInt(String(currentURL.port ?? '').trim(), 10);
+    if (!hostname || !Number.isInteger(port) || port <= 0) {
+      return null;
+    }
+    return formatBindHostPort(hostname, port);
+  } catch {
+    return null;
+  }
+}
+
+async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActionResponse> {
+  if (!managedAgent || currentSessionTarget?.kind !== 'managed_local') {
+    return {
+      ok: false,
+      started: false,
+      message: 'Managed runtime is not active.',
+    };
+  }
+
+  const previousManagedAgent = managedAgent;
+  const previousURL = allowedBaseURL;
+  const preferences = await loadDesktopPreferencesCached();
+  const localUIBind = resolveManagedRestartBindOverride(preferences, previousManagedAgent.startup) ?? undefined;
+
+  try {
+    await desktopDiagnostics.recordLifecycle(
+      'target_restarting',
+      'desktop requested a managed agent restart',
+      {
+        attached: previousManagedAgent.attached,
+        local_ui_bind_override: localUIBind ?? '',
+      },
+    );
+    await previousManagedAgent.stop();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      started: false,
+      message: message || 'Failed to stop the managed runtime.',
+    };
+  }
+
+  managedAgent = null;
+  externalTargetStartup = null;
+
+  const prepared = await prepareManagedTarget(preferences, { localUIBind });
+  if (!prepared.ok) {
+    return {
+      ok: false,
+      started: false,
+      message: prepared.issue.message,
+    };
+  }
+
+  await activateManagedTarget(prepared.launch, preferences);
+  if (previousURL && prepared.launch.managedAgent.startup.local_ui_url !== previousURL) {
+    await loadURLInMainWindow(prepared.launch.managedAgent.startup.local_ui_url, 'target');
+  }
+
+  return {
+    ok: true,
+    started: true,
+    message: 'Desktop restarted the managed runtime.',
+  };
 }
 
 async function openThisDeviceFromWelcome(): Promise<void> {
@@ -832,6 +932,26 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     await openAdvancedSettingsWindow('current_target');
+  });
+  ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, async (_event, request): Promise<DesktopShellRuntimeActionResponse> => {
+    const normalized = normalizeDesktopShellRuntimeActionRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        started: false,
+        message: 'Invalid desktop runtime action.',
+      };
+    }
+
+    if (normalized.action === 'restart_managed_runtime') {
+      return restartManagedRuntimeFromShell();
+    }
+
+    return {
+      ok: false,
+      started: false,
+      message: 'Unsupported desktop runtime action.',
+    };
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
     void closeSettingsSurface();

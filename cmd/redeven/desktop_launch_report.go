@@ -48,6 +48,7 @@ type desktopLaunchReport struct {
 	DesktopManaged     bool     `json:"desktop_managed"`
 	StateDir           string   `json:"state_dir,omitempty"`
 	DiagnosticsEnabled bool     `json:"diagnostics_enabled"`
+	PID                int      `json:"pid,omitempty"`
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`
 	Diagnostics *desktopLaunchDiagnostics `json:"diagnostics,omitempty"`

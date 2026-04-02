@@ -57,7 +57,9 @@ Behavior:
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - The Local UI password stays out of process args and environment variables.
 - Remote control is enabled only when the local config is already bootstrapped and remote-valid.
-- `--desktop-managed` disables CLI self-upgrade semantics; restart remains available.
+- `--desktop-managed` disables CLI self-upgrade semantics.
+- Desktop-owned managed-runtime restart stays available, but it is owned by Electron main rather than runtime self-`exec`.
+- Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind is dynamic such as `127.0.0.1:0`.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
@@ -181,6 +183,7 @@ Desktop shell preferences live under the Electron user data directory, not insid
 - Legacy shell entrypoints such as `connect`, `device_chooser`, and `switch_device` route to the same welcome launcher.
 - Legacy advanced-settings entrypoints route to `This Device Options`.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
+- The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
 - Env App exposes `Connect Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
 - Env App `Runtime Settings` stays separate from shell-owned Environment selection and desktop-managed startup state.
 
@@ -217,6 +220,8 @@ Desktop-specific outcomes from this implementation:
 - Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, and `remote_enabled` through local runtime/version endpoints.
 - Env App hides `Update Redeven` in desktop-managed runs.
 - Env App keeps `Restart runtime`.
+- When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.
+- If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - The maintenance card explains that updates must come from a new desktop release.
 - Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.
 

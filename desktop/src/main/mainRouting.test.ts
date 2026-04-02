@@ -31,12 +31,16 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {");
+    expect(mainSrc).toContain("async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActionResponse> {");
     expect(mainSrc).toContain("surface: 'this_device_settings'");
     expect(mainSrc).toContain("case 'upsert_saved_environment':");
     expect(mainSrc).toContain("case 'delete_saved_environment':");
     expect(mainSrc).not.toContain("case 'open_advanced_settings':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain("await openAdvancedSettingsWindow('current_target');");
+    expect(mainSrc).toContain('ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL');
+    expect(mainSrc).toContain("if (normalized.action === 'restart_managed_runtime') {");
+    expect(mainSrc).toContain('return restartManagedRuntimeFromShell();');
   });
 
   it('keeps settings saves renderer-local by persisting without closing the surface', () => {

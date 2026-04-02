@@ -6,6 +6,7 @@ export type StartupReport = Readonly<{
   desktop_managed?: boolean;
   state_dir?: string;
   diagnostics_enabled?: boolean;
+  pid?: number;
 }>;
 
 export function parseStartupReport(raw: string): StartupReport {
@@ -27,5 +28,6 @@ export function parseStartupReport(raw: string): StartupReport {
     desktop_managed: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,
     state_dir: String(parsed.state_dir ?? '').trim() || undefined,
     diagnostics_enabled: typeof parsed.diagnostics_enabled === 'boolean' ? parsed.diagnostics_enabled : undefined,
+    pid: Number.isInteger(parsed.pid) && Number(parsed.pid) > 0 ? Number(parsed.pid) : undefined,
   };
 }

@@ -185,13 +185,21 @@ Security baseline:
 Env App reconnect recovery is intentionally split into two layers:
 
 1. **Transport fast retries**
-   - Flowersec transport reconnect keeps a small bounded retry budget for short websocket/tunnel blips.
+   - Flowersec transport reconnect keeps a small bounded retry budget for short websocket/tunnel blips in both remote tunnel mode and local direct mode.
    - This path is optimized for brief network hiccups and quick runtime restarts.
 
 2. **App-level waiting loop**
    - If fast retries are exhausted, Env App switches into an explicit waiting state instead of hammering full reconnect attempts.
-   - The shell polls environment availability with a single-flight backoff timer and only launches controlled hard reconnect probes.
+   - `EnvAppShell` owns the only waiting coordinator; maintenance and page-level widgets do not start their own reconnect loops.
+   - The shell polls runtime availability with a single-flight backoff timer and only launches controlled reconnect probes.
+   - Remote mode probes environment status from the control plane.
+   - Local direct mode probes Local UI availability plus local access-gate state from `/api/local/access/status`.
    - Manual retries and lifecycle nudges (`online`, `focus`, `visibilitychange`) reuse the same coordinator so the UI never spawns parallel reconnect loops.
+
+3. **Secure-session recovery**
+   - Transport recovery and access-gate recovery stay separate.
+   - After reconnect, Env App re-checks the secure session authoritatively instead of trusting stale browser-side unlocked state.
+   - If the runtime restart invalidates the previous resume token or local access session, the same page switches back to the in-place password prompt without requiring a manual refresh.
 
 UI contract:
 
@@ -209,6 +217,7 @@ Design goals:
 - keep transient recovery fast,
 - bound control-plane pressure during prolonged downtime,
 - distinguish runtime unavailability from secure-session recovery,
+- let the same reconnect contract cover remote tunnel mode and local direct mode,
 - keep reconnect policy centralized in the Env App shell instead of scattering timers across pages.
 
 ## Audit log
