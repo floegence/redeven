@@ -7,7 +7,7 @@ Key points:
 - The Env App UI is **runtime-bundled** (built + embedded into the Redeven runtime binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex).
-- In Redeven Desktop, the command palette also exposes a shell-owned `Switch Device...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
+- In Redeven Desktop, the command palette also exposes a shell-owned `Connect Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
 - Codex is a separate optional AI runtime with its own activity-bar entry and gateway namespace; it is not implemented as a Flower mode, provider, or sub-page.
 - Runtime Settings -> Codex is a read-only host/runtime status panel. Redeven does not persist Codex approval, sandbox, model, or binary configuration in runtime settings.
 - The Codex sidebar/page use floe-webapp layout and form primitives for visual consistency, but Codex state, icon assets, thread navigation, transcript projection, and request handling stay implemented as a separate surface rather than as Flower extensions.

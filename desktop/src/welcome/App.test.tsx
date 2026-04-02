@@ -4,28 +4,35 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { buildDesktopWelcomeShellViewModel, capabilityUnavailableMessage, shellStatus } from './viewModel';
 
 describe('DesktopWelcomeShell', () => {
-  it('describes the chooser surface inside the shared shell model', () => {
+  it('describes Connect Environment inside the shared shell model', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         pending_bootstrap: null,
+        saved_environments: [
+          {
+            id: 'http://192.168.1.11:24000/',
+            label: '192.168.1.11:24000',
+            local_ui_url: 'http://192.168.1.11:24000/',
+            last_used_at_ms: 10,
+          },
+        ],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
       },
-      surface: 'machine_chooser',
+      surface: 'connect_environment',
     });
 
     expect(buildDesktopWelcomeShellViewModel(snapshot)).toEqual({
       shell_title: 'Redeven Desktop',
-      surface_title: 'Choose a machine',
-      chooser_heading: 'Open a Redeven machine',
-      utility_labels: ['Switch Machine', 'Settings'],
+      surface_title: 'Connect Environment',
+      connect_heading: 'Connect Environment',
       primary_action_label: 'Open This Device',
-      settings_save_label: null,
+      settings_save_label: 'Save This Device Options',
     });
     expect(shellStatus(snapshot)).toEqual({
       tone: 'disconnected',
-      label: 'No machine open',
+      label: 'No environment open',
     });
   });
 
@@ -39,6 +46,7 @@ describe('DesktopWelcomeShell', () => {
           env_id: 'env_123',
           env_token: 'token-123',
         },
+        saved_environments: [],
         recent_external_local_ui_urls: [],
       },
       surface: 'this_device_settings',
@@ -46,17 +54,16 @@ describe('DesktopWelcomeShell', () => {
 
     expect(buildDesktopWelcomeShellViewModel(snapshot)).toEqual({
       shell_title: 'Redeven Desktop',
-      surface_title: 'This Device settings',
-      chooser_heading: 'Open a Redeven machine',
-      utility_labels: ['Switch Machine', 'Settings'],
+      surface_title: 'This Device Settings',
+      connect_heading: 'Connect Environment',
       primary_action_label: 'Open This Device',
       settings_save_label: 'Save This Device Options',
     });
-    expect(snapshot.settings_surface?.window_title).toBe('This Device Options');
-    expect(snapshot.settings_surface?.alert.title).toBe('Machine selection stays in the welcome launcher');
+    expect(snapshot.settings_surface.window_title).toBe('This Device Options');
+    expect(snapshot.settings_surface.alert.title).toBe('Environment selection stays in Connect Environment');
   });
 
-  it('uses chooser guidance copy when a workbench capability is unavailable before connection', () => {
-    expect(capabilityUnavailableMessage('Deck')).toBe('Choose a machine first to open Deck.');
+  it('uses Environment guidance copy when a capability is unavailable before connection', () => {
+    expect(capabilityUnavailableMessage('Deck')).toBe('Connect to an Environment first to open Deck.');
   });
 });

@@ -4,46 +4,32 @@ import {
   buildBlockedLaunchIssue,
   buildDesktopWelcomeSnapshot,
   buildRemoteConnectionIssue,
-  resolveDesktopLinkState,
-  resolveDesktopSharePreset,
 } from './desktopWelcomeState';
 
 describe('desktopWelcomeState', () => {
-  it('resolves high-level sharing presets for This Device', () => {
-    expect(resolveDesktopSharePreset('127.0.0.1:0', '')).toBe('this_device');
-    expect(resolveDesktopSharePreset('0.0.0.0:24000', 'secret')).toBe('local_network');
-    expect(resolveDesktopSharePreset('127.0.0.1:24000', 'secret')).toBe('custom');
-  });
-
-  it('derives the remote control status from pending bootstrap and active runtime state', () => {
-    expect(resolveDesktopLinkState({
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      pending_bootstrap: {
-        controlplane_url: 'https://region.example.invalid',
-        env_id: 'env_123',
-        env_token: 'token-123',
-      },
-      recent_external_local_ui_urls: [],
-    }, false)).toBe('pending');
-
-    expect(resolveDesktopLinkState({
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      pending_bootstrap: null,
-      recent_external_local_ui_urls: [],
-    }, true)).toBe('connected');
-  });
-
-  it('builds launcher snapshots around the active session and recent devices', () => {
+  it('builds Connect Environment snapshots around the active session and saved environments', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         pending_bootstrap: null,
+        saved_environments: [
+          {
+            id: 'http://192.168.1.12:24000/',
+            label: 'Staging',
+            local_ui_url: 'http://192.168.1.12:24000/',
+            last_used_at_ms: 200,
+          },
+          {
+            id: 'http://192.168.1.11:24000/',
+            label: 'Laptop',
+            local_ui_url: 'http://192.168.1.11:24000/',
+            last_used_at_ms: 100,
+          },
+        ],
         recent_external_local_ui_urls: [
-          'http://192.168.1.11:24000/',
           'http://192.168.1.12:24000/',
+          'http://192.168.1.11:24000/',
         ],
       },
       externalStartup: {
@@ -58,31 +44,81 @@ describe('desktopWelcomeState', () => {
       issue: buildRemoteConnectionIssue(
         'http://192.168.1.99:24000/',
         'external_target_unreachable',
-        'Desktop could not reach that device.',
+        'Desktop could not reach that Environment.',
       ),
     });
 
-    expect(snapshot.surface).toBe('machine_chooser');
+    expect(snapshot.surface).toBe('connect_environment');
     expect(snapshot.entry_reason).toBe('switch_device');
     expect(snapshot.current_session_target_kind).toBe('external_local_ui');
     expect(snapshot.current_session_local_ui_url).toBe('http://192.168.1.12:24000/');
-    expect(snapshot.current_session_label).toBe('Another device is open');
-    expect(snapshot.close_action_label).toBe('Back to current device');
-    expect(snapshot.this_device_share_preset).toBe('local_network');
-    expect(snapshot.this_device_share_label).toBe('Shared on your local network');
-    expect(snapshot.recent_devices).toEqual([
-      {
+    expect(snapshot.current_session_label).toBe('Another environment is open');
+    expect(snapshot.close_action_label).toBe('Back to current environment');
+    expect(snapshot.environments).toEqual([
+      expect.objectContaining({
+        id: 'this_device',
+        kind: 'this_device',
+        label: 'This Device',
+        tag: 'This Device',
+        can_edit: true,
+        can_delete: false,
+      }),
+      expect.objectContaining({
+        id: 'http://192.168.1.12:24000/',
+        kind: 'external_local_ui',
+        label: 'Staging',
         local_ui_url: 'http://192.168.1.12:24000/',
-        is_active_session: true,
-      },
-      {
+        tag: 'Current',
+        is_current: true,
+        can_edit: true,
+        can_delete: true,
+      }),
+      expect.objectContaining({
+        id: 'http://192.168.1.11:24000/',
+        kind: 'external_local_ui',
+        label: 'Laptop',
         local_ui_url: 'http://192.168.1.11:24000/',
-        is_active_session: false,
-      },
+        tag: 'Recent',
+        is_current: false,
+        can_edit: true,
+        can_delete: true,
+      }),
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
-    expect(snapshot.issue?.title).toBe('Unable to open that device');
-    expect(snapshot.settings_surface).toBeNull();
+    expect(snapshot.issue?.title).toBe('Unable to open that Environment');
+    expect(snapshot.settings_surface.window_title).toBe('This Device Options');
+  });
+
+  it('adds a transient current remote Environment when it is not yet saved', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: {
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        pending_bootstrap: null,
+        saved_environments: [],
+        recent_external_local_ui_urls: [],
+      },
+      externalStartup: {
+        local_ui_url: 'http://192.168.1.77:24000/',
+        local_ui_urls: ['http://192.168.1.77:24000/'],
+      },
+      activeSessionTarget: {
+        kind: 'external_local_ui',
+        external_local_ui_url: 'http://192.168.1.77:24000/',
+      },
+    });
+
+    expect(snapshot.environments).toEqual([
+      expect.objectContaining({ id: 'this_device', kind: 'this_device' }),
+      expect.objectContaining({
+        id: 'http://192.168.1.77:24000/',
+        kind: 'external_local_ui',
+        tag: 'Current',
+        can_edit: true,
+        can_delete: false,
+      }),
+    ]);
+    expect(snapshot.suggested_remote_url).toBe('http://192.168.1.77:24000/');
   });
 
   it('builds a shared settings surface snapshot when requested by the desktop shell', () => {
@@ -95,16 +131,16 @@ describe('desktopWelcomeState', () => {
           env_id: 'env_123',
           env_token: 'token-123',
         },
+        saved_environments: [],
         recent_external_local_ui_urls: [],
       },
       surface: 'this_device_settings',
     });
 
     expect(snapshot.surface).toBe('this_device_settings');
-    expect(snapshot.settings_surface).not.toBeNull();
-    expect(snapshot.settings_surface?.window_title).toBe('This Device Options');
-    expect(snapshot.settings_surface?.save_label).toBe('Save This Device Options');
-    expect(snapshot.settings_surface?.draft).toEqual({
+    expect(snapshot.settings_surface.window_title).toBe('This Device Options');
+    expect(snapshot.settings_surface.save_label).toBe('Save This Device Options');
+    expect(snapshot.settings_surface.draft).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       controlplane_url: 'https://region.example.invalid',

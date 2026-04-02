@@ -2,6 +2,7 @@
 
 @import 'tailwindcss';
 @import '@floegence/floe-webapp-core/tailwind';
+@import '../../../internal/envapp/ui_src/src/styles/redeven.css';
 
 @source './**/*.{ts,tsx,html}';
 
@@ -13,18 +14,12 @@ html,
 body {
   min-height: 100vh;
   margin: 0;
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background: var(--background);
+  color: var(--foreground);
 }
 
 #root {
   min-height: 100vh;
-}
-
-body {
-  background-image:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 28%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-background) 96%, transparent), var(--color-background));
 }
 
 code,

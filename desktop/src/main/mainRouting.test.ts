@@ -8,33 +8,43 @@ function readMainSource(): string {
 }
 
 describe('main routing', () => {
-  it('opens the welcome launcher on cold launch instead of auto-connecting immediately', () => {
+  it('opens the welcome renderer on cold launch instead of auto-connecting immediately', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("await openDesktopWelcomeWindow({ entryReason: 'app_launch' });");
     expect(mainSrc).toContain('resolveWelcomeRendererPath');
   });
 
-  it('tracks the active session separately and restores it on launcher-owned cancellation', () => {
+  it('tracks the active session separately and restores it on settings cancellation', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('let currentSessionTarget: DesktopSessionTarget | null = null;');
     expect(mainSrc).toContain('returnMainWindowToCurrentTarget({ stealAppFocus: true })');
-    expect(mainSrc).toContain('await closeSettingsSurface()');
+    expect(mainSrc).toContain('async function closeSettingsSurface(): Promise<void> {');
     expect(mainSrc).toContain("ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {");
+    expect(mainSrc).toContain('void closeSettingsSurface();');
     expect(mainSrc).toContain('if (currentSessionTarget) {');
     expect(mainSrc).toContain('void requestQuit();');
   });
 
-  it('routes launcher and legacy menu entrypoints into the welcome-owned flow', () => {
+  it('routes launcher actions and legacy shell entrypoints into the shared welcome flow', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {");
     expect(mainSrc).toContain("surface: 'this_device_settings'");
-    expect(mainSrc).toContain("case 'open_advanced_settings':");
-    expect(mainSrc).toContain("await openAdvancedSettingsWindow('welcome');");
+    expect(mainSrc).toContain("case 'upsert_saved_environment':");
+    expect(mainSrc).toContain("case 'delete_saved_environment':");
+    expect(mainSrc).not.toContain("case 'open_advanced_settings':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain("await openAdvancedSettingsWindow('current_target');");
+  });
+
+  it('keeps settings saves renderer-local by persisting without closing the surface', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain("ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {");
+    expect(mainSrc).toContain('await persistDesktopPreferences(next);');
+    expect(mainSrc).not.toContain('await closeSettingsSurface()');
   });
 
   it('builds launcher snapshots with active-session context', () => {

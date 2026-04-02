@@ -15,17 +15,17 @@ This document describes the public Electron desktop shell that ships with each `
 - Electron is a thin shell around Redeven Local UI.
 - `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
 - The main BrowserWindow has three shell-owned surfaces:
-  - `Machine chooser`
+  - `Connect Environment`
   - `This Device settings`
   - `Active target`
-- The desktop-owned `Machine chooser` and `This Device settings` surfaces render inside the same Floe workbench shell instance.
+- The desktop-owned `Connect Environment` and `This Device settings` surfaces render inside the same Floe workbench shell instance.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before a machine is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
   - `This Device`
-  - a remembered recent device
+  - a remembered recent Environment
   - a newly entered Redeven Local UI URL
-- Reopening the launcher from an active session does not immediately disconnect the current target. The current session stays available until the user opens a different device.
+- Reopening the launcher from an active session does not immediately disconnect the current target. The current session stays available until the user opens a different Environment.
 - Common startup failures return to the launcher with inline context instead of bouncing users to a separate blocked-first flow.
 - Electron only allows navigation to the exact reported Local UI origin and opens all other URLs in the system browser.
 
@@ -81,31 +81,31 @@ That blocked payload includes lock owner metadata and relevant state paths so De
 
 ## Welcome Launcher
 
-The machine chooser is the primary shell-owned startup surface.
+`Connect Environment` is the primary shell-owned startup surface.
 
 Visual hierarchy:
 
 - shell title: `Redeven Desktop`
-- shell surface title: `Choose a machine`
+- shell surface title: `Connect Environment`
 - primary section: `This Device`
-- secondary list: `Recent Machines`
-- secondary form: `Connect Another Device`
-- utility entrypoints in the Activity Bar bottom area:
-  - `Switch Machine`
-  - `Settings`
+- secondary list: `Saved and recent Environments`
+- secondary form: `Connect another Environment`
+- activity bar:
+  - one item: `Connect Environment`
 
 Interaction rules:
 
 - Cold launch never auto-opens a remembered target.
-- Machine choice is always a launcher action, never a side effect of saving settings.
+- Environment choice is always a launcher action, never a side effect of saving settings.
 - `This Device` is the primary path and behaves like a workbench-style open action.
-- `Settings` opens `This Device settings` inside the same shell frame.
-- Recent remote devices stay one click away after a successful connection.
+- `This Device settings` opens inside the same shell frame without reloading the renderer.
+- Recent remote Environments stay one click away after a successful connection.
+- Saved remote Environments can be edited or deleted inline.
 - Validation errors and startup failures render inline on the launcher.
-- Workbench activity items remain visible before connection; clicking them returns the user to the chooser with guidance instead of opening an empty page.
+- The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:
   - `Quit` when no device is open yet
-  - `Back to current device` when a target is already open
+  - `Back to current environment` when a target is already open
 
 ## This Device Settings
 
@@ -123,17 +123,18 @@ It edits only future startup behavior for `This Device`:
 Rules:
 
 - Saving options only persists configuration.
-- Saving options does not switch devices.
-- Cancel returns to the current device when one is already open; otherwise it returns to the launcher.
+- Saving options does not switch Environments.
+- Cancel returns to the current Environment when one is already open; otherwise it returns to Connect Environment.
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
 
 ## Desktop Preferences
 
-Desktop keeps one persisted preference model for stable `This Device` configuration and recent remote URLs:
+Desktop keeps one persisted preference model for stable `This Device` configuration and saved remote Environments:
 
 - `local_ui_bind`
 - `local_ui_password`
 - `pending_bootstrap`
+- `saved_environments`
 - `recent_external_local_ui_urls`
 
 Semantics:
@@ -141,7 +142,8 @@ Semantics:
 - Desktop does not persist a remembered current target for the next launch.
 - The active target is runtime-only desktop session state.
 - `local_ui_bind` and `local_ui_password` apply only to future `This Device` opens.
-- `recent_external_local_ui_urls` is normalized, de-duplicated, and capped.
+- `saved_environments` stores user-visible labels, normalized Local UI URLs, and `last_used_at_ms`.
+- `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 
 Launcher-oriented sharing presets intentionally map high-level user intent to the same runtime contract:
@@ -161,12 +163,12 @@ Desktop shell preferences live under the Electron user data directory, not insid
 ## User Entry Points
 
 - Cold app launch opens the welcome launcher in the main window.
-- The native app menu exposes one primary shell action: `Switch Device...`
+- The native app menu exposes one primary shell action: `Connect Environment...`
 - Legacy shell entrypoints such as `connect`, `device_chooser`, and `switch_device` route to the same welcome launcher.
 - Legacy advanced-settings entrypoints route to `This Device settings`.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
-- Env App exposes `Switch Machine` and `Runtime Settings` in the Activity Bar bottom utility area when the desktop shell bridge is available.
-- Env App `Runtime Settings` stays separate from shell-owned device selection and desktop-managed startup state.
+- Env App exposes `Connect Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
+- Env App `Runtime Settings` stays separate from shell-owned Environment selection and desktop-managed startup state.
 
 ## Error Recovery
 

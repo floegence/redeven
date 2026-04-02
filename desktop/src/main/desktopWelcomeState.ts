@@ -1,20 +1,20 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
-import { parseLocalUIBind } from './localUIBind';
-import { desktopPreferencesToDraft, type DesktopPreferences } from './desktopPreferences';
+import {
+  defaultSavedEnvironmentLabel,
+  desktopEnvironmentID,
+  desktopPreferencesToDraft,
+  type DesktopPreferences,
+} from './desktopPreferences';
 import type { DesktopSessionTarget } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type { StartupReport } from './startup';
-import {
-  type DesktopLauncherSurface,
-  type DesktopLinkState,
-  type DesktopRecentDeviceCard,
-  type DesktopSharePreset,
-  type DesktopWelcomeEntryReason,
-  type DesktopWelcomeIssue,
-  type DesktopWelcomeSnapshot,
+import type {
+  DesktopEnvironmentEntry,
+  DesktopLauncherSurface,
+  DesktopWelcomeEntryReason,
+  DesktopWelcomeIssue,
+  DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
-
-export const DEFAULT_LOCAL_NETWORK_BIND = '0.0.0.0:24000';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
@@ -25,55 +25,6 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
 }>;
-
-function isThisDevicePreset(bindRaw: string, passwordRaw: string): boolean {
-  const password = String(passwordRaw ?? '').trim();
-  if (password !== '') {
-    return false;
-  }
-  try {
-    const bind = parseLocalUIBind(bindRaw);
-    return bind.loopback && bind.port === 0;
-  } catch {
-    return false;
-  }
-}
-
-function isLocalNetworkPreset(bindRaw: string, passwordRaw: string): boolean {
-  const password = String(passwordRaw ?? '').trim();
-  if (password === '') {
-    return false;
-  }
-  try {
-    const bind = parseLocalUIBind(bindRaw);
-    return !bind.loopback && bind.port === 24000;
-  } catch {
-    return false;
-  }
-}
-
-export function resolveDesktopSharePreset(bindRaw: string, passwordRaw: string): DesktopSharePreset {
-  if (isThisDevicePreset(bindRaw, passwordRaw)) {
-    return 'this_device';
-  }
-  if (isLocalNetworkPreset(bindRaw, passwordRaw)) {
-    return 'local_network';
-  }
-  return 'custom';
-}
-
-export function resolveDesktopLinkState(
-  preferences: DesktopPreferences,
-  activeRuntimeRemoteEnabled: boolean | null,
-): DesktopLinkState {
-  if (preferences.pending_bootstrap) {
-    return 'pending';
-  }
-  if (activeRuntimeRemoteEnabled === true) {
-    return 'connected';
-  }
-  return 'idle';
-}
 
 function diagnosticsLines(lines: readonly string[]): string {
   return lines.filter((value) => String(value ?? '').trim() !== '').join('\n');
@@ -87,7 +38,7 @@ export function buildRemoteConnectionIssue(
   return {
     scope: 'remote_device',
     code,
-    title: code === 'external_target_invalid' ? 'Check the Redeven URL' : 'Unable to open that device',
+    title: code === 'external_target_invalid' ? 'Check the Environment URL' : 'Unable to open that Environment',
     message,
     diagnostics_copy: diagnosticsLines([
       'status: blocked',
@@ -124,39 +75,11 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
   return {
     scope: 'this_device',
     code: report.code,
-    title: 'This device needs attention',
+    title: 'This Device needs attention',
     message: report.message,
     diagnostics_copy: formatBlockedLaunchDiagnostics(report),
     target_url: '',
   };
-}
-
-function buildRecentDevices(
-  preferences: DesktopPreferences,
-  activeSessionTarget: DesktopSessionTarget | null,
-): readonly DesktopRecentDeviceCard[] {
-  const candidates: string[] = [];
-  if (activeSessionTarget?.kind === 'external_local_ui' && activeSessionTarget.external_local_ui_url) {
-    candidates.push(activeSessionTarget.external_local_ui_url);
-  }
-  candidates.push(...preferences.recent_external_local_ui_urls);
-
-  const seen = new Set<string>();
-  const recentDevices: DesktopRecentDeviceCard[] = [];
-  for (const localUIURL of candidates) {
-    const cleanURL = String(localUIURL ?? '').trim();
-    if (!cleanURL || seen.has(cleanURL)) {
-      continue;
-    }
-    seen.add(cleanURL);
-    recentDevices.push({
-      local_ui_url: cleanURL,
-      is_active_session: activeSessionTarget?.kind === 'external_local_ui'
-        && activeSessionTarget.external_local_ui_url === cleanURL,
-    });
-  }
-
-  return recentDevices;
 }
 
 function activeSessionLocalUIURL(
@@ -175,9 +98,11 @@ function activeSessionLocalUIURL(
 
 function currentSessionLabel(activeSessionTarget: DesktopSessionTarget | null): string {
   if (!activeSessionTarget) {
-    return 'No device opened';
+    return 'No environment open';
   }
-  return activeSessionTarget.kind === 'managed_local' ? 'This device is open' : 'Another device is open';
+  return activeSessionTarget.kind === 'managed_local'
+    ? 'This Device environment is open'
+    : 'Another environment is open';
 }
 
 function currentSessionDescription(
@@ -186,71 +111,83 @@ function currentSessionDescription(
   externalStartup: StartupReport | null,
 ): string {
   if (!activeSessionTarget) {
-    return 'Choose a machine to open in this Desktop session.';
+    return 'Choose an Environment to open in Redeven Desktop.';
   }
   if (activeSessionTarget.kind === 'managed_local') {
     return managedStartup?.local_ui_url
-      ? `Current session: ${managedStartup.local_ui_url}`
-      : 'Desktop is currently attached to This Device.';
+      ? `Current environment: ${managedStartup.local_ui_url}`
+      : 'Redeven Desktop is currently attached to This Device.';
   }
   return externalStartup?.local_ui_url
-    ? `Current session: ${externalStartup.local_ui_url}`
-    : 'Desktop is currently attached to another Redeven device.';
+    ? `Current environment: ${externalStartup.local_ui_url}`
+    : 'Redeven Desktop is currently attached to another Environment.';
 }
 
-function thisDeviceShareLabel(snapshot: DesktopSharePreset): string {
-  switch (snapshot) {
-    case 'local_network':
-      return 'Shared on your local network';
-    case 'custom':
-      return 'Custom exposure';
-    default:
-      return 'Private to this device';
-  }
-}
-
-function thisDeviceShareDescription(
-  snapshot: DesktopSharePreset,
+function buildEnvironmentEntries(
+  preferences: DesktopPreferences,
   managedStartup: StartupReport | null,
-): string {
-  switch (snapshot) {
-    case 'local_network':
-      return managedStartup?.local_ui_url
-        ? `This device can be opened from another trusted machine through ${managedStartup.local_ui_url}.`
-        : `Desktop will expose This Device on ${DEFAULT_LOCAL_NETWORK_BIND} with an access password.`;
-    case 'custom':
-      return 'This device uses a custom Local UI bind or password configuration.';
-    default:
-      return 'Desktop keeps This Device on a loopback-only Local UI bind until you choose to share it.';
-  }
-}
+  externalStartup: StartupReport | null,
+  activeSessionTarget: DesktopSessionTarget | null,
+): readonly DesktopEnvironmentEntry[] {
+  const currentExternalURL = activeSessionTarget?.kind === 'external_local_ui'
+    ? (externalStartup?.local_ui_url || activeSessionTarget.external_local_ui_url)
+    : '';
+  const currentManaged = activeSessionTarget?.kind === 'managed_local';
+  const entries: DesktopEnvironmentEntry[] = [
+    {
+      id: 'this_device',
+      kind: 'this_device',
+      label: 'This Device',
+      local_ui_url: managedStartup?.local_ui_url ?? '',
+      secondary_text: managedStartup?.local_ui_url || 'Open the desktop-managed Environment on this machine.',
+      tag: currentManaged ? 'Current' : 'This Device',
+      is_current: currentManaged,
+      can_edit: true,
+      can_delete: false,
+      last_used_at_ms: currentManaged ? Date.now() : 0,
+    },
+  ];
 
-function thisDeviceLinkLabel(linkState: DesktopLinkState): string {
-  switch (linkState) {
-    case 'pending':
-      return 'Queued for next start';
-    case 'connected':
-      return 'Remote control connected';
-    default:
-      return 'No queued request';
+  const catalog = preferences.saved_environments;
+  const currentExternalExistsInCatalog = currentExternalURL !== '' && catalog.some((environment) => environment.local_ui_url === currentExternalURL);
+  if (currentExternalURL !== '' && !currentExternalExistsInCatalog) {
+    entries.push({
+      id: desktopEnvironmentID(currentExternalURL),
+      kind: 'external_local_ui',
+      label: defaultSavedEnvironmentLabel(currentExternalURL),
+      local_ui_url: currentExternalURL,
+      secondary_text: currentExternalURL,
+      tag: 'Current',
+      is_current: true,
+      can_edit: true,
+      can_delete: false,
+      last_used_at_ms: Date.now(),
+    });
   }
-}
+  for (let index = 0; index < catalog.length; index += 1) {
+    const environment = catalog[index];
+    const isCurrent = currentExternalURL !== '' && environment.local_ui_url === currentExternalURL;
+    entries.push({
+      id: environment.id,
+      kind: 'external_local_ui',
+      label: environment.label,
+      local_ui_url: environment.local_ui_url,
+      secondary_text: environment.local_ui_url,
+      tag: isCurrent ? 'Current' : index < 3 ? 'Recent' : 'Saved',
+      is_current: isCurrent,
+      can_edit: true,
+      can_delete: true,
+      last_used_at_ms: environment.last_used_at_ms,
+    });
+  }
 
-function thisDeviceLinkDescription(linkState: DesktopLinkState): string {
-  switch (linkState) {
-    case 'pending':
-      return 'Desktop already has a saved one-shot Redeven link request for the next successful This Device start.';
-    case 'connected':
-      return 'This device is currently running with a valid remote control channel.';
-    default:
-      return 'Add a one-shot Redeven link request only when you need the next This Device start to register itself remotely.';
-  }
+  return entries;
 }
 
 function suggestedRemoteURL(
   issue: DesktopWelcomeIssue | null,
   activeSessionTarget: DesktopSessionTarget | null,
-  recentDevices: readonly DesktopRecentDeviceCard[],
+  environments: readonly DesktopEnvironmentEntry[],
 ): string {
   if (issue?.scope === 'remote_device' && issue.target_url) {
     return issue.target_url;
@@ -258,7 +195,7 @@ function suggestedRemoteURL(
   if (activeSessionTarget?.kind === 'external_local_ui' && activeSessionTarget.external_local_ui_url) {
     return activeSessionTarget.external_local_ui_url;
   }
-  return recentDevices[0]?.local_ui_url ?? '';
+  return environments.find((environment) => environment.kind === 'external_local_ui')?.local_ui_url ?? '';
 }
 
 export function buildDesktopWelcomeSnapshot(
@@ -268,14 +205,9 @@ export function buildDesktopWelcomeSnapshot(
   const managedStartup = args.managedStartup ?? null;
   const externalStartup = args.externalStartup ?? null;
   const activeSessionTarget = args.activeSessionTarget ?? null;
-  const activeRuntimeRemoteEnabled = activeSessionTarget?.kind === 'managed_local'
-    ? (typeof managedStartup?.remote_enabled === 'boolean' ? managedStartup.remote_enabled : null)
-    : null;
-  const recentDevices = buildRecentDevices(preferences, activeSessionTarget);
-  const sharePreset = resolveDesktopSharePreset(preferences.local_ui_bind, preferences.local_ui_password);
-  const linkState = resolveDesktopLinkState(preferences, activeRuntimeRemoteEnabled);
   const issue = args.issue ?? null;
-  const surface = args.surface ?? 'machine_chooser';
+  const surface = args.surface ?? 'connect_environment';
+  const environments = buildEnvironmentEntries(preferences, managedStartup, externalStartup, activeSessionTarget);
 
   return {
     surface,
@@ -284,19 +216,10 @@ export function buildDesktopWelcomeSnapshot(
     current_session_local_ui_url: activeSessionLocalUIURL(activeSessionTarget, managedStartup, externalStartup),
     current_session_label: currentSessionLabel(activeSessionTarget),
     current_session_description: currentSessionDescription(activeSessionTarget, managedStartup, externalStartup),
-    close_action_label: activeSessionTarget ? 'Back to current device' : 'Quit',
-    this_device_local_ui_url: managedStartup?.local_ui_url ?? '',
-    this_device_share_preset: sharePreset,
-    this_device_share_label: thisDeviceShareLabel(sharePreset),
-    this_device_share_description: thisDeviceShareDescription(sharePreset, managedStartup),
-    this_device_link_state: linkState,
-    this_device_link_label: thisDeviceLinkLabel(linkState),
-    this_device_link_description: thisDeviceLinkDescription(linkState),
-    recent_devices: recentDevices,
-    suggested_remote_url: suggestedRemoteURL(issue, activeSessionTarget, recentDevices),
+    close_action_label: activeSessionTarget ? 'Back to current environment' : 'Quit',
+    environments,
+    suggested_remote_url: suggestedRemoteURL(issue, activeSessionTarget, environments),
     issue,
-    settings_surface: surface === 'this_device_settings'
-      ? buildDesktopSettingsSurfaceSnapshot('advanced_settings', desktopPreferencesToDraft(preferences))
-      : null,
+    settings_surface: buildDesktopSettingsSurfaceSnapshot('advanced_settings', desktopPreferencesToDraft(preferences)),
   };
 }

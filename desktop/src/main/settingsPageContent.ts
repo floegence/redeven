@@ -67,15 +67,15 @@ export function buildDesktopSettingsSurfaceSnapshot(
   return {
     mode,
     window_title: pageWindowTitle(mode),
-    lead: 'Edit the low-level This Device startup, access, and one-shot bootstrap inputs that sit behind the Desktop welcome launcher.',
+    lead: 'Edit the This Device startup, access, and one-shot bootstrap inputs that sit behind the Desktop Connect Environment flow.',
     status_label: 'This device',
     status_tone: 'local',
     save_label: 'Save This Device Options',
     summary_items: [
       {
-        label: 'Launcher model',
-        value: 'Choose a machine on launch',
-        body: 'Desktop always opens the welcome launcher first. These settings only affect future opens of This Device.',
+        label: 'Startup flow',
+        value: 'Connect Environment first',
+        body: 'Desktop always opens Connect Environment first. These settings only affect future opens of This Device.',
         valueId: 'target-summary-value',
         bodyId: 'target-summary-note',
       },
@@ -94,8 +94,8 @@ export function buildDesktopSettingsSurfaceSnapshot(
     ],
     alert: {
       kicker: 'Primary workflow',
-      title: 'Machine selection stays in the welcome launcher',
-      body: 'Use Switch Device... or the startup welcome page when you want to choose This Device or another machine. This screen only edits This Device startup details.',
+      title: 'Environment selection stays in Connect Environment',
+      body: 'Use Connect Environment when you want to choose This Device or another Environment. This screen only edits This Device startup details.',
       bodyId: 'desktop-target-alert-body',
       tone: 'info',
     },
