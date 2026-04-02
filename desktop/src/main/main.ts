@@ -6,10 +6,12 @@ import { buildAppMenuTemplate } from './appMenu';
 import {
   clearPendingBootstrap,
   createSafeStorageSecretCodec,
+  deleteSavedEnvironment,
   defaultDesktopPreferencesPaths,
   loadDesktopPreferences,
   rememberRecentExternalLocalUITarget,
   saveDesktopPreferences,
+  upsertSavedEnvironment,
   validateDesktopSettingsDraft,
   type DesktopPreferences,
 } from './desktopPreferences';
@@ -123,7 +125,7 @@ let desktopWelcomeViewState: Readonly<{
   entryReason: DesktopWelcomeEntryReason;
   issue: DesktopWelcomeIssue | null;
 }> = {
-  surface: 'machine_chooser',
+  surface: 'connect_environment',
   entryReason: 'app_launch',
   issue: null,
 };
@@ -169,18 +171,6 @@ async function loadDesktopPreferencesCached(): Promise<DesktopPreferences> {
 async function persistDesktopPreferences(next: DesktopPreferences): Promise<void> {
   desktopPreferencesCache = next;
   await saveDesktopPreferences(preferencesPaths(), next, preferencesCodec());
-}
-
-function sameRecentTargets(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) {
-      return false;
-    }
-  }
-  return true;
 }
 
 function presentAppWindow(win: BrowserWindow, options?: Readonly<{ stealAppFocus?: boolean }>): void {
@@ -287,7 +277,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
 
 async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {}): Promise<void> {
   desktopWelcomeViewState = {
-    surface: options.surface ?? 'machine_chooser',
+    surface: options.surface ?? 'connect_environment',
     entryReason: options.entryReason ?? (currentSessionTarget ? 'switch_device' : 'app_launch'),
     issue: options.issue ?? null,
   };
@@ -328,7 +318,7 @@ async function prepareExternalTarget(targetURL: string): Promise<PreparedExterna
         issue: buildRemoteConnectionIssue(
           targetURL,
           'external_target_unreachable',
-          'Desktop could not reach that Redeven device. Make sure the target machine is exposing Redeven Local UI and that its port is reachable from this machine.',
+          'Desktop could not reach that Redeven Environment. Make sure the target host is exposing Redeven Local UI and that its port is reachable from this machine.',
         ),
       };
     }
@@ -360,9 +350,7 @@ async function activateExternalTarget(startup: StartupReport, preferences: Deskt
   allowedBaseURL = startup.local_ui_url;
 
   const nextPreferences = rememberRecentExternalLocalUITarget(preferences, startup.local_ui_url);
-  if (!sameRecentTargets(nextPreferences.recent_external_local_ui_urls, preferences.recent_external_local_ui_urls)) {
-    await persistDesktopPreferences(nextPreferences);
-  }
+  await persistDesktopPreferences(nextPreferences);
 
   await desktopDiagnostics.configureRuntime(startup, allowedBaseURL);
   await desktopDiagnostics.recordLifecycle(
@@ -457,7 +445,7 @@ async function openThisDeviceFromWelcome(): Promise<void> {
 async function openRemoteDeviceFromWelcome(targetURL: string): Promise<void> {
   const normalizedTargetURL = String(targetURL ?? '').trim();
   if (!normalizedTargetURL) {
-    throw new Error('Redeven URL is required to open another device.');
+    throw new Error('Environment URL is required to open another Environment.');
   }
   if (
     currentSessionTarget?.kind === 'external_local_ui'
@@ -496,6 +484,28 @@ async function closeSettingsSurface(): Promise<void> {
   });
 }
 
+async function upsertSavedEnvironmentFromWelcome(
+  environmentID: string,
+  label: string,
+  externalLocalUIURL: string,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const existing = preferences.saved_environments.find((environment) => environment.id === environmentID);
+  const next = upsertSavedEnvironment(preferences, {
+    environment_id: environmentID,
+    label,
+    local_ui_url: externalLocalUIURL,
+    last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
+  });
+  await persistDesktopPreferences(next);
+}
+
+async function deleteSavedEnvironmentFromWelcome(environmentID: string): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const next = deleteSavedEnvironment(preferences, environmentID);
+  await persistDesktopPreferences(next);
+}
+
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<void> {
   switch (request.kind) {
     case 'open_this_device':
@@ -504,8 +514,11 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'open_remote_device':
       await openRemoteDeviceFromWelcome(request.external_local_ui_url);
       return;
-    case 'open_advanced_settings':
-      await openAdvancedSettingsWindow('welcome');
+    case 'upsert_saved_environment':
+      await upsertSavedEnvironmentFromWelcome(request.environment_id, request.label, request.external_local_ui_url);
+      return;
+    case 'delete_saved_environment':
+      await deleteSavedEnvironmentFromWelcome(request.environment_id);
       return;
     case 'return_to_current_device':
       if (currentSessionTarget) {
@@ -783,10 +796,10 @@ if (!app.requestSingleInstanceLock()) {
       const validated = validateDesktopSettingsDraft(draft);
       const next: DesktopPreferences = {
         ...validated,
+        saved_environments: previous.saved_environments,
         recent_external_local_ui_urls: previous.recent_external_local_ui_urls,
       };
       await persistDesktopPreferences(next);
-      await closeSettingsSurface();
       return { ok: true };
     } catch (error) {
       return {
@@ -881,7 +894,7 @@ if (!app.requestSingleInstanceLock()) {
     if (currentSessionTarget && allowedBaseURL) {
       void returnMainWindowToCurrentTarget().catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        dialog.showErrorBox('Redeven Desktop failed to restore the current device', message || 'Unknown restore error.');
+        dialog.showErrorBox('Redeven Desktop failed to restore the current Environment', message || 'Unknown restore error.');
         app.quit();
       });
       return;

@@ -3,18 +3,17 @@ import type { DesktopLauncherSurface, DesktopWelcomeSnapshot } from '../shared/d
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
   surface_title: string;
-  chooser_heading: 'Open a Redeven machine';
-  utility_labels: readonly ['Switch Machine', 'Settings'];
+  connect_heading: 'Connect Environment';
   primary_action_label: 'Open This Device';
-  settings_save_label: string | null;
+  settings_save_label: string;
 }>;
 
 export function capabilityUnavailableMessage(label: string): string {
-  return `Choose a machine first to open ${label}.`;
+  return `Connect to an Environment first to open ${label}.`;
 }
 
 export function surfaceTitle(surface: DesktopLauncherSurface): string {
-  return surface === 'this_device_settings' ? 'This Device settings' : 'Choose a machine';
+  return surface === 'this_device_settings' ? 'This Device Settings' : 'Connect Environment';
 }
 
 export function shellStatus(snapshot: DesktopWelcomeSnapshot): Readonly<{
@@ -35,7 +34,7 @@ export function shellStatus(snapshot: DesktopWelcomeSnapshot): Readonly<{
   }
   return {
     tone: 'disconnected',
-    label: 'No machine open',
+    label: 'No environment open',
   };
 }
 
@@ -46,9 +45,8 @@ export function buildDesktopWelcomeShellViewModel(
   return {
     shell_title: 'Redeven Desktop',
     surface_title: surfaceTitle(visibleSurface),
-    chooser_heading: 'Open a Redeven machine',
-    utility_labels: ['Switch Machine', 'Settings'],
+    connect_heading: 'Connect Environment',
     primary_action_label: 'Open This Device',
-    settings_save_label: snapshot.settings_surface?.save_label ?? null,
+    settings_save_label: snapshot.settings_surface.save_label,
   };
 }

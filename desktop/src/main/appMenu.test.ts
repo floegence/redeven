@@ -11,12 +11,12 @@ function buildMenu(platform: NodeJS.Platform) {
 }
 
 describe('appMenu', () => {
-  it('includes the single switch-device shell entry and quit accelerator on macOS', () => {
+  it('includes the Connect Environment shell entry and quit accelerator on macOS', () => {
     const template = buildMenu('darwin');
 
     const items = template.flatMap((item) => Array.isArray(item.submenu) ? item.submenu : []);
     expect(items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'Switch Device...', accelerator: 'CommandOrControl+Shift+O' }),
+      expect.objectContaining({ label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O' }),
       expect.objectContaining({ label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q' }),
     ]));
   });

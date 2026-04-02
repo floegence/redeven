@@ -4,15 +4,16 @@ export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 
 export type DesktopTargetKind = 'managed_local' | 'external_local_ui';
-export type DesktopSharePreset = 'this_device' | 'local_network' | 'custom';
-export type DesktopLinkState = 'idle' | 'pending' | 'connected';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_device' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'this_device' | 'remote_device' | 'startup';
-export type DesktopLauncherSurface = 'machine_chooser' | 'this_device_settings';
+export type DesktopLauncherSurface = 'connect_environment' | 'this_device_settings';
+export type DesktopEnvironmentEntryKind = 'this_device' | 'external_local_ui';
+export type DesktopEnvironmentEntryTag = 'Current' | 'Recent' | 'Saved' | 'This Device' | '';
 export type DesktopWelcomeActionKind =
   | 'open_this_device'
   | 'open_remote_device'
-  | 'open_advanced_settings'
+  | 'upsert_saved_environment'
+  | 'delete_saved_environment'
   | 'return_to_current_device';
 
 export type DesktopWelcomeIssue = Readonly<{
@@ -24,9 +25,17 @@ export type DesktopWelcomeIssue = Readonly<{
   target_url: string;
 }>;
 
-export type DesktopRecentDeviceCard = Readonly<{
+export type DesktopEnvironmentEntry = Readonly<{
+  id: string;
+  kind: DesktopEnvironmentEntryKind;
+  label: string;
   local_ui_url: string;
-  is_active_session: boolean;
+  secondary_text: string;
+  tag: DesktopEnvironmentEntryTag;
+  is_current: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+  last_used_at_ms: number;
 }>;
 
 export type DesktopWelcomeSnapshot = Readonly<{
@@ -36,18 +45,11 @@ export type DesktopWelcomeSnapshot = Readonly<{
   current_session_local_ui_url: string;
   current_session_label: string;
   current_session_description: string;
-  close_action_label: 'Quit' | 'Back to current device';
-  this_device_local_ui_url: string;
-  this_device_share_preset: DesktopSharePreset;
-  this_device_share_label: string;
-  this_device_share_description: string;
-  this_device_link_state: DesktopLinkState;
-  this_device_link_label: string;
-  this_device_link_description: string;
-  recent_devices: readonly DesktopRecentDeviceCard[];
+  close_action_label: 'Quit' | 'Back to current environment';
+  environments: readonly DesktopEnvironmentEntry[];
   suggested_remote_url: string;
   issue: DesktopWelcomeIssue | null;
-  settings_surface: DesktopSettingsSurfaceSnapshot | null;
+  settings_surface: DesktopSettingsSurfaceSnapshot;
 }>;
 
 export type DesktopLauncherActionRequest = Readonly<
@@ -59,7 +61,14 @@ export type DesktopLauncherActionRequest = Readonly<
       external_local_ui_url: string;
     }
   | {
-      kind: 'open_advanced_settings';
+      kind: 'upsert_saved_environment';
+      environment_id: string;
+      label: string;
+      external_local_ui_url: string;
+    }
+  | {
+      kind: 'delete_saved_environment';
+      environment_id: string;
     }
   | {
       kind: 'return_to_current_device';
@@ -79,14 +88,28 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   const kind = compact(candidate.kind) as DesktopWelcomeActionKind;
   switch (kind) {
     case 'open_this_device':
-    case 'open_advanced_settings':
     case 'return_to_current_device':
       return { kind };
-    case 'open_remote_device': {
-      const externalLocalUIURL = compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url);
+    case 'open_remote_device':
       return {
         kind,
-        external_local_ui_url: externalLocalUIURL,
+        external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
+      };
+    case 'upsert_saved_environment':
+      return {
+        kind,
+        environment_id: compact((candidate as { environment_id?: unknown }).environment_id),
+        label: compact((candidate as { label?: unknown }).label),
+        external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
+      };
+    case 'delete_saved_environment': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
       };
     }
     default:

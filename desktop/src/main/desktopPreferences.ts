@@ -11,10 +11,18 @@ export type PendingBootstrap = Readonly<{
   env_token: string;
 }>;
 
+export type DesktopSavedEnvironment = Readonly<{
+  id: string;
+  label: string;
+  local_ui_url: string;
+  last_used_at_ms: number;
+}>;
+
 export type DesktopPreferences = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
   pending_bootstrap: PendingBootstrap | null;
+  saved_environments: readonly DesktopSavedEnvironment[];
   recent_external_local_ui_urls: readonly string[];
 }>;
 
@@ -28,9 +36,17 @@ type StoredSecret = Readonly<{
   data: string;
 }>;
 
+type DesktopSavedEnvironmentFile = Readonly<{
+  id?: unknown;
+  label?: unknown;
+  local_ui_url?: unknown;
+  last_used_at_ms?: unknown;
+}>;
+
 type DesktopPreferencesFile = Readonly<{
   version?: number;
   local_ui_bind?: string;
+  saved_environments?: readonly DesktopSavedEnvironmentFile[];
   recent_external_local_ui_urls?: readonly unknown[];
   pending_bootstrap?: Readonly<{
     controlplane_url?: string;
@@ -56,6 +72,16 @@ export type SafeStorageLike = Readonly<{
   encryptString: (value: string) => Buffer;
   decryptString: (value: Buffer) => string;
 }>;
+
+export type UpsertDesktopSavedEnvironmentInput = Readonly<{
+  environment_id: string;
+  label: string;
+  local_ui_url: string;
+  last_used_at_ms?: number;
+}>;
+
+const MAX_RECENT_EXTERNAL_LOCAL_UI_URLS = 5;
+const MAX_SAVED_ENVIRONMENTS = 20;
 
 export function createPlaintextSecretCodec(): DesktopSecretCodec {
   return {
@@ -96,6 +122,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
     pending_bootstrap: null,
+    saved_environments: [],
     recent_external_local_ui_urls: [],
   };
 }
@@ -121,7 +148,89 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-const MAX_RECENT_EXTERNAL_LOCAL_UI_URLS = 5;
+function normalizeLastUsedAtMS(value: unknown, fallback: number): number {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return Math.floor(numeric);
+  }
+  return fallback;
+}
+
+export function desktopEnvironmentID(rawURL: string): string {
+  return normalizeLocalUIBaseURL(rawURL);
+}
+
+export function defaultSavedEnvironmentLabel(rawURL: string): string {
+  const normalizedURL = normalizeLocalUIBaseURL(rawURL);
+  try {
+    const parsed = new URL(normalizedURL);
+    return parsed.host || normalizedURL;
+  } catch {
+    return normalizedURL;
+  }
+}
+
+function sortSavedEnvironmentsByLastUsed(
+  environments: readonly DesktopSavedEnvironment[],
+): readonly DesktopSavedEnvironment[] {
+  return [...environments].sort((left, right) => (
+    right.last_used_at_ms - left.last_used_at_ms
+    || left.label.localeCompare(right.label)
+    || left.local_ui_url.localeCompare(right.local_ui_url)
+  ));
+}
+
+function normalizeSavedEnvironmentCandidate(
+  value: unknown,
+  fallbackLastUsedAtMS: number,
+): DesktopSavedEnvironment | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as DesktopSavedEnvironmentFile;
+  let normalizedURL = '';
+  try {
+    normalizedURL = normalizeLocalUIBaseURL(compact(candidate.local_ui_url));
+  } catch {
+    return null;
+  }
+
+  const environmentID = compact(candidate.id) || desktopEnvironmentID(normalizedURL);
+  const label = compact(candidate.label) || defaultSavedEnvironmentLabel(normalizedURL);
+  return {
+    id: environmentID,
+    label,
+    local_ui_url: normalizedURL,
+    last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
+  };
+}
+
+function legacyRecentURLsToSavedEnvironments(values: readonly unknown[]): readonly DesktopSavedEnvironment[] {
+  if (values.length <= 0) {
+    return [];
+  }
+
+  const converted: DesktopSavedEnvironment[] = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const clean = compact(values[index]);
+    if (clean === '') {
+      continue;
+    }
+    try {
+      const normalizedURL = normalizeLocalUIBaseURL(clean);
+      converted.push({
+        id: desktopEnvironmentID(normalizedURL),
+        label: defaultSavedEnvironmentLabel(normalizedURL),
+        local_ui_url: normalizedURL,
+        last_used_at_ms: values.length - index,
+      });
+    } catch {
+      // Ignore malformed legacy entries during migration.
+    }
+  }
+  return converted;
+}
 
 export function normalizeRecentExternalLocalUIURLs(values: readonly unknown[] | null | undefined): readonly string[] {
   if (!Array.isArray(values) || values.length === 0) {
@@ -153,19 +262,98 @@ export function normalizeRecentExternalLocalUIURLs(values: readonly unknown[] | 
   return normalized;
 }
 
+export function normalizeSavedEnvironments(
+  values: readonly unknown[] | null | undefined,
+  legacyRecentURLs: readonly unknown[] | null | undefined = null,
+): readonly DesktopSavedEnvironment[] {
+  const sourceValues = Array.isArray(values) ? values : [];
+  const normalized: DesktopSavedEnvironment[] = [];
+  const seenURLs = new Set<string>();
+
+  for (let index = 0; index < sourceValues.length; index += 1) {
+    const environment = normalizeSavedEnvironmentCandidate(sourceValues[index], sourceValues.length - index);
+    if (!environment || seenURLs.has(environment.local_ui_url)) {
+      continue;
+    }
+    seenURLs.add(environment.local_ui_url);
+    normalized.push(environment);
+  }
+
+  if (normalized.length <= 0 && Array.isArray(legacyRecentURLs)) {
+    for (const environment of legacyRecentURLsToSavedEnvironments(legacyRecentURLs)) {
+      if (seenURLs.has(environment.local_ui_url)) {
+        continue;
+      }
+      seenURLs.add(environment.local_ui_url);
+      normalized.push(environment);
+    }
+  }
+
+  return sortSavedEnvironmentsByLastUsed(normalized).slice(0, MAX_SAVED_ENVIRONMENTS);
+}
+
+export function deriveRecentExternalLocalUIURLs(
+  savedEnvironments: readonly DesktopSavedEnvironment[],
+): readonly string[] {
+  return normalizeRecentExternalLocalUIURLs(
+    sortSavedEnvironmentsByLastUsed(savedEnvironments).map((environment) => environment.local_ui_url),
+  );
+}
+
+export function upsertSavedEnvironment(
+  preferences: DesktopPreferences,
+  input: UpsertDesktopSavedEnvironmentInput,
+): DesktopPreferences {
+  const normalizedURL = normalizeLocalUIBaseURL(input.local_ui_url);
+  const environmentID = compact(input.environment_id) || desktopEnvironmentID(normalizedURL);
+  const existing = preferences.saved_environments.find((environment) => (
+    environment.id === environmentID || environment.local_ui_url === normalizedURL
+  ));
+  const label = compact(input.label) || existing?.label || defaultSavedEnvironmentLabel(normalizedURL);
+  const nextEnvironment: DesktopSavedEnvironment = {
+    id: environmentID,
+    label,
+    local_ui_url: normalizedURL,
+    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
+  };
+
+  const savedEnvironments = sortSavedEnvironmentsByLastUsed([
+    nextEnvironment,
+    ...preferences.saved_environments.filter((environment) => (
+      environment.id !== environmentID && environment.local_ui_url !== normalizedURL
+    )),
+  ]).slice(0, MAX_SAVED_ENVIRONMENTS);
+
+  return {
+    ...preferences,
+    saved_environments: savedEnvironments,
+    recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
+  };
+}
+
+export function deleteSavedEnvironment(
+  preferences: DesktopPreferences,
+  environmentID: string,
+): DesktopPreferences {
+  const cleanEnvironmentID = compact(environmentID);
+  const savedEnvironments = preferences.saved_environments.filter((environment) => environment.id !== cleanEnvironmentID);
+  return {
+    ...preferences,
+    saved_environments: savedEnvironments,
+    recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
+  };
+}
+
 export function rememberRecentExternalLocalUITarget(
   preferences: DesktopPreferences,
   rawURL: string,
 ): DesktopPreferences {
-  const url = normalizeLocalUIBaseURL(rawURL);
-  const recents = normalizeRecentExternalLocalUIURLs([
-    url,
-    ...preferences.recent_external_local_ui_urls,
-  ]);
-  return {
-    ...preferences,
-    recent_external_local_ui_urls: recents,
-  };
+  return upsertSavedEnvironment(preferences, {
+    environment_id: desktopEnvironmentID(rawURL),
+    label: '',
+    local_ui_url: rawURL,
+    last_used_at_ms: Date.now(),
+  });
 }
 
 export function managedDesktopLaunchKey(preferences: DesktopPreferences): string {
@@ -235,6 +423,7 @@ export function validateDesktopSettingsDraft(draft: DesktopSettingsDraft): Deskt
     local_ui_bind: localUIBind,
     local_ui_password: localUIPassword,
     pending_bootstrap: pendingBootstrap,
+    saved_environments: [],
     recent_external_local_ui_urls: [],
   };
 }
@@ -343,9 +532,15 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     env_token: decodeOptionalSecret(codec, secretsFile?.pending_bootstrap?.env_token),
   }));
 
+  const savedEnvironments = normalizeSavedEnvironments(
+    preferencesFile?.saved_environments,
+    preferencesFile?.recent_external_local_ui_urls,
+  );
+
   return {
     ...recovered,
-    recent_external_local_ui_urls: normalizeRecentExternalLocalUIURLs(preferencesFile?.recent_external_local_ui_urls),
+    saved_environments: savedEnvironments,
+    recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
   };
 }
 
@@ -355,10 +550,22 @@ export async function saveDesktopPreferences(
   codec: DesktopSecretCodec,
 ): Promise<void> {
   const nextPreferences = validateDesktopSettingsDraft(desktopPreferencesToDraft(preferences));
+  const savedEnvironments = normalizeSavedEnvironments(
+    preferences.saved_environments,
+    preferences.recent_external_local_ui_urls,
+  );
+  const recentExternalLocalUIURLs = deriveRecentExternalLocalUIURLs(savedEnvironments);
+
   const preferencesFile: DesktopPreferencesFile = {
-    version: 1,
+    version: 2,
     local_ui_bind: nextPreferences.local_ui_bind,
-    recent_external_local_ui_urls: normalizeRecentExternalLocalUIURLs(preferences.recent_external_local_ui_urls),
+    saved_environments: savedEnvironments.map((environment) => ({
+      id: environment.id,
+      label: environment.label,
+      local_ui_url: environment.local_ui_url,
+      last_used_at_ms: environment.last_used_at_ms,
+    })),
+    recent_external_local_ui_urls: recentExternalLocalUIURLs,
     pending_bootstrap: nextPreferences.pending_bootstrap
       ? {
           controlplane_url: nextPreferences.pending_bootstrap.controlplane_url,
