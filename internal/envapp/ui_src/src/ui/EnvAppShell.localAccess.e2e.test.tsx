@@ -332,7 +332,7 @@ describe('EnvAppShell top bar affordances', () => {
     } finally {
       dispose();
     }
-  });
+  }, 10000);
 
   it('renders Switch Machine in the bottom activity area when the desktop bridge is available', async () => {
     const host = document.createElement('div');

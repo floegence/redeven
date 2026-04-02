@@ -37,6 +37,13 @@ export type wire_fs_write_file_req = {
 
 export type wire_fs_write_file_resp = { success: boolean };
 
+export type wire_fs_mkdir_req = {
+  path: string;
+  create_parents?: boolean;
+};
+
+export type wire_fs_mkdir_resp = { success: boolean };
+
 export type wire_fs_delete_req = {
   path: string;
   recursive?: boolean;

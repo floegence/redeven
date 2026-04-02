@@ -22,6 +22,27 @@ export function extNoDot(name: string): string | undefined {
   return name.slice(idx + 1).toLowerCase();
 }
 
+export function validateFileBrowserEntryName(name: string): string | null {
+  const trimmed = String(name ?? '').trim();
+  if (!trimmed) return 'Name is required.';
+  if (trimmed === '.' || trimmed === '..') {
+    return 'Name cannot be "." or "..".';
+  }
+  if (/[\\/]/.test(trimmed)) {
+    return 'Name cannot contain path separators.';
+  }
+  return null;
+}
+
+export function buildChildPath(parentPath: string, name: string): string {
+  const normalizedParent = normalizePath(parentPath);
+  const trimmedName = String(name ?? '').trim();
+  if (normalizedParent === '/') {
+    return `/${trimmedName}`;
+  }
+  return `${normalizedParent}/${trimmedName}`;
+}
+
 export function toFileItem(entry: FileSystemEntry): FileItem {
   const isDir = !!entry.isDirectory;
   const name = String(entry.name ?? '');
@@ -161,6 +182,30 @@ export function insertItemToTree(tree: FileItem[], parentPath: string, item: Fil
 
   const [nextTree] = visit(tree);
   return nextTree;
+}
+
+export function canInsertIntoTree(tree: FileItem[], parentPath: string, rootPath = '/'): boolean {
+  const targetParent = normalizePath(parentPath);
+  const normalizedRoot = normalizePath(rootPath);
+
+  if (targetParent === normalizedRoot) {
+    return true;
+  }
+
+  const visit = (items: FileItem[]): boolean => {
+    for (const entry of items) {
+      if (entry.type !== 'folder') continue;
+      if (normalizePath(entry.path) === targetParent) {
+        return Array.isArray(entry.children);
+      }
+      if (entry.children?.length && visit(entry.children)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  return visit(tree);
 }
 
 export function getParentDir(path: string): string {

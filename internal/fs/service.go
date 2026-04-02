@@ -23,6 +23,7 @@ const (
 	TypeID_FS_RENAME           uint32 = 1004
 	TypeID_FS_COPY             uint32 = 1005
 	TypeID_FS_DELETE           uint32 = 1006
+	TypeID_FS_MKDIR            uint32 = 1007
 	TypeID_FS_GET_PATH_CONTEXT uint32 = 1010
 )
 
@@ -154,6 +155,17 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		return &fsWriteFileResp{Success: true}, nil
 	})
 
+	accessgate.RegisterTyped[fsMkdirReq, fsMkdirResp](r, TypeID_FS_MKDIR, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsMkdirReq) (*fsMkdirResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		createParents := req.CreateParents != nil && *req.CreateParents
+		if _, err := s.mkdirTarget(req.Path, createParents); err != nil {
+			return nil, err
+		}
+		return &fsMkdirResp{Success: true}, nil
+	})
+
 	accessgate.RegisterTyped[fsDeleteReq, fsDeleteResp](r, TypeID_FS_DELETE, gate, meta, accessgate.RPCAccessProtected, func(_ctx context.Context, req *fsDeleteReq) (*fsDeleteResp, error) {
 		if meta == nil || !meta.CanWrite {
 			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
@@ -279,6 +291,52 @@ func (s *Service) resolveTargetPath(path string) (string, error) {
 	return pathutil.ResolveTargetScopedPath(path, s.agentHomeAbs)
 }
 
+func (s *Service) mkdirTarget(path string, createParents bool) (string, error) {
+	targetPath, err := s.resolveTargetPath(path)
+	if err != nil {
+		return "", &rpc.Error{Code: 400, Message: "invalid path"}
+	}
+
+	if _, err := os.Stat(targetPath); err == nil {
+		return "", &rpc.Error{Code: 409, Message: "path already exists"}
+	} else if !os.IsNotExist(err) {
+		return "", &rpc.Error{Code: 500, Message: "failed to stat target"}
+	}
+
+	if !createParents {
+		parentDir := filepath.Dir(targetPath)
+		info, err := os.Stat(parentDir)
+		if os.IsNotExist(err) {
+			return "", &rpc.Error{Code: 404, Message: "parent directory not found"}
+		}
+		if err != nil {
+			return "", &rpc.Error{Code: 500, Message: "failed to stat parent directory"}
+		}
+		if !info.IsDir() {
+			return "", &rpc.Error{Code: 400, Message: "parent is not a directory"}
+		}
+	}
+
+	if createParents {
+		if err := os.MkdirAll(targetPath, 0o755); err != nil {
+			if os.IsExist(err) {
+				return "", &rpc.Error{Code: 409, Message: "path already exists"}
+			}
+			return "", &rpc.Error{Code: 500, Message: "mkdir failed"}
+		}
+		return targetPath, nil
+	}
+
+	if err := os.Mkdir(targetPath, 0o755); err != nil {
+		if os.IsExist(err) {
+			return "", &rpc.Error{Code: 409, Message: "path already exists"}
+		}
+		return "", &rpc.Error{Code: 500, Message: "mkdir failed"}
+	}
+
+	return targetPath, nil
+}
+
 func fileModeString(m fs.FileMode) string {
 	// Best-effort, stable string for UI (e.g. "-rw-r--r--").
 	return m.String()
@@ -329,6 +387,15 @@ type fsWriteFileReq struct {
 }
 
 type fsWriteFileResp struct {
+	Success bool `json:"success"`
+}
+
+type fsMkdirReq struct {
+	Path          string `json:"path"`
+	CreateParents *bool  `json:"create_parents,omitempty"`
+}
+
+type fsMkdirResp struct {
 	Success bool `json:"success"`
 }
 

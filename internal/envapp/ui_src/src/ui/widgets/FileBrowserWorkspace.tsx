@@ -8,6 +8,7 @@ import {
   FileGridView,
   FileListView,
   useFileBrowser,
+  type ContextMenuEvent,
   type ContextMenuCallbacks,
   type ContextMenuItem,
   type FileItem,
@@ -22,6 +23,7 @@ import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import {
   mapContextMenuCallbacksToAbsolute,
+  mapContextMenuEventToAbsolutePath,
   mapContextMenuItemsToAbsolute,
   mapFileItemToAbsolutePath,
   mapFileItemsToDisplayPath,
@@ -65,7 +67,7 @@ export interface FileBrowserWorkspaceProps {
   toolbarEndActions?: JSX.Element;
   contextMenuCallbacks?: ContextMenuCallbacks;
   overrideContextMenuItems?: ContextMenuItem[];
-  resolveOverrideContextMenuItems?: (items: FileItem[]) => ContextMenuItem[] | undefined;
+  resolveOverrideContextMenuItems?: (event: ContextMenuEvent | null) => ContextMenuItem[] | undefined;
   class?: string;
 }
 
@@ -239,7 +241,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
     if (!props.resolveOverrideContextMenuItems) {
       return props.overrideContextMenuItems;
     }
-    return props.resolveOverrideContextMenuItems(browser.contextMenu()?.items ?? []);
+    return props.resolveOverrideContextMenuItems(browser.contextMenu() ?? null);
   });
   let contentScrollEl: HTMLDivElement | null = null;
   let treeScrollEl: HTMLDivElement | null = null;
@@ -271,6 +273,25 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
     if (!drag) return;
     drag.unregisterInstance(props.instanceId);
   });
+
+  const handleWorkspaceBackgroundContextMenu = (event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    browser.clearSelection();
+    browser.showContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [],
+      targetKind: 'directory-background',
+      source: 'background',
+      directory: {
+        path: browser.currentPath(),
+      },
+    });
+  };
 
   return (
     <BrowserWorkspaceShell
@@ -335,7 +356,9 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               contentScrollEl = el;
               browser.setScrollContainer(el);
             }}
+            data-testid="file-browser-content-scroll-region"
             class="min-h-0 flex-1 overflow-auto bg-background"
+            onContextMenu={handleWorkspaceBackgroundContextMenu}
           >
             <Show when={browser.viewMode() === 'list'} fallback={<FileGridView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full" />}>
               <FileListView instanceId={props.instanceId} enableDragDrop={dragEnabled()} class="h-full redeven-file-list-compact" />
@@ -359,10 +382,10 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
   const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(props.initialPath, props.homePath));
   const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(props.contextMenuCallbacks, props.homePath));
   const displayOverrideContextMenuItems = createMemo(() => mapContextMenuItemsToAbsolute(props.overrideContextMenuItems, props.homePath));
-  const resolveDisplayOverrideContextMenuItems = (items: FileItem[]) => (
+  const resolveDisplayOverrideContextMenuItems = (event: ContextMenuEvent | null) => (
     mapContextMenuItemsToAbsolute(
       props.resolveOverrideContextMenuItems?.(
-        items.map((item) => mapFileItemToAbsolutePath(item, props.homePath)),
+        mapContextMenuEventToAbsolutePath(event, props.homePath),
       ),
       props.homePath,
     )

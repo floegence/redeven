@@ -1,4 +1,10 @@
-import type { ContextMenuCallbacks, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type {
+  ContextMenuCallbacks,
+  ContextMenuDirectory,
+  ContextMenuEvent,
+  ContextMenuItem,
+  FileItem,
+} from '@floegence/floe-webapp-core/file-browser';
 import { isWithinAbsolutePath, normalizeAbsolutePath } from './askFlowerPath';
 
 function normalizeDisplayPath(path: string): string {
@@ -70,6 +76,29 @@ export function mapFileItemsToAbsolutePath(items: FileItem[], rootPathAbs?: stri
   return items.map((item) => mapFileItemToAbsolutePath(item, rootPathAbs));
 }
 
+function mapContextMenuDirectoryToAbsolutePath(
+  directory: ContextMenuDirectory | null | undefined,
+  rootPathAbs?: string | null,
+): ContextMenuDirectory | null {
+  if (!directory) return null;
+  return {
+    path: toFileBrowserAbsolutePath(directory.path, rootPathAbs),
+    item: directory.item ? mapFileItemToAbsolutePath(directory.item, rootPathAbs) : undefined,
+  };
+}
+
+export function mapContextMenuEventToAbsolutePath(
+  event: ContextMenuEvent | null | undefined,
+  rootPathAbs?: string | null,
+): ContextMenuEvent | null {
+  if (!event) return null;
+  return {
+    ...event,
+    items: mapFileItemsToAbsolutePath(event.items, rootPathAbs),
+    directory: mapContextMenuDirectoryToAbsolutePath(event.directory, rootPathAbs),
+  };
+}
+
 export function mapContextMenuCallbacksToAbsolute(
   callbacks: ContextMenuCallbacks | undefined,
   rootPathAbs?: string | null,
@@ -107,11 +136,14 @@ export function mapContextMenuItemsToAbsolute(
 ): ContextMenuItem[] {
   if (!Array.isArray(items)) return [];
 
-  return items.map((item) => {
-    if (!item.onAction) return item;
-    return {
-      ...item,
-      onAction: (selectedItems: FileItem[]) => item.onAction?.(mapFileItemsToAbsolutePath(selectedItems, rootPathAbs)),
-    };
-  });
+  return items.map((item) => ({
+    ...item,
+    children: item.children ? mapContextMenuItemsToAbsolute(item.children, rootPathAbs) : undefined,
+    onAction: item.onAction
+      ? (selectedItems: FileItem[], event?: ContextMenuEvent) => item.onAction?.(
+          mapFileItemsToAbsolutePath(selectedItems, rootPathAbs),
+          mapContextMenuEventToAbsolutePath(event, rootPathAbs) ?? undefined,
+        )
+      : undefined,
+  }));
 }

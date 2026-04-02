@@ -6,6 +6,7 @@ export const redevenV1TypeIds = {
     rename: 1004,
     copy: 1005,
     delete: 1006,
+    mkdir: 1007,
     getPathContext: 1010,
   },
   git: {

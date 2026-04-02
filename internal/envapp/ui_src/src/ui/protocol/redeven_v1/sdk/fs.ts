@@ -44,6 +44,15 @@ export interface FsWriteFileResponse {
   success: boolean;
 }
 
+export interface FsMkdirRequest {
+  path: string;
+  createParents?: boolean;
+}
+
+export interface FsMkdirResponse {
+  success: boolean;
+}
+
 export interface FsDeleteRequest {
   path: string;
   recursive?: boolean;
