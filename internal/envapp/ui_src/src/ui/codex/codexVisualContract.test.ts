@@ -73,6 +73,11 @@ describe('Codex visual contract', () => {
     expect(src).toMatch(/\.codex-chat-input-meta-rail \{[^}]*justify-content: space-between;[^}]*flex-wrap: wrap;/);
     expect(src).toMatch(/\.codex-chat-input-meta-group-context \{[^}]*justify-content: flex-start;/);
     expect(src).toMatch(/\.codex-chat-input-meta-group-strategy \{[^}]*justify-content: flex-end;/);
+    expect(src).toMatch(/@media \(max-width: 960px\) \{[\s\S]*\.codex-chat-input-meta-group-context,\s*\.codex-chat-input-meta-group-strategy \{[\s\S]*flex-basis: 100%;/);
+    expect(src).toMatch(/@media \(max-width: 960px\) \{[\s\S]*\.codex-chat-working-dir-chip \{[\s\S]*flex: 1 1 auto;[\s\S]*max-width: none;/);
+    expect(src).toMatch(/@media \(max-width: 960px\) \{[\s\S]*\.codex-chat-select-chip \{[\s\S]*min-width: calc\(50% - 0\.25rem\);[\s\S]*flex: 1 1 calc\(50% - 0\.25rem\);/);
+    expect(src).toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-chat-working-dir-chip \{[\s\S]*flex: 0 0 auto;[\s\S]*max-width: min\(14rem, 64vw\);/);
+    expect(src).toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-chat-select-chip-value \{[\s\S]*justify-content: flex-end;/);
     expect(src).toMatch(/\.codex-chat-select-chip-policy \{[^}]*border-color:/);
     expect(src).toMatch(/\.codex-chat-select-chip-control-policy \{[^}]*padding: 0 1rem 0 0\.5rem !important;/);
     expect(src).toMatch(/\.codex-chat-draft-objects \{[^}]*flex-direction: column;/);

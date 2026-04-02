@@ -457,6 +457,10 @@
   padding-inline: 0.75rem;
 }
 
+.codex-chat-input-send-btn .chat-input-send-btn-label {
+  white-space: nowrap;
+}
+
 .codex-chat-input-send-btn.chat-input-send-btn-active:hover {
   transform: translateY(-1px);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 18%, transparent);
@@ -1700,6 +1704,56 @@
   color: color-mix(in srgb, var(--muted-foreground) 56%, transparent);
 }
 
+@media (max-width: 960px) {
+  .codex-chat-input-meta-rail {
+    gap: 0.5rem;
+  }
+
+  .codex-chat-input-meta-group-context,
+  .codex-chat-input-meta-group-strategy {
+    flex-basis: 100%;
+  }
+
+  .codex-chat-input-meta-group-context {
+    flex-wrap: nowrap;
+  }
+
+  .codex-chat-input-meta-group-strategy {
+    justify-content: flex-start;
+  }
+
+  .codex-chat-working-dir-chip {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .codex-chat-select-chip {
+    min-width: calc(50% - 0.25rem);
+    flex: 1 1 calc(50% - 0.25rem);
+  }
+
+  .codex-chat-select-chip-value,
+  .codex-chat-select-chip-policy {
+    justify-content: flex-start;
+  }
+
+  .codex-chat-select-chip-control {
+    flex: 1 1 auto;
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .codex-chat-select-chip-control-value {
+    max-width: 100%;
+    padding: 0 1rem 0 0.25rem !important;
+    text-align: left;
+  }
+
+  .codex-chat-select-chip-control-policy {
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 640px) {
   .codex-page-header {
     padding: 0.375rem 0.5rem;
@@ -1797,11 +1851,16 @@
     flex-basis: 100%;
   }
 
+  .codex-chat-input-meta-group-context {
+    flex-wrap: wrap;
+  }
+
   .codex-chat-input-meta-group-strategy {
     justify-content: flex-start;
   }
 
   .codex-chat-working-dir-chip {
+    flex: 0 0 auto;
     max-width: min(14rem, 64vw);
   }
 
@@ -1816,6 +1875,7 @@
   }
 
   .codex-chat-select-chip-value {
+    justify-content: flex-end;
     min-width: 0;
     flex: 0 1 auto;
   }
@@ -1826,6 +1886,8 @@
 
   .codex-chat-select-chip-control-value {
     max-width: min(7.5rem, 32vw);
+    padding: 0 0.875rem 0 0 !important;
+    text-align: right;
   }
 
   .codex-chat-select-chip-control-policy {
