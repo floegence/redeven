@@ -650,8 +650,6 @@
 
 .codex-chat-input-meta-rail {
   display: flex;
-  container-type: inline-size;
-  container-name: codex-composer-meta;
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
@@ -674,6 +672,8 @@
 }
 
 .codex-chat-input-meta-group-strategy {
+  container-type: inline-size;
+  container-name: codex-composer-strategy;
   flex: 1 1 18rem;
   align-items: flex-start;
   justify-content: flex-end;
@@ -692,6 +692,7 @@
 }
 
 .codex-chat-input-meta-subgroup-policies {
+  margin-inline-start: auto;
   flex-wrap: nowrap;
 }
 
@@ -1723,31 +1724,13 @@
   color: color-mix(in srgb, var(--muted-foreground) 56%, transparent);
 }
 
-@container codex-composer-meta (max-width: 64rem) {
-  .codex-chat-input-meta-rail {
-    gap: 0.5rem;
-  }
-
-  .codex-chat-input-meta-group-context,
-  .codex-chat-input-meta-group-strategy {
-    flex-basis: 100%;
-  }
-
-  .codex-chat-input-meta-group-context {
-    flex-wrap: nowrap;
-  }
-
+@container codex-composer-strategy (max-width: 34rem) {
   .codex-chat-input-meta-group-strategy {
     justify-content: flex-start;
   }
 
-  .codex-chat-working-dir-chip {
-    flex: 1 1 auto;
-    max-width: none;
-  }
-
   .codex-chat-input-meta-subgroup-policies {
-    margin-inline-start: auto;
+    margin-inline-start: 0;
   }
 }
 

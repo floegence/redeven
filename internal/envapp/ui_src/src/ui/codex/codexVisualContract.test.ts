@@ -70,15 +70,15 @@ describe('Codex visual contract', () => {
   it('keeps composer metadata grouped by layout role and carrier semantics', () => {
     const src = readCodexCss();
 
-    expect(src).toMatch(/\.codex-chat-input-meta-rail \{[^}]*container-type: inline-size;[^}]*container-name: codex-composer-meta;[^}]*justify-content: space-between;[^}]*flex-wrap: wrap;/);
+    expect(src).toMatch(/\.codex-chat-input-meta-rail \{[^}]*justify-content: space-between;[^}]*flex-wrap: wrap;/);
     expect(src).toMatch(/\.codex-chat-input-meta-group-context \{[^}]*justify-content: flex-start;/);
-    expect(src).toMatch(/\.codex-chat-input-meta-group-strategy \{[^}]*align-items: flex-start;[^}]*justify-content: flex-end;[^}]*gap: 0\.625rem 0\.75rem;/);
+    expect(src).toMatch(/\.codex-chat-input-meta-group-strategy \{[^}]*container-type: inline-size;[^}]*container-name: codex-composer-strategy;[^}]*align-items: flex-start;[^}]*justify-content: flex-end;[^}]*gap: 0\.625rem 0\.75rem;/);
     expect(src).toMatch(/\.codex-chat-input-meta-subgroup \{[^}]*display: flex;[^}]*align-items: center;[^}]*gap: 0\.5rem;/);
-    expect(src).toMatch(/@container codex-composer-meta \(max-width: 64rem\) \{[\s\S]*\.codex-chat-input-meta-group-context,\s*\.codex-chat-input-meta-group-strategy \{[\s\S]*flex-basis: 100%;/);
-    expect(src).toMatch(/@container codex-composer-meta \(max-width: 64rem\) \{[\s\S]*\.codex-chat-working-dir-chip \{[\s\S]*flex: 1 1 auto;[\s\S]*max-width: none;/);
-    expect(src).toMatch(/@container codex-composer-meta \(max-width: 64rem\) \{[\s\S]*\.codex-chat-input-meta-subgroup-policies \{[\s\S]*margin-inline-start: auto;/);
-    expect(src).toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-chat-working-dir-chip \{[\s\S]*flex: 0 0 auto;[\s\S]*max-width: min\(14rem, 64vw\);/);
+    expect(src).toMatch(/\.codex-chat-input-meta-subgroup-policies \{[^}]*margin-inline-start: auto;[^}]*flex-wrap: nowrap;/);
+    expect(src).toMatch(/@container codex-composer-strategy \(max-width: 34rem\) \{[\s\S]*\.codex-chat-input-meta-group-strategy \{[\s\S]*justify-content: flex-start;/);
+    expect(src).toMatch(/@container codex-composer-strategy \(max-width: 34rem\) \{[\s\S]*\.codex-chat-input-meta-subgroup-policies \{[\s\S]*margin-inline-start: 0;/);
     expect(src).toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-chat-input-meta-subgroup-policies \{[\s\S]*margin-inline-start: 0;[\s\S]*flex-wrap: wrap;/);
+    expect(src).toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-chat-working-dir-chip \{[\s\S]*flex: 0 0 auto;[\s\S]*max-width: min\(14rem, 64vw\);/);
     expect(src).toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-chat-select-chip-value \{[\s\S]*justify-content: flex-end;/);
     expect(src).toMatch(/\.codex-chat-select-chip-policy \{[^}]*border-color:/);
     expect(src).toMatch(/\.codex-chat-select-chip-control-policy \{[^}]*padding: 0 1rem 0 0\.5rem !important;/);
