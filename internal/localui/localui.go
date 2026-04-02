@@ -91,6 +91,8 @@ type Server struct {
 
 	accessGate *accessgate.Gate
 
+	latestVersionResolver latestVersionResolver
+
 	pendingMu sync.Mutex
 	pending   map[string]pendingDirect
 
@@ -908,10 +910,23 @@ type latestVersionResp struct {
 	RecommendedVersion string `json:"recommended_version,omitempty"`
 	UpgradePolicy      string `json:"upgrade_policy"`
 	ReleasePageURL     string `json:"release_page_url,omitempty"`
+	SourceReleaseTag   string `json:"source_release_tag,omitempty"`
+	ManifestETag       string `json:"manifest_etag,omitempty"`
+	Source             string `json:"source,omitempty"`
+	Stale              bool   `json:"stale,omitempty"`
+	FetchedAtMs        int64  `json:"fetched_at_ms,omitempty"`
+	CacheTTLMS         int64  `json:"cache_ttl_ms,omitempty"`
 	Message            string `json:"message,omitempty"`
 	DesktopManaged     bool   `json:"desktop_managed,omitempty"`
 	EffectiveRunMode   string `json:"effective_run_mode,omitempty"`
 	RemoteEnabled      bool   `json:"remote_enabled,omitempty"`
+}
+
+func (s *Server) resolvedLatestVersionResolver() latestVersionResolver {
+	if s != nil && s.latestVersionResolver != nil {
+		return s.latestVersionResolver
+	}
+	return defaultLatestVersionResolver
 }
 
 func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
@@ -929,20 +944,38 @@ func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 	if v == "" {
 		v = "unknown"
 	}
-	message := "Offline: latest version check is unavailable in local mode."
-	upgradePolicy := "manual"
-	if s.desktopManaged {
-		message = "Managed by Redeven Desktop. Update from the desktop release instead of self-upgrade."
-		upgradePolicy = "desktop_release"
-	}
-	writeJSON(w, http.StatusOK, latestVersionResp{
+
+	resp := latestVersionResp{
 		CurrentVersion:   v,
-		UpgradePolicy:    upgradePolicy,
-		Message:          message,
+		UpgradePolicy:    "manual",
+		Message:          localLatestVersionUnavailableMessage,
 		DesktopManaged:   s.desktopManaged,
 		EffectiveRunMode: s.resolvedEffectiveRunMode(),
 		RemoteEnabled:    s.remoteEnabled,
-	})
+	}
+	if s.desktopManaged {
+		resp.UpgradePolicy = "desktop_release"
+		resp.Message = localLatestVersionDesktopManagedMessage
+	}
+
+	loadResult, err := s.resolvedLatestVersionResolver().Load(r.Context())
+	if err == nil {
+		resp.LatestVersion = loadResult.snapshot.latest
+		resp.RecommendedVersion = loadResult.snapshot.recommended
+		resp.ReleasePageURL = loadResult.snapshot.releasePageURL
+		resp.SourceReleaseTag = loadResult.snapshot.sourceReleaseTag
+		resp.ManifestETag = loadResult.snapshot.etag
+		resp.Source = loadResult.source
+		resp.Stale = loadResult.stale
+		resp.FetchedAtMs = loadResult.snapshot.fetchedAt.UnixMilli()
+		resp.CacheTTLMS = int64(loadResult.snapshot.ttl / time.Millisecond)
+		if !s.desktopManaged {
+			resp.UpgradePolicy = "self_upgrade"
+			resp.Message = strings.TrimSpace(loadResult.message)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) resolvedEffectiveRunMode() string {

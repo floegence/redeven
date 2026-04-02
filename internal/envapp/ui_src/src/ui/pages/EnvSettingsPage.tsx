@@ -405,12 +405,6 @@ export function EnvSettingsPage() {
   const isRestarting = createMemo(() => agentUpdate.maintenance.isRestarting());
 
   createEffect(() => {
-    const envId = env.env_id().trim();
-    if (!envId) return;
-    void agentUpdate.version.ensureLatestVersionLoaded().catch(() => undefined);
-  });
-
-  createEffect(() => {
     if (codeRuntimeStatus()?.operation.state !== 'running') return;
     const timer = window.setInterval(() => {
       void refetchCodeRuntimeStatus();
@@ -460,6 +454,13 @@ export function EnvSettingsPage() {
   const [upgradeOpen, setUpgradeOpen] = createSignal(false);
   const [restartOpen, setRestartOpen] = createSignal(false);
   const statusLabel = createMemo(() => formatAgentStatusLabel(displayedStatus()));
+
+  const refreshSettingsPage = async () => {
+    await Promise.allSettled([
+      refetch(),
+      agentUpdate.version.refetchLatestVersion(),
+    ]);
+  };
 
   const agentCardBadge = createMemo(() => {
     if (isUpgrading()) return 'Updating';
@@ -2486,7 +2487,7 @@ export function EnvSettingsPage() {
               Configure your Redeven runtime. Changes are auto-saved when valid. Restart-required settings only apply after a manual restart that you trigger.
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={settings.loading} class="gap-1.5 self-start">
+          <Button size="sm" variant="outline" onClick={() => void refreshSettingsPage()} disabled={settings.loading} class="gap-1.5 self-start">
             <RefreshIcon class="w-3.5 h-3.5" />
             <span>Refresh</span>
           </Button>

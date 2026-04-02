@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
@@ -534,6 +535,20 @@ func TestServer_handleLatestVersion_desktopManagedMessage(t *testing.T) {
 	s.desktopManaged = true
 	s.effectiveRunMode = "hybrid"
 	s.remoteEnabled = true
+	s.latestVersionResolver = latestVersionResolverFunc(func(context.Context) (latestVersionLoadResult, error) {
+		return latestVersionLoadResult{
+			snapshot: latestVersionSnapshot{
+				latest:           "v1.2.4",
+				recommended:      "v1.2.4",
+				sourceReleaseTag: "v1.2.4",
+				releasePageURL:   "https://example.test/releases/v1.2.4",
+				etag:             "\"etag-1\"",
+				fetchedAt:        time.Unix(1_700_000_000, 0),
+				ttl:              5 * time.Minute,
+			},
+			source: "upstream",
+		}, nil
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/agent/version/latest", nil)
 	res := httptest.NewRecorder()
@@ -550,11 +565,14 @@ func TestServer_handleLatestVersion_desktopManagedMessage(t *testing.T) {
 	if body.CurrentVersion != "v1.2.3" {
 		t.Fatalf("CurrentVersion = %q", body.CurrentVersion)
 	}
-	if body.LatestVersion != "" || body.RecommendedVersion != "" {
-		t.Fatalf("unexpected latest metadata in local mode: %#v", body)
+	if body.LatestVersion != "v1.2.4" || body.RecommendedVersion != "v1.2.4" {
+		t.Fatalf("unexpected latest metadata: %#v", body)
 	}
 	if body.UpgradePolicy != "desktop_release" {
 		t.Fatalf("UpgradePolicy = %q", body.UpgradePolicy)
+	}
+	if body.ReleasePageURL != "https://example.test/releases/v1.2.4" || body.ManifestETag != "\"etag-1\"" || body.Source != "upstream" {
+		t.Fatalf("unexpected manifest metadata: %#v", body)
 	}
 	if !body.DesktopManaged || !strings.Contains(body.Message, "Managed by Redeven Desktop") {
 		t.Fatalf("unexpected latest version body: %#v", body)
@@ -567,6 +585,9 @@ func TestServer_handleLatestVersion_manualPolicyForLocalMode(t *testing.T) {
 	s.desktopManaged = false
 	s.effectiveRunMode = "local"
 	s.remoteEnabled = false
+	s.latestVersionResolver = latestVersionResolverFunc(func(context.Context) (latestVersionLoadResult, error) {
+		return latestVersionLoadResult{}, errors.New("manifest unavailable")
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/agent/version/latest", nil)
 	res := httptest.NewRecorder()
@@ -583,7 +604,111 @@ func TestServer_handleLatestVersion_manualPolicyForLocalMode(t *testing.T) {
 	if body.CurrentVersion != "v1.2.3" || body.UpgradePolicy != "manual" {
 		t.Fatalf("unexpected latest version body: %#v", body)
 	}
-	if !strings.Contains(body.Message, "Offline: latest version check is unavailable in local mode.") {
+	if body.LatestVersion != "" || body.RecommendedVersion != "" {
+		t.Fatalf("unexpected manifest metadata: %#v", body)
+	}
+	if !strings.Contains(body.Message, localLatestVersionUnavailableMessage) {
+		t.Fatalf("unexpected message: %#v", body)
+	}
+}
+
+func TestServer_handleLatestVersion_returnsNormalizedManifestMetadata(t *testing.T) {
+	manifestSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("ETag", "\"manifest-1\"")
+		_, _ = w.Write([]byte(`{"latest":"v1.4.0","recommended":"main","source_release_tag":"v1.4.0","release_page_url":"https://example.test/releases/v1.4.0"}`))
+	}))
+	defer manifestSrv.Close()
+
+	now := time.Unix(1_700_000_100, 0)
+	resolver := newManifestLatestVersionResolver(manifestSrv.URL, manifestSrv.Client(), 5*time.Minute)
+	resolver.now = func() time.Time { return now }
+
+	s := newTestServer(t, nil)
+	s.version = "v1.3.0"
+	s.effectiveRunMode = "local"
+	s.latestVersionResolver = resolver
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/agent/version/latest", nil)
+	res := httptest.NewRecorder()
+	s.handleLatestVersion(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+
+	var body latestVersionResp
+	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if body.CurrentVersion != "v1.3.0" || body.UpgradePolicy != "self_upgrade" {
+		t.Fatalf("unexpected latest version body: %#v", body)
+	}
+	if body.LatestVersion != "v1.4.0" || body.RecommendedVersion != "v1.4.0" {
+		t.Fatalf("expected recommended fallback to latest, got %#v", body)
+	}
+	if body.ReleasePageURL != "https://example.test/releases/v1.4.0" || body.SourceReleaseTag != "v1.4.0" {
+		t.Fatalf("unexpected release metadata: %#v", body)
+	}
+	if body.ManifestETag != "\"manifest-1\"" || body.Source != "upstream" || body.Stale {
+		t.Fatalf("unexpected cache metadata: %#v", body)
+	}
+	if body.FetchedAtMs != now.UnixMilli() || body.CacheTTLMS != int64((5*time.Minute)/time.Millisecond) {
+		t.Fatalf("unexpected timing metadata: %#v", body)
+	}
+}
+
+func TestServer_handleLatestVersion_usesStaleCacheWhenManifestUnavailable(t *testing.T) {
+	requestCount := 0
+	manifestSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("ETag", "\"manifest-2\"")
+			_, _ = w.Write([]byte(`{"latest":"v1.5.0","recommended":"v1.5.0","source_release_tag":"v1.5.0","release_page_url":"https://example.test/releases/v1.5.0"}`))
+			return
+		}
+		http.Error(w, "boom", http.StatusServiceUnavailable)
+	}))
+	defer manifestSrv.Close()
+
+	now := time.Unix(1_700_000_200, 0)
+	resolver := newManifestLatestVersionResolver(manifestSrv.URL, manifestSrv.Client(), 5*time.Minute)
+	resolver.now = func() time.Time { return now }
+
+	s := newTestServer(t, nil)
+	s.version = "v1.4.0"
+	s.effectiveRunMode = "local"
+	s.latestVersionResolver = resolver
+
+	firstReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/agent/version/latest", nil)
+	firstRes := httptest.NewRecorder()
+	s.handleLatestVersion(firstRes, firstReq)
+
+	now = now.Add(10 * time.Minute)
+
+	secondReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/agent/version/latest", nil)
+	secondRes := httptest.NewRecorder()
+	s.handleLatestVersion(secondRes, secondReq)
+
+	if secondRes.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", secondRes.Result().StatusCode, http.StatusOK)
+	}
+
+	var body latestVersionResp
+	if err := json.Unmarshal(secondRes.Body.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if requestCount != 2 {
+		t.Fatalf("requestCount = %d, want 2", requestCount)
+	}
+	if body.UpgradePolicy != "self_upgrade" || body.LatestVersion != "v1.5.0" || body.RecommendedVersion != "v1.5.0" {
+		t.Fatalf("unexpected stale latest version body: %#v", body)
+	}
+	if !body.Stale || body.Source != "cache_stale" {
+		t.Fatalf("expected stale cache response, got %#v", body)
+	}
+	if body.Message != localLatestVersionTemporaryUnavailableMessage {
 		t.Fatalf("unexpected message: %#v", body)
 	}
 }

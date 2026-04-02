@@ -91,8 +91,9 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
       try {
         const nextMeta = await getAgentLatestVersion(envId);
         if (latestRequestToken === requestToken) {
-          setLatestMeta(nextMeta ?? null);
-          setLatestSettledEnvId(envId);
+          const normalizedMeta = nextMeta ?? null;
+          setLatestMeta(normalizedMeta);
+          setLatestSettledEnvId(normalizedMeta ? envId : '');
         }
         return nextMeta ?? null;
       } catch (error) {
@@ -124,6 +125,13 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
   const currentVersion = createMemo(() => String(currentPing()?.version ?? '').trim());
   const preferredTargetVersion = createMemo(() => resolvePreferredTargetVersion(latestMeta()));
   const preferredTargetCompareToCurrent = createMemo(() => compareReleaseVersionCore(currentVersion(), preferredTargetVersion()));
+
+  createEffect(() => {
+    const envId = String(args.envId() ?? '').trim();
+    if (!envId) return;
+    if (currentPing() == null) return;
+    void loadLatestMeta('ensure').catch(() => undefined);
+  });
 
   const refetchCurrentVersion = async (): Promise<SysPingResponse | null> => {
     if (args.currentPingSource() == null) return null;
