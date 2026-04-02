@@ -376,6 +376,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div data-testid="mock-background-menu-order">{describeMenuItems(backgroundItems())}</div>
         <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems)}</div>
         <div data-testid="mock-multi-menu-order">{describeMenuItems(multiSelectItems)}</div>
+        <div data-testid="mock-folder-new-has-icon">{findMenuItem(folderItems, 'new')?.icon ? 'yes' : 'no'}</div>
+        <div data-testid="mock-background-new-has-icon">{findMenuItem(backgroundItems(), 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-files-tree">{flattenTreePaths(props.files).join(',')}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
@@ -2086,6 +2088,8 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-background-menu-order"]')?.textContent).toBe(
         'ask-flower,open-in-terminal,new[new-file|new-folder]',
       );
+      expect(host.querySelector('[data-testid="mock-folder-new-has-icon"]')?.textContent).toBe('yes');
+      expect(host.querySelector('[data-testid="mock-background-new-has-icon"]')?.textContent).toBe('yes');
       expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toBe(
         'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
       );
