@@ -69,6 +69,18 @@ describe('DesktopWelcomeShell', () => {
     expect(snapshot.settings_surface.window_title).toBe('This Device Options');
     expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
     expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
+    expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'bind_address',
+        value: '0.0.0.0:24000',
+        detail: 'Local network preset',
+      }),
+      expect.objectContaining({
+        id: 'password_state',
+        value: 'Password configured',
+        tone: 'success',
+      }),
+    ]));
   });
 
   it('filters the Environment Library by current, recent, and saved connections', () => {

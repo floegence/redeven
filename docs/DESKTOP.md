@@ -14,11 +14,10 @@ This document describes the public Electron desktop shell that ships with each `
 
 - Electron is a thin shell around Redeven Local UI.
 - `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
-- The main BrowserWindow has three shell-owned surfaces:
+- The main BrowserWindow keeps one shell-owned launcher dashboard:
   - `Connect Environment`
-  - `This Device Options`
-  - `Active target`
-- The desktop-owned `Connect Environment` and `This Device Options` surfaces render inside the same Floe workbench shell instance.
+- `This Device Options` is a shell-owned dialog layered on top of that dashboard.
+- The launcher dashboard and `This Device Options` dialog render inside the same Floe workbench shell instance.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before a machine is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
@@ -92,9 +91,9 @@ Visual hierarchy:
 - primary workbench column:
   - `Current Session`
   - `This Device`
-  - `Connect another Environment`
 - secondary workbench column:
   - `Environment Library`
+  - `Add Connection`
   - `All / Current / Recent / Saved` filters
 - activity bar:
   - one item: `Connect Environment`
@@ -104,15 +103,15 @@ Interaction rules:
 - Cold launch never auto-opens a remembered target.
 - Environment choice is always a launcher action, never a side effect of saving settings.
 - `This Device` is the primary path and behaves like a workbench-style open action.
-- `This Device Options` opens inside the same shell frame without reloading the renderer.
-- Quick Connect can either open a remote Environment immediately or save it into the Environment Library.
+- `This Device Options` opens as a dialog without replacing the launcher dashboard.
+- `Add Connection` opens a dialog that can either connect immediately or save a remote Environment into the library.
 - Remote library entries distinguish:
   - the current unsaved remote session
   - auto-remembered recent connections
   - explicitly saved connections
 - Recent remote Environments stay one click away after a successful connection.
-- Saved remote Environments can be opened, edited, or deleted inline.
-- Validation errors and startup failures render inline on the launcher.
+- Saved remote Environments render in a compact library table and can be opened, edited, or deleted inline.
+- Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:
   - `Quit` when no device is open yet
@@ -120,7 +119,7 @@ Interaction rules:
 
 ## This Device Options
 
-`This Device Options` is a launcher-owned advanced surface inside the same desktop shell, not a second page or window.
+`This Device Options` is a launcher-owned dialog inside the same desktop shell, not a second page or window.
 
 It edits only future startup behavior for `This Device`:
 
@@ -137,11 +136,13 @@ Rules:
 - Saving options does not switch Environments.
 - Cancel returns to the current Environment when one is already open; otherwise it returns to Connect Environment.
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
+- The dialog starts with a compact summary grid for access mode, bind address, password state, and next start status.
 - The first decision is an access intent, not a raw bind field:
   - `Private to this device`
   - `Shared on your local network`
   - `Custom exposure`
 - The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving.
+- The one-shot bootstrap request stays in a compact `Advanced` section so the main settings flow stays focused on common local access decisions.
 
 ## Desktop Preferences
 
