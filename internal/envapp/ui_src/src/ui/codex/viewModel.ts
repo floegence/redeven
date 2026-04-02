@@ -1,4 +1,8 @@
 import { displayStatus, isWorkingStatus } from './presentation';
+import {
+  resolveCodexApprovalPolicyValue,
+  resolveCodexSandboxModeValue,
+} from './runtimeDefaults';
 import type {
   CodexCapabilitiesSnapshot,
   CodexModelOption,
@@ -196,7 +200,7 @@ export function codexSupportsOperation(
 }
 
 export function codexApprovalPolicyLabel(value: string | null | undefined): string {
-  switch (String(value ?? '').trim()) {
+  switch (resolveCodexApprovalPolicyValue(value)) {
     case 'untrusted':
       return 'Untrusted';
     case 'on-failure':
@@ -208,12 +212,12 @@ export function codexApprovalPolicyLabel(value: string | null | undefined): stri
     case 'granular':
       return 'Granular';
     default:
-      return displayStatus(String(value ?? '').trim(), 'Default');
+      return displayStatus(resolveCodexApprovalPolicyValue(value), 'Never');
   }
 }
 
 export function codexSandboxModeLabel(value: string | null | undefined): string {
-  switch (String(value ?? '').trim()) {
+  switch (resolveCodexSandboxModeValue(value)) {
     case 'read-only':
       return 'Read only';
     case 'workspace-write':
@@ -223,7 +227,7 @@ export function codexSandboxModeLabel(value: string | null | undefined): string 
     case 'external-sandbox':
       return 'External sandbox';
     default:
-      return displayStatus(String(value ?? '').trim(), 'Default');
+      return displayStatus(resolveCodexSandboxModeValue(value), 'Full access');
   }
 }
 

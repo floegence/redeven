@@ -738,7 +738,7 @@ export function CodexComposerShell(props: {
                 label="Approval"
                 value={props.approvalPolicyValue}
                 options={props.approvalPolicyOptions}
-                placeholder="Default"
+                placeholder="Never"
                 disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
                 variant="policy"
                 onChange={props.onApprovalPolicyChange}
@@ -751,7 +751,7 @@ export function CodexComposerShell(props: {
                 label="Sandbox"
                 value={props.sandboxModeValue}
                 options={props.sandboxModeOptions}
-                placeholder="Default"
+                placeholder="Full access"
                 disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
                 variant="policy"
                 onChange={props.onSandboxModeChange}

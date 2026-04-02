@@ -5,6 +5,10 @@ import type {
   CodexComposerMentionDraft,
   CodexThreadRuntimeConfig,
 } from './types';
+import {
+  resolveCodexApprovalPolicyValue,
+  resolveCodexSandboxModeValue,
+} from './runtimeDefaults';
 
 export const CODEX_NEW_THREAD_OWNER = 'draft:new';
 
@@ -107,8 +111,8 @@ function createRuntimeDraft(config: CodexThreadRuntimeConfig | null | undefined,
     cwd: String(config?.cwd ?? fallbackCWD).trim(),
     model: String(config?.model ?? '').trim(),
     effort: String(config?.reasoning_effort ?? '').trim(),
-    approvalPolicy: String(config?.approval_policy ?? '').trim(),
-    sandboxMode: String(config?.sandbox_mode ?? '').trim(),
+    approvalPolicy: resolveCodexApprovalPolicyValue(config?.approval_policy),
+    sandboxMode: resolveCodexSandboxModeValue(config?.sandbox_mode),
   };
 }
 
