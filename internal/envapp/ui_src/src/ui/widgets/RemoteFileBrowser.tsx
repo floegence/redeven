@@ -32,7 +32,12 @@ import {
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
-import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from '../utils/fileBrowserClipboard';
+import {
+  copyFileBrowserItemNames,
+  copyFileBrowserItemPaths,
+  describeCopiedFileBrowserItemNames,
+  describeCopiedFileBrowserItemPaths,
+} from '../utils/fileBrowserClipboard';
 import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
 import { buildGitAskFlowerIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
@@ -3326,6 +3331,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     })();
   };
 
+  const handleCopyPath = (items: FileItem[]) => {
+    void (async () => {
+      try {
+        const result = await copyFileBrowserItemPaths(items);
+        notification.success('Copied', describeCopiedFileBrowserItemPaths(result));
+      } catch (e) {
+        notification.error('Copy failed', e instanceof Error ? e.message : String(e));
+      }
+    })();
+  };
+
   const canOpenDirectoryInTerminal = (items: FileItem[]) => (
     Boolean(ctx.env()?.permissions?.can_execute)
     && items.length === 1
@@ -3425,6 +3441,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       label: 'Copy Name',
       type: 'copy-name',
       icon: (props) => <ClipboardIcon class={props.class} />,
+    },
+    {
+      id: 'copy-path',
+      label: 'Copy Path',
+      type: 'custom',
+      icon: (props) => <ClipboardIcon class={props.class} />,
+      onAction: (items: FileItem[]) => {
+        handleCopyPath(items);
+      },
     },
     {
       id: 'copy-to',
