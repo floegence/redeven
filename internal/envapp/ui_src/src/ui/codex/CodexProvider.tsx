@@ -432,7 +432,7 @@ export function CodexProvider(props: ParentProps) {
   const [archivingThreadID, setArchivingThreadID] = createSignal<string | null>(null);
   const [restoringThreadID, setRestoringThreadID] = createSignal<string | null>(null);
   const [forkingThreadID, setForkingThreadID] = createSignal<string | null>(null);
-  const [interruptingTurnID] = createSignal<string | null>(null);
+  const [interruptingTurnID, setInterruptingTurnID] = createSignal<string | null>(null);
   const [reviewingThreadID, setReviewingThreadID] = createSignal<string | null>(null);
   const [streamBinding, setStreamBinding] = createSignal<Readonly<{ threadID: string; afterSeq: number }> | null>(null);
   const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
@@ -1486,6 +1486,7 @@ export function CodexProvider(props: ParentProps) {
       notify.error('Action unavailable', 'This Codex host does not support turn interruption from Redeven yet.');
       return;
     }
+    setInterruptingTurnID(turnID);
     try {
       await interruptCodexTurn({
         thread_id: threadID,
@@ -1494,6 +1495,8 @@ export function CodexProvider(props: ParentProps) {
       notify.success('Interrupted', 'Requested Codex to stop the active turn.');
     } catch (error) {
       notify.error('Interrupt failed', error instanceof Error ? error.message : String(error));
+    } finally {
+      setInterruptingTurnID((current) => (current === turnID ? null : current));
     }
   };
 
