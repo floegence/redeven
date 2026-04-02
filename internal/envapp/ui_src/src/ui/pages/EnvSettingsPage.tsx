@@ -3747,6 +3747,7 @@ export function EnvSettingsPage() {
         <div class="space-y-3">
           <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
           <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
+          <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
           <p class="text-xs text-muted-foreground">
             Target version: <span class="font-mono">{targetUpgradeVersion() || '—'}</span>
           </p>
@@ -3768,6 +3769,7 @@ export function EnvSettingsPage() {
         <div class="space-y-3">
           <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
           <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
+          <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
         </div>
       </ConfirmDialog>
 

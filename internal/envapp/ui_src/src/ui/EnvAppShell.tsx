@@ -53,9 +53,11 @@ import { createAgentMaintenanceController } from './maintenance/createAgentMaint
 import { createAgentUpdatePromptCoordinator } from './maintenance/createAgentUpdatePromptCoordinator';
 import { createAgentVersionModel } from './maintenance/createAgentVersionModel';
 import {
+  LOCAL_FAST_RECONNECT_POLICY,
   REMOTE_FAST_RECONNECT_POLICY,
   classifyReconnectFailure,
   createAgentReconnectController,
+  type ReconnectAvailability,
 } from './reconnect/createAgentReconnectController';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
@@ -83,6 +85,7 @@ import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellC
 import {
   desktopShellBridgeAvailable,
   openConnectionCenter,
+  restartDesktopManagedRuntime,
 } from './services/desktopShellBridge';
 import {
   fetchGatewayJSON,
@@ -266,12 +269,6 @@ export function EnvAppShell() {
   const fileBrowserSurfaceController = createFileBrowserSurfaceController();
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
-  const directReconnectPolicy = {
-    enabled: true,
-    maxAttempts: 1_000_000,
-    initialDelayMs: 500,
-    maxDelayMs: 30_000,
-  } as const;
   const topBarTooltip = (label: string): string | false => (layout.isMobile() ? false : label);
   const headerLogoSrc = createMemo(() =>
     `${import.meta.env.BASE_URL}${theme.resolvedTheme() === 'dark' ? 'logo-dark.svg' : 'logo.svg'}`,
@@ -409,6 +406,41 @@ export function EnvAppShell() {
     if (message) {
       setManualError(message);
     }
+  };
+
+  const probeRemoteRuntimeAvailability = async (): Promise<ReconnectAvailability> => {
+    const id = envId();
+    if (!id) {
+      return { status: 'unknown', access: 'unknown' };
+    }
+
+    try {
+      const detail = await getEnvironment(id);
+      return {
+        status: String(detail?.status ?? '').trim().toLowerCase() === 'offline' ? 'offline' : 'online',
+        access: 'unknown',
+      };
+    } catch {
+      return { status: 'unknown', access: 'unknown' };
+    }
+  };
+
+  const probeLocalRuntimeAvailability = async (): Promise<ReconnectAvailability> => {
+    const status = await getLocalAccessStatus();
+    if (!status) {
+      return { status: 'offline', access: 'unknown' };
+    }
+
+    if (status.password_required && !status.unlocked) {
+      markCurrentAccessLocked('Access password expired. Enter it again to continue.');
+      return { status: 'online', access: 'locked' };
+    }
+
+    setLocalAccessStatus(status);
+    setLocalAccessChecked(true);
+    setCurrentAccessChannelReady(false);
+    setCurrentAccessError(null);
+    return { status: 'online', access: 'ready' };
   };
 
   const [envId, setEnvId] = createSignal(getEnvPublicIDFromSession());
@@ -828,9 +860,7 @@ export function EnvAppShell() {
     }
 
     const attemptKey = ++accessRecoverySeq;
-    if (!isLocalMode()) {
-      setConnectionAttemptSeq((n) => n + 1);
-    }
+    setConnectionAttemptSeq((n) => n + 1);
     accessResumeClient = null;
     accessResumeInFlight = null;
     setAccessRecoveryBusy(true);
@@ -847,7 +877,7 @@ export function EnvAppShell() {
           connect: {
             keepaliveIntervalMs: 15_000,
           },
-          autoReconnect: directReconnectPolicy,
+          autoReconnect: LOCAL_FAST_RECONNECT_POLICY,
         });
         if (accessRecoverySeq !== attemptKey) return;
         accessResumeClient = protocol.client();
@@ -893,8 +923,8 @@ export function EnvAppShell() {
       await retryAccessConnection();
       return;
     }
-    if (!isLocalMode() && remoteReconnectController.phase() === 'waiting_for_agent') {
-      remoteReconnectController.requestReconnectNow();
+    if (reconnectController.phase() === 'waiting_for_runtime') {
+      reconnectController.requestReconnectNow();
       return;
     }
     await reconnect();
@@ -904,10 +934,9 @@ export function EnvAppShell() {
     reloadCurrentPage(window);
   };
 
-  const remoteReconnectController = createAgentReconnectController({
-    enabled: () => !isLocalMode() && !accessGateVisible() && connectionAttemptSeq() > 0,
-    envId,
-    getEnvironment,
+  const reconnectController = createAgentReconnectController({
+    enabled: () => !accessGateVisible() && connectionAttemptSeq() > 0,
+    probeAvailability: () => (isLocalMode() ? probeLocalRuntimeAvailability() : probeRemoteRuntimeAvailability()),
     reconnect,
   });
 
@@ -923,6 +952,25 @@ export function EnvAppShell() {
     rpc,
   });
 
+  const startRuntimeRestart = async () => {
+    const runtime = localRuntime();
+    if (runtime && isDesktopManagedRuntime(runtime)) {
+      const result = await restartDesktopManagedRuntime();
+      if (!result) {
+        return {
+          ok: false,
+          message: 'Managed runtime restart is only available from Redeven Desktop.',
+        };
+      }
+      return {
+        ok: result.ok && result.started,
+        message: result.message,
+      };
+    }
+
+    return rpc.sys.restart();
+  };
+
   const agentMaintenanceController = createAgentMaintenanceController({
     envId,
     canAdmin,
@@ -930,9 +978,9 @@ export function EnvAppShell() {
     protocolStatus: () => protocol.status(),
     currentProcessStartedAtMs: agentVersionModel.currentProcessStartedAtMs,
     currentVersion: agentVersionModel.currentVersion,
-    connect,
     notify,
     rpc,
+    startRestartRequest: startRuntimeRestart,
     refetchCurrentVersion: agentVersionModel.refetchCurrentVersion,
     refetchEnvironment: async () => {
       const next = await refetchEnv();
@@ -951,14 +999,14 @@ export function EnvAppShell() {
     maintenance: agentMaintenanceController,
   });
 
-  const remoteReconnectFailure = createMemo(() => remoteReconnectController.failure());
+  const reconnectFailure = createMemo(() => reconnectController.failure());
   const connectNotice = createMemo<Readonly<{ title: string; message: string }> | null>(() => {
     if (accessGateVisible()) return null;
 
-    if (remoteReconnectController.phase() === 'waiting_for_agent') {
+    if (reconnectController.phase() === 'waiting_for_runtime') {
       return {
         title: 'Waiting for runtime',
-        message: remoteReconnectFailure()?.message || 'The runtime is unavailable right now. Retrying automatically.',
+        message: reconnectFailure()?.message || 'The runtime is unavailable right now. Retrying automatically.',
       };
     }
 
@@ -978,9 +1026,9 @@ export function EnvAppShell() {
       return 'connecting';
     }
 
-    switch (remoteReconnectController.phase()) {
+    switch (reconnectController.phase()) {
       case 'transport_retry':
-      case 'waiting_for_agent':
+      case 'waiting_for_runtime':
       case 'reconnecting':
         return 'connecting';
       default:
@@ -1004,13 +1052,13 @@ export function EnvAppShell() {
         break;
     }
 
-    switch (remoteReconnectController.phase()) {
+    switch (reconnectController.phase()) {
       case 'transport_retry':
         return 'Retrying connection';
-      case 'waiting_for_agent':
+      case 'waiting_for_runtime':
         if (
-          remoteReconnectController.controlplaneStatus() === 'offline'
-          || remoteReconnectFailure()?.kind === 'agent_offline'
+          reconnectController.availabilityStatus() === 'offline'
+          || reconnectFailure()?.kind === 'agent_offline'
         ) {
           return 'Waiting for runtime';
         }
@@ -1021,7 +1069,7 @@ export function EnvAppShell() {
         return undefined;
     }
   });
-  const connecting = () => !accessGateVisible() && (protocol.status() === 'connecting' || remoteReconnectController.phase() === 'reconnecting');
+  const connecting = () => !accessGateVisible() && (protocol.status() === 'connecting' || reconnectController.phase() === 'reconnecting');
   const reconnectDisabled = createMemo(() => {
     switch (accessGatePhase()) {
       case 'checking':
@@ -1034,7 +1082,7 @@ export function EnvAppShell() {
         break;
     }
 
-    if (remoteReconnectController.phase() === 'transport_retry' || remoteReconnectController.phase() === 'reconnecting') {
+    if (reconnectController.phase() === 'transport_retry' || reconnectController.phase() === 'reconnecting') {
       return true;
     }
 
@@ -1053,11 +1101,11 @@ export function EnvAppShell() {
         break;
     }
 
-    switch (remoteReconnectController.phase()) {
+    switch (reconnectController.phase()) {
       case 'transport_retry':
       case 'reconnecting':
         return 'Reconnecting...';
-      case 'waiting_for_agent':
+      case 'waiting_for_runtime':
         return 'Retry now';
       default:
         return connecting() ? 'Connecting...' : 'Reconnect';
@@ -1065,25 +1113,24 @@ export function EnvAppShell() {
   });
   const connectionOverlayVisible = createMemo(() => !accessGateVisible() && protocol.status() !== 'connected');
   const connectionOverlayMessage = createMemo(() => {
-    if (isLocalMode()) return 'Connecting to local runtime...';
     if (agentMaintenanceController.maintaining()) {
       return agentMaintenanceController.stage() || 'Runtime restarting...';
     }
 
-    switch (remoteReconnectController.phase()) {
+    switch (reconnectController.phase()) {
       case 'transport_retry':
       case 'reconnecting':
         return 'Reconnecting to runtime...';
-      case 'waiting_for_agent':
+      case 'waiting_for_runtime':
         if (
-          remoteReconnectController.controlplaneStatus() === 'offline'
-          || remoteReconnectFailure()?.kind === 'agent_offline'
+          reconnectController.availabilityStatus() === 'offline'
+          || reconnectFailure()?.kind === 'agent_offline'
         ) {
           return 'Waiting for runtime...';
         }
         return 'Trying the runtime again soon...';
       default:
-        return 'Connecting to runtime...';
+        return isLocalMode() ? 'Connecting to local runtime...' : 'Connecting to runtime...';
     }
   });
   const connectError = createMemo(() => connectNotice()?.message ?? null);
@@ -1146,14 +1193,14 @@ export function EnvAppShell() {
     }
   });
 
-  let lastRemoteReconnectSignal = '';
-  let lastRemoteConnectedClient: unknown = null;
+  let lastReconnectSignal = '';
+  let lastConnectedClient: unknown = null;
 
   createEffect(() => {
-    if (isLocalMode() || accessGateVisible()) {
-      remoteReconnectController.noteBlocked();
-      lastRemoteReconnectSignal = '';
-      lastRemoteConnectedClient = null;
+    if (accessGateVisible()) {
+      reconnectController.noteBlocked();
+      lastReconnectSignal = '';
+      lastConnectedClient = null;
       return;
     }
 
@@ -1168,31 +1215,33 @@ export function EnvAppShell() {
     const signal = `${protocolStatusValue}:${failure.kind}:${trimString(failure.message)}`;
 
     if (protocolStatusValue === 'connected') {
-      if (lastRemoteConnectedClient !== protocol.client()) {
-        lastRemoteConnectedClient = protocol.client();
-        void refetchEnv();
+      if (lastConnectedClient !== protocol.client()) {
+        lastConnectedClient = protocol.client();
+        if (!isLocalMode()) {
+          void refetchEnv();
+        }
       }
-      remoteReconnectController.noteConnected();
-      lastRemoteReconnectSignal = signal;
+      reconnectController.noteConnected();
+      lastReconnectSignal = signal;
       return;
     }
 
-    lastRemoteConnectedClient = null;
+    lastConnectedClient = null;
     if (protocolStatusValue === 'connecting') {
-      remoteReconnectController.noteTransportRetry();
-      lastRemoteReconnectSignal = signal;
+      reconnectController.noteTransportRetry();
+      lastReconnectSignal = signal;
       return;
     }
 
-    if (signal === lastRemoteReconnectSignal) return;
-    lastRemoteReconnectSignal = signal;
+    if (signal === lastReconnectSignal) return;
+    lastReconnectSignal = signal;
 
     if (failure.kind === 'fatal') {
-      remoteReconnectController.noteBlocked();
+      reconnectController.noteBlocked();
       return;
     }
 
-    remoteReconnectController.activateWaiting(failure);
+    reconnectController.activateWaiting(failure);
   });
 
   createEffect(() => {
@@ -1269,9 +1318,9 @@ export function EnvAppShell() {
       if (accessGateVisible()) return;
       if (connecting()) return;
       if (manualError() && classifyReconnectFailure(manualError()).kind === 'fatal') return;
-      if (!isLocalMode() && remoteReconnectController.phase() === 'waiting_for_agent') {
+      if (reconnectController.phase() === 'waiting_for_runtime') {
         console.debug('[envapp] ensureHealthy: nudge waiting reconnect', { reason });
-        remoteReconnectController.requestImmediateTick();
+        reconnectController.requestImmediateTick();
         return;
       }
 

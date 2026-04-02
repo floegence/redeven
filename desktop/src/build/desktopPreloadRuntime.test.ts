@@ -135,7 +135,8 @@ if (!preload) {
       && typeof window.redevenDesktopShell?.openConnectionCenter === 'function'
       && typeof window.redevenDesktopShell?.openAdvancedSettings === 'function'
       && typeof window.redevenDesktopShell?.openConnectToRedeven === 'function'
-      && typeof window.redevenDesktopShell?.openDesktopSettings === 'function',
+      && typeof window.redevenDesktopShell?.openDesktopSettings === 'function'
+      && typeof window.redevenDesktopShell?.restartManagedRuntime === 'function',
     hasStateStorageBridge: typeof window.redevenDesktopStateStorage === 'object',
   });
 }

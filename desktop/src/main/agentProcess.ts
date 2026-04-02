@@ -187,6 +187,67 @@ async function stopChildProcess(child: SpawnedAgentProcess, timeoutMs: number): 
   }
 }
 
+function processExists(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    return nodeError?.code === 'EPERM';
+  }
+}
+
+async function stopAttachedProcess(pid: number, timeoutMs: number): Promise<void> {
+  if (!Number.isInteger(pid) || pid <= 0 || !processExists(pid)) {
+    return;
+  }
+
+  try {
+    process.kill(pid, 'SIGTERM');
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError?.code === 'ESRCH') {
+      return;
+    }
+    throw error;
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!processExists(pid)) {
+      return;
+    }
+    await delay(100);
+  }
+
+  if (!processExists(pid)) {
+    return;
+  }
+
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError?.code === 'ESRCH') {
+      return;
+    }
+    throw error;
+  }
+}
+
+function attachedStop(startup: StartupReport, timeoutMs: number): () => Promise<void> {
+  const pid = Number(startup.pid ?? Number.NaN);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return async () => undefined;
+  }
+  return async () => {
+    await stopAttachedProcess(pid, timeoutMs);
+  };
+}
+
 async function writePasswordToStdin(child: SpawnedAgentProcess, password: string): Promise<void> {
   const stdin = child.stdin;
   if (!stdin || stdin.destroyed || !stdin.writable) {
@@ -227,7 +288,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
         reportDir: null,
         reportFile: null,
         attached: true,
-        stop: async () => undefined,
+        stop: attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
       },
       spawned: false,
     };
@@ -304,7 +365,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
           reportDir: null,
           reportFile: null,
           attached: true,
-          stop: async () => undefined,
+          stop: attachedStop(startup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
         },
         spawned: true,
       };
@@ -324,7 +385,7 @@ export async function startManagedAgent(args: StartManagedAgentArgs): Promise<Ma
           reportDir: null,
           reportFile: null,
           attached: true,
-          stop: async () => undefined,
+          stop: attachedStop(attachedStartup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
         },
         spawned: true,
       };

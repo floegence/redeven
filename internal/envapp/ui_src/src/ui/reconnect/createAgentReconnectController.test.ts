@@ -43,38 +43,37 @@ describe('createAgentReconnectController', () => {
   it('keeps waiting while the environment looks offline and reconnects once it looks online', async () => {
     vi.useFakeTimers();
 
-    const getEnvironment = vi.fn()
-      .mockResolvedValueOnce({ status: 'offline' })
-      .mockResolvedValueOnce({ status: 'online' });
+    const probeAvailability = vi.fn()
+      .mockResolvedValueOnce({ status: 'offline', access: 'unknown' })
+      .mockResolvedValueOnce({ status: 'online', access: 'ready' });
     const reconnect = vi.fn(async () => undefined);
 
     let controller!: AgentReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentReconnectController({
         enabled: () => true,
-        envId: () => 'env-demo',
-        getEnvironment,
+        probeAvailability,
         reconnect,
       });
       return disposeRoot;
     });
 
     controller.activateWaiting({ kind: 'agent_offline', message: 'The runtime is offline.' });
-    expect(controller.phase()).toBe('waiting_for_agent');
+    expect(controller.phase()).toBe('waiting_for_runtime');
 
     await vi.advanceTimersByTimeAsync(2_000);
     await flushAsync();
 
-    expect(getEnvironment).toHaveBeenCalledTimes(1);
-    expect(controller.controlplaneStatus()).toBe('offline');
-    expect(controller.phase()).toBe('waiting_for_agent');
+    expect(probeAvailability).toHaveBeenCalledTimes(1);
+    expect(controller.availabilityStatus()).toBe('offline');
+    expect(controller.phase()).toBe('waiting_for_runtime');
     expect(reconnect).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(3_000);
     await flushAsync();
 
-    expect(getEnvironment).toHaveBeenCalledTimes(2);
-    expect(controller.controlplaneStatus()).toBe('online');
+    expect(probeAvailability).toHaveBeenCalledTimes(2);
+    expect(controller.availabilityStatus()).toBe('online');
     expect(controller.phase()).toBe('reconnecting');
     expect(reconnect).toHaveBeenCalledTimes(1);
 
@@ -84,15 +83,14 @@ describe('createAgentReconnectController', () => {
   it('lets manual retry bypass the offline wait delay', async () => {
     vi.useFakeTimers();
 
-    const getEnvironment = vi.fn().mockResolvedValue({ status: 'offline' });
+    const probeAvailability = vi.fn().mockResolvedValue({ status: 'offline', access: 'unknown' });
     const reconnect = vi.fn(async () => undefined);
 
     let controller!: AgentReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentReconnectController({
         enabled: () => true,
-        envId: () => 'env-demo',
-        getEnvironment,
+        probeAvailability,
         reconnect,
       });
       return disposeRoot;
@@ -102,7 +100,7 @@ describe('createAgentReconnectController', () => {
     controller.requestReconnectNow();
     await flushAsync();
 
-    expect(getEnvironment).toHaveBeenCalledTimes(1);
+    expect(probeAvailability).toHaveBeenCalledTimes(1);
     expect(controller.phase()).toBe('reconnecting');
     expect(reconnect).toHaveBeenCalledTimes(1);
 

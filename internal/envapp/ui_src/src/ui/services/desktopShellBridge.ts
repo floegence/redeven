@@ -1,3 +1,9 @@
+export type DesktopManagedRuntimeRestartResult = Readonly<{
+  ok: boolean;
+  started: boolean;
+  message?: string;
+}>;
+
 export interface DesktopShellBridge {
   openDeviceChooser?: () => Promise<void>;
   switchDevice?: () => Promise<void>;
@@ -6,6 +12,7 @@ export interface DesktopShellBridge {
   openConnectToRedeven?: () => Promise<void>;
   openDesktopSettings?: () => Promise<void>;
   openWindow?: (kind: unknown) => Promise<void>;
+  restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
 }
 
 declare global {
@@ -84,4 +91,12 @@ export async function openDesktopConnectToRedeven(): Promise<boolean> {
 
 export async function openDesktopSettings(): Promise<boolean> {
   return openAdvancedSettings();
+}
+
+export async function restartDesktopManagedRuntime(): Promise<DesktopManagedRuntimeRestartResult | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge || typeof bridge.restartManagedRuntime !== 'function') {
+    return null;
+  }
+  return bridge.restartManagedRuntime();
 }

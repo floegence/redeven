@@ -33,6 +33,7 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(typeof bridge.openConnectToRedeven).toBe('function');
     expect(typeof bridge.openDesktopSettings).toBe('function');
     expect(typeof bridge.openWindow).toBe('function');
+    expect(typeof bridge.restartManagedRuntime).toBe('function');
 
     await bridge.openDeviceChooser();
     await bridge.switchDevice();
@@ -44,6 +45,7 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.openWindow('connect');
     await bridge.openWindow('advanced_settings');
     await bridge.openWindow('invalid');
+    await bridge.restartManagedRuntime();
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
@@ -54,6 +56,7 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-open-window', { kind: 'settings' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(9);
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(10);
   });
 });

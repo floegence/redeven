@@ -13,6 +13,7 @@ describe('agentProcess', () => {
       desktop_managed: true,
       state_dir: '/Users/tester/.redeven',
       diagnostics_enabled: true,
+      pid: 4242,
     }))).toEqual({
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
@@ -21,6 +22,7 @@ describe('agentProcess', () => {
       desktop_managed: true,
       state_dir: '/Users/tester/.redeven',
       diagnostics_enabled: true,
+      pid: 4242,
     });
   });
 
@@ -40,6 +42,7 @@ describe('agentProcess', () => {
           effective_run_mode: 'desktop',
           remote_enabled: true,
           desktop_managed: true,
+          pid: 4242,
         },
         reportDir: null,
         reportFile: null,
@@ -59,6 +62,7 @@ describe('agentProcess', () => {
           effective_run_mode: 'desktop',
           remote_enabled: true,
           desktop_managed: true,
+          pid: 4242,
         },
         reportDir: '/tmp/redeven',
         reportFile: '/tmp/redeven/startup.json',

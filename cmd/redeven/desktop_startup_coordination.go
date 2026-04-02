@@ -29,6 +29,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		DesktopManaged:     startup.DesktopManaged,
 		StateDir:           startup.StateDir,
 		DiagnosticsEnabled: startup.DiagnosticsEnabled,
+		PID:                startup.PID,
 	})
 }
 
@@ -40,6 +41,7 @@ type runtimeStartupReport struct {
 	DesktopManaged     bool
 	StateDir           string
 	DiagnosticsEnabled bool
+	PID                int
 }
 
 func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupReport {
@@ -51,6 +53,7 @@ func buildRuntimeStartupReport(state *localuiruntime.Snapshot) runtimeStartupRep
 		DesktopManaged:     state.DesktopManaged,
 		StateDir:           state.StateDir,
 		DiagnosticsEnabled: state.DiagnosticsEnabled,
+		PID:                state.PID,
 	}
 }
 
