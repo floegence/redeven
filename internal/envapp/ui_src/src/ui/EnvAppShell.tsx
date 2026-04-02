@@ -62,6 +62,7 @@ import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
+import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
@@ -2122,7 +2123,7 @@ export function EnvAppShell() {
             : <></>
       }
       logo={
-        <TopBarIconButton
+        <TopBarBrandButton
           label="Back to dashboard"
           tooltip={topBarTooltip('Back to dashboard')}
           onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
@@ -2133,7 +2134,7 @@ export function EnvAppShell() {
             class="h-6 w-6 object-contain"
             data-redeven-logo-theme={theme.resolvedTheme()}
           />
-        </TopBarIconButton>
+        </TopBarBrandButton>
       }
       activityItems={activityItems()}
       activityBottomItems={activityBottomItems()}

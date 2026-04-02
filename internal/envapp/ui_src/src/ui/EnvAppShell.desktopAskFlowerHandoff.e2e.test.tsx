@@ -40,6 +40,7 @@ const accessStatusMock = vi.fn(async () => ({ passwordRequired: false, unlocked:
 const accessResumeMock = vi.fn(async () => undefined);
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {} }),
   useLayout: () => ({
@@ -80,6 +81,14 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Dropdown: (props: any) => <>{props.trigger}</>,
   Tooltip: (props: any) => <>{props.children}</>,
+}));
+
+vi.mock('./TopBarBrandButton', () => ({
+  TopBarBrandButton: (props: any) => (
+    <button type="button" class={props.class} onClick={props.onClick} aria-label={props.label}>
+      {props.children}
+    </button>
+  ),
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
