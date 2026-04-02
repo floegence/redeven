@@ -13,6 +13,10 @@ import {
   formatMonitorProcessBytes,
   monitorProcessDisplayLabel,
 } from '../utils/monitorProcessAskFlower';
+import {
+  getMonitorProcessCpuUsagePresentation,
+  getMonitorProcessMemoryUsagePresentation,
+} from '../utils/monitorProcessUsageTone';
 import { isPermissionDeniedError } from '../utils/permission';
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
@@ -619,19 +623,35 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                       </tr>
                     }>
                       <For each={processes()}>
-                        {(proc) => (
-                          <tr
-                            class={`border-b border-border/40 transition-colors hover:bg-muted/30 ${processContextMenu()?.process.pid === proc.pid ? 'bg-muted/40' : ''}`}
-                            onContextMenu={(event) => openProcessContextMenu(event, proc)}
-                            title="Right-click for actions"
-                          >
-                            <td class="py-2 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
-                            <td class="py-2 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
-                            <td class="py-2 px-2 text-right font-mono tabular-nums">{Number(proc.cpuPercent ?? 0).toFixed(1)}</td>
-                            <td class="py-2 px-2 text-right font-mono tabular-nums">{formatMonitorProcessBytes(Number(proc.memoryBytes ?? 0))}</td>
-                            <td class="py-2 px-2 truncate max-w-[160px] text-muted-foreground" title={proc.username}>{proc.username}</td>
-                          </tr>
-                        )}
+                        {(proc) => {
+                          const cpuPresentation = getMonitorProcessCpuUsagePresentation(Number(proc.cpuPercent ?? 0));
+                          const memoryPresentation = getMonitorProcessMemoryUsagePresentation(Number(proc.memoryBytes ?? 0));
+                          return (
+                            <tr
+                              class={`border-b border-border/40 transition-colors hover:bg-muted/30 ${processContextMenu()?.process.pid === proc.pid ? 'bg-muted/40' : ''}`}
+                              onContextMenu={(event) => openProcessContextMenu(event, proc)}
+                              title="Right-click for actions"
+                            >
+                              <td class="py-2 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
+                              <td class="py-2 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
+                              <td
+                                class={`py-2 px-2 text-right font-mono tabular-nums ${cpuPresentation.className}`}
+                                data-monitor-metric="cpu"
+                                data-monitor-metric-tone={cpuPresentation.tone}
+                              >
+                                {Number(proc.cpuPercent ?? 0).toFixed(1)}
+                              </td>
+                              <td
+                                class={`py-2 px-2 text-right font-mono tabular-nums ${memoryPresentation.className}`}
+                                data-monitor-metric="memory"
+                                data-monitor-metric-tone={memoryPresentation.tone}
+                              >
+                                {formatMonitorProcessBytes(Number(proc.memoryBytes ?? 0))}
+                              </td>
+                              <td class="py-2 px-2 truncate max-w-[160px] text-muted-foreground" title={proc.username}>{proc.username}</td>
+                            </tr>
+                          );
+                        }}
                       </For>
                     </Show>
                   </tbody>
