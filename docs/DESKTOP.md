@@ -182,6 +182,39 @@ Target validation rules:
 
 Desktop shell preferences live under the Electron user data directory, not inside the git checkout.
 
+## Shell-Owned Theme State
+
+Desktop theme is shell-owned UI state shared by Electron main, preload, welcome, and desktop Env App.
+
+Authoritative state:
+
+- Electron main persists `theme_source` in Desktop UI state under `desktop:theme-source`.
+- `theme_source` is one of:
+  - `system`
+  - `light`
+  - `dark`
+- Electron main resolves `resolved_theme` from `theme_source` plus `nativeTheme.shouldUseDarkColors`.
+- Electron main materializes one `DesktopThemeSnapshot` payload:
+  - `source`
+  - `resolvedTheme`
+  - `window.backgroundColor`
+  - `window.symbolColor`
+
+Behavior:
+
+- Every `BrowserWindow` is created from the latest shell snapshot, so the native window background is correct before the first renderer paint.
+- Linux title bar overlay colors still come from the desktop shell, but that overlay behavior is no longer coupled to renderer-side color reporting.
+- Preload exposes `window.redevenDesktopTheme` with synchronous `getSnapshot()`, `setSource(...)`, and `subscribe(...)`.
+- Preload applies `html.light` / `html.dark` and `color-scheme` as soon as the document is available, then keeps the current document synchronized when theme updates arrive from Electron main.
+- Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
+- Theme toggles from either welcome or Env App update native chrome and all registered renderer windows together, including detached desktop child windows.
+- When the stored source is `system`, Electron main rebroadcasts a fresh snapshot whenever the OS theme changes.
+
+Non-goals:
+
+- Native window colors must not depend on DOM color sampling from the current page.
+- Desktop should not maintain one-off per-surface theme patches for welcome, Env App, or detached child windows.
+
 ## User Entry Points
 
 - Cold app launch opens the welcome launcher in the main window.

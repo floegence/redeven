@@ -1,5 +1,5 @@
 import { bootstrapDesktopSettingsBridge } from './desktopSettingsBridge';
-import { bootstrapDesktopWindowThemeReporter } from './windowTheme';
+import { bootstrapDesktopThemeBridge } from './windowTheme';
 
 bootstrapDesktopSettingsBridge();
-bootstrapDesktopWindowThemeReporter();
+bootstrapDesktopThemeBridge();

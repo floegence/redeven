@@ -120,6 +120,7 @@ import {
   openDetachedSurfaceWindow,
   parseDetachedSurfaceFromURL,
 } from './services/detachedSurface';
+import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 
@@ -250,6 +251,7 @@ function AIChatProviderBridge(props: { children: any }) {
 export function EnvAppShell() {
   const layout = useLayout();
   const theme = useTheme();
+  const shellTheme = desktopThemeBridge();
   const widgetRegistry = useWidgetRegistry();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -1917,7 +1919,7 @@ export function EnvAppShell() {
         keybind: 'mod+shift+l',
         icon: () => (theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />),
         execute: () => {
-          theme.toggleTheme();
+          toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme());
           const nextTheme = theme.resolvedTheme() === 'light' ? 'dark' : 'light';
           notify.info('Theme changed', `Switched to ${nextTheme} theme`);
         },
@@ -2200,7 +2202,7 @@ export function EnvAppShell() {
           <TopBarIconButton
             label="Toggle theme"
             tooltip={topBarTooltip('Toggle theme')}
-            onClick={() => theme.toggleTheme()}
+            onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
           >
             {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
           </TopBarIconButton>

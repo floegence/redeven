@@ -7,7 +7,10 @@ Key points:
 - The Env App UI is **runtime-bundled** (built + embedded into the Redeven runtime binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex).
+<<<<<<< HEAD
 - In Redeven Desktop, the command palette also exposes a shell-owned `Open Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
+- In Redeven Desktop, Env App also follows a shell-owned theme contract: Electron main resolves `system` / `light` / `dark`, preload exposes `window.redevenDesktopTheme`, and Env App routes only its Floe `theme` persistence key through that shell bridge while leaving other UI persistence in the normal Env App namespace.
+- Desktop theme changes triggered from Env App must update the current document theme, native window chrome, and detached child windows together instead of leaving Env App as an independent theme authority.
 - Runtime Settings uses an explicit information architecture so users can find endpoint controls by intent rather than by implementation detail:
   - `Overview`: `Config File`, `Connection`, `Runtime Status`
   - `Runtime Configuration`: `Shell & Workspace`, `Logging`
@@ -112,6 +115,27 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - Git branch deletion keeps `safe delete` as the default path, but when an unmerged local branch cannot be safely deleted the review dialog can escalate into an exact branch-name-confirmed `force delete`; linked worktrees are force-removed together with their pending changes, while inaccessible linked worktrees remain blocked.
 
 This keeps worktree status consistent even when the user opens `Branches` first without visiting `Changes`.
+
+## Desktop Shell Theme Integration
+
+When Env App runs inside Redeven Desktop, theme ownership stays in the Electron shell rather than in Env App page state.
+
+Contract:
+
+- Env App reads the current shell snapshot from `window.redevenDesktopTheme`.
+- Floe `defaultTheme` comes from the shell snapshot source, not from an Env App-only local default.
+- The Env App storage adapter intercepts only the persisted Floe `theme` key and maps it onto the shell bridge:
+  - `getItem(theme-key)` returns the shell source
+  - `setItem(theme-key, ...)` updates the shell source
+  - `removeItem(theme-key)` resets the shell source to `system`
+- All non-theme UI persistence such as layout and deck state remains owned by the existing Env App storage namespace.
+- A small runtime subscription keeps `useTheme()` synchronized when Electron main rebroadcasts a new snapshot, including OS theme changes while the user preference is `system`.
+
+Implications:
+
+- Env App theme toggles behave like shell-wide toggles, not page-local overrides.
+- Detached desktop child windows inherit the same theme snapshot and document-class synchronization path as the main Env App window.
+- Eliminating independent page authority for native window colors avoids light flashes during dark-mode open, close, and aggressive resize transitions.
 
 ## Git browse stash workflow
 

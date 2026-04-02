@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
 import { pathToFileURL } from 'node:url';
 
 import { launchStartedFreshManagedRuntime, startManagedAgent, type ManagedAgent } from './agentProcess';
@@ -25,6 +25,7 @@ import {
   type BuildDesktopWelcomeSnapshotArgs,
 } from './desktopWelcomeState';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
+import { DesktopThemeState } from './desktopThemeState';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveWelcomeRendererPath } from './paths';
@@ -36,7 +37,7 @@ import {
   restoreBrowserWindowBounds,
 } from './windowState';
 import { resolveDesktopWindowSpec } from './windowSpec';
-import { applyDesktopWindowTheme, buildDesktopWindowChromeOptions, defaultDesktopWindowThemeSnapshot } from './windowChrome';
+import { buildDesktopWindowChromeOptions } from './windowChrome';
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
   SAVE_DESKTOP_SETTINGS_CHANNEL,
@@ -52,9 +53,9 @@ import {
   normalizeDesktopStateSetPayload,
 } from '../shared/stateIPC';
 import {
-  REPORT_DESKTOP_WINDOW_THEME_CHANNEL,
-  normalizeDesktopWindowThemeSnapshot,
-} from '../shared/windowThemeIPC';
+  DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_THEME_SET_SOURCE_CHANNEL,
+} from '../shared/desktopThemeIPC';
 import {
   DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL,
   DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL,
@@ -128,6 +129,7 @@ const childWindows = new Set<BrowserWindow>();
 const namedChildWindows = new Map<string, BrowserWindow>();
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
+let desktopThemeStateCache: DesktopThemeState | null = null;
 const desktopDiagnostics = new DesktopDiagnosticsRecorder();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 const pendingMainWindowAskFlowerHandoffs: DesktopAskFlowerHandoffPayload[] = [];
@@ -155,6 +157,14 @@ function desktopStateStore(): DesktopStateStore {
     desktopStateStoreCache = new DesktopStateStore(defaultDesktopStateStorePath(app.getPath('userData')));
   }
   return desktopStateStoreCache;
+}
+
+function desktopThemeState(): DesktopThemeState {
+  if (!desktopThemeStateCache) {
+    desktopThemeStateCache = new DesktopThemeState(desktopStateStore(), nativeTheme, process.platform);
+  }
+  desktopThemeStateCache.initialize();
+  return desktopThemeStateCache;
 }
 
 function registerWindowStatePersistence(win: BrowserWindow, key: string): void {
@@ -672,6 +682,7 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
   const attachToParent = Boolean(parent) && spec.attachToParent !== false;
   const actualParent = attachToParent ? parent : undefined;
   const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });
+  const themeSnapshot = desktopThemeState().getSnapshot();
   const trimmedFrameName = String(frameName ?? '').trim();
   const windowStateKey = String(explicitWindowStateKey ?? '').trim()
     || (trimmedFrameName ? `window:${trimmedFrameName}` : parent ? 'window:child' : 'window:main');
@@ -701,7 +712,7 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
     minHeight: spec.minHeight,
     show: false,
     title: spec.title,
-    ...buildDesktopWindowChromeOptions(process.platform, defaultDesktopWindowThemeSnapshot()),
+    ...buildDesktopWindowChromeOptions(process.platform, themeSnapshot.window),
     parent: actualParent,
     webPreferences: {
       preload: browserPreloadPath,
@@ -711,6 +722,7 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
       spellcheck: false,
     },
   });
+  desktopThemeState().registerWindow(win);
   applyRestoredWindowState(win, restoredState);
   registerWindowStatePersistence(win, windowStateKey);
 
@@ -899,6 +911,12 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on(DESKTOP_STATE_KEYS_CHANNEL, (event) => {
     event.returnValue = desktopStateStore().rendererKeys();
   });
+  ipcMain.on(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL, (event) => {
+    event.returnValue = desktopThemeState().getSnapshot();
+  });
+  ipcMain.on(DESKTOP_THEME_SET_SOURCE_CHANNEL, (event, source) => {
+    event.returnValue = desktopThemeState().setSource(source);
+  });
 
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {
     try {
@@ -988,17 +1006,6 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
     void closeSettingsSurface();
-  });
-  ipcMain.on(REPORT_DESKTOP_WINDOW_THEME_CHANNEL, (event, snapshot) => {
-    const normalized = normalizeDesktopWindowThemeSnapshot(snapshot);
-    if (!normalized) {
-      return;
-    }
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || win.isDestroyed()) {
-      return;
-    }
-    applyDesktopWindowTheme(win, normalized, process.platform);
   });
   ipcMain.on(DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL, (_event, payload) => {
     const normalized = normalizeDesktopAskFlowerHandoffPayload(payload);

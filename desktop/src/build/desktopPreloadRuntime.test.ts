@@ -115,13 +115,42 @@ describe('desktop preload runtime', () => {
 
     const runtimeScript = path.join(tempDir, 'runtime.js');
     await fs.writeFile(runtimeScript, `
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 
 const preload = process.env.${electronRuntimePreloadEnvName};
 
 if (!preload) {
   throw new Error('Missing ${electronRuntimePreloadEnvName}');
 }
+
+let themeSource = 'system';
+
+function resolveTheme(source) {
+  return source === 'dark' ? 'dark' : 'light';
+}
+
+function buildThemeSnapshot(source = themeSource) {
+  const resolvedTheme = resolveTheme(source);
+  return {
+    source,
+    resolvedTheme,
+    window: {
+      backgroundColor: resolvedTheme === 'dark' ? '#0e121b' : '#f3e5de',
+      symbolColor: resolvedTheme === 'dark' ? '#f9fafb' : '#181311',
+    },
+  };
+}
+
+ipcMain.on('redeven-desktop:theme-get-snapshot', (event) => {
+  event.returnValue = buildThemeSnapshot();
+});
+
+ipcMain.on('redeven-desktop:theme-set-source', (event, nextSource) => {
+  if (nextSource === 'system' || nextSource === 'light' || nextSource === 'dark') {
+    themeSource = nextSource;
+  }
+  event.returnValue = buildThemeSnapshot();
+});
 
   function snapshotBridgeState() {
   return JSON.stringify({
@@ -136,6 +165,10 @@ if (!preload) {
       && typeof window.redevenDesktopShell?.openAdvancedSettings === 'function'
       && typeof window.redevenDesktopShell?.restartManagedRuntime === 'function',
     hasStateStorageBridge: typeof window.redevenDesktopStateStorage === 'object',
+    hasDesktopThemeBridge: typeof window.redevenDesktopTheme === 'object'
+      && typeof window.redevenDesktopTheme?.getSnapshot === 'function'
+      && typeof window.redevenDesktopTheme?.setSource === 'function'
+      && typeof window.redevenDesktopTheme?.subscribe === 'function',
   });
 }
 
@@ -193,17 +226,31 @@ app.whenReady().then(async () => {
     });
 
     const payload = JSON.parse(extractElectronRuntimePayload(stdout)) as {
-      main: { hasAskFlowerBridge: boolean; hasDesktopSettingsBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
-      child: { hasAskFlowerBridge: boolean; hasDesktopSettingsBridge: boolean; hasDesktopShellBridge: boolean; hasStateStorageBridge: boolean };
+      main: {
+        hasAskFlowerBridge: boolean;
+        hasDesktopSettingsBridge: boolean;
+        hasDesktopShellBridge: boolean;
+        hasStateStorageBridge: boolean;
+        hasDesktopThemeBridge: boolean;
+      };
+      child: {
+        hasAskFlowerBridge: boolean;
+        hasDesktopSettingsBridge: boolean;
+        hasDesktopShellBridge: boolean;
+        hasStateStorageBridge: boolean;
+        hasDesktopThemeBridge: boolean;
+      };
     };
 
     expect(payload.main.hasAskFlowerBridge).toBe(true);
     expect(payload.main.hasDesktopSettingsBridge).toBe(true);
     expect(payload.main.hasDesktopShellBridge).toBe(true);
     expect(payload.main.hasStateStorageBridge).toBe(true);
+    expect(payload.main.hasDesktopThemeBridge).toBe(true);
     expect(payload.child.hasAskFlowerBridge).toBe(true);
     expect(payload.child.hasDesktopSettingsBridge).toBe(true);
     expect(payload.child.hasDesktopShellBridge).toBe(true);
     expect(payload.child.hasStateStorageBridge).toBe(true);
+    expect(payload.child.hasDesktopThemeBridge).toBe(true);
   }, electronRuntimeIntegrationTimeoutMs);
 });

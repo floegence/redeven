@@ -15,6 +15,8 @@ export type DesktopThemePalette = Readonly<{
   info: string;
 }>;
 
+import type { DesktopResolvedTheme, DesktopWindowThemeSnapshot } from '../shared/desktopTheme';
+
 export const desktopLightTheme = {
   windowBackground: 'hsl(36 15% 93%)',
   pageBackground: 'hsl(36 15% 93%)',
@@ -50,3 +52,17 @@ export const desktopDarkTheme = {
 } as const satisfies DesktopThemePalette;
 
 export const desktopTheme = desktopLightTheme;
+
+export function desktopPaletteForResolvedTheme(resolvedTheme: DesktopResolvedTheme): DesktopThemePalette {
+  return resolvedTheme === 'dark' ? desktopDarkTheme : desktopLightTheme;
+}
+
+export function desktopWindowThemeSnapshotForResolvedTheme(
+  resolvedTheme: DesktopResolvedTheme,
+): DesktopWindowThemeSnapshot {
+  const palette = desktopPaletteForResolvedTheme(resolvedTheme);
+  return {
+    backgroundColor: palette.windowBackground,
+    symbolColor: palette.text,
+  };
+}

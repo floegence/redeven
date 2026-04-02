@@ -1,7 +1,7 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 
 import { desktopTheme } from './desktopTheme';
-import { type DesktopWindowThemeSnapshot } from '../shared/windowThemeIPC';
+import type { DesktopWindowThemeSnapshot } from '../shared/desktopTheme';
 import { LINUX_TITLE_BAR_OVERLAY_HEIGHT, usesDesktopWindowThemeOverlay } from '../shared/windowChromePlatform';
 
 export function defaultDesktopWindowThemeSnapshot(): DesktopWindowThemeSnapshot {

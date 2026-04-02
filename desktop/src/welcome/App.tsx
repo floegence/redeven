@@ -57,6 +57,12 @@ import {
   type EnvironmentLibraryFilter,
   shellStatus,
 } from './viewModel';
+import {
+  createDesktopThemeStorageAdapter,
+  desktopStateStorageBridge,
+  desktopThemeBridge,
+  toggleDesktopTheme,
+} from './desktopTheme';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -115,28 +121,48 @@ const EMPTY_SETTINGS_DRAFT: DesktopSettingsDraft = {
   env_token: '',
 };
 
-const DESKTOP_FLOE_CONFIG = {
-  storage: {
-    namespace: 'redeven-desktop-shell',
-  },
-  commands: {
-    ignoreWhenTyping: false,
-  },
-  accessibility: {
-    mainContentId: 'redeven-desktop-main',
-    skipLinkLabel: 'Skip to Redeven Desktop content',
-    topBarLabel: 'Redeven Desktop toolbar',
-    primaryNavigationLabel: 'Redeven Desktop navigation',
-    mobileNavigationLabel: 'Redeven Desktop navigation',
-    sidebarLabel: 'Redeven Desktop sidebar',
-    mainLabel: 'Redeven Desktop content',
-  },
-  strings: {
-    topBar: {
-      searchPlaceholder: 'Search desktop commands...',
+const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
+const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
+
+function buildDesktopFloeConfig() {
+  const themeBridge = desktopThemeBridge();
+  const stateStorage = desktopStateStorageBridge();
+
+  return {
+    storage: {
+      namespace: DESKTOP_FLOE_STORAGE_NAMESPACE,
+      adapter: stateStorage
+        ? createDesktopThemeStorageAdapter(
+          stateStorage,
+          DESKTOP_FLOE_STORAGE_NAMESPACE,
+          DESKTOP_FLOE_THEME_STORAGE_KEY,
+          themeBridge,
+        )
+        : undefined,
     },
-  },
-} as const;
+    theme: {
+      storageKey: DESKTOP_FLOE_THEME_STORAGE_KEY,
+      defaultTheme: themeBridge?.getSnapshot().source ?? 'system',
+    },
+    commands: {
+      ignoreWhenTyping: false,
+    },
+    accessibility: {
+      mainContentId: 'redeven-desktop-main',
+      skipLinkLabel: 'Skip to Redeven Desktop content',
+      topBarLabel: 'Redeven Desktop toolbar',
+      primaryNavigationLabel: 'Redeven Desktop navigation',
+      mobileNavigationLabel: 'Redeven Desktop navigation',
+      sidebarLabel: 'Redeven Desktop sidebar',
+      mainLabel: 'Redeven Desktop content',
+    },
+    strings: {
+      topBar: {
+        searchPlaceholder: 'Search desktop commands...',
+      },
+    },
+  } as const;
+}
 
 const LIBRARY_FILTERS: readonly EnvironmentLibraryFilter[] = ['all', 'current', 'recent', 'saved'];
 
@@ -279,6 +305,7 @@ function DesktopCommandRegistrar(props: Readonly<{
 }>): null {
   const cmd = useCommand();
   const theme = useTheme();
+  const shellTheme = desktopThemeBridge();
 
   createEffect(() => {
     const snapshot = props.snapshot();
@@ -338,7 +365,7 @@ function DesktopCommandRegistrar(props: Readonly<{
         description: 'Switch between light and dark theme',
         category: 'General',
         icon: theme.resolvedTheme() === 'light' ? Moon : Sun,
-        execute: () => theme.toggleTheme(),
+        execute: () => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme()),
       },
       {
         id: 'redeven.desktop.openCommandPalette',
@@ -385,6 +412,7 @@ function DesktopCommandRegistrar(props: Readonly<{
 function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const cmd = useCommand();
   const theme = useTheme();
+  const shellTheme = desktopThemeBridge();
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
   const [surfaceMode, setSurfaceMode] = createSignal<SurfaceMode>(props.snapshot.surface === 'local_environment_settings' ? 'root' : 'local');
   const [localSurface, setLocalSurface] = createSignal<DesktopLauncherSurface>(props.snapshot.surface === 'local_environment_settings' ? 'local_environment_settings' : 'connect_environment');
@@ -421,6 +449,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     },
   ]));
   const libraryEntries = createMemo(() => filterEnvironmentLibrary(snapshot(), libraryFilter(), libraryQuery()));
+
+  if (shellTheme) {
+    const applyShellTheme = (next: Readonly<{ source: 'system' | 'light' | 'dark' }>) => {
+      if (theme.theme() !== next.source) {
+        theme.setTheme(next.source);
+      }
+    };
+    applyShellTheme(shellTheme.getSnapshot());
+    const unsubscribe = shellTheme.subscribe(applyShellTheme);
+    onCleanup(unsubscribe);
+  }
 
   createEffect(() => {
     setDraft(snapshot().settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
@@ -792,7 +831,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             </TopBarIconButton>
             <TopBarIconButton
               label={theme.resolvedTheme() === 'light' ? 'Use dark theme' : 'Use light theme'}
-              onClick={() => theme.toggleTheme()}
+              onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
             >
               {theme.resolvedTheme() === 'light' ? <Moon class="h-4 w-4" /> : <Sun class="h-4 w-4" />}
             </TopBarIconButton>
@@ -1681,7 +1720,7 @@ function SettingsFieldInput(props: Readonly<{
 
 export function DesktopWelcomeShell(props: DesktopWelcomeShellProps) {
   return (
-    <FloeProvider config={DESKTOP_FLOE_CONFIG}>
+    <FloeProvider config={buildDesktopFloeConfig()}>
       <>
         <DesktopWelcomeShellInner {...props} />
         <CommandPalette />
