@@ -562,6 +562,57 @@ describe('CodexPage', () => {
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
   });
 
+  it('keeps the new-chat welcome state inside the transcript viewport shell', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const transcriptRoot = host.querySelector('[data-codex-surface="transcript"]') as HTMLDivElement | null;
+    const emptyState = host.querySelector('[data-codex-surface="empty-state"]') as HTMLDivElement | null;
+
+    expect(transcriptRoot).not.toBeNull();
+    expect(transcriptRoot?.className).toContain('codex-transcript-shell');
+    expect(transcriptRoot?.getAttribute('data-codex-transcript-mode')).toBe('empty');
+    expect(emptyState).not.toBeNull();
+    expect(emptyState?.className).toContain('codex-transcript-state');
+    expect(emptyState?.textContent).toContain('Start a Codex conversation with a prompt');
+    expect(host.querySelector('.codex-transcript-shell-feed')).toBeNull();
+  });
+
   it('disables host-backed composer controls while Codex is unavailable', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: false,

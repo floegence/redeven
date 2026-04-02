@@ -39,8 +39,11 @@ describe('Codex visual contract', () => {
   it('keeps the Codex empty hero visually centered without phantom bottom spacing', () => {
     const src = readCodexCss();
 
+    expect(src).toMatch(/\.codex-transcript-shell \{[\s\S]*min-height: 100%;/);
+    expect(src).toMatch(/\.codex-transcript-state \{[\s\S]*min-height: 100%;[\s\S]*justify-content: center;/);
     expect(src).toMatch(/\.codex-empty-hero \{[\s\S]*margin: 0;[\s\S]*text-align: center;/);
     expect(src).toMatch(/\.codex-empty-hero \+ \.codex-empty-suggestions \{[\s\S]*margin-top: 2rem;/);
+    expect(src).not.toMatch(/@media \(max-width: 640px\) \{[\s\S]*\.codex-transcript-state \{[\s\S]*justify-content: flex-start;/);
   });
 
   it('keeps header controls compact and wrap-friendly for narrow Codex layouts', () => {
@@ -99,7 +102,9 @@ describe('Codex visual contract', () => {
   it('keeps empty and loading ornaments on the neutral Codex shell class', () => {
     const src = readCodexTranscript();
 
-    expect(src.match(/class="codex-empty-ornament"/g)?.length ?? 0).toBe(2);
+    expect(src.match(/class="codex-empty-ornament"/g)?.length ?? 0).toBe(1);
+    expect(src).toContain('data-codex-transcript-mode={transcriptSurfaceState().mode}');
+    expect(src).toContain('class="codex-transcript-shell"');
     expect(src).not.toContain('bg-gradient-to-br');
   });
 });
