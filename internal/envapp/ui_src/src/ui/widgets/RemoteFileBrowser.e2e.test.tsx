@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
-import type { ContextMenuCallbacks, ContextMenuEvent, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type {
+  ContextMenuCallbacks,
+  ContextMenuEvent,
+  ContextMenuItem,
+  FileBrowserRevealRequest,
+  FileItem,
+} from '@floegence/floe-webapp-core/file-browser';
 import { RpcError } from '@floegence/floe-webapp-protocol';
 import { createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -278,6 +284,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
     contextMenuCallbacks?: ContextMenuCallbacks;
     overrideContextMenuItems?: ContextMenuItem[];
     resolveOverrideContextMenuItems?: (event: ContextMenuEvent | null) => ContextMenuItem[] | undefined;
+    revealRequest?: FileBrowserRevealRequest | null;
+    onRevealRequestConsumed?: (requestId: string) => void;
   }) => {
     const [localCount, setLocalCount] = createSignal(0);
     const copyNameTarget: FileItem = {
@@ -347,6 +355,9 @@ vi.mock('./FileBrowserWorkspace', () => ({
         : item.id;
       return item.separator ? [label, `separator:${item.id}`] : [label];
     }).join(',');
+    const describeRevealRequest = (request: FileBrowserRevealRequest | null | undefined) => (
+      request ? `${request.requestId}|${request.parentPath}|${request.targetPath}` : ''
+    );
     const flattenTreePaths = (items: FileItem[]): string[] => items.flatMap((item) => [
       item.path,
       ...(item.children ? flattenTreePaths(item.children) : []),
@@ -379,12 +390,25 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div data-testid="mock-folder-new-has-icon">{findMenuItem(folderItems, 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-background-new-has-icon">{findMenuItem(backgroundItems(), 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-files-tree">{flattenTreePaths(props.files).join(',')}</div>
+        <div data-testid="mock-current-path">{props.currentPath}</div>
+        <div data-testid="mock-reveal-request">{describeRevealRequest(props.revealRequest)}</div>
+        <div data-testid="mock-reveal-request-id">{props.revealRequest?.requestId ?? ''}</div>
+        <div data-testid="mock-reveal-parent-path">{props.revealRequest?.parentPath ?? ''}</div>
+        <div data-testid="mock-reveal-target-path">{props.revealRequest?.targetPath ?? ''}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo')}>mock-nav-repo</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/src')}>mock-nav-src</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/missing')}>mock-nav-missing</button>
+        {props.revealRequest ? (
+          <button
+            type="button"
+            onClick={() => props.onRevealRequestConsumed?.(props.revealRequest!.requestId)}
+          >
+            mock-consume-reveal
+          </button>
+        ) : null}
         {copyNameItems.some((item) => item.type === 'copy-name') ? (
           <button
             type="button"
@@ -2163,7 +2187,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('creates a file from the background New submenu and updates the visible tree', async () => {
+  it('creates a file from the background New submenu, issues a reveal request, and clears it after consume', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
       pageModeByEnv: { 'env-1': 'files' },
@@ -2223,15 +2247,26 @@ describe('RemoteFileBrowser persistence', () => {
         createDirs: false,
       });
       expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/fresh.txt');
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
+      expect(host.querySelector('[data-testid="mock-reveal-parent-path"]')?.textContent).toBe('/workspace/repo/src');
+      expect(host.querySelector('[data-testid="mock-reveal-target-path"]')?.textContent).toBe('/workspace/repo/src/fresh.txt');
+      expect(host.querySelector('[data-testid="mock-reveal-request-id"]')?.textContent).toMatch(/^created-entry-\d+$/);
       expect(notificationStore.success).toContainEqual({ title: 'Created', message: '"fresh.txt" created.' });
+
+      const consumeRevealButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-consume-reveal') as HTMLButtonElement | undefined;
+      expect(consumeRevealButton).toBeTruthy();
+      consumeRevealButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-reveal-request"]')?.textContent).toBe('');
     } finally {
       dispose();
     }
   });
 
-  it('creates a folder from the directory New submenu and updates the visible tree', async () => {
+  it('creates a folder from the directory New submenu, navigates into the target parent, and keeps the reveal request until consumed', async () => {
     widgetStateStore.values['widget-1'] = {
-      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
       pageModeByEnv: { 'env-1': 'files' },
       gitSubviewByEnv: { 'env-1': 'changes' },
     };
@@ -2254,6 +2289,9 @@ describe('RemoteFileBrowser persistence', () => {
           return {
             entries: [
               { name: 'current.txt', path: '/workspace/repo/src/current.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+              ...(mockRpc.fs.mkdir.mock.calls.some(([request]) => request?.path === '/workspace/repo/src/components')
+                ? [{ name: 'components', path: '/workspace/repo/src/components', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' }]
+                : []),
             ],
           };
         default:
@@ -2282,13 +2320,26 @@ describe('RemoteFileBrowser persistence', () => {
       createButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
       await flush();
+      await flush();
 
       expect(mockRpc.fs.mkdir).toHaveBeenCalledWith({
         path: '/workspace/repo/src/components',
         createParents: false,
       });
+      expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/workspace/repo/src', showHidden: false });
       expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/components');
+      expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/workspace/repo/src');
+      expect(host.querySelector('[data-testid="mock-reveal-parent-path"]')?.textContent).toBe('/workspace/repo/src');
+      expect(host.querySelector('[data-testid="mock-reveal-target-path"]')?.textContent).toBe('/workspace/repo/src/components');
+      expect(host.querySelector('[data-testid="mock-reveal-request-id"]')?.textContent).toMatch(/^created-entry-\d+$/);
       expect(notificationStore.success).toContainEqual({ title: 'Created', message: '"components" created.' });
+
+      const consumeRevealButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-consume-reveal') as HTMLButtonElement | undefined;
+      expect(consumeRevealButton).toBeTruthy();
+      consumeRevealButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-reveal-request"]')?.textContent).toBe('');
     } finally {
       dispose();
     }

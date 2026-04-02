@@ -4,6 +4,7 @@ import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core
 import {
   FileBrowserDragPreview,
   FileBrowserProvider,
+  type FileBrowserRevealRequest,
   FileContextMenu,
   FileGridView,
   FileListView,
@@ -27,6 +28,7 @@ import {
   mapContextMenuItemsToAbsolute,
   mapFileItemToAbsolutePath,
   mapFileItemsToDisplayPath,
+  mapRevealRequestToDisplayPath,
   toFileBrowserAbsolutePath,
   toFileBrowserDisplayPath,
 } from '../utils/fileBrowserDisplayPath';
@@ -64,6 +66,8 @@ export interface FileBrowserWorkspaceProps {
   onPathChange?: (path: string, source: 'user' | 'programmatic') => void;
   onOpen?: (item: FileItem) => void;
   onDragMove?: (items: FileItem[], targetPath: string) => void;
+  revealRequest?: FileBrowserRevealRequest | null;
+  onRevealRequestConsumed?: (requestId: string) => void;
   toolbarEndActions?: JSX.Element;
   contextMenuCallbacks?: ContextMenuCallbacks;
   overrideContextMenuItems?: ContextMenuItem[];
@@ -382,6 +386,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
   const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(props.initialPath, props.homePath));
   const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(props.contextMenuCallbacks, props.homePath));
   const displayOverrideContextMenuItems = createMemo(() => mapContextMenuItemsToAbsolute(props.overrideContextMenuItems, props.homePath));
+  const displayRevealRequest = createMemo(() => mapRevealRequestToDisplayPath(props.revealRequest, props.homePath));
   const resolveDisplayOverrideContextMenuItems = (event: ContextMenuEvent | null) => (
     mapContextMenuItemsToAbsolute(
       props.resolveOverrideContextMenuItems?.(
@@ -407,6 +412,8 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
         onNavigate={(path) => props.onNavigate?.(toAbsolutePath(path))}
         onPathChange={(path, source) => props.onPathChange?.(toAbsolutePath(path), source)}
         onOpen={(item) => props.onOpen?.(mapFileItemToAbsolutePath(item, props.homePath))}
+        revealRequest={displayRevealRequest()}
+        onRevealRequestConsumed={props.onRevealRequestConsumed}
       >
         <FileBrowserWorkspaceInner
           mode={props.mode}

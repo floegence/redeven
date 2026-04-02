@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { FileBrowserDragProvider, LayoutProvider } from '@floegence/floe-webapp-core';
-import type { ContextMenuEvent, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { ContextMenuEvent, ContextMenuItem, FileBrowserRevealRequest, FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1185,6 +1185,97 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(activeRow?.textContent).toContain('icons');
       expect(host.textContent).toContain('+2');
       expect(scrollIntoView).toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('maps absolute reveal requests through the workspace shell, clears blocking filters, and shows the created item as selected', async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    const consumed = vi.fn();
+    let setRevealRequest!: (request: FileBrowserRevealRequest | null) => void;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const absoluteFiles: FileItem[] = [
+      {
+        id: '/workspace/src',
+        name: 'src',
+        type: 'folder',
+        path: '/workspace/src',
+        children: [
+          { id: '/workspace/src/current.txt', name: 'current.txt', type: 'file', path: '/workspace/src/current.txt' },
+          { id: '/workspace/src/fresh.txt', name: 'fresh.txt', type: 'file', path: '/workspace/src/fresh.txt' },
+        ],
+      },
+    ];
+
+    function Harness() {
+      const [revealRequest, updateRevealRequest] = createSignal<FileBrowserRevealRequest | null>(null);
+      setRevealRequest = updateRevealRequest;
+
+      return (
+        <FileBrowserWorkspace
+          mode="files"
+          onModeChange={() => {}}
+          files={absoluteFiles}
+          currentPath="/workspace/src"
+          initialPath="/workspace/src"
+          homePath="/workspace"
+          persistenceKey="test-files-workspace-reveal"
+          instanceId="test-files-workspace-reveal"
+          resetKey={0}
+          width={260}
+          open
+          revealRequest={revealRequest()}
+          onRevealRequestConsumed={(requestId) => {
+            consumed(requestId);
+            updateRevealRequest(null);
+          }}
+        />
+      );
+    }
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <Harness />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const filterInput = host.querySelector('input[aria-label="Filter files"]') as HTMLInputElement | null;
+      expect(filterInput).toBeTruthy();
+
+      filterInput!.value = 'current';
+      filterInput!.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'current' }));
+      await flush();
+      await flush();
+
+      expect(filterInput!.value).toBe('current');
+      expect(host.textContent).toContain('Filter active');
+      expect(host.textContent).not.toContain('fresh.txt');
+
+      setRevealRequest({
+        requestId: 'created-entry-1',
+        targetId: '/workspace/src/fresh.txt',
+        targetPath: '/workspace/src/fresh.txt',
+        parentPath: '/workspace/src',
+        clearFilter: 'if-needed',
+      });
+      await flush();
+      await flush();
+      await flush();
+
+      expect(host.textContent).not.toContain('Filter active');
+      expect(scrollIntoView).toHaveBeenCalled();
+      expect(host.textContent).toContain('fresh.txt');
+      expect(host.textContent).toContain('1 selected');
+      expect(consumed).toHaveBeenCalledWith('created-entry-1');
     } finally {
       dispose();
     }

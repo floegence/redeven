@@ -4,6 +4,7 @@ import type {
   ContextMenuEvent,
   ContextMenuItem,
   FileItem,
+  FileBrowserRevealRequest,
 } from '@floegence/floe-webapp-core/file-browser';
 import { isWithinAbsolutePath, normalizeAbsolutePath } from './askFlowerPath';
 
@@ -74,6 +75,20 @@ export function mapFileItemToAbsolutePath(item: FileItem, rootPathAbs?: string |
 
 export function mapFileItemsToAbsolutePath(items: FileItem[], rootPathAbs?: string | null): FileItem[] {
   return items.map((item) => mapFileItemToAbsolutePath(item, rootPathAbs));
+}
+
+export function mapRevealRequestToDisplayPath(
+  request: FileBrowserRevealRequest | null | undefined,
+  rootPathAbs?: string | null,
+): FileBrowserRevealRequest | null {
+  if (!request) return null;
+
+  return {
+    ...request,
+    targetId: toFileBrowserDisplayPath(request.targetId, rootPathAbs),
+    targetPath: toFileBrowserDisplayPath(request.targetPath, rootPathAbs),
+    parentPath: toFileBrowserDisplayPath(request.parentPath, rootPathAbs),
+  };
 }
 
 function mapContextMenuDirectoryToAbsolutePath(

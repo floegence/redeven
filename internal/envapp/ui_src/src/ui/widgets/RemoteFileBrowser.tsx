@@ -2,7 +2,13 @@ import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'so
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Plus, Refresh, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
-import { type ContextMenuCallbacks, type ContextMenuEvent, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
+import {
+  type ContextMenuCallbacks,
+  type ContextMenuEvent,
+  type ContextMenuItem,
+  type FileBrowserRevealRequest,
+  type FileItem,
+} from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
@@ -148,6 +154,8 @@ type CreateEntryDraft = {
   parentDir: string;
   initialName: string;
 };
+
+let createdEntryRevealSeq = 0;
 
 const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
@@ -441,6 +449,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
   const [createDialogDraft, setCreateDialogDraft] = createSignal<CreateEntryDraft | null>(null);
   const [createLoading, setCreateLoading] = createSignal(false);
+  const [pendingCreatedEntryReveal, setPendingCreatedEntryReveal] = createSignal<FileBrowserRevealRequest | null>(null);
 
   const [moveToDialogOpen, setMoveToDialogOpen] = createSignal(false);
   const [moveToDialogItem, setMoveToDialogItem] = createSignal<FileItem | null>(null);
@@ -2548,6 +2557,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     resetGitCommitSidebar();
     resetGitWorkbenchData();
     setDragMoveLoading(false);
+    setPendingCreatedEntryReveal(null);
     resetFileBrowser();
 
     repoReqSeq += 1;
@@ -2916,6 +2926,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     };
   };
 
+  const buildCreatedEntryReveal = (itemPath: string, parentDir: string): FileBrowserRevealRequest => {
+    const targetPath = normalizePath(itemPath);
+    return {
+      requestId: `created-entry-${++createdEntryRevealSeq}`,
+      targetId: targetPath,
+      targetPath,
+      parentPath: normalizePath(parentDir),
+      clearFilter: 'if-needed',
+    };
+  };
+
   const resolveDirectoryContextTarget = (event?: ContextMenuEvent | null) => {
     const directoryPath = normalizeAbsolutePath(event?.directory?.path ?? '');
     if (!directoryPath) return null;
@@ -3141,9 +3162,27 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
 
       const newItem = buildCreatedItem(draft.kind, draft.parentDir, nextName);
+      const revealRequest = buildCreatedEntryReveal(newItem.path, draft.parentDir);
       insertCreatedItemIntoState(draft.parentDir, newItem);
-      setCreateDialogOpen(false);
-      setCreateDialogDraft(null);
+      batch(() => {
+        setCreateDialogOpen(false);
+        setCreateDialogDraft(null);
+        setPendingCreatedEntryReveal(revealRequest);
+      });
+
+      if (normalizePath(currentBrowserPath()) !== normalizePath(draft.parentDir)) {
+        await requestDirectoryNavigation(draft.parentDir, {
+          fallbackPath: lastLoadedBrowserPath() || agentHomePathAbs(),
+          persistEnvId: envId(),
+          persistOnReady: true,
+          targetPolicy: 'revalidate_target',
+        });
+
+        if (normalizePath(currentBrowserPath()) !== normalizePath(draft.parentDir)) {
+          setPendingCreatedEntryReveal((current) => current?.requestId === revealRequest.requestId ? null : current);
+        }
+      }
+
       notification.success('Created', `"${nextName}" created.`);
     } catch (e) {
       notification.error('Create failed', e instanceof Error ? e.message : String(e));
@@ -3742,6 +3781,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
                       onToggleSidebar={togglePageSidebar}
                       toolbarEndActions={fileBrowserToolbarEndActions()}
+                      revealRequest={pendingCreatedEntryReveal()}
+                      onRevealRequestConsumed={(requestId) => {
+                        setPendingCreatedEntryReveal((current) => current?.requestId === requestId ? null : current);
+                      }}
                       onNavigate={(path) => {
                         const targetPath = normalizePath(path);
                         void requestDirectoryNavigation(targetPath, {
