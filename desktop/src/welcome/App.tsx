@@ -42,7 +42,12 @@ import type {
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
-import type { DesktopSettingsDraft, SaveDesktopSettingsResult } from '../shared/settingsIPC';
+import {
+  normalizeDesktopLocalUIPasswordMode,
+  type DesktopLocalUIPasswordMode,
+  type DesktopSettingsDraft,
+  type SaveDesktopSettingsResult,
+} from '../shared/settingsIPC';
 import {
   buildDesktopWelcomeShellViewModel,
   capabilityUnavailableMessage,
@@ -104,6 +109,7 @@ const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.
 const EMPTY_SETTINGS_DRAFT: DesktopSettingsDraft = {
   local_ui_bind: '',
   local_ui_password: '',
+  local_ui_password_mode: 'replace',
   controlplane_url: '',
   env_id: '',
   env_token: '',
@@ -136,6 +142,14 @@ const LIBRARY_FILTERS: readonly EnvironmentLibraryFilter[] = ['all', 'current', 
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function defaultLocalUIPasswordMode(configured: boolean): DesktopLocalUIPasswordMode {
+  return configured ? 'keep' : 'replace';
+}
+
+function passwordModeForInput(value: string, configured: boolean): DesktopLocalUIPasswordMode {
+  return trimString(value) !== '' ? 'replace' : defaultLocalUIPasswordMode(configured);
 }
 
 function getErrorMessage(error: unknown): string {
@@ -555,6 +569,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateDraftField(name: keyof DesktopSettingsDraft, value: string): void {
+    if (name === 'local_ui_password') {
+      const storedPasswordConfigured = snapshot().settings_surface.local_ui_password_configured;
+      setDraft((current) => ({
+        ...current,
+        local_ui_password: value,
+        local_ui_password_mode: passwordModeForInput(value, storedPasswordConfigured),
+      }));
+      return;
+    }
     setDraft((current) => ({
       ...current,
       [name]: value,
@@ -563,21 +586,37 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function applyAccessMode(mode: DesktopAccessMode): void {
     setDraft((current) => {
+      const storedPasswordConfigured = snapshot().settings_surface.local_ui_password_configured;
       if (mode === 'local_only') {
         return {
           ...current,
           local_ui_bind: '127.0.0.1:0',
           local_ui_password: '',
+          local_ui_password_mode: 'clear',
         };
       }
       if (mode === 'shared_local_network') {
         return {
           ...current,
           local_ui_bind: '0.0.0.0:24000',
+          local_ui_password_mode: normalizeDesktopLocalUIPasswordMode(
+            current.local_ui_password_mode,
+            defaultLocalUIPasswordMode(storedPasswordConfigured),
+          ) === 'clear'
+            ? defaultLocalUIPasswordMode(storedPasswordConfigured)
+            : current.local_ui_password_mode,
         };
       }
       return current;
     });
+  }
+
+  function clearStoredLocalUIPassword(): void {
+    setDraft((current) => ({
+      ...current,
+      local_ui_password: '',
+      local_ui_password_mode: 'clear',
+    }));
   }
 
   function clearBootstrapDraft(): void {
@@ -821,6 +860,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         clearBootstrapDraft={clearBootstrapDraft}
         saveSettings={saveSettings}
         cancelSettings={cancelSettings}
+        clearStoredLocalUIPassword={clearStoredLocalUIPassword}
       />
 
       <ConnectionDialog
@@ -1346,6 +1386,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   clearBootstrapDraft: () => void;
   saveSettings: () => Promise<void>;
   cancelSettings: () => void;
+  clearStoredLocalUIPassword: () => void;
 }>) {
   const [advancedOpen, setAdvancedOpen] = createSignal(props.snapshot.bootstrap_pending);
   const selectedOption = createMemo(() => props.snapshot.access_mode_options.find((option) => option.value === props.snapshot.access_mode) ?? null);
@@ -1414,10 +1455,11 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               value={props.draft.local_ui_bind}
               updateDraftField={props.updateDraftField}
             />
-            <SettingsFieldInput
-              field={props.snapshot.host_fields[1]!}
-              value={props.draft.local_ui_password}
+            <LocalUIPasswordField
+              snapshot={props.snapshot}
+              draft={props.draft}
               updateDraftField={props.updateDraftField}
+              clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
             />
           </div>
         </Show>
@@ -1427,12 +1469,13 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
               <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Preset bind</div>
               <div class="mt-1 break-all font-mono text-xs text-foreground">0.0.0.0:24000</div>
-              <div class="mt-1 text-xs leading-5 text-muted-foreground">Password required before the next open.</div>
+              <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.snapshot.password_state_label}</div>
             </div>
-            <SettingsFieldInput
-              field={props.snapshot.host_fields[1]!}
-              value={props.draft.local_ui_password}
+            <LocalUIPasswordField
+              snapshot={props.snapshot}
+              draft={props.draft}
               updateDraftField={props.updateDraftField}
+              clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
             />
           </div>
         </Show>
@@ -1578,6 +1621,32 @@ function ConnectionDialog(props: Readonly<{
         </Show>
       </div>
     </Dialog>
+  );
+}
+
+function LocalUIPasswordField(props: Readonly<{
+  snapshot: DesktopSettingsSurfaceSnapshot;
+  draft: DesktopSettingsDraft;
+  updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
+  clearStoredLocalUIPassword: () => void;
+}>) {
+  return (
+    <div class="space-y-2">
+      <SettingsFieldInput
+        field={props.snapshot.host_fields[1]!}
+        value={props.draft.local_ui_password}
+        updateDraftField={props.updateDraftField}
+      />
+      <Show when={props.snapshot.local_ui_password_can_clear}>
+        <button
+          type="button"
+          class="inline-flex cursor-pointer items-center justify-start rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          onClick={props.clearStoredLocalUIPassword}
+        >
+          Remove stored password
+        </button>
+      </Show>
+    </div>
   );
 }
 

@@ -13,6 +13,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		Status:           desktopLaunchStatusReady,
 		LocalUIURL:       "http://127.0.0.1:43210/",
 		LocalUIURLs:      []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
+		PasswordRequired: true,
 		EffectiveRunMode: "hybrid",
 		RemoteEnabled:    true,
 		DesktopManaged:   true,
@@ -38,6 +39,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	}
 	if len(report.LocalUIURLs) != 1 || report.LocalUIURLs[0] != report.LocalUIURL {
 		t.Fatalf("LocalUIURLs = %#v", report.LocalUIURLs)
+	}
+	if !report.PasswordRequired {
+		t.Fatalf("PasswordRequired = false, want true")
 	}
 	if !report.RemoteEnabled || !report.DesktopManaged || report.EffectiveRunMode != "hybrid" {
 		t.Fatalf("unexpected report: %#v", report)

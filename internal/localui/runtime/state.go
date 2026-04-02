@@ -15,6 +15,7 @@ import (
 type State struct {
 	LocalUIURL         string   `json:"local_ui_url,omitempty"`
 	LocalUIURLs        []string `json:"local_ui_urls,omitempty"`
+	PasswordRequired   bool     `json:"password_required"`
 	EffectiveRunMode   string   `json:"effective_run_mode,omitempty"`
 	RemoteEnabled      bool     `json:"remote_enabled"`
 	DesktopManaged     bool     `json:"desktop_managed"`
@@ -26,6 +27,7 @@ type State struct {
 type Snapshot struct {
 	LocalUIURL         string
 	LocalUIURLs        []string
+	PasswordRequired   bool
 	EffectiveRunMode   string
 	RemoteEnabled      bool
 	DesktopManaged     bool
@@ -143,6 +145,7 @@ func parseState(raw []byte) (*Snapshot, error) {
 	return &Snapshot{
 		LocalUIURL:         state.LocalUIURL,
 		LocalUIURLs:        append([]string(nil), state.LocalUIURLs...),
+		PasswordRequired:   state.PasswordRequired,
 		EffectiveRunMode:   strings.TrimSpace(state.EffectiveRunMode),
 		RemoteEnabled:      state.RemoteEnabled,
 		DesktopManaged:     state.DesktopManaged,
@@ -180,31 +183,31 @@ type localAccessStatusPayload struct {
 	Unlocked         *bool `json:"unlocked"`
 }
 
-func probeURL(rawURL string, timeout time.Duration) bool {
+func probeURL(rawURL string, timeout time.Duration) (*localAccessStatusPayload, bool) {
 	baseURL := strings.TrimSpace(rawURL)
 	if baseURL == "" {
-		return false
+		return nil, false
 	}
 	parsedURL, err := url.Parse(baseURL)
 	if err != nil {
-		return false
+		return nil, false
 	}
 	host := strings.TrimSpace(parsedURL.Hostname())
 	if host == "" {
-		return false
+		return nil, false
 	}
 	ip := net.ParseIP(host)
 	if ip != nil {
 		if !ip.IsLoopback() {
-			return false
+			return nil, false
 		}
 	} else if !strings.EqualFold(host, "localhost") {
-		return false
+		return nil, false
 	}
 
 	probeURL, err := url.Parse(baseURL)
 	if err != nil {
-		return false
+		return nil, false
 	}
 	probeURL.Path = "/api/local/access/status"
 	probeURL.RawQuery = ""
@@ -213,18 +216,21 @@ func probeURL(rawURL string, timeout time.Duration) bool {
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Get(probeURL.String())
 	if err != nil {
-		return false
+		return nil, false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return false
+		return nil, false
 	}
 
 	var envelope localAccessStatusEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return false
+		return nil, false
 	}
-	return envelope.Data != nil && envelope.Data.PasswordRequired != nil && envelope.Data.Unlocked != nil
+	if envelope.Data == nil || envelope.Data.PasswordRequired == nil || envelope.Data.Unlocked == nil {
+		return nil, false
+	}
+	return envelope.Data, true
 }
 
 func LoadAttachable(path string, timeout time.Duration) (*Snapshot, error) {
@@ -237,9 +243,11 @@ func LoadAttachable(path string, timeout time.Duration) (*Snapshot, error) {
 		if candidateURL == "" {
 			continue
 		}
-		if probeURL(candidateURL, timeout) {
+		status, ok := probeURL(candidateURL, timeout)
+		if ok {
 			snapshot.LocalUIURL = candidateURL
 			snapshot.LocalUIURLs = compactStrings(append([]string{candidateURL}, snapshot.LocalUIURLs...))
+			snapshot.PasswordRequired = status.PasswordRequired != nil && *status.PasswordRequired
 			return snapshot, nil
 		}
 	}

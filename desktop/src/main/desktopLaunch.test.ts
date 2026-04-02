@@ -13,6 +13,7 @@ describe('desktopLaunch', () => {
     const preferences = validateDesktopSettingsDraft({
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: 'secret',
+      local_ui_password_mode: 'replace',
       controlplane_url: '',
       env_id: '',
       env_token: '',
@@ -33,6 +34,7 @@ describe('desktopLaunch', () => {
     const preferences = validateDesktopSettingsDraft({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: 'secret',
+      local_ui_password_mode: 'replace',
       controlplane_url: 'https://region.example.invalid',
       env_id: 'env_123',
       env_token: 'token-123',
@@ -65,6 +67,7 @@ describe('desktopLaunch', () => {
     const preferences = validateDesktopSettingsDraft({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_mode: 'replace',
       controlplane_url: '',
       env_id: '',
       env_token: '',

@@ -43,6 +43,7 @@ type desktopLaunchReport struct {
 
 	LocalUIURL         string   `json:"local_ui_url,omitempty"`
 	LocalUIURLs        []string `json:"local_ui_urls,omitempty"`
+	PasswordRequired   bool     `json:"password_required"`
 	EffectiveRunMode   string   `json:"effective_run_mode,omitempty"`
 	RemoteEnabled      bool     `json:"remote_enabled"`
 	DesktopManaged     bool     `json:"desktop_managed"`

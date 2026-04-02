@@ -55,6 +55,7 @@ Behavior:
 - Local UI always starts for `Local Environment`.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - The Local UI password stays out of process args and environment variables.
+- Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
 - Remote control is enabled only when the local config is already bootstrapped and remote-valid.
 - `--desktop-managed` disables CLI self-upgrade semantics.
 - Desktop-owned managed-runtime restart stays available, but it is owned by Electron main rather than runtime self-`exec`.
@@ -136,6 +137,8 @@ Rules:
 - Saving options does not switch Environments.
 - Cancel returns to the current Environment when one is already open; otherwise it returns to Connect Environment.
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
+- The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
+- Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
 - The dialog starts with a compact summary grid for access mode, bind address, password state, and next start status.
 - The first decision is an access intent, not a raw bind field:
   - `Local only`
@@ -150,6 +153,7 @@ Desktop keeps one persisted preference model for stable `Local Environment` conf
 
 - `local_ui_bind`
 - `local_ui_password`
+- `local_ui_password_configured`
 - `pending_bootstrap`
 - `saved_environments`
 - `recent_external_local_ui_urls`
@@ -158,7 +162,8 @@ Semantics:
 
 - Desktop does not persist a remembered current target for the next launch.
 - The active target is runtime-only desktop session state.
-- `local_ui_bind` and `local_ui_password` apply only to future `Local Environment` opens.
+- `local_ui_bind`, `local_ui_password`, and `local_ui_password_configured` apply only to future `Local Environment` opens.
+- Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.

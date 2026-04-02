@@ -903,7 +903,10 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {
     try {
       const previous = await loadDesktopPreferencesCached();
-      const validated = validateDesktopSettingsDraft(draft);
+      const validated = validateDesktopSettingsDraft(draft, {
+        currentLocalUIPassword: previous.local_ui_password,
+        currentLocalUIPasswordConfigured: previous.local_ui_password_configured,
+      });
       const next: DesktopPreferences = {
         ...validated,
         saved_environments: previous.saved_environments,

@@ -46,6 +46,9 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	if report.LocalUIURL != server.URL+"/" {
 		t.Fatalf("LocalUIURL = %q", report.LocalUIURL)
 	}
+	if !report.PasswordRequired {
+		t.Fatalf("PasswordRequired = false, want true")
+	}
 	if report.StateDir != filepath.Dir(cfgPath) || !report.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics report: %#v", report)
 	}
@@ -94,6 +97,7 @@ func writeRuntimeStateForTest(path string, localUIURL string) error {
 	body, err := json.MarshalIndent(map[string]any{
 		"local_ui_url":        localUIURL,
 		"local_ui_urls":       []string{localUIURL},
+		"password_required":   true,
 		"effective_run_mode":  "hybrid",
 		"remote_enabled":      true,
 		"desktop_managed":     true,

@@ -1,6 +1,7 @@
 export type StartupReport = Readonly<{
   local_ui_url: string;
   local_ui_urls: string[];
+  password_required?: boolean;
   effective_run_mode?: string;
   remote_enabled?: boolean;
   desktop_managed?: boolean;
@@ -23,6 +24,7 @@ export function parseStartupReport(raw: string): StartupReport {
   return {
     local_ui_url: localUIURL,
     local_ui_urls: localUIURLs.length > 0 ? localUIURLs : [localUIURL],
+    password_required: typeof parsed.password_required === 'boolean' ? parsed.password_required : undefined,
     effective_run_mode: String(parsed.effective_run_mode ?? '').trim() || undefined,
     remote_enabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
     desktop_managed: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,

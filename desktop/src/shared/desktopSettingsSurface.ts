@@ -42,6 +42,9 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   access_bind_display: string;
   password_state_label: string;
   password_state_tone: 'default' | 'warning' | 'success';
+  local_ui_password_configured: boolean;
+  runtime_password_required: boolean;
+  local_ui_password_can_clear: boolean;
   bootstrap_pending: boolean;
   bootstrap_status_label: string;
   summary_items: readonly DesktopSettingsSummaryItem[];

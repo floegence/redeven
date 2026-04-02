@@ -12,6 +12,7 @@ describe('desktopWelcomeState', () => {
       preferences: {
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
+        local_ui_password_configured: true,
         pending_bootstrap: null,
         saved_environments: [
           {
@@ -102,6 +103,7 @@ describe('desktopWelcomeState', () => {
       preferences: {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
+        local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
@@ -136,6 +138,7 @@ describe('desktopWelcomeState', () => {
       preferences: {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
+        local_ui_password_configured: false,
         pending_bootstrap: {
           controlplane_url: 'https://region.example.invalid',
           env_id: 'env_123',
@@ -166,6 +169,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.draft).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_mode: 'replace',
       controlplane_url: 'https://region.example.invalid',
       env_id: 'env_123',
       env_token: 'token-123',

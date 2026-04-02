@@ -65,6 +65,9 @@ func TestServerStartWritesAndCloseRemovesRuntimeState(t *testing.T) {
 	if state.LocalUIURL == "" || len(state.LocalUIURLs) == 0 {
 		t.Fatalf("unexpected runtime state: %#v", state)
 	}
+	if state.PasswordRequired {
+		t.Fatalf("PasswordRequired = true, want false")
+	}
 	if state.StateDir != filepath.Dir(cfgPath) || !state.DiagnosticsEnabled {
 		t.Fatalf("unexpected diagnostics metadata: %#v", state)
 	}

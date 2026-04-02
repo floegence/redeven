@@ -59,6 +59,7 @@ describe('runtimeState', () => {
       expect(startup).toEqual({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+        password_required: true,
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
@@ -119,6 +120,7 @@ describe('runtimeState', () => {
       await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/_redeven_proxy/env/`)).resolves.toEqual({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+        password_required: false,
       });
     } finally {
       await new Promise<void>((resolve, reject) => {

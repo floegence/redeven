@@ -15,6 +15,7 @@ describe('DesktopWelcomeShell', () => {
       preferences: {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
+        local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [
           {
@@ -48,6 +49,7 @@ describe('DesktopWelcomeShell', () => {
       preferences: {
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
+        local_ui_password_configured: true,
         pending_bootstrap: {
           controlplane_url: 'https://region.example.invalid',
           env_id: 'env_123',
@@ -69,6 +71,8 @@ describe('DesktopWelcomeShell', () => {
     expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
     expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
+    expect(snapshot.settings_surface.draft.local_ui_password).toBe('');
+    expect(snapshot.settings_surface.draft.local_ui_password_mode).toBe('keep');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'bind_address',
@@ -88,6 +92,7 @@ describe('DesktopWelcomeShell', () => {
       preferences: {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
+        local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [
           {

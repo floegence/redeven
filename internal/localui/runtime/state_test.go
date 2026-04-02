@@ -14,6 +14,7 @@ func TestWriteState(t *testing.T) {
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
 	err := WriteState(runtimePath, State{
 		LocalUIURLs:        []string{"http://127.0.0.1:43123/", "", "http://127.0.0.1:43123/"},
+		PasswordRequired:   true,
 		EffectiveRunMode:   "hybrid",
 		RemoteEnabled:      true,
 		DesktopManaged:     true,
@@ -39,6 +40,9 @@ func TestWriteState(t *testing.T) {
 	}
 	if len(state.LocalUIURLs) != 1 || state.LocalUIURLs[0] != state.LocalUIURL {
 		t.Fatalf("LocalUIURLs = %#v", state.LocalUIURLs)
+	}
+	if !state.PasswordRequired {
+		t.Fatalf("PasswordRequired = false, want true")
 	}
 	if !state.RemoteEnabled || !state.DesktopManaged || state.EffectiveRunMode != "hybrid" || state.PID != 42 {
 		t.Fatalf("unexpected state: %#v", state)
@@ -89,6 +93,9 @@ func TestLoadAttachable(t *testing.T) {
 	if state.LocalUIURL != server.URL+"/" {
 		t.Fatalf("LocalUIURL = %q", state.LocalUIURL)
 	}
+	if !state.PasswordRequired {
+		t.Fatalf("PasswordRequired = false, want true")
+	}
 	if !state.RemoteEnabled || !state.DesktopManaged || state.EffectiveRunMode != "hybrid" || state.PID != 42 {
 		t.Fatalf("unexpected state: %#v", state)
 	}
@@ -126,6 +133,9 @@ func TestWaitForAttachable(t *testing.T) {
 	}
 	if state.LocalUIURL != server.URL+"/" {
 		t.Fatalf("LocalUIURL = %q", state.LocalUIURL)
+	}
+	if state.PasswordRequired {
+		t.Fatalf("PasswordRequired = true, want false")
 	}
 }
 

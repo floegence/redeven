@@ -4,7 +4,11 @@ import path from 'node:path';
 import { DEFAULT_DESKTOP_LOCAL_UI_BIND, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionTypes';
-import type { DesktopSettingsDraft } from '../shared/settingsIPC';
+import {
+  normalizeDesktopLocalUIPasswordMode,
+  type DesktopLocalUIPasswordMode,
+  type DesktopSettingsDraft,
+} from '../shared/settingsIPC';
 
 export type PendingBootstrap = Readonly<{
   controlplane_url: string;
@@ -23,6 +27,7 @@ export type DesktopSavedEnvironment = Readonly<{
 export type DesktopPreferences = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
+  local_ui_password_configured: boolean;
   pending_bootstrap: PendingBootstrap | null;
   saved_environments: readonly DesktopSavedEnvironment[];
   recent_external_local_ui_urls: readonly string[];
@@ -125,6 +130,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
   return {
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
+    local_ui_password_configured: false,
     pending_bootstrap: null,
     saved_environments: [],
     recent_external_local_ui_urls: [],
@@ -148,7 +154,8 @@ export function defaultDesktopPreferencesPaths(userDataDir: string): DesktopPref
 export function desktopPreferencesToDraft(preferences: DesktopPreferences): DesktopSettingsDraft {
   return {
     local_ui_bind: preferences.local_ui_bind,
-    local_ui_password: preferences.local_ui_password,
+    local_ui_password: '',
+    local_ui_password_mode: preferences.local_ui_password_configured ? 'keep' : 'replace',
     controlplane_url: preferences.pending_bootstrap?.controlplane_url ?? '',
     env_id: preferences.pending_bootstrap?.env_id ?? '',
     env_token: preferences.pending_bootstrap?.env_token ?? '',
@@ -380,6 +387,7 @@ export function managedDesktopLaunchKey(preferences: DesktopPreferences): string
   return JSON.stringify({
     local_ui_bind: preferences.local_ui_bind,
     local_ui_password: preferences.local_ui_password,
+    local_ui_password_configured: preferences.local_ui_password_configured,
     controlplane_url: pendingBootstrap?.controlplane_url ?? '',
     env_id: pendingBootstrap?.env_id ?? '',
     env_token: pendingBootstrap?.env_token ?? '',
@@ -403,15 +411,61 @@ function normalizeControlplaneURL(raw: string): string {
   return parsed.toString().replace(/\/$/u, '');
 }
 
-export function validateDesktopSettingsDraft(draft: DesktopSettingsDraft): DesktopPreferences {
+type ValidateDesktopSettingsDraftOptions = Readonly<{
+  currentLocalUIPassword?: string;
+  currentLocalUIPasswordConfigured?: boolean;
+}>;
+
+function resolveLocalUIPasswordFromDraft(
+  draft: DesktopSettingsDraft,
+  options?: ValidateDesktopSettingsDraftOptions,
+): Readonly<{
+  local_ui_password: string;
+  local_ui_password_configured: boolean;
+  local_ui_password_mode: DesktopLocalUIPasswordMode;
+}> {
+  const currentLocalUIPassword = String(options?.currentLocalUIPassword ?? '');
+  const currentLocalUIPasswordConfigured = options?.currentLocalUIPasswordConfigured === true;
+  const typedLocalUIPassword = String(draft.local_ui_password ?? '');
+  const localUIPasswordMode = normalizeDesktopLocalUIPasswordMode(
+    draft.local_ui_password_mode,
+    currentLocalUIPasswordConfigured ? 'keep' : 'replace',
+  );
+
+  switch (localUIPasswordMode) {
+    case 'keep':
+      return {
+        local_ui_password: currentLocalUIPassword,
+        local_ui_password_configured: currentLocalUIPasswordConfigured,
+        local_ui_password_mode: localUIPasswordMode,
+      };
+    case 'clear':
+      return {
+        local_ui_password: '',
+        local_ui_password_configured: false,
+        local_ui_password_mode: localUIPasswordMode,
+      };
+    default:
+      return {
+        local_ui_password: typedLocalUIPassword,
+        local_ui_password_configured: compact(typedLocalUIPassword) !== '',
+        local_ui_password_mode: localUIPasswordMode,
+      };
+  }
+}
+
+export function validateDesktopSettingsDraft(
+  draft: DesktopSettingsDraft,
+  options?: ValidateDesktopSettingsDraftOptions,
+): DesktopPreferences {
   const localUIBind = compact(draft.local_ui_bind);
   if (!localUIBind) {
     throw new Error('Local UI bind address is required.');
   }
 
   const bind = parseLocalUIBind(localUIBind);
-  const localUIPassword = String(draft.local_ui_password ?? '');
-  if (!isLoopbackOnlyBind(bind) && compact(localUIPassword) === '') {
+  const passwordState = resolveLocalUIPasswordFromDraft(draft, options);
+  if (!isLoopbackOnlyBind(bind) && !passwordState.local_ui_password_configured) {
     throw new Error('Non-loopback Local UI binds require a Local UI password.');
   }
 
@@ -440,7 +494,8 @@ export function validateDesktopSettingsDraft(draft: DesktopSettingsDraft): Deskt
 
   return {
     local_ui_bind: localUIBind,
-    local_ui_password: localUIPassword,
+    local_ui_password: passwordState.local_ui_password,
+    local_ui_password_configured: passwordState.local_ui_password_configured,
     pending_bootstrap: pendingBootstrap,
     saved_environments: [],
     recent_external_local_ui_urls: [],
@@ -519,9 +574,15 @@ function recoverPendingBootstrap(
 function recoverDesktopPreferencesDraft(draft: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
   let localUIBind = recoverLocalUIBind(draft.local_ui_bind);
   const localUIPassword = String(draft.local_ui_password ?? '');
+  const localUIPasswordMode = normalizeDesktopLocalUIPasswordMode(
+    draft.local_ui_password_mode,
+    compact(localUIPassword) !== '' ? 'replace' : 'replace',
+  );
   try {
     const bind = parseLocalUIBind(localUIBind);
-    if (!isLoopbackOnlyBind(bind) && compact(localUIPassword) === '') {
+    const passwordWillBeConfigured = localUIPasswordMode === 'keep'
+      || (localUIPasswordMode === 'replace' && compact(localUIPassword) !== '');
+    if (!isLoopbackOnlyBind(bind) && !passwordWillBeConfigured) {
       localUIBind = DEFAULT_DESKTOP_LOCAL_UI_BIND;
     }
   } catch {
@@ -533,6 +594,7 @@ function recoverDesktopPreferencesDraft(draft: Partial<DesktopSettingsDraft>): D
   return {
     local_ui_bind: localUIBind,
     local_ui_password: localUIPassword,
+    local_ui_password_mode: localUIPasswordMode,
     controlplane_url: pendingBootstrap?.controlplane_url ?? '',
     env_id: pendingBootstrap?.env_id ?? '',
     env_token: pendingBootstrap?.env_token ?? '',
@@ -542,14 +604,20 @@ function recoverDesktopPreferencesDraft(draft: Partial<DesktopSettingsDraft>): D
 export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
   const preferencesFile = await readJSONFile<DesktopPreferencesFile>(paths.preferencesFile);
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
+  const localUIPasswordConfigured = Boolean(secretsFile?.local_ui_password);
+  const localUIPassword = decodeOptionalSecret(codec, secretsFile?.local_ui_password);
 
   const recovered = validateDesktopSettingsDraft(recoverDesktopPreferencesDraft({
     local_ui_bind: preferencesFile?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
-    local_ui_password: decodeOptionalSecret(codec, secretsFile?.local_ui_password),
+    local_ui_password: '',
+    local_ui_password_mode: localUIPasswordConfigured ? 'keep' : 'replace',
     controlplane_url: preferencesFile?.pending_bootstrap?.controlplane_url ?? '',
     env_id: preferencesFile?.pending_bootstrap?.env_id ?? '',
     env_token: decodeOptionalSecret(codec, secretsFile?.pending_bootstrap?.env_token),
-  }));
+  }), {
+    currentLocalUIPassword: localUIPassword,
+    currentLocalUIPasswordConfigured: localUIPasswordConfigured,
+  });
 
   const savedEnvironments = normalizeSavedEnvironments(
     preferencesFile?.saved_environments,
@@ -568,7 +636,11 @@ export async function saveDesktopPreferences(
   preferences: DesktopPreferences,
   codec: DesktopSecretCodec,
 ): Promise<void> {
-  const nextPreferences = validateDesktopSettingsDraft(desktopPreferencesToDraft(preferences));
+  const existingSecretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
+  const nextPreferences = validateDesktopSettingsDraft(desktopPreferencesToDraft(preferences), {
+    currentLocalUIPassword: preferences.local_ui_password,
+    currentLocalUIPasswordConfigured: preferences.local_ui_password_configured,
+  });
   const savedEnvironments = normalizeSavedEnvironments(
     preferences.saved_environments,
     preferences.recent_external_local_ui_urls,
@@ -595,8 +667,10 @@ export async function saveDesktopPreferences(
   };
   const secretsFile: DesktopSecretsFile = {
     version: 1,
-    local_ui_password: compact(nextPreferences.local_ui_password) !== ''
-      ? codec.encodeSecret(nextPreferences.local_ui_password)
+    local_ui_password: nextPreferences.local_ui_password_configured
+      ? (compact(nextPreferences.local_ui_password) !== ''
+          ? codec.encodeSecret(nextPreferences.local_ui_password)
+          : existingSecretsFile?.local_ui_password)
       : undefined,
     pending_bootstrap: nextPreferences.pending_bootstrap
       ? {

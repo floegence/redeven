@@ -236,6 +236,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err := localuiruntime.WriteState(s.runtimeStatePath, localuiruntime.State{
 		LocalUIURL:         firstNonEmptyString(s.DisplayURLs()),
 		LocalUIURLs:        s.DisplayURLs(),
+		PasswordRequired:   s.accessEnabled(),
 		EffectiveRunMode:   s.effectiveRunMode,
 		RemoteEnabled:      s.remoteEnabled,
 		DesktopManaged:     s.desktopManaged,

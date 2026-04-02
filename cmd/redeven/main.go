@@ -536,6 +536,7 @@ func (c *cli) runCmd(args []string) int {
 			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
 				LocalUIURL:         firstNonEmptyString(localUIURLs),
 				LocalUIURLs:        append([]string(nil), localUIURLs...),
+				PasswordRequired:   accessGate != nil && accessGate.Enabled(),
 				EffectiveRunMode:   string(effectiveRunMode),
 				RemoteEnabled:      controlChannelEnabled,
 				DesktopManaged:     *desktopManaged,

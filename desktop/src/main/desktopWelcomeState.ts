@@ -220,6 +220,7 @@ export function buildDesktopWelcomeSnapshot(
   const issue = args.issue ?? null;
   const surface = args.surface ?? 'connect_environment';
   const environments = buildEnvironmentEntries(preferences, managedStartup, externalStartup, activeSessionTarget);
+  const runtimePasswordRequired = activeSessionTarget?.kind === 'managed_local' && managedStartup?.password_required === true;
 
   return {
     surface,
@@ -232,6 +233,9 @@ export function buildDesktopWelcomeSnapshot(
     environments,
     suggested_remote_url: suggestedRemoteURL(issue, activeSessionTarget, environments),
     issue,
-    settings_surface: buildDesktopSettingsSurfaceSnapshot('local_environment_settings', desktopPreferencesToDraft(preferences)),
+    settings_surface: buildDesktopSettingsSurfaceSnapshot('local_environment_settings', desktopPreferencesToDraft(preferences), {
+      local_ui_password_configured: preferences.local_ui_password_configured,
+      runtime_password_required: runtimePasswordRequired,
+    }),
   };
 }

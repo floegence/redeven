@@ -30,12 +30,14 @@ describe('desktopPreferences', () => {
     expect(validateDesktopSettingsDraft({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_mode: 'replace',
       controlplane_url: '',
       env_id: '',
       env_token: '',
     })).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_configured: false,
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
@@ -46,6 +48,7 @@ describe('desktopPreferences', () => {
     expect(() => validateDesktopSettingsDraft({
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: '',
+      local_ui_password_mode: 'replace',
       controlplane_url: '',
       env_id: '',
       env_token: '',
@@ -56,6 +59,7 @@ describe('desktopPreferences', () => {
     expect(() => validateDesktopSettingsDraft({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_mode: 'replace',
       controlplane_url: 'https://region.example.invalid',
       env_id: '',
       env_token: '',
@@ -71,6 +75,7 @@ describe('desktopPreferences', () => {
         ...validateDesktopSettingsDraft({
           local_ui_bind: '0.0.0.0:24000',
           local_ui_password: 'super-secret',
+          local_ui_password_mode: 'replace',
           controlplane_url: 'https://region.example.invalid',
           env_id: 'env_123',
           env_token: 'token-123',
@@ -90,6 +95,40 @@ describe('desktopPreferences', () => {
       await saveDesktopPreferences(paths, preferences, codec);
       const loaded = await loadDesktopPreferences(paths, codec);
       expect(loaded).toEqual(preferences);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves an existing encoded password when saving configured write-only state', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const initial = validateDesktopSettingsDraft({
+        local_ui_bind: '0.0.0.0:24000',
+        local_ui_password: 'super-secret',
+        local_ui_password_mode: 'replace',
+        controlplane_url: '',
+        env_id: '',
+        env_token: '',
+      });
+
+      await saveDesktopPreferences(paths, initial, codec);
+      await saveDesktopPreferences(paths, {
+        ...initial,
+        local_ui_password: '',
+        local_ui_password_configured: true,
+      }, codec);
+
+      await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual({
+        local_ui_bind: '0.0.0.0:24000',
+        local_ui_password: 'super-secret',
+        local_ui_password_configured: true,
+        pending_bootstrap: null,
+        saved_environments: [],
+        recent_external_local_ui_urls: [],
+      });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -122,6 +161,7 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual({
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
+        local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
@@ -161,6 +201,7 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual({
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
+        local_ui_password_configured: true,
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
@@ -198,6 +239,7 @@ describe('desktopPreferences', () => {
       expect(loaded).toEqual({
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
+        local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [
           {
@@ -404,6 +446,7 @@ describe('desktopPreferences', () => {
     expect(desktopPreferencesToDraft({
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: 'secret',
+      local_ui_password_configured: true,
       pending_bootstrap: {
         controlplane_url: 'https://region.example.invalid',
         env_id: 'env_123',
@@ -421,7 +464,8 @@ describe('desktopPreferences', () => {
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
     })).toEqual({
       local_ui_bind: '0.0.0.0:24000',
-      local_ui_password: 'secret',
+      local_ui_password: '',
+      local_ui_password_mode: 'keep',
       controlplane_url: 'https://region.example.invalid',
       env_id: 'env_123',
       env_token: 'token-123',
@@ -432,6 +476,7 @@ describe('desktopPreferences', () => {
     expect(clearPendingBootstrap({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_configured: false,
       pending_bootstrap: {
         controlplane_url: 'https://region.example.invalid',
         env_id: 'env_123',
@@ -450,6 +495,7 @@ describe('desktopPreferences', () => {
     })).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_configured: false,
       pending_bootstrap: null,
       saved_environments: [
         {
@@ -468,6 +514,7 @@ describe('desktopPreferences', () => {
     const left = managedDesktopLaunchKey({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
+      local_ui_password_configured: false,
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
@@ -475,11 +522,54 @@ describe('desktopPreferences', () => {
     const right = managedDesktopLaunchKey({
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: 'secret',
+      local_ui_password_configured: true,
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
     });
 
     expect(left).not.toBe(right);
+  });
+
+  it('keeps an existing stored password when the write-only draft stays blank', () => {
+    expect(validateDesktopSettingsDraft({
+      local_ui_bind: '0.0.0.0:24000',
+      local_ui_password: '',
+      local_ui_password_mode: 'keep',
+      controlplane_url: '',
+      env_id: '',
+      env_token: '',
+    }, {
+      currentLocalUIPassword: 'secret',
+      currentLocalUIPasswordConfigured: true,
+    })).toEqual({
+      local_ui_bind: '0.0.0.0:24000',
+      local_ui_password: 'secret',
+      local_ui_password_configured: true,
+      pending_bootstrap: null,
+      saved_environments: [],
+      recent_external_local_ui_urls: [],
+    });
+  });
+
+  it('clears an existing stored password only when explicitly requested', () => {
+    expect(validateDesktopSettingsDraft({
+      local_ui_bind: '127.0.0.1:0',
+      local_ui_password: '',
+      local_ui_password_mode: 'clear',
+      controlplane_url: '',
+      env_id: '',
+      env_token: '',
+    }, {
+      currentLocalUIPassword: 'secret',
+      currentLocalUIPasswordConfigured: true,
+    })).toEqual({
+      local_ui_bind: '127.0.0.1:0',
+      local_ui_password: '',
+      local_ui_password_configured: false,
+      pending_bootstrap: null,
+      saved_environments: [],
+      recent_external_local_ui_urls: [],
+    });
   });
 });

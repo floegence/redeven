@@ -15,6 +15,11 @@ type RuntimeProbeResponse = Readonly<{
   body: string;
 }>;
 
+type RuntimeProbeStatus = Readonly<{
+  password_required: boolean;
+  unlocked: boolean;
+}>;
+
 function candidateStartupURLs(startup: StartupReport): string[] {
   const seen = new Set<string>();
   const ordered = [startup.local_ui_url, ...startup.local_ui_urls];
@@ -57,30 +62,39 @@ function request(url: URL, timeoutMs: number): Promise<RuntimeProbeResponse> {
   });
 }
 
-function parseLocalAccessStatusResponse(raw: string): boolean {
+function parseLocalAccessStatusResponse(raw: string): RuntimeProbeStatus | null {
   if (!raw) {
-    return false;
+    return null;
   }
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const inner = parsed?.data;
     if (!inner || typeof inner !== 'object') {
-      return false;
+      return null;
     }
     const data = inner as Record<string, unknown>;
-    return typeof data.password_required === 'boolean' && typeof data.unlocked === 'boolean';
+    if (typeof data.password_required !== 'boolean' || typeof data.unlocked !== 'boolean') {
+      return null;
+    }
+    return {
+      password_required: data.password_required,
+      unlocked: data.unlocked,
+    };
   } catch {
-    return false;
+    return null;
   }
 }
 
-async function probeRedevenLocalUI(baseURL: string, timeoutMs: number): Promise<boolean> {
+async function probeRedevenLocalUI(baseURL: string, timeoutMs: number): Promise<RuntimeProbeStatus | null> {
   if (!isAllowedAppNavigation(baseURL, baseURL)) {
-    return false;
+    return null;
   }
   const probeURL = new URL('/api/local/access/status', baseURL);
   const response = await request(probeURL, timeoutMs);
-  return response.statusCode === 200 && parseLocalAccessStatusResponse(response.body);
+  if (response.statusCode !== 200) {
+    return null;
+  }
+  return parseLocalAccessStatusResponse(response.body);
 }
 
 export async function loadExternalLocalUIStartup(
@@ -88,12 +102,14 @@ export async function loadExternalLocalUIStartup(
   timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
 ): Promise<StartupReport | null> {
   const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
-  if (!await probeRedevenLocalUI(normalizedBaseURL, timeoutMs)) {
+  const status = await probeRedevenLocalUI(normalizedBaseURL, timeoutMs);
+  if (!status) {
     return null;
   }
   return {
     local_ui_url: normalizedBaseURL,
     local_ui_urls: [normalizedBaseURL],
+    password_required: status.password_required,
   };
 }
 
@@ -136,7 +152,8 @@ export async function loadAttachableRuntimeState(
   }
 
   for (const candidateURL of candidateStartupURLs(startup)) {
-    if (await probeRedevenLocalUI(candidateURL, timeoutMs)) {
+    const status = await probeRedevenLocalUI(candidateURL, timeoutMs);
+    if (status) {
       return {
         ...startup,
         local_ui_url: candidateURL,
@@ -144,6 +161,7 @@ export async function loadAttachableRuntimeState(
           ...startup,
           local_ui_url: candidateURL,
         }),
+        password_required: status.password_required,
       };
     }
   }
