@@ -913,6 +913,9 @@ describe('CodexPage', () => {
     expect(host.querySelector('.codex-chat-input-meta')).not.toBeNull();
     expect(host.querySelector('.codex-chat-input-meta-group-context')).not.toBeNull();
     expect(host.querySelector('.codex-chat-input-meta-group-strategy')).not.toBeNull();
+    expect(host.querySelector('.codex-page-bottom-support-lane')).not.toBeNull();
+    expect(host.querySelector('.codex-page-bottom-support-track')).not.toBeNull();
+    expect(host.querySelector('.codex-page-bottom-support-content')).not.toBeNull();
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-variant="value"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-variant="policy"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
@@ -931,6 +934,96 @@ describe('CodexPage', () => {
     workingDirChip?.click();
     await flushAsync();
     expect(host.querySelector('[data-testid="directory-picker"]')).toBeNull();
+  });
+
+  it('resolves concrete approval and sandbox defaults when the runtime config leaves them empty', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_default_policy',
+        name: 'Default policy thread',
+        preview: 'Default policy thread',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      token_usage: null,
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request', 'never'],
+        allowed_sandbox_modes: ['workspace-write', 'danger-full-access'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let codex!: ReturnType<typeof useCodexContext>;
+
+    renderPageWithHarness(host, (value) => {
+      codex = value;
+    });
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(codex.approvalPolicyDraft()).toBe('never');
+    expect(codex.sandboxModeDraft()).toBe('danger-full-access');
+    expect(host.textContent).toContain('Never');
+    expect(host.textContent).toContain('Full access');
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!textarea || !sendButton) throw new Error('composer controls not found');
+
+    textarea.value = 'Use resolved defaults';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    sendButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(startCodexThreadMock).toHaveBeenCalledWith(expect.objectContaining({
+      approval_policy: 'never',
+      sandbox_mode: 'danger-full-access',
+    }));
   });
 
   it('renders stream disconnect failures with the shared highlight block styling', async () => {

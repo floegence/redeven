@@ -50,6 +50,10 @@ import {
 } from './codexThreadUnreadState';
 import { createCodexThreadController } from './threadController';
 import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
+import {
+  resolveCodexApprovalPolicyValue,
+  resolveCodexSandboxModeValue,
+} from './runtimeDefaults';
 import { codexSupportedReasoningEfforts, codexSupportsOperation } from './viewModel';
 import type {
   CodexCapabilitiesSnapshot,
@@ -274,6 +278,8 @@ function defaultRuntimeConfig(args: {
   return {
     ...(args.runtimeConfig ?? {}),
     cwd: String(args.runtimeConfig?.cwd ?? args.thread?.cwd ?? fallbackCWD).trim(),
+    approval_policy: resolveCodexApprovalPolicyValue(args.runtimeConfig?.approval_policy),
+    sandbox_mode: resolveCodexSandboxModeValue(args.runtimeConfig?.sandbox_mode),
   };
 }
 

@@ -59,6 +59,8 @@ describe('Codex visual contract', () => {
     expect(src).not.toMatch(/\.codex-page-bottom-dock \{[^}]*border-top:/);
     expect(src).toMatch(/\.codex-page-bottom-dock::before \{[^}]*box-shadow: 0 -20px 32px -28px/);
     expect(src).toMatch(/\.codex-chat-input\.chat-input-container \{[^}]*backdrop-filter: blur\(14px\);/);
+    expect(src).toMatch(/\.codex-page-bottom-support-track \{[^}]*grid-template-columns: var\(--codex-transcript-avatar-size\) minmax\(0, 1fr\);/);
+    expect(src).toMatch(/\.codex-page-bottom-support-content \{[^}]*width: min\(100%, var\(--codex-transcript-content-max-width\)\);/);
   });
 
   it('keeps composer metadata grouped by layout role and carrier semantics', () => {
@@ -68,6 +70,7 @@ describe('Codex visual contract', () => {
     expect(src).toMatch(/\.codex-chat-input-meta-group-context \{[^}]*justify-content: flex-start;/);
     expect(src).toMatch(/\.codex-chat-input-meta-group-strategy \{[^}]*justify-content: flex-end;/);
     expect(src).toMatch(/\.codex-chat-select-chip-policy \{[^}]*border-color:/);
+    expect(src).toMatch(/\.codex-chat-select-chip-control-policy \{[^}]*padding: 0 1rem 0 0\.5rem !important;/);
     expect(src).toMatch(/\.codex-chat-draft-objects \{[^}]*flex-direction: column;/);
   });
 

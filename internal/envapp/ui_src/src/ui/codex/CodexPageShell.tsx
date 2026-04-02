@@ -20,6 +20,10 @@ import { CodexTranscript } from './CodexTranscript';
 import { CodexWorkingDirPickerDialog } from './CodexWorkingDirPickerDialog';
 import { isWorkingStatus } from './presentation';
 import {
+  resolveCodexApprovalPolicyValue,
+  resolveCodexSandboxModeValue,
+} from './runtimeDefaults';
+import {
   buildCodexWorkbenchSummary,
   codexAllowedApprovalPolicies,
   codexAllowedSandboxModes,
@@ -86,8 +90,8 @@ export function CodexPageShell() {
   );
   const modelValue = createMemo(() => String(codex.modelDraft() ?? '').trim());
   const effortValue = createMemo(() => String(codex.effortDraft() ?? '').trim());
-  const approvalPolicyValue = createMemo(() => String(codex.approvalPolicyDraft() ?? '').trim());
-  const sandboxModeValue = createMemo(() => String(codex.sandboxModeDraft() ?? '').trim());
+  const approvalPolicyValue = createMemo(() => resolveCodexApprovalPolicyValue(codex.approvalPolicyDraft()));
+  const sandboxModeValue = createMemo(() => resolveCodexSandboxModeValue(codex.sandboxModeDraft()));
   const homePath = createMemo(() => normalizeAbsolutePath(String(codex.status()?.agent_home_dir ?? '').trim()));
   const workingDirPath = createMemo(() => (
     normalizeAbsolutePath(String(codex.workingDirDraft() ?? '').trim()) ||
@@ -331,53 +335,65 @@ export function CodexPageShell() {
         <div class="codex-page-bottom-dock">
           <div class="codex-page-bottom-support">
             <Show when={codex.pendingRequests().length > 0}>
-              <CodexPendingRequestsPanel
-                requests={codex.pendingRequests()}
-                requestDraftValue={codex.requestDraftValue}
-                setRequestDraftValue={codex.setRequestDraftValue}
-                onAnswer={(request, decision) => void codex.answerRequest(request, decision)}
-              />
+              <div class="codex-page-bottom-support-lane">
+                <div class="codex-page-bottom-support-track">
+                  <div class="codex-page-bottom-support-content">
+                    <CodexPendingRequestsPanel
+                      requests={codex.pendingRequests()}
+                      requestDraftValue={codex.requestDraftValue}
+                      setRequestDraftValue={codex.setRequestDraftValue}
+                      onAnswer={(request, decision) => void codex.answerRequest(request, decision)}
+                    />
+                  </div>
+                </div>
+              </div>
             </Show>
 
-            <CodexComposerShell
-              workingDirPath={workingDirPath()}
-              workingDirLabel={workingDirValue()}
-              workingDirTitle={workingDirPath() || workingDirValue() || 'Working directory'}
-              workingDirLocked={workingDirLocked()}
-              workingDirDisabled={workingDirDisabled()}
-              modelValue={modelValue()}
-              modelOptions={modelOptions()}
-              effortValue={effortValue()}
-              effortOptions={effortOptions()}
-              approvalPolicyValue={approvalPolicyValue()}
-              approvalPolicyOptions={approvalPolicyOptions()}
-              sandboxModeValue={sandboxModeValue()}
-              sandboxModeOptions={sandboxModeOptions()}
-              attachments={codex.attachments()}
-              mentions={codex.mentions()}
-              supportsImages={supportsImages()}
-              capabilitiesLoading={codex.capabilitiesLoading()}
-              composerText={codex.composerText()}
-              submitting={codex.submitting()}
-              hostAvailable={composerHostAvailable()}
-              hostDisabledReason={composerDisabledReason()}
-              onOpenWorkingDirPicker={() => {
-                if (!canPickWorkingDir()) return;
-                setWorkingDirPickerOpen(true);
-              }}
-              onModelChange={codex.setModelDraft}
-              onEffortChange={codex.setEffortDraft}
-              onApprovalPolicyChange={codex.setApprovalPolicyDraft}
-              onSandboxModeChange={codex.setSandboxModeDraft}
-              onAddAttachments={codex.addImageAttachments}
-              onRemoveAttachment={codex.removeAttachment}
-              onAddFileMentions={codex.addFileMentions}
-              onRemoveMention={codex.removeMention}
-              onComposerInput={codex.setComposerText}
-              onResetComposer={codex.resetComposer}
-              onStartNewThreadDraft={codex.startNewThreadDraft}
-              onSend={() => void codex.sendTurn()}
-            />
+            <div class="codex-page-bottom-support-lane">
+              <div class="codex-page-bottom-support-track">
+                <div class="codex-page-bottom-support-content">
+                  <CodexComposerShell
+                    workingDirPath={workingDirPath()}
+                    workingDirLabel={workingDirValue()}
+                    workingDirTitle={workingDirPath() || workingDirValue() || 'Working directory'}
+                    workingDirLocked={workingDirLocked()}
+                    workingDirDisabled={workingDirDisabled()}
+                    modelValue={modelValue()}
+                    modelOptions={modelOptions()}
+                    effortValue={effortValue()}
+                    effortOptions={effortOptions()}
+                    approvalPolicyValue={approvalPolicyValue()}
+                    approvalPolicyOptions={approvalPolicyOptions()}
+                    sandboxModeValue={sandboxModeValue()}
+                    sandboxModeOptions={sandboxModeOptions()}
+                    attachments={codex.attachments()}
+                    mentions={codex.mentions()}
+                    supportsImages={supportsImages()}
+                    capabilitiesLoading={codex.capabilitiesLoading()}
+                    composerText={codex.composerText()}
+                    submitting={codex.submitting()}
+                    hostAvailable={composerHostAvailable()}
+                    hostDisabledReason={composerDisabledReason()}
+                    onOpenWorkingDirPicker={() => {
+                      if (!canPickWorkingDir()) return;
+                      setWorkingDirPickerOpen(true);
+                    }}
+                    onModelChange={codex.setModelDraft}
+                    onEffortChange={codex.setEffortDraft}
+                    onApprovalPolicyChange={codex.setApprovalPolicyDraft}
+                    onSandboxModeChange={codex.setSandboxModeDraft}
+                    onAddAttachments={codex.addImageAttachments}
+                    onRemoveAttachment={codex.removeAttachment}
+                    onAddFileMentions={codex.addFileMentions}
+                    onRemoveMention={codex.removeMention}
+                    onComposerInput={codex.setComposerText}
+                    onResetComposer={codex.resetComposer}
+                    onStartNewThreadDraft={codex.startNewThreadDraft}
+                    onSend={() => void codex.sendTurn()}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
