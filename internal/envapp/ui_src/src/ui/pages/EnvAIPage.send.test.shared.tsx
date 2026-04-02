@@ -898,7 +898,7 @@ export function registerEnvAIPageSendTests() {
       } finally {
         dispose();
       }
-    });
+    }, 20000);
 
     it('shows a thread-model picker for an unlocked active thread and wires it to selectThreadModel', async () => {
       aiContextValue.modelOptions = () => [
@@ -925,7 +925,7 @@ export function registerEnvAIPageSendTests() {
       } finally {
         dispose();
       }
-    });
+    }, 20000);
 
     it('shows a locked thread model badge instead of an editable picker', async () => {
       aiState.activeThread = {

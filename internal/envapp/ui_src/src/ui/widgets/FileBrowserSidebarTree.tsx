@@ -90,6 +90,12 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
       x: event.clientX,
       y: event.clientY,
       items: [props.item],
+      targetKind: 'item',
+      source: 'tree',
+      directory: {
+        path: props.item.path,
+        item: props.item,
+      },
     });
   };
 

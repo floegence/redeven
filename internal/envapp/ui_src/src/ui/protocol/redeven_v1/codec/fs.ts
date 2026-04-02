@@ -1,4 +1,6 @@
 import type {
+  wire_fs_mkdir_req,
+  wire_fs_mkdir_resp,
   wire_fs_copy_req,
   wire_fs_copy_resp,
   wire_fs_delete_req,
@@ -14,6 +16,8 @@ import type {
   wire_fs_write_file_resp,
 } from '../wire/fs';
 import type {
+  FsMkdirRequest,
+  FsMkdirResponse,
   FsCopyRequest,
   FsCopyResponse,
   FsDeleteRequest,
@@ -75,6 +79,17 @@ export function toWireFsWriteFileRequest(req: FsWriteFileRequest): wire_fs_write
 }
 
 export function fromWireFsWriteFileResponse(resp: wire_fs_write_file_resp): FsWriteFileResponse {
+  return { success: Boolean(resp?.success ?? false) };
+}
+
+export function toWireFsMkdirRequest(req: FsMkdirRequest): wire_fs_mkdir_req {
+  return {
+    path: req.path,
+    create_parents: typeof req.createParents === 'boolean' ? req.createParents : undefined,
+  };
+}
+
+export function fromWireFsMkdirResponse(resp: wire_fs_mkdir_resp): FsMkdirResponse {
   return { success: Boolean(resp?.success ?? false) };
 }
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { FileBrowserDragProvider, LayoutProvider } from '@floegence/floe-webapp-core';
-import type { ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { ContextMenuEvent, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -163,6 +163,23 @@ function triggerResizeObservers() {
 beforeEach(() => {
   mockMatchMedia(false);
   resizeObserverState.observers.length = 0;
+
+  const localStorageStore = new Map<string, string>();
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => localStorageStore.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        localStorageStore.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        localStorageStore.delete(key);
+      },
+      clear: () => {
+        localStorageStore.clear();
+      },
+    },
+  });
 
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     return window.setTimeout(() => callback(performance.now()), 0);
@@ -822,14 +839,14 @@ describe('FileBrowserWorkspace interactions', () => {
     document.body.appendChild(host);
     const openInTerminalSpy = vi.fn();
 
-    const resolveOverrideContextMenuItems = (items: FileItem[]): ContextMenuItem[] => {
-      if (items.length === 1 && items[0]?.type === 'folder') {
+    const resolveOverrideContextMenuItems = (event: ContextMenuEvent | null): ContextMenuItem[] => {
+      if (event?.targetKind === 'item' && event.items.length === 1 && event.items[0]?.type === 'folder') {
         return [
           {
             id: 'open-in-terminal',
             label: 'Open in Terminal',
             type: 'custom',
-            onAction: openInTerminalSpy,
+            onAction: (_items, menuEvent) => openInTerminalSpy(menuEvent),
           },
         ];
       }
@@ -879,6 +896,70 @@ describe('FileBrowserWorkspace interactions', () => {
       const hiddenOpenButton = Array.from(document.body.querySelectorAll('[role="menu"] button')).find((node) => node.textContent?.includes('Open in Terminal')) as HTMLButtonElement | undefined;
       expect(hiddenOpenButton).toBeUndefined();
       expect(openInTerminalSpy).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('emits a directory-background context event for empty workspace right clicks', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let backgroundEvent: ContextMenuEvent | null = null;
+
+    const resolveOverrideContextMenuItems = (event: ContextMenuEvent | null): ContextMenuItem[] => {
+      if (event?.targetKind !== 'directory-background') return [];
+      backgroundEvent = event;
+      return [
+        {
+          id: 'open-in-terminal',
+          label: 'Open in Terminal',
+          type: 'custom',
+        },
+      ];
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-background-context-menu"
+            instanceId="test-files-workspace-background-context-menu"
+            resetKey={0}
+            width={260}
+            open
+            resolveOverrideContextMenuItems={resolveOverrideContextMenuItems}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const contentRegion = host.querySelector('[data-testid="file-browser-content-scroll-region"]') as HTMLDivElement | null;
+      expect(contentRegion).toBeTruthy();
+
+      contentRegion!.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 64,
+        clientY: 72,
+      }));
+      await flush();
+
+      expect(backgroundEvent).toMatchObject({
+        targetKind: 'directory-background',
+        source: 'background',
+        items: [],
+        directory: {
+          path: '/',
+        },
+      });
     } finally {
       dispose();
     }

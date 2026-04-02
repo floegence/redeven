@@ -2,7 +2,7 @@ import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'so
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Refresh, Sparkles, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
-import { type ContextMenuCallbacks, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { type ContextMenuCallbacks, type ContextMenuEvent, type ContextMenuItem, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import type { Client } from '@floegence/flowersec-core';
@@ -82,7 +82,10 @@ import {
 import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
 import { LazyMountedDirectoryPicker, LazyMountedFileSavePicker } from '../primitives/LazyMountedPickers';
 import {
+  buildChildPath,
+  canInsertIntoTree,
   extNoDot,
+  fileNameFromPath,
   getParentDir,
   insertItemToTree,
   normalizePath,
@@ -93,6 +96,7 @@ import {
   sortFileItems,
   toFileItem,
   updateItemInTree,
+  validateFileBrowserEntryName,
   withChildrenAtRoot,
 } from './FileBrowserShared';
 
@@ -138,6 +142,12 @@ type DirectoryNavigationOptions = {
 };
 
 type BrowserPageMode = GitHistoryMode;
+type CreateEntryKind = 'file' | 'folder';
+type CreateEntryDraft = {
+  kind: CreateEntryKind;
+  parentDir: string;
+  initialName: string;
+};
 
 const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
@@ -427,6 +437,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [renameDialogOpen, setRenameDialogOpen] = createSignal(false);
   const [renameDialogItem, setRenameDialogItem] = createSignal<FileItem | null>(null);
   const [renameLoading, setRenameLoading] = createSignal(false);
+
+  const [createDialogOpen, setCreateDialogOpen] = createSignal(false);
+  const [createDialogDraft, setCreateDialogDraft] = createSignal<CreateEntryDraft | null>(null);
+  const [createLoading, setCreateLoading] = createSignal(false);
 
   const [moveToDialogOpen, setMoveToDialogOpen] = createSignal(false);
   const [moveToDialogItem, setMoveToDialogItem] = createSignal<FileItem | null>(null);
@@ -2866,27 +2880,101 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
+  const resolveValidatedEntryName = (value: string, failureTitle: string): string | null => {
+    const nextName = String(value ?? '').trim();
+    const validationError = validateFileBrowserEntryName(nextName);
+    if (validationError) {
+      notification.error(failureTitle, validationError);
+      return null;
+    }
+    return nextName;
+  };
+
+  const insertCreatedItemIntoState = (parentDirPath: string, item: FileItem) => {
+    const parentDir = normalizePath(parentDirPath);
+    const scopedRootPath = normalizePath(agentHomePathAbs() || parentDir);
+    const cached = cache.get(parentDir);
+
+    if (cached && !cached.some((entry) => normalizePath(entry.path) === normalizePath(item.path))) {
+      cache.set(parentDir, sortFileItems([...cached, item]));
+    }
+
+    if (canInsertIntoTree(files(), parentDir, scopedRootPath)) {
+      setFiles((prev) => insertItemToTree(prev, parentDir, item, scopedRootPath));
+    }
+  };
+
+  const buildCreatedItem = (kind: CreateEntryKind, parentDir: string, name: string): FileItem => {
+    const path = buildChildPath(parentDir, name);
+    return {
+      id: path,
+      name,
+      type: kind === 'folder' ? 'folder' : 'file',
+      path,
+      extension: kind === 'file' ? extNoDot(name) : undefined,
+      children: kind === 'folder' ? [] : undefined,
+    };
+  };
+
+  const resolveDirectoryContextTarget = (event?: ContextMenuEvent | null) => {
+    const directoryPath = normalizeAbsolutePath(event?.directory?.path ?? '');
+    if (!directoryPath) return null;
+
+    const item = event?.directory?.item?.type === 'folder'
+      ? event.directory.item
+      : undefined;
+
+    return {
+      path: directoryPath,
+      item,
+      preferredName: item?.name || fileNameFromPath(directoryPath) || undefined,
+    };
+  };
+
+  const askFlowerFromDirectoryContext = (event?: ContextMenuEvent | null) => {
+    const directory = resolveDirectoryContextTarget(event);
+    if (!directory) {
+      notification.error('Ask Flower unavailable', 'Failed to resolve the target directory.');
+      return;
+    }
+
+    const result = buildFilePathAskFlowerIntent({
+      items: [{
+        path: directory.path,
+        isDirectory: true,
+      }],
+      fallbackWorkingDirAbs: directory.path,
+    });
+    if (!result.intent) {
+      notification.error('Ask Flower unavailable', result.error ?? 'Failed to resolve selected file paths.');
+      return;
+    }
+
+    dispatchAskFlowerIntent(result.intent);
+  };
+
   const handleRename = async (item: FileItem, newName: string) => {
     const client = protocol.client();
-    if (!client || !newName.trim()) return;
+    if (!client) return;
 
-    const newNameTrimmed = newName.trim();
-    if (newNameTrimmed === item.name) {
+    const nextName = resolveValidatedEntryName(newName, 'Rename failed');
+    if (!nextName) return;
+    if (nextName === item.name) {
       setRenameDialogOpen(false);
+      setRenameDialogItem(null);
       return;
     }
 
     const parentDir = getParentDir(item.path);
-    const newPath = parentDir === '/' ? `/${newNameTrimmed}` : `${parentDir}/${newNameTrimmed}`;
-    const newExt = item.type === 'file' ? extNoDot(newNameTrimmed) : undefined;
+    const newPath = buildChildPath(parentDir, nextName);
+    const newExt = item.type === 'file' ? extNoDot(nextName) : undefined;
 
     setRenameLoading(true);
-    setRenameDialogOpen(false);
 
     try {
       await rpc.fs.rename({ oldPath: item.path, newPath });
       const updates: Partial<FileItem> = {
-        name: newNameTrimmed,
+        name: nextName,
         path: newPath,
         id: newPath,
         extension: newExt,
@@ -2900,7 +2988,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         );
       }
 
-      notification.success('Renamed', `"${item.name}" renamed to "${newNameTrimmed}".`);
+      setRenameDialogOpen(false);
+      setRenameDialogItem(null);
+      notification.success('Renamed', `"${item.name}" renamed to "${nextName}".`);
     } catch (e) {
       notification.error('Rename failed', e instanceof Error ? e.message : String(e));
     } finally {
@@ -2923,7 +3013,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ? baseName.slice(0, baseName.lastIndexOf('.'))
       : baseName;
     const newName = `${nameWithoutExt} (copy)${ext}`;
-    const destPath = parentDir === '/' ? `/${newName}` : `${parentDir}/${newName}`;
+    const destPath = buildChildPath(parentDir, newName);
     const scopedRootPath = normalizePath(agentHomePathAbs() || parentDir);
 
     try {
@@ -2952,7 +3042,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!client || !destDirPath.trim()) return;
 
     const destDir = normalizePath(destDirPath.trim());
-    const finalDestPath = destDir === '/' ? `/${item.name}` : `${destDir}/${item.name}`;
+    const finalDestPath = buildChildPath(destDir, item.name);
 
     if (finalDestPath === item.path) {
       setMoveToDialogOpen(false);
@@ -2986,7 +3076,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!client || !destDirPath.trim() || !destFileName.trim()) return;
 
     const destDir = normalizePath(destDirPath.trim());
-    const finalDestPath = destDir === '/' ? `/${destFileName.trim()}` : `${destDir}/${destFileName.trim()}`;
+    const finalDestPath = buildChildPath(destDir, destFileName);
 
     if (finalDestPath === item.path) {
       setCopyToDialogOpen(false);
@@ -3022,6 +3112,43 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       notification.error('Copy failed', e instanceof Error ? e.message : String(e));
     } finally {
       setCopyToLoading(false);
+    }
+  };
+
+  const handleCreateEntry = async (name: string) => {
+    const client = protocol.client();
+    const draft = createDialogDraft();
+    if (!client || !draft) return;
+
+    const nextName = resolveValidatedEntryName(name, 'Create failed');
+    if (!nextName) return;
+
+    const finalPath = buildChildPath(draft.parentDir, nextName);
+    setCreateLoading(true);
+
+    try {
+      if (draft.kind === 'file') {
+        await rpc.fs.writeFile({
+          path: finalPath,
+          content: '',
+          createDirs: false,
+        });
+      } else {
+        await rpc.fs.mkdir({
+          path: finalPath,
+          createParents: false,
+        });
+      }
+
+      const newItem = buildCreatedItem(draft.kind, draft.parentDir, nextName);
+      insertCreatedItemIntoState(draft.parentDir, newItem);
+      setCreateDialogOpen(false);
+      setCreateDialogDraft(null);
+      notification.success('Created', `"${nextName}" created.`);
+    } catch (e) {
+      notification.error('Create failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreateLoading(false);
     }
   };
 
@@ -3342,25 +3469,42 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     })();
   };
 
-  const canOpenDirectoryInTerminal = (items: FileItem[]) => (
-    Boolean(ctx.env()?.permissions?.can_execute)
-    && items.length === 1
-    && items[0]?.type === 'folder'
-    && canOpenDirectoryPathInTerminal(items[0]?.path ?? '')
-  );
+  const canOpenDirectoryContextInTerminal = (event?: ContextMenuEvent | null) => {
+    const directory = resolveDirectoryContextTarget(event);
+    return Boolean(
+      directory
+      && ctx.env()?.permissions?.can_execute
+      && canOpenDirectoryPathInTerminal(directory.path)
+    );
+  };
 
-  const handleOpenInTerminal = (items: FileItem[]) => {
-    const item = items[0];
-    if (!item || item.type !== 'folder') return;
+  const handleOpenDirectoryContextInTerminal = (event?: ContextMenuEvent | null) => {
+    const directory = resolveDirectoryContextTarget(event);
+    if (!directory) return;
 
     openDirectoryInTerminal({
-      path: item.path,
-      preferredName: item.name,
+      path: directory.path,
+      preferredName: directory.preferredName,
       openTerminalInDirectory: ctx.openTerminalInDirectory,
       onInvalidDirectory: () => {
         notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
       },
     });
+  };
+
+  const openCreateEntryDialog = (kind: CreateEntryKind, event?: ContextMenuEvent | null) => {
+    const directory = resolveDirectoryContextTarget(event);
+    if (!directory) {
+      notification.error('Create unavailable', 'Could not resolve the target directory.');
+      return;
+    }
+
+    setCreateDialogDraft({
+      kind,
+      parentDir: directory.path,
+      initialName: '',
+    });
+    setCreateDialogOpen(true);
   };
 
   const ctxMenu: ContextMenuCallbacks = {
@@ -3416,18 +3560,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   };
 
-  const priorityOverrideContextMenuItems: ContextMenuItem[] = [
-    {
-      id: 'ask-flower',
-      label: 'Ask Flower',
-      type: 'custom',
-      icon: (props) => <Sparkles class={props.class} />,
-      onAction: (items: FileItem[]) => {
-        void askFlowerFromFileBrowser(items);
-      },
-    },
-  ];
-
   const secondaryOverrideContextMenuItems: ContextMenuItem[] = [
     {
       id: 'duplicate',
@@ -3480,29 +3612,90 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   ];
 
-  const resolveOverrideContextMenuItems = (items: FileItem[]): ContextMenuItem[] => {
-    if (!canOpenDirectoryInTerminal(items)) {
-      return [
-        {
-          ...priorityOverrideContextMenuItems[0],
-          separator: true,
+  const buildAskFlowerMenuItem = (options?: {
+    separator?: boolean;
+    onAction?: (items: FileItem[], event?: ContextMenuEvent) => void;
+  }): ContextMenuItem => ({
+    id: 'ask-flower',
+    label: 'Ask Flower',
+    type: 'custom',
+    icon: (props) => <Sparkles class={props.class} />,
+    separator: options?.separator,
+    onAction: (items, event) => {
+      if (options?.onAction) {
+        options.onAction(items, event);
+        return;
+      }
+      void askFlowerFromFileBrowser(items);
+    },
+  });
+
+  const buildOpenInTerminalMenuItem = (): ContextMenuItem => ({
+    id: 'open-in-terminal',
+    label: 'Open in Terminal',
+    type: 'custom',
+    icon: (props) => <Terminal class={props.class} />,
+    onAction: (_items, event) => {
+      handleOpenDirectoryContextInTerminal(event);
+    },
+  });
+
+  const buildNewContextMenuItem = (separator = false): ContextMenuItem => ({
+    id: 'new',
+    label: 'New',
+    type: 'custom',
+    separator,
+    children: [
+      {
+        id: 'new-file',
+        label: 'File',
+        type: 'custom',
+        onAction: (_items, event) => {
+          openCreateEntryDialog('file', event);
         },
-        ...secondaryOverrideContextMenuItems,
+      },
+      {
+        id: 'new-folder',
+        label: 'Folder',
+        type: 'custom',
+        onAction: (_items, event) => {
+          openCreateEntryDialog('folder', event);
+        },
+      },
+    ],
+  });
+
+  const resolveOverrideContextMenuItems = (event: ContextMenuEvent | null): ContextMenuItem[] => {
+    if (!event) return [];
+
+    if (event.targetKind === 'directory-background' && resolveDirectoryContextTarget(event)) {
+      const backgroundItems: ContextMenuItem[] = [
+        buildAskFlowerMenuItem({
+          onAction: (_items, menuEvent) => {
+            askFlowerFromDirectoryContext(menuEvent);
+          },
+        }),
       ];
+      if (canOpenDirectoryContextInTerminal(event)) {
+        backgroundItems.push(buildOpenInTerminalMenuItem());
+      }
+      backgroundItems.push(buildNewContextMenuItem());
+      return backgroundItems;
+    }
+
+    if (event.directory?.item?.type === 'folder') {
+      const folderItems: ContextMenuItem[] = [
+        buildAskFlowerMenuItem(),
+      ];
+      if (canOpenDirectoryContextInTerminal(event)) {
+        folderItems.push(buildOpenInTerminalMenuItem());
+      }
+      folderItems.push(buildNewContextMenuItem(true));
+      return [...folderItems, ...secondaryOverrideContextMenuItems];
     }
 
     return [
-      ...priorityOverrideContextMenuItems,
-      {
-        id: 'open-in-terminal',
-        label: 'Open in Terminal',
-        type: 'custom',
-        icon: (props) => <Terminal class={props.class} />,
-        separator: true,
-        onAction: (selectedItems: FileItem[]) => {
-          handleOpenInTerminal(selectedItems);
-        },
-      },
+      buildAskFlowerMenuItem({ separator: true }),
       ...secondaryOverrideContextMenuItems,
     ];
   };
@@ -3760,6 +3953,24 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         </div>
       </ConfirmDialog>
 
+      {/* Create Dialog */}
+      <InputDialog
+        open={createDialogOpen()}
+        title={createDialogDraft()?.kind === 'folder' ? 'New Folder' : 'New File'}
+        label={createDialogDraft()?.kind === 'folder' ? 'Folder name' : 'File name'}
+        value={createDialogDraft()?.initialName ?? ''}
+        placeholder={createDialogDraft()?.kind === 'folder' ? 'new-folder' : 'README.md'}
+        confirmText="Create"
+        loading={createLoading()}
+        onConfirm={(name) => {
+          void handleCreateEntry(name);
+        }}
+        onCancel={() => {
+          setCreateDialogOpen(false);
+          setCreateDialogDraft(null);
+        }}
+      />
+
       {/* Rename Dialog */}
       <InputDialog
         open={renameDialogOpen()}
@@ -3771,7 +3982,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           const item = renameDialogItem();
           if (item) void handleRename(item, newName);
         }}
-        onCancel={() => setRenameDialogOpen(false)}
+        onCancel={() => {
+          setRenameDialogOpen(false);
+          setRenameDialogItem(null);
+        }}
       />
 
       {/* Move To Directory Picker */}

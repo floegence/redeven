@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/floegence/flowersec/flowersec-go/rpc"
 )
 
 func mustEvalPath(t *testing.T, path string) string {
@@ -45,4 +47,65 @@ func TestServiceResolve(t *testing.T) {
 	if _, err := s.resolveExistingDir("/../../.."); err == nil {
 		t.Fatalf("expected out-of-scope path to fail")
 	}
+}
+
+func TestServiceMkdirTarget(t *testing.T) {
+	root := t.TempDir()
+	s := NewService(root)
+
+	t.Run("creates directory under existing parent", func(t *testing.T) {
+		target := filepath.Join(root, "docs")
+		created, err := s.mkdirTarget(target, false)
+		if err != nil {
+			t.Fatalf("mkdirTarget(existing parent): %v", err)
+		}
+		if mustEvalPath(t, created) != mustEvalPath(t, target) {
+			t.Fatalf("mkdirTarget(existing parent) = %q, want %q", created, target)
+		}
+		info, err := os.Stat(target)
+		if err != nil {
+			t.Fatalf("Stat(%q): %v", target, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("%q should be a directory", target)
+		}
+	})
+
+	t.Run("rejects out of scope target", func(t *testing.T) {
+		_, err := s.mkdirTarget("/../../outside", false)
+		rpcErr, ok := err.(*rpc.Error)
+		if !ok || rpcErr.Code != 400 {
+			t.Fatalf("expected rpc 400 error, got %#v", err)
+		}
+	})
+
+	t.Run("rejects existing directory", func(t *testing.T) {
+		existing := filepath.Join(root, "existing")
+		if err := os.MkdirAll(existing, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q): %v", existing, err)
+		}
+		_, err := s.mkdirTarget(existing, false)
+		rpcErr, ok := err.(*rpc.Error)
+		if !ok || rpcErr.Code != 409 {
+			t.Fatalf("expected rpc 409 error, got %#v", err)
+		}
+	})
+
+	t.Run("creates parents when requested", func(t *testing.T) {
+		target := filepath.Join(root, "nested", "dir")
+		created, err := s.mkdirTarget(target, true)
+		if err != nil {
+			t.Fatalf("mkdirTarget(create parents): %v", err)
+		}
+		if mustEvalPath(t, created) != mustEvalPath(t, target) {
+			t.Fatalf("mkdirTarget(create parents) = %q, want %q", created, target)
+		}
+		info, err := os.Stat(target)
+		if err != nil {
+			t.Fatalf("Stat(%q): %v", target, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("%q should be a directory", target)
+		}
+	})
 }

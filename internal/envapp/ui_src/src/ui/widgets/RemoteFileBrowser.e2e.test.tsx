@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider } from '@floegence/floe-webapp-core';
-import type { ContextMenuCallbacks, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { ContextMenuCallbacks, ContextMenuEvent, ContextMenuItem, FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { RpcError } from '@floegence/floe-webapp-protocol';
 import { createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
@@ -77,6 +77,10 @@ const workspaceLifecycleStore = vi.hoisted(() => ({
   gitUnmounts: 0,
 }));
 
+const inputDialogStore = vi.hoisted(() => ({
+  pendingConfirmValue: null as string | null,
+}));
+
 const filePreviewStore = vi.hoisted(() => ({
   openPreview: vi.fn(),
   closePreview: vi.fn(),
@@ -95,6 +99,11 @@ const envActionSpies = vi.hoisted(() => ({
 const mockRpc = vi.hoisted(() => ({
   fs: {
     list: vi.fn(),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+    rename: vi.fn(),
+    copy: vi.fn(),
+    delete: vi.fn(),
     getPathContext: vi.fn(),
   },
   git: {
@@ -204,9 +213,60 @@ vi.mock('./FileBrowserSurfaceContext', () => ({
   }),
 }));
 
+vi.mock('./InputDialog', () => ({
+  InputDialog: (props: {
+    open: boolean;
+    title: string;
+    label: string;
+    value: string;
+    placeholder?: string;
+    confirmText?: string;
+    loading?: boolean;
+    onConfirm: (value: string) => void;
+    onCancel: () => void;
+  }) => {
+    const [draft, setDraft] = createSignal(props.value);
+
+    createEffect(() => {
+      if (props.open) {
+        setDraft(props.value);
+      }
+    });
+
+    createEffect(() => {
+      if (!props.open || inputDialogStore.pendingConfirmValue == null) return;
+      const nextValue = inputDialogStore.pendingConfirmValue;
+      inputDialogStore.pendingConfirmValue = null;
+      queueMicrotask(() => props.onConfirm(nextValue));
+    });
+
+    return props.open ? (
+      <div data-testid="mock-input-dialog">
+        <div>{props.title}</div>
+        <label>
+          {props.label}
+          <input
+            aria-label={props.label}
+            value={draft()}
+            placeholder={props.placeholder}
+            onInput={(event) => setDraft(event.currentTarget.value)}
+          />
+        </label>
+        <button type="button" onClick={() => props.onConfirm(draft())} disabled={props.loading}>
+          {props.confirmText ?? 'Confirm'}
+        </button>
+        <button type="button" onClick={props.onCancel}>
+          Cancel
+        </button>
+      </div>
+    ) : null;
+  },
+}));
+
 vi.mock('./FileBrowserWorkspace', () => ({
   FileBrowserWorkspace: (props: {
     mode: string;
+    files: FileItem[];
     currentPath: string;
     width?: number;
     resetKey?: number;
@@ -217,7 +277,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     onNavigate?: (path: string) => void;
     contextMenuCallbacks?: ContextMenuCallbacks;
     overrideContextMenuItems?: ContextMenuItem[];
-    resolveOverrideContextMenuItems?: (items: FileItem[]) => ContextMenuItem[] | undefined;
+    resolveOverrideContextMenuItems?: (event: ContextMenuEvent | null) => ContextMenuItem[] | undefined;
   }) => {
     const [localCount, setLocalCount] = createSignal(0);
     const copyNameTarget: FileItem = {
@@ -232,14 +292,73 @@ vi.mock('./FileBrowserWorkspace', () => ({
       type: 'folder',
       path: '/workspace/repo/src',
     };
+    const fileEvent: ContextMenuEvent = {
+      x: 40,
+      y: 44,
+      items: [copyNameTarget],
+      targetKind: 'item',
+      source: 'list',
+      directory: null,
+    };
+    const folderEvent: ContextMenuEvent = {
+      x: 24,
+      y: 32,
+      items: [folderTarget],
+      targetKind: 'item',
+      source: 'list',
+      directory: {
+        path: folderTarget.path,
+        item: folderTarget,
+      },
+    };
+    const multiSelectEvent: ContextMenuEvent = {
+      x: 48,
+      y: 56,
+      items: [folderTarget, copyNameTarget],
+      targetKind: 'item',
+      source: 'list',
+      directory: null,
+    };
+    const backgroundEvent: ContextMenuEvent = {
+      x: 16,
+      y: 24,
+      items: [],
+      targetKind: 'directory-background',
+      source: 'background',
+      directory: {
+        path: props.currentPath,
+      },
+    };
     const resolver = props.resolveOverrideContextMenuItems;
-    const copyNameItems = resolver?.([copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
-    const folderItems = resolver?.([folderTarget]) ?? props.overrideContextMenuItems ?? [];
-    const fileItems = resolver?.([copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
-    const multiSelectItems = resolver?.([folderTarget, copyNameTarget]) ?? props.overrideContextMenuItems ?? [];
-    const describeMenuItems = (items: ContextMenuItem[]) => items.flatMap((item) => (
-      item.separator ? [item.id, `separator:${item.id}`] : [item.id]
-    )).join(',');
+    const resolveItems = (event: ContextMenuEvent) => resolver?.(event) ?? props.overrideContextMenuItems ?? [];
+    const copyNameItems = resolveItems(fileEvent);
+    const folderItems = resolveItems(folderEvent);
+    const fileItems = resolveItems(fileEvent);
+    const multiSelectItems = resolveItems(multiSelectEvent);
+    const backgroundItems = () => resolveItems({
+      ...backgroundEvent,
+      directory: {
+        path: props.currentPath,
+      },
+    });
+    const describeMenuItems = (items: ContextMenuItem[]) => items.flatMap((item) => {
+      const label = item.children?.length
+        ? `${item.id}[${item.children.map((child) => child.id).join('|')}]`
+        : item.id;
+      return item.separator ? [label, `separator:${item.id}`] : [label];
+    }).join(',');
+    const flattenTreePaths = (items: FileItem[]): string[] => items.flatMap((item) => [
+      item.path,
+      ...(item.children ? flattenTreePaths(item.children) : []),
+    ]);
+    const findMenuItem = (items: ContextMenuItem[], id: string): ContextMenuItem | undefined => {
+      for (const item of items) {
+        if (item.id === id) return item;
+        const child = item.children ? findMenuItem(item.children, id) : undefined;
+        if (child) return child;
+      }
+      return undefined;
+    };
 
     onMount(() => {
       workspaceLifecycleStore.filesMounts += 1;
@@ -254,8 +373,10 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div>files:{props.mode}:{props.currentPath}:{props.width ?? 0}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
         <div>{props.toolbarEndActions}</div>
         <div data-testid="mock-folder-menu-order">{describeMenuItems(folderItems)}</div>
+        <div data-testid="mock-background-menu-order">{describeMenuItems(backgroundItems())}</div>
         <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems)}</div>
         <div data-testid="mock-multi-menu-order">{describeMenuItems(multiSelectItems)}</div>
+        <div data-testid="mock-files-tree">{flattenTreePaths(props.files).join(',')}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
         <button type="button" onClick={() => props.onModeChange?.('git')}>mock-to-git</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
@@ -273,7 +394,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
         {fileItems.some((item) => item.id === 'copy-path') ? (
           <button
             type="button"
-            onClick={() => fileItems.find((item) => item.id === 'copy-path')?.onAction?.([copyNameTarget])}
+            onClick={() => fileItems.find((item) => item.id === 'copy-path')?.onAction?.(fileEvent.items, fileEvent)}
           >
             mock-copy-path
           </button>
@@ -281,9 +402,77 @@ vi.mock('./FileBrowserWorkspace', () => ({
         {folderItems.some((item) => item.id === 'open-in-terminal') ? (
           <button
             type="button"
-            onClick={() => folderItems.find((item) => item.id === 'open-in-terminal')?.onAction?.([folderTarget])}
+            onClick={() => folderItems.find((item) => item.id === 'open-in-terminal')?.onAction?.(folderEvent.items, folderEvent)}
           >
             mock-open-terminal-folder
+          </button>
+        ) : null}
+        {backgroundItems().some((item) => item.id === 'open-in-terminal') ? (
+          <button
+            type="button"
+            onClick={() => backgroundItems().find((item) => item.id === 'open-in-terminal')?.onAction?.([], {
+              ...backgroundEvent,
+              directory: {
+                path: props.currentPath,
+              },
+            })}
+          >
+            mock-open-terminal-background
+          </button>
+        ) : null}
+        {backgroundItems().some((item) => item.id === 'ask-flower') ? (
+          <button
+            type="button"
+            onClick={() => backgroundItems().find((item) => item.id === 'ask-flower')?.onAction?.([], {
+              ...backgroundEvent,
+              directory: {
+                path: props.currentPath,
+              },
+            })}
+          >
+            mock-ask-flower-background
+          </button>
+        ) : null}
+        {findMenuItem(folderItems, 'new-file') ? (
+          <button
+            type="button"
+            onClick={() => findMenuItem(folderItems, 'new-file')?.onAction?.(folderEvent.items, folderEvent)}
+          >
+            mock-create-file-from-folder
+          </button>
+        ) : null}
+        {findMenuItem(folderItems, 'new-folder') ? (
+          <button
+            type="button"
+            onClick={() => findMenuItem(folderItems, 'new-folder')?.onAction?.(folderEvent.items, folderEvent)}
+          >
+            mock-create-folder-from-folder
+          </button>
+        ) : null}
+        {findMenuItem(backgroundItems(), 'new-file') ? (
+          <button
+            type="button"
+            onClick={() => findMenuItem(backgroundItems(), 'new-file')?.onAction?.([], {
+              ...backgroundEvent,
+              directory: {
+                path: props.currentPath,
+              },
+            })}
+          >
+            mock-create-file-from-background
+          </button>
+        ) : null}
+        {findMenuItem(backgroundItems(), 'new-folder') ? (
+          <button
+            type="button"
+            onClick={() => findMenuItem(backgroundItems(), 'new-folder')?.onAction?.([], {
+              ...backgroundEvent,
+              directory: {
+                path: props.currentPath,
+              },
+            })}
+          >
+            mock-create-folder-from-background
           </button>
         ) : null}
         {fileItems.some((item) => item.id === 'open-in-terminal') ? (
@@ -675,6 +864,7 @@ beforeEach(() => {
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
   workspaceLifecycleStore.gitUnmounts = 0;
+  inputDialogStore.pendingConfirmValue = null;
   fileBrowserSurfaceStore.openBrowser.mockReset();
   fileBrowserSurfaceStore.openBrowser.mockResolvedValue(undefined);
   fileBrowserSurfaceStore.closeBrowser.mockReset();
@@ -692,6 +882,11 @@ beforeEach(() => {
   });
 
   mockRpc.fs.list.mockResolvedValue({ entries: [] });
+  mockRpc.fs.writeFile.mockResolvedValue({ success: true });
+  mockRpc.fs.mkdir.mockResolvedValue({ success: true });
+  mockRpc.fs.rename.mockResolvedValue({ success: true, newPath: '/workspace/repo/renamed' });
+  mockRpc.fs.copy.mockResolvedValue({ success: true, newPath: '/workspace/repo/copied' });
+  mockRpc.fs.delete.mockResolvedValue({ success: true });
   mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
   mockRpc.git.resolveRepo.mockResolvedValue({
     available: true,
@@ -1864,7 +2059,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('shows Open in Terminal only for a single folder target and dispatches the request with the absolute directory', async () => {
+  it('shows directory helper menus with New submenus and dispatches terminal requests for both folder and background contexts', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
       pageModeByEnv: { 'env-1': 'files' },
@@ -1886,7 +2081,10 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,open-in-terminal,separator:open-in-terminal,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,open-in-terminal,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+      );
+      expect(host.querySelector('[data-testid="mock-background-menu-order"]')?.textContent).toBe(
+        'ask-flower,open-in-terminal,new[new-file|new-folder]',
       );
       expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toBe(
         'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
@@ -1896,17 +2094,197 @@ describe('RemoteFileBrowser persistence', () => {
       );
 
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
+      const backgroundButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-background') as HTMLButtonElement | undefined;
       const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-file') as HTMLButtonElement | undefined;
       const multiButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-multi') as HTMLButtonElement | undefined;
 
       expect(folderButton).toBeTruthy();
+      expect(backgroundButton).toBeTruthy();
       expect(fileButton).toBeUndefined();
       expect(multiButton).toBeUndefined();
 
       folderButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      backgroundButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(envActionSpies.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/repo/src', { preferredName: 'src' });
+      expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(1, '/workspace/repo/src', { preferredName: 'src' });
+      expect(envActionSpies.openTerminalInDirectory).toHaveBeenNthCalledWith(2, '/workspace/repo/src', { preferredName: 'src' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes background Ask Flower through the current directory context', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-ask-flower-background') as HTMLButtonElement | undefined;
+      expect(askFlowerButton).toBeTruthy();
+
+      askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(envActionSpies.openAskFlowerComposer).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0]).toMatchObject({
+        source: 'file_browser',
+        mode: 'append',
+        suggestedWorkingDirAbs: '/workspace/repo/src',
+        contextItems: [
+          {
+            kind: 'file_path',
+            path: '/workspace/repo/src',
+            isDirectory: true,
+          },
+        ],
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('creates a file from the background New submenu and updates the visible tree', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/src':
+          return {
+            entries: [
+              { name: 'current.txt', path: '/workspace/repo/src/current.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+            ],
+          };
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const createButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-create-file-from-background') as HTMLButtonElement | undefined;
+      expect(createButton).toBeTruthy();
+      inputDialogStore.pendingConfirmValue = 'fresh.txt';
+
+      createButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(mockRpc.fs.writeFile).toHaveBeenCalledWith({
+        path: '/workspace/repo/src/fresh.txt',
+        content: '',
+        createDirs: false,
+      });
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/fresh.txt');
+      expect(notificationStore.success).toContainEqual({ title: 'Created', message: '"fresh.txt" created.' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('creates a folder from the directory New submenu and updates the visible tree', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/src':
+          return {
+            entries: [
+              { name: 'current.txt', path: '/workspace/repo/src/current.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+            ],
+          };
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const createButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-create-folder-from-folder') as HTMLButtonElement | undefined;
+      expect(createButton).toBeTruthy();
+      inputDialogStore.pendingConfirmValue = 'components';
+
+      createButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(mockRpc.fs.mkdir).toHaveBeenCalledWith({
+        path: '/workspace/repo/src/components',
+        createParents: false,
+      });
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/src/components');
+      expect(notificationStore.success).toContainEqual({ title: 'Created', message: '"components" created.' });
     } finally {
       dispose();
     }
@@ -1934,10 +2312,15 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+      );
+      expect(host.querySelector('[data-testid="mock-background-menu-order"]')?.textContent).toBe(
+        'ask-flower,new[new-file|new-folder]',
       );
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
+      const backgroundButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-background') as HTMLButtonElement | undefined;
       expect(folderButton).toBeUndefined();
+      expect(backgroundButton).toBeUndefined();
     } finally {
       dispose();
     }

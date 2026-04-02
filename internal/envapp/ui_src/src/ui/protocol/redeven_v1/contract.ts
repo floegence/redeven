@@ -26,7 +26,7 @@ import type {
   AIToolApprovalResponse,
 } from './sdk/ai';
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
-import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsListRequest, FsListResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
+import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsListRequest, FsListResponse, FsMkdirRequest, FsMkdirResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
 import type {
   GitApplyStashRequest,
   GitApplyStashResponse,
@@ -119,7 +119,7 @@ import {
   toWireAIToolApprovalRequest,
 } from './codec/ai';
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
-import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsListResponse, fromWireFsPathContextResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
+import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsListResponse, fromWireFsMkdirResponse, fromWireFsPathContextResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsMkdirRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
 import {
   fromWireGitApplyStashResponse,
   fromWireGitCheckoutBranchResponse,
@@ -212,7 +212,7 @@ import type {
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
 } from './wire/ai';
-import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_path_context_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
+import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_path_context_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_mkdir_req, wire_fs_mkdir_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type {
   wire_git_apply_stash_req,
   wire_git_apply_stash_resp,
@@ -287,6 +287,7 @@ export type RedevenV1Rpc = {
     list: (req: FsListRequest) => Promise<FsListResponse>;
     readFile: (req: FsReadFileRequest) => Promise<FsReadFileResponse>;
     writeFile: (req: FsWriteFileRequest) => Promise<FsWriteFileResponse>;
+    mkdir: (req: FsMkdirRequest) => Promise<FsMkdirResponse>;
     rename: (req: FsRenameRequest) => Promise<FsRenameResponse>;
     copy: (req: FsCopyRequest) => Promise<FsCopyResponse>;
     delete: (req: FsDeleteRequest) => Promise<FsDeleteResponse>;
@@ -412,6 +413,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireFsWriteFileRequest(req);
         const resp = await call<wire_fs_write_file_req, wire_fs_write_file_resp>(redevenV1TypeIds.fs.writeFile, payload);
         return fromWireFsWriteFileResponse(resp);
+      },
+      mkdir: async (req) => {
+        const payload = toWireFsMkdirRequest(req);
+        const resp = await call<wire_fs_mkdir_req, wire_fs_mkdir_resp>(redevenV1TypeIds.fs.mkdir, payload);
+        return fromWireFsMkdirResponse(resp);
       },
       rename: async (req) => {
         const payload = toWireFsRenameRequest(req);
