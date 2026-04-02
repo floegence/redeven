@@ -152,6 +152,17 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.save_label).toBe('Save This Device Options');
     expect(snapshot.settings_surface.access_mode).toBe('private_device');
     expect(snapshot.settings_surface.bootstrap_pending).toBe(true);
+    expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'access_mode',
+        value: 'Private to this device',
+      }),
+      expect.objectContaining({
+        id: 'next_start',
+        value: 'Registration queued for next start',
+        tone: 'primary',
+      }),
+    ]));
     expect(snapshot.settings_surface.draft).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',

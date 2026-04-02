@@ -4,6 +4,7 @@ import type {
   DesktopAccessModeOption,
   DesktopPageFieldModel,
   DesktopPageMode,
+  DesktopSettingsSummaryItem,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
 
@@ -100,17 +101,6 @@ function desktopAccessModeLabel(mode: DesktopAccessMode): string {
   return DESKTOP_ACCESS_MODE_OPTIONS.find((option) => option.value === mode)?.label ?? 'Custom exposure';
 }
 
-function desktopAccessModeDescription(mode: DesktopAccessMode): string {
-  switch (mode) {
-    case 'private_device':
-      return 'Redeven only listens on loopback and keeps This Device private until you choose a broader exposure.';
-    case 'shared_local_network':
-      return 'Redeven listens on your LAN-facing interface and expects a password before the next This Device open.';
-    default:
-      return 'Redeven uses the raw bind and password values shown below.';
-  }
-}
-
 function passwordState(mode: DesktopAccessMode, draft: DesktopSettingsDraft): Readonly<{
   label: string;
   tone: 'default' | 'warning' | 'success';
@@ -138,6 +128,7 @@ function bootstrapStatus(draft: DesktopSettingsDraft): Readonly<{
   pending: boolean;
   label: string;
   detail: string;
+  tone: 'default' | 'primary';
 }> {
   const hasBootstrap = trimString(draft.controlplane_url) !== ''
     || trimString(draft.env_id) !== ''
@@ -146,14 +137,57 @@ function bootstrapStatus(draft: DesktopSettingsDraft): Readonly<{
     return {
       pending: true,
       label: 'Registration queued for next start',
-      detail: 'Desktop will consume and clear this bootstrap request after the next successful This Device startup.',
+      detail: 'Will be consumed after the next successful desktop-managed start.',
+      tone: 'primary',
     };
   }
   return {
     pending: false,
     label: 'No bootstrap request queued',
-    detail: 'Add a one-shot control plane registration only when the next desktop-managed start needs it.',
+    detail: 'Optional for the next desktop-managed start only.',
+    tone: 'default',
   };
+}
+
+function buildSummaryItems(
+  accessMode: DesktopAccessMode,
+  draft: DesktopSettingsDraft,
+  password: Readonly<{ label: string; tone: 'default' | 'warning' | 'success' }>,
+  bootstrap: Readonly<{ label: string; detail: string; tone: 'default' | 'primary' }>,
+): readonly DesktopSettingsSummaryItem[] {
+  return [
+    {
+      id: 'access_mode',
+      label: 'Access mode',
+      value: desktopAccessModeLabel(accessMode),
+      detail: DESKTOP_ACCESS_MODE_OPTIONS.find((option) => option.value === accessMode)?.description,
+      tone: 'default',
+    },
+    {
+      id: 'bind_address',
+      label: 'Bind address',
+      value: trimString(draft.local_ui_bind) || '127.0.0.1:0',
+      detail: accessMode === 'private_device'
+        ? 'Loopback only'
+        : accessMode === 'shared_local_network'
+          ? 'Local network preset'
+          : 'Custom bind',
+      tone: 'default',
+    },
+    {
+      id: 'password_state',
+      label: 'Password',
+      value: password.label,
+      tone: password.tone,
+    },
+    {
+      id: 'next_start',
+      label: 'Next start',
+      value: bootstrap.label,
+      detail: bootstrap.detail,
+      tone: bootstrap.tone,
+    },
+  ] as const;
 }
 
 export function buildDesktopSettingsSurfaceSnapshot(
@@ -167,27 +201,16 @@ export function buildDesktopSettingsSurfaceSnapshot(
   return {
     mode,
     window_title: pageWindowTitle(mode),
-    lead: 'Edit the startup, access, and one-shot bootstrap behavior that applies the next time you open This Device from Connect Environment.',
-    status_label: 'This device',
-    status_tone: 'local',
     save_label: 'Save This Device Options',
     access_mode: accessMode,
     access_mode_label: desktopAccessModeLabel(accessMode),
-    access_mode_description: desktopAccessModeDescription(accessMode),
     access_mode_options: DESKTOP_ACCESS_MODE_OPTIONS,
     access_bind_display: trimString(draft.local_ui_bind) || '127.0.0.1:0',
     password_state_label: password.label,
     password_state_tone: password.tone,
     bootstrap_pending: bootstrap.pending,
     bootstrap_status_label: bootstrap.label,
-    bootstrap_status_detail: bootstrap.detail,
-    alert: {
-      kicker: 'Primary workflow',
-      title: 'Environment selection stays in Connect Environment',
-      body: 'Use Connect Environment when you want to choose This Device or another Environment. This screen only changes future This Device startup behavior.',
-      bodyId: 'desktop-target-alert-body',
-      tone: 'info',
-    },
+    summary_items: buildSummaryItems(accessMode, draft, password, bootstrap),
     host_fields: hostFields,
     bootstrap_fields: bootstrapFields,
     draft,

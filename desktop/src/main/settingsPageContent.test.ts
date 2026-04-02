@@ -26,6 +26,22 @@ describe('settingsPageContent', () => {
     expect(snapshot.password_state_tone).toBe('warning');
     expect(snapshot.bootstrap_pending).toBe(true);
     expect(snapshot.bootstrap_status_label).toBe('Registration queued for next start');
+    expect(snapshot.summary_items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'access_mode',
+        value: 'Shared on your local network',
+      }),
+      expect.objectContaining({
+        id: 'password_state',
+        value: 'Password required before the next open of This Device',
+        tone: 'warning',
+      }),
+      expect.objectContaining({
+        id: 'next_start',
+        value: 'Registration queued for next start',
+        tone: 'primary',
+      }),
+    ]));
   });
 
   it('treats non-preset binds as custom exposure', () => {
@@ -40,5 +56,17 @@ describe('settingsPageContent', () => {
     expect(snapshot.access_mode).toBe('custom_exposure');
     expect(snapshot.password_state_tone).toBe('success');
     expect(snapshot.access_bind_display).toBe('10.0.0.12:25000');
+    expect(snapshot.summary_items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'bind_address',
+        value: '10.0.0.12:25000',
+        detail: 'Custom bind',
+      }),
+      expect.objectContaining({
+        id: 'password_state',
+        value: 'Password configured',
+        tone: 'success',
+      }),
+    ]));
   });
 });
