@@ -14,6 +14,7 @@
   --codex-transcript-content-max-width: 44rem;
   --codex-transcript-assistant-bubble-max-width: 42rem;
   --codex-transcript-user-bubble-max-width: 34rem;
+  --codex-transcript-shell-max-width: 64rem;
   --codex-transcript-avatar-size: 2.25rem;
   --codex-transcript-gap: 0.625rem;
   display: flex;
@@ -283,6 +284,24 @@
 
 .codex-page-bottom-support-content-page {
   width: 100%;
+}
+
+.codex-transcript-shell {
+  display: flex;
+  width: 100%;
+  max-width: var(--codex-transcript-shell-max-width);
+  min-width: 0;
+  min-height: 100%;
+  margin: 0 auto;
+  flex-direction: column;
+}
+
+.codex-transcript-shell-feed {
+  display: flex;
+  min-width: 0;
+  min-height: 100%;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .codex-page-chip {
@@ -905,8 +924,9 @@
   color: var(--muted-foreground);
 }
 
-.codex-empty-state {
+.codex-transcript-state {
   display: flex;
+  min-width: 0;
   min-height: 100%;
   flex: 1 1 auto;
   flex-direction: column;
@@ -1915,8 +1935,7 @@
     inset-inline: 0.5625rem;
   }
 
-  .codex-empty-state {
-    justify-content: flex-start;
+  .codex-transcript-state {
     padding: 1rem;
     padding-top: 1.25rem;
   }

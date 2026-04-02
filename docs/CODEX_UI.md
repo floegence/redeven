@@ -197,6 +197,10 @@ Current Env App behavior:
   - review current workspace changes
   - stop the active turn when the current thread has an in-progress turn
 - Transcript rows project user prompts, Codex replies, command executions, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
+- The transcript root now owns an explicit full-height Codex shell that resolves one render mode before children are laid out:
+  - `empty`: center the welcome or diagnostic hero against the real transcript viewport;
+  - `loading`: reuse the same viewport shell for selected-thread hydration;
+  - `feed`: render transcript rows and pending assistant lanes.
 - Command execution rows render the collapsible shell block directly in the transcript lane instead of nesting it inside an extra evidence-card header chrome.
 - User-message rendering is intentionally separate from assistant/evidence markdown rendering:
   - assistant/evidence items still use the markdown renderer;
@@ -215,6 +219,7 @@ Current Env App behavior:
 - System restore intents such as `bootstrap` and `thread_switch` stay instant so thread hydration and late layout reconciliation converge deterministically without introducing extra motion.
 - Explicit user intents such as `send` and manual “return to bottom” requests use smooth convergence when reduced motion is not requested, so streaming output can keep advancing the viewport without the old jump/retry feel.
 - The controller now targets the real bottom scroll position (`scrollHeight - clientHeight`) instead of the raw content height, which keeps bottom-follow math correct for both instant and animated follow paths.
+- Empty and loading heroes depend on that Codex-owned transcript shell rather than on ad-hoc top spacing, so viewport centering stays stable without patching Flower-owned selectors.
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.

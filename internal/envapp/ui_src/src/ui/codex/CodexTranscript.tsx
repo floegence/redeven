@@ -18,12 +18,26 @@ import {
 } from './presentation';
 import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
-function EmptyTranscriptState(props: {
+type CodexTranscriptSurfaceMode = 'empty' | 'loading' | 'feed';
+type CodexTranscriptSurfaceName = 'empty-state' | 'loading-state';
+type CodexTranscriptFallbackState = Readonly<{
+  mode: Exclude<CodexTranscriptSurfaceMode, 'feed'>;
+  surface: CodexTranscriptSurfaceName;
+  title: string;
+  body: string;
+}>;
+type CodexTranscriptSurfaceState = CodexTranscriptFallbackState | Readonly<{
+  mode: 'feed';
+  hasRows: true;
+}>;
+
+function CodexTranscriptStateHero(props: {
+  surface: CodexTranscriptSurfaceName;
   title: string;
   body: string;
 }) {
   return (
-    <div data-codex-surface="empty-state" class="codex-empty-state">
+    <div data-codex-surface={props.surface} class="codex-transcript-state">
       <div class="codex-empty-hero">
         <div class="relative mb-4 inline-flex items-center justify-center">
           <div class="codex-empty-ornament">
@@ -38,24 +52,31 @@ function EmptyTranscriptState(props: {
   );
 }
 
-function LoadingTranscriptState(props: {
-  title: string;
-  body: string;
-}) {
-  return (
-    <div data-codex-surface="loading-state" class="codex-empty-state">
-      <div class="codex-empty-hero">
-        <div class="relative mb-4 inline-flex items-center justify-center">
-          <div class="codex-empty-ornament">
-            <CodexIcon class="h-10 w-10 text-primary" />
-          </div>
-        </div>
-
-        <h2 class="mb-2 text-lg font-semibold text-foreground">{props.title}</h2>
-        <p class="text-sm leading-relaxed text-muted-foreground">{props.body}</p>
-      </div>
-    </div>
-  );
+function resolveCodexTranscriptSurfaceState(args: {
+  hasRows: boolean;
+  loading?: boolean;
+  loadingTitle?: string;
+  loadingBody?: string;
+  emptyTitle: string;
+  emptyBody: string;
+}): CodexTranscriptSurfaceState {
+  if (args.hasRows) {
+    return { mode: 'feed', hasRows: true };
+  }
+  if (args.loading) {
+    return {
+      mode: 'loading',
+      surface: 'loading-state',
+      title: String(args.loadingTitle ?? '').trim() || 'Loading conversation',
+      body: String(args.loadingBody ?? '').trim() || 'Fetching the selected Codex thread.',
+    };
+  }
+  return {
+    mode: 'empty',
+    surface: 'empty-state',
+    title: args.emptyTitle,
+    body: args.emptyBody,
+  };
 }
 
 function CodexMessageLane(props: {
@@ -590,6 +611,18 @@ export function CodexTranscript(props: {
 }) {
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
   const hasRows = () => props.items.length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
+  const transcriptSurfaceState = createMemo<CodexTranscriptSurfaceState>(() => resolveCodexTranscriptSurfaceState({
+    hasRows: hasRows(),
+    loading: props.loading,
+    loadingTitle: props.loadingTitle,
+    loadingBody: props.loadingBody,
+    emptyTitle: props.emptyTitle,
+    emptyBody: props.emptyBody,
+  }));
+  const transcriptFallbackState = createMemo<CodexTranscriptFallbackState | null>(() => {
+    const state = transcriptSurfaceState();
+    return state.mode === 'feed' ? null : state;
+  });
   const pendingAssistantState = createMemo<PendingAssistantVisualState>(() => {
     const showWorkingRail = Boolean(props.showWorkingState);
     const showPrelude = showWorkingRail && (
@@ -606,54 +639,56 @@ export function CodexTranscript(props: {
   });
   const showStandaloneWorkingRow = createMemo(() => Boolean(props.showWorkingState) && !pendingAssistantState().show);
   return (
-    <div ref={props.rootRef} data-codex-surface="transcript" class="mx-auto flex w-full max-w-5xl flex-col">
+    <div
+      ref={props.rootRef}
+      data-codex-surface="transcript"
+      data-codex-transcript-mode={transcriptSurfaceState().mode}
+      class="codex-transcript-shell"
+    >
       <Show
-        when={hasRows()}
+        when={transcriptSurfaceState().mode === 'feed'}
         fallback={(
-          <Show
-            when={props.loading}
-            fallback={(
-              <EmptyTranscriptState
-                title={props.emptyTitle}
-                body={props.emptyBody}
+          <Show when={transcriptFallbackState()}>
+            {(state) => (
+              <CodexTranscriptStateHero
+                surface={state().surface}
+                title={state().title}
+                body={state().body}
               />
             )}
-          >
-            <LoadingTranscriptState
-              title={String(props.loadingTitle ?? '').trim() || 'Loading conversation'}
-              body={String(props.loadingBody ?? '').trim() || 'Fetching the selected Codex thread.'}
-            />
           </Show>
         )}
       >
-        <div class="codex-transcript-feed">
-          <For each={optimisticUserTurns()}>
-            {(turn) => (
-              <div class="codex-transcript-row" data-follow-bottom-anchor-id={`optimistic:${turn.id}`}>
-                <OptimisticUserMessageRow turn={turn} />
+        <div class="codex-transcript-shell-feed">
+          <div class="codex-transcript-feed">
+            <For each={optimisticUserTurns()}>
+              {(turn) => (
+                <div class="codex-transcript-row" data-follow-bottom-anchor-id={`optimistic:${turn.id}`}>
+                  <OptimisticUserMessageRow turn={turn} />
+                </div>
+              )}
+            </For>
+            <For each={props.items}>
+              {(item, index) => (
+                <div class="codex-transcript-row" data-follow-bottom-anchor-id={`item:${item.id}`}>
+                  <TranscriptRow item={item} showAssistantAvatar={shouldShowAgentAvatar(props.items, index())} />
+                </div>
+              )}
+            </For>
+            <Show when={pendingAssistantState().show}>
+              <div class="codex-transcript-row" data-follow-bottom-anchor-id="pending-assistant">
+                <PendingAssistantRow state={pendingAssistantState()} />
               </div>
-            )}
-          </For>
-          <For each={props.items}>
-            {(item, index) => (
-              <div class="codex-transcript-row" data-follow-bottom-anchor-id={`item:${item.id}`}>
-                <TranscriptRow item={item} showAssistantAvatar={shouldShowAgentAvatar(props.items, index())} />
+            </Show>
+            <Show when={showStandaloneWorkingRow()}>
+              <div class="codex-transcript-row" data-follow-bottom-anchor-id="working-state">
+                <WorkingStateRow
+                  phaseLabel={pendingAssistantState().phaseLabel}
+                  showAvatar={shouldShowWorkingAvatar(props.items)}
+                />
               </div>
-            )}
-          </For>
-          <Show when={pendingAssistantState().show}>
-            <div class="codex-transcript-row" data-follow-bottom-anchor-id="pending-assistant">
-              <PendingAssistantRow state={pendingAssistantState()} />
-            </div>
-          </Show>
-          <Show when={showStandaloneWorkingRow()}>
-            <div class="codex-transcript-row" data-follow-bottom-anchor-id="working-state">
-              <WorkingStateRow
-                phaseLabel={pendingAssistantState().phaseLabel}
-                showAvatar={shouldShowWorkingAvatar(props.items)}
-              />
-            </div>
-          </Show>
+            </Show>
+          </div>
         </div>
       </Show>
     </div>

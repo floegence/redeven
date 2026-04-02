@@ -25,6 +25,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
   - mentions / attachments belong to a lower-priority draft-object lane instead of the strategy lane.
 - Codex transcript follow-bottom is also controller-based and page-local: `CodexProvider` emits explicit bottom intents, and `createFollowBottomController()` keeps system restore paths instant while allowing smooth user-initiated convergence on the Codex page only.
 - Codex follow-bottom targets the real bottom scroll position (`scrollHeight - clientHeight`) and preserves paused anchor restoration during late transcript reflow, so streaming growth no longer relies on repeated raw `scrollTop = scrollHeight` retries.
+- Codex transcript layout is shell-based: a Codex-owned transcript shell establishes full-height viewport sizing first, then resolves `empty`, `loading`, or `feed` mode so welcome/loading heroes can center without depending on implicit parent height.
 - Codex transcript rendering is intentionally split by role semantics:
   - assistant/evidence rows may use markdown rendering;
   - user rows render through the structured `CodexUserMessageContent` path using `item.inputs`;
