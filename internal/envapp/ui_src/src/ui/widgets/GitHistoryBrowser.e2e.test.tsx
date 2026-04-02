@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { LayoutProvider, NotificationProvider } from '@floegence/floe-webapp-core';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -137,6 +138,162 @@ describe('GitHistoryBrowser interactions', () => {
       expect(document.body.textContent).toContain('Copy Patch');
       expect(document.body.textContent).toContain('+newValue');
       expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('loads patch previews on demand when commit detail only returns file summaries', async () => {
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo',
+      commit: {
+        hash: '3a47b67b1234567890',
+        shortHash: '3a47b67b',
+        parents: [],
+        subject: 'Refine bootstrap',
+        body: ['Refine bootstrap', '', 'Keep diff rendering stable.'].join('\n'),
+      },
+      files: [
+        {
+          changeType: 'modified',
+          path: 'src/app.ts',
+          displayPath: 'src/app.ts',
+          additions: 1,
+          deletions: 1,
+        },
+      ],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[640px]">
+            <GitHistoryBrowser
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: '3a47b67b1234567890' }}
+              currentPath="/workspace/repo/src"
+              selectedCommitHash="3a47b67b1234567890"
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/app.ts'));
+      expect(fileButton).toBeTruthy();
+
+      fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(mockGetDiffContent.mock.calls[0]?.[0]).toMatchObject({
+        repoRootPath: '/workspace/repo',
+        sourceKind: 'commit',
+        commit: '3a47b67b1234567890',
+        mode: 'preview',
+        file: {
+          changeType: 'modified',
+          path: 'src/app.ts',
+        },
+      });
+      expect(document.body.textContent).toContain('Copy Patch');
+      expect(document.body.textContent).toContain('+newValue');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the opened commit diff stable while the external graph selection changes', async () => {
+    let resolvePreview: ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void) | undefined;
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo',
+      commit: {
+        hash: '3a47b67b1234567890',
+        shortHash: '3a47b67b',
+        parents: [],
+        subject: 'Refine bootstrap',
+        body: ['Refine bootstrap', '', 'Keep diff rendering stable.'].join('\n'),
+      },
+      files: [
+        {
+          changeType: 'modified',
+          path: 'src/app.ts',
+          displayPath: 'src/app.ts',
+          additions: 1,
+          deletions: 1,
+        },
+      ],
+    });
+    mockGetDiffContent.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePreview = resolve;
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => {
+      const [selectedCommitHash, setSelectedCommitHash] = createSignal('3a47b67b1234567890');
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <button type="button" onClick={() => setSelectedCommitHash('')}>
+              Clear Selection
+            </button>
+            <div class="h-[640px]">
+              <GitHistoryBrowser
+                repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: '3a47b67b1234567890' }}
+                currentPath="/workspace/repo/src"
+                selectedCommitHash={selectedCommitHash()}
+              />
+            </div>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      const fileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('src/app.ts'));
+      expect(fileButton).toBeTruthy();
+
+      fileButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain('Loading patch preview...');
+
+      const clearButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Clear Selection'));
+      expect(clearButton).toBeTruthy();
+      clearButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      resolvePreview?.({
+        repoRootPath: '/workspace/repo',
+        mode: 'preview',
+        file: {
+          changeType: 'modified',
+          path: 'src/app.ts',
+          displayPath: 'src/app.ts',
+          additions: 1,
+          deletions: 1,
+          patchText: [
+            'diff --git a/src/app.ts b/src/app.ts',
+            '--- a/src/app.ts',
+            '+++ b/src/app.ts',
+            '@@ -1 +1 @@',
+            '-oldValue',
+            '+newValue',
+          ].join('\n'),
+        },
+      });
+      await flush();
+
+      expect(document.body.textContent).toContain('Commit Diff');
+      expect(document.body.textContent).toContain('+newValue');
     } finally {
       dispose();
     }

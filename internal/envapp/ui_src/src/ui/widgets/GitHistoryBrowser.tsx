@@ -78,11 +78,13 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const [commitBodyExpanded, setCommitBodyExpanded] = createSignal(false);
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitCommitFileSummary | null>(null);
+  const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal('');
 
   let detailReqSeq = 0;
 
   const repoAvailable = createMemo(() => Boolean(props.repoInfo?.available && props.repoInfo?.repoRootPath));
   const repoUnavailableReason = createMemo(() => String(props.repoInfo?.unavailableReason ?? '').trim());
+  const repoRootPath = createMemo(() => String(props.repoInfo?.repoRootPath ?? '').trim());
   const commitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
   const headDisplay = createMemo(() => describeGitHead(props.repoSummary, props.repoInfo));
   const currentHeadCommit = createMemo(() => String(props.repoSummary?.headCommit ?? props.repoInfo?.headCommit ?? '').trim());
@@ -99,18 +101,16 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     setCommitFiles([]);
     setDetailError('');
     setDetailLoading(false);
-    setDiffDialogItem(null);
-    setDiffDialogOpen(false);
   };
 
   const loadCommitDetail = async (hash: string) => {
-    const repoRootPath = String(props.repoInfo?.repoRootPath ?? '').trim();
-    if (!repoRootPath || !hash || !protocol.client()) return;
+    const repo = repoRootPath();
+    if (!repo || !hash || !protocol.client()) return;
     const seq = ++detailReqSeq;
     setDetailLoading(true);
     setDetailError('');
     try {
-      const resp = await rpc.git.getCommitDetail({ repoRootPath, commit: hash });
+      const resp = await rpc.git.getCommitDetail({ repoRootPath: repo, commit: hash });
       if (seq !== detailReqSeq) return;
       const files = Array.isArray(resp?.files) ? resp.files : [];
       setCommitDetail(resp?.commit ?? null);
@@ -139,10 +139,15 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   });
 
   createEffect(() => {
+    repoRootPath();
+    setDiffDialogItem(null);
+    setDiffDialogCommitHash('');
+    setDiffDialogOpen(false);
+  });
+
+  createEffect(() => {
     commitHash();
     setCommitBodyExpanded(false);
-    setDiffDialogItem(null);
-    setDiffDialogOpen(false);
   });
 
   createEffect(() => {
@@ -305,6 +310,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                             class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
                                             title={changeSecondaryPath(file)}
                                             onClick={() => {
+                                              setDiffDialogCommitHash(commitHash());
                                               setDiffDialogItem(file);
                                               setDiffDialogOpen(true);
                                             }}
@@ -318,6 +324,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                       <td class={gitChangedFilesStickyCellClass(active())}>
                                         <GitChangedFilesActionButton
                                           onClick={() => {
+                                            setDiffDialogCommitHash(commitHash());
                                             setDiffDialogItem(file);
                                             setDiffDialogOpen(true);
                                           }}
@@ -346,13 +353,16 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
         open={diffDialogOpen()}
         onOpenChange={(open) => {
           setDiffDialogOpen(open);
-          if (!open) setDiffDialogItem(null);
+          if (!open) {
+            setDiffDialogItem(null);
+            setDiffDialogCommitHash('');
+          }
         }}
         item={diffDialogItem()}
         source={diffDialogItem() ? {
           kind: 'commit',
-          repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
-          commit: commitHash(),
+          repoRootPath: repoRootPath(),
+          commit: diffDialogCommitHash(),
         } : null}
         title="Commit Diff"
         description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected file diff.'}
