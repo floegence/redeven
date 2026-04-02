@@ -27,8 +27,8 @@ importers:
         specifier: ^0.35.32
         version: 0.35.32(solid-js@1.9.11)
       '@floegence/floeterm-terminal-web':
-        specifier: ^0.4.9
-        version: 0.4.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.4.11
+        version: 0.4.11(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@floegence/flowersec-core':
         specifier: ^0.17.1
         version: 0.17.1
@@ -473,8 +473,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.4.9':
-    resolution: {integrity: sha512-kaRm8/u58e7ue4pkli/WzJwnV6SKJ0iIcGlT9KEaj9iurMPKFYdphMlsSTGcQ7YTV0Cwn74F+Yoal7hDkSQquQ==}
+  '@floegence/floeterm-terminal-web@0.4.11':
+    resolution: {integrity: sha512-13Lb97+Bhh1vxSG1nGPIr61+5IRxIC/WC6Pau+RSMpKyTmBqq8ANPwX6rX9rZnbxyql0n38Jnv0kPK7Fy5GfmA==}
     peerDependencies:
       react: '>=18'
       react-dom: '>=18'
@@ -1680,8 +1680,8 @@ packages:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
 
-  ghostty-web@0.4.0:
-    resolution: {integrity: sha512-0puDBik2qapbD/QQBW9o5ZHfXnZBqZWx/ctBiVtKZ6ZLds4NYb+wZuw1cRLXZk9zYovIQ908z3rvFhexAvc5Hg==}
+  ghostty-web@0.4.0-next.14.g6a1a50d:
+    resolution: {integrity: sha512-01H59pAKq43Y8ZZiIhH98cu0ahZaoGoPQPtW4KnZPT0JFdQYen2djsXrOnt27JnMv64D4eLeAq8D6h72mo52xQ==}
 
   glob-parent@6.0.2:
     resolution: {integrity: sha512-XxwI8EOhVQgWp6iDL+3b0r86f4d6AX6zSU55HfB4ydCEuXLXc5FcYeOu+nnGftS4TEju/11rt4KJPTMgbfmv4A==}
@@ -3053,9 +3053,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.4.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@floegence/floeterm-terminal-web@0.4.11(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      ghostty-web: 0.4.0
+      ghostty-web: 0.4.0-next.14.g6a1a50d
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
@@ -4371,7 +4371,7 @@ snapshots:
 
   gensync@1.0.0-beta.2: {}
 
-  ghostty-web@0.4.0: {}
+  ghostty-web@0.4.0-next.14.g6a1a50d: {}
 
   glob-parent@6.0.2:
     dependencies:

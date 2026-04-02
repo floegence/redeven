@@ -54,6 +54,9 @@ import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSet
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
+import { useFilePreviewContext } from './FilePreviewContext';
+import { fileItemFromPath } from '../utils/filePreviewItem';
+import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
@@ -155,6 +158,8 @@ type terminal_session_view_props = {
   themeColors: () => Record<string, string>;
   fontSize: () => number;
   fontFamily: () => string;
+  agentHomePathAbs: () => string;
+  canOpenFilePreview: () => boolean;
   bottomInsetPx: () => number;
   connId: string;
   transport: TerminalTransport;
@@ -162,6 +167,8 @@ type terminal_session_view_props = {
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: { reload: () => Promise<void> } | null) => void;
+  onBell?: (sessionId: string) => void;
+  onTerminalFileLinkOpen?: (target: TerminalResolvedLinkTarget) => Promise<void> | void;
   onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
 };
 
@@ -174,6 +181,14 @@ const TERMINAL_SELECTION_FOREGROUND = '#000000';
 const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
 const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
 const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
+const TERMINAL_BELL_NOTIFICATION_THROTTLE_MS = 5_000;
+
+type TerminalBellAttentionState = {
+  pending: boolean;
+  lastNotifiedAtMs: number;
+};
+
+type TerminalBellAttentionMap = Record<string, TerminalBellAttentionState>;
 
 type terminal_touch_scroll_target = {
   scrollLines?: (amount: number) => void;
@@ -194,6 +209,10 @@ function readTerminalSelectionText(core: TerminalCore | null): string {
   } catch {
     return '';
   }
+}
+
+function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number): string {
+  return session.name?.trim() ? session.name.trim() : `Terminal ${index + 1}`;
 }
 
 const PlusIcon = (props: { class?: string }) => (
@@ -460,9 +479,24 @@ function TerminalSessionView(props: terminal_session_view_props) {
         onError: (e: Error) => {
           setError(e.message);
         },
+        onBell: () => {
+          props.onBell?.(id);
+        },
       },
       buildLogger(),
     );
+
+    core.registerLinkProvider?.(createTerminalFileLinkProvider({
+      core,
+      isEnabled: () => props.canOpenFilePreview(),
+      getContext: () => ({
+        workingDirAbs: normalizeAskFlowerAbsolutePath(props.session.workingDir ?? '')
+          || normalizeAskFlowerAbsolutePath(props.agentHomePathAbs())
+          || '/',
+        agentHomePathAbs: normalizeAskFlowerAbsolutePath(props.agentHomePathAbs()) || undefined,
+      }),
+      onActivate: (target) => props.onTerminalFileLinkOpen?.(target),
+    }));
 
     term = core;
     props.registerCore(id, core);
@@ -585,13 +619,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
   createEffect(() => {
     if (!term) return;
-    // TerminalCore does not expose setFontFamily yet; pass through to ghostty-web options (a Proxy) to trigger re-layout.
-    const anyCore = term as any;
-    const inner = anyCore?.terminal;
-    if (inner?.options) {
-      inner.options.fontFamily = fontFamily();
-      term.forceResize();
-    }
+    term.setFontFamily?.(fontFamily());
   });
 
   onCleanup(() => {
@@ -661,6 +689,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const rpc = useRedevenRpc();
   const env = useEnvContext();
   const fileBrowserSurface = useFileBrowserSurfaceContext();
+  const filePreview = useFilePreviewContext();
   const layout = useLayout();
   const notify = useNotification();
   const theme = useTheme();
@@ -863,6 +892,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardHistoryBySession, setMobileKeyboardHistoryBySession] = createSignal<Record<string, string[]>>({});
   const [mobileKeyboardPathEntries, setMobileKeyboardPathEntries] = createSignal<TerminalMobileKeyboardPathEntry[]>([]);
   const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
+  const [bellAttentionBySession, setBellAttentionBySession] = createSignal<TerminalBellAttentionMap>({});
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'execute')) return false;
@@ -888,11 +918,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       coreRegistry.set(id, core);
       core.setTheme(terminalThemeColors());
       core.setFontSize(fontSize());
-      const anyCore = core as any;
-      const inner = anyCore?.terminal;
-      if (inner?.options) {
-        inner.options.fontFamily = fontFamily();
-      }
+      core.setFontFamily?.(fontFamily());
       setCoreRegistrySeq((v) => v + 1);
       return;
     }
@@ -978,13 +1004,100 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   createEffect(() => {
     const family = fontFamily();
     for (const core of coreRegistry.values()) {
-      const anyCore = core as any;
-      const inner = anyCore?.terminal;
-      if (inner?.options) {
-        inner.options.fontFamily = family;
-      }
+      core.setFontFamily?.(family);
     }
   });
+
+  const clearBellAttention = (sessionId: string | null) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+
+    setBellAttentionBySession((prev) => {
+      const current = prev[normalizedSessionId];
+      if (!current?.pending) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [normalizedSessionId]: {
+          ...current,
+          pending: false,
+        },
+      };
+    });
+  };
+
+  const handleSessionBell = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) {
+      return;
+    }
+
+    const sessionList = sessions();
+    const sessionIndex = sessionList.findIndex((session) => session.id === normalizedSessionId);
+    if (sessionIndex < 0) {
+      return;
+    }
+
+    const sessionLabel = buildTerminalSessionLabel(sessionList[sessionIndex]!, sessionIndex);
+    const shouldHoldAttention = activeSessionId() !== normalizedSessionId || !viewActive();
+    const now = Date.now();
+    let shouldNotify = false;
+
+    setBellAttentionBySession((prev) => {
+      const current = prev[normalizedSessionId] ?? {
+        pending: false,
+        lastNotifiedAtMs: 0,
+      };
+
+      if (!shouldHoldAttention) {
+        if (!current.pending) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [normalizedSessionId]: {
+            ...current,
+            pending: false,
+          },
+        };
+      }
+
+      shouldNotify = now - current.lastNotifiedAtMs >= TERMINAL_BELL_NOTIFICATION_THROTTLE_MS;
+      const nextState: TerminalBellAttentionState = {
+        pending: true,
+        lastNotifiedAtMs: shouldNotify ? now : current.lastNotifiedAtMs,
+      };
+
+      if (current.pending === nextState.pending && current.lastNotifiedAtMs === nextState.lastNotifiedAtMs) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [normalizedSessionId]: nextState,
+      };
+    });
+
+    if (shouldNotify) {
+      notify.info('Terminal bell', `${sessionLabel} requested attention.`);
+    }
+  };
+
+  const openTerminalFileLinkTarget = async (target: TerminalResolvedLinkTarget) => {
+    if (!canBrowseFiles()) {
+      return;
+    }
+
+    try {
+      await filePreview.openPreview(fileItemFromPath(target.resolvedPath));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      notify.error('Failed to open file preview', message || 'Could not open the terminal file reference.');
+    }
+  };
 
   const activeSession = createMemo<TerminalSessionInfo | null>(() => {
     const sid = activeSessionId();
@@ -1445,6 +1558,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
+    if (!viewActive()) return;
+    clearBellAttention(activeSessionId());
+  });
+
+  createEffect(() => {
     const ids = new Set(sessions().map((s) => s.id));
     setMountedSessionIds((prev) => {
       let changed = false;
@@ -1452,6 +1570,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       for (const id of prev) {
         if (ids.has(id)) next.add(id);
         else changed = true;
+      }
+      return changed ? next : prev;
+    });
+
+    setBellAttentionBySession((prev) => {
+      let changed = false;
+      const next: TerminalBellAttentionMap = {};
+      for (const [id, state] of Object.entries(prev)) {
+        if (ids.has(id)) {
+          next[id] = state;
+        } else {
+          changed = true;
+        }
       }
       return changed ? next : prev;
     });
@@ -1463,9 +1594,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const tabItems = createMemo<TabItem[]>(() => {
     const list = sessions();
+    const attention = bellAttentionBySession();
     return list.map((s, index) => ({
       id: s.id,
-      label: s.name?.trim() ? s.name.trim() : `Terminal ${index + 1}`,
+      label: attention[s.id]?.pending ? `! ${buildTerminalSessionLabel(s, index)}` : buildTerminalSessionLabel(s, index),
       closable: true,
     }));
   });
@@ -2266,7 +2398,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 {(session) => (
                   <Show when={mountedSessionIds().has(session().id)}>
                     <TabPanel active={activeSessionId() === session().id} keepMounted class="h-full">
-	                      <TerminalSessionView
+                      <TerminalSessionView
 	                        session={session()}
 	                        active={() => activeSessionId() === session().id}
 	                        connected={connected}
@@ -2277,6 +2409,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 	                        themeColors={terminalThemeColors}
                         fontSize={fontSize}
                         fontFamily={fontFamily}
+                        agentHomePathAbs={agentHomePathAbs}
+                        canOpenFilePreview={canBrowseFiles}
                         bottomInsetPx={terminalViewportInsetPx}
                         connId={connId}
                         transport={transport}
@@ -2284,6 +2418,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                         registerCore={registerCore}
                         registerSurfaceElement={registerSurfaceElement}
                         registerActions={registerActions}
+                        onBell={handleSessionBell}
+                        onTerminalFileLinkOpen={openTerminalFileLinkTarget}
                         onNameUpdate={handleNameUpdate}
                       />
                     </TabPanel>

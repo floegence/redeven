@@ -54,8 +54,21 @@ const terminalConfigState = vi.hoisted(() => ({
   values: [] as any[],
 }));
 
+const terminalBufferLinesState = vi.hoisted(() => ({
+  lines: new Map<number, string>(),
+}));
+
+const terminalCoreInstances = vi.hoisted(() => [] as any[]);
+
+const notificationMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+  success: vi.fn(),
+}));
+
 const writeTextToClipboardSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const openBrowserSpy = vi.hoisted(() => vi.fn(async () => undefined));
+const openPreviewSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const terminalEnvPermissionsState = vi.hoisted(() => ({
   canRead: true,
   canExecute: true,
@@ -167,10 +180,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   useLayout: () => ({
     isMobile: () => layoutState.mobile,
   }),
-  useNotification: () => ({
-    error: vi.fn(),
-    success: vi.fn(),
-  }),
+  useNotification: () => notificationMocks,
   useResolvedFloeConfig: () => ({
     persist: {
       load: (_key: string, fallback: any) => fallback,
@@ -365,6 +375,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     container: HTMLDivElement;
     config: any;
     handlers: any;
+    registeredLinkProviders: any[] = [];
     terminal = {
       options: {},
       selectionManager: {
@@ -379,6 +390,20 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       getScrollbackLength: () => terminalScrollState.scrollbackLength,
       isAlternateScreen: () => terminalScrollState.alternateScreen,
       input: terminalInputSpy,
+      buffer: {
+        active: {
+          getLine: (row: number) => {
+            const value = terminalBufferLinesState.lines.get(row);
+            if (typeof value !== 'string') {
+              return null;
+            }
+
+            return {
+              translateToString: () => value,
+            };
+          },
+        },
+      },
     };
 
     constructor(container: HTMLDivElement, config?: any, handlers?: any) {
@@ -386,6 +411,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       this.config = config ?? {};
       this.handlers = handlers ?? {};
       terminalConfigState.values.push(config ?? null);
+      terminalCoreInstances.push(this);
       const input = document.createElement('textarea');
       input.setAttribute('aria-label', 'Terminal input');
       this.container.appendChild(input);
@@ -407,12 +433,19 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       }
     });
     setFontSize = vi.fn();
+    setFontFamily = vi.fn();
+    registerLinkProvider = vi.fn((provider: unknown) => {
+      this.registeredLinkProviders.push(provider);
+    });
     setSearchResultsCallback = vi.fn();
     clearSearch = vi.fn();
     findNext = vi.fn();
     findPrevious = vi.fn();
     clear = vi.fn();
     getSelectionText = vi.fn(() => terminalSelectionState.text);
+    emitBell = () => {
+      this.handlers?.onBell?.();
+    };
   }
 
   return {
@@ -495,6 +528,16 @@ vi.mock('./FileBrowserSurfaceContext', () => ({
   }),
 }));
 
+vi.mock('./FilePreviewContext', () => ({
+  useFilePreviewContext: () => ({
+    controller: {
+      openPreview: openPreviewSpy,
+    },
+    openPreview: openPreviewSpy,
+    closePreview: vi.fn(),
+  }),
+}));
+
 vi.mock('../utils/permission', () => ({
   isPermissionDeniedError: () => false,
 }));
@@ -550,8 +593,14 @@ describe('TerminalPanel', () => {
     terminalEnvPermissionsState.canExecute = true;
     terminalSelectionState.text = '';
     terminalConfigState.values = [];
+    terminalBufferLinesState.lines = new Map();
+    terminalCoreInstances.splice(0, terminalCoreInstances.length);
+    notificationMocks.error.mockClear();
+    notificationMocks.info.mockClear();
+    notificationMocks.success.mockClear();
     writeTextToClipboardSpy.mockClear();
     openBrowserSpy.mockClear();
+    openPreviewSpy.mockClear();
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       value: 372,
@@ -722,6 +771,16 @@ describe('TerminalPanel', () => {
     });
   });
 
+  it('uses the explicit floeterm font-family API instead of mutating terminal internals directly', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    expect(terminalCoreInstances[0]?.setFontFamily).toHaveBeenCalledWith(expect.stringContaining('Iosevka'));
+  });
+
   it('creates and focuses a terminal session from a page-scoped open-session request', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -772,6 +831,81 @@ describe('TerminalPanel', () => {
     await vi.waitFor(() => {
       expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 80, 24);
     });
+  });
+
+  it('opens the floating file preview from a modifier-click terminal file link', async () => {
+    terminalBufferLinesState.lines.set(0, 'src/app/server.ts:18:4 failed to compile');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const provider = terminalCoreInstances[0]?.registeredLinkProviders[0];
+    expect(provider).toBeTruthy();
+
+    const links = await new Promise<any[] | undefined>((resolve) => {
+      provider.provideLinks(1, resolve);
+    });
+    expect(links).toHaveLength(1);
+
+    links?.[0]?.activate(new MouseEvent('click', { metaKey: true }));
+    await settleTerminalPanel();
+
+    expect(openPreviewSpy).toHaveBeenCalledWith({
+      id: '/workspace/src/app/server.ts',
+      name: 'server.ts',
+      path: '/workspace/src/app/server.ts',
+      type: 'file',
+    });
+  });
+
+  it('marks inactive sessions after a bell and clears the marker when the session becomes active', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    terminalCoreInstances[1]?.emitBell();
+    await settleTerminalPanel();
+    terminalCoreInstances[1]?.emitBell();
+    await settleTerminalPanel();
+
+    expect(notificationMocks.info).toHaveBeenCalledTimes(1);
+    expect(notificationMocks.info).toHaveBeenCalledWith('Terminal bell', 'Terminal 2 requested attention.');
+    expect(host.textContent).toContain('! Terminal 2');
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === '! Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    expect(host.textContent).not.toContain('! Terminal 2');
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {
