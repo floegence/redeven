@@ -181,11 +181,8 @@ const TERMINAL_SELECTION_FOREGROUND = '#000000';
 const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
 const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
 const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
-const TERMINAL_BELL_NOTIFICATION_THROTTLE_MS = 5_000;
-
 type TerminalBellAttentionState = {
   pending: boolean;
-  lastNotifiedAtMs: number;
 };
 
 type TerminalBellAttentionMap = Record<string, TerminalBellAttentionState>;
@@ -1040,15 +1037,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       return;
     }
 
-    const sessionLabel = buildTerminalSessionLabel(sessionList[sessionIndex]!, sessionIndex);
     const shouldHoldAttention = activeSessionId() !== normalizedSessionId || !viewActive();
-    const now = Date.now();
-    let shouldNotify = false;
 
     setBellAttentionBySession((prev) => {
       const current = prev[normalizedSessionId] ?? {
         pending: false,
-        lastNotifiedAtMs: 0,
       };
 
       if (!shouldHoldAttention) {
@@ -1059,19 +1052,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         return {
           ...prev,
           [normalizedSessionId]: {
-            ...current,
             pending: false,
           },
         };
       }
 
-      shouldNotify = now - current.lastNotifiedAtMs >= TERMINAL_BELL_NOTIFICATION_THROTTLE_MS;
       const nextState: TerminalBellAttentionState = {
         pending: true,
-        lastNotifiedAtMs: shouldNotify ? now : current.lastNotifiedAtMs,
       };
 
-      if (current.pending === nextState.pending && current.lastNotifiedAtMs === nextState.lastNotifiedAtMs) {
+      if (current.pending === nextState.pending) {
         return prev;
       }
 
@@ -1080,10 +1070,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         [normalizedSessionId]: nextState,
       };
     });
-
-    if (shouldNotify) {
-      notify.info('Terminal bell', `${sessionLabel} requested attention.`);
-    }
   };
 
   const openTerminalFileLinkTarget = async (target: TerminalResolvedLinkTarget) => {
