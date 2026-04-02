@@ -861,7 +861,7 @@ describe('TerminalPanel', () => {
     });
   });
 
-  it('marks inactive sessions after a bell and clears the marker when the session becomes active', async () => {
+  it('marks inactive sessions after a bell without raising a toast and clears the marker when the session becomes active', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -898,8 +898,7 @@ describe('TerminalPanel', () => {
     terminalCoreInstances[1]?.emitBell();
     await settleTerminalPanel();
 
-    expect(notificationMocks.info).toHaveBeenCalledTimes(1);
-    expect(notificationMocks.info).toHaveBeenCalledWith('Terminal bell', 'Terminal 2 requested attention.');
+    expect(notificationMocks.info).not.toHaveBeenCalled();
     expect(host.textContent).toContain('! Terminal 2');
 
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent === '! Terminal 2')?.click();
