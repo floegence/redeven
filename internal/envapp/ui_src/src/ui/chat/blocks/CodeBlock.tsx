@@ -1,9 +1,11 @@
 // CodeBlock renders chat code with shared Shiki highlighting and copy support.
 
-import { createEffect, createSignal, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
 import { highlightCodeToHtml, resolveCodeHighlightTheme } from '../../utils/shikiHighlight';
+import { isLargeCodeBlock } from '../responsiveness';
+import { hasShikiWorkerSupport, highlightCodeToHtmlInWorker } from '../workers/shikiWorkerClient';
 
 export interface CodeBlockProps {
   language: string;
@@ -13,6 +15,27 @@ export interface CodeBlockProps {
 }
 
 const CHAT_CODE_THEME = resolveCodeHighlightTheme('dark');
+
+async function renderHighlightedCode(code: string, language: string): Promise<string> {
+  if (isLargeCodeBlock(code) && hasShikiWorkerSupport()) {
+    try {
+      const workerHtml = await highlightCodeToHtmlInWorker(code, language, CHAT_CODE_THEME);
+      if (workerHtml) {
+        return workerHtml;
+      }
+    } catch (error) {
+      console.warn('Failed to highlight code in worker, falling back to main thread.', error);
+    }
+  }
+
+  return (
+    (await highlightCodeToHtml({
+      code,
+      language,
+      theme: CHAT_CODE_THEME,
+    })) ?? ''
+  );
+}
 
 const CopyIcon = () => (
   <svg
@@ -56,17 +79,22 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
     const code = props.content;
     const language = props.language;
     const seq = (highlightRequestSeq += 1);
+    let disposed = false;
 
     setHighlightedHtml('');
     if (!code) return;
 
-    void highlightCodeToHtml({
-      code,
-      language,
-      theme: CHAT_CODE_THEME,
-    }).then((html) => {
-      if (seq !== highlightRequestSeq) return;
-      setHighlightedHtml(html ?? '');
+    deferAfterPaint(() => {
+      if (disposed || seq !== highlightRequestSeq) return;
+
+      void renderHighlightedCode(code, language).then((html) => {
+        if (disposed || seq !== highlightRequestSeq) return;
+        setHighlightedHtml(html);
+      });
+    });
+
+    onCleanup(() => {
+      disposed = true;
     });
   });
 

@@ -1,10 +1,21 @@
 // CodeDiffBlock — code diff viewer with unified/split toggle.
-// Uses dynamic import of the 'diff' library.
 
-import { createSignal, createMemo, createEffect, Show, For } from 'solid-js';
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
-import type { CodeDiffRenderModel, UnifiedDiffLine, SplitDiffLine } from '../types';
+import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
+
+import { useVirtualWindow } from '../hooks/useVirtualWindow';
+import {
+  CHAT_DIFF_ROW_HEIGHT_PX,
+  isLargeCodeDiff,
+  resolveDiffViewportHeight,
+} from '../responsiveness';
+import type { CodeDiffRenderModel, SplitDiffLine, UnifiedDiffLine } from '../types';
+import {
+  hasDiffWorkerSupport,
+  renderCodeDiffModel,
+  renderCodeDiffModelSync,
+} from '../workers/diffWorkerClient';
 
 export interface CodeDiffBlockProps {
   language: string;
@@ -14,86 +25,58 @@ export interface CodeDiffBlockProps {
   class?: string;
 }
 
-/**
- * Parse a unified diff string into structured line models for rendering.
- */
-function parseDiffModel(patch: string): CodeDiffRenderModel {
-  const lines = patch.split('\n');
-  const unifiedLines: UnifiedDiffLine[] = [];
-  const leftLines: SplitDiffLine[] = [];
-  const rightLines: SplitDiffLine[] = [];
-  let addedCount = 0;
-  let removedCount = 0;
-  let leftLineNum = 0;
-  let rightLineNum = 0;
-
-  for (const line of lines) {
-    // Skip diff headers
-    if (
-      line.startsWith('===') ||
-      line.startsWith('---') ||
-      line.startsWith('+++') ||
-      line.startsWith('Index:') ||
-      line.startsWith('diff ')
-    ) {
-      continue;
+async function renderDiffModel(oldCode: string, newCode: string): Promise<CodeDiffRenderModel> {
+  if (isLargeCodeDiff(oldCode, newCode) && hasDiffWorkerSupport()) {
+    try {
+      return await renderCodeDiffModel(oldCode, newCode);
+    } catch (error) {
+      console.warn('Failed to render diff in worker, falling back to main thread.', error);
     }
+  }
 
-    // Parse hunk header to get line numbers
-    if (line.startsWith('@@')) {
-      const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      if (match) {
-        leftLineNum = parseInt(match[1], 10) - 1;
-        rightLineNum = parseInt(match[2], 10) - 1;
-      }
-      continue;
-    }
+  return renderCodeDiffModelSync(oldCode, newCode);
+}
 
-    if (line.startsWith('+')) {
-      rightLineNum++;
-      addedCount++;
-      const content = line.slice(1);
-      unifiedLines.push({
-        type: 'added',
-        sign: '+',
-        lineNumber: rightLineNum,
-        content,
-      });
-      leftLines.push({ type: 'empty', lineNumber: null, content: '' });
-      rightLines.push({ type: 'added', lineNumber: rightLineNum, content });
-    } else if (line.startsWith('-')) {
-      leftLineNum++;
-      removedCount++;
-      const content = line.slice(1);
-      unifiedLines.push({
-        type: 'removed',
-        sign: '-',
-        lineNumber: leftLineNum,
-        content,
-      });
-      leftLines.push({ type: 'removed', lineNumber: leftLineNum, content });
-      rightLines.push({ type: 'empty', lineNumber: null, content: '' });
-    } else if (line.startsWith(' ')) {
-      leftLineNum++;
-      rightLineNum++;
-      const content = line.slice(1);
-      unifiedLines.push({
-        type: 'context',
-        sign: ' ',
-        lineNumber: leftLineNum,
-        content,
-      });
-      leftLines.push({ type: 'context', lineNumber: leftLineNum, content });
-      rightLines.push({ type: 'context', lineNumber: rightLineNum, content });
-    }
-    // Skip empty lines in the diff or the newline-at-eof marker
+function lineClass(type: string): string {
+  switch (type) {
+    case 'added':
+      return 'chat-diff-line chat-diff-line-added';
+    case 'removed':
+      return 'chat-diff-line chat-diff-line-removed';
+    case 'empty':
+      return 'chat-diff-line chat-diff-line-empty';
+    default:
+      return 'chat-diff-line chat-diff-line-context';
+  }
+}
+
+function lineStyle(virtualized: boolean): Record<string, string> | undefined {
+  if (!virtualized) {
+    return undefined;
   }
 
   return {
-    unifiedLines,
-    split: { left: leftLines, right: rightLines },
-    stats: { added: addedCount, removed: removedCount },
+    height: `${CHAT_DIFF_ROW_HEIGHT_PX}px`,
   };
+}
+
+function UnifiedDiffRow(props: { line: UnifiedDiffLine; virtualized: boolean }) {
+  return (
+    <div class={lineClass(props.line.type)} style={lineStyle(props.virtualized)}>
+      <span class="chat-diff-line-sign">{props.line.sign}</span>
+      <span class="chat-diff-line-number">{props.line.lineNumber ?? ''}</span>
+      <span class="chat-diff-line-content">{props.line.content}</span>
+    </div>
+  );
+}
+
+function SplitDiffRow(props: { line: SplitDiffLine; virtualized: boolean }) {
+  return (
+    <div class={lineClass(props.line.type)} style={lineStyle(props.virtualized)}>
+      <span class="chat-diff-line-number">{props.line.lineNumber ?? ''}</span>
+      <span class="chat-diff-line-content">{props.line.content}</span>
+    </div>
+  );
 }
 
 /**
@@ -102,25 +85,40 @@ function parseDiffModel(patch: string): CodeDiffRenderModel {
 export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
   const [viewMode, setViewMode] = createSignal<'unified' | 'split'>('unified');
   const [diffModel, setDiffModel] = createSignal<CodeDiffRenderModel | null>(null);
-  const [error, setError] = createSignal<string>('');
+  const [error, setError] = createSignal('');
+  const [virtualized, setVirtualized] = createSignal(false);
+  let renderRequestSeq = 0;
 
-  // Compute diff when code changes
   createEffect(() => {
     const oldCode = props.oldCode;
     const newCode = props.newCode;
+    const seq = (renderRequestSeq += 1);
+    const nextVirtualized = isLargeCodeDiff(oldCode, newCode);
+    let disposed = false;
 
-    import('diff')
-      .then(({ createPatch }) => {
-        const filename = props.filename || 'file';
-        const patch = createPatch(filename, oldCode, newCode, '', '', { context: 3 });
-        const model = parseDiffModel(patch);
-        setDiffModel(model);
-        setError('');
-      })
-      .catch((err) => {
-        console.error('Failed to load diff library:', err);
-        setError('Failed to compute diff');
-      });
+    setDiffModel(null);
+    setError('');
+    setVirtualized(nextVirtualized);
+
+    deferAfterPaint(() => {
+      if (disposed || seq !== renderRequestSeq) return;
+
+      void renderDiffModel(oldCode, newCode)
+        .then((model) => {
+          if (disposed || seq !== renderRequestSeq) return;
+          setDiffModel(model);
+          setError('');
+        })
+        .catch((renderError) => {
+          if (disposed || seq !== renderRequestSeq) return;
+          console.error('Failed to compute diff:', renderError);
+          setError('Failed to compute diff');
+        });
+    });
+
+    onCleanup(() => {
+      disposed = true;
+    });
   });
 
   const statsText = createMemo(() => {
@@ -133,18 +131,42 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
     return parts.join(' ');
   });
 
-  const lineClass = (type: string): string => {
-    switch (type) {
-      case 'added':
-        return 'chat-diff-line chat-diff-line-added';
-      case 'removed':
-        return 'chat-diff-line chat-diff-line-removed';
-      case 'empty':
-        return 'chat-diff-line chat-diff-line-empty';
-      default:
-        return 'chat-diff-line chat-diff-line-context';
-    }
-  };
+  const currentLineCount = createMemo(() => {
+    const model = diffModel();
+    if (!model) return 0;
+    return viewMode() === 'unified'
+      ? model.unifiedLines.length
+      : model.split.left.length;
+  });
+
+  const virtualWindow = useVirtualWindow({
+    count: currentLineCount,
+    itemSize: () => CHAT_DIFF_ROW_HEIGHT_PX,
+    overscan: 12,
+  });
+
+  const visibleUnifiedLines = createMemo(() => {
+    const model = diffModel();
+    if (!model) return [];
+    const { start, end } = virtualWindow.range();
+    return model.unifiedLines.slice(start, end);
+  });
+
+  const visibleSplitLeftLines = createMemo(() => {
+    const model = diffModel();
+    if (!model) return [];
+    const { start, end } = virtualWindow.range();
+    return model.split.left.slice(start, end);
+  });
+
+  const visibleSplitRightLines = createMemo(() => {
+    const model = diffModel();
+    if (!model) return [];
+    const { start, end } = virtualWindow.range();
+    return model.split.right.slice(start, end);
+  });
+
+  const viewportHeight = createMemo(() => resolveDiffViewportHeight(currentLineCount()));
 
   return (
     <div class={cn('chat-code-diff-block', props.class)}>
@@ -160,8 +182,8 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
         <div class="chat-code-diff-actions">
           <button
             class={cn(
-              'chat-code-diff-toggle-btn',
-              viewMode() === 'unified' && 'chat-code-diff-toggle-btn-active',
+              'chat-code-diff-toggle-btn chat-code-diff-view-btn',
+              viewMode() === 'unified' && 'chat-code-diff-toggle-btn-active active',
             )}
             onClick={() => setViewMode('unified')}
           >
@@ -169,8 +191,8 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
           </button>
           <button
             class={cn(
-              'chat-code-diff-toggle-btn',
-              viewMode() === 'split' && 'chat-code-diff-toggle-btn-active',
+              'chat-code-diff-toggle-btn chat-code-diff-view-btn',
+              viewMode() === 'split' && 'chat-code-diff-toggle-btn-active active',
             )}
             onClick={() => setViewMode('split')}
           >
@@ -185,52 +207,75 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
 
       <Show when={diffModel()}>
         {(model) => (
-          <div class="chat-code-diff-content">
+          <div
+            class={cn(
+              'chat-code-diff-content',
+              virtualized() && 'chat-code-diff-content-virtualized',
+            )}
+          >
             <Show
-              when={viewMode() === 'unified'}
-              fallback={
-                // Split view
-                <div class="chat-code-diff-split">
-                  <div class="chat-code-diff-split-panel chat-code-diff-split-left">
-                    <For each={model().split.left}>
-                      {(line) => (
-                        <div class={lineClass(line.type)}>
-                          <span class="chat-diff-line-number">
-                            {line.lineNumber ?? ''}
-                          </span>
-                          <span class="chat-diff-line-content">{line.content}</span>
-                        </div>
-                      )}
-                    </For>
-                  </div>
-                  <div class="chat-code-diff-split-panel chat-code-diff-split-right">
-                    <For each={model().split.right}>
-                      {(line) => (
-                        <div class={lineClass(line.type)}>
-                          <span class="chat-diff-line-number">
-                            {line.lineNumber ?? ''}
-                          </span>
-                          <span class="chat-diff-line-content">{line.content}</span>
-                        </div>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              }
-            >
-              {/* Unified view */}
-              <div class="chat-code-diff-unified">
-                <For each={model().unifiedLines}>
-                  {(line) => (
-                    <div class={lineClass(line.type)}>
-                      <span class="chat-diff-line-sign">{line.sign}</span>
-                      <span class="chat-diff-line-number">
-                        {line.lineNumber ?? ''}
-                      </span>
-                      <span class="chat-diff-line-content">{line.content}</span>
+              when={virtualized()}
+              fallback={(
+                <Show
+                  when={viewMode() === 'unified'}
+                  fallback={(
+                    <div class="chat-code-diff-split">
+                      <div class="chat-code-diff-split-panel chat-code-diff-split-left">
+                        <For each={model().split.left}>
+                          {(line) => <SplitDiffRow line={line} virtualized={false} />}
+                        </For>
+                      </div>
+                      <div class="chat-code-diff-split-panel chat-code-diff-split-right">
+                        <For each={model().split.right}>
+                          {(line) => <SplitDiffRow line={line} virtualized={false} />}
+                        </For>
+                      </div>
                     </div>
                   )}
-                </For>
+                >
+                  <div class="chat-code-diff-unified">
+                    <For each={model().unifiedLines}>
+                      {(line) => <UnifiedDiffRow line={line} virtualized={false} />}
+                    </For>
+                  </div>
+                </Show>
+              )}
+            >
+              <div
+                ref={virtualWindow.scrollRef}
+                class="chat-code-diff-viewport"
+                onScroll={virtualWindow.onScroll}
+                style={{ height: `${viewportHeight()}px` }}
+              >
+                <Show
+                  when={viewMode() === 'unified'}
+                  fallback={(
+                    <div class="chat-code-diff-split">
+                      <div class="chat-code-diff-split-panel chat-code-diff-split-left">
+                        <div style={{ height: `${virtualWindow.paddingTop()}px` }} />
+                        <For each={visibleSplitLeftLines()}>
+                          {(line) => <SplitDiffRow line={line} virtualized />}
+                        </For>
+                        <div style={{ height: `${virtualWindow.paddingBottom()}px` }} />
+                      </div>
+                      <div class="chat-code-diff-split-panel chat-code-diff-split-right">
+                        <div style={{ height: `${virtualWindow.paddingTop()}px` }} />
+                        <For each={visibleSplitRightLines()}>
+                          {(line) => <SplitDiffRow line={line} virtualized />}
+                        </For>
+                        <div style={{ height: `${virtualWindow.paddingBottom()}px` }} />
+                      </div>
+                    </div>
+                  )}
+                >
+                  <div class="chat-code-diff-unified">
+                    <div style={{ height: `${virtualWindow.paddingTop()}px` }} />
+                    <For each={visibleUnifiedLines()}>
+                      {(line) => <UnifiedDiffRow line={line} virtualized />}
+                    </For>
+                    <div style={{ height: `${virtualWindow.paddingBottom()}px` }} />
+                  </div>
+                </Show>
               </div>
             </Show>
           </div>
