@@ -1,9 +1,13 @@
 export type FsEncoding = 'utf8' | 'base64';
+export type FsEntryType = 'file' | 'folder' | 'symlink';
+export type FsResolvedType = 'file' | 'folder' | 'broken' | 'unknown';
 
 export interface FsFileInfo {
   name: string;
   path: string;
   isDirectory: boolean;
+  entryType: FsEntryType;
+  resolvedType: FsResolvedType;
   size: number;
   modifiedAt: number;
   createdAt: number;

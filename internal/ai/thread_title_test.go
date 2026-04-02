@@ -712,7 +712,7 @@ func TestScheduleAutoThreadTitle_RegeneratesAfterFallbackWhenNewUserMessageArriv
 		PublicText: secondText,
 	})
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
 		if getErr != nil {

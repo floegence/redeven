@@ -99,6 +99,7 @@ Design notes:
 Notes:
 - Proxy streams are enabled per-session. The same stream kind can require different permissions depending on `session_meta.floe_app` (and sometimes `code_space_id`).
 - Code App is intentionally conservative: the runtime requires **all three** permission bits (`read`, `write`, `execute`) before it will serve `floe_app = com.floegence.redeven.code` (to avoid misleading "read-only code-server" semantics).
+- `fs/read_file` is intentionally file-only. Directory targets, including symbolic links that resolve to directories, must fail before raw bytes are streamed.
 
 ## Local Gateway HTTP API Capabilities (`/_redeven_proxy/api/*`)
 

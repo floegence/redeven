@@ -181,4 +181,37 @@ describe('createFilePreviewController', () => {
       dispose();
     }
   });
+
+  it('shows a clear unsupported preview state for broken symlinks without opening a read stream', async () => {
+    const brokenLink = {
+      id: '/workspace/broken',
+      name: 'broken',
+      path: '/workspace/broken',
+      type: 'file',
+      link: { kind: 'symbolic', targetType: 'broken' },
+    } satisfies FileItem;
+
+    const [client] = createSignal({} as any);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      await controller.openPreview(brokenLink);
+
+      expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+      expect(controller.open()).toBe(true);
+      expect(controller.item()?.path).toBe('/workspace/broken');
+      expect(controller.descriptor()).toEqual({ mode: 'unsupported' });
+      expect(controller.error()).toBe('This symbolic link target is unavailable.');
+      expect(controller.message()).toBe('This symbolic link target is unavailable.');
+    } finally {
+      dispose();
+    }
+  });
 });

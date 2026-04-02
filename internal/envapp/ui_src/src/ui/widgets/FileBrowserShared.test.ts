@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildChildPath,
   canInsertIntoTree,
+  getFilePreviewBlockReason,
   insertItemToTree,
+  toFileItem,
   validateFileBrowserEntryName,
   withChildrenAtRoot,
 } from './FileBrowserShared';
@@ -67,5 +69,61 @@ describe('FileBrowserShared scoped root helpers', () => {
     expect(canInsertIntoTree(tree, '/Users/tester', '/Users/tester')).toBe(true);
     expect(canInsertIntoTree(tree, '/Users/tester/src', '/Users/tester')).toBe(false);
     expect(canInsertIntoTree(tree, '/Users/tester/docs', '/Users/tester')).toBe(true);
+  });
+
+  it('maps symlink entries into FileItem.link metadata while keeping folder/file interaction types intact', () => {
+    const symlinkFolder = toFileItem({
+      name: 'certs',
+      path: '/Users/tester/certs',
+      isDirectory: true,
+      entryType: 'symlink',
+      resolvedType: 'folder',
+    });
+    const symlinkFile = toFileItem({
+      name: 'config',
+      path: '/Users/tester/config',
+      isDirectory: false,
+      entryType: 'symlink',
+      resolvedType: 'file',
+    });
+    const brokenLink = toFileItem({
+      name: 'broken',
+      path: '/Users/tester/broken',
+      isDirectory: false,
+      entryType: 'symlink',
+      resolvedType: 'broken',
+    });
+
+    expect(symlinkFolder).toMatchObject({
+      type: 'folder',
+      link: { kind: 'symbolic', targetType: 'folder' },
+    });
+    expect(symlinkFile).toMatchObject({
+      type: 'file',
+      link: { kind: 'symbolic', targetType: 'file' },
+    });
+    expect(brokenLink).toMatchObject({
+      type: 'file',
+      link: { kind: 'symbolic', targetType: 'broken' },
+    });
+  });
+
+  it('provides a preview guard reason for broken or directory-like targets before stream reads begin', () => {
+    expect(getFilePreviewBlockReason({
+      type: 'folder',
+      link: undefined,
+    })).toBe('Cannot preview a directory.');
+    expect(getFilePreviewBlockReason({
+      type: 'file',
+      link: { kind: 'symbolic', targetType: 'folder' },
+    })).toBe('Cannot preview a directory link.');
+    expect(getFilePreviewBlockReason({
+      type: 'file',
+      link: { kind: 'symbolic', targetType: 'broken' },
+    })).toBe('This symbolic link target is unavailable.');
+    expect(getFilePreviewBlockReason({
+      type: 'file',
+      link: { kind: 'symbolic', targetType: 'file' },
+    })).toBe(null);
   });
 });

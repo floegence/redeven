@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, onCleanup } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { ChevronRight } from '@floegence/floe-webapp-core/icons';
-import { FolderIcon, FolderOpenIcon, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
+import { FileItemIcon, useFileBrowser, type FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
@@ -158,8 +158,8 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
           onContextMenu={handleContextMenu}
         >
           <span class={cn('flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground', isCurrent() && 'text-sidebar-accent-foreground')}>
-            <Show when={hasChildren() && isExpanded()} fallback={<FolderIcon class="h-3.5 w-3.5" />}>
-              <FolderOpenIcon class="h-3.5 w-3.5" />
+            <Show when={hasChildren() && isExpanded()} fallback={<FileItemIcon item={props.item} class="h-3.5 w-3.5" />}>
+              <FileItemIcon item={props.item} open class="h-3.5 w-3.5" />
             </Show>
           </span>
           <span class="min-w-0 flex-1 truncate">{props.item.name}</span>

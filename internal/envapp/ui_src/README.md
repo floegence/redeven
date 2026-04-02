@@ -44,6 +44,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - Local UI runtime maintenance now resolves `Latest version` from the public runtime manifest through the local runtime API, with ETag/TTL-backed caching, so the Settings surface does not collapse to a permanent dash in local mode once the runtime session is ready.
 - Shared `DirectoryPicker` / `FileSavePicker` integrations in Env App are intentionally lazy-mounted on open so picker state always initializes from the latest `homePath` + `initialPath` pair. Downstream surfaces must keep picker-internal paths root-relative and convert back to absolute filesystem paths only at the boundary helpers.
 - File Browser directory navigation is cache-assisted, target-truthful, and atomically committed: the currently rendered path stays stable until the requested target directory (or a fallback ancestor after delete/rename recovery) is ready, cached ancestors may still seed the next tree for responsiveness, user entry revalidates the requested target directory, explicit refresh force-reloads the current directory, and invalid cached targets recover by force-refreshing the nearest existing ancestor so external delete/rename changes do not strand stale tree content.
+- File Browser keeps symbolic links as explicit browser semantics: directory links remain navigable, file links remain previewable, broken links stay visible but blocked from invalid preview/navigation paths, and the runtime no longer lets directory-like targets fall through into `fs/read_file` stream EOFs.
 
 Notes:
 

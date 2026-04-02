@@ -6,10 +6,15 @@ export type wire_fs_list_req = {
   show_hidden?: boolean;
 };
 
+export type wire_fs_entry_type = 'file' | 'folder' | 'symlink';
+export type wire_fs_resolved_type = 'file' | 'folder' | 'broken' | 'unknown';
+
 export type wire_fs_file_info = {
   name: string;
   path: string;
   is_directory: boolean;
+  entry_type?: wire_fs_entry_type;
+  resolved_type?: wire_fs_resolved_type;
   size: number;
   modified_at: number;
   created_at: number;
