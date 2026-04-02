@@ -1,18 +1,18 @@
 import { Globe } from '@floegence/floe-webapp-core/icons';
 
 export type DesktopShellCommandPaletteActions = Readonly<{
-  openDeviceChooser: () => Promise<void>;
+  openEnvironmentLauncher: () => Promise<void>;
 }>;
 
 export function buildDesktopShellCommandPaletteEntries(actions: DesktopShellCommandPaletteActions) {
   return [
     {
-      id: 'redeven.desktop.switchDevice',
-      title: 'Switch Device...',
-      description: 'Choose This device or another Redeven device from the desktop shell.',
+      id: 'redeven.desktop.openEnvironment',
+      title: 'Open Environment...',
+      description: 'Open the desktop environment launcher.',
       category: 'Desktop',
       icon: Globe,
-      execute: actions.openDeviceChooser,
+      execute: actions.openEnvironmentLauncher,
     },
   ] as const;
 }

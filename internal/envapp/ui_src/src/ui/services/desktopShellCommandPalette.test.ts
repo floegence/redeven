@@ -4,22 +4,22 @@ import { buildDesktopShellCommandPaletteEntries } from './desktopShellCommandPal
 
 describe('desktopShellCommandPalette', () => {
   it('builds the single Desktop chooser command palette entry', async () => {
-    const openDeviceChooser = vi.fn().mockResolvedValue(undefined);
+    const openEnvironmentLauncher = vi.fn().mockResolvedValue(undefined);
 
     const entries = buildDesktopShellCommandPaletteEntries({
-      openDeviceChooser,
+      openEnvironmentLauncher,
     });
 
     expect(entries.map((entry) => entry.id)).toEqual([
-      'redeven.desktop.switchDevice',
+      'redeven.desktop.openEnvironment',
     ]);
     expect(entries.map((entry) => entry.category)).toEqual(['Desktop']);
     expect(entries.map((entry) => entry.title)).toEqual([
-      'Switch Device...',
+      'Open Environment...',
     ]);
 
     await entries[0]?.execute();
 
-    expect(openDeviceChooser).toHaveBeenCalledTimes(1);
+    expect(openEnvironmentLauncher).toHaveBeenCalledTimes(1);
   });
 });

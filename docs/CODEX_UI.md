@@ -116,7 +116,7 @@ Codex thread list/detail payloads also include per-thread `read_status` on `thre
   - `last_read_updated_at_unix_s`
   - `last_seen_activity_signature`
 
-`POST /_redeven_proxy/api/codex/threads/:id/read` accepts the browser-visible `snapshot`, validates that it does not move beyond the current backend thread state, and advances the per-user read watermark monotonically. The runtime persists that watermark by `endpoint_id + user_public_id + surface + thread_id`, so unread state survives device switches and refreshes instead of living in browser-local storage.
+`POST /_redeven_proxy/api/codex/threads/:id/read` accepts the browser-visible `snapshot`, validates that it does not move beyond the current backend thread state, and advances the per-user read watermark monotonically. The runtime persists that watermark by `endpoint_id + user_public_id + surface + thread_id`, so unread state survives environment switches and refreshes instead of living in browser-local storage.
 
 `last_applied_seq` means the returned bootstrap has already applied all bridge-projected events up to that sequence number. The browser must resume SSE from that exact sequence so refreshes do not lose live work state.
 

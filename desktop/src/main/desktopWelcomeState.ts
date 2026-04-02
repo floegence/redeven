@@ -37,7 +37,7 @@ export function buildRemoteConnectionIssue(
   message: string,
 ): DesktopWelcomeIssue {
   return {
-    scope: 'remote_device',
+    scope: 'remote_environment',
     code,
     title: code === 'external_target_invalid' ? 'Check the Environment URL' : 'Unable to open that Environment',
     message,
@@ -55,7 +55,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
   if (report.code === 'state_dir_locked') {
     if (report.lock_owner?.local_ui_enabled === true) {
       return {
-        scope: 'this_device',
+        scope: 'local_environment',
         code: report.code,
         title: 'Redeven is already starting elsewhere',
         message: 'Another Redeven runtime instance is using the default state directory and appears to provide Local UI. Retry in a moment so Desktop can attach to it.',
@@ -64,7 +64,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
       };
     }
     return {
-      scope: 'this_device',
+      scope: 'local_environment',
       code: report.code,
       title: 'Redeven is already running',
       message: 'Another Redeven runtime instance is using the default state directory without an attachable Local UI. Stop that runtime or restart it in a Local UI mode, then try again.',
@@ -74,9 +74,9 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
   }
 
   return {
-    scope: 'this_device',
+    scope: 'local_environment',
     code: report.code,
-    title: 'This Device needs attention',
+    title: 'Local Environment needs attention',
     message: report.message,
     diagnostics_copy: formatBlockedLaunchDiagnostics(report),
     target_url: '',
@@ -102,7 +102,7 @@ function currentSessionLabel(activeSessionTarget: DesktopSessionTarget | null): 
     return 'No environment open';
   }
   return activeSessionTarget.kind === 'managed_local'
-    ? 'This Device environment is open'
+    ? 'Local environment is open'
     : 'Another environment is open';
 }
 
@@ -117,7 +117,7 @@ function currentSessionDescription(
   if (activeSessionTarget.kind === 'managed_local') {
     return managedStartup?.local_ui_url
       ? `Current environment: ${managedStartup.local_ui_url}`
-      : 'Redeven Desktop is currently attached to This Device.';
+      : 'Redeven Desktop is currently attached to the Local Environment.';
   }
   return externalStartup?.local_ui_url
     ? `Current environment: ${externalStartup.local_ui_url}`
@@ -136,13 +136,13 @@ function buildEnvironmentEntries(
   const currentManaged = activeSessionTarget?.kind === 'managed_local';
   const entries: DesktopEnvironmentEntry[] = [
     {
-      id: 'this_device',
-      kind: 'this_device',
-      label: 'This Device',
+      id: 'local_environment',
+      kind: 'local_environment',
+      label: 'Local Environment',
       local_ui_url: managedStartup?.local_ui_url ?? '',
-      secondary_text: managedStartup?.local_ui_url || 'Open the desktop-managed Environment on this machine.',
-      tag: currentManaged ? 'Current' : 'This Device',
-      category: 'this_device',
+      secondary_text: managedStartup?.local_ui_url || 'Open the desktop-managed environment on this machine.',
+      tag: currentManaged ? 'Current' : 'Local',
+      category: 'local_environment',
       is_current: currentManaged,
       can_edit: true,
       can_delete: false,
@@ -201,7 +201,7 @@ function suggestedRemoteURL(
   activeSessionTarget: DesktopSessionTarget | null,
   environments: readonly DesktopEnvironmentEntry[],
 ): string {
-  if (issue?.scope === 'remote_device' && issue.target_url) {
+  if (issue?.scope === 'remote_environment' && issue.target_url) {
     return issue.target_url;
   }
   if (activeSessionTarget?.kind === 'external_local_ui' && activeSessionTarget.external_local_ui_url) {
@@ -232,6 +232,6 @@ export function buildDesktopWelcomeSnapshot(
     environments,
     suggested_remote_url: suggestedRemoteURL(issue, activeSessionTarget, environments),
     issue,
-    settings_surface: buildDesktopSettingsSurfaceSnapshot('advanced_settings', desktopPreferencesToDraft(preferences)),
+    settings_surface: buildDesktopSettingsSurfaceSnapshot('local_environment_settings', desktopPreferencesToDraft(preferences)),
   };
 }

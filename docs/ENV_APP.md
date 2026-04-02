@@ -7,7 +7,7 @@ Key points:
 - The Env App UI is **runtime-bundled** (built + embedded into the Redeven runtime binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex).
-- In Redeven Desktop, the command palette also exposes a shell-owned `Connect Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
+- In Redeven Desktop, the command palette also exposes a shell-owned `Open Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
 - Runtime Settings uses an explicit information architecture so users can find endpoint controls by intent rather than by implementation detail:
   - `Overview`: `Config File`, `Connection`, `Runtime Status`
   - `Runtime Configuration`: `Shell & Workspace`, `Logging`

@@ -400,7 +400,7 @@ describe('desktopPreferences', () => {
     ]);
   });
 
-  it('serializes this-device settings into a settings draft', () => {
+  it('serializes local-environment settings into a settings draft', () => {
     expect(desktopPreferencesToDraft({
       local_ui_bind: '0.0.0.0:24000',
       local_ui_password: 'secret',
@@ -464,7 +464,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('includes this-device startup inputs in the managed launch key', () => {
+  it('includes local-environment startup inputs in the managed launch key', () => {
     const left = managedDesktopLaunchKey({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',

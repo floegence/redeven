@@ -8,7 +8,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse Redeven Local UI instead of introducing a second app runtime.
 - Make machine choice explicit on every cold desktop launch.
-- Keep launcher, recovery, diagnostics, and This Device configuration aligned around one welcome-first model.
+- Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around one welcome-first model.
 
 ## Architecture
 
@@ -16,12 +16,12 @@ This document describes the public Electron desktop shell that ships with each `
 - `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
 - The main BrowserWindow keeps one shell-owned launcher dashboard:
   - `Connect Environment`
-- `This Device Options` is a shell-owned dialog layered on top of that dashboard.
-- The launcher dashboard and `This Device Options` dialog render inside the same Floe workbench shell instance.
+- `Local Environment Settings` is a shell-owned dialog layered on top of that dashboard.
+- The launcher dashboard and `Local Environment Settings` dialog render inside the same Floe workbench shell instance.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before a machine is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
-  - `This Device`
+  - `Local Environment`
   - a remembered recent Environment
   - a newly entered Redeven Local UI URL
 - Reopening the launcher from an active session does not immediately disconnect the current target. The current session stays available until the user opens a different Environment.
@@ -52,7 +52,7 @@ Desktop may add user-configured startup flags on top of that base command:
 
 Behavior:
 
-- Local UI always starts for `This Device`.
+- Local UI always starts for `Local Environment`.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - The Local UI password stays out of process args and environment variables.
 - Remote control is enabled only when the local config is already bootstrapped and remote-valid.
@@ -63,7 +63,7 @@ Behavior:
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
 
-When the selected target is `Another Device`, Desktop does not start the bundled binary.
+When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 
 ### Launch Outcomes
@@ -90,7 +90,7 @@ Visual hierarchy:
 - shell surface title: `Connect Environment`
 - primary workbench column:
   - `Current Session`
-  - `This Device`
+  - `Local Environment`
 - secondary workbench column:
   - `Environment Library`
   - `Add Connection`
@@ -102,8 +102,8 @@ Interaction rules:
 
 - Cold launch never auto-opens a remembered target.
 - Environment choice is always a launcher action, never a side effect of saving settings.
-- `This Device` is the primary path and behaves like a workbench-style open action.
-- `This Device Options` opens as a dialog without replacing the launcher dashboard.
+- `Local Environment` is the primary path and behaves like a workbench-style open action.
+- `Local Environment Settings` opens as a dialog without replacing the launcher dashboard.
 - `Add Connection` opens a dialog that can either connect immediately or save a remote Environment into the library.
 - Remote library entries distinguish:
   - the current unsaved remote session
@@ -114,14 +114,14 @@ Interaction rules:
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:
-  - `Quit` when no device is open yet
+  - `Quit` when no environment is open yet
   - `Back to current environment` when a target is already open
 
-## This Device Options
+## Local Environment Settings
 
-`This Device Options` is a launcher-owned dialog inside the same desktop shell, not a second page or window.
+`Local Environment Settings` is a launcher-owned dialog inside the same desktop shell, not a second page or window.
 
-It edits only future startup behavior for `This Device`:
+It edits only future startup behavior for `Local Environment`:
 
 - `local_ui_bind`
 - `local_ui_password`
@@ -138,7 +138,7 @@ Rules:
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
 - The dialog starts with a compact summary grid for access mode, bind address, password state, and next start status.
 - The first decision is an access intent, not a raw bind field:
-  - `Private to this device`
+  - `Local only`
   - `Shared on your local network`
   - `Custom exposure`
 - The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving.
@@ -146,7 +146,7 @@ Rules:
 
 ## Desktop Preferences
 
-Desktop keeps one persisted preference model for stable `This Device` configuration and saved remote Environments:
+Desktop keeps one persisted preference model for stable `Local Environment` configuration and saved remote Environments:
 
 - `local_ui_bind`
 - `local_ui_password`
@@ -158,14 +158,14 @@ Semantics:
 
 - Desktop does not persist a remembered current target for the next launch.
 - The active target is runtime-only desktop session state.
-- `local_ui_bind` and `local_ui_password` apply only to future `This Device` opens.
+- `local_ui_bind` and `local_ui_password` apply only to future `Local Environment` opens.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 
 Launcher-oriented sharing presets intentionally map high-level user intent to the same runtime contract:
 
-- `Private to this device` -> `127.0.0.1:0` with no password
+- `Local only` -> `127.0.0.1:0` with no password
 - `Shared on your local network` -> `0.0.0.0:24000` with a password baseline
 - `Custom exposure` -> raw bind/password editing
 
@@ -181,8 +181,8 @@ Desktop shell preferences live under the Electron user data directory, not insid
 
 - Cold app launch opens the welcome launcher in the main window.
 - The native app menu exposes one primary shell action: `Connect Environment...`
-- Legacy shell entrypoints such as `connect`, `device_chooser`, and `switch_device` route to the same welcome launcher.
-- Legacy advanced-settings entrypoints route to `This Device Options`.
+- Shell window aliases such as `connect` route to the same welcome launcher.
+- Generic settings aliases such as `advanced_settings` route to `Local Environment Settings`.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
 - The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
@@ -193,9 +193,9 @@ Desktop shell preferences live under the Electron user data directory, not insid
 ## Error Recovery
 
 - Remote target unreachable
-  - launcher reloads with the failing URL preserved and an inline remote-device issue
+  - launcher reloads with the failing URL preserved and an inline remote-environment issue
 - Desktop-managed startup blocked
-  - launcher reloads with a `This Device` issue and diagnostics copy
+  - launcher reloads with a `Local Environment` issue and diagnostics copy
 - Secondary compatibility surfaces such as the blocked page may still exist, but the normal product flow is launcher-first recovery in the main window
 
 ## Accessibility Behavior

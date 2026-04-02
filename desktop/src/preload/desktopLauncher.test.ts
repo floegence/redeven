@@ -30,11 +30,11 @@ describe('bootstrapDesktopLauncherBridge', () => {
     expect(typeof bridge.performAction).toBe('function');
 
     await bridge.getSnapshot();
-    await bridge.performAction({ kind: 'open_remote_device', external_local_ui_url: 'http://192.168.1.11:24000/' });
+    await bridge.performAction({ kind: 'open_remote_environment', external_local_ui_url: 'http://192.168.1.11:24000/' });
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:launcher-get-snapshot');
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:launcher-perform-action', {
-      kind: 'open_remote_device',
+      kind: 'open_remote_environment',
       external_local_ui_url: 'http://192.168.1.11:24000/',
     });
     expect(ipcRendererInvoke).toHaveBeenCalledTimes(2);

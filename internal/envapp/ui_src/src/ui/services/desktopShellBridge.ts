@@ -10,12 +10,8 @@ export type DesktopManagedRuntimeRestartResult = Readonly<{
 }>;
 
 export interface DesktopShellBridge {
-  openDeviceChooser?: () => Promise<void>;
-  switchDevice?: () => Promise<void>;
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
-  openConnectToRedeven?: () => Promise<void>;
-  openDesktopSettings?: () => Promise<void>;
   openWindow?: (kind: unknown) => Promise<void>;
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
@@ -36,12 +32,8 @@ function desktopShellBridge(): DesktopShellBridge | null {
   if (
     !candidate
     || (
-      typeof candidate.openDeviceChooser !== 'function'
-      && typeof candidate.switchDevice !== 'function'
-      && typeof candidate.openConnectionCenter !== 'function'
-      && typeof candidate.openConnectToRedeven !== 'function'
+      typeof candidate.openConnectionCenter !== 'function'
       && typeof candidate.openAdvancedSettings !== 'function'
-      && typeof candidate.openDesktopSettings !== 'function'
       && typeof candidate.openWindow !== 'function'
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.restartManagedRuntime !== 'function'
@@ -63,20 +55,15 @@ export async function openConnectionCenter(): Promise<boolean> {
     return false;
   }
 
-  if (typeof bridge.openDeviceChooser === 'function') {
-    await bridge.openDeviceChooser();
-    return true;
-  }
-  if (typeof bridge.switchDevice === 'function') {
-    await bridge.switchDevice();
-    return true;
-  }
   if (typeof bridge.openConnectionCenter === 'function') {
     await bridge.openConnectionCenter();
     return true;
   }
-  await bridge.openConnectToRedeven?.();
-  return true;
+  if (typeof bridge.openWindow === 'function') {
+    await bridge.openWindow('connection_center');
+    return true;
+  }
+  return false;
 }
 
 export async function openAdvancedSettings(): Promise<boolean> {
@@ -85,23 +72,15 @@ export async function openAdvancedSettings(): Promise<boolean> {
     return false;
   }
 
-  if (typeof bridge.openAdvancedSettings !== 'function' && typeof bridge.openDesktopSettings !== 'function') {
-    return openConnectionCenter();
-  }
   if (typeof bridge.openAdvancedSettings === 'function') {
     await bridge.openAdvancedSettings();
     return true;
   }
-  await bridge.openDesktopSettings?.();
-  return true;
-}
-
-export async function openDesktopConnectToRedeven(): Promise<boolean> {
+  if (typeof bridge.openWindow === 'function') {
+    await bridge.openWindow('settings');
+    return true;
+  }
   return openConnectionCenter();
-}
-
-export async function openDesktopSettings(): Promise<boolean> {
-  return openAdvancedSettings();
 }
 
 export function desktopShellExternalURLOpenAvailable(): boolean {

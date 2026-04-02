@@ -32,7 +32,7 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain("async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {");
     expect(mainSrc).toContain("async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActionResponse> {");
-    expect(mainSrc).toContain("surface: 'this_device_settings'");
+    expect(mainSrc).toContain("surface: 'local_environment_settings'");
     expect(mainSrc).toContain("case 'upsert_saved_environment':");
     expect(mainSrc).toContain("case 'delete_saved_environment':");
     expect(mainSrc).not.toContain("case 'open_advanced_settings':");

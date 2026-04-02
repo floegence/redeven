@@ -1863,7 +1863,7 @@ export function EnvAppShell() {
 
     if (desktopShellAvailable) {
       list.push(...buildDesktopShellCommandPaletteEntries({
-        openDeviceChooser: () => runDesktopShellCommand('Switch Device', openConnectionCenter),
+        openEnvironmentLauncher: () => runDesktopShellCommand('Open Environment', openConnectionCenter),
       }));
     }
 

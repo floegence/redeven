@@ -9,14 +9,14 @@ import type {
 } from '../shared/desktopSettingsSurface';
 
 export function pageWindowTitle(_mode: DesktopPageMode): string {
-  return 'This Device Options';
+  return 'Local Environment Settings';
 }
 
 export const DESKTOP_ACCESS_MODE_OPTIONS: readonly DesktopAccessModeOption[] = [
   {
-    value: 'private_device',
-    label: 'Private to this device',
-    description: 'Keep Redeven on loopback for this machine only.',
+    value: 'local_only',
+    label: 'Local only',
+    description: 'Keep the local environment on loopback for this machine only.',
   },
   {
     value: 'shared_local_network',
@@ -89,7 +89,7 @@ export function desktopAccessModeForDraft(draft: DesktopSettingsDraft): DesktopA
   const bind = trimString(draft.local_ui_bind);
   const hasPassword = trimString(draft.local_ui_password) !== '';
   if (bind === '127.0.0.1:0' && !hasPassword) {
-    return 'private_device';
+    return 'local_only';
   }
   if (bind === '0.0.0.0:24000') {
     return 'shared_local_network';
@@ -104,9 +104,9 @@ function desktopAccessModeLabel(mode: DesktopAccessMode): string {
 function passwordState(mode: DesktopAccessMode, draft: DesktopSettingsDraft): Readonly<{
   label: string;
   tone: 'default' | 'warning' | 'success';
-}> {
+  }> {
   const hasPassword = trimString(draft.local_ui_password) !== '';
-  if (mode === 'private_device') {
+  if (mode === 'local_only') {
     return {
       label: 'No password required',
       tone: 'default',
@@ -119,7 +119,7 @@ function passwordState(mode: DesktopAccessMode, draft: DesktopSettingsDraft): Re
     };
   }
   return {
-    label: 'Password required before the next open of This Device',
+    label: 'Password required before the next open of Local Environment',
     tone: 'warning',
   };
 }
@@ -167,7 +167,7 @@ function buildSummaryItems(
       id: 'bind_address',
       label: 'Bind address',
       value: trimString(draft.local_ui_bind) || '127.0.0.1:0',
-      detail: accessMode === 'private_device'
+      detail: accessMode === 'local_only'
         ? 'Loopback only'
         : accessMode === 'shared_local_network'
           ? 'Local network preset'
@@ -201,7 +201,7 @@ export function buildDesktopSettingsSurfaceSnapshot(
   return {
     mode,
     window_title: pageWindowTitle(mode),
-    save_label: 'Save This Device Options',
+    save_label: 'Save Local Environment Settings',
     access_mode: accessMode,
     access_mode_label: desktopAccessModeLabel(accessMode),
     access_mode_options: DESKTOP_ACCESS_MODE_OPTIONS,

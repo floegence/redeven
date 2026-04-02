@@ -293,7 +293,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
 async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {}): Promise<void> {
   desktopWelcomeViewState = {
     surface: options.surface ?? 'connect_environment',
-    entryReason: options.entryReason ?? (currentSessionTarget ? 'switch_device' : 'app_launch'),
+    entryReason: options.entryReason ?? (currentSessionTarget ? 'switch_environment' : 'app_launch'),
     issue: options.issue ?? null,
   };
   await loadURLInMainWindow(
@@ -306,7 +306,7 @@ async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {})
 async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {
   settingsReturnSurface = returnSurface;
   await openDesktopWelcomeWindow({
-    surface: 'this_device_settings',
+    surface: 'local_environment_settings',
     entryReason: desktopWelcomeViewState.entryReason,
     stealAppFocus: true,
   });
@@ -528,7 +528,7 @@ async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActi
   };
 }
 
-async function openThisDeviceFromWelcome(): Promise<void> {
+async function openLocalEnvironmentFromWelcome(): Promise<void> {
   if (currentSessionTarget?.kind === 'managed_local' && allowedBaseURL) {
     await returnMainWindowToCurrentTarget({ stealAppFocus: true });
     return;
@@ -551,7 +551,7 @@ async function openThisDeviceFromWelcome(): Promise<void> {
   await loadURLInMainWindow(prepared.launch.managedAgent.startup.local_ui_url, 'target');
 }
 
-async function openRemoteDeviceFromWelcome(targetURL: string): Promise<void> {
+async function openRemoteEnvironmentFromWelcome(targetURL: string): Promise<void> {
   const normalizedTargetURL = String(targetURL ?? '').trim();
   if (!normalizedTargetURL) {
     throw new Error('Environment URL is required to open another Environment.');
@@ -588,7 +588,7 @@ async function closeSettingsSurface(): Promise<void> {
     return;
   }
   await openDesktopWelcomeWindow({
-    entryReason: currentSessionTarget ? 'switch_device' : 'app_launch',
+    entryReason: currentSessionTarget ? 'switch_environment' : 'app_launch',
     stealAppFocus: true,
   });
 }
@@ -618,11 +618,11 @@ async function deleteSavedEnvironmentFromWelcome(environmentID: string): Promise
 
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<void> {
   switch (request.kind) {
-    case 'open_this_device':
-      await openThisDeviceFromWelcome();
+    case 'open_local_environment':
+      await openLocalEnvironmentFromWelcome();
       return;
-    case 'open_remote_device':
-      await openRemoteDeviceFromWelcome(request.external_local_ui_url);
+    case 'open_remote_environment':
+      await openRemoteEnvironmentFromWelcome(request.external_local_ui_url);
       return;
     case 'upsert_saved_environment':
       await upsertSavedEnvironmentFromWelcome(request.environment_id, request.label, request.external_local_ui_url);
@@ -630,7 +630,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'delete_saved_environment':
       await deleteSavedEnvironmentFromWelcome(request.environment_id);
       return;
-    case 'return_to_current_device':
+    case 'return_to_current_environment':
       if (currentSessionTarget) {
         await returnMainWindowToCurrentTarget({ stealAppFocus: true });
         return;
@@ -934,7 +934,7 @@ if (!app.requestSingleInstanceLock()) {
 
     if (normalized.kind === 'connection_center') {
       await openDesktopWelcomeWindow({
-        entryReason: currentSessionTarget ? 'switch_device' : 'app_launch',
+        entryReason: currentSessionTarget ? 'switch_environment' : 'app_launch',
         stealAppFocus: true,
       });
       return;
@@ -1010,7 +1010,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
       openConnectionCenter: () => {
         void openDesktopWelcomeWindow({
-          entryReason: currentSessionTarget ? 'switch_device' : 'app_launch',
+          entryReason: currentSessionTarget ? 'switch_environment' : 'app_launch',
           stealAppFocus: true,
         }).catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
@@ -1020,7 +1020,7 @@ if (!app.requestSingleInstanceLock()) {
       openAdvancedSettings: () => {
         void openAdvancedSettingsWindow('current_target').catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open advanced options', message || 'Unknown advanced-options error.');
+          dialog.showErrorBox('Redeven Desktop failed to open Local Environment Settings', message || 'Unknown settings error.');
         });
       },
       requestQuit: () => {
