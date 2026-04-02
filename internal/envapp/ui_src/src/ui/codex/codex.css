@@ -650,6 +650,8 @@
 
 .codex-chat-input-meta-rail {
   display: flex;
+  container-type: inline-size;
+  container-name: codex-composer-meta;
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
@@ -673,7 +675,24 @@
 
 .codex-chat-input-meta-group-strategy {
   flex: 1 1 18rem;
+  align-items: flex-start;
   justify-content: flex-end;
+  gap: 0.625rem 0.75rem;
+}
+
+.codex-chat-input-meta-subgroup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.codex-chat-input-meta-subgroup-values {
+  flex-wrap: nowrap;
+}
+
+.codex-chat-input-meta-subgroup-policies {
+  flex-wrap: nowrap;
 }
 
 .codex-chat-chip {
@@ -1704,7 +1723,7 @@
   color: color-mix(in srgb, var(--muted-foreground) 56%, transparent);
 }
 
-@media (max-width: 960px) {
+@container codex-composer-meta (max-width: 64rem) {
   .codex-chat-input-meta-rail {
     gap: 0.5rem;
   }
@@ -1727,30 +1746,8 @@
     max-width: none;
   }
 
-  .codex-chat-select-chip {
-    min-width: calc(50% - 0.25rem);
-    flex: 1 1 calc(50% - 0.25rem);
-  }
-
-  .codex-chat-select-chip-value,
-  .codex-chat-select-chip-policy {
-    justify-content: flex-start;
-  }
-
-  .codex-chat-select-chip-control {
-    flex: 1 1 auto;
-    width: 100% !important;
-    max-width: 100%;
-  }
-
-  .codex-chat-select-chip-control-value {
-    max-width: 100%;
-    padding: 0 1rem 0 0.25rem !important;
-    text-align: left;
-  }
-
-  .codex-chat-select-chip-control-policy {
-    max-width: 100%;
+  .codex-chat-input-meta-subgroup-policies {
+    margin-inline-start: auto;
   }
 }
 
@@ -1857,6 +1854,11 @@
 
   .codex-chat-input-meta-group-strategy {
     justify-content: flex-start;
+  }
+
+  .codex-chat-input-meta-subgroup-policies {
+    margin-inline-start: 0;
+    flex-wrap: wrap;
   }
 
   .codex-chat-working-dir-chip {

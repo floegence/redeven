@@ -741,57 +741,61 @@ export function CodexComposerShell(props: {
             </div>
 
             <div class="codex-chat-input-meta-group codex-chat-input-meta-group-strategy">
-              <ComposerSelectChip
-                label="Model"
-                value={props.modelValue}
-                options={props.modelOptions}
-                placeholder="Default"
-                disabled={!props.hostAvailable || props.modelOptions.length === 0}
-                variant="value"
-                onChange={props.onModelChange}
-                containerRef={(element) => {
-                  modelContainerRef = element;
-                }}
-              />
+              <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-values">
+                <ComposerSelectChip
+                  label="Model"
+                  value={props.modelValue}
+                  options={props.modelOptions}
+                  placeholder="Default"
+                  disabled={!props.hostAvailable || props.modelOptions.length === 0}
+                  variant="value"
+                  onChange={props.onModelChange}
+                  containerRef={(element) => {
+                    modelContainerRef = element;
+                  }}
+                />
 
-              <ComposerSelectChip
-                label="Effort"
-                value={props.effortValue}
-                options={props.effortOptions}
-                placeholder="Default"
-                disabled={!props.hostAvailable || props.effortOptions.length === 0}
-                variant="value"
-                onChange={props.onEffortChange}
-                containerRef={(element) => {
-                  effortContainerRef = element;
-                }}
-              />
+                <ComposerSelectChip
+                  label="Effort"
+                  value={props.effortValue}
+                  options={props.effortOptions}
+                  placeholder="Default"
+                  disabled={!props.hostAvailable || props.effortOptions.length === 0}
+                  variant="value"
+                  onChange={props.onEffortChange}
+                  containerRef={(element) => {
+                    effortContainerRef = element;
+                  }}
+                />
+              </div>
 
-              <ComposerSelectChip
-                label="Approval"
-                value={props.approvalPolicyValue}
-                options={props.approvalPolicyOptions}
-                placeholder="Never"
-                disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
-                variant="policy"
-                onChange={props.onApprovalPolicyChange}
-                containerRef={(element) => {
-                  approvalContainerRef = element;
-                }}
-              />
+              <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-policies">
+                <ComposerSelectChip
+                  label="Approval"
+                  value={props.approvalPolicyValue}
+                  options={props.approvalPolicyOptions}
+                  placeholder="Never"
+                  disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
+                  variant="policy"
+                  onChange={props.onApprovalPolicyChange}
+                  containerRef={(element) => {
+                    approvalContainerRef = element;
+                  }}
+                />
 
-              <ComposerSelectChip
-                label="Sandbox"
-                value={props.sandboxModeValue}
-                options={props.sandboxModeOptions}
-                placeholder="Full access"
-                disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
-                variant="policy"
-                onChange={props.onSandboxModeChange}
-                containerRef={(element) => {
-                  sandboxContainerRef = element;
-                }}
-              />
+                <ComposerSelectChip
+                  label="Sandbox"
+                  value={props.sandboxModeValue}
+                  options={props.sandboxModeOptions}
+                  placeholder="Full access"
+                  disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
+                  variant="policy"
+                  onChange={props.onSandboxModeChange}
+                  containerRef={(element) => {
+                    sandboxContainerRef = element;
+                  }}
+                />
+              </div>
             </div>
           </div>
 

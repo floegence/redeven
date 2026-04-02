@@ -918,8 +918,10 @@ describe('CodexPage', () => {
     expect(host.querySelector('.codex-page-bottom-support-content')).not.toBeNull();
     expect(host.querySelector('.codex-page-bottom-support-track-page')).not.toBeNull();
     expect(host.querySelector('.codex-page-bottom-support-content-page')).not.toBeNull();
-    expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-variant="value"]').length).toBe(2);
-    expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-variant="policy"]').length).toBe(2);
+    expect(host.querySelector('.codex-chat-input-meta-subgroup-values')).not.toBeNull();
+    expect(host.querySelector('.codex-chat-input-meta-subgroup-policies')).not.toBeNull();
+    expect(host.querySelectorAll('.codex-chat-input-meta-subgroup-values [data-codex-select-variant="value"]').length).toBe(2);
+    expect(host.querySelectorAll('.codex-chat-input-meta-subgroup-policies [data-codex-select-variant="policy"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
     expect(host.querySelector('.codex-chat-draft-objects')).toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();

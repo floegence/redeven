@@ -219,12 +219,14 @@ describe('CodexComposerShell', () => {
 
     const contextGroup = host.querySelector('.codex-chat-input-meta-group-context') as HTMLDivElement | null;
     const strategyGroup = host.querySelector('.codex-chat-input-meta-group-strategy') as HTMLDivElement | null;
-    if (!contextGroup || !strategyGroup) throw new Error('composer meta groups not found');
+    const valueSubgroup = host.querySelector('.codex-chat-input-meta-subgroup-values') as HTMLDivElement | null;
+    const policySubgroup = host.querySelector('.codex-chat-input-meta-subgroup-policies') as HTMLDivElement | null;
+    if (!contextGroup || !strategyGroup || !valueSubgroup || !policySubgroup) throw new Error('composer meta groups not found');
 
     expect(contextGroup.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(contextGroup.querySelector('.codex-chat-working-dir-chip')?.className).toContain('codex-chat-path-chip');
-    expect(strategyGroup.querySelectorAll('[data-codex-select-variant="value"]').length).toBe(2);
-    expect(strategyGroup.querySelectorAll('[data-codex-select-variant="policy"]').length).toBe(2);
+    expect(valueSubgroup.querySelectorAll('[data-codex-select-variant="value"]').length).toBe(2);
+    expect(policySubgroup.querySelectorAll('[data-codex-select-variant="policy"]').length).toBe(2);
     expect(strategyGroup.querySelectorAll('[data-codex-select-collapsed="true"]').length).toBe(4);
     expect(strategyGroup.querySelector('.codex-chat-select-chip-label')).toBeNull();
     dispose();
