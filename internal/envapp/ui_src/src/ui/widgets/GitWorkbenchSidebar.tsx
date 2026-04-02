@@ -24,16 +24,14 @@ import {
 } from '../utils/gitWorkbench';
 import {
   gitBranchTone,
-  gitSelectedChipClass,
   gitSelectedSecondaryTextClass,
   gitToneActionButtonClass,
-  gitToneBadgeClass,
   gitToneSelectableCardClass,
   workspaceSectionTone,
 } from './GitChrome';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitCommitGraph } from './GitCommitGraph';
-import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitCountPill, GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitWorkbenchSidebarProps {
   subview: GitWorkbenchSubview;
@@ -173,14 +171,9 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                           {count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
                                         </div>
                                       </div>
-                                      <span
-                                        class={cn(
-                                          'inline-flex min-w-[1.75rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold',
-                                          active() ? gitSelectedChipClass(true) : gitToneBadgeClass(tone())
-                                        )}
-                                      >
+                                      <GitCountPill tone={tone()} emphasis={active() ? 'selected' : 'default'} class="min-w-[1.75rem] font-semibold">
                                         {count()}
-                                      </span>
+                                      </GitCountPill>
                                     </div>
                                   </button>
                                 );
@@ -217,7 +210,9 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       <div class="grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                                         <span class="min-w-0 flex-1 truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
                                         <Show when={branch.current}>
-                                          <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', active() ? gitSelectedChipClass(true) : 'bg-primary/[0.12] text-primary')}>Current</span>
+                                          <GitMetaPill tone="brand" emphasis={active() ? 'selected' : 'default'} class="px-1.5 py-0.5 text-[10px] font-medium leading-none">
+                                            Current
+                                          </GitMetaPill>
                                         </Show>
                                       </div>
                                       <div class={cn('mt-0.5 min-h-4 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))} title={branchStatusSummary(branch)}>{branchContextSummary(branch)}</div>

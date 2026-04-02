@@ -2,6 +2,7 @@ import { For, Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitCommitSummary } from '../protocol/redeven_v1';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { GitMetaPill } from './GitWorkbenchPrimitives';
 
 export type CommitGraphLane = {
   hash: string;
@@ -288,16 +289,13 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                       >
                         {row.commit.subject || '(no subject)'}
                       </span>
-                      <span
-                        class={cn(
-                          'rounded px-1.5 py-0.5 font-mono text-[9px]',
-                          selected()
-                            ? 'bg-background/18 text-sidebar-accent-foreground/82'
-                            : 'bg-muted/[0.26] text-muted-foreground',
-                        )}
+                      <GitMetaPill
+                        tone="neutral"
+                        emphasis={selected() ? 'selected' : 'default'}
+                        class="px-1.5 py-0.5 font-mono text-[9px] leading-none"
                       >
                         {row.commit.shortHash}
-                      </span>
+                      </GitMetaPill>
                     </div>
                     <div
                       class={cn(
