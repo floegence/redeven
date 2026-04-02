@@ -298,4 +298,47 @@ describe('AgentMonitorPanel', () => {
       { x: 24, y: 32 },
     );
   });
+
+  it('applies semantic severity tones to CPU and memory cells', async () => {
+    const gibibyte = 1024 ** 3;
+
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1, [
+        { pid: 101, name: 'idle', cpuPercent: 9.4, memoryBytes: 512 * 1024 * 1024, username: 'system' },
+        { pid: 102, name: 'worker', cpuPercent: 33.3, memoryBytes: 2 * gibibyte, username: 'alice' },
+        { pid: 103, name: 'compiler', cpuPercent: 78.8, memoryBytes: 12 * gibibyte, username: 'bob' },
+        { pid: 104, name: 'render', cpuPercent: 132.1, memoryBytes: 256 * 1024 * 1024, username: 'carol' },
+      ]),
+    );
+
+    render(() => <AgentMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    const getProcessRow = (name: string) => Array.from(host.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes(name)) as HTMLTableRowElement | undefined;
+
+    const idleRow = getProcessRow('idle');
+    const workerRow = getProcessRow('worker');
+    const compilerRow = getProcessRow('compiler');
+    const renderRow = getProcessRow('render');
+
+    expect(idleRow?.querySelector('[data-monitor-metric="cpu"]')?.getAttribute('data-monitor-metric-tone')).toBe('muted');
+    expect(idleRow?.querySelector('[data-monitor-metric="cpu"]')?.className).toContain('text-muted-foreground');
+    expect(idleRow?.querySelector('[data-monitor-metric="memory"]')?.getAttribute('data-monitor-metric-tone')).toBe('muted');
+    expect(idleRow?.querySelector('[data-monitor-metric="memory"]')?.className).toContain('text-muted-foreground');
+
+    expect(workerRow?.querySelector('[data-monitor-metric="cpu"]')?.getAttribute('data-monitor-metric-tone')).toBe('success');
+    expect(workerRow?.querySelector('[data-monitor-metric="cpu"]')?.className).toContain('text-success');
+    expect(workerRow?.querySelector('[data-monitor-metric="memory"]')?.getAttribute('data-monitor-metric-tone')).toBe('success');
+    expect(workerRow?.querySelector('[data-monitor-metric="memory"]')?.className).toContain('text-success');
+
+    expect(compilerRow?.querySelector('[data-monitor-metric="cpu"]')?.getAttribute('data-monitor-metric-tone')).toBe('warning');
+    expect(compilerRow?.querySelector('[data-monitor-metric="cpu"]')?.className).toContain('text-warning');
+    expect(compilerRow?.querySelector('[data-monitor-metric="memory"]')?.getAttribute('data-monitor-metric-tone')).toBe('warning');
+    expect(compilerRow?.querySelector('[data-monitor-metric="memory"]')?.className).toContain('text-warning');
+
+    expect(renderRow?.querySelector('[data-monitor-metric="cpu"]')?.getAttribute('data-monitor-metric-tone')).toBe('error');
+    expect(renderRow?.querySelector('[data-monitor-metric="cpu"]')?.className).toContain('text-error');
+    expect(renderRow?.querySelector('[data-monitor-metric="memory"]')?.getAttribute('data-monitor-metric-tone')).toBe('muted');
+    expect(renderRow?.querySelector('[data-monitor-metric="memory"]')?.className).toContain('text-muted-foreground');
+  });
 });
