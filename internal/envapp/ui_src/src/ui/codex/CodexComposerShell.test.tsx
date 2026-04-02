@@ -59,11 +59,29 @@ function flushAsync(): Promise<void> {
 function renderComposer(options?: {
   initialText?: string;
   hostAvailable?: boolean;
+  hostDisabledReason?: string;
   workingDirPath?: string;
   workingDirLabel?: string;
   workingDirTitle?: string;
   workingDirLocked?: boolean;
   workingDirDisabled?: boolean;
+  supportsImages?: boolean;
+  capabilitiesLoading?: boolean;
+  attachments?: ReadonlyArray<{
+    id: string;
+    name: string;
+    mime_type: string;
+    size_bytes: number;
+    data_url: string;
+    preview_url: string;
+  }>;
+  mentions?: ReadonlyArray<{
+    id: string;
+    name: string;
+    path: string;
+    kind: 'file';
+    is_image: boolean;
+  }>;
   onSend?: () => void;
   onOpenWorkingDirPicker?: () => void;
   onAddAttachments?: (files: readonly File[]) => Promise<void>;
@@ -97,14 +115,14 @@ function renderComposer(options?: {
         approvalPolicyOptions={[{ value: 'on-request', label: 'On request' }]}
         sandboxModeValue="workspace-write"
         sandboxModeOptions={[{ value: 'workspace-write', label: 'Workspace write' }]}
-        attachments={[]}
-        mentions={[]}
-        supportsImages
-        capabilitiesLoading={false}
+        attachments={options?.attachments ?? []}
+        mentions={options?.mentions ?? []}
+        supportsImages={options?.supportsImages ?? true}
+        capabilitiesLoading={options?.capabilitiesLoading ?? false}
         composerText={text()}
         submitting={false}
         hostAvailable={options?.hostAvailable ?? true}
-        hostDisabledReason=""
+        hostDisabledReason={options?.hostDisabledReason ?? ''}
         onOpenWorkingDirPicker={onOpenWorkingDirPicker}
         onModelChange={() => undefined}
         onEffortChange={() => undefined}
@@ -176,6 +194,88 @@ describe('CodexComposerShell', () => {
     expect(button.getAttribute('aria-disabled')).toBe('true');
     expect(button.tabIndex).toBe(-1);
     expect(onOpenWorkingDirPicker).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it('splits context controls from execution strategy and collapses selected labels at rest', () => {
+    const { host, dispose } = renderComposer({
+      workingDirPath: '/workspace/ui',
+      workingDirLabel: '~/ui',
+      workingDirTitle: '/workspace/ui',
+    });
+
+    const contextGroup = host.querySelector('.codex-chat-input-meta-group-context') as HTMLDivElement | null;
+    const strategyGroup = host.querySelector('.codex-chat-input-meta-group-strategy') as HTMLDivElement | null;
+    if (!contextGroup || !strategyGroup) throw new Error('composer meta groups not found');
+
+    expect(contextGroup.querySelector('button[title="Add attachments"]')).not.toBeNull();
+    expect(contextGroup.querySelector('.codex-chat-working-dir-chip')?.className).toContain('codex-chat-path-chip');
+    expect(strategyGroup.querySelectorAll('[data-codex-select-variant="value"]').length).toBe(2);
+    expect(strategyGroup.querySelectorAll('[data-codex-select-variant="policy"]').length).toBe(2);
+    expect(strategyGroup.querySelectorAll('[data-codex-select-collapsed="true"]').length).toBe(4);
+    expect(strategyGroup.querySelector('.codex-chat-select-chip-label')).toBeNull();
+    dispose();
+  });
+
+  it('renders mentions and attachments in a lower-priority draft object lane', () => {
+    const { host, dispose } = renderComposer({
+      mentions: [{
+        id: 'mention_1',
+        name: 'CodexPage.tsx',
+        path: '/workspace/ui/src/CodexPage.tsx',
+        kind: 'file',
+        is_image: false,
+      }],
+      attachments: [{
+        id: 'attachment_1',
+        name: 'screen.png',
+        mime_type: 'image/png',
+        size_bytes: 4,
+        data_url: 'data:image/png;base64,AAAA',
+        preview_url: 'data:image/png;base64,AAAA',
+      }],
+    });
+
+    const draftObjects = host.querySelector('.codex-chat-draft-objects') as HTMLDivElement | null;
+    if (!draftObjects) throw new Error('draft object lane not found');
+
+    expect(draftObjects.querySelector('.codex-chat-mention-strip')).not.toBeNull();
+    expect(draftObjects.querySelector('.codex-chat-attachment-strip')).not.toBeNull();
+    expect(draftObjects.textContent).toContain('CodexPage.tsx');
+    expect(draftObjects.textContent).toContain('screen.png');
+    expect(host.querySelector('.codex-chat-input-meta-rail .codex-chat-mention-strip')).toBeNull();
+    expect(host.querySelector('.codex-chat-input-meta-rail .codex-chat-attachment-strip')).toBeNull();
+    dispose();
+  });
+
+  it('only shows the generic onboarding note while the empty composer is focused', async () => {
+    const { host, dispose } = renderComposer();
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) throw new Error('textarea not found');
+
+    expect(host.textContent).not.toContain('Type @ for file context, / for commands, or paste an image.');
+
+    textarea.dispatchEvent(new Event('focus'));
+    await flushAsync();
+    expect(host.textContent).toContain('Type @ for file context, / for commands, or paste an image.');
+
+    textarea.value = 'Review this diff';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushAsync();
+    expect(host.textContent).not.toContain('Type @ for file context, / for commands, or paste an image.');
+    dispose();
+  });
+
+  it('surfaces host-level blocking feedback without falling back to the generic onboarding hint', () => {
+    const { host, dispose } = renderComposer({
+      hostAvailable: false,
+      hostDisabledReason: 'Install codex first',
+    });
+
+    expect(host.textContent).toContain('Install codex first');
+    expect(host.textContent).not.toContain('Type @ for file context, / for commands, or paste an image.');
+    expect((host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null)?.disabled).toBe(true);
+    expect((host.querySelector('button[title="Add attachments"]') as HTMLButtonElement | null)?.disabled).toBe(true);
     dispose();
   });
 

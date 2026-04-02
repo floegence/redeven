@@ -31,6 +31,8 @@ type SelectOption = Readonly<{
 }>;
 
 type ComposerPopupKind = 'none' | 'file-mentions' | 'slash-commands';
+type ComposerSelectVariant = 'value' | 'policy';
+type ComposerSelectLabelMode = 'always' | 'auto';
 
 function ComposerSelectChip(props: {
   label: string;
@@ -38,19 +40,31 @@ function ComposerSelectChip(props: {
   options: readonly SelectOption[];
   placeholder: string;
   disabled: boolean;
+  variant: ComposerSelectVariant;
+  labelMode?: ComposerSelectLabelMode;
   onChange: (value: string) => void;
   containerRef?: (element: HTMLDivElement) => void;
 }) {
+  const hasValue = () => String(props.value ?? '').trim().length > 0;
+  const showLabel = () => (props.labelMode ?? 'auto') === 'always' || !hasValue();
   return (
     <div
       ref={props.containerRef}
       data-codex-command-focus={props.label.toLowerCase()}
+      data-codex-select-variant={props.variant}
+      data-codex-select-collapsed={showLabel() ? 'false' : 'true'}
       class={cn(
         'codex-chat-select-chip',
+        props.variant === 'value'
+          ? 'codex-chat-select-chip-value'
+          : 'codex-chat-select-chip-policy',
+        !showLabel() && 'codex-chat-select-chip-value-only',
         props.disabled && 'codex-chat-select-chip-disabled',
       )}
     >
-      <span class="codex-chat-select-chip-label">{props.label}</span>
+      <Show when={showLabel()}>
+        <span class="codex-chat-select-chip-label">{props.label}</span>
+      </Show>
       <Select
         value={props.value}
         onChange={(value) => props.onChange(String(value ?? ''))}
@@ -58,7 +72,12 @@ function ComposerSelectChip(props: {
         placeholder={props.placeholder}
         disabled={props.disabled}
         aria-label={props.label}
-        class="codex-chat-select-chip-control"
+        class={cn(
+          'codex-chat-select-chip-control',
+          props.variant === 'value'
+            ? 'codex-chat-select-chip-control-value'
+            : 'codex-chat-select-chip-control-policy',
+        )}
       />
     </div>
   );
@@ -342,8 +361,16 @@ export function CodexComposerShell(props: {
   const attachmentSupportNote = () => {
     if (!props.hostAvailable) return '';
     if (props.capabilitiesLoading) return 'Checking image support...';
-    if (!props.supportsImages) return 'Image attachments are unavailable for the current model.';
-    return 'Paste an image, type @ for file references, or use / for composer commands.';
+    if (
+      isFocused() &&
+      props.supportsImages &&
+      !String(props.composerText ?? '').trim() &&
+      props.attachments.length === 0 &&
+      props.mentions.length === 0
+    ) {
+      return 'Type @ for file context, / for commands, or paste an image.';
+    }
+    return '';
   };
   const statusNote = () => {
     if (!props.hostAvailable) {
@@ -488,26 +515,6 @@ export function CodexComposerShell(props: {
       'chat-input-container codex-chat-input',
       isFocused() && 'chat-input-container-focused',
     )}>
-      <Show when={props.mentions.length > 0}>
-        <div class="codex-chat-mention-strip">
-          <For each={props.mentions}>
-            {(mention) => (
-              <MentionChip mention={mention} onRemove={props.onRemoveMention} />
-            )}
-          </For>
-        </div>
-      </Show>
-
-      <Show when={props.attachments.length > 0}>
-        <div class="codex-chat-attachment-strip">
-          <For each={props.attachments}>
-            {(attachment) => (
-              <AttachmentCard attachment={attachment} onRemove={props.onRemoveAttachment} />
-            )}
-          </For>
-        </div>
-      </Show>
-
       <div class="chat-input-body codex-chat-input-body">
         <div class="codex-chat-input-primary-row">
           <textarea
@@ -647,104 +654,112 @@ export function CodexComposerShell(props: {
 
         <div class="codex-chat-input-meta">
           <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input controls">
-            <button
-              ref={workingDirChipRef}
-              type="button"
-              class={cn(
-                'codex-chat-chip codex-chat-working-dir-chip',
-                canOpenWorkingDirPicker()
-                  ? 'codex-chat-chip-actionable'
-                  : 'codex-chat-chip-disabled',
-                props.workingDirLocked && 'codex-chat-working-dir-chip-locked',
-              )}
-              onClick={() => {
-                if (!canOpenWorkingDirPicker()) return;
-                props.onOpenWorkingDirPicker();
-              }}
-              disabled={props.workingDirDisabled}
-              title={workingDirChipTitle()}
-              aria-label={props.workingDirLocked ? 'Working directory locked' : 'Select working directory'}
-              aria-disabled={!canOpenWorkingDirPicker()}
-              tabIndex={canOpenWorkingDirPicker() ? 0 : -1}
-            >
-              <FolderIcon />
-              <span class="codex-chat-working-dir-chip-label">{workingDirChipLabel()}</span>
-              <Show when={props.workingDirLocked}>
-                <LockIcon />
-              </Show>
-            </button>
+            <div class="codex-chat-input-meta-group codex-chat-input-meta-group-context">
+              <button
+                type="button"
+                class="codex-chat-meta-btn codex-chat-attachment-trigger"
+                onClick={() => fileInputRef?.click()}
+                disabled={!props.hostAvailable || !props.supportsImages}
+                aria-label="Add attachments"
+                title="Add attachments"
+              >
+                <PaperclipIcon />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                class="hidden"
+                onChange={(event) => {
+                  const files = event.currentTarget.files;
+                  if (!files || files.length === 0) return;
+                  void props.onAddAttachments(Array.from(files));
+                  event.currentTarget.value = '';
+                }}
+              />
 
-            <button
-              type="button"
-              class="codex-chat-meta-btn"
-              onClick={() => fileInputRef?.click()}
-              disabled={!props.hostAvailable || !props.supportsImages}
-              aria-label="Add attachments"
-              title="Add attachments"
-            >
-              <PaperclipIcon />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*"
-              class="hidden"
-              onChange={(event) => {
-                const files = event.currentTarget.files;
-                if (!files || files.length === 0) return;
-                void props.onAddAttachments(Array.from(files));
-                event.currentTarget.value = '';
-              }}
-            />
+              <button
+                ref={workingDirChipRef}
+                type="button"
+                class={cn(
+                  'codex-chat-chip codex-chat-working-dir-chip codex-chat-path-chip',
+                  canOpenWorkingDirPicker()
+                    ? 'codex-chat-chip-actionable'
+                    : 'codex-chat-chip-disabled',
+                  props.workingDirLocked && 'codex-chat-working-dir-chip-locked',
+                )}
+                onClick={() => {
+                  if (!canOpenWorkingDirPicker()) return;
+                  props.onOpenWorkingDirPicker();
+                }}
+                disabled={props.workingDirDisabled}
+                title={workingDirChipTitle()}
+                aria-label={props.workingDirLocked ? 'Working directory locked' : 'Select working directory'}
+                aria-disabled={!canOpenWorkingDirPicker()}
+                tabIndex={canOpenWorkingDirPicker() ? 0 : -1}
+              >
+                <FolderIcon />
+                <span class="codex-chat-working-dir-chip-label">{workingDirChipLabel()}</span>
+                <Show when={props.workingDirLocked}>
+                  <LockIcon />
+                </Show>
+              </button>
+            </div>
 
-            <ComposerSelectChip
-              label="Model"
-              value={props.modelValue}
-              options={props.modelOptions}
-              placeholder="Default"
-              disabled={!props.hostAvailable || props.modelOptions.length === 0}
-              onChange={props.onModelChange}
-              containerRef={(element) => {
-                modelContainerRef = element;
-              }}
-            />
+            <div class="codex-chat-input-meta-group codex-chat-input-meta-group-strategy">
+              <ComposerSelectChip
+                label="Model"
+                value={props.modelValue}
+                options={props.modelOptions}
+                placeholder="Default"
+                disabled={!props.hostAvailable || props.modelOptions.length === 0}
+                variant="value"
+                onChange={props.onModelChange}
+                containerRef={(element) => {
+                  modelContainerRef = element;
+                }}
+              />
 
-            <ComposerSelectChip
-              label="Effort"
-              value={props.effortValue}
-              options={props.effortOptions}
-              placeholder="Default"
-              disabled={!props.hostAvailable || props.effortOptions.length === 0}
-              onChange={props.onEffortChange}
-              containerRef={(element) => {
-                effortContainerRef = element;
-              }}
-            />
+              <ComposerSelectChip
+                label="Effort"
+                value={props.effortValue}
+                options={props.effortOptions}
+                placeholder="Default"
+                disabled={!props.hostAvailable || props.effortOptions.length === 0}
+                variant="value"
+                onChange={props.onEffortChange}
+                containerRef={(element) => {
+                  effortContainerRef = element;
+                }}
+              />
 
-            <ComposerSelectChip
-              label="Approval"
-              value={props.approvalPolicyValue}
-              options={props.approvalPolicyOptions}
-              placeholder="Default"
-              disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
-              onChange={props.onApprovalPolicyChange}
-              containerRef={(element) => {
-                approvalContainerRef = element;
-              }}
-            />
+              <ComposerSelectChip
+                label="Approval"
+                value={props.approvalPolicyValue}
+                options={props.approvalPolicyOptions}
+                placeholder="Default"
+                disabled={!props.hostAvailable || props.approvalPolicyOptions.length === 0}
+                variant="policy"
+                onChange={props.onApprovalPolicyChange}
+                containerRef={(element) => {
+                  approvalContainerRef = element;
+                }}
+              />
 
-            <ComposerSelectChip
-              label="Sandbox"
-              value={props.sandboxModeValue}
-              options={props.sandboxModeOptions}
-              placeholder="Default"
-              disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
-              onChange={props.onSandboxModeChange}
-              containerRef={(element) => {
-                sandboxContainerRef = element;
-              }}
-            />
+              <ComposerSelectChip
+                label="Sandbox"
+                value={props.sandboxModeValue}
+                options={props.sandboxModeOptions}
+                placeholder="Default"
+                disabled={!props.hostAvailable || props.sandboxModeOptions.length === 0}
+                variant="policy"
+                onChange={props.onSandboxModeChange}
+                containerRef={(element) => {
+                  sandboxContainerRef = element;
+                }}
+              />
+            </div>
           </div>
 
           <Show when={attachmentSupportNote() || statusNote()}>
@@ -758,6 +773,30 @@ export function CodexComposerShell(props: {
                   !props.hostAvailable && 'text-error',
                 )}>
                   {statusNote()}
+                </div>
+              </Show>
+            </div>
+          </Show>
+
+          <Show when={props.mentions.length > 0 || props.attachments.length > 0}>
+            <div class="codex-chat-draft-objects">
+              <Show when={props.mentions.length > 0}>
+                <div class="codex-chat-mention-strip codex-chat-draft-strip">
+                  <For each={props.mentions}>
+                    {(mention) => (
+                      <MentionChip mention={mention} onRemove={props.onRemoveMention} />
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              <Show when={props.attachments.length > 0}>
+                <div class="codex-chat-attachment-strip codex-chat-draft-strip">
+                  <For each={props.attachments}>
+                    {(attachment) => (
+                      <AttachmentCard attachment={attachment} onRemove={props.onRemoveAttachment} />
+                    )}
+                  </For>
                 </div>
               </Show>
             </div>

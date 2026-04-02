@@ -155,7 +155,7 @@ Current Env App behavior:
 - If host `codex` is unavailable, the entry point still stays visible and the Codex surface shows inline host diagnostics instead of a separate disabled/settings-jump flow.
 - When host `codex` is unavailable, Codex keeps the page-level diagnostics visible but disables host-backed actions such as `New Chat`, archive, send, attachments, and working-directory editing rather than leaving a half-interactive shell.
 - The Codex sidebar is a dedicated conversation navigator for Codex threads plus compact host/runtime context; it mirrors the same overall layout rhythm as Flower without reusing Flower-owned UI modules.
-- The main Codex page is a Codex-owned chat shell with a single-row compact header, a Flower-aligned transcript lane for user/assistant/evidence rows, inline approvals, a Flower-aligned bottom dock, and a dedicated composer surface.
+- The main Codex page is a Codex-owned chat shell with a single-row compact header, a Flower-aligned transcript lane for user/assistant/evidence rows, inline approvals, a soft-edged bottom dock, and a dedicated composer surface.
 - The Codex surface uses floe-webapp cards/forms/tags for a consistent Env App look while keeping Codex-specific state and request handling separate.
 - The Codex transcript and send bar intentionally mirror Flower's message lane geometry, bubble cadence, and editor chrome through Codex-local components and selectors only; Flower files and selectors are not changed.
 - Codex UI structure stays isolated under `src/ui/codex/*`, including its own namespaced `codex.css` layer, so Flower selectors and component contracts do not change when Codex layout evolves.
@@ -176,6 +176,14 @@ Current Env App behavior:
   - reasoning effort
   - approval policy
   - sandbox mode
+- The composer treats the prompt as the only primary surface and groups draft context on the left (`attachments`, `working directory`, draft objects) while keeping execution strategy on the right (`model`, `reasoning effort`, `approval policy`, `sandbox mode`).
+- Selected runtime controls use value-first presentation instead of repeating field labels at rest:
+  - `model` and `reasoning effort` collapse to lighter value triggers;
+  - `approval policy` and `sandbox mode` keep compact tag-like strategy pills;
+  - the working directory keeps the stronger path-chip treatment.
+- Draft mentions and attachments render as a lower-priority draft-object lane beneath the control row instead of sharing the same visual weight as runtime controls.
+- Generic onboarding copy such as `@` / `/` / image hints is conditional; it only appears when the composer is still empty or when capability/state feedback is genuinely needed.
+- The transcript-to-composer boundary is intentionally soft: the Codex send bar should read as floating over the transcript tail rather than as a second hard-split footer panel.
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.
 - New threads can choose working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn.
 - Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.

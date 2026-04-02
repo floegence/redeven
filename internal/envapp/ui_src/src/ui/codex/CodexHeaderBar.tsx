@@ -23,6 +23,18 @@ export function CodexHeaderBar(props: {
     const value = String(props.summary.statusLabel ?? '').trim().toLowerCase();
     return value.length > 0 && value !== 'idle' && value !== 'ready';
   };
+  const supplementalTag = () => {
+    if (!props.summary.hostReady) {
+      return { variant: 'warning' as const, label: 'Install required' };
+    }
+    if (props.summary.pendingRequestCount > 0) {
+      return { variant: 'warning' as const, label: `${props.summary.pendingRequestCount} pending` };
+    }
+    if (props.summary.statusFlags.length > 0) {
+      return { variant: 'info' as const, label: props.summary.statusFlags[0] };
+    }
+    return null;
+  };
   const renderActionButton = (action: CodexHeaderAction) => (
     <Button
       size="sm"
@@ -61,9 +73,7 @@ export function CodexHeaderBar(props: {
           <Show
             when={
               shouldShowStatusTag() ||
-              !props.summary.hostReady ||
-              props.summary.pendingRequestCount > 0 ||
-              props.summary.statusFlags.length > 0
+              Boolean(supplementalTag())
             }
           >
             <div class="codex-page-header-badges">
@@ -72,20 +82,12 @@ export function CodexHeaderBar(props: {
                   {props.summary.statusLabel}
                 </Tag>
               </Show>
-              <Show when={!props.summary.hostReady}>
-                <Tag class="codex-page-header-tag cursor-default" variant="warning" tone="soft" size="sm">
-                  Install required
-                </Tag>
-              </Show>
-              <Show when={props.summary.pendingRequestCount > 0}>
-                <Tag class="codex-page-header-tag cursor-default" variant="warning" tone="soft" size="sm">
-                  {props.summary.pendingRequestCount} pending
-                </Tag>
-              </Show>
-              <Show when={props.summary.statusFlags.length > 0}>
-                <Tag class="codex-page-header-tag cursor-default" variant="info" tone="soft" size="sm">
-                  {props.summary.statusFlags[0]}
-                </Tag>
+              <Show when={supplementalTag()}>
+                {(tag) => (
+                  <Tag class="codex-page-header-tag cursor-default" variant={tag().variant} tone="soft" size="sm">
+                    {tag().label}
+                  </Tag>
+                )}
               </Show>
             </div>
           </Show>
