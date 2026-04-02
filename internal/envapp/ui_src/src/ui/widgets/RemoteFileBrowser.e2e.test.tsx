@@ -270,6 +270,14 @@ vi.mock('./FileBrowserWorkspace', () => ({
             mock-copy-name
           </button>
         ) : null}
+        {fileItems.some((item) => item.id === 'copy-path') ? (
+          <button
+            type="button"
+            onClick={() => fileItems.find((item) => item.id === 'copy-path')?.onAction?.([copyNameTarget])}
+          >
+            mock-copy-path
+          </button>
+        ) : null}
         {folderItems.some((item) => item.id === 'open-in-terminal') ? (
           <button
             type="button"
@@ -1820,6 +1828,42 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('copies the selected absolute path from the file browser context menu', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    clipboardStore.writeText.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const copyPathButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-copy-path') as HTMLButtonElement | undefined;
+      expect(copyPathButton).toBeTruthy();
+
+      copyPathButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(clipboardStore.writeText).toHaveBeenCalledWith('/workspace/repo/src/.env');
+      expect(notificationStore.success).toContainEqual({ title: 'Copied', message: '"/workspace/repo/src/.env" copied to clipboard.' });
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows Open in Terminal only for a single folder target and dispatches the request with the absolute directory', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -1842,13 +1886,13 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,open-in-terminal,separator:open-in-terminal,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,open-in-terminal,separator:open-in-terminal,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-multi-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
       );
 
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
@@ -1890,7 +1934,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
       );
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
       expect(folderButton).toBeUndefined();

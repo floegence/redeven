@@ -2,7 +2,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { copyFileBrowserItemNames, describeCopiedFileBrowserItemNames } from './fileBrowserClipboard';
+import {
+  copyFileBrowserItemNames,
+  copyFileBrowserItemPaths,
+  describeCopiedFileBrowserItemNames,
+  describeCopiedFileBrowserItemPaths,
+} from './fileBrowserClipboard';
 
 function stubClipboard(writeText: ReturnType<typeof vi.fn>) {
   Object.defineProperty(globalThis, 'navigator', {
@@ -64,6 +69,33 @@ describe('fileBrowserClipboard', () => {
     expect(describeCopiedFileBrowserItemNames(result)).toBe('2 names copied to clipboard.');
   });
 
+  it('copies a single absolute path and returns the single-path message payload', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+
+    const result = await copyFileBrowserItemPaths([
+      { id: '1', name: '.env', type: 'file', path: '/workspace/.env' } satisfies FileItem,
+    ]);
+
+    expect(writeText).toHaveBeenCalledWith('/workspace/.env');
+    expect(result).toEqual({ count: 1, firstPath: '/workspace/.env' });
+    expect(describeCopiedFileBrowserItemPaths(result)).toBe('"/workspace/.env" copied to clipboard.');
+  });
+
+  it('copies multiple absolute paths as newline-separated text', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+
+    const result = await copyFileBrowserItemPaths([
+      { id: '1', name: '.env', type: 'file', path: '/workspace/.env' } satisfies FileItem,
+      { id: '2', name: 'src', type: 'folder', path: '/workspace/src' } satisfies FileItem,
+    ]);
+
+    expect(writeText).toHaveBeenCalledWith('/workspace/.env\n/workspace/src');
+    expect(result).toEqual({ count: 2, firstPath: '/workspace/.env' });
+    expect(describeCopiedFileBrowserItemPaths(result)).toBe('2 paths copied to clipboard.');
+  });
+
   it('fails when there is no copyable name', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     stubClipboard(writeText);
@@ -71,6 +103,17 @@ describe('fileBrowserClipboard', () => {
     await expect(copyFileBrowserItemNames([
       { id: '1', name: '   ', type: 'file', path: '/workspace/blank' } satisfies FileItem,
     ])).rejects.toThrow('No file or folder name available to copy.');
+
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it('fails when there is no copyable absolute path', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+
+    await expect(copyFileBrowserItemPaths([
+      { id: '1', name: 'blank', type: 'file', path: '   ' } satisfies FileItem,
+    ])).rejects.toThrow('No absolute file or folder path available to copy.');
 
     expect(writeText).not.toHaveBeenCalled();
   });
