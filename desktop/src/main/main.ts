@@ -30,6 +30,7 @@ import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
+import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
 import {
   applyRestoredWindowState,
@@ -143,6 +144,11 @@ let desktopWelcomeViewState: Readonly<{
   issue: null,
 };
 let settingsReturnSurface: 'welcome' | 'current_target' = 'welcome';
+const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
+  String(process.env.REDEVEN_DESKTOP_OPEN_DEVTOOLS ?? '').trim().toLowerCase(),
+);
+
+installStdioBrokenPipeGuards();
 
 function preferencesPaths() {
   return defaultDesktopPreferencesPaths(app.getPath('userData'));
@@ -761,6 +767,13 @@ function createBrowserWindow(targetURL: string, parent?: BrowserWindow, frameNam
       main_frame: isMainFrame,
     });
   });
+  if (desktopDevToolsEnabled && windowRole === 'main') {
+    webContents.on('did-finish-load', () => {
+      if (!webContents.isDestroyed() && !webContents.isDevToolsOpened()) {
+        webContents.openDevTools({ mode: 'detach', activate: false });
+      }
+    });
+  }
 
   win.once('ready-to-show', () => {
     win.show();
