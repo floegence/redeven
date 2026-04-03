@@ -189,6 +189,15 @@ func TestClassifyTerminalCommandRisk_Mutating(t *testing.T) {
 	}
 }
 
+func TestClassifyTerminalCommandRisk_QuotedGreaterThanStaysReadonly(t *testing.T) {
+	t.Parallel()
+
+	risk := ClassifyTerminalCommandRisk(`grep "a > b" README.md`)
+	if risk != TerminalCommandRiskReadonly {
+		t.Fatalf("risk=%q, want %q", risk, TerminalCommandRiskReadonly)
+	}
+}
+
 func TestClassifyTerminalCommandRisk_Dangerous(t *testing.T) {
 	t.Parallel()
 

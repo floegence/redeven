@@ -902,7 +902,31 @@ func hasWriteRedirection(segment string) bool {
 	lower = strings.ReplaceAll(lower, "1>&2", "")
 	lower = strings.ReplaceAll(lower, ">/dev/null", "")
 	lower = strings.ReplaceAll(lower, "2>/dev/null", "")
-	return strings.Contains(lower, ">")
+	quote := rune(0)
+	escaped := false
+	for _, ch := range lower {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if ch == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch ch {
+		case '\'', '"', '`':
+			quote = ch
+		case '>':
+			return true
+		}
+	}
+	return false
 }
 
 func isEnvAssignment(token string) bool {

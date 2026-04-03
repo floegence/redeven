@@ -10,6 +10,19 @@ const (
 	finalizationReasonExitPlanModeWaiting = "exit_plan_mode_waiting"
 )
 
+type runtimeCloseoutAttemptSource string
+
+const (
+	runtimeCloseoutAttemptSourceTextOnlyTurn    runtimeCloseoutAttemptSource = "text_only_turn"
+	runtimeCloseoutAttemptSourceContextCanceled runtimeCloseoutAttemptSource = "context_canceled"
+)
+
+type runtimeCloseoutAttempt struct {
+	Source      runtimeCloseoutAttemptSource
+	Fallback    string
+	Interrupted bool
+}
+
 func runtimeCloseoutHasVerifiedToolWork(state runtimeState) bool {
 	for _, fact := range state.CompletedActionFacts {
 		toolName := strings.ToLower(strings.TrimSpace(strings.SplitN(strings.TrimSpace(fact), ":", 2)[0]))
@@ -23,8 +36,11 @@ func runtimeCloseoutHasVerifiedToolWork(state runtimeState) bool {
 	return false
 }
 
-func buildRuntimeCloseout(resultText string, state runtimeState, complexity string, mode string) (RuntimeCloseout, bool, string) {
+func buildRuntimeCloseout(resultText string, state runtimeState, complexity string, mode string, attempt runtimeCloseoutAttempt) (RuntimeCloseout, bool, string) {
 	resultText = strings.TrimSpace(resultText)
+	if attempt.Interrupted {
+		return RuntimeCloseout{}, false, "interrupted_execution"
+	}
 	if resultText == "" {
 		return RuntimeCloseout{}, false, "empty_result"
 	}
@@ -64,7 +80,7 @@ func (r *run) finalizeRuntimeCloseout(step int, closeout RuntimeCloseout) {
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 }
 
-func (r *run) attemptRuntimeCloseout(step int, state runtimeState, complexity string, mode string, profile RunProtocolProfile, requireUserConfirm bool, source string, fallback string) bool {
+func (r *run) attemptRuntimeCloseout(step int, state runtimeState, complexity string, mode string, profile RunProtocolProfile, requireUserConfirm bool, attempt runtimeCloseoutAttempt) bool {
 	if r == nil || requireUserConfirm {
 		return false
 	}
@@ -72,8 +88,8 @@ func (r *run) attemptRuntimeCloseout(step int, state runtimeState, complexity st
 	if profile.CompletionMode != RunCompletionModeRuntimeCloseout {
 		return false
 	}
-	resultText := r.canonicalAssistantMarkdownOrFallback(fallback)
-	closeout, closeoutOK, closeoutReason := buildRuntimeCloseout(resultText, state, complexity, mode)
+	resultText := r.canonicalAssistantMarkdownOrFallback(attempt.Fallback)
+	closeout, closeoutOK, closeoutReason := buildRuntimeCloseout(resultText, state, complexity, mode, attempt)
 	r.persistRunEvent("protocol.closeout.attempt", RealtimeStreamKindLifecycle, map[string]any{
 		"step_index":          step,
 		"surface":             profile.Surface,
@@ -82,7 +98,8 @@ func (r *run) attemptRuntimeCloseout(step int, state runtimeState, complexity st
 		"gate_reason":         closeoutReason,
 		"verified_tool_work":  runtimeCloseoutHasVerifiedToolWork(state),
 		"mode":                strings.TrimSpace(mode),
-		"source":              strings.TrimSpace(source),
+		"source":              strings.TrimSpace(string(attempt.Source)),
+		"interrupted":         attempt.Interrupted,
 		"interaction_waiting": completionResultRequestsUserInput(resultText, state.InteractionContract),
 	})
 	if !closeoutOK {
@@ -96,7 +113,10 @@ func (r *run) finalizeIfContextCanceledWithRuntimeCloseout(ctx context.Context, 
 	if ctx == nil || ctx.Err() == nil {
 		return false
 	}
-	if r.attemptRuntimeCloseout(step, state, complexity, mode, profile, requireUserConfirm, "context_canceled", "") {
+	if r.attemptRuntimeCloseout(step, state, complexity, mode, profile, requireUserConfirm, runtimeCloseoutAttempt{
+		Source:      runtimeCloseoutAttemptSourceContextCanceled,
+		Interrupted: true,
+	}) {
 		return true
 	}
 	return r.finalizeIfContextCanceled(ctx)

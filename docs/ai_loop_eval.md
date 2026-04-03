@@ -106,6 +106,7 @@ Runtime-output invariants worth asserting explicitly:
 - a single assistant run should converge to one canonical visible answer, not multiple concatenated final-answer revisions
 - draft text from a still-active run must not be replayed into later provider turns as committed assistant history
 - `execution_contract` should explain why a run ended directly, promoted into an agentic loop, or persisted into `waiting_user`
+- `protocol_closeout` may recover only clean in-band completion; interrupted or canceled runs must never be reported as successful closeout
 
 ## Report model
 

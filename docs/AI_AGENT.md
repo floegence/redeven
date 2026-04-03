@@ -186,7 +186,7 @@ Behavior summary:
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
 - Structured protocol runs may also finish through runtime-assisted closeout after verified tool work plus a strong final answer, even if the model forgot to emit `task_complete`; this keeps compatibility with weaker tool-using models without removing explicit completion support.
-- Runtime-assisted closeout also remains available as a timeout/cancellation recovery path when verified tool work and a strong final answer were already produced before the provider stopped short of an explicit completion signal.
+- Runtime-assisted closeout is only a clean in-band completion recovery path. Interrupted, canceled, or timed-out runs must keep their interruption outcome even if partial final text and verified tool work already exist.
 - Flower keeps exactly one canonical visible answer slot per assistant run. Later answer revisions replace the current candidate instead of being appended as additional final-answer turns.
 - In the Env App UI, that canonical answer slot is rendered through two coordinated surfaces: settled transcript rows for persisted history, and a dedicated live assistant tail for the current in-flight answer. The runtime must never let both surfaces show the same assistant message at once.
 - Draft text produced inside the same run must stay separate from assistant history. Flower may stream draft markdown to the active answer block, but it must not feed that draft back into the next provider turn as if it were a committed assistant transcript message.

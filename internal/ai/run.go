@@ -66,6 +66,8 @@ type runOptions struct {
 	ForceReadonlyExec     bool
 	NoUserInteraction     bool
 	SkillManager          *skillManager
+
+	createWorkspaceCheckpoint func(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error)
 }
 
 type run struct {
@@ -158,6 +160,7 @@ type run struct {
 
 	muCheckpoint               sync.Mutex
 	workspaceCheckpointCreated bool
+	createWorkspaceCheckpoint  func(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error)
 }
 
 type assistantAnswerState struct {
@@ -225,6 +228,10 @@ func newRun(opts runOptions) *run {
 			}
 			return opts.SubagentDepth <= 0
 		}(),
+		createWorkspaceCheckpoint: opts.createWorkspaceCheckpoint,
+	}
+	if r.createWorkspaceCheckpoint == nil {
+		r.createWorkspaceCheckpoint = createWorkspaceCheckpoint
 	}
 	if r.idleTimeout > 0 {
 		r.activityCh = make(chan struct{}, 1)
@@ -2165,7 +2172,15 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		r.debug("ai.run.tool.approval.approved", "tool_id", toolID, "tool_name", toolName)
 	}
 
+	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
+	endBusy := r.beginBusy()
+	defer endBusy()
+	block.Status = ToolCallStatusRunning
+	r.emitPersistedToolBlockSet(idx, block)
+	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
+
 	if mutating {
+		r.touchActivity()
 		if _, err := r.ensureWorkspaceCheckpoint(ctx); err != nil {
 			setToolError(&aitools.ToolError{
 				Code:      aitools.ErrorCodeUnknown,
@@ -2179,13 +2194,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			return outcome, nil
 		}
 	}
-
-	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
-	endBusy := r.beginBusy()
-	defer endBusy()
-	block.Status = ToolCallStatusRunning
-	r.emitPersistedToolBlockSet(idx, block)
-	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
 
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {

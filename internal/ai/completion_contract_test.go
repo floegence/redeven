@@ -109,7 +109,7 @@ func TestBuildRuntimeCloseout(t *testing.T) {
 
 	closeout, ok, reason := buildRuntimeCloseout("Final verified answer.", runtimeState{
 		CompletedActionFacts: []string{"file.write: file.updated"},
-	}, TaskComplexityStandard, config.AIModeAct)
+	}, TaskComplexityStandard, config.AIModeAct, runtimeCloseoutAttempt{})
 	if !ok || reason != "ok" {
 		t.Fatalf("buildRuntimeCloseout => ok=%v reason=%q", ok, reason)
 	}
@@ -119,7 +119,13 @@ func TestBuildRuntimeCloseout(t *testing.T) {
 
 	if _, ok, reason := buildRuntimeCloseout("Final answer.", runtimeState{
 		CompletedActionFacts: []string{"write_todos: todos.updated"},
-	}, TaskComplexityStandard, config.AIModeAct); ok || reason != "missing_verified_tool_work" {
+	}, TaskComplexityStandard, config.AIModeAct, runtimeCloseoutAttempt{}); ok || reason != "missing_verified_tool_work" {
 		t.Fatalf("missing verified work => ok=%v reason=%q", ok, reason)
+	}
+
+	if _, ok, reason := buildRuntimeCloseout("Final verified answer.", runtimeState{
+		CompletedActionFacts: []string{"file.write: file.updated"},
+	}, TaskComplexityStandard, config.AIModeAct, runtimeCloseoutAttempt{Interrupted: true}); ok || reason != "interrupted_execution" {
+		t.Fatalf("interrupted execution => ok=%v reason=%q", ok, reason)
 	}
 }
