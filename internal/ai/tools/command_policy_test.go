@@ -90,6 +90,7 @@ func TestClassifyTerminalCommandRisk_CurlReadonlyFetches(t *testing.T) {
 		`curl -I https://example.com`,
 		`curl -s https://example.com 2>/dev/null`,
 		`curl -s https://example.com | head -n 20`,
+		`curl -s https://example.com/data.json | python3 -m json.tool`,
 		`curl -G --data-urlencode city=Toronto https://example.com/weather`,
 		`curl -o /dev/null -I https://example.com`,
 	}
@@ -227,6 +228,45 @@ func TestProfileTerminalCommand_CurlReadonlyIncludesEffectsAndReason(t *testing.
 	}
 	if !reflect.DeepEqual(profile.Effects, []string{terminalCommandEffectNetworkRead, terminalCommandEffectLocalRead}) {
 		t.Fatalf("effects=%v", profile.Effects)
+	}
+}
+
+func TestProfileTerminalCommand_CurlPipePythonJSONToolStaysReadonly(t *testing.T) {
+	t.Parallel()
+
+	profile := ProfileTerminalCommand(`curl -s https://example.com/data.json | python3 -m json.tool`)
+	if profile.Risk != TerminalCommandRiskReadonly {
+		t.Fatalf("risk=%q, want %q", profile.Risk, TerminalCommandRiskReadonly)
+	}
+	if profile.Reason != "http_fetch_stdout_readonly" {
+		t.Fatalf("reason=%q, want %q", profile.Reason, "http_fetch_stdout_readonly")
+	}
+	if !reflect.DeepEqual(profile.Effects, []string{terminalCommandEffectNetworkRead, terminalCommandEffectLocalRead}) {
+		t.Fatalf("effects=%v", profile.Effects)
+	}
+}
+
+func TestProfileTerminalCommand_PythonJSONToolFileIsReadonly(t *testing.T) {
+	t.Parallel()
+
+	profile := ProfileTerminalCommand(`python3 -m json.tool sample.json`)
+	if profile.Risk != TerminalCommandRiskReadonly {
+		t.Fatalf("risk=%q, want %q", profile.Risk, TerminalCommandRiskReadonly)
+	}
+	if profile.Reason != "python_json_tool_stdout" {
+		t.Fatalf("reason=%q, want %q", profile.Reason, "python_json_tool_stdout")
+	}
+}
+
+func TestProfileTerminalCommand_PythonInlineCodeRemainsMutating(t *testing.T) {
+	t.Parallel()
+
+	profile := ProfileTerminalCommand(`python3 -c 'print(123)'`)
+	if profile.Risk != TerminalCommandRiskMutating {
+		t.Fatalf("risk=%q, want %q", profile.Risk, TerminalCommandRiskMutating)
+	}
+	if profile.Reason != "python_inline_code" {
+		t.Fatalf("reason=%q, want %q", profile.Reason, "python_inline_code")
 	}
 }
 

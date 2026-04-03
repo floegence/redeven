@@ -39,6 +39,8 @@ var dangerousCommandPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\b(?:shutdown|reboot|poweroff|halt)\b`),
 }
 
+var pythonInterpreterPattern = regexp.MustCompile(`^python(?:[23](?:\.\d+)*)?$`)
+
 var readonlyVerbs = map[string]struct{}{
 	"basename": {},
 	"cat":      {},
@@ -388,6 +390,10 @@ func classifyShellSegment(segment string) TerminalCommandProfile {
 		return profile
 	}
 
+	if profile, ok := classifyPythonInterpreterCommand(verb, args); ok {
+		return profile
+	}
+
 	if profile, ok := classifyVerbCommand(verb, segment, args); ok {
 		return profile
 	}
@@ -404,6 +410,64 @@ func classifyShellSegment(segment string) TerminalCommandProfile {
 		Risk:   TerminalCommandRiskMutating,
 		Reason: "unknown_command",
 	}
+}
+
+func classifyPythonInterpreterCommand(verb string, args []string) (TerminalCommandProfile, bool) {
+	if !pythonInterpreterPattern.MatchString(strings.ToLower(strings.TrimSpace(verb))) {
+		return TerminalCommandProfile{}, false
+	}
+	if len(args) == 0 {
+		return TerminalCommandProfile{
+			Risk:   TerminalCommandRiskMutating,
+			Reason: "python_missing_mode",
+		}, true
+	}
+
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "" {
+			continue
+		}
+		if arg == "--" {
+			break
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			return TerminalCommandProfile{
+				Risk:   TerminalCommandRiskMutating,
+				Reason: "python_script_or_stdin_mode",
+			}, true
+		}
+		switch arg {
+		case "-m":
+			module, _ := consumeNextArg(args, i)
+			if strings.EqualFold(strings.TrimSpace(module), "json.tool") {
+				return TerminalCommandProfile{
+					Risk:    TerminalCommandRiskReadonly,
+					Effects: []string{terminalCommandEffectLocalRead},
+					Reason:  "python_json_tool_stdout",
+				}, true
+			}
+			return TerminalCommandProfile{
+				Risk:   TerminalCommandRiskMutating,
+				Reason: "python_unknown_module",
+			}, true
+		case "-c":
+			return TerminalCommandProfile{
+				Risk:   TerminalCommandRiskMutating,
+				Reason: "python_inline_code",
+			}, true
+		case "-W", "-X":
+			_, i = consumeNextArg(args, i)
+		default:
+			// Interpreter flags such as -B/-E/-I/-O/-OO/-q/-s/-S/-u/-v are safe
+			// to ignore here. We only recognize explicit readonly module mode.
+		}
+	}
+
+	return TerminalCommandProfile{
+		Risk:   TerminalCommandRiskMutating,
+		Reason: "python_unknown_mode",
+	}, true
 }
 
 func classifyVerbCommand(verb string, segment string, args []string) (TerminalCommandProfile, bool) {
