@@ -335,3 +335,137 @@ func TestHandleToolCall_PendingFrameVisibleInSnapshotImmediately(t *testing.T) {
 		t.Fatalf("snapshot did not include the emitted pending tool block")
 	}
 }
+
+func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	store, err := threadstore.Open(dbPath)
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.UpsertRun(ctx, threadstore.RunRecord{
+		RunID:      "run_terminal_timeout",
+		EndpointID: "env_1",
+		ThreadID:   "th_1",
+		MessageID:  "msg_1",
+		State:      "running",
+	}); err != nil {
+		t.Fatalf("UpsertRun: %v", err)
+	}
+
+	workspace := t.TempDir()
+	toolID := "tool_terminal_timeout"
+
+	var (
+		mu         sync.Mutex
+		errorFrame ToolCallBlock
+	)
+
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		RunID:        "run_terminal_timeout",
+		EndpointID:   "env_1",
+		ThreadID:     "th_1",
+		MessageID:    "msg_1",
+		AgentHomeDir: workspace,
+		Shell:        "bash",
+		ThreadsDB:    store,
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+		},
+		PersistOpTimeout: 5 * time.Second,
+		OnStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			block, ok := bs.Block.(ToolCallBlock)
+			if !ok || strings.TrimSpace(block.ToolID) != toolID || block.Status != ToolCallStatusError {
+				return
+			}
+			mu.Lock()
+			errorFrame = block
+			mu.Unlock()
+		},
+	})
+
+	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", map[string]any{
+		"command":    "printf partial-output && sleep 0.1",
+		"timeout_ms": 20,
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall: %v", err)
+	}
+	if outcome == nil {
+		t.Fatalf("missing tool outcome")
+	}
+	if outcome.Success {
+		t.Fatalf("expected timeout to surface as tool error, got success outcome=%+v", outcome)
+	}
+	if outcome.ToolError == nil {
+		t.Fatalf("missing timeout tool error")
+	}
+	if outcome.ToolError.Code != "TIMEOUT" {
+		t.Fatalf("tool error code=%q, want TIMEOUT", outcome.ToolError.Code)
+	}
+
+	resultMap, _ := outcome.Result.(map[string]any)
+	if resultMap == nil {
+		t.Fatalf("timeout outcome should preserve terminal result payload")
+	}
+	if !readBoolField(resultMap, "timed_out", "timedOut") {
+		t.Fatalf("timed_out=%v, want true", resultMap["timed_out"])
+	}
+
+	mu.Lock()
+	frame := errorFrame
+	mu.Unlock()
+	if frame.Status != ToolCallStatusError {
+		t.Fatalf("missing error frame, got status=%q", frame.Status)
+	}
+	frameResult, _ := frame.Result.(map[string]any)
+	if frameResult == nil {
+		t.Fatalf("error frame missing terminal result payload")
+	}
+	outputRef, _ := frameResult["output_ref"].(map[string]any)
+	if outputRef == nil {
+		t.Fatalf("error frame missing output_ref")
+	}
+	if got := strings.TrimSpace(anyToString(outputRef["run_id"])); got != "run_terminal_timeout" {
+		t.Fatalf("output_ref.run_id=%q, want %q", got, "run_terminal_timeout")
+	}
+	if got := strings.TrimSpace(anyToString(outputRef["tool_id"])); got != toolID {
+		t.Fatalf("output_ref.tool_id=%q, want %q", got, toolID)
+	}
+	if !readBoolField(frameResult, "timed_out", "timedOut") {
+		t.Fatalf("frame timed_out=%v, want true", frameResult["timed_out"])
+	}
+
+	rec, err := store.GetToolCall(ctx, "env_1", "run_terminal_timeout", toolID)
+	if err != nil {
+		t.Fatalf("GetToolCall: %v", err)
+	}
+	if rec == nil {
+		t.Fatalf("GetToolCall returned nil")
+	}
+	if rec.Status != string(ToolCallStatusError) {
+		t.Fatalf("tool call status=%q, want %q", rec.Status, ToolCallStatusError)
+	}
+	if rec.ErrorCode != "TIMEOUT" {
+		t.Fatalf("tool call error_code=%q, want TIMEOUT", rec.ErrorCode)
+	}
+
+	var persisted map[string]any
+	if err := json.Unmarshal([]byte(rec.ResultJSON), &persisted); err != nil {
+		t.Fatalf("result json invalid: %v", err)
+	}
+	if !readBoolField(persisted, "timed_out", "timedOut") {
+		t.Fatalf("persisted timed_out=%v, want true", persisted["timed_out"])
+	}
+}

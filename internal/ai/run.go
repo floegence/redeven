@@ -1918,12 +1918,13 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.emitPersistedToolBlockSet(idx, block)
 	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
 
-	setToolError := func(toolErr *aitools.ToolError, recoveryAction string) {
+	setToolError := func(toolErr *aitools.ToolError, recoveryAction string, partialResult any) {
 		if toolErr == nil {
 			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Tool failed"}
 		}
 		toolErr.Normalize()
 		outcome.Success = false
+		outcome.Result = partialResult
 		outcome.ToolError = toolErr
 		outcome.RecoveryAction = strings.TrimSpace(recoveryAction)
 		r.debug("ai.run.tool.result",
@@ -1948,8 +1949,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		block.Status = ToolCallStatusError
 		block.Error = toolErr.Message
 		block.ErrorDetails = toolErr
+		if toolName == "terminal.exec" {
+			block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), partialResult)
+		}
 		r.emitPersistedToolBlockSet(idx, block)
-		r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, toolErr, recoveryAction, toolStartedAt, time.Now())
+		r.persistToolCallSnapshot(toolID, toolName, block.Status, args, partialResult, toolErr, recoveryAction, toolStartedAt, time.Now())
 		r.persistRunEvent("tool.error", RealtimeStreamKindTool, map[string]any{
 			"tool_id":   toolID,
 			"tool_name": toolName,
@@ -1961,6 +1965,9 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			"status":          "failed",
 			"error":           toolErr,
 			"recovery_action": strings.TrimSpace(recoveryAction),
+		}
+		if partialResult != nil {
+			errPayload["result"] = redactAnyForLog("result", partialResult, 0)
 		}
 		r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
 			SpanID:          toolSpanID,
@@ -1980,7 +1987,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	// Detached runs are hard-canceled (e.g. replaced by a new user turn). Prevent them from
 	// mutating the workspace even if some tool calls were already queued.
 	if r.isDetached() && mutating {
-		setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Run was canceled", Retryable: false}, "")
+		setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Run was canceled", Retryable: false}, "", nil)
 		return outcome, nil
 	}
 
@@ -1994,7 +2001,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				"Switch to a worker subagent role when write operations are required.",
 			},
 		}
-		setToolError(toolErr, "")
+		setToolError(toolErr, "", nil)
 		return outcome, nil
 	}
 
@@ -2009,7 +2016,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				"Disable block_dangerous_commands in Settings > AI > Execution policy only if you accept the risk.",
 			},
 		}
-		setToolError(toolErr, "")
+		setToolError(toolErr, "", nil)
 		return outcome, nil
 	}
 
@@ -2023,7 +2030,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				"Complete with task_complete and report blockers instead of requesting approval.",
 			},
 		}
-		setToolError(toolErr, "")
+		setToolError(toolErr, "", nil)
 		return outcome, nil
 	}
 
@@ -2037,14 +2044,14 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				"If edits are required, call ask_user to request switching to act mode.",
 			},
 		}
-		setToolError(toolErr, "")
+		setToolError(toolErr, "", nil)
 		return outcome, nil
 	}
 
 	meta, err := r.sessionMetaForTool()
 	if err != nil {
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
-		setToolError(toolErr, "")
+		setToolError(toolErr, "", nil)
 		return outcome, nil
 	}
 
@@ -2085,19 +2092,19 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				toolErr = &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Timed out", Retryable: true}
 			}
-			setToolError(toolErr, "")
+			setToolError(toolErr, "", nil)
 			return outcome, nil
 		}
 		if timedOut {
 			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Approval timed out", Retryable: true}
 			block.ApprovalState = "rejected"
-			setToolError(toolErr, "")
+			setToolError(toolErr, "", nil)
 			return outcome, nil
 		}
 		if !approved {
 			toolErr := &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "Rejected by user", Retryable: false}
 			block.ApprovalState = "rejected"
-			setToolError(toolErr, "")
+			setToolError(toolErr, "", nil)
 			return outcome, nil
 		}
 
@@ -2116,7 +2123,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 					"Ensure the runtime state directory is writable.",
 					"Retry the tool call after fixing the checkpoint error.",
 				},
-			}, "")
+			}, "", nil)
 			return outcome, nil
 		}
 	}
@@ -2131,11 +2138,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
 		if errors.Is(toolErrRaw, context.Canceled) {
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "")
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}, "", nil)
 			return outcome, nil
 		}
 		if errors.Is(toolErrRaw, context.DeadlineExceeded) {
-			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: true}, "")
+			setToolError(&aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Tool execution timed out", Retryable: true}, "", nil)
 			return outcome, nil
 		}
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, toolErrRaw)
@@ -2143,8 +2150,15 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if aitools.ShouldRetryWithNormalizedArgs(toolErr) {
 			recoveryAction = "retry_with_normalized_args"
 		}
-		setToolError(toolErr, recoveryAction)
+		setToolError(toolErr, recoveryAction, nil)
 		return outcome, nil
+	}
+
+	if toolName == "terminal.exec" {
+		if toolErr := terminalExecTimeoutToolError(result, args); toolErr != nil {
+			setToolError(toolErr, "", result)
+			return outcome, nil
+		}
 	}
 
 	block.Status = ToolCallStatusSuccess
@@ -3397,6 +3411,37 @@ func buildTerminalExecBlockResult(runID string, toolID string, raw any) map[stri
 		out["stderr_bytes"] = len(stderr)
 	}
 	return out
+}
+
+func terminalExecTimeoutToolError(result any, args map[string]any) *aitools.ToolError {
+	resultMap, _ := result.(map[string]any)
+	if resultMap == nil || !readBoolField(resultMap, "timed_out", "timedOut") {
+		return nil
+	}
+	timeoutMS := readInt64Field(args, "timeout_ms", "timeoutMs")
+	if timeoutMS <= 0 {
+		timeoutMS = int64(terminalExecDefaultTimeout / time.Millisecond)
+	}
+	exitCode := readIntField(resultMap, "exit_code", "exitCode")
+	toolErr := &aitools.ToolError{
+		Code:      aitools.ErrorCodeTimeout,
+		Message:   fmt.Sprintf("Tool execution timed out after %d ms", timeoutMS),
+		Retryable: true,
+		SuggestedFixes: []string{
+			"Retry with a smaller scope.",
+			"Increase timeout_ms when the command is legitimately long-running.",
+			"Do not repeat the same timed-out command unchanged; switch strategy if progress stalls.",
+		},
+		Meta: map[string]any{
+			"timed_out":  true,
+			"timeout_ms": timeoutMS,
+		},
+	}
+	if exitCode != 0 {
+		toolErr.Meta["exit_code"] = exitCode
+	}
+	toolErr.Normalize()
+	return toolErr
 }
 
 func prependRedevenBinToEnv(baseEnv []string) []string {

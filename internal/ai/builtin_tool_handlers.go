@@ -94,13 +94,16 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolRe
 	if details == "" {
 		details = "tool execution failed"
 	}
+	data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
 	return ToolResult{
-		ToolID:   strings.TrimSpace(call.ID),
-		ToolName: toolName,
-		Status:   status,
-		Summary:  summary,
-		Details:  details,
-		Error:    outcome.ToolError,
+		ToolID:    strings.TrimSpace(call.ID),
+		ToolName:  toolName,
+		Status:    status,
+		Summary:   summary,
+		Details:   details,
+		Data:      data,
+		Truncated: truncated,
+		Error:     outcome.ToolError,
 	}, nil
 }
 

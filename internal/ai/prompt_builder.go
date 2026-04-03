@@ -469,6 +469,7 @@ func buildPromptToolFailureRecoverySection() promptSection {
 		"- If apply_patch fails, re-read the current file contents and regenerate a fresh canonical Begin/End Patch once; do NOT fall back to shell redirection or ad-hoc file overwrite commands for normal edits.",
 		"- If web.search fails (e.g., missing API key), do NOT retry web.search; use terminal.exec with curl to query a public API or fetch an authoritative URL directly.",
 		"- If terminal.exec fails, reduce scope or switch tools; if blocked, follow the interaction policy in runtime context.",
+		"- If terminal.exec times out, do NOT rerun the same command unchanged. Reduce scope, raise timeout_ms only when justified, or switch strategy.",
 	)
 }
 

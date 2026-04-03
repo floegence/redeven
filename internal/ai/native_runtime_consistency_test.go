@@ -128,6 +128,50 @@ func TestBuiltInToolHandler_ApprovalTimeout_MapsToTimeout(t *testing.T) {
 	}
 }
 
+func TestBuiltInToolHandler_TerminalExecTimeout_MapsToTimeoutWithPartialData(t *testing.T) {
+	t.Parallel()
+
+	agentHomeDir := t.TempDir()
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: agentHomeDir,
+		Shell:        "bash",
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+	})
+	h := &builtInToolHandler{r: r, toolName: "terminal.exec"}
+
+	res, err := h.Execute(context.Background(), ToolCall{
+		ID:   "tool_1",
+		Name: "terminal.exec",
+		Args: map[string]any{
+			"command":    "printf partial && sleep 0.1",
+			"timeout_ms": 20,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if res.Status != toolResultStatusTimeout {
+		t.Fatalf("status=%q, want %q (summary=%q details=%q)", res.Status, toolResultStatusTimeout, res.Summary, res.Details)
+	}
+	if res.Summary != "tool.timeout" {
+		t.Fatalf("summary=%q, want %q", res.Summary, "tool.timeout")
+	}
+	data, _ := res.Data.(map[string]any)
+	if data == nil {
+		t.Fatalf("timeout result should preserve partial terminal output data")
+	}
+	if got := strings.TrimSpace(anyToString(data["stdout"])); got != "partial" {
+		t.Fatalf("stdout=%q, want %q", got, "partial")
+	}
+	if !readBoolField(data, "timed_out", "timedOut") {
+		t.Fatalf("timed_out=%v, want true", data["timed_out"])
+	}
+	if res.Error == nil || res.Error.Code != "TIMEOUT" {
+		t.Fatalf("error=%+v, want TIMEOUT", res.Error)
+	}
+}
+
 type openAIDoomLoopGuardMock struct {
 	mu sync.Mutex
 
@@ -281,6 +325,148 @@ func (m *openAIDoomLoopGuardMock) snapshotStep() int {
 	return m.step
 }
 
+type openAIToolTimeoutRecoveryMock struct {
+	mu sync.Mutex
+
+	step               int
+	finalToken         string
+	sawTimeoutToolResp bool
+}
+
+func (m *openAIToolTimeoutRecoveryMock) handle(w http.ResponseWriter, r *http.Request) {
+	if r == nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	bodyText := string(body)
+	var req map[string]any
+	_ = json.Unmarshal(body, &req)
+	if isIntentClassifierRequest(req) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type":  "response.output_text.delta",
+			"delta": classifyIntentResponseToken(req),
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_timeout_intent",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+		return
+	}
+
+	m.mu.Lock()
+	if strings.Contains(bodyText, "tool.timeout") && strings.Contains(bodyText, "TIMEOUT") {
+		m.sawTimeoutToolResp = true
+	}
+	m.step++
+	step := m.step
+	finalToken := m.finalToken
+	sawTimeout := m.sawTimeoutToolResp
+	m.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	switch step {
+	case 1:
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_timeout_1",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+				"output": []any{
+					map[string]any{
+						"type":      "function_call",
+						"id":        "fc_timeout_1",
+						"call_id":   "call_timeout_1",
+						"name":      "terminal_exec",
+						"arguments": `{"command":"printf partial && sleep 0.1","timeout_ms":20}`,
+					},
+				},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+					"output_tokens_details": map[string]any{
+						"reasoning_tokens": 0,
+					},
+				},
+			},
+		})
+	default:
+		result := "TIMEOUT_SIGNAL_MISSING"
+		if sawTimeout {
+			result = finalToken
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"type": "response.completed",
+			"response": map[string]any{
+				"id":     "resp_timeout_2",
+				"model":  "gpt-5-mini",
+				"status": "completed",
+				"output": []any{
+					map[string]any{
+						"type":      "function_call",
+						"id":        "fc_timeout_2",
+						"call_id":   "call_timeout_2",
+						"name":      "task_complete",
+						"arguments": fmt.Sprintf(`{"result":%q}`, result),
+					},
+				},
+				"usage": map[string]any{
+					"input_tokens":  1,
+					"output_tokens": 1,
+					"output_tokens_details": map[string]any{
+						"reasoning_tokens": 0,
+					},
+				},
+			},
+		})
+	}
+
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	f.Flush()
+}
+
+func (m *openAIToolTimeoutRecoveryMock) snapshot() (int, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.step, m.sawTimeoutToolResp
+}
+
 func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 	t.Parallel()
 
@@ -393,6 +579,128 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 	}
 	if mock.snapshotStep() < 3 {
 		t.Fatalf("expected at least 3 provider turns, got %d", mock.snapshotStep())
+	}
+}
+
+func TestIntegration_NativeSDK_OpenAI_ToolTimeout_RecoversWithoutRunTimeout(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	stateDir := t.TempDir()
+	agentHomeDir := t.TempDir()
+
+	finalToken := "OPENAI_TOOL_TIMEOUT_RECOVERY_OK"
+	mock := &openAIToolTimeoutRecoveryMock{finalToken: finalToken}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: baseURL,
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			},
+		},
+	}
+
+	meta := session.Meta{
+		EndpointID:        "env_test",
+		NamespacePublicID: "ns_test",
+		ChannelID:         "ch_test_tool_timeout_recovery",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	svc, err := NewService(Options{
+		Logger:              logger,
+		StateDir:            stateDir,
+		AgentHomeDir:        agentHomeDir,
+		Shell:               "bash",
+		Config:              cfg,
+		RunMaxWallTime:      30 * time.Second,
+		RunIdleTimeout:      10 * time.Second,
+		ToolApprovalTimeout: 5 * time.Second,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) != "openai" {
+				return "", false, nil
+			}
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_test_native_openai_tool_timeout_recovery_1"
+	rr := httptest.NewRecorder()
+	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "Trigger one tool timeout, then recover and finish cleanly."},
+		Options:  RunOptions{MaxSteps: 4, MaxNoToolRounds: 1},
+	}, rr); err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, finalToken) {
+		t.Fatalf("NDJSON stream missing token %q, body=%q", finalToken, body)
+	}
+
+	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil {
+		t.Fatalf("thread missing after run")
+	}
+	if strings.TrimSpace(view.RunStatus) != string(RunStateSuccess) {
+		t.Fatalf("run_status=%q, want %q", view.RunStatus, RunStateSuccess)
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(view.RunError)), "timed out") {
+		t.Fatalf("run_error=%q, want no run timeout", view.RunError)
+	}
+	if !strings.Contains(view.LastMessagePreview, finalToken) {
+		t.Fatalf("unexpected last_message_preview=%q, want token %q", view.LastMessagePreview, finalToken)
+	}
+
+	toolCalls, err := svc.threadsDB.ListRecentThreadToolCalls(ctx, meta.EndpointID, th.ThreadID, 20)
+	if err != nil {
+		t.Fatalf("ListRecentThreadToolCalls: %v", err)
+	}
+	if len(toolCalls) != 1 {
+		t.Fatalf("tool call records=%d, want 1; records=%+v", len(toolCalls), toolCalls)
+	}
+	if toolCalls[0].Status != string(ToolCallStatusError) {
+		t.Fatalf("tool status=%q, want %q", toolCalls[0].Status, ToolCallStatusError)
+	}
+	if toolCalls[0].ErrorCode != "TIMEOUT" {
+		t.Fatalf("tool error_code=%q, want TIMEOUT", toolCalls[0].ErrorCode)
+	}
+
+	steps, sawTimeoutSignal := mock.snapshot()
+	if steps < 2 {
+		t.Fatalf("expected at least 2 provider turns, got %d", steps)
+	}
+	if !sawTimeoutSignal {
+		t.Fatalf("expected provider follow-up turn to receive structured timeout tool result")
 	}
 }
 
