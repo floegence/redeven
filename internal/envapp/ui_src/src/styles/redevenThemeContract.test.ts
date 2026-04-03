@@ -47,7 +47,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);');
     expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);');
     expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 82%, transparent);');
-    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 12%, transparent);');
+    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 10%, transparent);');
     expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-border) 82%);');
     expect(src).toContain('--git-browser-selection-chip-fg: var(--git-browser-selection-fg);');
   });
@@ -86,6 +86,8 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-browser-selection-surface {');
     expect(src).toContain('.git-browser-selection-nav {');
     expect(src).toContain('.git-browser-selection-secondary {');
+    expect(src).toContain('html.dark .git-meta-pill:not(.git-browser-selection-chip) {');
+    expect(src).toContain('background-color: color-mix(in srgb, var(--tag-bg) 88%, white 12%);');
     expect(src).toContain('.git-browser-selection-chip {');
     expect(src).toContain('--tag-bg: var(--git-browser-selection-chip-bg);');
     expect(src).toContain('--tag-border: var(--git-browser-selection-chip-border);');
