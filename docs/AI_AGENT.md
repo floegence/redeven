@@ -6,7 +6,7 @@ High-level design:
 
 - The browser UI calls the runtime via the existing `/_redeven_proxy/api/ai/*` gateway routes (still over Flowersec E2EE proxy).
 - The **Go runtime is the security boundary** and executes tools after validating authoritative session metadata.
-- Tooling follows a shell-first workflow: `terminal.exec` for investigation and verification, `apply_patch` in canonical Begin/End Patch format for file edits.
+- Tooling now uses a structured file-operation surface by default: `file.read` for direct inspection, `file.edit` / `file.write` for deterministic mutations, `terminal.exec` for investigation and verification, and `apply_patch` as a compatibility fallback.
 - LLM orchestration runs in the **Go runtime** via native provider SDK adapters:
   - OpenAI: `openai-go` (Responses API)
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
@@ -101,14 +101,27 @@ Example:
 
 Built-in tools:
 
+- `file.read`
+- `file.edit`
+- `file.write`
 - `terminal.exec`
 - `apply_patch`
 - `write_todos`
+- `exit_plan_mode`
 - `web.search` (optional; controlled by `ai.web_search_provider`)
+
+Structured file-tool notes:
+
+- `file.read` is the primary file inspection path for code and text files.
+- `file.edit` performs exact string replacement with deterministic single-match or replace-all semantics.
+- `file.write` creates or replaces a full file deterministically inside the runtime home boundary.
+- Structured file tools resolve relative paths from the thread working directory, but runtime path validation still enforces the runtime-home sandbox boundary.
+- When a task explicitly asks for verification or a verification command, Flower should use `terminal.exec` for that verification step; `file.read` can supplement inspection, but it does not replace a real verification command.
 
 Patch execution notes:
 
 - The model-facing `apply_patch` contract is a single canonical format: one document from `*** Begin Patch` to `*** End Patch` with relative paths plus `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks.
+- `apply_patch` remains supported during migration, but it is a compatibility path rather than the primary edit surface for new runs.
 - `diff --git` unified diff parsing remains available as a compatibility path for older payloads, but it is not the recommended format for normal Flower-authored edits.
 - Hunk matching is intentionally controlled and explainable: Flower tries exact line matching first, then trailing-whitespace-tolerant matching, then Unicode punctuation normalization.
 - If `apply_patch` fails for a normal file edit, Flower should re-read the file and regenerate a fresh canonical patch instead of switching to shell overwrite/redirection commands.
@@ -140,8 +153,9 @@ Behavior summary:
 - In `plan`, readonly `terminal.exec` commands are still allowed, including readonly HTTP fetches that only stream to stdout (for example `curl -s URL`, `curl -I URL`, `wget -qO- URL`).
 - In `plan`, HTTP commands that write local files/state or send request bodies/uploads are mutating and blocked (for example `curl -o`, `curl -d`, `curl -F`, `curl -T`, `wget -O file`, `wget --post-data`).
 - Execution mode is a thread-level server state (`execution_mode`) and is authoritative for every run.
-- If edits are needed in `plan`, Flower should use `ask_user` to request switching the thread to `act`.
-- The mode-switch `ask_user` must use structured `questions[]`, and deterministic UI actions belong on `questions[].choices[].actions` (for example `[{type:"set_mode",mode:"act"}]`).
+- If execution is needed in `plan`, Flower should use `exit_plan_mode` to request switching the thread to `act`.
+- `exit_plan_mode` is converted runtime-side into the existing waiting-user prompt UI with deterministic `set_mode` actions; the model no longer needs to handcraft a manual mode-switch `ask_user` payload.
+- Runtime-owned signal tools such as `ask_user` and `exit_plan_mode` are still persisted as successful tool-call records so evals, audits, and transcript recovery can observe them consistently.
 - Every `ask_user` question should use the canonical question-level response contract. Each question declares `response_mode`, `choices[]` contains fixed options only, and any choice-based question must also declare `choices_exhaustive`.
 - `ask_user` is the canonical structured-input primitive both for true blockers and for guided structured interaction turns such as questionnaires, interviews, quizzes, guessing games, decision trees, and other option-driven conversations.
 - Guided structured interactions should be front-loaded into an explicit interaction contract classified with the run policy, then preserved consistently across prompts, gates, waiting-user rendering, and completion.
@@ -171,6 +185,8 @@ Behavior summary:
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.
+- Structured protocol runs may also finish through runtime-assisted closeout after verified tool work plus a strong final answer, even if the model forgot to emit `task_complete`; this keeps compatibility with weaker tool-using models without removing explicit completion support.
+- Runtime-assisted closeout also remains available as a timeout/cancellation recovery path when verified tool work and a strong final answer were already produced before the provider stopped short of an explicit completion signal.
 - Flower keeps exactly one canonical visible answer slot per assistant run. Later answer revisions replace the current candidate instead of being appended as additional final-answer turns.
 - In the Env App UI, that canonical answer slot is rendered through two coordinated surfaces: settled transcript rows for persisted history, and a dedicated live assistant tail for the current in-flight answer. The runtime must never let both surfaces show the same assistant message at once.
 - Draft text produced inside the same run must stay separate from assistant history. Flower may stream draft markdown to the active answer block, but it must not feed that draft back into the next provider turn as if it were a committed assistant transcript message.
@@ -222,8 +238,9 @@ Flower quality is validated with a behavioral eval harness, not just transcript 
 The eval harness runs real Flower tasks and asserts:
 
 - final thread state (`run_status`, `execution_mode`, waiting prompt behavior)
-- structural tool behavior (`terminal.exec`, `write_todos`, `ask_user`, `task_complete`, forbidden tools)
+- structural tool behavior (`file.read`, `file.edit`, `file.write`, `terminal.exec`, `write_todos`, `exit_plan_mode`, `task_complete`, forbidden tools)
 - runtime events such as `ask_user.waiting`, `todos.updated`, and loop-failure signals
+- structured workspace-scope enforcement for `file.read`, `file.edit`, `file.write`, `apply_patch`, and `terminal.exec`
 - todo discipline, including final closeout and single `in_progress` execution
 - assistant-visible output, evidence paths, and fallback-free closeout
 

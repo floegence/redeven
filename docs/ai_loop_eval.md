@@ -33,6 +33,17 @@ Hard-gate suite:
 
 `eval_local_config_sandbox_suite.sh` is the dedicated entry point for validating the locally active Flower model configuration. It does not force a provider or model on the command line; instead it uses the current `ai.current_model_id` from local config, so if your current local setup is `moonshot/kimi-k2.5`, the suite runs on that model automatically. The wrapper also disables benchmark baselines by default unless you explicitly provide `BASELINE_PATH`, because this suite is meant for provider-specific local diagnostics rather than the shared open-source promotion gate.
 
+The local-config sandbox suite is also the main end-to-end regression surface for the structured runtime protocol. It intentionally exercises:
+
+- `file.read` for direct repository inspection
+- `exit_plan_mode` for readonly plan-to-act escalation
+- `write_todos` for multi-step readonly discipline
+- `file.write` and `file.edit` for deterministic structured mutations
+- `apply_patch` as a compatibility editing path
+- workspace-boundary refusal when a task asks for an out-of-scope write
+
+For structured edit and compatibility tasks, verification should be command-backed: the intended success path is mutation via `file.*` or `apply_patch`, then verification via `terminal.exec`, then a user-facing summary with evidence paths.
+
 ## Inputs
 
 Environment variables:
@@ -78,15 +89,17 @@ Tasks are loaded from YAML under `eval/tasks/` and support:
 - `assertions.events`
 - `assertions.todos`
 
-Tool assertions also support `workspace_scoped_tools`, which fails a task when those tool calls contain path arguments that escape the isolated task workspace.
+Tool assertions also support `workspace_scoped_tools`, which fails a task when those tool calls contain path arguments that escape the isolated task workspace. Structured file tools (`file.read`, `file.edit`, `file.write`) participate in the same boundary checks as `apply_patch` and `terminal.exec`.
 
 Assertion groups are intentionally structural:
 
 - output: evidence, minimum path count, minimum length, required phrases, forbidden phrases
 - thread: final `run_status`, final `execution_mode`, waiting prompt presence
-- tools: required tool calls, forbidden tool calls, success requirements, call budget
+- tools: required tool calls, forbidden tool calls, success requirements, call budget, and workspace-scope safety
 - events: required event types, forbidden event types, hard-fail event types
 - todos: snapshot presence, non-empty plan, closed plan, in-progress discipline
+
+Runtime-owned signal tools such as `ask_user` and `exit_plan_mode` are expected to appear as normal successful tool-call records in reports so eval assertions can treat them the same way as scheduler-dispatched tools.
 
 Runtime-output invariants worth asserting explicitly:
 
@@ -113,7 +126,7 @@ Default output directory:
 
 - `~/.redeven/ai/evals/<timestamp>/`
 
-The local-config sandbox suite writes the same report shape and is intended for provider-specific smoke/regression runs such as "verify my current Kimi setup can inspect, plan, write safely inside the sandbox, and refuse outside-workspace edits."
+The local-config sandbox suite writes the same report shape and is intended for provider-specific smoke/regression runs such as "verify my current Kimi setup can inspect with file.read, escalate with exit_plan_mode, write safely inside the sandbox, preserve apply_patch compatibility, and refuse outside-workspace edits."
 
 ## Hard gate
 

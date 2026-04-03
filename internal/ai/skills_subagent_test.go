@@ -214,7 +214,7 @@ This content should appear in overlay.`
 	if _, _, err := r.activateSkill(skillName); err != nil {
 		t.Fatalf("activate skill: %v", err)
 	}
-	contract := resolveRunCapabilityContract(r, nil, false)
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), nil, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "build", TaskComplexityStandard, 0, 8, true, nil, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "Available skills: prompt-skill") {
 		t.Fatalf("prompt missing skills catalog: %q", prompt)

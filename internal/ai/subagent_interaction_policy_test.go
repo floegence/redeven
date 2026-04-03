@@ -93,7 +93,7 @@ func TestResolveRunCapabilityContract_MainAutonomousNoUserInteraction(t *testing
 		{Name: "terminal.exec"},
 	}
 	r := &run{noUserInteraction: true}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), tools, false)
 	if contract.AllowUserInteraction {
 		t.Fatalf("expected no user interaction")
 	}
@@ -117,7 +117,7 @@ func TestResolveRunCapabilityContract_SubagentAutonomousNoUserInteraction(t *tes
 		noUserInteraction: true,
 		subagentDepth:     1,
 	}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), tools, false)
 	if contract.PromptProfile != runPromptProfileSubagentAutonomous {
 		t.Fatalf("unexpected prompt profile=%q", contract.PromptProfile)
 	}
@@ -166,7 +166,7 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testi
 		NoUserInteraction: true,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if strings.Contains(prompt, "call ask_user") || strings.Contains(prompt, "ask_user is unavailable") || strings.Contains(prompt, "Do not attempt ask_user") {
 		t.Fatalf("no-user prompt should not include ask_user guidance: %q", prompt)
@@ -190,7 +190,7 @@ func TestBuildLayeredSystemPrompt_SubagentAutonomousUsesDelegatedWording(t *test
 		SubagentDepth:     1,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "You are Flower operating as a delegated autonomous subagent") {
 		t.Fatalf("subagent prompt missing delegated identity: %q", prompt)
@@ -203,13 +203,13 @@ func TestBuildLayeredSystemPrompt_SubagentAutonomousUsesDelegatedWording(t *test
 	}
 }
 
-func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *testing.T) {
+func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndExitPlanModeSwitch(t *testing.T) {
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir: t.TempDir(),
 	})
-	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "apply_patch"}, {Name: "task_complete"}, {Name: "ask_user"}}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.edit", Mutating: true}, {Name: "task_complete"}, {Name: "ask_user"}, {Name: "exit_plan_mode"}}
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "Plan mode is strict readonly: do NOT run any mutating action.") {
 		t.Fatalf("plan prompt missing strict readonly guidance: %q", prompt)
@@ -217,8 +217,8 @@ func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *te
 	if !strings.Contains(prompt, "Readonly terminal.exec commands include local inspection and readonly HTTP fetches that only stream to stdout") {
 		t.Fatalf("plan prompt missing readonly HTTP guidance: %q", prompt)
 	}
-	if !strings.Contains(prompt, "If edits are required, call ask_user and request the user to switch this thread to act mode.") {
-		t.Fatalf("plan prompt missing act switch guidance: %q", prompt)
+	if !strings.Contains(prompt, "If execution is required, call exit_plan_mode instead of constructing a manual mode-switch ask_user payload.") {
+		t.Fatalf("plan prompt missing exit_plan_mode guidance: %q", prompt)
 	}
 }
 
@@ -229,7 +229,7 @@ func TestBuildLayeredSystemPrompt_PlanModeNoUserInteractionUsesTaskCompleteBlock
 		NoUserInteraction: true,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "User interaction is disabled in this run, so do NOT call ask_user.") {
 		t.Fatalf("plan no-user prompt missing no-ask_user guidance: %q", prompt)
@@ -247,7 +247,7 @@ func TestBuildLayeredSystemPrompt_PlanModeSubagentNoUserInteractionUsesParentAct
 		SubagentDepth:     1,
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	contract := resolveRunCapabilityContract(r, defaultStructuredProtocolProfile(), tools, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "If edits are required, finish with task_complete and report blockers plus suggested parent actions.") {
 		t.Fatalf("plan subagent prompt missing parent-action guidance: %q", prompt)

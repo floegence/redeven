@@ -1795,7 +1795,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err := registerBuiltInTools(registry, r); err != nil {
 		return r.failRun("Failed to initialize tool registry", err)
 	}
-	modeFilter := newModeToolFilter(r.cfg)
+	protocolProfile := resolveRunProtocolProfile(capability)
+	r.persistRunEvent("protocol.profile.resolved", RealtimeStreamKindLifecycle, protocolProfile.eventPayload())
+	modeFilter := newModeToolFilter(r.cfg, protocolProfile, !r.noUserInteraction)
 	if len(r.toolAllowlist) > 0 {
 		allow := make(map[string]struct{}, len(r.toolAllowlist))
 		for name := range r.toolAllowlist {
@@ -1811,7 +1813,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err != nil {
 		return r.failRun("Failed to initialize tool scheduler", err)
 	}
-	capabilityContract := resolveRunCapabilityContract(r, scheduler.ActiveTools(mode), req.ModelCapability.SupportsAskUserQuestionBatches)
+	capabilityContract := resolveRunCapabilityContract(r, protocolProfile, scheduler.ActiveTools(mode), req.ModelCapability.SupportsAskUserQuestionBatches)
 	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, capabilityContract.eventPayload())
 	r.ensureSkillManager()
 
@@ -2154,7 +2156,7 @@ mainLoop:
 			break
 		}
 		r.touchActivity()
-		if r.finalizeIfContextCanceled(execCtx) {
+		if r.finalizeIfContextCanceledWithRuntimeCloseout(execCtx, step, state, taskComplexity, req.Options.Mode, capabilityContract.ProtocolProfile, req.Options.RequireUserConfirmOnTaskComplete) {
 			return nil
 		}
 
@@ -2414,7 +2416,7 @@ mainLoop:
 		}
 		if stepErr != nil {
 			recoveryCount++
-			if r.finalizeIfContextCanceled(execCtx) {
+			if r.finalizeIfContextCanceledWithRuntimeCloseout(execCtx, step, state, taskComplexity, req.Options.Mode, capabilityContract.ProtocolProfile, req.Options.RequireUserConfirmOnTaskComplete) {
 				return nil
 			}
 			if recoveryCount > 5 {
@@ -2476,6 +2478,7 @@ mainLoop:
 		normalCalls := signalSplit.NormalCalls
 		taskCompleteCall := signalSplit.TaskCompleteCall
 		askUserCall := signalSplit.AskUserCall
+		exitPlanModeCall := signalSplit.ExitPlanModeCall
 		if len(signalSplit.ForbiddenSignals) > 0 {
 			blockedSignals := make([]string, 0, len(signalSplit.ForbiddenSignals))
 			for _, blocked := range signalSplit.ForbiddenSignals {
@@ -2673,6 +2676,58 @@ mainLoop:
 				continue
 			}
 			processedNormalCalls = true
+		}
+
+		if exitPlanModeCall != nil {
+			promoteToAgenticLoop(step, "plan_mode_exit_requested")
+			var exitArgs ExitPlanModeArgs
+			exitArgs.Summary = extractSignalText(*exitPlanModeCall, "summary")
+			exitResult, exitErr := r.toolExitPlanMode(strings.TrimSpace(exitPlanModeCall.ID), exitArgs)
+			if exitErr != nil || exitResult.WaitingPrompt == nil {
+				recoveryCount++
+				exceptionOverlay = buildRecoveryOverlay(recoveryCount, 5, errors.New("exit_plan_mode failed"), lastSignature, capabilityContract.AllowUserInteraction)
+				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "exit_plan_mode failed. Regenerate a concise reason and call exit_plan_mode again if act mode is still required."}}})
+				isFirstRound = false
+				continue
+			}
+			question := strings.TrimSpace(exitResult.WaitingPrompt.PublicSummary)
+			if question == "" && len(exitResult.WaitingPrompt.Questions) > 0 {
+				question = strings.TrimSpace(exitResult.WaitingPrompt.Questions[0].Question)
+			}
+			closeout, closeoutErr := r.closeOpenTodosBeforeWaitingUser(execCtx, step, question, "exit_plan_mode")
+			if closeoutErr != nil {
+				r.persistRunEvent("todos.closeout.waiting_user_failed", RealtimeStreamKindLifecycle, map[string]any{
+					"step_index": step,
+					"source":     "exit_plan_mode",
+					"error":      strings.TrimSpace(closeoutErr.Error()),
+				})
+				return closeoutErr
+			}
+			r.emitExitPlanModeToolBlock(strings.TrimSpace(exitPlanModeCall.ID), exitArgs, exitResult)
+			r.reconcileCanonicalWaitingUserMessage()
+			r.persistRunEvent("exit_plan_mode.waiting", RealtimeStreamKindLifecycle, map[string]any{
+				"summary":                      strings.TrimSpace(exitResult.Summary),
+				"questions_count":              len(exitResult.WaitingPrompt.Questions),
+				"choices_count":                requestUserInputQuestionChoiceCount(exitResult.WaitingPrompt.Questions),
+				"source":                       "exit_plan_mode",
+				"finalization_reason":          finalizationReasonExitPlanModeWaiting,
+				"interaction_contract_enabled": normalizeInteractionContract(state.InteractionContract).Enabled,
+				"todo_closeout": map[string]any{
+					"updated":          closeout.Updated,
+					"version_before":   closeout.VersionBefore,
+					"version_after":    closeout.VersionAfter,
+					"open_before":      closeout.OpenBefore,
+					"open_after":       closeout.OpenAfter,
+					"total_before":     closeout.TotalBefore,
+					"total_after":      closeout.TotalAfter,
+					"conflict_retries": closeout.ConflictRetries,
+				},
+			})
+			r.setFinalizationReason(finalizationReasonExitPlanModeWaiting)
+			r.setEndReason("complete")
+			r.emitLifecyclePhase("ended", map[string]any{"reason": finalizationReasonExitPlanModeWaiting, "step_index": step})
+			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+			return nil
 		}
 
 		if askUserCall != nil {
@@ -2925,6 +2980,10 @@ mainLoop:
 				_ = r.appendTextDelta(strings.TrimSpace(stepResult.Text))
 			}
 			r.finalizeImplicitReply(step, "hybrid_first_turn_reply", stepResult.Text)
+			return nil
+		}
+
+		if r.attemptRuntimeCloseout(step, state, taskComplexity, req.Options.Mode, capabilityContract.ProtocolProfile, req.Options.RequireUserConfirmOnTaskComplete, "text_only_turn", stepResult.Text) {
 			return nil
 		}
 
@@ -5083,6 +5142,7 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract
 		"interaction_contract": contract,
 		"waiting_user":         true,
 	}
+	toolID = r.persistSyntheticToolSuccess(toolID, "ask_user", args, result)
 	block := ToolCallBlock{
 		Type:     "tool-call",
 		ToolName: "ask_user",
@@ -5090,6 +5150,53 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract
 		Args:     args,
 		Status:   ToolCallStatusSuccess,
 		Result:   result,
+	}
+	r.emitPersistedToolBlockSet(idx, block)
+}
+
+func (r *run) emitExitPlanModeToolBlock(toolID string, args ExitPlanModeArgs, result ExitPlanModeResult) {
+	if r == nil || result.WaitingPrompt == nil {
+		return
+	}
+	toolID = strings.TrimSpace(toolID)
+	if toolID == "" {
+		if id, err := newToolID(); err == nil {
+			toolID = id
+		} else {
+			toolID = "tool_exit_plan_mode_waiting"
+		}
+	}
+	args.Summary = truncateRunes(strings.TrimSpace(args.Summary), 280)
+	args.AllowedPrompts = normalizeExitPlanPromptRefs(args.AllowedPrompts)
+	prompt := normalizeRequestUserInputPrompt(result.WaitingPrompt)
+	if prompt == nil {
+		return
+	}
+	r.mu.Lock()
+	idx := r.nextBlockIndex
+	r.nextBlockIndex++
+	r.needNewTextBlock = true
+	r.mu.Unlock()
+	blockArgs := map[string]any{}
+	if args.Summary != "" {
+		blockArgs["summary"] = args.Summary
+	}
+	if len(args.AllowedPrompts) > 0 {
+		blockArgs["allowed_prompts"] = args.AllowedPrompts
+	}
+	blockResult := map[string]any{
+		"summary":        strings.TrimSpace(result.Summary),
+		"waiting_prompt": prompt,
+		"waiting_user":   true,
+	}
+	toolID = r.persistSyntheticToolSuccess(toolID, "exit_plan_mode", blockArgs, blockResult)
+	block := ToolCallBlock{
+		Type:     "tool-call",
+		ToolName: "exit_plan_mode",
+		ToolID:   toolID,
+		Args:     blockArgs,
+		Status:   ToolCallStatusSuccess,
+		Result:   blockResult,
 	}
 	r.emitPersistedToolBlockSet(idx, block)
 }

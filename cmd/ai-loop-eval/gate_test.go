@@ -238,3 +238,60 @@ func TestFirstWorkspaceScopeViolation_ApplyPatchIgnoresOutsidePathMentionsInFile
 		t.Fatalf("unexpected violation: %s", violation)
 	}
 }
+
+func TestFirstWorkspaceScopeViolation_AllowsStructuredFileToolInsideWorkspace(t *testing.T) {
+	t.Parallel()
+
+	workspace := "/tmp/workspace"
+	calls := []threadstore.ToolCallRecord{
+		{
+			ToolName: "file.write",
+			Status:   "success",
+			ArgsJSON: `{"file_path":"/tmp/workspace/notes/inside.txt","content":"hello"}`,
+		},
+		{
+			ToolName: "file.read",
+			Status:   "success",
+			ArgsJSON: `{"file_path":"/tmp/workspace/README.md"}`,
+		},
+	}
+
+	if violation := firstWorkspaceScopeViolation("file.write", calls[:1], workspace); violation != "" {
+		t.Fatalf("unexpected file.write violation: %s", violation)
+	}
+	if violation := firstWorkspaceScopeViolation("file.read", calls[1:], workspace); violation != "" {
+		t.Fatalf("unexpected file.read violation: %s", violation)
+	}
+}
+
+func TestAssessTaskOutcome_FailsWhenStructuredFileToolEscapesSandbox(t *testing.T) {
+	t.Parallel()
+
+	task := evalTask{
+		ID: "structured_file_scope",
+		Assertions: taskAssertionsSpec{
+			Tools: taskToolAssertions{
+				WorkspaceScopedTools: []string{"file.write"},
+			},
+		},
+	}
+	result := taskResult{
+		Task:          task,
+		WorkspacePath: "/tmp/workspace",
+		rawToolCalls: []threadstore.ToolCallRecord{
+			{
+				ToolName: "file.write",
+				Status:   "success",
+				ArgsJSON: `{"file_path":"/tmp/outside.txt","content":"escape"}`,
+			},
+		},
+	}
+
+	outcome := assessTaskOutcome(task, result)
+	if outcome.Passed {
+		t.Fatalf("expected workspace scope violation to fail")
+	}
+	if len(outcome.HardFailReasons) == 0 || outcome.HardFailReasons[0] != "tool_args_escape_workspace:file.write" {
+		t.Fatalf("hard_fail_reasons=%v", outcome.HardFailReasons)
+	}
+}

@@ -353,6 +353,8 @@ func findWorkspaceScopeViolation(toolName string, args any, workspacePath string
 		return findTerminalExecWorkspaceScopeViolation(args, workspacePath)
 	case "apply_patch":
 		return findApplyPatchWorkspaceScopeViolation(args, workspacePath)
+	case "file.read", "file.edit", "file.write":
+		return findStructuredFileToolWorkspaceScopeViolation(args, workspacePath)
 	}
 	return ""
 }
@@ -407,6 +409,24 @@ func findApplyPatchWorkspaceScopeViolation(args any, workspacePath string) strin
 		}
 	}
 	return ""
+}
+
+func findStructuredFileToolWorkspaceScopeViolation(args any, workspacePath string) string {
+	obj, _ := args.(map[string]any)
+	if len(obj) == 0 {
+		return ""
+	}
+	candidate := strings.TrimSpace(anyToString(obj["file_path"]))
+	if candidate == "" {
+		return ""
+	}
+	if strings.Contains(candidate, "../") || strings.Contains(candidate, `..\`) {
+		return "parent:" + candidate
+	}
+	if !filepath.IsAbs(candidate) {
+		return ""
+	}
+	return validateScopedPathCandidate(filepath.Clean(candidate), workspacePath)
 }
 
 func validatePatchTargetPath(candidate string, workspacePath string) string {

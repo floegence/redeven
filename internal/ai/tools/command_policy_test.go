@@ -371,3 +371,31 @@ func TestInvocationPolicies_WriteTodos(t *testing.T) {
 		t.Fatalf("write_todos should not be dangerous")
 	}
 }
+
+func TestInvocationPolicies_StructuredFileTools(t *testing.T) {
+	t.Parallel()
+
+	readArgs := map[string]any{"file_path": "/tmp/workspace/readme.md"}
+	if RequiresApprovalForInvocation("file.read", readArgs) {
+		t.Fatalf("file.read should not require approval")
+	}
+	if IsMutatingForInvocation("file.read", readArgs) {
+		t.Fatalf("file.read should not be classified as mutating")
+	}
+
+	writeArgs := map[string]any{"file_path": "/tmp/workspace/note.txt", "content": "hello"}
+	if !RequiresApprovalForInvocation("file.write", writeArgs) {
+		t.Fatalf("file.write should require approval")
+	}
+	if !IsMutatingForInvocation("file.write", writeArgs) {
+		t.Fatalf("file.write should be classified as mutating")
+	}
+
+	editArgs := map[string]any{"file_path": "/tmp/workspace/note.txt", "old_string": "a", "new_string": "b"}
+	if !RequiresApprovalForInvocation("file.edit", editArgs) {
+		t.Fatalf("file.edit should require approval")
+	}
+	if !IsMutatingForInvocation("file.edit", editArgs) {
+		t.Fatalf("file.edit should be classified as mutating")
+	}
+}

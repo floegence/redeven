@@ -18,10 +18,16 @@ func toolSuccessSummary(toolName string) string {
 	switch strings.TrimSpace(toolName) {
 	case "terminal.exec":
 		return "terminal.exec"
+	case "file.read":
+		return "file.read"
+	case "file.edit", "file.write":
+		return "file.updated"
 	case "apply_patch":
 		return "apply_patch.applied"
 	case "write_todos":
 		return "todos.updated"
+	case "exit_plan_mode":
+		return "plan.exit.requested"
 	case "web.search":
 		return "web.search"
 	case "knowledge.search":
@@ -448,8 +454,41 @@ func builtInToolDefinitions() []ToolDef {
 	}
 	defs := []ToolDef{
 		{
+			Name:             "file.read",
+			Description:      "Read a workspace-scoped file from disk. Use this as the primary file inspection tool before editing.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to read. Relative paths resolve from the current working directory; absolute paths must stay within the runtime home."}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional 1-based starting line for partial reads."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Optional maximum number of lines to return for partial reads."}}, "required": []string{"file_path"}, "additionalProperties": false}),
+			ParallelSafe:     true,
+			Mutating:         false,
+			RequiresApproval: false,
+			Source:           "builtin",
+			Namespace:        "builtin.file",
+			Priority:         100,
+		},
+		{
+			Name:             "file.edit",
+			Description:      "Edit a workspace-scoped text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must stay within the runtime home."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}, "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
+			ParallelSafe:     false,
+			Mutating:         true,
+			RequiresApproval: true,
+			Source:           "builtin",
+			Namespace:        "builtin.file",
+			Priority:         100,
+		},
+		{
+			Name:             "file.write",
+			Description:      "Write the full content of a workspace-scoped text file. Use this to create files or replace an entire file deterministically.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must stay within the runtime home."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}, "required": []string{"file_path", "content"}, "additionalProperties": false}),
+			ParallelSafe:     false,
+			Mutating:         true,
+			RequiresApproval: true,
+			Source:           "builtin",
+			Namespace:        "builtin.file",
+			Priority:         100,
+		},
+		{
 			Name:             "apply_patch",
-			Description:      "Apply a patch to files on the local machine. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks.",
+			Description:      "Apply a patch to files on the local machine. This is a compatibility editing tool; prefer file.edit or file.write for normal changes. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"patch": map[string]any{"type": "string", "description": "Entire patch text in canonical Begin/End Patch format. Start with `*** Begin Patch`, end with `*** End Patch`, use relative paths, and include file operations such as `*** Update File:` plus `@@` hunks."}}, "required": []string{"patch"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
@@ -523,6 +562,16 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:     100,
 		},
 		{
+			Name:         "exit_plan_mode",
+			Description:  "Request a deterministic switch prompt from plan mode into act mode when execution is needed. Use this instead of constructing a manual mode-switch ask_user payload.",
+			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"summary": map[string]any{"type": "string", "maxLength": 500, "description": "Short explanation of why act mode is needed."}, "allowed_prompts": map[string]any{"type": "array", "maxItems": 8, "items": map[string]any{"type": "object", "properties": map[string]any{"tool": map[string]any{"type": "string", "maxLength": 80}, "prompt": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"tool", "prompt"}, "additionalProperties": false}}}, "additionalProperties": false}),
+			ParallelSafe: true,
+			Mutating:     false,
+			Source:       "builtin",
+			Namespace:    "builtin.signal",
+			Priority:     100,
+		},
+		{
 			Name:         "use_skill",
 			Description:  "Load and activate a skill by name.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"}}, "required": []string{"name"}, "additionalProperties": false}),
@@ -554,7 +603,7 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		if def.Name == "web.search" && (r == nil || !r.webSearchToolEnabled) {
 			continue
 		}
-		if def.Name == "ask_user" && r != nil && r.noUserInteraction {
+		if (def.Name == "ask_user" || def.Name == "exit_plan_mode") && r != nil && r.noUserInteraction {
 			continue
 		}
 		if !r.allowSubagentDelegate {
@@ -564,7 +613,7 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 			}
 		}
 		handler := ToolHandler(&builtInToolHandler{r: r, toolName: def.Name})
-		if def.Name == "task_complete" || def.Name == "ask_user" {
+		if def.Name == "task_complete" || def.Name == "ask_user" || def.Name == "exit_plan_mode" {
 			handler = signalToolHandler{}
 		}
 		if err := reg.Register(def, handler); err != nil {
