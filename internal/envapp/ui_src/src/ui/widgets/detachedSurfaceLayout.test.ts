@@ -14,17 +14,26 @@ describe('detached surface desktop wiring', () => {
     const shellSrc = read('../EnvAppShell.tsx');
     const sceneSrc = read('./DetachedSurfaceScene.tsx');
     const browserSrc = read('./RemoteFileBrowser.tsx');
+    const frameSrc = read('./DesktopDetachedWindowFrame.tsx');
 
     expect(shellSrc).toContain("parseDetachedSurfaceFromURL(window.location)");
     expect(shellSrc).toContain("const surface = buildDetachedFilePreviewSurface(item);");
     expect(shellSrc).toContain('openDetachedSurfaceWindow(surface);');
     expect(shellSrc).toContain('<DetachedSurfaceScene');
 
+    expect(frameSrc).toContain("data-redeven-desktop-window-titlebar=\"true\"");
+    expect(frameSrc).toContain("data-redeven-desktop-window-titlebar-content=\"true\"");
+    expect(frameSrc).toContain("data-redeven-desktop-titlebar-drag-region=\"true\"");
     expect(sceneSrc).toContain('stateScope="detached-surface"');
+    expect(sceneSrc).toContain("import { DesktopDetachedWindowFrame } from './DesktopDetachedWindowFrame';");
+    expect(sceneSrc).toContain('<DesktopDetachedWindowFrame');
+    expect(sceneSrc).toContain('showHeader={false}');
     expect(sceneSrc).toContain('<RemoteFileBrowser');
     expect(sceneSrc).toContain('document.title = detachedSceneTitle(props.surface);');
     expect(sceneSrc).toContain('<FilePreviewControllerContent');
-    expect(sceneSrc).toContain("writeTextToClipboard(path)");
+    expect(sceneSrc).toContain('const sceneModel = createMemo<DetachedSurfaceFrameModel>');
+    expect(sceneSrc).toContain('headerActions: props.accessGateVisible ? undefined : previewHeaderActions()');
+    expect(sceneSrc).toContain("await writeTextToClipboard(path)");
     expect(sceneSrc).toContain("filePreview.controller.selectedText() ?? '').trim() || readSelectionTextFromPreview(previewContentEl)");
 
     expect(browserSrc).toContain('stateScope?: string;');

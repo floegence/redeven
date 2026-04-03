@@ -232,7 +232,11 @@ Behavior:
   - `--redeven-desktop-titlebar-height`
   - `--redeven-desktop-titlebar-start-inset`
   - `--redeven-desktop-titlebar-end-inset`
+- Preload also publishes generic detached-window titlebar hooks so renderer shells can consume the same contract without per-scene platform logic:
+  - `[data-redeven-desktop-window-titlebar='true']`
+  - `[data-redeven-desktop-window-titlebar-content='true']`
 - Floe shell top bars and desktop-owned launcher chrome both receive drag / no-drag semantics from preload so BrowserWindow movement keeps working after the app takes over the title bar area.
+- Detached desktop child windows render through a shared chrome-safe frame in Env App, so title, subtitle, banner, footer, and scene body can evolve independently while native control reservations still come only from the shell contract.
 - Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
 - Theme toggles from either welcome or Env App update native chrome and all registered renderer windows together, including detached desktop child windows.
 - When the stored source is `system`, Electron main rebroadcasts a fresh snapshot whenever the OS theme changes.

@@ -65,6 +65,21 @@ vi.mock('../utils/clipboard', () => ({
   writeTextToClipboard,
 }));
 
+vi.mock('./DesktopDetachedWindowFrame', () => ({
+  DesktopDetachedWindowFrame: (props: any) => (
+    <div
+      data-testid="desktop-detached-window-frame"
+      data-title={props.title}
+      data-subtitle={props.subtitle ?? ''}
+    >
+      <div data-testid="detached-frame-banner">{props.banner}</div>
+      <div data-testid="detached-frame-actions">{props.headerActions}</div>
+      <div data-testid="detached-frame-body">{props.children}</div>
+      <div data-testid="detached-frame-footer">{props.footer}</div>
+    </div>
+  ),
+}));
+
 vi.mock('./FilePreviewContext', () => ({
   useFilePreviewContext: () => ({
     controller: {
@@ -105,15 +120,13 @@ vi.mock('./FilePreviewContent', () => ({
   FilePreviewContent: (props: any) => (
     <div
       data-testid="preview-content"
+      data-show-header={String(props.showHeader !== false)}
       data-can-edit={String(Boolean(props.canEdit))}
       data-editing={String(Boolean(props.editing))}
       data-has-copy-path={String(typeof props.onCopyPath === 'function')}
       ref={props.contentRef}
     >
       {props.item?.path}
-      <button type="button" onClick={() => void props.onCopyPath?.()}>
-        Copy path
-      </button>
     </div>
   ),
 }));
@@ -168,8 +181,11 @@ describe('DetachedSurfaceScene', () => {
 
     expect(openPreview).toHaveBeenCalledWith(previewItem);
     expect(document.title).toBe('demo.txt - File Preview');
+    expect(host.querySelector('[data-testid="desktop-detached-window-frame"]')?.getAttribute('data-title')).toBe('demo.txt');
+    expect(host.querySelector('[data-testid="desktop-detached-window-frame"]')?.getAttribute('data-subtitle')).toBe('/workspace/demo.txt');
     expect(host.querySelector('[data-testid="preview-content"]')?.getAttribute('data-can-edit')).toBe('true');
-    expect(host.querySelector('[data-testid="preview-content"]')?.getAttribute('data-has-copy-path')).toBe('true');
+    expect(host.querySelector('[data-testid="preview-content"]')?.getAttribute('data-show-header')).toBe('false');
+    expect(host.querySelector('[data-testid="preview-content"]')?.getAttribute('data-has-copy-path')).toBe('false');
 
     vi.spyOn(window, 'getSelection').mockReturnValue({
       rangeCount: 1,
@@ -178,9 +194,11 @@ describe('DetachedSurfaceScene', () => {
     } as unknown as Selection);
 
     const buttons = Array.from(host.querySelectorAll('button'));
+    buttons.find((button) => button.textContent?.includes('Edit'))?.click();
     buttons.find((button) => button.textContent?.includes('Ask Flower'))?.click();
     buttons.find((button) => button.textContent?.includes('Download'))?.click();
 
+    expect(beginEditing).toHaveBeenCalledTimes(1);
     expect(openAskFlowerComposer).toHaveBeenCalledTimes(1);
     expect(openAskFlowerComposer).toHaveBeenCalledWith(expect.objectContaining({
       source: 'file_preview',
@@ -206,7 +224,7 @@ describe('DetachedSurfaceScene', () => {
       />
     ), host);
 
-    const copyButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Copy path'));
+    const copyButton = host.querySelector('button[aria-label="Copy path"]') as HTMLButtonElement | null;
     copyButton?.click();
     await Promise.resolve();
 
@@ -295,6 +313,8 @@ describe('DetachedSurfaceScene', () => {
     expect(scene?.getAttribute('data-state-scope')).toBe('detached-surface');
     expect(scene?.getAttribute('data-initial-path')).toBe('/workspace');
     expect(scene?.getAttribute('data-home-path')).toBe('/Users/demo');
+    expect(host.querySelector('[data-testid="desktop-detached-window-frame"]')?.getAttribute('data-title')).toBe('File Browser');
+    expect(host.querySelector('[data-testid="desktop-detached-window-frame"]')?.getAttribute('data-subtitle')).toBe('/workspace');
     expect(document.title).toBe('/workspace - File Browser');
   });
 
@@ -314,5 +334,23 @@ describe('DetachedSurfaceScene', () => {
     ), host);
 
     expect(openPreview).not.toHaveBeenCalled();
+  });
+
+  it('hides preview actions while the access gate is blocking detached content', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <DetachedSurfaceScene
+        surface={{ kind: 'file_preview', path: '/workspace/demo.txt' }}
+        accessGateVisible
+        accessGatePanel={<div data-testid="detached-access-gate">gate</div>}
+      />
+    ), host);
+
+    expect(host.querySelector('[data-testid="detached-access-gate"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="preview-content"]')).toBeNull();
+    expect(host.querySelector('[data-testid="detached-frame-actions"]')?.textContent).toBe('');
+    expect(host.querySelector('[data-testid="detached-frame-footer"]')?.textContent).toBe('');
   });
 });

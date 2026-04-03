@@ -153,4 +153,25 @@ describe('FilePreviewContent', () => {
     discardButton?.click();
     expect(onDiscard).toHaveBeenCalledTimes(1);
   });
+
+  it('supports a content-only mode without the shared path header', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FilePreviewContent
+        item={{ id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' }}
+        descriptor={{ mode: 'text', textPresentation: 'code', language: 'typescript', wrapText: false }}
+        text="const value = 1;"
+        showHeader={false}
+        canEdit
+      />
+    ), host);
+
+    const root = host.firstElementChild as HTMLElement | null;
+    expect(root?.firstElementChild?.textContent).not.toContain('Path');
+    expect(host.textContent).not.toContain('Edit');
+    expect(host.querySelector('button[aria-label="Copy path"]')).toBeNull();
+    expect(host.querySelector('[data-testid="text-preview-pane"]')?.textContent).toContain('/workspace/demo.ts');
+  });
 });

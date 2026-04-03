@@ -2,7 +2,7 @@ import type { FilePreviewContentProps } from './FilePreviewContent';
 import { FilePreviewContent } from './FilePreviewContent';
 import type { FilePreviewController } from './createFilePreviewController';
 
-export interface FilePreviewControllerContentProps extends Pick<FilePreviewContentProps, 'contentRef' | 'onCopyPath'> {
+export interface FilePreviewControllerContentProps extends Pick<FilePreviewContentProps, 'contentRef' | 'onCopyPath' | 'showHeader'> {
   controller: FilePreviewController;
 }
 
@@ -27,6 +27,7 @@ export function FilePreviewControllerContent(props: FilePreviewControllerContent
       xlsxSheetName={props.controller.xlsxSheetName()}
       xlsxRows={props.controller.xlsxRows()}
       onCopyPath={props.onCopyPath}
+      showHeader={props.showHeader}
       contentRef={props.contentRef}
       onStartEdit={props.controller.beginEditing}
       onDraftChange={props.controller.updateDraft}

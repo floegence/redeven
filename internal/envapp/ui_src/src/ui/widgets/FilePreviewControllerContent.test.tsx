@@ -73,6 +73,7 @@ describe('FilePreviewControllerContent', () => {
       <FilePreviewControllerContent
         controller={controller as any}
         onCopyPath={onCopyPath}
+        showHeader={false}
         contentRef={contentRef}
       />
     ), host);
@@ -86,6 +87,7 @@ describe('FilePreviewControllerContent', () => {
     expect(capturedProps.current.canEdit).toBe(true);
     expect(capturedProps.current.message).toBe('preview message');
     expect(capturedProps.current.onCopyPath).toBe(onCopyPath);
+    expect(capturedProps.current.showHeader).toBe(false);
     expect(contentRef).toHaveBeenCalledTimes(1);
 
     capturedProps.current.onStartEdit?.();

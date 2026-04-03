@@ -94,6 +94,8 @@ describe('bootstrapDesktopThemeBridge', () => {
       `--redeven-desktop-titlebar-end-inset: ${windowChromeVars['--redeven-desktop-titlebar-end-inset']};`,
     );
     expect(style?.textContent).toContain("[data-floe-shell-slot='top-bar']");
+    expect(style?.textContent).toContain("[data-redeven-desktop-window-titlebar='true']");
+    expect(style?.textContent).toContain("[data-redeven-desktop-window-titlebar-content='true']");
     expect(style?.textContent).toContain("[data-redeven-desktop-titlebar-no-drag='true']");
 
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];

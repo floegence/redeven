@@ -138,6 +138,22 @@ Implications:
 - Detached desktop child windows inherit the same theme snapshot and document-class synchronization path as the main Env App window.
 - Eliminating independent page authority for native window colors avoids light flashes during dark-mode open, close, and aggressive resize transitions.
 
+## Detached Desktop Window Frame
+
+Detached desktop child windows no longer mount business content directly against the document origin.
+
+Contract:
+
+- `DetachedSurfaceScene` maps each detached surface into a shared frame model with `title`, `subtitle`, `headerActions`, `body`, and optional `footer`.
+- `DesktopDetachedWindowFrame` owns the chrome-safe titlebar reservation and consumes the shell-published titlebar hooks instead of re-deriving per-platform spacing inside scene components.
+- File preview uses that shared frame header for file identity plus copy/edit/save/discard actions, while `FilePreviewContent` switches into a content-only mode for detached native windows.
+- Detached file browser keeps its existing workspace behavior, but now starts below the shared frame instead of assuming the page can render at the top edge of the document.
+
+Implications:
+
+- Future detached desktop surfaces should plug content into the shared frame rather than writing a new top-level window layout.
+- Native control avoidance stays centralized in desktop preload + shared renderer frame code instead of scattering padding fixes across individual features.
+
 ## Git browse stash workflow
 
 Git stash stays a workflow overlay owned by Git browse rather than a separate primary navigation mode:

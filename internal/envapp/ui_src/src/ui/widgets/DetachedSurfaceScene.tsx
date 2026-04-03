@@ -1,4 +1,5 @@
-import { Show, createEffect, onCleanup, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { Check, Copy } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useNotification } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
@@ -13,6 +14,7 @@ import {
   requestDesktopAskFlowerMainWindowHandoff,
   shouldRequireDesktopAskFlowerMainWindowHandoff,
 } from '../services/desktopAskFlowerBridge';
+import { DesktopDetachedWindowFrame } from './DesktopDetachedWindowFrame';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewControllerContent } from './FilePreviewControllerContent';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
@@ -23,6 +25,14 @@ export interface DetachedSurfaceSceneProps {
   accessGatePanel: JSX.Element;
   connectError?: string | null;
 }
+
+type DetachedSurfaceFrameModel = Readonly<{
+  title: string;
+  subtitle?: string;
+  headerActions?: JSX.Element;
+  footer?: JSX.Element;
+  body: JSX.Element;
+}>;
 
 function buildDetachedPreviewItem(path: string): FileItem {
   const name = basenameFromAbsolutePath(path);
@@ -46,8 +56,10 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
   const protocol = useProtocol();
   const notification = useNotification();
   const filePreview = useFilePreviewContext();
+  const [pathCopied, setPathCopied] = createSignal(false);
   let previewContentEl: HTMLDivElement | undefined;
   let openedPreviewPath = '';
+  let pathCopiedResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
   createEffect(() => {
     const previousTitle = document.title;
@@ -68,13 +80,33 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     void filePreview.controller.openPreview(item);
   });
 
+  const resolvedPreviewPath = () => String(filePreview.controller.item()?.path ?? props.surface.path ?? '').trim();
+  const previewCanShowEditorActions = () => (
+    props.surface.kind === 'file_preview'
+    && filePreview.controller.descriptor().mode === 'text'
+    && Boolean(filePreview.controller.canEdit())
+  );
+
+  createEffect(() => {
+    resolvedPreviewPath();
+    if (pathCopiedResetTimer !== undefined) {
+      globalThis.clearTimeout(pathCopiedResetTimer);
+      pathCopiedResetTimer = undefined;
+    }
+    setPathCopied(false);
+  });
+
   onCleanup(() => {
+    if (pathCopiedResetTimer !== undefined) {
+      globalThis.clearTimeout(pathCopiedResetTimer);
+      pathCopiedResetTimer = undefined;
+    }
     openedPreviewPath = '';
     filePreview.controller.closePreview();
   });
 
   const handleCopyPath = async (): Promise<boolean> => {
-    const path = String(filePreview.controller.item()?.path ?? '').trim();
+    const path = resolvedPreviewPath();
     if (!path) {
       notification.error('Copy failed', 'Missing file path');
       return false;
@@ -89,9 +121,22 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     }
   };
 
+  const handleCopyPathWithFeedback = async () => {
+    const copied = await handleCopyPath();
+    if (!copied) return;
+    setPathCopied(true);
+    if (pathCopiedResetTimer !== undefined) {
+      globalThis.clearTimeout(pathCopiedResetTimer);
+    }
+    pathCopiedResetTimer = globalThis.setTimeout(() => {
+      pathCopiedResetTimer = undefined;
+      setPathCopied(false);
+    }, 1600);
+  };
+
   const handleAskFlower = () => {
     const selectionText = String(filePreview.controller.selectedText() ?? '').trim() || readSelectionTextFromPreview(previewContentEl);
-    const path = String(filePreview.controller.item()?.path ?? '').trim();
+    const path = resolvedPreviewPath();
     if (
       requestDesktopAskFlowerMainWindowHandoff({
         source: 'file_preview',
@@ -118,49 +163,109 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     env.openAskFlowerComposer(result.intent);
   };
 
-  const previewScene = () => (
+  const previewHeaderActions = () => (
+    <>
+      <button
+        type="button"
+        class={`inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 ${
+          pathCopied() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+        }`}
+        disabled={!resolvedPreviewPath()}
+        aria-label={pathCopied() ? 'Path copied' : 'Copy path'}
+        title={pathCopied() ? 'Path copied' : 'Copy path'}
+        onClick={() => {
+          void handleCopyPathWithFeedback();
+        }}
+      >
+        <Show when={pathCopied()} fallback={<Copy class="size-4" />}>
+          <Check class="size-4" />
+        </Show>
+      </button>
+
+      <Show when={previewCanShowEditorActions() && !filePreview.controller.editing()}>
+        <Button
+          size="sm"
+          variant="outline"
+          class="cursor-pointer"
+          onClick={() => filePreview.controller.beginEditing()}
+        >
+          Edit
+        </Button>
+      </Show>
+
+      <Show when={previewCanShowEditorActions() && filePreview.controller.editing()}>
+        <div class="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            class="cursor-pointer"
+            disabled={filePreview.controller.saving()}
+            onClick={() => filePreview.controller.revertCurrent()}
+          >
+            Discard
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            class="cursor-pointer"
+            loading={filePreview.controller.saving()}
+            disabled={!filePreview.controller.dirty()}
+            onClick={() => {
+              void filePreview.controller.saveCurrent();
+            }}
+          >
+            Save
+          </Button>
+        </div>
+      </Show>
+    </>
+  );
+
+  const previewBody = () => (
     <div class="flex h-full min-h-0 flex-col bg-background">
       <div class="flex-1 min-h-0 overflow-hidden">
         <FilePreviewControllerContent
           controller={filePreview.controller}
-          onCopyPath={handleCopyPath}
+          showHeader={false}
           contentRef={(element) => {
             previewContentEl = element;
           }}
         />
       </div>
+    </div>
+  );
 
-      <div class="flex shrink-0 flex-col gap-3 border-t border-border/70 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:flex-row sm:items-center sm:justify-between">
-        <div class="min-h-4 min-w-0 text-[11px] text-muted-foreground">
-          <Show when={filePreview.controller.truncated()}>
-            <div class="truncate">Truncated preview</div>
-          </Show>
-        </div>
+  const previewFooter = () => (
+    <div class="flex shrink-0 flex-col gap-3 border-t border-border/70 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:flex-row sm:items-center sm:justify-between">
+      <div class="min-h-4 min-w-0 text-[11px] text-muted-foreground">
+        <Show when={filePreview.controller.truncated()}>
+          <div class="truncate">Truncated preview</div>
+        </Show>
+      </div>
 
-        <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
-          <Button
-            size="sm"
-            variant="outline"
-            class="w-full sm:w-auto"
-            disabled={!filePreview.controller.item() || filePreview.controller.loading()}
-            onClick={handleAskFlower}
-          >
-            Ask Flower
-          </Button>
+      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          class="w-full cursor-pointer sm:w-auto"
+          disabled={!filePreview.controller.item() || filePreview.controller.loading()}
+          onClick={handleAskFlower}
+        >
+          Ask Flower
+        </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            class="w-full sm:w-auto"
-            loading={filePreview.controller.downloadLoading()}
-            disabled={!filePreview.controller.item() || filePreview.controller.loading()}
-            onClick={() => {
-              void filePreview.controller.downloadCurrent();
-            }}
-          >
-            Download
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          class="w-full cursor-pointer sm:w-auto"
+          loading={filePreview.controller.downloadLoading()}
+          disabled={!filePreview.controller.item() || filePreview.controller.loading()}
+          onClick={() => {
+            void filePreview.controller.downloadCurrent();
+          }}
+        >
+          Download
+        </Button>
       </div>
     </div>
   );
@@ -175,24 +280,40 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     </div>
   );
 
-  return (
-    <div class="flex h-full min-h-0 flex-col bg-background">
-      <Show when={props.connectError}>
-        <div class="shrink-0 border-b border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
-          {props.connectError}
-        </div>
-      </Show>
+  const sceneModel = createMemo<DetachedSurfaceFrameModel>(() => {
+    if (props.surface.kind === 'file_preview') {
+      const path = resolvedPreviewPath() || props.surface.path;
+      return {
+        title: basenameFromAbsolutePath(path),
+        subtitle: path,
+        headerActions: props.accessGateVisible ? undefined : previewHeaderActions(),
+        footer: props.accessGateVisible ? undefined : previewFooter(),
+        body: props.accessGateVisible ? props.accessGatePanel : previewBody(),
+      };
+    }
 
-      <div class="flex-1 min-h-0 overflow-hidden">
-        <Show
-          when={!props.accessGateVisible}
-          fallback={props.accessGatePanel}
-        >
-          <Show when={props.surface.kind === 'file_preview'} fallback={fileBrowserScene()}>
-            {previewScene()}
-          </Show>
-        </Show>
-      </div>
-    </div>
+    return {
+      title: 'File Browser',
+      subtitle: props.surface.path,
+      body: props.accessGateVisible ? props.accessGatePanel : fileBrowserScene(),
+    };
+  });
+
+  return (
+    <DesktopDetachedWindowFrame
+      title={sceneModel().title}
+      subtitle={sceneModel().subtitle}
+      headerActions={sceneModel().headerActions}
+      footer={sceneModel().footer}
+      banner={props.connectError
+        ? (
+            <div class="border-b border-error/30 bg-error/5 px-3 py-2 text-xs text-error">
+              {props.connectError}
+            </div>
+          )
+        : undefined}
+    >
+      {sceneModel().body}
+    </DesktopDetachedWindowFrame>
   );
 }

@@ -54,6 +54,16 @@ ${declarations}
   padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset));
 }
 
+[data-redeven-desktop-window-titlebar='true'] {
+  min-height: var(--redeven-desktop-titlebar-height, 40px);
+}
+
+[data-redeven-desktop-window-titlebar-content='true'] {
+  min-height: var(--redeven-desktop-titlebar-height, 40px);
+  padding-inline-start: calc(0.75rem + var(--redeven-desktop-titlebar-start-inset));
+  padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset));
+}
+
 [data-floe-shell-slot='top-bar'] button,
 [data-floe-shell-slot='top-bar'] a,
 [data-floe-shell-slot='top-bar'] input,
