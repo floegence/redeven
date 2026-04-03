@@ -10,17 +10,16 @@ import {
   compactSaveActionLabel,
   compactSettingsFieldLabel,
   isRedundantSettingsFieldLabel,
-  compactSessionAvailabilityLabel,
   compactSettingsActionLabel,
   plainTextFromHelpHTML,
 } from './welcomeCopy';
 
 describe('welcomeCopy', () => {
   it('shortens the dense desktop button labels', () => {
-    expect(compactCloseActionLabel('Back to current environment')).toBe('Back');
+    expect(compactCloseActionLabel('Close Launcher')).toBe('Close Launcher');
     expect(compactCloseActionLabel('Quit')).toBe('Quit');
     expect(compactOpenLocalEnvironmentLabel(false)).toBe('Open');
-    expect(compactOpenLocalEnvironmentLabel(true)).toBe('Resume');
+    expect(compactOpenLocalEnvironmentLabel(true)).toBe('Focus');
     expect(compactSettingsActionLabel()).toBe('Settings');
     expect(compactSettingsFieldLabel('Local UI bind address')).toBe('Bind address');
     expect(compactSettingsFieldLabel('Local UI password')).toBe('Password');
@@ -40,7 +39,6 @@ describe('welcomeCopy', () => {
   });
 
   it('shortens verbose tag copy while preserving meaning', () => {
-    expect(compactSessionAvailabilityLabel()).toBe('Active');
     expect(compactPasswordStateTagLabel('Password configured')).toBe('Password set');
     expect(compactPasswordStateTagLabel('Password required before the next open of Local Environment')).toBe('Password needed');
     expect(compactPasswordStateTagLabel('Password will be replaced on save')).toBe('Update on save');

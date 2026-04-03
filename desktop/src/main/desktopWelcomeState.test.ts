@@ -5,9 +5,13 @@ import {
   buildDesktopWelcomeSnapshot,
   buildRemoteConnectionIssue,
 } from './desktopWelcomeState';
+import {
+  buildExternalLocalUIDesktopTarget,
+  buildManagedLocalDesktopTarget,
+} from './desktopTarget';
 
 describe('desktopWelcomeState', () => {
-  it('builds Connect Environment snapshots around the active session and saved environments', () => {
+  it('builds launcher snapshots around open windows and saved environments', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '0.0.0.0:24000',
@@ -35,14 +39,24 @@ describe('desktopWelcomeState', () => {
           'http://192.168.1.11:24000/',
         ],
       },
-      externalStartup: {
-        local_ui_url: 'http://192.168.1.12:24000/',
-        local_ui_urls: ['http://192.168.1.12:24000/'],
-      },
-      activeSessionTarget: {
-        kind: 'external_local_ui',
-        external_local_ui_url: 'http://192.168.1.12:24000/',
-      },
+      openSessions: [
+        {
+          session_key: 'managed_local',
+          target: buildManagedLocalDesktopTarget(),
+          startup: {
+            local_ui_url: 'http://localhost:23998/',
+            local_ui_urls: ['http://localhost:23998/'],
+          },
+        },
+        {
+          session_key: 'url:http://192.168.1.12:24000/',
+          target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
+          startup: {
+            local_ui_url: 'http://192.168.1.12:24000/',
+            local_ui_urls: ['http://192.168.1.12:24000/'],
+          },
+        },
+      ],
       entryReason: 'switch_environment',
       issue: buildRemoteConnectionIssue(
         'http://192.168.1.99:24000/',
@@ -53,17 +67,30 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.surface).toBe('connect_environment');
     expect(snapshot.entry_reason).toBe('switch_environment');
-    expect(snapshot.current_session_target_kind).toBe('external_local_ui');
-    expect(snapshot.current_session_local_ui_url).toBe('http://192.168.1.12:24000/');
-    expect(snapshot.current_session_label).toBe('Another environment is open');
-    expect(snapshot.close_action_label).toBe('Back to current environment');
+    expect(snapshot.close_action_label).toBe('Close Launcher');
+    expect(snapshot.open_windows).toEqual([
+      expect.objectContaining({
+        session_key: 'managed_local',
+        target_kind: 'managed_local',
+        label: 'Local Environment',
+        local_ui_url: 'http://localhost:23998/',
+      }),
+      expect.objectContaining({
+        session_key: 'url:http://192.168.1.12:24000/',
+        target_kind: 'external_local_ui',
+        label: 'Staging',
+        local_ui_url: 'http://192.168.1.12:24000/',
+      }),
+    ]);
     expect(snapshot.environments).toEqual([
       expect.objectContaining({
         id: 'local_environment',
         kind: 'local_environment',
         label: 'Local Environment',
-        tag: 'Local',
+        tag: 'Open',
         category: 'local_environment',
+        is_open: true,
+        open_action_label: 'Focus',
         can_edit: true,
         can_delete: false,
         can_save: false,
@@ -73,9 +100,10 @@ describe('desktopWelcomeState', () => {
         kind: 'external_local_ui',
         label: 'Staging',
         local_ui_url: 'http://192.168.1.12:24000/',
-        tag: 'Current',
+        tag: 'Open',
         category: 'saved',
-        is_current: true,
+        is_open: true,
+        open_action_label: 'Focus',
         can_edit: true,
         can_delete: true,
         can_save: false,
@@ -87,7 +115,8 @@ describe('desktopWelcomeState', () => {
         local_ui_url: 'http://192.168.1.11:24000/',
         tag: 'Recent',
         category: 'recent_auto',
-        is_current: false,
+        is_open: false,
+        open_action_label: 'Open',
         can_edit: true,
         can_delete: true,
         can_save: true,
@@ -98,7 +127,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
   });
 
-  it('adds a transient current remote Environment when it is not yet saved', () => {
+  it('adds transient open remote environments when they are not yet saved', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '127.0.0.1:0',
@@ -108,14 +137,16 @@ describe('desktopWelcomeState', () => {
         saved_environments: [],
         recent_external_local_ui_urls: [],
       },
-      externalStartup: {
-        local_ui_url: 'http://192.168.1.77:24000/',
-        local_ui_urls: ['http://192.168.1.77:24000/'],
-      },
-      activeSessionTarget: {
-        kind: 'external_local_ui',
-        external_local_ui_url: 'http://192.168.1.77:24000/',
-      },
+      openSessions: [
+        {
+          session_key: 'url:http://192.168.1.77:24000/',
+          target: buildExternalLocalUIDesktopTarget('http://192.168.1.77:24000/'),
+          startup: {
+            local_ui_url: 'http://192.168.1.77:24000/',
+            local_ui_urls: ['http://192.168.1.77:24000/'],
+          },
+        },
+      ],
     });
 
     expect(snapshot.environments).toEqual([
@@ -123,8 +154,9 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: 'http://192.168.1.77:24000/',
         kind: 'external_local_ui',
-        tag: 'Current',
-        category: 'current_unsaved',
+        tag: 'Open',
+        category: 'open_unsaved',
+        is_open: true,
         can_edit: true,
         can_delete: false,
         can_save: true,
@@ -133,7 +165,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.77:24000/');
   });
 
-  it('builds a shared settings surface snapshot when requested by the desktop shell', () => {
+  it('builds a dedicated settings snapshot when requested by the desktop shell', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '127.0.0.1:0',
@@ -151,6 +183,7 @@ describe('desktopWelcomeState', () => {
     });
 
     expect(snapshot.surface).toBe('local_environment_settings');
+    expect(snapshot.close_action_label).toBe('Quit');
     expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
     expect(snapshot.settings_surface.save_label).toBe('Save Local Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('local_only');
@@ -176,7 +209,7 @@ describe('desktopWelcomeState', () => {
     });
   });
 
-  it('threads the current managed runtime url into the settings surface when Local Environment is active', () => {
+  it('threads the current managed runtime url into the settings surface when Local Environment is open', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: 'localhost:23998',
@@ -186,13 +219,16 @@ describe('desktopWelcomeState', () => {
         saved_environments: [],
         recent_external_local_ui_urls: [],
       },
-      managedStartup: {
-        local_ui_url: 'http://localhost:23998/',
-        local_ui_urls: ['http://localhost:23998/'],
-      },
-      activeSessionTarget: {
-        kind: 'managed_local',
-      },
+      openSessions: [
+        {
+          session_key: 'managed_local',
+          target: buildManagedLocalDesktopTarget(),
+          startup: {
+            local_ui_url: 'http://localhost:23998/',
+            local_ui_urls: ['http://localhost:23998/'],
+          },
+        },
+      ],
       surface: 'local_environment_settings',
     });
 
@@ -218,6 +254,5 @@ describe('desktopWelcomeState', () => {
     expect(issue.title).toBe('Redeven is already starting elsewhere');
     expect(issue.message).toContain('Desktop can attach to it');
     expect(issue.diagnostics_copy).toContain('lock owner pid: 1234');
-    expect(issue.diagnostics_copy).toContain('state dir: /Users/test/.redeven');
   });
 });

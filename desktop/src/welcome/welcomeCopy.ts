@@ -1,17 +1,13 @@
 import type { DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
 
-export function compactSessionAvailabilityLabel(): string {
-  return 'Active';
-}
-
 export function compactCloseActionLabel(
   label: DesktopWelcomeSnapshot['close_action_label'],
 ): string {
-  return label === 'Back to current environment' ? 'Back' : label;
+  return label;
 }
 
-export function compactOpenLocalEnvironmentLabel(isCurrent: boolean): string {
-  return isCurrent ? 'Resume' : 'Open';
+export function compactOpenLocalEnvironmentLabel(isOpen: boolean): string {
+  return isOpen ? 'Focus' : 'Open';
 }
 
 export function compactSettingsActionLabel(): string {

@@ -1,22 +1,25 @@
-export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
-export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
-
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
+
+export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
+export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
+export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launcher-snapshot-updated';
 
 export type DesktopTargetKind = 'managed_local' | 'external_local_ui';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'local_environment_settings';
 export type DesktopEnvironmentEntryKind = 'local_environment' | 'external_local_ui';
-export type DesktopEnvironmentEntryTag = 'Current' | 'Recent' | 'Saved' | 'Local' | '';
-export type DesktopEnvironmentEntryCategory = 'local_environment' | 'current_unsaved' | DesktopSavedEnvironmentSource;
-export type DesktopWelcomeActionKind =
+export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Local' | '';
+export type DesktopEnvironmentEntryCategory = 'local_environment' | 'open_unsaved' | DesktopSavedEnvironmentSource;
+export type DesktopLauncherActionKind =
   | 'open_local_environment'
   | 'open_remote_environment'
+  | 'open_local_environment_settings'
+  | 'focus_environment_window'
   | 'upsert_saved_environment'
   | 'delete_saved_environment'
-  | 'return_to_current_environment';
+  | 'close_launcher_or_quit';
 
 export type DesktopWelcomeIssue = Readonly<{
   scope: DesktopWelcomeIssueScope;
@@ -27,6 +30,14 @@ export type DesktopWelcomeIssue = Readonly<{
   target_url: string;
 }>;
 
+export type DesktopOpenEnvironmentWindow = Readonly<{
+  session_key: string;
+  target_kind: DesktopTargetKind;
+  environment_id: string;
+  label: string;
+  local_ui_url: string;
+}>;
+
 export type DesktopEnvironmentEntry = Readonly<{
   id: string;
   kind: DesktopEnvironmentEntryKind;
@@ -35,7 +46,9 @@ export type DesktopEnvironmentEntry = Readonly<{
   secondary_text: string;
   tag: DesktopEnvironmentEntryTag;
   category: DesktopEnvironmentEntryCategory;
-  is_current: boolean;
+  is_open: boolean;
+  open_session_key: string;
+  open_action_label: 'Open' | 'Focus';
   can_edit: boolean;
   can_delete: boolean;
   can_save: boolean;
@@ -45,11 +58,8 @@ export type DesktopEnvironmentEntry = Readonly<{
 export type DesktopWelcomeSnapshot = Readonly<{
   surface: DesktopLauncherSurface;
   entry_reason: DesktopWelcomeEntryReason;
-  current_session_target_kind: DesktopTargetKind | null;
-  current_session_local_ui_url: string;
-  current_session_label: string;
-  current_session_description: string;
-  close_action_label: 'Quit' | 'Back to current environment';
+  close_action_label: 'Quit' | 'Close Launcher';
+  open_windows: readonly DesktopOpenEnvironmentWindow[];
   environments: readonly DesktopEnvironmentEntry[];
   suggested_remote_url: string;
   issue: DesktopWelcomeIssue | null;
@@ -63,6 +73,15 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'open_remote_environment';
       external_local_ui_url: string;
+      environment_id?: string;
+      label?: string;
+    }
+  | {
+      kind: 'open_local_environment_settings';
+    }
+  | {
+      kind: 'focus_environment_window';
+      session_key: string;
     }
   | {
       kind: 'upsert_saved_environment';
@@ -75,9 +94,23 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
     }
   | {
-      kind: 'return_to_current_environment';
+      kind: 'close_launcher_or_quit';
     }
 >;
+
+export type DesktopLauncherActionResult = Readonly<{
+  outcome:
+    | 'opened_environment_window'
+    | 'focused_environment_window'
+    | 'opened_utility_window'
+    | 'focused_utility_window'
+    | 'saved_environment'
+    | 'deleted_environment'
+    | 'closed_launcher'
+    | 'quit_app';
+  session_key?: string;
+  utility_window_kind?: 'launcher' | 'local_environment_settings';
+}>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -89,16 +122,29 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   }
 
   const candidate = value as Partial<DesktopLauncherActionRequest>;
-  const kind = compact(candidate.kind) as DesktopWelcomeActionKind;
+  const kind = compact(candidate.kind) as DesktopLauncherActionKind;
   switch (kind) {
     case 'open_local_environment':
-    case 'return_to_current_environment':
+    case 'open_local_environment_settings':
+    case 'close_launcher_or_quit':
       return { kind };
     case 'open_remote_environment':
       return {
         kind,
         external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
+        environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
+        label: compact((candidate as { label?: unknown }).label) || undefined,
       };
+    case 'focus_environment_window': {
+      const sessionKey = compact((candidate as { session_key?: unknown }).session_key);
+      if (sessionKey === '') {
+        return null;
+      }
+      return {
+        kind,
+        session_key: sessionKey,
+      };
+    }
     case 'upsert_saved_environment':
       return {
         kind,

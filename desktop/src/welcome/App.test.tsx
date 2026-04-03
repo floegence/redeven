@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
+  buildExternalLocalUIDesktopTarget,
+  buildManagedLocalDesktopTarget,
+} from '../main/desktopTarget';
+import {
   buildDesktopWelcomeShellViewModel,
   capabilityUnavailableMessage,
   environmentLibraryCount,
@@ -40,7 +44,7 @@ describe('DesktopWelcomeShell', () => {
     });
     expect(shellStatus(snapshot)).toEqual({
       tone: 'disconnected',
-      label: 'No environment open',
+      label: 'No environment windows open',
     });
   });
 
@@ -87,7 +91,7 @@ describe('DesktopWelcomeShell', () => {
     ]));
   });
 
-  it('filters the Environment Library by current, recent, and saved connections', () => {
+  it('filters the Environment Library by open, recent, and saved connections', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
         local_ui_bind: '127.0.0.1:0',
@@ -115,26 +119,37 @@ describe('DesktopWelcomeShell', () => {
           'http://192.168.1.11:24000/',
         ],
       },
-      externalStartup: {
-        local_ui_url: 'http://192.168.1.12:24000/',
-        local_ui_urls: ['http://192.168.1.12:24000/'],
-      },
-      activeSessionTarget: {
-        kind: 'external_local_ui',
-        external_local_ui_url: 'http://192.168.1.12:24000/',
-      },
+      openSessions: [
+        {
+          session_key: 'managed_local',
+          target: buildManagedLocalDesktopTarget(),
+          startup: {
+            local_ui_url: 'http://localhost:23998/',
+            local_ui_urls: ['http://localhost:23998/'],
+          },
+        },
+        {
+          session_key: 'url:http://192.168.1.12:24000/',
+          target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
+          startup: {
+            local_ui_url: 'http://192.168.1.12:24000/',
+            local_ui_urls: ['http://192.168.1.12:24000/'],
+          },
+        },
+      ],
     });
 
     expect(environmentLibraryCount(snapshot, 'all')).toBe(2);
-    expect(environmentLibraryCount(snapshot, 'current')).toBe(1);
+    expect(environmentLibraryCount(snapshot, 'open')).toBe(1);
     expect(environmentLibraryCount(snapshot, 'recent')).toBe(1);
     expect(environmentLibraryCount(snapshot, 'saved')).toBe(1);
 
-    expect(filterEnvironmentLibrary(snapshot, 'current')).toEqual([
+    expect(filterEnvironmentLibrary(snapshot, 'open')).toEqual([
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         category: 'saved',
-        is_current: true,
+        is_open: true,
+        open_action_label: 'Focus',
       }),
     ]);
     expect(filterEnvironmentLibrary(snapshot, 'recent')).toEqual([
