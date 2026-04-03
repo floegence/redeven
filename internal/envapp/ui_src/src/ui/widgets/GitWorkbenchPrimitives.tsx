@@ -1,11 +1,30 @@
 import { For, Show, type Component, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
-import { Button, Tag } from '@floegence/floe-webapp-core/ui';
+import { Button, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneName, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
+import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
+
+function gitTagVariant(tone?: GitChromeTone): TagProps['variant'] {
+  switch (tone) {
+    case 'brand':
+      return 'primary';
+    case 'success':
+      return 'success';
+    case 'warning':
+      return 'warning';
+    case 'danger':
+      return 'error';
+    case 'info':
+    case 'violet':
+      return 'info';
+    case 'neutral':
+    default:
+      return 'neutral';
+  }
+}
 
 export interface GitSectionProps {
   label: string;
@@ -316,58 +335,15 @@ export function gitChangedFilesStickyCellClass(active: boolean): string {
 
 export interface GitMetaPillProps {
   tone?: GitChromeTone;
-  emphasis?: GitPillEmphasis;
   children: JSX.Element;
   class?: string;
-}
-
-export type GitPillEmphasis = 'default' | 'selected';
-
-interface GitPillBaseProps extends GitMetaPillProps {
-  kind: 'meta' | 'count';
-}
-
-function GitPillBase(props: GitPillBaseProps) {
-  const emphasis = () => props.emphasis ?? 'default';
-  return (
-    <Tag
-      variant="neutral"
-      tone="soft"
-      size="sm"
-      data-git-tone={gitToneName(props.tone)}
-      data-git-pill-kind={props.kind}
-      class={cn('git-meta-pill max-w-full align-middle', emphasis() === 'selected' && 'git-browser-selection-chip', props.class)}
-    >
-      {props.children}
-    </Tag>
-  );
 }
 
 export function GitMetaPill(props: GitMetaPillProps) {
   return (
-    <GitPillBase kind="meta" tone={props.tone} emphasis={props.emphasis} class={props.class}>
+    <Tag variant={gitTagVariant(props.tone)} tone="soft" size="sm" class={cn('max-w-full align-middle', props.class)}>
       {props.children}
-    </GitPillBase>
-  );
-}
-
-export interface GitCountPillProps {
-  tone?: GitChromeTone;
-  emphasis?: GitPillEmphasis;
-  children: JSX.Element;
-  class?: string;
-}
-
-export function GitCountPill(props: GitCountPillProps) {
-  return (
-    <GitPillBase
-      kind="count"
-      tone={props.tone}
-      emphasis={props.emphasis}
-      class={cn('min-w-[1.5rem] justify-center px-1 py-0.5 text-[10px] font-medium leading-none tabular-nums', props.class)}
-    >
-      {props.children}
-    </GitPillBase>
+    </Tag>
   );
 }
 

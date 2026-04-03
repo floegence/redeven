@@ -2,7 +2,7 @@ import { For } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitWorkbenchSubview, GitWorkbenchSubviewItem } from '../utils/gitWorkbench';
 import { buildTabElementId, buildTabPanelElementId, resolveRovingTabTargetId } from '../utils/tabNavigation';
-import { GitCountPill } from './GitWorkbenchPrimitives';
+import { gitSelectedChipClass } from './GitChrome';
 
 export interface GitViewNavProps {
   value: GitWorkbenchSubview;
@@ -16,6 +16,8 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 export function GitViewNav(props: GitViewNavProps) {
   const buttonBaseClass =
     'cursor-pointer flex w-full items-center justify-between gap-2 rounded px-2.5 py-2.5 text-left text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:py-1.5';
+  const badgeBaseClass =
+    'inline-flex min-w-[1.5rem] items-center justify-center rounded px-1 py-0.5 text-[10px] font-medium tabular-nums transition-colors duration-150';
   const tabRefs = new Map<GitWorkbenchSubview, HTMLButtonElement>();
   const itemIds = () => props.items.map((item) => item.id);
 
@@ -58,9 +60,16 @@ export function GitViewNav(props: GitViewNavProps) {
               onKeyDown={(event) => handleKeyDown(event, item.id)}
             >
               <span class="min-w-0 flex-1 truncate font-medium">{item.label}</span>
-              <GitCountPill tone="neutral" emphasis={active() ? 'selected' : 'default'} class="transition-colors duration-150">
+              <span
+                class={cn(
+                  badgeBaseClass,
+                  active()
+                    ? gitSelectedChipClass(true)
+                    : 'bg-background/70 text-muted-foreground',
+                )}
+              >
                 {typeof item.count === 'number' && item.count > 0 ? item.count : '•'}
-              </GitCountPill>
+              </span>
             </button>
           );
         }}

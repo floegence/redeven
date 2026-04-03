@@ -9,10 +9,6 @@ function normalizeTone(tone: GitChromeTone | undefined): GitChromeTone {
   return tone || 'neutral';
 }
 
-export function gitToneName(tone: GitChromeTone | undefined): GitChromeTone {
-  return normalizeTone(tone);
-}
-
 const badgeBaseClass = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] border';
 const insetBaseClass = cn(
   'border shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]',

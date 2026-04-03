@@ -40,30 +40,9 @@
   --git-browser-selection-border-strong: color-mix(in srgb, var(--primary) 62%, #0b1324);
   --git-browser-selection-fg: color-mix(in srgb, white 94%, var(--primary) 6%);
   --git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 78%, transparent);
-  --git-browser-selection-chip-bg: color-mix(in srgb, #020617 58%, var(--primary) 42%);
-  --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-chip-bg) 82%);
-  --git-browser-selection-chip-fg: color-mix(in srgb, white 96%, var(--primary) 4%);
-  --git-pill-neutral-bg: color-mix(in srgb, #1f2937 82%, var(--muted-foreground) 18%);
-  --git-pill-neutral-border: color-mix(in srgb, #020617 58%, var(--muted-foreground) 42%);
-  --git-pill-neutral-fg: color-mix(in srgb, white 94%, var(--muted) 6%);
-  --git-pill-info-bg: color-mix(in srgb, #0f172a 68%, var(--info) 32%);
-  --git-pill-info-border: color-mix(in srgb, #082f49 54%, var(--info) 46%);
-  --git-pill-info-fg: color-mix(in srgb, white 94%, var(--info) 6%);
-  --git-pill-brand-bg: color-mix(in srgb, #0f172a 66%, var(--primary) 34%);
-  --git-pill-brand-border: color-mix(in srgb, #1e3a8a 50%, var(--primary) 50%);
-  --git-pill-brand-fg: color-mix(in srgb, white 94%, var(--primary) 6%);
-  --git-pill-success-bg: color-mix(in srgb, #0f172a 70%, var(--success) 30%);
-  --git-pill-success-border: color-mix(in srgb, #14532d 54%, var(--success) 46%);
-  --git-pill-success-fg: color-mix(in srgb, white 94%, var(--success) 6%);
-  --git-pill-warning-bg: color-mix(in srgb, #111827 62%, var(--warning) 38%);
-  --git-pill-warning-border: color-mix(in srgb, #713f12 56%, var(--warning) 44%);
-  --git-pill-warning-fg: color-mix(in srgb, white 92%, var(--warning) 8%);
-  --git-pill-danger-bg: color-mix(in srgb, #111827 66%, var(--error) 34%);
-  --git-pill-danger-border: color-mix(in srgb, #7f1d1d 54%, var(--error) 46%);
-  --git-pill-danger-fg: color-mix(in srgb, white 94%, var(--error) 6%);
-  --git-pill-violet-bg: color-mix(in srgb, #0f172a 66%, var(--color-violet-500) 34%);
-  --git-pill-violet-border: color-mix(in srgb, #4c1d95 54%, var(--color-violet-500) 46%);
-  --git-pill-violet-fg: color-mix(in srgb, white 94%, var(--color-violet-500) 6%);
+  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 10%, transparent);
+  --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 14%, var(--git-browser-selection-border) 86%);
+  --git-browser-selection-chip-fg: var(--git-browser-selection-fg);
   --git-browser-selection-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 1px 2px rgba(2, 6, 23, 0.14);
@@ -102,30 +81,9 @@ html.dark {
   --git-browser-selection-border-strong: color-mix(in srgb, var(--primary) 68%, #30415b);
   --git-browser-selection-fg: color-mix(in srgb, white 92%, var(--primary) 8%);
   --git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 82%, transparent);
-  --git-browser-selection-chip-bg: color-mix(in srgb, white 78%, var(--primary) 22%);
-  --git-browser-selection-chip-border: color-mix(in srgb, #1e3a8a 52%, var(--primary) 48%);
-  --git-browser-selection-chip-fg: color-mix(in srgb, #0f172a 84%, var(--primary) 16%);
-  --git-pill-neutral-bg: color-mix(in srgb, white 78%, var(--muted) 22%);
-  --git-pill-neutral-border: color-mix(in srgb, #1f2937 56%, var(--muted-foreground) 44%);
-  --git-pill-neutral-fg: color-mix(in srgb, #0f172a 88%, var(--muted-foreground) 12%);
-  --git-pill-info-bg: color-mix(in srgb, white 76%, var(--info) 24%);
-  --git-pill-info-border: color-mix(in srgb, #0c4a6e 56%, var(--info) 44%);
-  --git-pill-info-fg: color-mix(in srgb, #082f49 82%, var(--info) 18%);
-  --git-pill-brand-bg: color-mix(in srgb, white 76%, var(--primary) 24%);
-  --git-pill-brand-border: color-mix(in srgb, #1e3a8a 54%, var(--primary) 46%);
-  --git-pill-brand-fg: color-mix(in srgb, #172554 82%, var(--primary) 18%);
-  --git-pill-success-bg: color-mix(in srgb, white 76%, var(--success) 24%);
-  --git-pill-success-border: color-mix(in srgb, #166534 56%, var(--success) 44%);
-  --git-pill-success-fg: color-mix(in srgb, #14532d 82%, var(--success) 18%);
-  --git-pill-warning-bg: color-mix(in srgb, white 74%, var(--warning) 26%);
-  --git-pill-warning-border: color-mix(in srgb, #92400e 58%, var(--warning) 42%);
-  --git-pill-warning-fg: color-mix(in srgb, #78350f 82%, var(--warning) 18%);
-  --git-pill-danger-bg: color-mix(in srgb, white 76%, var(--error) 24%);
-  --git-pill-danger-border: color-mix(in srgb, #991b1b 58%, var(--error) 42%);
-  --git-pill-danger-fg: color-mix(in srgb, #7f1d1d 82%, var(--error) 18%);
-  --git-pill-violet-bg: color-mix(in srgb, white 76%, var(--color-violet-500) 24%);
-  --git-pill-violet-border: color-mix(in srgb, #5b21b6 56%, var(--color-violet-500) 44%);
-  --git-pill-violet-fg: color-mix(in srgb, #4c1d95 82%, var(--color-violet-500) 18%);
+  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 12%, transparent);
+  --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-border) 82%);
+  --git-browser-selection-chip-fg: var(--git-browser-selection-fg);
   --git-browser-selection-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 1px 2px rgba(2, 6, 23, 0.24);
@@ -200,59 +158,6 @@ html.dark {
 
 .git-browser-selection-secondary {
   color: var(--git-browser-selection-secondary-fg);
-}
-
-.git-meta-pill {
-  --git-pill-bg: var(--git-pill-neutral-bg);
-  --git-pill-border: var(--git-pill-neutral-border);
-  --git-pill-fg: var(--git-pill-neutral-fg);
-  --tag-bg: var(--git-pill-bg);
-  --tag-border: var(--git-pill-border);
-  --tag-color: var(--git-pill-fg);
-  border-color: var(--git-pill-border);
-  background: var(--git-pill-bg);
-  color: var(--git-pill-fg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-}
-
-.git-meta-pill[data-git-tone='info'] {
-  --git-pill-bg: var(--git-pill-info-bg);
-  --git-pill-border: var(--git-pill-info-border);
-  --git-pill-fg: var(--git-pill-info-fg);
-}
-
-.git-meta-pill[data-git-tone='brand'] {
-  --git-pill-bg: var(--git-pill-brand-bg);
-  --git-pill-border: var(--git-pill-brand-border);
-  --git-pill-fg: var(--git-pill-brand-fg);
-}
-
-.git-meta-pill[data-git-tone='success'] {
-  --git-pill-bg: var(--git-pill-success-bg);
-  --git-pill-border: var(--git-pill-success-border);
-  --git-pill-fg: var(--git-pill-success-fg);
-}
-
-.git-meta-pill[data-git-tone='warning'] {
-  --git-pill-bg: var(--git-pill-warning-bg);
-  --git-pill-border: var(--git-pill-warning-border);
-  --git-pill-fg: var(--git-pill-warning-fg);
-}
-
-.git-meta-pill[data-git-tone='danger'] {
-  --git-pill-bg: var(--git-pill-danger-bg);
-  --git-pill-border: var(--git-pill-danger-border);
-  --git-pill-fg: var(--git-pill-danger-fg);
-}
-
-.git-meta-pill[data-git-tone='violet'] {
-  --git-pill-bg: var(--git-pill-violet-bg);
-  --git-pill-border: var(--git-pill-violet-border);
-  --git-pill-fg: var(--git-pill-violet-fg);
-}
-
-.git-meta-pill[data-git-pill-kind='count'] {
-  font-variant-numeric: tabular-nums;
 }
 
 .git-browser-selection-chip {

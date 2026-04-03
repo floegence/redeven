@@ -29,13 +29,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--card: var(--redeven-surface-panel);');
     expect(src).toContain('--popover: var(--redeven-surface-panel);');
     expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 78%, transparent);');
-    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, #020617 58%, var(--primary) 42%);');
-    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-chip-bg) 82%);');
-    expect(src).toContain('--git-browser-selection-chip-fg: color-mix(in srgb, white 96%, var(--primary) 4%);');
-    expect(src).toContain('--git-pill-neutral-bg: color-mix(in srgb, #1f2937 82%, var(--muted-foreground) 18%);');
-    expect(src).toContain('--git-pill-brand-bg: color-mix(in srgb, #0f172a 66%, var(--primary) 34%);');
-    expect(src).toContain('--git-pill-warning-border: color-mix(in srgb, #713f12 56%, var(--warning) 44%);');
-    expect(src).toContain('--git-pill-violet-fg: color-mix(in srgb, white 94%, var(--color-violet-500) 6%);');
+    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 10%, transparent);');
+    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 14%, var(--git-browser-selection-border) 86%);');
+    expect(src).toContain('--git-browser-selection-chip-fg: var(--git-browser-selection-fg);');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
     expect(src).toContain('--redeven-surface-panel-soft: #353942;');
@@ -51,13 +47,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);');
     expect(src).toContain('--redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);');
     expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 82%, transparent);');
-    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, white 78%, var(--primary) 22%);');
-    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, #1e3a8a 52%, var(--primary) 48%);');
-    expect(src).toContain('--git-browser-selection-chip-fg: color-mix(in srgb, #0f172a 84%, var(--primary) 16%);');
-    expect(src).toContain('--git-pill-neutral-bg: color-mix(in srgb, white 78%, var(--muted) 22%);');
-    expect(src).toContain('--git-pill-info-border: color-mix(in srgb, #0c4a6e 56%, var(--info) 44%);');
-    expect(src).toContain('--git-pill-brand-fg: color-mix(in srgb, #172554 82%, var(--primary) 18%);');
-    expect(src).toContain('--git-pill-danger-fg: color-mix(in srgb, #7f1d1d 82%, var(--error) 18%);');
+    expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 12%, transparent);');
+    expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-border) 82%);');
+    expect(src).toContain('--git-browser-selection-chip-fg: var(--git-browser-selection-fg);');
   });
 
   it('keeps Flower on the shared panel surface family instead of private raw color literals', () => {
@@ -94,15 +86,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-browser-selection-surface {');
     expect(src).toContain('.git-browser-selection-nav {');
     expect(src).toContain('.git-browser-selection-secondary {');
-    expect(src).toContain('.git-meta-pill {');
-    expect(src).toContain(".git-meta-pill[data-git-tone='info'] {");
-    expect(src).toContain(".git-meta-pill[data-git-tone='warning'] {");
-    expect(src).toContain(".git-meta-pill[data-git-pill-kind='count'] {");
     expect(src).toContain('.git-browser-selection-chip {');
-    expect(src).toContain('--git-pill-bg: var(--git-pill-neutral-bg);');
-    expect(src).toContain('--tag-bg: var(--git-pill-bg);');
-    expect(src).toContain('--tag-border: var(--git-pill-border);');
-    expect(src).toContain('--tag-color: var(--git-pill-fg);');
     expect(src).toContain('--tag-bg: var(--git-browser-selection-chip-bg);');
     expect(src).toContain('--tag-border: var(--git-browser-selection-chip-border);');
     expect(src).toContain('--tag-color: var(--git-browser-selection-chip-fg);');
