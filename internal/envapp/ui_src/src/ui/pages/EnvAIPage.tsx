@@ -15,7 +15,6 @@ import {
 import { FlowerIcon } from '../icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading';
-import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog, Dialog, Dropdown, Input, Select, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import {
   AttachmentPreview,
@@ -41,7 +40,7 @@ import {
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext } from './AIChatContext';
-import { useRedevenRpc, type FsFileInfo } from '../protocol/redeven_v1';
+import { useRedevenRpc } from '../protocol/redeven_v1';
 import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
 import { decorateMessageBlocks, decorateStreamEvent } from './aiBlockPresentation';
@@ -69,12 +68,10 @@ import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import {
-  replacePickerChildren,
-  sortPickerFolderItems,
-  toPickerFolderItem,
   toPickerTreeAbsolutePath,
   toPickerTreePath,
 } from '../utils/directoryPickerTree';
+import { createDirectoryPickerDataSource } from '../utils/createDirectoryPickerDataSource';
 import {
   composeFollowupOrder,
   composerSnapshotHasContent,
@@ -93,8 +90,6 @@ import { createAIThreadRenderController } from './createAIThreadRenderController
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
 import { createFlowerBottomDockLayoutController } from './flowerBottomDockLayout';
 import { CompactContextSummary } from './AIContextSummary';
-
-type DirCache = Map<string, FileItem[]>;
 
 type ExecutionMode = 'act' | 'plan';
 
@@ -1420,8 +1415,13 @@ export function EnvAIPage() {
   // Working dir (draft-only; locked after thread creation)
   const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
-  const [workingDirFiles, setWorkingDirFiles] = createSignal<FileItem[]>([]);
-  let workingDirCache: DirCache = new Map();
+  const workingDirPicker = createDirectoryPickerDataSource({
+    homePath,
+    listDirectory: async (absolutePath) => {
+      if (!protocol.client()) return [];
+      return (await rpc.fs.list({ path: absolutePath, showHidden: false }))?.entries ?? [];
+    },
+  });
   let draftWorkingDirInitializedForHome = false;
 
   createEffect(() => {
@@ -1439,8 +1439,7 @@ export function EnvAIPage() {
 
   createEffect(() => {
     homePath();
-    workingDirCache = new Map();
-    setWorkingDirFiles([]);
+    workingDirPicker.reset();
   });
 
   const validateWorkingDirSilently = async (workingDir: string): Promise<string> => {
@@ -1932,37 +1931,10 @@ export function EnvAIPage() {
     }
   });
 
-  const loadWorkingDirTree = async (pickerPath: string) => {
-    if (!protocol.client()) return;
-    const absolutePath = toPickerTreeAbsolutePath(pickerPath, homePath());
-    if (!absolutePath) return;
-    if (workingDirCache.has(absolutePath)) {
-      setWorkingDirFiles((prev) => replacePickerChildren(prev, pickerPath, workingDirCache.get(absolutePath)!));
-      return;
-    }
-    try {
-      const resp = await rpc.fs.list({ path: absolutePath, showHidden: false });
-      const entries = resp?.entries ?? [];
-      const items = sortPickerFolderItems(
-        entries
-          .map((entry) => toPickerFolderItem(entry as FsFileInfo, homePath()))
-          .filter((item): item is FileItem => !!item),
-      );
-      workingDirCache.set(absolutePath, items);
-      setWorkingDirFiles((prev) => replacePickerChildren(prev, pickerPath, items));
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleWorkingDirExpand = (path: string) => {
-    void loadWorkingDirTree(path);
-  };
-
   createEffect(() => {
     if (!workingDirPickerOpen()) return;
-    if (workingDirFiles().length > 0) return;
-    void loadWorkingDirTree('/');
+    if (workingDirPicker.files().length > 0) return;
+    void workingDirPicker.ensureRootLoaded();
   });
 
   const updateExecutionMode = async (nextMode: ExecutionMode) => {
@@ -4138,13 +4110,14 @@ export function EnvAIPage() {
               onOpenChange={(open) => {
                 if (!open) setWorkingDirPickerOpen(false);
               }}
-              files={workingDirFiles()}
+              files={workingDirPicker.files()}
               initialPath={workingDirPickerInitialPath()}
               homeLabel="Home"
               homePath={homePath()}
               title="Select Working Directory"
               confirmText="Select"
-              onExpand={handleWorkingDirExpand}
+              onExpand={workingDirPicker.expandPath}
+              ensurePath={workingDirPicker.ensurePath}
               onSelect={(selectedPath) => {
                 if (workingDirLocked()) return;
                 const realPath = toPickerTreeAbsolutePath(selectedPath, homePath());

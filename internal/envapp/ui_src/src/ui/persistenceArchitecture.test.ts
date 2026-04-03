@@ -47,7 +47,8 @@ describe('desktop persistence architecture', () => {
     expect(appSrc).toContain("import { resolveEnvAppStorageBinding } from './services/uiPersistence';");
     expect(appSrc).toContain('const persistenceBinding = resolveEnvAppStorageBinding({');
     expect(appSrc).toContain('desktopStateStorageAvailable: isDesktopStateStorageAvailable(),');
-    expect(appSrc).toContain('adapter: createUIStorageAdapter(),');
+    expect(appSrc).toContain('adapter: createDesktopThemeStorageAdapter(');
+    expect(appSrc).toContain('createUIStorageAdapter(),');
     expect(appSrc).toContain('namespace: persistenceBinding.namespace,');
     expect(appSrc).toContain('storageKey: persistenceBinding.deckStorageKey,');
   });

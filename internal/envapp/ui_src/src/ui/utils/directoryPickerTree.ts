@@ -22,6 +22,20 @@ export function normalizePickerTreePath(path: string): string {
   return collapsed.endsWith('/') ? collapsed.replace(/\/+$/, '') || '/' : collapsed;
 }
 
+export function listPickerTreePathChain(path: string): string[] {
+  const normalized = normalizePickerTreePath(path);
+  if (normalized === '/') return ['/'];
+
+  const parts = normalized.split('/').filter(Boolean);
+  const chain = ['/'];
+  let current = '';
+  for (const part of parts) {
+    current += `/${part}`;
+    chain.push(current);
+  }
+  return chain;
+}
+
 export function toPickerTreePath(pathAbs: string, rootPathAbs?: string | null): string {
   const normalizedRoot = normalizeAbsolutePath(rootPathAbs ?? '');
   const normalizedPath = normalizeAbsolutePath(pathAbs);
@@ -56,6 +70,26 @@ export function toPickerFolderItem(entry: DirectoryEntryLike, rootPathAbs?: stri
 
 export function sortPickerFolderItems(items: FileItem[]): FileItem[] {
   return [...items].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
+}
+
+export function hasPickerFolderPath(tree: readonly FileItem[], folderPath: string): boolean {
+  const target = normalizePickerTreePath(folderPath);
+  if (target === '/') return true;
+
+  const visit = (items: readonly FileItem[]): boolean => {
+    for (const item of items) {
+      if (item.type !== 'folder') continue;
+      if (normalizePickerTreePath(item.path) === target) {
+        return true;
+      }
+      if (item.children && item.children.length > 0 && visit(item.children)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  return visit(tree);
 }
 
 export function replacePickerChildren(tree: FileItem[], folderPath: string, children: FileItem[]): FileItem[] {

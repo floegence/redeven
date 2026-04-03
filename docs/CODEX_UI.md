@@ -207,6 +207,7 @@ Current Env App behavior:
 - The transcript-to-composer boundary is intentionally soft: the Codex send bar should read as floating over the transcript tail rather than as a second hard-split footer panel.
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.
 - New threads can choose working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn.
+- The working-directory picker uses the shared floe-webapp async path-resolution contract plus an Env App directory data source that hydrates ancestor folders on demand, so deep initial cwd values, typed path entry, breadcrumb jumps, and tree reselection all resolve against the same lazy-loaded tree state.
 - Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.
 - Archiving a thread hides it from the browser conversation list after the active-thread list refreshes.
 - Later turns may still adjust model, reasoning effort, approval policy, and sandbox mode through the Codex composer controls.
