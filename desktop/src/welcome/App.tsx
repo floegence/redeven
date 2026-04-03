@@ -87,6 +87,7 @@ import {
   desktopThemeBridge,
   toggleDesktopTheme,
 } from './desktopTheme';
+import { DesktopTooltip } from './DesktopTooltip';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
 
 type DesktopLauncherBridge = Readonly<{
@@ -158,6 +159,8 @@ const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
 const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
 const DESKTOP_COMMAND_PALETTE_TITLE = 'Command palette';
 const DESKTOP_COMMAND_PALETTE_KEYBIND = 'mod+k';
+const PANEL_HEADER_BADGES_CLASS = 'flex min-h-8 flex-wrap items-center gap-2 md:justify-end';
+const PANEL_HEADER_ACTIONS_CLASS = 'flex min-h-8 flex-wrap items-center gap-2 md:justify-end';
 
 function buildDesktopFloeConfig() {
   const themeBridge = desktopThemeBridge();
@@ -947,40 +950,35 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </>
         )}
       >
-        <Show
-          when={snapshot().surface === 'connect_environment'}
-          fallback={<div class="h-full min-h-0 bg-background" />}
-        >
-          <ConnectEnvironmentSurface
-            snapshot={snapshot()}
-            settingsSurface={settingsSurface()}
-            localEnvironment={localEnvironmentEntry()}
-            feedback={feedback()}
-            error={connectError()}
-            busyAction={busyAction()}
-            libraryFilter={libraryFilter()}
-            libraryQuery={libraryQuery()}
-            libraryEntries={libraryEntries()}
-            setLibraryFilter={setLibraryFilter}
-            setLibraryQuery={setLibraryQuery}
-            issueRef={(value) => {
-              issueRef = value;
-            }}
-            openLocalEnvironment={openLocalEnvironment}
-            openSettingsSurface={openSettingsSurface}
-            openCreateConnectionDialog={openCreateConnectionDialog}
-            openRemoteEnvironment={openRemoteEnvironment}
-            focusEnvironmentWindow={focusEnvironmentWindow}
-            saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
-            editEnvironment={startEditingEnvironment}
-            deleteEnvironment={setDeleteTarget}
-            closeLauncherOrQuit={closeLauncherOrQuit}
-            copyDiagnostics={async () => {
-              await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
-              setFeedback('Diagnostics copied to the clipboard.');
-            }}
-          />
-        </Show>
+        <ConnectEnvironmentSurface
+          snapshot={snapshot()}
+          settingsSurface={settingsSurface()}
+          localEnvironment={localEnvironmentEntry()}
+          feedback={feedback()}
+          error={connectError()}
+          busyAction={busyAction()}
+          libraryFilter={libraryFilter()}
+          libraryQuery={libraryQuery()}
+          libraryEntries={libraryEntries()}
+          setLibraryFilter={setLibraryFilter}
+          setLibraryQuery={setLibraryQuery}
+          issueRef={(value) => {
+            issueRef = value;
+          }}
+          openLocalEnvironment={openLocalEnvironment}
+          openSettingsSurface={openSettingsSurface}
+          openCreateConnectionDialog={openCreateConnectionDialog}
+          openRemoteEnvironment={openRemoteEnvironment}
+          focusEnvironmentWindow={focusEnvironmentWindow}
+          saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
+          editEnvironment={startEditingEnvironment}
+          deleteEnvironment={setDeleteTarget}
+          closeLauncherOrQuit={closeLauncherOrQuit}
+          copyDiagnostics={async () => {
+            await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
+            setFeedback('Diagnostics copied to the clipboard.');
+          }}
+        />
       </DesktopLauncherShell>
 
       <LocalEnvironmentSettingsDialog
@@ -1207,7 +1205,7 @@ function OpenWindowsPanel(props: Readonly<{
   return (
     <Card class="overflow-hidden border-border/80 bg-card/75 shadow-sm">
       <CardHeader class="gap-2 border-b border-border/70 px-4 py-4 sm:px-5">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div class="min-w-0">
             <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Open windows</div>
             <CardTitle class="mt-1 text-base">Environment Windows</CardTitle>
@@ -1217,19 +1215,23 @@ function OpenWindowsPanel(props: Readonly<{
                 : 'No environment windows are open yet.'}
             </CardDescription>
           </div>
-          <div class="flex items-center gap-2">
-            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {props.snapshot.open_windows.length === 1 ? '1 window' : `${props.snapshot.open_windows.length} windows`}
-            </Tag>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label={props.snapshot.close_action_label}
-              title={props.snapshot.close_action_label}
-              onClick={() => { void props.closeLauncherOrQuit(); }}
-            >
-              {compactCloseActionLabel(props.snapshot.close_action_label)}
-            </Button>
+          <div class="flex shrink-0 flex-col items-start gap-2 self-start md:items-end">
+            <div class={PANEL_HEADER_BADGES_CLASS}>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {props.snapshot.open_windows.length === 1 ? '1 window' : `${props.snapshot.open_windows.length} windows`}
+              </Tag>
+            </div>
+            <div class={PANEL_HEADER_ACTIONS_CLASS}>
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={props.snapshot.close_action_label}
+                title={props.snapshot.close_action_label}
+                onClick={() => { void props.closeLauncherOrQuit(); }}
+              >
+                {compactCloseActionLabel(props.snapshot.close_action_label)}
+              </Button>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -1310,32 +1312,34 @@ function LocalEnvironmentLauncherCard(props: Readonly<{
             <CardTitle class="mt-1 text-xl tracking-tight">Local Environment</CardTitle>
             <CardDescription class="mt-1 text-sm">Desktop-managed environment on this machine.</CardDescription>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <span title={isOpen() ? 'Local Environment already has an open session window.' : 'Local Environment is ready to open.'}>
-              <Tag variant={isOpen() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {isOpen() ? 'Open' : 'Ready'}
-              </Tag>
-            </span>
-            <span title={props.settingsSurface.password_state_label}>
-              <Tag
-                variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
-                tone="soft"
-                size="sm"
-                class="cursor-default whitespace-nowrap"
-              >
-                {compactPasswordStateTagLabel(props.settingsSurface.password_state_label)}
-              </Tag>
-            </span>
-            <span title={props.settingsSurface.bootstrap_status_label}>
-              <Tag
-                variant={props.settingsSurface.bootstrap_pending ? 'primary' : 'neutral'}
-                tone="soft"
-                size="sm"
-                class="cursor-default whitespace-nowrap"
-              >
-                {compactBootstrapStatusTagLabel(props.settingsSurface.bootstrap_status_label)}
-              </Tag>
-            </span>
+          <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:items-end">
+            <div class={PANEL_HEADER_BADGES_CLASS}>
+              <span title={isOpen() ? 'Local Environment already has an open session window.' : 'Local Environment is ready to open.'}>
+                <Tag variant={isOpen() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                  {isOpen() ? 'Open' : 'Ready'}
+                </Tag>
+              </span>
+              <span title={props.settingsSurface.password_state_label}>
+                <Tag
+                  variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
+                  tone="soft"
+                  size="sm"
+                  class="cursor-default whitespace-nowrap"
+                >
+                  {compactPasswordStateTagLabel(props.settingsSurface.password_state_label)}
+                </Tag>
+              </span>
+              <span title={props.settingsSurface.bootstrap_status_label}>
+                <Tag
+                  variant={props.settingsSurface.bootstrap_pending ? 'primary' : 'neutral'}
+                  tone="soft"
+                  size="sm"
+                  class="cursor-default whitespace-nowrap"
+                >
+                  {compactBootstrapStatusTagLabel(props.settingsSurface.bootstrap_status_label)}
+                </Tag>
+              </span>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -1419,14 +1423,17 @@ function SettingsHelpBadge(props: Readonly<{
 
   return (
     <Show when={tooltip()}>
-      <span
-        role="img"
-        aria-label={`${props.label}: ${tooltip()}`}
-        title={tooltip()}
-        class="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-border/70 text-[10px] font-semibold leading-none text-muted-foreground"
-      >
-        ?
-      </span>
+      <DesktopTooltip content={<div class="max-w-xs">{tooltip()}</div>} placement="top" delay={0}>
+        <span
+          data-redeven-settings-help=""
+          role="img"
+          aria-label={`${props.label}: more information`}
+          tabIndex={0}
+          class="inline-flex h-[1.125rem] w-[1.125rem] shrink-0 cursor-help items-center justify-center rounded-full border border-border/70 bg-muted/35 text-[10px] font-semibold leading-none text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          ?
+        </span>
+      </DesktopTooltip>
     </Show>
   );
 }
@@ -1541,20 +1548,24 @@ function EnvironmentLibraryPanel(props: Readonly<{
             <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Remote environments</div>
             <CardTitle class="mt-1 text-lg">Environment Library</CardTitle>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {environmentLibraryCount(props.snapshot, 'all')} connections
-            </Tag>
-            <Button
-              size="sm"
-              variant="default"
-              aria-label="Add Connection"
-              title="Add Connection"
-              onClick={() => props.openCreateConnectionDialog()}
-            >
-              <Plus class="mr-1 h-3.5 w-3.5" />
-              {compactAddConnectionLabel()}
-            </Button>
+          <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:items-end">
+            <div class={PANEL_HEADER_BADGES_CLASS}>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {environmentLibraryCount(props.snapshot, 'all')} connections
+              </Tag>
+            </div>
+            <div class={PANEL_HEADER_ACTIONS_CLASS}>
+              <Button
+                size="sm"
+                variant="default"
+                aria-label="Add Connection"
+                title="Add Connection"
+                onClick={() => props.openCreateConnectionDialog()}
+              >
+                <Plus class="mr-1 h-3.5 w-3.5" />
+                {compactAddConnectionLabel()}
+              </Button>
+            </div>
           </div>
         </div>
         <div class="grid gap-3 pt-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">

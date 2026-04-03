@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
@@ -12,6 +15,14 @@ import {
   filterEnvironmentLibrary,
   shellStatus,
 } from './viewModel';
+
+function readWelcomeSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'App.tsx'), 'utf8');
+}
+
+function readDesktopTooltipSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'DesktopTooltip.tsx'), 'utf8');
+}
 
 describe('DesktopWelcomeShell', () => {
   it('describes Connect Environment inside the shared shell model', () => {
@@ -168,5 +179,34 @@ describe('DesktopWelcomeShell', () => {
 
   it('uses Environment guidance copy when a capability is unavailable before connection', () => {
     expect(capabilityUnavailableMessage('Deck')).toBe('Connect to an Environment first to open Deck.');
+  });
+
+  it('keeps Local Environment Settings as a dialog layered on top of the launcher surface', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('<ConnectEnvironmentSurface');
+    expect(appSrc).toContain("<LocalEnvironmentSettingsDialog");
+    expect(appSrc).toContain("open={snapshot().surface === 'local_environment_settings'}");
+    expect(appSrc).not.toContain('fallback={<div class="h-full min-h-0 bg-background" />}');
+  });
+
+  it('uses shared tooltip and aligned header rails for desktop help affordances', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("import { DesktopTooltip } from './DesktopTooltip';");
+    expect(appSrc).toContain('data-redeven-settings-help=""');
+    expect(appSrc).not.toContain('title={tooltip()}');
+    expect(appSrc).toContain('const PANEL_HEADER_BADGES_CLASS =');
+    expect(appSrc).toContain('const PANEL_HEADER_ACTIONS_CLASS =');
+  });
+
+  it('renders desktop tooltips through a body-level portal so dialogs do not clip them', () => {
+    const tooltipSrc = readDesktopTooltipSource();
+
+    expect(tooltipSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(tooltipSrc).toContain('data-redeven-tooltip-anchor=""');
+    expect(tooltipSrc).toContain('<Portal>');
+    expect(tooltipSrc).toContain('role="tooltip"');
+    expect(tooltipSrc).toContain('fixed z-[220]');
   });
 });
