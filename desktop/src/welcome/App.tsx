@@ -157,8 +157,6 @@ const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
 const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
 const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
-const DESKTOP_COMMAND_PALETTE_TITLE = 'Command palette';
-const DESKTOP_COMMAND_PALETTE_KEYBIND = 'mod+k';
 const PANEL_HEADER_BADGES_CLASS = 'flex min-h-8 flex-wrap items-center gap-2 md:justify-end';
 const PANEL_HEADER_ACTIONS_CLASS = 'flex min-h-8 flex-wrap items-center gap-2 md:justify-end';
 
@@ -467,7 +465,6 @@ function DesktopCommandRegistrar(props: Readonly<{
 }
 
 function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
-  const cmd = useCommand();
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
@@ -915,10 +912,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             />
           </TopBarIconButton>
         )}
-        commandPlaceholder={DESKTOP_COMMAND_PLACEHOLDER}
-        commandKeybind={cmd.getKeybindDisplay(DESKTOP_COMMAND_PALETTE_KEYBIND)}
-        commandTitle={DESKTOP_COMMAND_PALETTE_TITLE}
-        onOpenCommandPalette={() => cmd.open()}
         trailingActions={(
           <div class="flex items-center gap-1">
             <TopBarIconButton

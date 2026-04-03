@@ -6,11 +6,16 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' '),
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => ({
-  Search: (props: { class?: string }) => <span data-icon="search" class={props.class} />,
-}));
-
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  TopBar: (props: { ariaLabel?: string; logo?: JSX.Element; actions?: JSX.Element }) => (
+    <header data-floe-shell-slot="top-bar" aria-label={props.ariaLabel}>
+      <div>
+        <div data-top-bar-logo="true">{props.logo}</div>
+        <button type="button">Search desktop commands...</button>
+        <div data-top-bar-actions="true">{props.actions}</div>
+      </div>
+    </header>
+  ),
   BottomBar: (props: { class?: string; children?: JSX.Element }) => (
     <footer data-floe-shell-slot="bottom-bar" class={props.class}>
       {props.children}
@@ -27,9 +32,6 @@ async function renderShell(): Promise<string> {
       skipLinkLabel="Skip to Redeven Desktop content"
       topBarLabel="Redeven Desktop toolbar"
       logo={<button type="button">Logo</button>}
-      commandPlaceholder="Search desktop commands..."
-      commandKeybind="Ctrl+K"
-      onOpenCommandPalette={() => {}}
       trailingActions={<button type="button">Theme</button>}
       bottomBarLeading={<span>Connect Environment</span>}
       bottomBarTrailing={<span>Disconnected</span>}
@@ -40,22 +42,20 @@ async function renderShell(): Promise<string> {
 }
 
 describe('DesktopLauncherShell', () => {
-  it('renders a dedicated titlebar surface with a centered command trigger', async () => {
+  it('renders the shared top bar so the launcher stays aligned with other pages', async () => {
     const html = await renderShell();
 
-    expect(html).toContain('data-redeven-desktop-titlebar-surface="true"');
-    expect(html).toContain('data-redeven-desktop-titlebar-drag-region="true"');
-    expect(html).toContain('data-redeven-desktop-titlebar-region="center"');
-    expect(html).toContain('data-redeven-desktop-command-trigger');
+    expect(html).toContain('data-floe-shell-slot="top-bar"');
+    expect(html).toContain('data-top-bar-logo="true"');
+    expect(html).toContain('data-top-bar-actions="true"');
     expect(html).toContain('Search desktop commands...');
-    expect(html).toContain('Ctrl+K');
+    expect(html).not.toContain('data-redeven-desktop-titlebar-region="center"');
   });
 
-  it('keeps skip-link and no-drag affordances in the desktop launcher shell', async () => {
+  it('keeps skip-link and shared shell affordances in the desktop launcher shell', async () => {
     const html = await renderShell();
 
     expect(html).toContain('href="#redeven-desktop-main"');
-    expect(html).toContain('data-redeven-desktop-titlebar-no-drag="true"');
     expect(html).toContain('data-floe-shell-slot="bottom-bar"');
   });
 });
