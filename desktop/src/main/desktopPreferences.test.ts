@@ -159,7 +159,7 @@ describe('desktopPreferences', () => {
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual({
-        local_ui_bind: '127.0.0.1:0',
+        local_ui_bind: 'localhost:23998',
         local_ui_password: '',
         local_ui_password_configured: false,
         pending_bootstrap: null,
@@ -199,9 +199,32 @@ describe('desktopPreferences', () => {
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual({
-        local_ui_bind: '127.0.0.1:0',
+        local_ui_bind: 'localhost:23998',
         local_ui_password: '',
         local_ui_password_configured: true,
+        pending_bootstrap: null,
+        saved_environments: [],
+        recent_external_local_ui_urls: [],
+      });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves explicit auto-port loopback binds in the current preferences format', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      await fs.writeFile(paths.preferencesFile, JSON.stringify({
+        version: 3,
+        local_ui_bind: '127.0.0.1:0',
+      }), 'utf8');
+
+      const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
+      expect(loaded).toEqual({
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],

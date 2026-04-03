@@ -4,6 +4,7 @@ import path from 'node:path';
 import { DEFAULT_DESKTOP_LOCAL_UI_BIND, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionTypes';
+import { DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND } from '../shared/desktopAccessModel';
 import {
   normalizeDesktopLocalUIPasswordMode,
   type DesktopLocalUIPasswordMode,
@@ -546,6 +547,15 @@ function recoverLocalUIBind(raw: unknown): string {
   }
 }
 
+function isLegacyDesktopPreferencesVersion(version: unknown): boolean {
+  const numeric = Number(version);
+  return !Number.isInteger(numeric) || numeric < 3;
+}
+
+function shouldMigrateLegacyAutoLoopbackBind(bind: string, version: unknown): boolean {
+  return bind === DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND && isLegacyDesktopPreferencesVersion(version);
+}
+
 function recoverPendingBootstrap(
   controlplaneURLRaw: unknown,
   envIDRaw: unknown,
@@ -571,8 +581,14 @@ function recoverPendingBootstrap(
   }
 }
 
-function recoverDesktopPreferencesDraft(draft: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
+function recoverDesktopPreferencesDraft(
+  draft: Partial<DesktopSettingsDraft>,
+  options: Readonly<{ preferencesVersion?: unknown }> = {},
+): DesktopSettingsDraft {
   let localUIBind = recoverLocalUIBind(draft.local_ui_bind);
+  if (shouldMigrateLegacyAutoLoopbackBind(localUIBind, options.preferencesVersion)) {
+    localUIBind = DEFAULT_DESKTOP_LOCAL_UI_BIND;
+  }
   const localUIPassword = String(draft.local_ui_password ?? '');
   const localUIPasswordMode = normalizeDesktopLocalUIPasswordMode(
     draft.local_ui_password_mode,
@@ -614,6 +630,8 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     controlplane_url: preferencesFile?.pending_bootstrap?.controlplane_url ?? '',
     env_id: preferencesFile?.pending_bootstrap?.env_id ?? '',
     env_token: decodeOptionalSecret(codec, secretsFile?.pending_bootstrap?.env_token),
+  }, {
+    preferencesVersion: preferencesFile?.version,
   }), {
     currentLocalUIPassword: localUIPassword,
     currentLocalUIPasswordConfigured: localUIPasswordConfigured,
