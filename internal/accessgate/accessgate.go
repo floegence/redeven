@@ -240,12 +240,10 @@ func (g *Gate) MintLocalSession(password string) (*LocalSessionResult, error) {
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(now)
 
-	sessionToken, err := randomToken(24)
+	sessionToken, expiresAt, err := g.mintLocalSessionLocked(now)
 	if err != nil {
 		return nil, err
 	}
-	expiresAt := now.Add(g.localSessionTTL)
-	g.localSessions[sessionToken] = &localSessionState{expiresAt: expiresAt}
 
 	resumeToken, resumeExpiresAt, err := g.mintResumeTokenLocked(now, session.Meta{
 		ChannelID:         "local-ui",
@@ -267,6 +265,36 @@ func (g *Gate) MintLocalSession(password string) (*LocalSessionResult, error) {
 		SessionExpiresAtUnix: expiresAt.UnixMilli(),
 		ResumeToken:          resumeToken,
 		ResumeExpiresAtUnix:  resumeExpiresAt.UnixMilli(),
+	}, nil
+}
+
+func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.Meta) (*LocalSessionResult, error) {
+	if g == nil || !g.enabled {
+		return &LocalSessionResult{Unlocked: true}, nil
+	}
+	resumeToken = strings.TrimSpace(resumeToken)
+	if resumeToken == "" {
+		return nil, errors.New("missing resume token")
+	}
+
+	now := time.Now()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cleanupExpiredLocked(now)
+
+	if err := g.validateResumeTokenLocked(now, resumeToken, meta); err != nil {
+		return nil, err
+	}
+
+	sessionToken, expiresAt, err := g.mintLocalSessionLocked(now)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LocalSessionResult{
+		Unlocked:             true,
+		SessionToken:         sessionToken,
+		SessionExpiresAtUnix: expiresAt.UnixMilli(),
 	}, nil
 }
 
@@ -324,12 +352,7 @@ func (g *Gate) CanResumeMeta(resumeToken string, meta session.Meta) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.cleanupExpiredLocked(now)
-
-	tok := g.resumeTokens[resumeToken]
-	if tok == nil || now.After(tok.expiresAt) {
-		return false
-	}
-	return resumeTokenMatchesMeta(tok, meta)
+	return g.validateResumeTokenLocked(now, resumeToken, meta) == nil
 }
 
 func (g *Gate) ResumeChannel(channelID string, resumeToken string) error {
@@ -350,12 +373,8 @@ func (g *Gate) ResumeChannel(channelID string, resumeToken string) error {
 	if st == nil {
 		return errors.New("channel not found")
 	}
-	tok := g.resumeTokens[resumeToken]
-	if tok == nil || now.After(tok.expiresAt) {
-		return errors.New("invalid resume token")
-	}
-	if !resumeTokenMatchesMeta(tok, st.meta) {
-		return errors.New("resume token binding mismatch")
+	if err := g.validateResumeTokenLocked(now, resumeToken, st.meta); err != nil {
+		return err
 	}
 	st.unlocked = true
 	st.unlockedAt = now
@@ -397,6 +416,27 @@ func resumeTokenMatchesMeta(tok *resumeTokenState, meta session.Meta) bool {
 		tok.floeApp == strings.TrimSpace(meta.FloeApp) &&
 		tok.codeSpaceID == strings.TrimSpace(meta.CodeSpaceID) &&
 		tok.sessionKind == normalizeSessionKind(meta.SessionKind)
+}
+
+func (g *Gate) validateResumeTokenLocked(now time.Time, resumeToken string, meta session.Meta) error {
+	tok := g.resumeTokens[resumeToken]
+	if tok == nil || now.After(tok.expiresAt) {
+		return errors.New("invalid resume token")
+	}
+	if !resumeTokenMatchesMeta(tok, meta) {
+		return errors.New("resume token binding mismatch")
+	}
+	return nil
+}
+
+func (g *Gate) mintLocalSessionLocked(now time.Time) (string, time.Time, error) {
+	sessionToken, err := randomToken(24)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expiresAt := now.Add(g.localSessionTTL)
+	g.localSessions[sessionToken] = &localSessionState{expiresAt: expiresAt}
+	return sessionToken, expiresAt, nil
 }
 
 func (g *Gate) mintResumeTokenLocked(now time.Time, meta session.Meta) (string, time.Time, error) {

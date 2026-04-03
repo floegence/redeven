@@ -3,6 +3,7 @@ package localui
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -139,5 +140,85 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	defer headerConnectResp.Body.Close()
 	if headerConnectResp.StatusCode != http.StatusOK {
 		t.Fatalf("header connect_info status = %d, want %d", headerConnectResp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	cfgPath := writeTestConfig(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte("<html>codespace</html>"))
+		case "/static/workbench.js":
+			_, _ = w.Write([]byte("console.log('ok');"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	upstreamPort := upstream.Listener.Addr().(*net.TCPAddr).Port
+	gw := newTestGatewayWithBackend(t, cfgPath, localUITestCodeSpaceBackend{port: upstreamPort})
+	s := newTestServerWithGateway(t, gate, gw, cfgPath)
+
+	srv := httptest.NewServer(s.handler())
+	defer srv.Close()
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New() error = %v", err)
+	}
+	client := &http.Client{Jar: jar}
+
+	unlockResp, err := client.Post(srv.URL+"/api/local/access/unlock", "application/json", bytes.NewBufferString(`{"password":"secret"}`))
+	if err != nil {
+		t.Fatalf("POST unlock error = %v", err)
+	}
+	defer unlockResp.Body.Close()
+	if unlockResp.StatusCode != http.StatusOK {
+		t.Fatalf("unlock status = %d, want %d", unlockResp.StatusCode, http.StatusOK)
+	}
+
+	var unlockBody struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			ResumeToken string `json:"resume_token"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(unlockResp.Body).Decode(&unlockBody); err != nil {
+		t.Fatalf("decode unlock body error = %v", err)
+	}
+	if !unlockBody.OK || unlockBody.Data.ResumeToken == "" {
+		t.Fatalf("unexpected unlock body: %#v", unlockBody)
+	}
+
+	codespaceReq, err := http.NewRequest(http.MethodGet, srv.URL+"/cs/demo/?redeven_access_resume="+unlockBody.Data.ResumeToken, nil)
+	if err != nil {
+		t.Fatalf("NewRequest codespace error = %v", err)
+	}
+	codespaceReq.Host = "localhost:23998"
+	codespaceResp, err := client.Do(codespaceReq)
+	if err != nil {
+		t.Fatalf("GET codespace error = %v", err)
+	}
+	defer codespaceResp.Body.Close()
+	if codespaceResp.StatusCode != http.StatusOK {
+		t.Fatalf("codespace status = %d, want %d", codespaceResp.StatusCode, http.StatusOK)
+	}
+
+	assetReq, err := http.NewRequest(http.MethodGet, srv.URL+"/cs/demo/static/workbench.js", nil)
+	if err != nil {
+		t.Fatalf("NewRequest asset error = %v", err)
+	}
+	assetReq.Host = "localhost:23998"
+	assetResp, err := client.Do(assetReq)
+	if err != nil {
+		t.Fatalf("GET asset error = %v", err)
+	}
+	defer assetResp.Body.Close()
+	if assetResp.StatusCode != http.StatusOK {
+		t.Fatalf("asset status = %d, want %d", assetResp.StatusCode, http.StatusOK)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -86,10 +87,24 @@ func (localUITestBackend) CancelCodeRuntimeOperation(context.Context) (gatewaypk
 	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 
+type localUITestCodeSpaceBackend struct {
+	localUITestBackend
+	port int
+}
+
+func (b localUITestCodeSpaceBackend) ResolveCodeServerPort(context.Context, string) (int, error) {
+	return b.port, nil
+}
+
 func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
 	t.Helper()
+	return newTestGatewayWithBackend(t, cfgPath, localUITestBackend{})
+}
+
+func newTestGatewayWithBackend(t *testing.T, cfgPath string, backend gatewaypkg.Backend) *gatewaypkg.Gateway {
+	t.Helper()
 	gw, err := gatewaypkg.New(gatewaypkg.Options{
-		Backend: localUITestBackend{},
+		Backend: backend,
 		DistFS: fstest.MapFS{
 			"env/index.html":  {Data: []byte("<html>env</html>")},
 			"env/favicon.svg": {Data: []byte("<svg>icon</svg>")},
@@ -107,6 +122,11 @@ func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
 func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
 	cfgPath := writeTestConfig(t)
+	return newTestServerWithGateway(t, gate, newTestGateway(t, cfgPath), cfgPath)
+}
+
+func newTestServerWithGateway(t *testing.T, gate *accessgate.Gate, gw *gatewaypkg.Gateway, cfgPath string) *Server {
+	t.Helper()
 	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
 		cfgPath,
 		localUserPublicID,
@@ -119,7 +139,7 @@ func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 		version:            "dev",
 		localPermissionCap: &localPermissionCap,
 		accessGate:         gate,
-		gw:                 newTestGateway(t, cfgPath),
+		gw:                 gw,
 		pending:            make(map[string]pendingDirect),
 	}
 }
@@ -365,6 +385,62 @@ func TestServer_hasLocalAccess_acceptsResumeTokenQuery(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_direct/ws?"+localAccessResumeQuery+"="+unlockBody.Data.ResumeToken, nil)
 	if !s.hasLocalAccess(req) {
 		t.Fatalf("expected query resume token to grant local access")
+	}
+}
+
+func TestServer_handleCodeSpace_bootstrapsLocalAccessCookieFromResumeToken(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	cfgPath := writeTestConfig(t)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte("<html>codespace</html>"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer upstream.Close()
+
+	upstreamPort := upstream.Listener.Addr().(*net.TCPAddr).Port
+	gw := newTestGatewayWithBackend(t, cfgPath, localUITestCodeSpaceBackend{port: upstreamPort})
+	s := newTestServerWithGateway(t, gate, gw, cfgPath)
+
+	unlockReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/access/unlock", bytes.NewBufferString(`{"password":"secret"}`))
+	unlockReq.Header.Set("Content-Type", "application/json")
+	unlockRes := httptest.NewRecorder()
+	s.handleAccessUnlock(unlockRes, unlockReq)
+
+	var unlockBody struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			ResumeToken string `json:"resume_token"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(unlockRes.Body.Bytes(), &unlockBody); err != nil {
+		t.Fatalf("decode unlock body error = %v", err)
+	}
+	if !unlockBody.OK || unlockBody.Data.ResumeToken == "" {
+		t.Fatalf("unexpected unlock body: %#v", unlockBody)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/cs/demo/?redeven_access_resume="+unlockBody.Data.ResumeToken, nil)
+	res := httptest.NewRecorder()
+	s.handleCodeSpace(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("codespace status = %d, want %d body=%s", res.Result().StatusCode, http.StatusOK, res.Body.String())
+	}
+	if body := res.Body.String(); body != "<html>codespace</html>" {
+		t.Fatalf("codespace body = %q, want %q", body, "<html>codespace</html>")
+	}
+
+	cookies := res.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatalf("expected bootstrap cookie")
+	}
+	if cookies[0].Name != accessgate.LocalSessionCookieName {
+		t.Fatalf("cookie name = %q, want %q", cookies[0].Name, accessgate.LocalSessionCookieName)
 	}
 }
 

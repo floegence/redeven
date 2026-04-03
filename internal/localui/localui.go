@@ -362,10 +362,36 @@ func (s *Server) hasLocalAccess(r *http.Request) bool {
 		return true
 	}
 	token := s.localAccessToken(r)
-	if token == "" {
-		return s.accessGate.CanResumeMeta(s.localAccessResumeToken(r), localAccessResumeMeta())
+	if token != "" && s.accessGate.IsLocalSessionValid(token) {
+		return true
 	}
-	return s.accessGate.IsLocalSessionValid(token)
+	return s.accessGate.CanResumeMeta(s.localAccessResumeToken(r), localAccessResumeMeta())
+}
+
+func (s *Server) ensureLocalAccessHTTPResponse(w http.ResponseWriter, r *http.Request) bool {
+	if !s.accessEnabled() {
+		return true
+	}
+	if s == nil || w == nil || r == nil {
+		return false
+	}
+
+	if token := s.localAccessToken(r); token != "" && s.accessGate.IsLocalSessionValid(token) {
+		return true
+	}
+
+	resumeToken := s.localAccessResumeToken(r)
+	if resumeToken == "" {
+		return false
+	}
+
+	result, err := s.accessGate.MintLocalSessionFromResumeToken(resumeToken, localAccessResumeMeta())
+	if err != nil || result == nil || strings.TrimSpace(result.SessionToken) == "" || result.SessionExpiresAtUnix <= 0 {
+		return false
+	}
+
+	s.setLocalAccessCookie(w, result.SessionToken, result.SessionExpiresAtUnix)
+	return true
 }
 
 func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expiresAtUnixMs int64) {
@@ -399,7 +425,7 @@ func (s *Server) clearLocalAccessCookie(w http.ResponseWriter) {
 }
 
 func (s *Server) requireLocalAccessAPI(w http.ResponseWriter, r *http.Request) bool {
-	if s.hasLocalAccess(r) {
+	if s.ensureLocalAccessHTTPResponse(w, r) {
 		return true
 	}
 	writeJSON(w, http.StatusLocked, apiResp{OK: false, Error: &apiError{Message: "access password required"}})
@@ -433,9 +459,11 @@ func (s *Server) handleGateway(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if s.accessEnabled() && !s.hasLocalAccess(r) && !s.isPublicEnvAppRequest(r) {
-		http.Error(w, "access password required", http.StatusLocked)
-		return
+	if s.accessEnabled() && !s.isPublicEnvAppRequest(r) {
+		if !s.ensureLocalAccessHTTPResponse(w, r) {
+			http.Error(w, "access password required", http.StatusLocked)
+			return
+		}
 	}
 	s.gw.ServeHTTP(w, gateway.WithLocalUIEnvRoute(r))
 }
@@ -461,9 +489,11 @@ func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, target, http.StatusFound)
 		return
 	}
-	if s.accessEnabled() && !s.hasLocalAccess(r) {
-		http.Error(w, "access password required", http.StatusLocked)
-		return
+	if s.accessEnabled() {
+		if !s.ensureLocalAccessHTTPResponse(w, r) {
+			http.Error(w, "access password required", http.StatusLocked)
+			return
+		}
 	}
 	s.gw.ServeHTTP(w, gateway.WithLocalUICodeSpaceRoute(r, codeSpaceID))
 }

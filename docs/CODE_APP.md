@@ -21,6 +21,7 @@ This document describes the **Code App** implementation in the Redeven runtime:
   - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the controller runtime.
   - The injected script patches same-origin `WebSocket` so it also goes through `flowersec-proxy/ws`, but it now uses `registerCodeAppProxyBridge()` instead of reading `window.top.__flowersecProxyRuntime`.
   - In Redeven Desktop, Env App requests the desktop shell to open Codespaces in the system browser, but the browser-facing bootstrap contract stays the same: the first load still starts from the trusted launcher with a one-time `entry_ticket`.
+  - For desktop-managed Local UI with an access password, the first protected `http://127.0.0.1:23998/cs/<code_space_id>/...` request can arrive with only `redeven_access_resume`. Local UI exchanges that resume token into the normal `redeven_local_access` cookie before returning the page so code-server subresources can continue on the standard same-origin session path.
 
 - Runtime side:
   - The runtime starts one `code-server` process per `code_space_id` (localhost only).

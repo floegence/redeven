@@ -2,6 +2,7 @@ package accessgate
 
 import (
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/session"
 )
@@ -107,6 +108,84 @@ func TestGate_CanResumeMetaAndRevokeResumeToken(t *testing.T) {
 	gate.RevokeResumeToken(result.ResumeToken)
 	if gate.CanResumeMeta(result.ResumeToken, localMeta) {
 		t.Fatalf("resume token should be revoked")
+	}
+}
+
+func TestGate_MintLocalSessionFromResumeToken(t *testing.T) {
+	gate := New(Options{Password: "secret"})
+
+	unlockResult, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatalf("MintLocalSession() error = %v", err)
+	}
+	if unlockResult == nil || unlockResult.ResumeToken == "" {
+		t.Fatalf("MintLocalSession() missing resume token: %#v", unlockResult)
+	}
+
+	localMeta := session.Meta{
+		EndpointID:   "env_local",
+		FloeApp:      "com.floegence.redeven.agent",
+		CodeSpaceID:  "env-ui",
+		SessionKind:  "envapp_rpc",
+		UserPublicID: "user_local",
+	}
+
+	sessionResult, err := gate.MintLocalSessionFromResumeToken(unlockResult.ResumeToken, localMeta)
+	if err != nil {
+		t.Fatalf("MintLocalSessionFromResumeToken() error = %v", err)
+	}
+	if sessionResult == nil || sessionResult.SessionToken == "" {
+		t.Fatalf("MintLocalSessionFromResumeToken() missing local session: %#v", sessionResult)
+	}
+	if !gate.IsLocalSessionValid(sessionResult.SessionToken) {
+		t.Fatalf("bootstrapped local session should be valid")
+	}
+}
+
+func TestGate_MintLocalSessionFromResumeTokenRejectsMismatchedMeta(t *testing.T) {
+	gate := New(Options{Password: "secret"})
+
+	unlockResult, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatalf("MintLocalSession() error = %v", err)
+	}
+
+	mismatchedMeta := session.Meta{
+		EndpointID:   "env_other",
+		FloeApp:      "com.floegence.redeven.agent",
+		CodeSpaceID:  "env-ui",
+		SessionKind:  "envapp_rpc",
+		UserPublicID: "user_local",
+	}
+
+	if _, err := gate.MintLocalSessionFromResumeToken(unlockResult.ResumeToken, mismatchedMeta); err == nil {
+		t.Fatalf("MintLocalSessionFromResumeToken() expected mismatch error")
+	}
+}
+
+func TestGate_MintLocalSessionFromResumeTokenRejectsExpiredToken(t *testing.T) {
+	gate := New(Options{
+		Password:  "secret",
+		ResumeTTL: time.Millisecond,
+	})
+
+	unlockResult, err := gate.MintLocalSession("secret")
+	if err != nil {
+		t.Fatalf("MintLocalSession() error = %v", err)
+	}
+
+	time.Sleep(10 * time.Millisecond)
+
+	localMeta := session.Meta{
+		EndpointID:   "env_local",
+		FloeApp:      "com.floegence.redeven.agent",
+		CodeSpaceID:  "env-ui",
+		SessionKind:  "envapp_rpc",
+		UserPublicID: "user_local",
+	}
+
+	if _, err := gate.MintLocalSessionFromResumeToken(unlockResult.ResumeToken, localMeta); err == nil {
+		t.Fatalf("MintLocalSessionFromResumeToken() expected expiration error")
 	}
 }
 
