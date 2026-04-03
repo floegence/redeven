@@ -7,7 +7,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Keep `redeven` as the single runtime authority for endpoint behavior.
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse Redeven Local UI instead of introducing a second app runtime.
-- Make machine choice explicit on every cold desktop launch.
+- Make environment choice explicit on every cold desktop launch.
 - Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around one welcome-first model.
 
 ## Architecture
@@ -18,7 +18,7 @@ This document describes the public Electron desktop shell that ships with each `
   - `Connect Environment`
 - `Local Environment Settings` is a shell-owned dialog layered on top of that dashboard.
 - The launcher dashboard and `Local Environment Settings` dialog render inside the same Floe workbench shell instance.
-- The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before a machine is opened, so startup and active-session flows share the same frame.
+- The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
   - `Local Environment`
@@ -94,7 +94,7 @@ Visual hierarchy:
   - `Local Environment`
 - secondary workbench column:
   - `Environment Library`
-  - `Add Connection`
+  - `Add` (`Add Connection` in tooltip and accessibility copy)
   - `All / Current / Recent / Saved` filters
 - activity bar:
   - one item: `Connect Environment`
@@ -105,18 +105,19 @@ Interaction rules:
 - Environment choice is always a launcher action, never a side effect of saving settings.
 - `Local Environment` is the primary path and behaves like a workbench-style open action.
 - `Local Environment Settings` opens as a dialog without replacing the launcher dashboard.
-- `Add Connection` opens a dialog that can either connect immediately or save a remote Environment into the library.
+- The `Add` action opens a dialog that can either connect immediately or save a remote Environment into the library.
 - Remote library entries distinguish:
   - the current unsaved remote session
   - auto-remembered recent connections
   - explicitly saved connections
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a compact library table and can be opened, edited, or deleted inline.
+- Dense repeated controls use compact visible labels such as `Open`, `Resume`, `Back`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:
   - `Quit` when no environment is open yet
-  - `Back to current environment` when a target is already open
+  - `Back` when a target is already open, with `Back to current environment` preserved in tooltip/accessibility text
 
 ## Local Environment Settings
 
@@ -232,7 +233,7 @@ Non-goals:
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
 - The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
-- Env App exposes `Connect Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
+- Env App exposes `Switch Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
 - Env App Codespaces uses that external-URL bridge when the desktop shell is present, so `Open` launches the selected codespace in the system browser instead of an Electron child window.
 - Env App `Runtime Settings` stays separate from shell-owned Environment selection and desktop-managed startup state.
 
