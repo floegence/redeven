@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
+  hasPickerFolderPath,
+  listPickerTreePathChain,
   replacePickerChildren,
   toPickerFolderItem,
   toPickerTreeAbsolutePath,
@@ -35,6 +37,15 @@ describe('directoryPickerTree', () => {
     expect(item?.modifiedAt).toBeInstanceOf(Date);
   });
 
+  it('lists the full picker path chain from root to target', () => {
+    expect(listPickerTreePathChain('/')).toEqual(['/']);
+    expect(listPickerTreePathChain('/project/src')).toEqual([
+      '/',
+      '/project',
+      '/project/src',
+    ]);
+  });
+
   it('replaces both root and nested folder children using picker paths', () => {
     const rootChildren: FileItem[] = [
       { id: '/project', name: 'project', path: '/project', type: 'folder' },
@@ -47,5 +58,8 @@ describe('directoryPickerTree', () => {
 
     const next = replacePickerChildren(rootChildren, '/project', nestedChildren);
     expect(next[0]?.children).toEqual(nestedChildren);
+    expect(hasPickerFolderPath(next, '/project')).toBe(true);
+    expect(hasPickerFolderPath(next, '/project/src')).toBe(true);
+    expect(hasPickerFolderPath(next, '/missing')).toBe(false);
   });
 });

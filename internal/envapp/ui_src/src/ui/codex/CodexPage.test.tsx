@@ -32,6 +32,7 @@ const notification = {
   info: vi.fn(),
 };
 const desktopStorageState = new Map<string, string>();
+let lastDirectoryPickerProps: any = null;
 
 if (typeof window !== 'undefined') {
   window.redevenDesktopStateStorage = {
@@ -121,7 +122,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     </div>
   ),
   DirectoryPicker: (props: any) => (
-    props.open
+    ((lastDirectoryPickerProps = props), props.open)
       ? (
         <div
           data-testid="directory-picker"
@@ -526,6 +527,7 @@ function renderPageWithHarness(
 afterEach(() => {
   document.body.innerHTML = '';
   desktopStorageState.clear();
+  lastDirectoryPickerProps = null;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   rpcMocks.fs.list.mockReset();
@@ -1480,6 +1482,71 @@ describe('CodexPage', () => {
       inputText: 'Review this folder',
       cwd: '/workspace/ui',
     }));
+  });
+
+  it('wires the working-directory picker through the shared async path loader', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+    rpcMocks.fs.list.mockImplementation(async ({ path }: { path: string }) => {
+      if (path === '/workspace') {
+        return {
+          entries: [
+            { name: 'ui', path: '/workspace/ui', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1 },
+          ],
+        };
+      }
+      if (path === '/workspace/ui') {
+        return {
+          entries: [
+            { name: 'src', path: '/workspace/ui/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1 },
+          ],
+        };
+      }
+      return { entries: [] };
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const workingDirButton = host.querySelector('button[aria-label="Select working directory"]') as HTMLButtonElement | null;
+    if (!workingDirButton) {
+      throw new Error('working directory button not found');
+    }
+    workingDirButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(lastDirectoryPickerProps?.open).toBe(true);
+    expect(typeof lastDirectoryPickerProps?.onExpand).toBe('function');
+    expect(typeof lastDirectoryPickerProps?.ensurePath).toBe('function');
+
+    const result = await lastDirectoryPickerProps.ensurePath('/ui/src', { reason: 'path-input' });
+
+    expect(result).toEqual({
+      status: 'ready',
+      resolvedPath: '/ui/src',
+    });
+    expect(rpcMocks.fs.list).toHaveBeenCalledWith({ path: '/workspace', showHidden: false });
+    expect(rpcMocks.fs.list).toHaveBeenCalledWith({ path: '/workspace/ui', showHidden: false });
   });
 
   it('submits slash-selected model changes through the existing thread and turn requests', async () => {

@@ -46,6 +46,9 @@ const protocolState = {
   status: 'connected' as 'connected' | 'disconnected',
 };
 const ACTIVE_RUN_SNAPSHOT_RECOVERY_SETTLE_MS = 380;
+type MockFsListResponse = {
+  entries: Array<Record<string, unknown>>;
+};
 
 const sendUserTurnMock = vi.fn(async (_req: unknown) => ({
   runId: 'run-send-1',
@@ -74,9 +77,11 @@ const subscribeThreadMock = vi.fn(async (_req: unknown) => ({ runId: 'run-subscr
 const listMessagesMock = vi.fn(async (_req: unknown) => ({ messages: [], nextAfterRowId: 0, hasMore: false }));
 const getActiveRunSnapshotMock = vi.fn(async (_req: unknown) => ({ ok: false }));
 const getPathContextMock = vi.fn(async () => ({ agentHomePathAbs: '/workspace' }));
+const listFsEntriesMock = vi.fn(async (_req: unknown): Promise<MockFsListResponse> => ({ entries: [] }));
 const setToolCollapsedMock = vi.fn(async () => ({ ok: true }));
 const stopThreadMock = vi.fn(async () => ({ ok: true, recoveredFollowups: [] }));
 const approveToolMock = vi.fn(async () => ({ ok: true }));
+let lastDirectoryPickerProps: any = null;
 
 const defaultFetchGatewayJSON: (url: string) => Promise<any> = async (url: string) => {
   if (url.includes('/todos')) {
@@ -394,14 +399,19 @@ const aiContextValue = new Proxy({
   },
 });
 
-vi.mock('@floegence/floe-webapp-core', () => ({
-  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
-  useNotification: () => ({
-    error: notificationErrorMock,
-    info: notificationInfoMock,
-    success: notificationSuccessMock,
-  }),
-}));
+vi.mock('@floegence/floe-webapp-core', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
+  return {
+    ...actual,
+    cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+    deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
+    useNotification: () => ({
+      error: notificationErrorMock,
+      info: notificationInfoMock,
+      success: notificationSuccessMock,
+    }),
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
@@ -424,71 +434,79 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   SnakeLoader: () => <div />,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: any) => (
-    <button
-      type={props.type ?? 'button'}
-      class={props.class}
-      disabled={props.disabled}
-      onClick={props.onClick}
-      title={props.title}
-      aria-label={props['aria-label']}
-    >
-      {props.children}
-    </button>
-  ),
-  ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
-  Dialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
-  Dropdown: (props: any) => (
-    <div data-testid="dropdown">
-      {props.trigger}
-      <div data-testid="dropdown-items">
-        {(props.items ?? []).map((item: any) => (
-          <button
-            type="button"
-            data-testid={`dropdown-item-${item.id}`}
-            onClick={() => props.onSelect?.(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+vi.mock('@floegence/floe-webapp-core/ui', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core/ui')>('@floegence/floe-webapp-core/ui');
+  return {
+    ...actual,
+    Button: (props: any) => (
+      <button
+        type={props.type ?? 'button'}
+        class={props.class}
+        disabled={props.disabled}
+        onClick={props.onClick}
+        title={props.title}
+        aria-label={props['aria-label']}
+      >
+        {props.children}
+      </button>
+    ),
+    ConfirmDialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
+    Dialog: (props: any) => (props.open ? <div>{props.children}</div> : null),
+    Dropdown: (props: any) => (
+      <div data-testid="dropdown">
+        {props.trigger}
+        <div data-testid="dropdown-items">
+          {(props.items ?? []).map((item: any) => (
+            <button
+              type="button"
+              data-testid={`dropdown-item-${item.id}`}
+              onClick={() => props.onSelect?.(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
-  ),
-  DirectoryPicker: () => null,
-  Input: (props: any) => (
-    <input
-      class={props.class}
-      value={props.value}
-      onInput={props.onInput}
-      onChange={props.onChange}
-      placeholder={props.placeholder}
-      disabled={props.disabled}
-    />
-  ),
-  Select: (props: any) => (
-    <select
-      data-testid={props['data-testid']}
-      class={props.class}
-      value={props.value}
-      disabled={props.disabled}
-      title={props.title}
-      onChange={(event) => props.onChange?.((event.currentTarget as HTMLSelectElement).value)}
-    >
-      {props.placeholder ? <option value="">{props.placeholder}</option> : null}
-      {(props.options ?? []).map((option: any) => {
-        const value = String(option?.value ?? option?.id ?? '').trim();
-        return (
-          <option value={value}>
-            {String(option?.label ?? value)}
-          </option>
-        );
-      })}
-    </select>
-  ),
-  Tag: (props: any) => <span class={props.class}>{props.children}</span>,
-  Tooltip: (props: any) => <>{props.children}</>,
-}));
+    ),
+    DirectoryPicker: (props: any) => {
+      lastDirectoryPickerProps = props;
+      return props.open ? <div data-testid="directory-picker" /> : null;
+    },
+    FileSavePicker: (props: any) => (props.open ? <div data-testid="file-save-picker" /> : null),
+    Input: (props: any) => (
+      <input
+        class={props.class}
+        value={props.value}
+        onInput={props.onInput}
+        onChange={props.onChange}
+        placeholder={props.placeholder}
+        disabled={props.disabled}
+      />
+    ),
+    Select: (props: any) => (
+      <select
+        data-testid={props['data-testid']}
+        class={props.class}
+        value={props.value}
+        disabled={props.disabled}
+        title={props.title}
+        onChange={(event) => props.onChange?.((event.currentTarget as HTMLSelectElement).value)}
+      >
+        {props.placeholder ? <option value="">{props.placeholder}</option> : null}
+        {(props.options ?? []).map((option: any) => {
+          const value = String(option?.value ?? option?.id ?? '').trim();
+          return (
+            <option value={value}>
+              {String(option?.label ?? value)}
+            </option>
+          );
+        })}
+      </select>
+    ),
+    Tag: (props: any) => <span class={props.class}>{props.children}</span>,
+    Tooltip: (props: any) => <>{props.children}</>,
+  };
+});
 
 vi.mock('solid-motionone', () => ({
   Motion: {
@@ -537,6 +555,7 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     fs: {
       getPathContext: getPathContextMock,
+      list: listFsEntriesMock,
     },
     ai: {
       subscribeThread: subscribeThreadMock,
@@ -907,6 +926,9 @@ export function registerEnvAIPageSendTests() {
     vi.resetModules();
     vi.clearAllMocks();
     resetScenario();
+    lastDirectoryPickerProps = null;
+    listFsEntriesMock.mockReset();
+    listFsEntriesMock.mockResolvedValue({ entries: [] });
 
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -931,6 +953,7 @@ export function registerEnvAIPageSendTests() {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
+    lastDirectoryPickerProps = null;
   });
 
   describe('EnvAIPage header model controls', () => {
@@ -1087,6 +1110,55 @@ export function registerEnvAIPageSendTests() {
         notifyResizeObserver(dock!);
 
         expect(transcript?.style.getPropertyValue('--flower-chat-transcript-overlay-bottom-inset')).toBe('176px');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('wires the working-directory picker through the shared async path loader', async () => {
+      aiState.activeThreadId = '';
+      aiState.activeThread = null;
+      listFsEntriesMock.mockImplementation(async (request: unknown) => {
+        const { path } = request as { path: string };
+        if (path === '/workspace') {
+          return {
+            entries: [
+              { name: 'ui', path: '/workspace/ui', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1 },
+            ],
+          };
+        }
+        if (path === '/workspace/ui') {
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/ui/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1 },
+            ],
+          };
+        }
+        return { entries: [] };
+      });
+
+      const { host, dispose } = await renderPage();
+      try {
+        const chip = host.querySelector('.flower-chat-working-dir-chip') as HTMLButtonElement | null;
+        if (!chip) {
+          throw new Error('working directory chip not found');
+        }
+
+        chip.click();
+        await waitFor(() => {
+          expect(lastDirectoryPickerProps?.open).toBe(true);
+        });
+        expect(typeof lastDirectoryPickerProps?.onExpand).toBe('function');
+        expect(typeof lastDirectoryPickerProps?.ensurePath).toBe('function');
+
+        const result = await lastDirectoryPickerProps.ensurePath('/ui/src', { reason: 'path-input' });
+
+        expect(result).toEqual({
+          status: 'ready',
+          resolvedPath: '/ui/src',
+        });
+        expect(listFsEntriesMock).toHaveBeenCalledWith({ path: '/workspace', showHidden: false });
+        expect(listFsEntriesMock).toHaveBeenCalledWith({ path: '/workspace/ui', showHidden: false });
       } finally {
         dispose();
       }

@@ -25,7 +25,7 @@ describe('browser workspace layout wiring', () => {
     const src = read('./RemoteFileBrowser.tsx');
 
     expect(src).toContain("import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';");
-    expect(src).toContain("import { FileBrowserWorkspace } from './FileBrowserWorkspace';");
+    expect(src).toContain("import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';");
     expect(src).toContain("import { GitWorkspace } from './GitWorkspace';");
     expect(src).toContain('<KeepAliveStack');
     expect(src).toContain('activeId={pageMode()}');

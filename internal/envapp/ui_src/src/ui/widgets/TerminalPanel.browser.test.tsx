@@ -93,30 +93,34 @@ const sessionsCoordinatorMocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@floegence/floe-webapp-core', () => ({
-  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
-  useCurrentWidgetId: () => null,
-  useLayout: () => ({
-    isMobile: () => layoutState.mobile,
-  }),
-  useNotification: () => ({
-    error: vi.fn(),
-    info: vi.fn(),
-    success: vi.fn(),
-  }),
-  useResolvedFloeConfig: () => ({
-    persist: {
-      load: (_key: string, fallback: any) => fallback,
-      debouncedSave: vi.fn(),
-    },
-  }),
-  useTheme: () => ({
-    resolvedTheme: () => 'dark',
-  }),
-  useViewActivation: () => ({
-    active: () => true,
-  }),
-}));
+vi.mock('@floegence/floe-webapp-core', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
+  return {
+    ...actual,
+    cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+    useCurrentWidgetId: () => null,
+    useLayout: () => ({
+      isMobile: () => layoutState.mobile,
+    }),
+    useNotification: () => ({
+      error: vi.fn(),
+      info: vi.fn(),
+      success: vi.fn(),
+    }),
+    useResolvedFloeConfig: () => ({
+      persist: {
+        load: (_key: string, fallback: any) => fallback,
+        debouncedSave: vi.fn(),
+      },
+    }),
+    useTheme: () => ({
+      resolvedTheme: () => 'dark',
+    }),
+    useViewActivation: () => ({
+      active: () => true,
+    }),
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
@@ -138,55 +142,59 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: (props: any) => (props.visible ? <div>{props.message}</div> : null),
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: any) => (
-    <button type="button" onClick={props.onClick} disabled={props.disabled} title={props.title}>
-      {props.children}
-    </button>
-  ),
-  Dropdown: (props: any) => (
-    <div>
-      <div>{props.trigger}</div>
-      <For each={props.items}>
-        {(item: any) => (
-          <button type="button" data-testid={`dropdown-item-${item.id}`} onClick={() => props.onSelect(item.id)}>
+vi.mock('@floegence/floe-webapp-core/ui', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core/ui')>('@floegence/floe-webapp-core/ui');
+  return {
+    ...actual,
+    Button: (props: any) => (
+      <button type="button" onClick={props.onClick} disabled={props.disabled} title={props.title}>
+        {props.children}
+      </button>
+    ),
+    Dropdown: (props: any) => (
+      <div>
+        <div>{props.trigger}</div>
+        <For each={props.items}>
+          {(item: any) => (
+            <button type="button" data-testid={`dropdown-item-${item.id}`} onClick={() => props.onSelect(item.id)}>
+              {item.label}
+            </button>
+          )}
+        </For>
+      </div>
+    ),
+    Input: (props: any) => <input ref={props.ref} value={props.value} placeholder={props.placeholder} onInput={props.onInput} />,
+    NumberInput: (props: any) => (
+      <input
+        value={props.value}
+        onInput={(event) => props.onChange(Number((event.currentTarget as HTMLInputElement).value))}
+      />
+    ),
+    MobileKeyboard: (props: any) => <div ref={props.ref} aria-hidden={!props.visible} />,
+    Tabs: (props: any) => (
+      <div role="tablist">
+        {props.items.map((item: any) => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={item.id === props.activeId}
+            onClick={() => props.onChange?.(item.id)}
+          >
+            {item.icon}
             {item.label}
           </button>
-        )}
-      </For>
-    </div>
-  ),
-  Input: (props: any) => <input ref={props.ref} value={props.value} placeholder={props.placeholder} onInput={props.onInput} />,
-  NumberInput: (props: any) => (
-    <input
-      value={props.value}
-      onInput={(event) => props.onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    />
-  ),
-  MobileKeyboard: (props: any) => <div ref={props.ref} aria-hidden={!props.visible} />,
-  Tabs: (props: any) => (
-    <div role="tablist">
-      {props.items.map((item: any) => (
-        <button
-          type="button"
-          role="tab"
-          aria-selected={item.id === props.activeId}
-          onClick={() => props.onChange?.(item.id)}
-        >
-          {item.icon}
-          {item.label}
-        </button>
-      ))}
-      {props.showAdd ? <button type="button" onClick={props.onAdd}>Add</button> : null}
-    </div>
-  ),
-  TabPanel: (props: any) => (props.active || props.keepMounted ? <div>{props.children}</div> : null),
-  Dialog: (props: any) => (
-    <Show when={props.open}>
-      <div>{props.children}</div>
-    </Show>
-  ),
-}));
+        ))}
+        {props.showAdd ? <button type="button" onClick={props.onAdd}>Add</button> : null}
+      </div>
+    ),
+    TabPanel: (props: any) => (props.active || props.keepMounted ? <div>{props.children}</div> : null),
+    Dialog: (props: any) => (
+      <Show when={props.open}>
+        <div>{props.children}</div>
+      </Show>
+    ),
+  };
+});
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
