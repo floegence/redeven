@@ -8,15 +8,15 @@ This document describes the public Electron desktop shell that ships with each `
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse Redeven Local UI instead of introducing a second app runtime.
 - Make environment choice explicit on every cold desktop launch.
-- Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around a utility-window plus session-window model.
+- Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around a launcher-window plus session-window model.
 
 ## Architecture
 
 - Electron is a thin shell around Redeven Local UI.
 - `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
-- Desktop keeps two singleton shell-owned utility windows:
+- Desktop keeps one singleton shell-owned utility window:
   - `Connect Environment` launcher
-  - `Local Environment Settings`
+- `Local Environment Settings` renders as a launcher-owned modal dialog instead of a second native window.
 - Each opened Environment owns its own top-level session window, plus any detached child windows it spawns.
 - Session deduplication happens in Electron main through a canonical session key:
   - `managed_local` for the desktop-managed Local Environment
@@ -107,7 +107,7 @@ Interaction rules:
 - Cold launch never auto-opens a remembered target.
 - Environment choice is always a launcher action, never a side effect of saving settings.
 - `Local Environment` is the primary path and behaves like a workbench-style open action.
-- `Local Environment Settings` opens or focuses its own singleton utility window.
+- `Local Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window.
 - The `Add` action opens a dialog that can either connect immediately or save a remote Environment into the library.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
@@ -126,7 +126,7 @@ Interaction rules:
 
 ## Local Environment Settings
 
-`Local Environment Settings` is a dedicated singleton utility window that renders the same shell but keeps its own focused surface.
+`Local Environment Settings` is a launcher-owned dialog that opens above `Connect Environment` inside the same native window.
 
 It edits only future startup behavior for `Local Environment`:
 
@@ -141,12 +141,13 @@ Rules:
 
 - Saving options only persists configuration.
 - Saving options does not switch Environments.
-- Cancel closes the settings window.
+- Cancel closes the dialog and returns the launcher to `Connect Environment`.
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
 - The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
 - Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
 - The dialog starts with a compact summary grid for visibility, next-start address, password state, and next start status.
 - Summary-card details and field-level help stay available through compact question-mark tooltip affordances instead of always-visible helper paragraphs.
+- Those tooltips render through the shared overlay portal so hover/focus help is visible above cards and dialogs instead of relying on browser-native `title` text.
 - The first decision is a visibility intent, not a raw bind field:
   - `Local only`
   - `Shared on your local network`
@@ -246,10 +247,10 @@ Non-goals:
 - Cold app launch opens the singleton launcher window.
 - The native app menu exposes one primary shell action: `Connect Environment...`
 - Shell window aliases such as `connect` route to the same welcome launcher.
-- Generic settings aliases such as `advanced_settings` route to `Local Environment Settings`.
+- Generic settings aliases such as `advanced_settings` route to the launcher-owned `Local Environment Settings` dialog.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
 - `Switch Environment` focuses or opens the singleton launcher instead of replacing the active Environment session window.
-- `Runtime Settings` focuses or opens the singleton `Local Environment Settings` utility window instead of rendering inside the launcher.
+- `Runtime Settings` focuses or opens the singleton launcher and presents the `Local Environment Settings` dialog instead of creating a second native window.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
 - The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
 - Env App exposes `Switch Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
@@ -263,7 +264,7 @@ Non-goals:
 - Desktop-managed startup blocked
   - launcher reloads with a `Local Environment` issue and diagnostics copy
 - Detached child windows and Ask Flower handoff stay session-scoped during recovery; only the owning Environment window receives those callbacks
-- Secondary compatibility surfaces such as the blocked page may still exist, but the normal product flow is launcher-first recovery through the utility windows
+- Secondary compatibility surfaces such as the blocked page may still exist, but the normal product flow is launcher-first recovery through the launcher window and its dialogs
 
 ## Accessibility Behavior
 

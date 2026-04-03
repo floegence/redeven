@@ -49,12 +49,15 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
     expect(mainSrc).toContain('const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();');
+    expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain('const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();');
     expect(mainSrc).toContain("const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });");
     expect(mainSrc).toContain('preload: browserPreloadPath,');
-    expect(mainSrc).toContain("stateKey: utilityWindowStateKey(kind)");
+    expect(mainSrc).toContain("stateKey: utilityWindowStateKey()");
     expect(mainSrc).toContain("stateKey: sessionWindowStateKey(sessionKey)");
     expect(mainSrc).toContain('sessionChildWindowStateKey(sessionKey, childKey)');
     expect(mainSrc).toContain('void handoffAskFlowerToOwningSession(event.sender.id, normalized);');
+    expect(mainSrc).toContain("setLauncherViewState({");
+    expect(mainSrc).toContain("surface: 'connect_environment',");
   });
 });

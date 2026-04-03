@@ -105,7 +105,7 @@ type OpenDesktopWelcomeOptions = Readonly<{
   stealAppFocus?: boolean;
 }>;
 
-type DesktopUtilityWindowKind = 'launcher' | 'local_environment_settings';
+type DesktopUtilityWindowKind = 'launcher';
 
 type DesktopUtilityWindowState = Readonly<{
   surface: DesktopLauncherSurface;
@@ -155,7 +155,7 @@ type PreparedManagedTargetResult = Readonly<
 type CreateBrowserWindowArgs = Readonly<{
   targetURL: string;
   stateKey: string;
-  role: 'launcher' | 'settings' | 'session_root' | 'session_child';
+  role: 'launcher' | 'session_root' | 'session_child';
   parent?: BrowserWindow;
   frameName?: string;
   diagnostics?: DesktopDiagnosticsRecorder | null;
@@ -169,9 +169,9 @@ type CreateBrowserWindowArgs = Readonly<{
 const utilityWindows = new Map<DesktopUtilityWindowKind, BrowserWindow>();
 const utilityWindowState = new Map<DesktopUtilityWindowKind, DesktopUtilityWindowState>([
   ['launcher', { surface: 'connect_environment', entryReason: 'app_launch', issue: null }],
-  ['local_environment_settings', { surface: 'local_environment_settings', entryReason: 'app_launch', issue: null }],
 ]);
 const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();
+const UTILITY_WINDOW_KINDS = ['launcher'] as const;
 const sessionsByKey = new Map<DesktopSessionKey, DesktopSessionRecord>();
 const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
@@ -291,7 +291,7 @@ function openExternal(url: string): void {
 
 function currentUtilityWindowState(kind: DesktopUtilityWindowKind): DesktopUtilityWindowState {
   return utilityWindowState.get(kind) ?? {
-    surface: kind === 'launcher' ? 'connect_environment' : 'local_environment_settings',
+    surface: 'connect_environment',
     entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
     issue: null,
   };
@@ -306,7 +306,7 @@ function currentParentWindow(): BrowserWindow | undefined {
   if (focused && !focused.isDestroyed()) {
     return focused;
   }
-  for (const kind of ['launcher', 'local_environment_settings'] as const) {
+  for (const kind of UTILITY_WINDOW_KINDS) {
     const utilityWindow = utilityWindows.get(kind);
     if (utilityWindow && !utilityWindow.isDestroyed()) {
       return utilityWindow;
@@ -354,8 +354,8 @@ function desktopWelcomePageURL(): string {
   return pathToFileURL(resolveWelcomeRendererPath({ appPath: app.getAppPath() })).toString();
 }
 
-function utilityWindowStateKey(kind: DesktopUtilityWindowKind): string {
-  return kind === 'launcher' ? 'window:launcher' : 'window:settings';
+function utilityWindowStateKey(): string {
+  return 'window:launcher';
 }
 
 function sessionWindowStateKey(sessionKey: DesktopSessionKey): string {
@@ -451,33 +451,25 @@ async function emitDesktopWelcomeSnapshot(kind: DesktopUtilityWindowKind): Promi
 }
 
 function broadcastDesktopWelcomeSnapshots(): void {
-  for (const kind of ['launcher', 'local_environment_settings'] as const) {
+  for (const kind of UTILITY_WINDOW_KINDS) {
     void emitDesktopWelcomeSnapshot(kind);
   }
 }
 
 function setLauncherViewState(options: OpenDesktopWelcomeOptions = {}): DesktopUtilityWindowState {
+  const current = currentUtilityWindowState('launcher');
   const nextState: DesktopUtilityWindowState = {
-    surface: 'connect_environment',
+    surface: options.surface ?? 'connect_environment',
     entryReason: options.entryReason ?? (openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch'),
-    issue: options.issue ?? null,
+    issue: options.issue === undefined ? current.issue : options.issue,
   };
   setUtilityWindowState('launcher', nextState);
   return nextState;
 }
 
-function setSettingsViewState(options: OpenDesktopWelcomeOptions = {}): DesktopUtilityWindowState {
-  const nextState: DesktopUtilityWindowState = {
-    surface: 'local_environment_settings',
-    entryReason: options.entryReason ?? (openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch'),
-    issue: null,
-  };
-  setUtilityWindowState('local_environment_settings', nextState);
-  return nextState;
-}
-
 function resetLauncherIssueState(): void {
   setLauncherViewState({
+    surface: currentUtilityWindowState('launcher').surface,
     entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
     issue: null,
   });
@@ -835,11 +827,7 @@ async function openUtilityWindow(
   kind: DesktopUtilityWindowKind,
   options: OpenDesktopWelcomeOptions = {},
 ): Promise<DesktopLauncherActionResult> {
-  if (kind === 'launcher') {
-    setLauncherViewState(options);
-  } else {
-    setSettingsViewState(options);
-  }
+  setLauncherViewState(options);
 
   const existing = liveUtilityWindow(kind);
   if (existing) {
@@ -853,8 +841,8 @@ async function openUtilityWindow(
 
   const win = createBrowserWindow({
     targetURL: desktopWelcomePageURL(),
-    stateKey: utilityWindowStateKey(kind),
-    role: kind === 'launcher' ? 'launcher' : 'settings',
+    stateKey: utilityWindowStateKey(),
+    role: 'launcher',
     stealAppFocus: options.stealAppFocus,
     onClosed: () => {
       utilityWindows.delete(kind);
@@ -871,15 +859,14 @@ async function openUtilityWindow(
 }
 
 async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {}): Promise<void> {
-  if (options.surface === 'local_environment_settings') {
-    await openUtilityWindow('local_environment_settings', options);
-    return;
-  }
   await openUtilityWindow('launcher', options);
 }
 
 async function openAdvancedSettingsWindow(): Promise<void> {
-  await openUtilityWindow('local_environment_settings', { stealAppFocus: true });
+  await openDesktopWelcomeWindow({
+    surface: 'local_environment_settings',
+    stealAppFocus: true,
+  });
 }
 
 async function prepareExternalTarget(targetURL: string): Promise<PreparedExternalTargetResult> {
@@ -1218,7 +1205,10 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'open_remote_environment':
       return openRemoteEnvironmentFromLauncher(request);
     case 'open_local_environment_settings':
-      return openUtilityWindow('local_environment_settings', { stealAppFocus: true });
+      return openUtilityWindow('launcher', {
+        surface: 'local_environment_settings',
+        stealAppFocus: true,
+      });
     case 'focus_environment_window':
       return focusEnvironmentWindow(request.session_key);
     case 'upsert_saved_environment':
@@ -1304,9 +1294,6 @@ async function restoreBestAvailableWindow(options?: Readonly<{ stealAppFocus?: b
   if (focusUtilityWindow('launcher', options)) {
     return;
   }
-  if (focusUtilityWindow('local_environment_settings', options)) {
-    return;
-  }
   if (lastFocusedSessionKey && focusEnvironmentSession(lastFocusedSessionKey, options)) {
     return;
   }
@@ -1319,7 +1306,7 @@ async function restoreBestAvailableWindow(options?: Readonly<{ stealAppFocus?: b
 
 async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
-  for (const kind of ['launcher', 'local_environment_settings'] as const) {
+  for (const kind of UTILITY_WINDOW_KINDS) {
     const win = liveUtilityWindow(kind);
     if (!win) {
       continue;
@@ -1458,7 +1445,10 @@ if (!app.requestSingleInstanceLock()) {
     };
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
-    void closeUtilityWindow('local_environment_settings');
+    setLauncherViewState({
+      surface: 'connect_environment',
+    });
+    void emitDesktopWelcomeSnapshot('launcher');
   });
   ipcMain.on(DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL, (event, payload) => {
     const normalized = normalizeDesktopAskFlowerHandoffPayload(payload);

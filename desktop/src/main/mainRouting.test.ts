@@ -8,14 +8,16 @@ function readMainSource(): string {
 }
 
 describe('main routing', () => {
-  it('keeps the launcher and settings as singleton utility windows', () => {
+  it('keeps the launcher as the single desktop utility window', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain("type DesktopUtilityWindowKind = 'launcher' | 'local_environment_settings';");
+    expect(mainSrc).toContain("type DesktopUtilityWindowKind = 'launcher';");
     expect(mainSrc).toContain('const utilityWindows = new Map<DesktopUtilityWindowKind, BrowserWindow>();');
+    expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain("surface: 'connect_environment'");
     expect(mainSrc).toContain("surface: 'local_environment_settings'");
-    expect(mainSrc).toContain("return kind === 'launcher' ? 'window:launcher' : 'window:settings';");
+    expect(mainSrc).toContain("return 'window:launcher';");
+    expect(mainSrc).not.toContain("'window:settings'");
   });
 
   it('tracks environment windows by session key and scopes detached windows per session', () => {
@@ -38,7 +40,8 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("case 'return_to_current_environment':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain('await openAdvancedSettingsWindow();');
-    expect(mainSrc).toContain("return openUtilityWindow('local_environment_settings', { stealAppFocus: true });");
+    expect(mainSrc).toContain("return openUtilityWindow('launcher', {");
+    expect(mainSrc).toContain("surface: 'local_environment_settings',");
     expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
   });
 
