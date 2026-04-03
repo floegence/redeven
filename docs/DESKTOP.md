@@ -8,25 +8,28 @@ This document describes the public Electron desktop shell that ships with each `
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse Redeven Local UI instead of introducing a second app runtime.
 - Make environment choice explicit on every cold desktop launch.
-- Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around one welcome-first model.
+- Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around a utility-window plus session-window model.
 
 ## Architecture
 
 - Electron is a thin shell around Redeven Local UI.
 - `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
-- The main BrowserWindow keeps one shell-owned launcher dashboard:
-  - `Connect Environment`
-- `Local Environment Settings` is a shell-owned dialog layered on top of that dashboard.
-- The launcher dashboard and `Local Environment Settings` dialog render inside the same Floe workbench shell instance.
+- Desktop keeps two singleton shell-owned utility windows:
+  - `Connect Environment` launcher
+  - `Local Environment Settings`
+- Each opened Environment owns its own top-level session window, plus any detached child windows it spawns.
+- Session deduplication happens in Electron main through a canonical session key:
+  - `managed_local` for the desktop-managed Local Environment
+  - `url:<normalized-local-ui-origin>` for remote Local UI targets
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
   - `Local Environment`
   - a remembered recent Environment
   - a newly entered Redeven Local UI URL
-- Reopening the launcher from an active session does not immediately disconnect the current target. The current session stays available until the user opens a different Environment.
+- Reopening the launcher from an active session does not disconnect anything. Existing Environment windows stay live until the user closes those specific session windows.
 - Common startup failures return to the launcher with inline context instead of bouncing users to a separate blocked-first flow.
-- Electron only allows navigation to the exact reported Local UI origin and opens all other URLs in the system browser.
+- Electron only allows session-owned navigation to the exact reported Local UI origin for that session and opens all other URLs in the system browser.
 
 ## Runtime Contract
 
@@ -90,12 +93,12 @@ Visual hierarchy:
 - shell title: `Redeven Desktop`
 - shell surface title: `Connect Environment`
 - primary workbench column:
-  - `Current Session`
+  - `Open Windows`
   - `Local Environment`
 - secondary workbench column:
   - `Environment Library`
   - `Add` (`Add Connection` in tooltip and accessibility copy)
-  - `All / Current / Recent / Saved` filters
+  - `All / Open / Recent / Saved` filters
 - activity bar:
   - one item: `Connect Environment`
 
@@ -104,24 +107,26 @@ Interaction rules:
 - Cold launch never auto-opens a remembered target.
 - Environment choice is always a launcher action, never a side effect of saving settings.
 - `Local Environment` is the primary path and behaves like a workbench-style open action.
-- `Local Environment Settings` opens as a dialog without replacing the launcher dashboard.
+- `Local Environment Settings` opens or focuses its own singleton utility window.
 - The `Add` action opens a dialog that can either connect immediately or save a remote Environment into the library.
 - Remote library entries distinguish:
-  - the current unsaved remote session
+  - unsaved remote sessions that are already open
   - auto-remembered recent connections
   - explicitly saved connections
+- Open launcher entries switch their primary action from `Open` to `Focus`.
+- The launcher shows every currently open Environment window and can focus any of them without opening duplicates.
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a compact library table and can be opened, edited, or deleted inline.
-- Dense repeated controls use compact visible labels such as `Open`, `Resume`, `Back`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
+- Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:
   - `Quit` when no environment is open yet
-  - `Back` when a target is already open, with `Back to current environment` preserved in tooltip/accessibility text
+  - `Close Launcher` when one or more Environment windows are already open
 
 ## Local Environment Settings
 
-`Local Environment Settings` is a launcher-owned dialog inside the same desktop shell, not a second page or window.
+`Local Environment Settings` is a dedicated singleton utility window that renders the same shell but keeps its own focused surface.
 
 It edits only future startup behavior for `Local Environment`:
 
@@ -136,7 +141,7 @@ Rules:
 
 - Saving options only persists configuration.
 - Saving options does not switch Environments.
-- Cancel returns to the current Environment when one is already open; otherwise it returns to Connect Environment.
+- Cancel closes the settings window.
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
 - The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
 - Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
@@ -165,7 +170,7 @@ Desktop keeps one persisted preference model for stable `Local Environment` conf
 Semantics:
 
 - Desktop does not persist a remembered current target for the next launch.
-- The active target is runtime-only desktop session state.
+- Open Environment windows are runtime-only desktop session state.
 - `local_ui_bind`, `local_ui_password`, and `local_ui_password_configured` apply only to future `Local Environment` opens.
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
@@ -228,11 +233,13 @@ Non-goals:
 
 ## User Entry Points
 
-- Cold app launch opens the welcome launcher in the main window.
+- Cold app launch opens the singleton launcher window.
 - The native app menu exposes one primary shell action: `Connect Environment...`
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Generic settings aliases such as `advanced_settings` route to `Local Environment Settings`.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
+- `Switch Environment` focuses or opens the singleton launcher instead of replacing the active Environment session window.
+- `Runtime Settings` focuses or opens the singleton `Local Environment Settings` utility window instead of rendering inside the launcher.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
 - The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
 - Env App exposes `Switch Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
@@ -245,7 +252,8 @@ Non-goals:
   - launcher reloads with the failing URL preserved and an inline remote-environment issue
 - Desktop-managed startup blocked
   - launcher reloads with a `Local Environment` issue and diagnostics copy
-- Secondary compatibility surfaces such as the blocked page may still exist, but the normal product flow is launcher-first recovery in the main window
+- Detached child windows and Ask Flower handoff stay session-scoped during recovery; only the owning Environment window receives those callbacks
+- Secondary compatibility surfaces such as the blocked page may still exist, but the normal product flow is launcher-first recovery through the utility windows
 
 ## Accessibility Behavior
 

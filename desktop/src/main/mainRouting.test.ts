@@ -8,58 +8,48 @@ function readMainSource(): string {
 }
 
 describe('main routing', () => {
-  it('opens the welcome renderer on cold launch instead of auto-connecting immediately', () => {
+  it('keeps the launcher and settings as singleton utility windows', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain("await openDesktopWelcomeWindow({ entryReason: 'app_launch' });");
-    expect(mainSrc).toContain('resolveWelcomeRendererPath');
-  });
-
-  it('tracks the active session separately and restores it on settings cancellation', () => {
-    const mainSrc = readMainSource();
-
-    expect(mainSrc).toContain('let currentSessionTarget: DesktopSessionTarget | null = null;');
-    expect(mainSrc).toContain('returnMainWindowToCurrentTarget({ stealAppFocus: true })');
-    expect(mainSrc).toContain('async function closeSettingsSurface(): Promise<void> {');
-    expect(mainSrc).toContain("ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {");
-    expect(mainSrc).toContain('void closeSettingsSurface();');
-    expect(mainSrc).toContain('if (currentSessionTarget) {');
-    expect(mainSrc).toContain('void requestQuit();');
-  });
-
-  it('routes launcher actions and legacy shell entrypoints into the shared welcome flow', () => {
-    const mainSrc = readMainSource();
-
-    expect(mainSrc).toContain("async function openAdvancedSettingsWindow(returnSurface: 'welcome' | 'current_target' = 'current_target'): Promise<void> {");
-    expect(mainSrc).toContain("async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActionResponse> {");
+    expect(mainSrc).toContain("type DesktopUtilityWindowKind = 'launcher' | 'local_environment_settings';");
+    expect(mainSrc).toContain('const utilityWindows = new Map<DesktopUtilityWindowKind, BrowserWindow>();');
+    expect(mainSrc).toContain("surface: 'connect_environment'");
     expect(mainSrc).toContain("surface: 'local_environment_settings'");
-    expect(mainSrc).toContain("case 'upsert_saved_environment':");
-    expect(mainSrc).toContain("case 'delete_saved_environment':");
-    expect(mainSrc).not.toContain("case 'open_advanced_settings':");
+    expect(mainSrc).toContain("return kind === 'launcher' ? 'window:launcher' : 'window:settings';");
+  });
+
+  it('tracks environment windows by session key and scopes detached windows per session', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('const sessionsByKey = new Map<DesktopSessionKey, DesktopSessionRecord>();');
+    expect(mainSrc).toContain('const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();');
+    expect(mainSrc).toContain('function sessionWindowStateKey(sessionKey: DesktopSessionKey): string {');
+    expect(mainSrc).toContain('function sessionChildWindowStateKey(sessionKey: DesktopSessionKey, childKey: string): string {');
+    expect(mainSrc).toContain('function openSessionChildWindow(');
+    expect(mainSrc).toContain('if (isAllowedSessionNavigation(sessionKey, nextURL)) {');
+  });
+
+  it('routes launcher and shell actions into the multi-window desktop flow', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain("case 'open_local_environment_settings':");
+    expect(mainSrc).toContain("case 'focus_environment_window':");
+    expect(mainSrc).toContain("case 'close_launcher_or_quit':");
+    expect(mainSrc).not.toContain("case 'return_to_current_environment':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
-    expect(mainSrc).toContain("await openAdvancedSettingsWindow('current_target');");
-    expect(mainSrc).toContain('ipcMain.handle(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
-    expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
-    expect(mainSrc).toContain("message: 'Invalid external URL.'");
-    expect(mainSrc).toContain('ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL');
-    expect(mainSrc).toContain("if (normalized.action === 'restart_managed_runtime') {");
-    expect(mainSrc).toContain('return restartManagedRuntimeFromShell();');
+    expect(mainSrc).toContain('await openAdvancedSettingsWindow();');
+    expect(mainSrc).toContain("return openUtilityWindow('local_environment_settings', { stealAppFocus: true });");
+    expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
   });
 
-  it('keeps settings saves renderer-local by persisting without closing the surface', () => {
+  it('broadcasts launcher snapshots per utility window and scopes Ask Flower handoff by sender ownership', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain("ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {");
-    expect(mainSrc).toContain('await persistDesktopPreferences(next);');
-    expect(mainSrc).not.toContain('await closeSettingsSurface()');
-  });
-
-  it('builds launcher snapshots with active-session context', () => {
-    const mainSrc = readMainSource();
-
-    expect(mainSrc).toContain('activeSessionTarget: currentSessionTarget');
-    expect(mainSrc).toContain('surface: desktopWelcomeViewState.surface');
-    expect(mainSrc).toContain('entryReason: overrides.entryReason ?? desktopWelcomeViewState.entryReason');
-    expect(mainSrc).toContain('issue: overrides.issue ?? desktopWelcomeViewState.issue');
+    expect(mainSrc).toContain('DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL');
+    expect(mainSrc).toContain('function emitDesktopWelcomeSnapshot(kind: DesktopUtilityWindowKind): Promise<void>');
+    expect(mainSrc).toContain('function broadcastDesktopWelcomeSnapshots(): void {');
+    expect(mainSrc).toContain('function senderUtilityWindowKind(webContentsID: number): DesktopUtilityWindowKind {');
+    expect(mainSrc).toContain('function handoffAskFlowerToOwningSession(senderWebContentsID: number, payload: DesktopAskFlowerHandoffPayload): Promise<void> {');
+    expect(mainSrc).toContain('queueSessionAskFlowerHandoff(sessionKey, payload);');
   });
 });

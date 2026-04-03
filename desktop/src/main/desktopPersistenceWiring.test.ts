@@ -23,7 +23,7 @@ describe('desktop persistence wiring', () => {
     expect(preloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
   });
 
-  it('keeps electron main wired to the desktop state store and ipc channels', () => {
+  it('keeps electron main wired to the desktop state store, utility windows, and session-scoped ownership maps', () => {
     const mainSrc = readDesktopFile('./main.ts');
 
     expect(mainSrc).toContain("from './desktopStateStore';");
@@ -42,20 +42,19 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('normalizeDesktopAskFlowerHandoffPayload');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL');
+    expect(mainSrc).toContain('DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopLauncherActionRequest');
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_WINDOW_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenWindowRequest');
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
-    expect(mainSrc).toContain('openDesktopWelcomeWindow');
-    expect(mainSrc).toContain('openAdvancedSettingsWindow');
-    expect(mainSrc).toContain('resolveWelcomeRendererPath');
+    expect(mainSrc).toContain('const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();');
+    expect(mainSrc).toContain('const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();');
     expect(mainSrc).toContain("const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });");
     expect(mainSrc).toContain('preload: browserPreloadPath,');
-    expect(mainSrc).not.toContain('usesDesktopWindowThemeOverlay(process.platform)');
-    expect(mainSrc).toContain("const win = createBrowserWindow(targetURL, undefined, '', 'window:main');");
-    expect(mainSrc).toContain('queueMainWindowAskFlowerHandoff(payload);');
-    expect(mainSrc).toContain('focusMainWindow({ stealAppFocus: true });');
-    expect(mainSrc).toContain('registerWindowStatePersistence(win, windowStateKey);');
+    expect(mainSrc).toContain("stateKey: utilityWindowStateKey(kind)");
+    expect(mainSrc).toContain("stateKey: sessionWindowStateKey(sessionKey)");
+    expect(mainSrc).toContain('sessionChildWindowStateKey(sessionKey, childKey)');
+    expect(mainSrc).toContain('void handoffAskFlowerToOwningSession(event.sender.id, normalized);');
   });
 });

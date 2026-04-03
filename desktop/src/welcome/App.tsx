@@ -38,8 +38,10 @@ import type {
 } from '../shared/desktopSettingsSurface';
 import type {
   DesktopEnvironmentEntry,
+  DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
   DesktopLauncherSurface,
+  DesktopOpenEnvironmentWindow,
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
@@ -76,7 +78,6 @@ import {
   compactSaveActionLabel,
   compactSettingsFieldLabel,
   isRedundantSettingsFieldLabel,
-  compactSessionAvailabilityLabel,
   compactSettingsActionLabel,
   plainTextFromHelpHTML,
 } from './welcomeCopy';
@@ -89,7 +90,8 @@ import {
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
-  performAction: (request: DesktopLauncherActionRequest) => Promise<void>;
+  performAction: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
+  subscribeSnapshot: (listener: (snapshot: DesktopWelcomeSnapshot) => void) => (() => void);
 }>;
 
 type DesktopSettingsBridge = Readonly<{
@@ -111,6 +113,10 @@ declare global {
   interface Window {
     redevenDesktopLauncher?: DesktopLauncherBridge;
     redevenDesktopSettings?: DesktopSettingsBridge;
+    redevenDesktopShell?: Readonly<{
+      openConnectionCenter?: () => Promise<void>;
+      openWindow?: (kind: unknown) => Promise<void>;
+    }>;
   }
 }
 
@@ -118,12 +124,12 @@ type BusyAction =
   | ''
   | 'open_local_environment'
   | 'open_remote_environment'
-  | 'return_to_current_environment'
+  | 'focus_environment_window'
+  | 'open_local_environment_settings'
+  | 'close_launcher_or_quit'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
-
-type SurfaceMode = 'root' | 'local';
 
 type ConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
@@ -187,7 +193,7 @@ function buildDesktopFloeConfig() {
   } as const;
 }
 
-const LIBRARY_FILTERS: readonly EnvironmentLibraryFilter[] = ['all', 'current', 'recent', 'saved'];
+const LIBRARY_FILTERS: readonly EnvironmentLibraryFilter[] = ['all', 'open', 'recent', 'saved'];
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
@@ -232,12 +238,23 @@ function issueKicker(issue: DesktopWelcomeIssue): string {
 
 function environmentTagVariant(tag: DesktopEnvironmentEntry['tag']): 'neutral' | 'primary' | 'success' {
   switch (tag) {
-    case 'Current':
+    case 'Open':
       return 'success';
     case 'Recent':
       return 'primary';
     default:
       return 'neutral';
+  }
+}
+
+function busyActionForLauncherRequest(request: DesktopLauncherActionRequest): BusyAction {
+  switch (request.kind) {
+    case 'upsert_saved_environment':
+      return 'save_environment';
+    case 'delete_saved_environment':
+      return 'delete_environment';
+    default:
+      return request.kind;
   }
 }
 
@@ -269,8 +286,8 @@ function summaryItemToneClasses(tone: DesktopSettingsSummaryItem['tone']): strin
 
 function environmentSourceLabel(environment: DesktopEnvironmentEntry): string {
   switch (environment.category) {
-    case 'current_unsaved':
-      return 'Current unsaved';
+    case 'open_unsaved':
+      return 'Open window';
     case 'recent_auto':
       return 'Recent';
     case 'saved':
@@ -302,7 +319,12 @@ async function copyToClipboard(text: string): Promise<void> {
 
 function desktopLauncherBridge(): DesktopLauncherBridge | null {
   const candidate = window.redevenDesktopLauncher;
-  if (!candidate || typeof candidate.getSnapshot !== 'function' || typeof candidate.performAction !== 'function') {
+  if (
+    !candidate
+    || typeof candidate.getSnapshot !== 'function'
+    || typeof candidate.performAction !== 'function'
+    || typeof candidate.subscribeSnapshot !== 'function'
+  ) {
     return null;
   }
   return candidate;
@@ -318,13 +340,16 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
 
 function DesktopCommandRegistrar(props: Readonly<{
   snapshot: () => DesktopWelcomeSnapshot;
-  visibleSurface: () => DesktopLauncherSurface;
   showConnectEnvironment: (message?: string) => void;
   openCreateConnectionDialog: (message?: string) => void;
   openSettingsSurface: () => void;
   openLocalEnvironment: () => Promise<void>;
-  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
-  returnOrQuit: () => Promise<void>;
+  openRemoteEnvironment: (
+    targetURL: string,
+    errorTarget?: 'connect' | 'dialog',
+    environment?: DesktopEnvironmentEntry,
+  ) => Promise<boolean>;
+  closeLauncherOrQuit: () => Promise<void>;
 }>): null {
   const cmd = useCommand();
   const theme = useTheme();
@@ -371,15 +396,15 @@ function DesktopCommandRegistrar(props: Readonly<{
         execute: () => props.openCreateConnectionDialog('Enter an Environment URL or choose a saved connection.'),
       },
       {
-        id: 'redeven.desktop.returnOrQuit',
+        id: 'redeven.desktop.closeLauncherOrQuit',
         title: snapshot.close_action_label,
         description: snapshot.close_action_label === 'Quit'
           ? 'Quit Redeven Desktop'
-          : 'Return to the current Environment',
+          : 'Close the launcher window',
         category: 'Desktop',
         icon: Globe,
         execute: () => {
-          void props.returnOrQuit();
+          void props.closeLauncherOrQuit();
         },
       },
       {
@@ -404,17 +429,17 @@ function DesktopCommandRegistrar(props: Readonly<{
     for (const environment of snapshot.environments.filter((entry) => entry.kind === 'external_local_ui').slice(0, 5)) {
       list.push({
         id: `redeven.desktop.openEnvironment.${environment.id}`,
-        title: `Open ${environment.label}`,
+        title: `${environment.open_action_label} ${environment.label}`,
         description: environment.local_ui_url,
         category: 'Recent Environments',
         icon: Globe,
         execute: () => {
-          void props.openRemoteEnvironment(environment.local_ui_url);
+          void props.openRemoteEnvironment(environment.local_ui_url, 'connect', environment);
         },
       });
     }
 
-    if (props.visibleSurface() === 'connect_environment') {
+    if (snapshot.surface === 'connect_environment') {
       list.push({
         id: 'redeven.desktop.openDeck',
         title: 'Open Deck',
@@ -437,8 +462,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
-  const [surfaceMode, setSurfaceMode] = createSignal<SurfaceMode>(props.snapshot.surface === 'local_environment_settings' ? 'root' : 'local');
-  const [localSurface, setLocalSurface] = createSignal<DesktopLauncherSurface>(props.snapshot.surface === 'local_environment_settings' ? 'local_environment_settings' : 'connect_environment');
   const [feedback, setFeedback] = createSignal('');
   const [connectError, setConnectError] = createSignal('');
   const [settingsError, setSettingsError] = createSignal('');
@@ -452,17 +475,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   let issueRef: HTMLElement | undefined;
   let settingsErrorRef: HTMLElement | undefined;
 
-  const visibleSurface = createMemo<DesktopLauncherSurface>(() => (
-    surfaceMode() === 'root' ? snapshot().surface : localSurface()
-  ));
+  const visibleSurface = createMemo<DesktopLauncherSurface>(() => snapshot().surface);
   const status = createMemo(() => shellStatus(snapshot()));
   const shellView = createMemo(() => buildDesktopWelcomeShellViewModel(snapshot(), visibleSurface()));
   const headerLogoSrc = createMemo(() => theme.resolvedTheme() === 'light' ? LOGO_LIGHT_URL : LOGO_DARK_URL);
   const settingsSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => snapshot().settings_surface);
-  const currentSessionSubtitle = createMemo(() => (
-    trimString(snapshot().current_session_local_ui_url) || snapshot().current_session_description
+  const localEnvironmentEntry = createMemo(() => (
+    snapshot().environments.find((environment) => environment.kind === 'local_environment') ?? null
   ));
-  const isMainOwnedSettingsSurface = createMemo(() => surfaceMode() === 'root' && snapshot().surface === 'local_environment_settings');
+  const openWindowsSubtitle = createMemo(() => {
+    const openWindows = snapshot().open_windows;
+    if (openWindows.length <= 0) {
+      return 'No environment windows open';
+    }
+    if (openWindows.length === 1) {
+      return `${openWindows[0]!.label} · ${openWindows[0]!.local_ui_url}`;
+    }
+    return `${openWindows.length} environment windows open`;
+  });
   const activityItems = createMemo<ActivityBarItem[]>(() => ([
     {
       id: 'connect_environment',
@@ -483,6 +513,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const unsubscribe = shellTheme.subscribe(applyShellTheme);
     onCleanup(unsubscribe);
   }
+
+  const unsubscribeSnapshot = props.runtime.launcher.subscribeSnapshot((nextSnapshot) => {
+    setSnapshot(nextSnapshot);
+  });
+  onCleanup(unsubscribeSnapshot);
 
   createEffect(() => {
     setDraft(snapshot().settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
@@ -505,10 +540,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function refreshSnapshot(): Promise<void> {
     const nextSnapshot = await props.runtime.launcher.getSnapshot();
     setSnapshot(nextSnapshot);
-    if (surfaceMode() === 'root' && nextSnapshot.surface !== 'local_environment_settings') {
-      setSurfaceMode('local');
-      setLocalSurface(nextSnapshot.surface);
-    }
   }
 
   function resetMessages(): void {
@@ -519,27 +550,45 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function showConnectEnvironment(message = ''): void {
-    setSurfaceMode('local');
-    setLocalSurface('connect_environment');
     setConnectionDialogState(null);
     setFeedback(trimString(message));
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
+    if (snapshot().surface === 'connect_environment') {
+      return;
+    }
+    if (typeof window.redevenDesktopShell?.openConnectionCenter === 'function') {
+      void window.redevenDesktopShell.openConnectionCenter();
+      return;
+    }
+    if (typeof window.redevenDesktopShell?.openWindow === 'function') {
+      void window.redevenDesktopShell.openWindow('connection_center');
+    }
   }
 
   function openSettingsSurface(): void {
-    setSurfaceMode('local');
-    setLocalSurface('local_environment_settings');
+    resetMessages();
     setConnectionDialogState(null);
-    setFeedback('');
-    setConnectError('');
-    setSettingsError('');
-    setConnectionDialogError('');
+    setBusyAction('open_local_environment_settings');
+    void props.runtime.launcher.performAction({ kind: 'open_local_environment_settings' })
+      .catch((error) => {
+        setSettingsError(getErrorMessage(error));
+      })
+      .finally(() => {
+        setBusyAction('');
+      });
   }
 
   function openCreateConnectionDialog(message = ''): void {
-    showConnectEnvironment(message);
+    if (snapshot().surface !== 'connect_environment') {
+      showConnectEnvironment(message || 'Open the launcher to add a connection.');
+      return;
+    }
+    setFeedback(trimString(message));
+    setConnectError('');
+    setSettingsError('');
+    setConnectionDialogError('');
     setConnectionDialogState({
       mode: 'create',
       environment_id: '',
@@ -587,47 +636,71 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectError(message);
   }
 
-  async function performNavigationAction(request: Extract<DesktopLauncherActionRequest, Readonly<{
-    kind: 'open_local_environment' | 'open_remote_environment' | 'return_to_current_environment';
-  }>>, errorTarget: 'connect' | 'settings' | 'dialog' = 'connect'): Promise<boolean> {
+  async function performLauncherAction(
+    request: DesktopLauncherActionRequest,
+    errorTarget: 'connect' | 'settings' | 'dialog' = 'connect',
+  ): Promise<DesktopLauncherActionResult | null> {
     resetMessages();
-    setBusyAction(request.kind);
+    setBusyAction(busyActionForLauncherRequest(request));
     try {
-      await props.runtime.launcher.performAction(request);
-      return true;
+      return await props.runtime.launcher.performAction(request);
     } catch (error) {
       setErrorMessage(errorTarget, getErrorMessage(error));
-      return false;
+      return null;
     } finally {
       setBusyAction('');
     }
   }
 
+  async function focusEnvironmentWindow(
+    sessionKey: string,
+    errorTarget: 'connect' | 'settings' | 'dialog' = 'connect',
+  ): Promise<boolean> {
+    const result = await performLauncherAction({
+      kind: 'focus_environment_window',
+      session_key: sessionKey,
+    }, errorTarget);
+    return result?.outcome === 'focused_environment_window';
+  }
+
   async function openLocalEnvironment(): Promise<void> {
-    await performNavigationAction({ kind: 'open_local_environment' }, visibleSurface() === 'local_environment_settings' ? 'settings' : 'connect');
+    const localEntry = localEnvironmentEntry();
+    if (localEntry?.is_open && localEntry.open_session_key) {
+      await focusEnvironmentWindow(localEntry.open_session_key, visibleSurface() === 'local_environment_settings' ? 'settings' : 'connect');
+      return;
+    }
+    await performLauncherAction({ kind: 'open_local_environment' }, visibleSurface() === 'local_environment_settings' ? 'settings' : 'connect');
   }
 
   async function openRemoteEnvironment(
     targetURL: string,
     errorTarget: 'connect' | 'dialog' = 'connect',
+    environment?: DesktopEnvironmentEntry,
   ): Promise<boolean> {
+    if (environment?.is_open && environment.open_session_key) {
+      return focusEnvironmentWindow(environment.open_session_key, errorTarget);
+    }
     const normalizedTargetURL = trimString(targetURL);
     if (!normalizedTargetURL) {
       setErrorMessage(errorTarget, 'Environment URL is required.');
       return false;
     }
-    const opened = await performNavigationAction({
+
+    const result = await performLauncherAction({
       kind: 'open_remote_environment',
       external_local_ui_url: normalizedTargetURL,
+      environment_id: environment?.id,
+      label: environment?.label,
     }, errorTarget);
+    const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
       closeConnectionDialog();
     }
     return opened;
   }
 
-  async function returnOrQuit(): Promise<void> {
-    await performNavigationAction({ kind: 'return_to_current_environment' });
+  async function closeLauncherOrQuit(): Promise<void> {
+    await performLauncherAction({ kind: 'close_launcher_or_quit' });
   }
 
   function updateDraftField(name: keyof DesktopSettingsDraft, value: string): void {
@@ -706,13 +779,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setSettingsError(result.error);
         return;
       }
-      if (isMainOwnedSettingsSurface()) {
-        props.runtime.settings.cancel();
-        return;
-      }
       await refreshSnapshot();
-      setSurfaceMode('local');
-      setLocalSurface('connect_environment');
       setFeedback('Local Environment settings saved.');
     } catch (error) {
       setSettingsError(getErrorMessage(error));
@@ -723,12 +790,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function cancelSettings(): void {
     setSettingsError('');
-    if (isMainOwnedSettingsSurface()) {
-      props.runtime.settings.cancel();
-      return;
-    }
-    setSurfaceMode('local');
-    setLocalSurface('connect_environment');
+    props.runtime.settings.cancel();
   }
 
   async function upsertSavedEnvironment(
@@ -831,13 +893,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     <>
       <DesktopCommandRegistrar
         snapshot={snapshot}
-        visibleSurface={visibleSurface}
         showConnectEnvironment={showConnectEnvironment}
         openCreateConnectionDialog={openCreateConnectionDialog}
         openSettingsSurface={openSettingsSurface}
         openLocalEnvironment={openLocalEnvironment}
         openRemoteEnvironment={openRemoteEnvironment}
-        returnOrQuit={returnOrQuit}
+        closeLauncherOrQuit={closeLauncherOrQuit}
       />
       <Shell
         sidebarMode="hidden"
@@ -874,49 +935,58 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <span class="truncate">{shellView().surface_title}</span>
               </BottomBarItem>
               <BottomBarItem class="min-w-0">
-                <span class="truncate">{currentSessionSubtitle()}</span>
+                <span class="truncate">{openWindowsSubtitle()}</span>
               </BottomBarItem>
             </div>
             <div class="flex items-center gap-2">
               <StatusIndicator status={status().tone} label={status().label} />
-              <BottomBarItem class="cursor-pointer" onClick={() => void returnOrQuit()}>
-                {snapshot().close_action_label}
-              </BottomBarItem>
+              <Show when={snapshot().surface === 'connect_environment'}>
+                <BottomBarItem class="cursor-pointer" onClick={() => void closeLauncherOrQuit()}>
+                  {snapshot().close_action_label}
+                </BottomBarItem>
+              </Show>
             </div>
           </>
         )}
       >
-        <ConnectEnvironmentSurface
-          snapshot={snapshot()}
-          settingsSurface={settingsSurface()}
-          feedback={feedback()}
-          error={connectError()}
-          busyAction={busyAction()}
-          libraryFilter={libraryFilter()}
-          libraryQuery={libraryQuery()}
-          libraryEntries={libraryEntries()}
-          setLibraryFilter={setLibraryFilter}
-          setLibraryQuery={setLibraryQuery}
-          issueRef={(value) => {
-            issueRef = value;
-          }}
-          openLocalEnvironment={openLocalEnvironment}
-          openSettingsSurface={openSettingsSurface}
-          openCreateConnectionDialog={openCreateConnectionDialog}
-          openRemoteEnvironment={openRemoteEnvironment}
-          saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
-          editEnvironment={startEditingEnvironment}
-          deleteEnvironment={setDeleteTarget}
-          returnOrQuit={returnOrQuit}
-          copyDiagnostics={async () => {
-            await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
-            setFeedback('Diagnostics copied to the clipboard.');
-          }}
-        />
+        <Show
+          when={snapshot().surface === 'connect_environment'}
+          fallback={<div class="h-full min-h-0 bg-background" />}
+        >
+          <ConnectEnvironmentSurface
+            snapshot={snapshot()}
+            settingsSurface={settingsSurface()}
+            localEnvironment={localEnvironmentEntry()}
+            feedback={feedback()}
+            error={connectError()}
+            busyAction={busyAction()}
+            libraryFilter={libraryFilter()}
+            libraryQuery={libraryQuery()}
+            libraryEntries={libraryEntries()}
+            setLibraryFilter={setLibraryFilter}
+            setLibraryQuery={setLibraryQuery}
+            issueRef={(value) => {
+              issueRef = value;
+            }}
+            openLocalEnvironment={openLocalEnvironment}
+            openSettingsSurface={openSettingsSurface}
+            openCreateConnectionDialog={openCreateConnectionDialog}
+            openRemoteEnvironment={openRemoteEnvironment}
+            focusEnvironmentWindow={focusEnvironmentWindow}
+            saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
+            editEnvironment={startEditingEnvironment}
+            deleteEnvironment={setDeleteTarget}
+            closeLauncherOrQuit={closeLauncherOrQuit}
+            copyDiagnostics={async () => {
+              await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
+              setFeedback('Diagnostics copied to the clipboard.');
+            }}
+          />
+        </Show>
       </Shell>
 
       <LocalEnvironmentSettingsDialog
-        open={visibleSurface() === 'local_environment_settings'}
+        open={snapshot().surface === 'local_environment_settings'}
         snapshot={settingsSurface()}
         draft={draft()}
         busyAction={busyAction()}
@@ -975,6 +1045,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 function ConnectEnvironmentSurface(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
   settingsSurface: DesktopSettingsSurfaceSnapshot;
+  localEnvironment: DesktopEnvironmentEntry | null;
   feedback: string;
   error: string;
   busyAction: BusyAction;
@@ -987,11 +1058,16 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: () => void;
   openCreateConnectionDialog: (message?: string) => void;
-  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
+  openRemoteEnvironment: (
+    targetURL: string,
+    errorTarget?: 'connect' | 'dialog',
+    environment?: DesktopEnvironmentEntry,
+  ) => Promise<boolean>;
+  focusEnvironmentWindow: (sessionKey: string, errorTarget?: 'connect' | 'settings' | 'dialog') => Promise<boolean>;
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
-  returnOrQuit: () => Promise<void>;
+  closeLauncherOrQuit: () => Promise<void>;
   copyDiagnostics: () => Promise<void>;
 }>) {
   const localEnvironmentIssue = createMemo(() => (
@@ -1010,7 +1086,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
   return (
     <div class="h-full min-h-0 overflow-auto bg-background">
       <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <CurrentSessionStrip snapshot={props.snapshot} returnOrQuit={props.returnOrQuit} />
+        <OpenWindowsPanel
+          snapshot={props.snapshot}
+          busyAction={props.busyAction}
+          focusEnvironmentWindow={props.focusEnvironmentWindow}
+          closeLauncherOrQuit={props.closeLauncherOrQuit}
+        />
 
         <Show when={props.feedback}>
           <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
@@ -1027,7 +1108,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
         <div class="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.85fr)]">
           <div class="space-y-4">
             <LocalEnvironmentLauncherCard
-              snapshot={props.snapshot}
+              environment={props.localEnvironment}
               settingsSurface={props.settingsSurface}
               busyAction={props.busyAction}
               openLocalEnvironment={props.openLocalEnvironment}
@@ -1119,49 +1200,108 @@ function ConnectEnvironmentSurface(props: Readonly<{
   );
 }
 
-function CurrentSessionStrip(props: Readonly<{
+function OpenWindowsPanel(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
-  returnOrQuit: () => Promise<void>;
+  busyAction: BusyAction;
+  focusEnvironmentWindow: (sessionKey: string, errorTarget?: 'connect' | 'settings' | 'dialog') => Promise<boolean>;
+  closeLauncherOrQuit: () => Promise<void>;
 }>) {
   return (
     <Card class="overflow-hidden border-border/80 bg-card/75 shadow-sm">
-      <CardContent class="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
-        <div class="min-w-0">
-          <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Current Session</div>
-          <div class="mt-1 text-sm font-medium text-foreground">{props.snapshot.current_session_label}</div>
-          <div class="mt-1 truncate text-xs text-muted-foreground">{props.snapshot.current_session_description}</div>
+      <CardHeader class="gap-2 border-b border-border/70 px-4 py-4 sm:px-5">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div class="min-w-0">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Open windows</div>
+            <CardTitle class="mt-1 text-base">Environment Windows</CardTitle>
+            <CardDescription class="mt-1 text-sm">
+              {props.snapshot.open_windows.length > 0
+                ? 'Open or focus environment windows without creating duplicates.'
+                : 'No environment windows are open yet.'}
+            </CardDescription>
+          </div>
+          <div class="flex items-center gap-2">
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {props.snapshot.open_windows.length === 1 ? '1 window' : `${props.snapshot.open_windows.length} windows`}
+            </Tag>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label={props.snapshot.close_action_label}
+              title={props.snapshot.close_action_label}
+              onClick={() => { void props.closeLauncherOrQuit(); }}
+            >
+              {compactCloseActionLabel(props.snapshot.close_action_label)}
+            </Button>
+          </div>
         </div>
-        <div class="flex items-center gap-2">
-          <Show when={props.snapshot.current_session_target_kind}>
-            <span title="Current environment is still available.">
-              <Tag variant="success" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {compactSessionAvailabilityLabel()}
-              </Tag>
-            </span>
-          </Show>
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label={props.snapshot.close_action_label}
-            title={props.snapshot.close_action_label}
-            onClick={() => { void props.returnOrQuit(); }}
-          >
-            {compactCloseActionLabel(props.snapshot.close_action_label)}
-          </Button>
-        </div>
+      </CardHeader>
+      <CardContent class="px-4 py-4 sm:px-5">
+        <Show
+          when={props.snapshot.open_windows.length > 0}
+          fallback={<div class="text-sm text-muted-foreground">Open Local Environment or connect another Environment to start a session window.</div>}
+        >
+          <div class="grid gap-3 lg:grid-cols-2">
+            <For each={props.snapshot.open_windows}>
+              {(openWindow) => (
+                <OpenWindowCard
+                  window={openWindow}
+                  busyAction={props.busyAction}
+                  focusEnvironmentWindow={props.focusEnvironmentWindow}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
       </CardContent>
     </Card>
   );
 }
 
+function OpenWindowCard(props: Readonly<{
+  window: DesktopOpenEnvironmentWindow;
+  busyAction: BusyAction;
+  focusEnvironmentWindow: (sessionKey: string, errorTarget?: 'connect' | 'settings' | 'dialog') => Promise<boolean>;
+}>) {
+  return (
+    <div class="rounded-lg border border-border/70 bg-background px-4 py-3 shadow-sm">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="truncate text-sm font-medium text-foreground">{props.window.label}</div>
+            <Tag
+              variant={props.window.target_kind === 'managed_local' ? 'primary' : 'success'}
+              tone="soft"
+              size="sm"
+              class="cursor-default whitespace-nowrap"
+            >
+              {props.window.target_kind === 'managed_local' ? 'Local' : 'Open'}
+            </Tag>
+          </div>
+          <div class="mt-1 break-all font-mono text-xs text-muted-foreground">{props.window.local_ui_url}</div>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          loading={props.busyAction === 'focus_environment_window'}
+          onClick={() => {
+            void props.focusEnvironmentWindow(props.window.session_key);
+          }}
+        >
+          Focus
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function LocalEnvironmentLauncherCard(props: Readonly<{
-  snapshot: DesktopWelcomeSnapshot;
+  environment: DesktopEnvironmentEntry | null;
   settingsSurface: DesktopSettingsSurfaceSnapshot;
   busyAction: BusyAction;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: () => void;
 }>) {
-  const isCurrent = createMemo(() => props.snapshot.current_session_target_kind === 'managed_local');
+  const isOpen = createMemo(() => props.environment?.is_open === true);
 
   return (
     <Card class="overflow-hidden shadow-sm">
@@ -1173,9 +1313,9 @@ function LocalEnvironmentLauncherCard(props: Readonly<{
             <CardDescription class="mt-1 text-sm">Desktop-managed environment on this machine.</CardDescription>
           </div>
           <div class="flex flex-wrap gap-2">
-            <span title={isCurrent() ? 'Local Environment is currently open.' : 'Local Environment is ready to open.'}>
-              <Tag variant={isCurrent() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {isCurrent() ? 'Current' : 'Ready'}
+            <span title={isOpen() ? 'Local Environment already has an open session window.' : 'Local Environment is ready to open.'}>
+              <Tag variant={isOpen() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {isOpen() ? 'Open' : 'Ready'}
               </Tag>
             </span>
             <span title={props.settingsSurface.password_state_label}>
@@ -1212,14 +1352,14 @@ function LocalEnvironmentLauncherCard(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'open_local_environment'}
-            aria-label={isCurrent() ? 'Return to Local Environment' : 'Open Local Environment'}
-            title={isCurrent() ? 'Return to Local Environment' : 'Open Local Environment'}
+            loading={props.busyAction === 'open_local_environment' || props.busyAction === 'focus_environment_window'}
+            aria-label={isOpen() ? 'Focus Local Environment' : 'Open Local Environment'}
+            title={isOpen() ? 'Focus Local Environment' : 'Open Local Environment'}
             onClick={() => {
               void props.openLocalEnvironment();
             }}
           >
-            {compactOpenLocalEnvironmentLabel(isCurrent())}
+            {compactOpenLocalEnvironmentLabel(isOpen())}
           </Button>
           <Button
             size="sm"
@@ -1386,7 +1526,11 @@ function EnvironmentLibraryPanel(props: Readonly<{
   setFilter: (value: EnvironmentLibraryFilter) => void;
   setQuery: (value: string) => void;
   openCreateConnectionDialog: (message?: string) => void;
-  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
+  openRemoteEnvironment: (
+    targetURL: string,
+    errorTarget?: 'connect' | 'dialog',
+    environment?: DesktopEnvironmentEntry,
+  ) => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1482,12 +1626,15 @@ function EnvironmentLibraryPanel(props: Readonly<{
 function EnvironmentLibraryRow(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
-  openRemoteEnvironment: (targetURL: string) => Promise<boolean>;
+  openRemoteEnvironment: (
+    targetURL: string,
+    errorTarget?: 'connect' | 'dialog',
+    environment?: DesktopEnvironmentEntry,
+  ) => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
-  const openLabel = createMemo(() => props.environment.is_current ? 'Return' : 'Open');
   return (
     <tr class="align-top">
       <td class="px-4 py-3 sm:px-5">
@@ -1522,12 +1669,12 @@ function EnvironmentLibraryRow(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'open_remote_environment'}
+            loading={props.busyAction === 'open_remote_environment' || props.busyAction === 'focus_environment_window'}
             onClick={() => {
-              void props.openRemoteEnvironment(props.environment.local_ui_url);
+              void props.openRemoteEnvironment(props.environment.local_ui_url, 'connect', props.environment);
             }}
           >
-            {openLabel()}
+            {props.environment.open_action_label}
           </Button>
           <Show when={props.environment.can_save}>
             <Button

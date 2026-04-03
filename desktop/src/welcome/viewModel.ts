@@ -8,7 +8,7 @@ export type DesktopWelcomeShellViewModel = Readonly<{
   settings_save_label: string;
 }>;
 
-export type EnvironmentLibraryFilter = 'all' | 'current' | 'recent' | 'saved';
+export type EnvironmentLibraryFilter = 'all' | 'open' | 'recent' | 'saved';
 
 export function capabilityUnavailableMessage(label: string): string {
   return `Connect to an Environment first to open ${label}.`;
@@ -28,15 +28,15 @@ export function shellStatus(snapshot: DesktopWelcomeSnapshot): Readonly<{
       label: snapshot.issue.title,
     };
   }
-  if (snapshot.current_session_target_kind) {
+  if (snapshot.open_windows.length > 0) {
     return {
       tone: 'connected',
-      label: snapshot.current_session_label,
+      label: snapshot.open_windows.length === 1 ? '1 environment window open' : `${snapshot.open_windows.length} environment windows open`,
     };
   }
   return {
     tone: 'disconnected',
-    label: 'No environment open',
+    label: 'No environment windows open',
   };
 }
 
@@ -59,8 +59,8 @@ export function isExternalEnvironmentEntry(environment: DesktopEnvironmentEntry)
 
 export function libraryFilterLabel(filter: EnvironmentLibraryFilter): string {
   switch (filter) {
-    case 'current':
-      return 'Current';
+    case 'open':
+      return 'Open';
     case 'recent':
       return 'Recent';
     case 'saved':
@@ -78,8 +78,8 @@ export function environmentMatchesLibraryFilter(
     return false;
   }
   switch (filter) {
-    case 'current':
-      return environment.is_current;
+    case 'open':
+      return environment.is_open;
     case 'recent':
       return environment.category === 'recent_auto';
     case 'saved':
