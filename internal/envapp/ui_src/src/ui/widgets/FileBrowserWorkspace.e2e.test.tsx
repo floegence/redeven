@@ -649,6 +649,197 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
+  it('opens the path editor from the current breadcrumb segment', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={[
+              { id: 'folder-src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
+            ]}
+            currentPath="/Users/tester/src"
+            initialPath="/Users/tester/src"
+            homePath="/Users/tester"
+            persistenceKey="test-files-workspace-path-editor-click"
+            instanceId="test-files-workspace-path-editor-click"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const breadcrumb = host.querySelector('nav[aria-label="Breadcrumb"]') as HTMLElement | null;
+      const currentPathButton = Array.from(breadcrumb?.querySelectorAll('button') ?? [])
+        .filter((node) => node.closest('[aria-hidden="true"]') === null)
+        .at(-1) as HTMLButtonElement | undefined;
+      expect(currentPathButton).toBeTruthy();
+
+      currentPathButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      const pathInput = host.querySelector('input[aria-label="Go to path"]') as HTMLInputElement | null;
+      expect(pathInput).toBeTruthy();
+      expect(pathInput?.value).toBe('~/src');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('opens the path editor with Ctrl+L and submits normalized paths through the workspace callback', async () => {
+    let submittedPath = '';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            captureTypingFromPage
+            files={[
+              { id: 'folder-src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
+            ]}
+            currentPath="/Users/tester/src"
+            initialPath="/Users/tester/src"
+            homePath="/Users/tester"
+            persistenceKey="test-files-workspace-path-editor-shortcut"
+            instanceId="test-files-workspace-path-editor-shortcut"
+            resetKey={0}
+            width={260}
+            open
+            onPathSubmit={async (path) => {
+              submittedPath = path;
+              return { status: 'ready', committedPath: path };
+            }}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, bubbles: true }));
+      await flush();
+
+      const pathInput = host.querySelector('input[aria-label="Go to path"]') as HTMLInputElement | null;
+      expect(pathInput).toBeTruthy();
+      expect(pathInput?.value).toBe('~/src');
+
+      pathInput!.value = '~/project';
+      pathInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      pathInput!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await flush();
+
+      expect(submittedPath).toBe('/Users/tester/project');
+      expect(host.querySelector('input[aria-label="Go to path"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the path editor open and shows inline feedback when the entered path is invalid', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            captureTypingFromPage
+            files={[
+              { id: 'folder-src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
+            ]}
+            currentPath="/Users/tester/src"
+            initialPath="/Users/tester/src"
+            homePath="/Users/tester"
+            persistenceKey="test-files-workspace-path-editor-invalid"
+            instanceId="test-files-workspace-path-editor-invalid"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, bubbles: true }));
+      await flush();
+
+      const pathInput = host.querySelector('input[aria-label="Go to path"]') as HTMLInputElement | null;
+      expect(pathInput).toBeTruthy();
+
+      pathInput!.value = '../outside';
+      pathInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      pathInput!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('input[aria-label="Go to path"]')).toBeTruthy();
+      expect(host.textContent).toContain('Use "/" or "~" to enter a path.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('treats the path edit request key as an edge-trigger instead of reopening after submit state changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const [pathEditRequestKey, setPathEditRequestKey] = createSignal(0);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            captureTypingFromPage
+            files={[
+              { id: 'folder-src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
+            ]}
+            currentPath="/Users/tester/src"
+            initialPath="/Users/tester/src"
+            homePath="/Users/tester"
+            persistenceKey="test-files-workspace-path-editor-request-key"
+            instanceId="test-files-workspace-path-editor-request-key"
+            resetKey={0}
+            width={260}
+            open
+            pathEditRequestKey={pathEditRequestKey()}
+            onPathSubmit={async (path) => ({ status: 'ready', committedPath: path })}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      setPathEditRequestKey(1);
+      await flush();
+
+      const pathInput = host.querySelector('input[aria-label="Go to path"]') as HTMLInputElement | null;
+      expect(pathInput).toBeTruthy();
+
+      pathInput!.value = '~/project';
+      pathInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      pathInput!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('input[aria-label="Go to path"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
   it('uses a shared toolbar control height across actions, fields, and view switcher', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

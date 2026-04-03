@@ -38,6 +38,7 @@ import {
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
+import { pathInputIncludesHiddenSegment } from '../utils/fileBrowserPathInput';
 import {
   copyFileBrowserItemNames,
   copyFileBrowserItemPaths,
@@ -51,7 +52,7 @@ import { useFilePreviewContext } from './FilePreviewContext';
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
-import { FileBrowserWorkspace } from './FileBrowserWorkspace';
+import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { GitStashWindow, type GitStashReviewState } from './GitStashWindow';
 import { GitWorkspace } from './GitWorkspace';
@@ -146,7 +147,15 @@ type DirectoryNavigationOptions = {
   persistOnReady?: boolean;
   targetPolicy?: DirTargetLoadPolicy;
   showBlockingOverlay?: boolean;
+  seed?: DirectoryStateSeed;
+  allowInvalidTargetFallback?: boolean;
+  showHiddenOverride?: boolean;
 };
+
+type ManualDirectoryNavigationResult =
+  | { status: 'ready' | 'refreshed'; committedPath: string }
+  | { status: 'invalid_path' | 'permission_denied' | 'transport_error'; message: string }
+  | { status: 'canceled' };
 
 type BrowserPageMode = GitHistoryMode;
 type CreateEntryKind = 'file' | 'folder';
@@ -171,6 +180,7 @@ const WIDGET_SIDEBAR_WIDTH_STATE_KEY = 'browserSidebarWidth';
 const PAGE_MODE_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:page-mode:';
 const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:';
 const SHOW_HIDDEN_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:show-hidden:';
+const GO_TO_PATH_DROPDOWN_ITEM_ID = 'go-to-path';
 const SHOW_HIDDEN_DROPDOWN_ITEM_ID = 'show-hidden-files';
 
 type GitMutationScope =
@@ -471,6 +481,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [agentHomePathAbs, setAgentHomePathAbs] = createSignal('');
   const [showHidden, setShowHidden] = createSignal(false);
   const [pageMode, setPageMode] = createSignal<BrowserPageMode>('files');
+  const [pathEditorRequestKey, setPathEditorRequestKey] = createSignal(0);
   const [repoInfo, setRepoInfo] = createSignal<GitResolveRepoResponse | null>(null);
   const [repoInfoLoading, setRepoInfoLoading] = createSignal(false);
   const [repoInfoResolved, setRepoInfoResolved] = createSignal(false);
@@ -2452,12 +2463,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const fileBrowserMoreItems = createMemo<DropdownItem[]>(() => [
     {
+      id: GO_TO_PATH_DROPDOWN_ITEM_ID,
+      label: 'Go to path...',
+    },
+    {
       id: SHOW_HIDDEN_DROPDOWN_ITEM_ID,
       label: 'Show hidden files',
     },
   ]);
 
   const handleFileBrowserMoreSelect = (itemId: string) => {
+    if (itemId === GO_TO_PATH_DROPDOWN_ITEM_ID) {
+      setPathEditorRequestKey((value) => value + 1);
+      return;
+    }
     if (itemId !== SHOW_HIDDEN_DROPDOWN_ITEM_ID) return;
 
     const id = envId();
@@ -2579,6 +2598,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     options: {
       targetPolicy?: DirTargetLoadPolicy;
       seed?: DirectoryStateSeed;
+      showHiddenOverride?: boolean;
     } = {},
   ): Promise<DirectoryPrepareResult> => {
     if (seq !== dirReqSeq) return { status: 'canceled' };
@@ -2630,7 +2650,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
 
       try {
-        const resp = await rpc.fs.list({ path: dir, showHidden: showHidden() });
+        const resp = await rpc.fs.list({
+          path: dir,
+          showHidden: options.showHiddenOverride ?? showHidden(),
+        });
         if (seq !== dirReqSeq) return { status: 'canceled' };
 
         const entries = resp?.entries ?? [];
@@ -2663,11 +2686,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const resolveDirectoryNavigation = async (
     requestedPath: string,
     seq: number,
-    options: Pick<DirectoryNavigationOptions, 'fallbackPath' | 'targetPolicy'> = {},
+    options: Pick<DirectoryNavigationOptions, 'fallbackPath' | 'targetPolicy' | 'seed' | 'allowInvalidTargetFallback' | 'showHiddenOverride'> = {},
   ): Promise<DirectoryNavigationResult> => {
     const normalizedRequestedPath = normalizePath(requestedPath);
     const prepared = await prepareDirectoryState(normalizedRequestedPath, seq, {
       targetPolicy: options.targetPolicy ?? 'use_cache',
+      seed: options.seed,
+      showHiddenOverride: options.showHiddenOverride,
     });
     if (prepared.status === 'ok') {
       return { status: 'ready', state: prepared.state };
@@ -2675,7 +2700,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (prepared.status === 'canceled') {
       return { status: 'canceled' };
     }
-    if (prepared.status !== 'invalid_path') {
+    if (prepared.status !== 'invalid_path' || options.allowInvalidTargetFallback === false) {
       return { status: 'error', result: prepared };
     }
 
@@ -2695,6 +2720,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           tree: nextTree,
           cache: cloneDirCache(nextCache),
         },
+        showHiddenOverride: options.showHiddenOverride,
       });
       if (fallbackPrepared.status === 'ok') {
         return { status: 'fallback', state: fallbackPrepared.state };
@@ -2710,12 +2736,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return { status: 'error', result: prepared };
   };
 
-  const requestDirectoryNavigation = async (
+  const runDirectoryNavigationRequest = async (
     requestedPath: string,
     options: DirectoryNavigationOptions = {},
-  ): Promise<void> => {
+  ): Promise<DirectoryNavigationResult> => {
     const normalizedRequestedPath = normalizePath(requestedPath);
-    if (pathLoadInFlight() === normalizedRequestedPath) return;
+    if (pathLoadInFlight() === normalizedRequestedPath) {
+      return { status: 'canceled' };
+    }
 
     const seq = ++dirReqSeq;
     setPendingBrowserPath(normalizedRequestedPath);
@@ -2727,17 +2755,22 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const result = await resolveDirectoryNavigation(normalizedRequestedPath, seq, {
         fallbackPath: options.fallbackPath,
         targetPolicy: options.targetPolicy,
+        seed: options.seed,
+        allowInvalidTargetFallback: options.allowInvalidTargetFallback,
+        showHiddenOverride: options.showHiddenOverride,
       });
-      if (seq !== dirReqSeq || result.status === 'canceled') return;
+      if (seq !== dirReqSeq || result.status === 'canceled') {
+        return { status: 'canceled' };
+      }
       if (result.status === 'error') {
-        notifyPathLoadFailure(result.result);
-        return;
+        return result;
       }
       applyPreparedDirectoryState(result.state, {
         persistEnvId: options.persistEnvId && (result.status === 'fallback' || options.persistOnReady === true)
           ? options.persistEnvId
           : undefined,
       });
+      return result;
     } finally {
       if (seq === dirReqSeq) {
         setPendingBrowserPath('');
@@ -2745,6 +2778,74 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setLoading(false);
       }
     }
+  };
+
+  const requestDirectoryNavigation = async (
+    requestedPath: string,
+    options: DirectoryNavigationOptions = {},
+  ): Promise<void> => {
+    const result = await runDirectoryNavigationRequest(requestedPath, {
+      ...options,
+      allowInvalidTargetFallback: options.allowInvalidTargetFallback ?? true,
+    });
+    if (result.status === 'error') {
+      notifyPathLoadFailure(result.result);
+    }
+  };
+
+  const requestManualDirectoryNavigation = async (requestedPath: string): Promise<ManualDirectoryNavigationResult> => {
+    let rootPath = '';
+    try {
+      rootPath = normalizePath(await resolveFsRootAbs());
+    } catch (error) {
+      return {
+        status: 'transport_error',
+        message: error instanceof Error ? error.message : 'Failed to resolve home directory.',
+      };
+    }
+
+    const id = envId();
+    const normalizedRequestedPath = normalizePath(requestedPath);
+    const normalizedCurrentPath = normalizeAbsolutePath(currentBrowserPath())
+      ? normalizePath(currentBrowserPath())
+      : rootPath;
+    const nextShowHidden = !showHidden() && pathInputIncludesHiddenSegment(normalizedRequestedPath, rootPath);
+    const result = await runDirectoryNavigationRequest(normalizedRequestedPath, {
+      fallbackPath: lastLoadedBrowserPath() || rootPath,
+      persistEnvId: id || undefined,
+      persistOnReady: true,
+      targetPolicy: 'revalidate_target',
+      allowInvalidTargetFallback: false,
+      showHiddenOverride: nextShowHidden ? true : undefined,
+      seed: nextShowHidden
+        ? {
+            tree: files(),
+            cache: new Map(),
+          }
+        : undefined,
+    });
+
+    if (result.status === 'canceled') {
+      return { status: 'canceled' };
+    }
+    if (result.status === 'error') {
+      return {
+        status: result.result.status,
+        message: result.result.message ?? 'Unable to open the requested path.',
+      };
+    }
+
+    if (nextShowHidden) {
+      setShowHidden(true);
+      if (id) {
+        writePersistedShowHidden(id, true);
+      }
+    }
+
+    return {
+      status: normalizedRequestedPath === normalizedCurrentPath ? 'refreshed' : 'ready',
+      committedPath: result.state.committedPath,
+    };
   };
 
   const refreshCurrentDirectory = async (options: { forceReload?: boolean } = {}): Promise<void> => {
@@ -3781,6 +3882,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onClose={closePageSidebar}
                       showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
                       onToggleSidebar={togglePageSidebar}
+                      pathEditRequestKey={pathEditorRequestKey()}
                       toolbarEndActions={fileBrowserToolbarEndActions()}
                       revealRequest={pendingCreatedEntryReveal()}
                       onRevealRequestConsumed={(requestId) => {
@@ -3798,6 +3900,26 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onPathChange={(_path, source) => {
                         if (source === 'user' && layout.isMobile()) {
                           closePageSidebar();
+                        }
+                      }}
+                      onPathSubmit={async (path): Promise<FileBrowserPathSubmitResult> => {
+                        const result = await requestManualDirectoryNavigation(path);
+                        switch (result.status) {
+                          case 'ready':
+                          case 'refreshed':
+                            return result;
+                          case 'canceled':
+                            return {
+                              status: 'error',
+                              message: 'Path navigation was canceled.',
+                            };
+                          case 'invalid_path':
+                          case 'permission_denied':
+                          case 'transport_error':
+                            return {
+                              status: 'error',
+                              message: result.message,
+                            };
                         }
                       }}
                       onOpen={(item) => void filePreview.openPreview(item)}

@@ -12,6 +12,7 @@ import {
 
 export interface FileBrowserPathBreadcrumbProps {
   class?: string
+  onCurrentPathActivate?: () => void
 }
 
 const PATH_BREADCRUMB_ITEM_BASE_CLASS =
@@ -119,6 +120,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
               segment={segment}
               isLast={index() === layout().visible.length - 1}
               onClick={() => handleSegmentSelect(segment)}
+              onActivate={props.onCurrentPathActivate}
             />
           </>
         )}
@@ -198,17 +200,31 @@ interface PathBreadcrumbItemProps {
   segment: FileBrowserPathSegment
   isLast: boolean
   onClick: () => void
+  onActivate?: () => void
 }
 
 function PathBreadcrumbItem(props: PathBreadcrumbItemProps) {
+  const clickableCurrentPath = () => props.isLast && typeof props.onActivate === 'function'
+
   return (
     <button
       type="button"
-      onClick={() => props.onClick()}
-      disabled={props.isLast}
+      onClick={() => {
+        if (clickableCurrentPath()) {
+          props.onActivate?.()
+          return
+        }
+        props.onClick()
+      }}
+      disabled={props.isLast && !clickableCurrentPath()}
+      title={clickableCurrentPath() ? 'Go to path' : undefined}
       class={cn(
         PATH_BREADCRUMB_ITEM_BASE_CLASS,
-        props.isLast ? PATH_BREADCRUMB_CURRENT_CLASS : PATH_BREADCRUMB_ANCESTOR_CLASS,
+        props.isLast
+          ? clickableCurrentPath()
+            ? cn(PATH_BREADCRUMB_CURRENT_CLASS, 'cursor-pointer hover:bg-muted/50')
+            : PATH_BREADCRUMB_CURRENT_CLASS
+          : PATH_BREADCRUMB_ANCESTOR_CLASS,
       )}
     >
       <span class={props.isLast ? PATH_BREADCRUMB_CURRENT_TEXT_CLASS : PATH_BREADCRUMB_ANCESTOR_TEXT_CLASS}>

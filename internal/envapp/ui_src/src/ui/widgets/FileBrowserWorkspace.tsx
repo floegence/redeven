@@ -1,4 +1,4 @@
-import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useFileBrowserDrag } from '@floegence/floe-webapp-core';
 import { Files as FilesIcon, Search, ArrowUp } from '@floegence/floe-webapp-core/icons';
 import {
@@ -16,12 +16,13 @@ import {
 } from '@floegence/floe-webapp-core/file-browser';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
-import { FileBrowserPathBreadcrumb } from './FileBrowserPathBreadcrumb';
+import { FileBrowserPathControl, type FileBrowserPathControlMode } from './FileBrowserPathControl';
 import { FileBrowserSidebarTree } from './FileBrowserSidebarTree';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { formatFileBrowserPathInputValue, parseFileBrowserPathInput } from '../utils/fileBrowserPathInput';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapContextMenuEventToAbsolutePath,
@@ -41,6 +42,10 @@ const FILE_WORKSPACE_TOOLBAR_PATH_CLASS = `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS}
 const FILE_WORKSPACE_TOOLBAR_FILTER_CLASS =
   `${FILE_WORKSPACE_TOOLBAR_FIELD_CLASS} flex items-center gap-1.5 text-[11px] text-muted-foreground focus-within:border-ring focus-within:ring-1 focus-within:ring-ring`;
 const FILE_WORKSPACE_OUTLINE_CONTROL_CLASS = cn('cursor-pointer', redevenSurfaceRoleClass('control'));
+
+export type FileBrowserPathSubmitResult =
+  | { status: 'ready' | 'refreshed'; committedPath: string }
+  | { status: 'error'; message: string };
 
 export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
@@ -64,10 +69,12 @@ export interface FileBrowserWorkspaceProps {
   onToggleSidebar?: () => void;
   onNavigate?: (path: string) => void;
   onPathChange?: (path: string, source: 'user' | 'programmatic') => void;
+  onPathSubmit?: (path: string) => Promise<FileBrowserPathSubmitResult>;
   onOpen?: (item: FileItem) => void;
   onDragMove?: (items: FileItem[], targetPath: string) => void;
   revealRequest?: FileBrowserRevealRequest | null;
   onRevealRequestConsumed?: (requestId: string) => void;
+  pathEditRequestKey?: number;
   toolbarEndActions?: JSX.Element;
   contextMenuCallbacks?: ContextMenuCallbacks;
   overrideContextMenuItems?: ContextMenuItem[];
@@ -80,6 +87,17 @@ interface FileWorkspaceHeaderProps {
   onToggleSidebar?: () => void;
   toolbarEndActions?: JSX.Element;
   filterInputRef?: (el: HTMLInputElement) => void;
+  pathInputRef?: (el: HTMLInputElement) => void;
+  pathControlMode: FileBrowserPathControlMode;
+  pathDraft: string;
+  pathError?: string;
+  pathSubmitting?: boolean;
+  pathStatusTone?: 'muted' | 'error';
+  pathStatusText?: string;
+  onPathDraftChange: (value: string) => void;
+  onActivatePathEdit: () => void;
+  onSubmitPath: () => void;
+  onCancelPathEdit: () => void;
 }
 
 function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
@@ -141,7 +159,18 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
         </div>
 
         <div class={FILE_WORKSPACE_TOOLBAR_PATH_CLASS}>
-          <FileBrowserPathBreadcrumb class="min-w-0 flex-1" />
+          <FileBrowserPathControl
+            class="min-w-0 flex-1"
+            mode={props.pathControlMode}
+            draft={props.pathDraft}
+            error={props.pathError}
+            submitting={props.pathSubmitting}
+            inputRef={props.pathInputRef}
+            onDraftChange={props.onPathDraftChange}
+            onActivateEdit={props.onActivatePathEdit}
+            onSubmit={props.onSubmitPath}
+            onCancel={props.onCancelPathEdit}
+          />
         </div>
 
         <div
@@ -205,6 +234,12 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
             <span>Filter active</span>
           </>
         </Show>
+        <Show when={props.pathStatusText?.trim()}>
+          <>
+            <span aria-hidden="true">·</span>
+            <span class={props.pathStatusTone === 'error' ? 'text-destructive' : undefined}>{props.pathStatusText}</span>
+          </>
+        </Show>
       </div>
     </div>
   );
@@ -237,7 +272,7 @@ function FileWorkspaceStatusBar() {
   );
 }
 
-function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files' | 'currentPath' | 'initialPath' | 'persistenceKey' | 'resetKey'>) {
+function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files' | 'initialPath' | 'persistenceKey' | 'resetKey'>) {
   const browser = useFileBrowser();
   const drag = useFileBrowserDrag();
   const dragEnabled = () => Boolean(drag && props.onDragMove);
@@ -251,13 +286,101 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
   let treeScrollEl: HTMLDivElement | null = null;
   let workspaceRootEl: HTMLDivElement | null = null;
   let filterInputEl: HTMLInputElement | null = null;
+  let pathInputEl: HTMLInputElement | null = null;
+  const [pathControlMode, setPathControlMode] = createSignal<FileBrowserPathControlMode>('read');
+  const [pathDraft, setPathDraft] = createSignal('');
+  const [pathError, setPathError] = createSignal('');
+  const [pathSubmitting, setPathSubmitting] = createSignal(false);
+  const formattedCurrentPath = createMemo(() => formatFileBrowserPathInputValue(props.currentPath, props.homePath));
+  const pathStatus = createMemo(() => {
+    if (pathControlMode() !== 'edit') return null;
+    if (pathError().trim()) {
+      return { tone: 'error' as const, text: pathError().trim() };
+    }
+    if (pathSubmitting()) {
+      return { tone: 'muted' as const, text: 'Opening path...' };
+    }
+    return { tone: 'muted' as const, text: 'Enter to open · Esc to cancel' };
+  });
+
+  const focusPathInput = () => {
+    requestAnimationFrame(() => {
+      pathInputEl?.focus();
+      pathInputEl?.select();
+    });
+  };
+
+  const openPathEditor = () => {
+    if (pathSubmitting()) return;
+    setPathDraft(formattedCurrentPath());
+    setPathError('');
+    setPathControlMode('edit');
+    focusPathInput();
+  };
+
+  const closePathEditor = () => {
+    if (pathSubmitting()) return;
+    setPathControlMode('read');
+    setPathError('');
+    setPathDraft(formattedCurrentPath());
+  };
+
+  const submitPathEditor = async () => {
+    if (pathSubmitting()) return;
+
+    const parsed = parseFileBrowserPathInput(pathDraft(), props.homePath);
+    if (parsed.kind === 'error') {
+      setPathError(parsed.message);
+      focusPathInput();
+      return;
+    }
+
+    if (!props.onPathSubmit) {
+      browser.setCurrentPath(toFileBrowserDisplayPath(parsed.absolutePath, props.homePath));
+      setPathControlMode('read');
+      setPathError('');
+      return;
+    }
+
+    setPathSubmitting(true);
+    setPathError('');
+    try {
+      const result = await props.onPathSubmit(parsed.absolutePath);
+      if (result.status === 'error') {
+        setPathError(result.message);
+        focusPathInput();
+        return;
+      }
+
+      setPathControlMode('read');
+      setPathError('');
+    } finally {
+      setPathSubmitting(false);
+    }
+  };
 
   useFileBrowserTypeToFilter({
     rootRef: () => workspaceRootEl,
     filterInputRef: () => filterInputEl,
     enabled: () => props.mode === 'files',
     captureWhenBodyFocused: () => props.captureTypingFromPage === true,
+    openPathEditor,
+    pathEditorActive: () => pathControlMode() === 'edit',
   });
+
+  createEffect(() => {
+    if (pathControlMode() === 'edit') return;
+    setPathDraft(formattedCurrentPath());
+    setPathError('');
+  });
+
+  createEffect(on(
+    () => props.pathEditRequestKey,
+    (requestKey) => {
+      if (!requestKey) return;
+      openPathEditor();
+    },
+  ));
 
   onMount(() => {
     if (!dragEnabled() || !drag) return;
@@ -351,6 +474,19 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             showMobileSidebarButton={props.showMobileSidebarButton}
             onToggleSidebar={props.onToggleSidebar}
             toolbarEndActions={props.toolbarEndActions}
+            pathControlMode={pathControlMode()}
+            pathDraft={pathDraft()}
+            pathError={pathError()}
+            pathSubmitting={pathSubmitting()}
+            pathStatusTone={pathStatus()?.tone}
+            pathStatusText={pathStatus()?.text}
+            pathInputRef={(el) => {
+              pathInputEl = el;
+            }}
+            onPathDraftChange={setPathDraft}
+            onActivatePathEdit={openPathEditor}
+            onSubmitPath={() => { void submitPathEditor(); }}
+            onCancelPathEdit={closePathEditor}
             filterInputRef={(el) => {
               filterInputEl = el;
             }}
@@ -421,6 +557,8 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           gitHistoryDisabled={props.gitHistoryDisabled}
           gitHistoryDisabledReason={props.gitHistoryDisabledReason}
           captureTypingFromPage={props.captureTypingFromPage}
+          currentPath={props.currentPath}
+          homePath={props.homePath}
           width={props.width}
           open={props.open}
           resizable={props.resizable}
@@ -429,6 +567,8 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           showMobileSidebarButton={props.showMobileSidebarButton}
           onToggleSidebar={props.onToggleSidebar}
           instanceId={props.instanceId}
+          onPathSubmit={props.onPathSubmit}
+          pathEditRequestKey={props.pathEditRequestKey}
           onDragMove={props.onDragMove
             ? (items, targetPath) => props.onDragMove?.(
                 items.map((item) => mapFileItemToAbsolutePath(item, props.homePath)),

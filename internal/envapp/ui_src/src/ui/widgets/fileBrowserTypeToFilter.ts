@@ -6,6 +6,8 @@ export interface UseFileBrowserTypeToFilterOptions {
   filterInputRef: Accessor<HTMLInputElement | null | undefined>;
   enabled?: Accessor<boolean>;
   captureWhenBodyFocused?: Accessor<boolean>;
+  openPathEditor?: () => void;
+  pathEditorActive?: Accessor<boolean>;
 }
 
 const INTERACTIVE_SELECTOR = 'button, input, select, textarea, a, [role="button"], [role="textbox"], [contenteditable="true"]';
@@ -45,6 +47,7 @@ export function useFileBrowserTypeToFilter(options: UseFileBrowserTypeToFilterOp
   const browser = useFileBrowser();
   const enabled = options.enabled ?? (() => true);
   const captureWhenBodyFocused = options.captureWhenBodyFocused ?? (() => false);
+  const pathEditorActive = options.pathEditorActive ?? (() => false);
 
   const shouldCaptureEvent = (event: KeyboardEvent, root: HTMLElement) => {
     if (!enabled()) return false;
@@ -68,6 +71,16 @@ export function useFileBrowserTypeToFilter(options: UseFileBrowserTypeToFilterOp
     const filterInput = options.filterInputRef();
     if (!root || !filterInput) return;
     if (!shouldCaptureEvent(event, root)) return;
+
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'l') {
+      event.preventDefault();
+      options.openPathEditor?.();
+      return;
+    }
+
+    if (pathEditorActive()) {
+      return;
+    }
 
     if (isPrintableKey(event)) {
       event.preventDefault();

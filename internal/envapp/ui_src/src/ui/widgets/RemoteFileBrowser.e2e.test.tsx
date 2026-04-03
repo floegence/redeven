@@ -83,6 +83,10 @@ const workspaceLifecycleStore = vi.hoisted(() => ({
   gitUnmounts: 0,
 }));
 
+const workspacePathSubmitStore = vi.hoisted(() => ({
+  nextPath: '/workspace/repo/src',
+}));
+
 const inputDialogStore = vi.hoisted(() => ({
   pendingConfirmValue: null as string | null,
 }));
@@ -281,6 +285,8 @@ vi.mock('./FileBrowserWorkspace', () => ({
     onModeChange?: (mode: string) => void;
     onResize?: (delta: number) => void;
     onNavigate?: (path: string) => void;
+    onPathSubmit?: (path: string) => Promise<{ status: string; committedPath?: string; message?: string }>;
+    pathEditRequestKey?: number;
     contextMenuCallbacks?: ContextMenuCallbacks;
     overrideContextMenuItems?: ContextMenuItem[];
     resolveOverrideContextMenuItems?: (event: ContextMenuEvent | null) => ContextMenuItem[] | undefined;
@@ -382,6 +388,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     return (
       <div data-testid="files-workspace">
         <div>files:{props.mode}:{props.currentPath}:{props.width ?? 0}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
+        <div data-testid="mock-path-edit-request-key">{props.pathEditRequestKey ?? 0}</div>
         <div>{props.toolbarEndActions}</div>
         <div data-testid="mock-folder-menu-order">{describeMenuItems(folderItems)}</div>
         <div data-testid="mock-background-menu-order">{describeMenuItems(backgroundItems())}</div>
@@ -401,6 +408,20 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo')}>mock-nav-repo</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/src')}>mock-nav-src</button>
         <button type="button" onClick={() => props.onNavigate?.('/workspace/repo/missing')}>mock-nav-missing</button>
+        <button
+          type="button"
+          onClick={async () => {
+            const result = await props.onPathSubmit?.(workspacePathSubmitStore.nextPath);
+            if (result) {
+              notificationStore.info.push({
+                title: 'mock-path-submit',
+                message: `${result.status}:${result.committedPath ?? result.message ?? ''}`,
+              });
+            }
+          }}
+        >
+          mock-submit-path
+        </button>
         {props.revealRequest ? (
           <button
             type="button"
@@ -890,6 +911,7 @@ beforeEach(() => {
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
   workspaceLifecycleStore.gitUnmounts = 0;
+  workspacePathSubmitStore.nextPath = '/workspace/repo/src';
   inputDialogStore.pendingConfirmValue = null;
   fileBrowserSurfaceStore.openBrowser.mockReset();
   fileBrowserSurfaceStore.openBrowser.mockResolvedValue(undefined);
@@ -1586,6 +1608,281 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('commits manual go-to-path navigation only after the requested directory is ready', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    workspacePathSubmitStore.nextPath = '/workspace/repo/src';
+
+    const srcLoad = deferred<{ entries: Array<Record<string, unknown>> }>();
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/src':
+          return srcLoad.promise;
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+
+      const submitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-submit-path') as HTMLButtonElement | undefined;
+      expect(submitButton).toBeTruthy();
+
+      submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
+      expect(host.textContent).toContain('Opening...');
+
+      srcLoad.resolve({
+        entries: [
+          { name: 'fresh.txt', path: '/workspace/repo/src/fresh.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+        ],
+      });
+      await flush();
+      await flush();
+
+      expect(host.textContent).toContain('files:files:/workspace/repo/src:312:0');
+      expect(host.textContent).not.toContain('Opening...');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the current directory stable when manual go-to-path targets an invalid directory', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    workspacePathSubmitStore.nextPath = '/workspace/repo/missing';
+
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/missing':
+          throw new RpcError({ typeId: 1001, code: 404, message: 'not found' });
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      widgetStateStore.updateCalls = [];
+
+      const submitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-submit-path') as HTMLButtonElement | undefined;
+      expect(submitButton).toBeTruthy();
+
+      submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.textContent).toContain('files:files:/workspace/repo:312:0');
+      expect(notificationStore.info).toContainEqual({
+        title: 'mock-path-submit',
+        message: 'error:not found',
+      });
+      expect(widgetStateStore.updateCalls).not.toContainEqual({
+        widgetId: 'widget-1',
+        key: 'lastPathByEnv',
+        value: { 'env-1': '/workspace/repo/missing' },
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('revalidates the current directory when manual go-to-path submits the current path again', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    workspacePathSubmitStore.nextPath = '/workspace/repo/src';
+
+    mockRpc.fs.list.mockImplementation(async ({ path, showHidden: showHiddenArg }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: [
+              { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo':
+          return {
+            entries: [
+              { name: 'src', path: '/workspace/repo/src', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        case '/workspace/repo/src':
+          return {
+            entries: [
+              { name: showHiddenArg ? '.env' : 'current.txt', path: showHiddenArg ? '/workspace/repo/src/.env' : '/workspace/repo/src/current.txt', isDirectory: false, size: 1, modifiedAt: 1, createdAt: 1, permissions: '-rw-r--r--' },
+            ],
+          };
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.fs.list.mockClear();
+
+      const submitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-submit-path') as HTMLButtonElement | undefined;
+      expect(submitButton).toBeTruthy();
+
+      submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.fs.list.mock.calls.map((call) => call[0]?.path)).toEqual(['/workspace/repo/src']);
+      expect(notificationStore.info).toContainEqual({
+        title: 'mock-path-submit',
+        message: 'refreshed:/workspace/repo/src',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('enables hidden-file visibility after manual go-to-path opens a hidden directory successfully', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    workspacePathSubmitStore.nextPath = '/workspace/.config';
+
+    mockRpc.fs.list.mockImplementation(async ({ path, showHidden: showHiddenArg }) => {
+      switch (path) {
+        case '/workspace':
+          return {
+            entries: showHiddenArg
+              ? [
+                  { name: '.config', path: '/workspace/.config', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+                  { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+                ]
+              : [
+                  { name: 'repo', path: '/workspace/repo', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+                ],
+          };
+        case '/workspace/repo':
+          return { entries: [] };
+        case '/workspace/.config':
+          return {
+            entries: [
+              { name: 'redeven', path: '/workspace/.config/redeven', isDirectory: true, size: 0, modifiedAt: 1, createdAt: 1, permissions: 'drwxr-xr-x' },
+            ],
+          };
+        default:
+          return { entries: [] };
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      widgetStateStore.updateCalls = [];
+      mockRpc.fs.list.mockClear();
+
+      const submitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-submit-path') as HTMLButtonElement | undefined;
+      expect(submitButton).toBeTruthy();
+
+      submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(mockRpc.fs.list.mock.calls[0]?.[0]).toEqual({ path: '/workspace', showHidden: true });
+      expect(host.textContent).toContain('files:files:/workspace/.config:312:0');
+      expect(widgetStateStore.updateCalls).toContainEqual({
+        widgetId: 'widget-1',
+        key: 'showHiddenByEnv',
+        value: { 'env-1': true },
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('restores page and widget sidebar widths from their own surfaces without cross-writing on mount', async () => {
     const pageHost = document.createElement('div');
     const widgetHost = document.createElement('div');
@@ -2008,6 +2305,47 @@ describe('RemoteFileBrowser persistence', () => {
         key: 'lastPathByEnv',
         value: { 'env-1': '/workspace/src' },
       });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes the More menu go-to-path action into the workspace path editor request key', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const requestKeyBefore = host.querySelector('[data-testid="mock-path-edit-request-key"]') as HTMLElement | null;
+      expect(requestKeyBefore?.textContent).toBe('0');
+
+      const moreButton = document.body.querySelector('button[aria-label="More file browser options"]') as HTMLButtonElement | null;
+      expect(moreButton).toBeTruthy();
+      moreButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      const goToPathItem = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.includes('Go to path...')) as HTMLButtonElement | undefined;
+      expect(goToPathItem).toBeTruthy();
+      goToPathItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      const requestKeyAfter = host.querySelector('[data-testid="mock-path-edit-request-key"]') as HTMLElement | null;
+      expect(requestKeyAfter?.textContent).toBe('1');
     } finally {
       dispose();
     }
