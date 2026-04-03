@@ -457,8 +457,10 @@ func TestScheduleAutoThreadTitle_PopulatesUntitledThread(t *testing.T) {
 	}
 
 	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:  "msg_auto_title_1",
-		PublicText: "please fix the failing regression tests in CI",
+		MessageID:              "msg_auto_title_1",
+		MessageRowID:           1,
+		MessageCreatedAtUnixMs: 100,
+		PublicText:             "please fix the failing regression tests in CI",
 	})
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -588,8 +590,10 @@ func TestScheduleAutoThreadTitle_RetriesUntilSuccess(t *testing.T) {
 	}
 
 	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:  "msg_retry_1",
-		PublicText: "please fix the retry failure in CI",
+		MessageID:              "msg_retry_1",
+		MessageRowID:           1,
+		MessageCreatedAtUnixMs: 100,
+		PublicText:             "please fix the retry failure in CI",
 	})
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -641,8 +645,10 @@ func TestScheduleAutoThreadTitle_FallsBackAfterThreeFailures(t *testing.T) {
 	}
 
 	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:  persisted.MessageID,
-		PublicText: firstText,
+		MessageID:              persisted.MessageID,
+		MessageRowID:           persisted.RowID,
+		MessageCreatedAtUnixMs: persisted.CreatedAtUnixMs,
+		PublicText:             firstText,
 	})
 
 	wantFallback := normalizeAutoThreadTitle(firstText)
@@ -708,8 +714,10 @@ func TestScheduleAutoThreadTitle_RegeneratesAfterFallbackWhenNewUserMessageArriv
 	}
 
 	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:  secondPersisted.MessageID,
-		PublicText: secondText,
+		MessageID:              secondPersisted.MessageID,
+		MessageRowID:           secondPersisted.RowID,
+		MessageCreatedAtUnixMs: secondPersisted.CreatedAtUnixMs,
+		PublicText:             secondText,
 	})
 
 	deadline := time.Now().Add(15 * time.Second)
@@ -758,8 +766,10 @@ func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *
 	}
 
 	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:  "msg_retry_old",
-		PublicText: "please inspect the failing CI job",
+		MessageID:              "msg_retry_old",
+		MessageRowID:           1,
+		MessageCreatedAtUnixMs: 100,
+		PublicText:             "please inspect the failing CI job",
 	})
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -781,8 +791,10 @@ func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *
 		t.Fatalf("old retry was not pending before replacement: %+v", pending)
 	}
 	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:  "msg_retry_new",
-		PublicText: "please prepare a focused sandbox smoke fix",
+		MessageID:              "msg_retry_new",
+		MessageRowID:           2,
+		MessageCreatedAtUnixMs: 200,
+		PublicText:             "please prepare a focused sandbox smoke fix",
 	})
 
 	deadline = time.Now().Add(5 * time.Second)
@@ -807,6 +819,88 @@ func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *
 	}
 
 	t.Fatalf("newer pending input was not applied")
+}
+
+func TestAutoThreadTitleCoordinator_ScheduleKeepsNewerPendingRequest(t *testing.T) {
+	t.Parallel()
+
+	c := &autoThreadTitleCoordinator{
+		pending: make(map[string]autoThreadTitleRequest),
+		wakeCh:  make(chan struct{}, 1),
+	}
+
+	newer := autoThreadTitleRequest{
+		EndpointID:             "env",
+		ThreadID:               "thread",
+		MessageID:              "msg_new",
+		MessageRowID:           2,
+		MessageCreatedAtUnixMs: 200,
+		PublicText:             "new title input",
+	}
+	older := autoThreadTitleRequest{
+		EndpointID:             "env",
+		ThreadID:               "thread",
+		MessageID:              "msg_old",
+		MessageRowID:           1,
+		MessageCreatedAtUnixMs: 100,
+		PublicText:             "old title input",
+	}
+
+	c.Schedule(newer)
+	c.Schedule(older)
+
+	key := runThreadKey("env", "thread")
+	c.mu.Lock()
+	pending, ok := c.pending[key]
+	c.mu.Unlock()
+	if !ok {
+		t.Fatalf("pending request missing")
+	}
+	if pending.MessageID != newer.MessageID {
+		t.Fatalf("pending.MessageID=%q, want %q", pending.MessageID, newer.MessageID)
+	}
+}
+
+func TestAutoThreadTitleCoordinator_HandleResultKeepsNewerPendingRequest(t *testing.T) {
+	t.Parallel()
+
+	newer := autoThreadTitleRequest{
+		EndpointID:             "env",
+		ThreadID:               "thread",
+		MessageID:              "msg_new",
+		MessageRowID:           2,
+		MessageCreatedAtUnixMs: 200,
+		PublicText:             "new title input",
+	}
+	older := autoThreadTitleRequest{
+		EndpointID:             "env",
+		ThreadID:               "thread",
+		MessageID:              "msg_old",
+		MessageRowID:           1,
+		MessageCreatedAtUnixMs: 100,
+		PublicText:             "old title input",
+	}
+
+	c := &autoThreadTitleCoordinator{
+		pending: map[string]autoThreadTitleRequest{
+			runThreadKey("env", "thread"): newer,
+		},
+	}
+	c.handleResult(older, autoThreadTitleApplyResult{
+		Status: autoThreadTitleApplyStatusTerminal,
+		Reason: "title_already_present",
+	})
+
+	key := runThreadKey("env", "thread")
+	c.mu.Lock()
+	pending, ok := c.pending[key]
+	c.mu.Unlock()
+	if !ok {
+		t.Fatalf("pending request missing after stale terminal result")
+	}
+	if pending.MessageID != newer.MessageID {
+		t.Fatalf("pending.MessageID=%q, want %q", pending.MessageID, newer.MessageID)
+	}
 }
 
 func TestNewService_RecoversPendingAutoThreadTitles(t *testing.T) {

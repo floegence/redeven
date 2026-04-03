@@ -1224,10 +1224,14 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	effectiveInput := req.Input
 
 	userMsgID := ""
+	autoTitleMessageRowID := int64(0)
+	autoTitleMessageCreatedAtUnixMs := int64(0)
 	if prepared.persistedUser != nil {
 		if persistedID := strings.TrimSpace(prepared.persistedUser.MessageID); persistedID != "" {
 			userMsgID = persistedID
 		}
+		autoTitleMessageRowID = prepared.persistedUser.RowID
+		autoTitleMessageCreatedAtUnixMs = prepared.persistedUser.CreatedAtUnixMs
 	}
 	if userMsgID == "" {
 		userMsgID = strings.TrimSpace(req.Input.MessageID)
@@ -1274,10 +1278,14 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			userRowID = existingRowID
 			userJSON = existingJSON
 		}
+		autoTitleMessageRowID = userRowID
+		autoTitleMessageCreatedAtUnixMs = now
 		s.broadcastTranscriptMessage(endpointID, threadID, runID, userRowID, userJSON, now)
 		s.broadcastThreadSummary(endpointID, threadID)
 	}
 	effectiveCurrentInput.MessageID = userMsgID
+	effectiveCurrentInput.MessageRowID = autoTitleMessageRowID
+	effectiveCurrentInput.MessageCreatedAtUnixMs = autoTitleMessageCreatedAtUnixMs
 	effectiveInput.MessageID = userMsgID
 	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
 
@@ -1623,9 +1631,11 @@ func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) 
 }
 
 type effectiveCurrentUserInput struct {
-	MessageID          string
-	PublicText         string
-	StructuredResponse *RequestUserInputResponseRecord
+	MessageID              string
+	MessageRowID           int64
+	MessageCreatedAtUnixMs int64
+	PublicText             string
+	StructuredResponse     *RequestUserInputResponseRecord
 }
 
 func deriveEffectiveCurrentUserInput(input RunInput) effectiveCurrentUserInput {

@@ -33,14 +33,16 @@ type autoThreadTitleGenerationAttempt struct {
 }
 
 type autoThreadTitleRequest struct {
-	EndpointID     string
-	ThreadID       string
-	MessageID      string
-	PublicText     string
-	UpdatedByID    string
-	UpdatedByEmail string
-	Attempts       int
-	NextAttemptAt  time.Time
+	EndpointID             string
+	ThreadID               string
+	MessageID              string
+	MessageRowID           int64
+	MessageCreatedAtUnixMs int64
+	PublicText             string
+	UpdatedByID            string
+	UpdatedByEmail         string
+	Attempts               int
+	NextAttemptAt          time.Time
 }
 
 type autoThreadTitleApplyStatus string
@@ -319,12 +321,14 @@ func (s *Service) scheduleAutoThreadTitle(meta *session.Meta, threadID string, i
 		return
 	}
 	coordinator.Schedule(autoThreadTitleRequest{
-		EndpointID:     endpointID,
-		ThreadID:       threadID,
-		MessageID:      messageID,
-		PublicText:     publicText,
-		UpdatedByID:    strings.TrimSpace(meta.UserPublicID),
-		UpdatedByEmail: strings.TrimSpace(meta.UserEmail),
+		EndpointID:             endpointID,
+		ThreadID:               threadID,
+		MessageID:              messageID,
+		MessageRowID:           input.MessageRowID,
+		MessageCreatedAtUnixMs: input.MessageCreatedAtUnixMs,
+		PublicText:             publicText,
+		UpdatedByID:            strings.TrimSpace(meta.UserPublicID),
+		UpdatedByEmail:         strings.TrimSpace(meta.UserEmail),
 	})
 }
 
@@ -398,6 +402,11 @@ func (c *autoThreadTitleCoordinator) Schedule(req autoThreadTitleRequest) {
 	}
 
 	c.mu.Lock()
+	current, ok := c.pending[key]
+	if ok && autoThreadTitleRequestIsOlder(req, current) {
+		c.mu.Unlock()
+		return
+	}
 	c.pending[key] = req
 	c.mu.Unlock()
 	c.Wake()
@@ -597,7 +606,7 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 	default:
 		c.mu.Lock()
 		current, ok := c.pending[key]
-		if ok && (autoThreadTitleResultIsGlobalTerminal(result) || autoThreadTitleRequestsMatch(current, req)) {
+		if ok && autoThreadTitleRequestsMatch(current, req) {
 			delete(c.pending, key)
 		}
 		c.mu.Unlock()
@@ -608,21 +617,21 @@ func autoThreadTitleRequestsMatch(current autoThreadTitleRequest, req autoThread
 	return current.EndpointID == req.EndpointID &&
 		current.ThreadID == req.ThreadID &&
 		current.MessageID == req.MessageID &&
+		current.MessageRowID == req.MessageRowID &&
+		current.MessageCreatedAtUnixMs == req.MessageCreatedAtUnixMs &&
 		current.PublicText == req.PublicText &&
 		current.UpdatedByID == req.UpdatedByID &&
 		current.UpdatedByEmail == req.UpdatedByEmail
 }
 
-func autoThreadTitleResultIsGlobalTerminal(result autoThreadTitleApplyResult) bool {
-	if result.Status == autoThreadTitleApplyStatusApplied {
-		return true
+func autoThreadTitleRequestIsOlder(candidate autoThreadTitleRequest, current autoThreadTitleRequest) bool {
+	if candidate.MessageRowID > 0 && current.MessageRowID > 0 && candidate.MessageRowID != current.MessageRowID {
+		return candidate.MessageRowID < current.MessageRowID
 	}
-	switch strings.TrimSpace(result.Reason) {
-	case "title_already_present", "user_title_locked", "store_guard_rejected":
-		return true
-	default:
-		return false
+	if candidate.MessageCreatedAtUnixMs > 0 && current.MessageCreatedAtUnixMs > 0 && candidate.MessageCreatedAtUnixMs != current.MessageCreatedAtUnixMs {
+		return candidate.MessageCreatedAtUnixMs < current.MessageCreatedAtUnixMs
 	}
+	return false
 }
 
 func autoThreadTitleRetryDelay(attempt int) time.Duration {
@@ -691,12 +700,14 @@ func (s *Service) recoverAutoThreadTitleRequest(ctx context.Context, endpointID 
 			continue
 		}
 		return autoThreadTitleRequest{
-			EndpointID:     endpointID,
-			ThreadID:       threadID,
-			MessageID:      strings.TrimSpace(msg.MessageID),
-			PublicText:     publicText,
-			UpdatedByID:    strings.TrimSpace(msg.AuthorUserPublicID),
-			UpdatedByEmail: strings.TrimSpace(msg.AuthorUserEmail),
+			EndpointID:             endpointID,
+			ThreadID:               threadID,
+			MessageID:              strings.TrimSpace(msg.MessageID),
+			MessageRowID:           msg.ID,
+			MessageCreatedAtUnixMs: msg.CreatedAtUnixMs,
+			PublicText:             publicText,
+			UpdatedByID:            strings.TrimSpace(msg.AuthorUserPublicID),
+			UpdatedByEmail:         strings.TrimSpace(msg.AuthorUserEmail),
 		}, true, nil
 	}
 	return autoThreadTitleRequest{}, false, nil
