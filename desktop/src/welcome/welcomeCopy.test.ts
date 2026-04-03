@@ -9,6 +9,7 @@ import {
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
   compactSettingsFieldLabel,
+  isRedundantSettingsFieldLabel,
   compactSessionAvailabilityLabel,
   compactSettingsActionLabel,
   plainTextFromHelpHTML,
@@ -29,6 +30,13 @@ describe('welcomeCopy', () => {
     expect(compactAddConnectionLabel()).toBe('Add');
     expect(compactSaveActionLabel()).toBe('Save');
     expect(compactClearRequestLabel()).toBe('Clear request');
+  });
+
+  it('detects redundant field labels inside matching settings cards', () => {
+    expect(isRedundantSettingsFieldLabel('Local UI bind address', 'Bind address')).toBe(true);
+    expect(isRedundantSettingsFieldLabel('Local UI password', 'Password')).toBe(true);
+    expect(isRedundantSettingsFieldLabel('Control plane URL', 'Advanced')).toBe(false);
+    expect(isRedundantSettingsFieldLabel('Environment token')).toBe(false);
   });
 
   it('shortens verbose tag copy while preserving meaning', () => {

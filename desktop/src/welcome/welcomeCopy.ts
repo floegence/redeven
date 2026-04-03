@@ -35,6 +35,14 @@ export function compactSettingsFieldLabel(label: string): string {
   }
 }
 
+export function isRedundantSettingsFieldLabel(label: string, sectionTitle?: string): boolean {
+  const normalizedSectionTitle = String(sectionTitle ?? '').trim();
+  if (normalizedSectionTitle === '') {
+    return false;
+  }
+  return compactSettingsFieldLabel(label) === normalizedSectionTitle;
+}
+
 export function compactAddConnectionLabel(): string {
   return 'Add';
 }

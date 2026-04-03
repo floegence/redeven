@@ -75,6 +75,7 @@ import {
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
   compactSettingsFieldLabel,
+  isRedundantSettingsFieldLabel,
   compactSessionAvailabilityLabel,
   compactSettingsActionLabel,
   plainTextFromHelpHTML,
@@ -1695,16 +1696,14 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               when={accessModel().access_mode === 'custom_exposure'}
               fallback={(
                 <label class="grid gap-2">
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs font-medium text-foreground">Port</span>
-                    <SettingsHelpBadge label="Port" content={addressCardHelp()} />
-                  </div>
+                  <span class="sr-only">Port</span>
                   <Input
                     value={accessModel().fixed_port_value}
                     inputMode="numeric"
                     disabled={accessModel().port_mode === 'auto'}
                     size="sm"
                     class="w-full"
+                    aria-label="Port"
                     onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
                   />
                 </label>
@@ -1714,6 +1713,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 field={props.snapshot.host_fields[0]!}
                 value={props.draft.local_ui_bind}
                 updateDraftField={props.updateDraftField}
+                sectionTitle={addressCardTitle()}
               />
             </Show>
           </SettingsSurfaceCard>
@@ -1731,6 +1731,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                   draft={props.draft}
                   updateDraftField={props.updateDraftField}
                   clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
+                  sectionTitle={protectionCardTitle()}
                 />
               )}
             >
@@ -1912,6 +1913,7 @@ function LocalUIPasswordField(props: Readonly<{
   draft: DesktopSettingsDraft;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   clearStoredLocalUIPassword: () => void;
+  sectionTitle?: string;
 }>) {
   return (
     <div class="flex h-full flex-col justify-between gap-3">
@@ -1919,6 +1921,7 @@ function LocalUIPasswordField(props: Readonly<{
         field={props.snapshot.host_fields[1]!}
         value={props.draft.local_ui_password}
         updateDraftField={props.updateDraftField}
+        sectionTitle={props.sectionTitle}
       />
       <Show when={props.snapshot.local_ui_password_can_clear}>
         <div class="flex justify-end">
@@ -1939,8 +1942,11 @@ function SettingsFieldInput(props: Readonly<{
   field: DesktopSettingsSurfaceSnapshot['host_fields'][number];
   value: string;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
+  sectionTitle?: string;
 }>) {
+  const compactLabel = createMemo(() => compactSettingsFieldLabel(props.field.label));
   const helpText = createMemo(() => plainTextFromHelpHTML(props.field.helpHTML ?? ''));
+  const showVisibleLabel = createMemo(() => !isRedundantSettingsFieldLabel(props.field.label, props.sectionTitle));
   const describedBy = createMemo(() => {
     const values = (props.field.describedBy ?? []).filter((value) => {
       if (value === props.field.helpId) {
@@ -1953,10 +1959,15 @@ function SettingsFieldInput(props: Readonly<{
 
   return (
     <label classList={{ hidden: props.field.hidden }} class="grid h-full gap-2.5">
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-medium text-foreground">{compactSettingsFieldLabel(props.field.label)}</span>
-        <SettingsHelpBadge label={props.field.label} content={helpText()} />
-      </div>
+      <Show
+        when={showVisibleLabel()}
+        fallback={<span class="sr-only">{compactLabel()}</span>}
+      >
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-foreground">{compactLabel()}</span>
+          <SettingsHelpBadge label={props.field.label} content={helpText()} />
+        </div>
+      </Show>
       <Input
         id={props.field.id}
         name={props.field.name}
@@ -1967,6 +1978,7 @@ function SettingsFieldInput(props: Readonly<{
         placeholder={props.field.placeholder}
         spellcheck={false}
         aria-describedby={describedBy()}
+        aria-label={showVisibleLabel() ? undefined : compactLabel()}
         size="sm"
         class="w-full"
         onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
