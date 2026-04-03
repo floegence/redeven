@@ -631,6 +631,10 @@ export function CodexProvider(props: ParentProps) {
         merged.set(threadID, sessionThread);
         continue;
       }
+      if (sameThreadSnapshot(existing, sessionThread)) {
+        merged.set(threadID, existing);
+        continue;
+      }
       const pinnedThread = threadID === selectedThread || threadID === displayedThread;
       const existingUpdatedAt = Number(existing.updated_at_unix_s ?? 0) || 0;
       const sessionUpdatedAt = Number(sessionThread.updated_at_unix_s ?? 0) || 0;
@@ -890,10 +894,16 @@ export function CodexProvider(props: ParentProps) {
     const normalizedThreadID = String(thread?.id ?? '').trim();
     if (!normalizedThreadID || !thread) return;
     const normalizedThread = patchThreadDisplayFallbacks(thread, fallbackPreview, fallbackCWD, fallbackReadStatus);
-    setOptimisticThreadsByID((current) => ({
-      ...current,
-      [normalizedThreadID]: normalizedThread,
-    }));
+    setOptimisticThreadsByID((current) => {
+      const existing = current[normalizedThreadID];
+      if (existing && sameThreadSnapshot(existing, normalizedThread)) {
+        return current;
+      }
+      return {
+        ...current,
+        [normalizedThreadID]: normalizedThread,
+      };
+    });
   };
 
   const removeOptimisticThread = (threadID: string) => {

@@ -400,6 +400,129 @@ describe('CodexSidebar', () => {
     expect(listCodexThreadsMock).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the active running sidebar card mounted during streamed deltas', async () => {
+    let streamOnEvent: ((event: any) => void) | null = null;
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Backend audit',
+        preview: 'Review the gateway wiring',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace',
+        turns: [
+          {
+            id: 'turn_1',
+            status: 'running',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 1,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
+      streamOnEvent = args.onEvent;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+    await flushAsync();
+    await flushAsync();
+
+    const initialCard = host.querySelector('[data-thread-id="thread_1"]');
+    const initialIndicator = host.querySelector('[data-thread-id="thread_1"] [data-thread-indicator="running"]');
+
+    expect(initialCard).not.toBeNull();
+    expect(initialIndicator).not.toBeNull();
+    expect(threadIndicatorMode(host, 'thread_1')).toBe('running');
+
+    if (!streamOnEvent) {
+      throw new Error('stream callback not captured');
+    }
+    const emitStreamEvent = streamOnEvent as (event: any) => void;
+
+    emitStreamEvent({
+      seq: 2,
+      type: 'agent_message_delta',
+      thread_id: 'thread_1',
+      item_id: 'item_1',
+      delta: 'Inspecting the current wiring.',
+    });
+    await flushAsync();
+
+    expect(host.querySelector('[data-thread-id="thread_1"]')).toBe(initialCard);
+    expect(host.querySelector('[data-thread-id="thread_1"] [data-thread-indicator="running"]')).toBe(initialIndicator);
+    expect(threadIndicatorMode(host, 'thread_1')).toBe('running');
+
+    emitStreamEvent({
+      seq: 3,
+      type: 'agent_message_delta',
+      thread_id: 'thread_1',
+      item_id: 'item_1',
+      delta: 'Still working.',
+    });
+    await flushAsync();
+
+    expect(host.querySelector('[data-thread-id="thread_1"]')).toBe(initialCard);
+    expect(host.querySelector('[data-thread-id="thread_1"] [data-thread-indicator="running"]')).toBe(initialIndicator);
+    expect(threadIndicatorMode(host, 'thread_1')).toBe('running');
+  });
+
   it('shows an unread dot when a completed thread has unseen activity after a prior running snapshot', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: true,

@@ -16,6 +16,11 @@ import {
 import type { CodexThread } from './types';
 import { buildCodexSidebarSummary } from './viewModel';
 
+type SidebarThreadGroup = Readonly<{
+  group: 'Today' | 'Yesterday' | 'This Week' | 'Older';
+  threadIDs: string[];
+}>;
+
 function RuntimeSummary() {
   const codex = useCodexContext();
   const summary = createMemo(() => buildCodexSidebarSummary({
@@ -191,9 +196,24 @@ function ThreadCard(props: {
 export function CodexSidebarShell() {
   const codex = useCodexContext();
 
-  const hasThreads = createMemo(() => codex.threads().length > 0);
-  const groupedThreads = createMemo(() => groupThreadsByDate(codex.threads()));
-  const showGroupHeaders = createMemo(() => codex.threads().length >= 5);
+  const threads = createMemo(() => codex.threads());
+  const threadByID = createMemo(() => {
+    const next = new Map<string, CodexThread>();
+    for (const thread of threads()) {
+      const threadID = String(thread.id ?? '').trim();
+      if (!threadID) continue;
+      next.set(threadID, thread);
+    }
+    return next;
+  });
+  const hasThreads = createMemo(() => threads().length > 0);
+  const groupedThreads = createMemo<SidebarThreadGroup[]>(() => groupThreadsByDate(threads()).map((group) => ({
+    group: group.group,
+    threadIDs: group.threads
+      .map((thread) => String(thread.id ?? '').trim())
+      .filter(Boolean),
+  })));
+  const showGroupHeaders = createMemo(() => threads().length >= 5);
   const showInitialLoading = createMemo(() => codex.threadsLoading() && !hasThreads());
   const newChatDisabledReason = createMemo(() => codex.hostDisabledReason());
   const renderNewChatButton = () => (
@@ -248,29 +268,36 @@ export function CodexSidebarShell() {
                           {group().group}
                         </div>
                       </Show>
-                      <For each={group().threads}>
-                        {(thread) => (
-                          <ThreadCard
-                            thread={thread}
-                            active={thread.id === codex.activeThreadID()}
-                            isRunning={codex.isThreadRunning(thread.id)}
-                            unread={codex.isThreadUnread(thread.id)}
-                            actionLabel={
-                              codex.supportsOperation('thread_archive')
-                                ? (codex.archivingThreadID() === thread.id ? 'Archiving…' : 'Archive')
-                                : ''
-                            }
-                            actionAriaLabel={
-                              `Archive chat ${String(thread.name ?? thread.preview ?? thread.id).trim() || thread.id}`
-                            }
-                            actionDisabled={
-                              !codex.hasHostBinary() || codex.archivingThreadID() === thread.id
-                            }
-                            actionDisabledReason={!codex.hasHostBinary() ? codex.hostDisabledReason() : ''}
-                            onClick={() => codex.selectThread(thread.id)}
-                            onAction={() => void codex.archiveThread(thread.id)}
-                          />
-                        )}
+                      <For each={group().threadIDs}>
+                        {(threadID) => {
+                          const thread = createMemo(() => threadByID().get(threadID) ?? null);
+                          return (
+                            <Show when={thread()}>
+                              {(resolvedThread) => (
+                                <ThreadCard
+                                  thread={resolvedThread()}
+                                  active={threadID === codex.activeThreadID()}
+                                  isRunning={codex.isThreadRunning(threadID)}
+                                  unread={codex.isThreadUnread(threadID)}
+                                  actionLabel={
+                                    codex.supportsOperation('thread_archive')
+                                      ? (codex.archivingThreadID() === threadID ? 'Archiving…' : 'Archive')
+                                      : ''
+                                  }
+                                  actionAriaLabel={
+                                    `Archive chat ${String(resolvedThread().name ?? resolvedThread().preview ?? threadID).trim() || threadID}`
+                                  }
+                                  actionDisabled={
+                                    !codex.hasHostBinary() || codex.archivingThreadID() === threadID
+                                  }
+                                  actionDisabledReason={!codex.hasHostBinary() ? codex.hostDisabledReason() : ''}
+                                  onClick={() => codex.selectThread(threadID)}
+                                  onAction={() => void codex.archiveThread(threadID)}
+                                />
+                              )}
+                            </Show>
+                          );
+                        }}
                       </For>
                     </>
                   );
