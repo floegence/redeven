@@ -115,6 +115,8 @@ type evalReport struct {
 	Gate                 gateReport              `json:"gate"`
 }
 
+type evalProviderKeyResolver func(providerID string) (string, bool, error)
+
 type monitoredResponseWriter struct {
 	head    http.Header
 	monitor *streamMonitor
@@ -349,22 +351,6 @@ func main() {
 		fatalf("failed to create isolated workspace dir: %v", err)
 	}
 
-	service, err := ai.NewService(ai.Options{
-		StateDir:              stateDir,
-		AgentHomeDir:          workspacePath,
-		Shell:                 "bash",
-		Config:                cfg.AI,
-		RunMaxWallTime:        3 * time.Minute,
-		RunIdleTimeout:        75 * time.Second,
-		ToolApprovalTimeout:   20 * time.Second,
-		PersistOpTimeout:      10 * time.Second,
-		ResolveProviderAPIKey: resolver,
-	})
-	if err != nil {
-		fatalf("failed to init AI service: %v", err)
-	}
-	defer func() { _ = service.Close() }()
-
 	tasks, loadErr := loadTaskSpecs(strings.TrimSpace(*taskSpecPath))
 	if loadErr != nil {
 		fatalf("failed to load task specs: %v", loadErr)
@@ -377,7 +363,7 @@ func main() {
 	results := make([]taskResult, 0, len(tasks))
 	for i, task := range tasks {
 		fmt.Printf("[task] (%d/%d) %s\n", i+1, len(tasks), task.ID)
-		res := runTask(ctx, service, modelID, workspacePath, taskWorkspaceRoot, task)
+		res := runTask(ctx, cfg.AI, resolver, modelID, workspacePath, taskWorkspaceRoot, stateDir, task)
 		results = append(results, res)
 		fmt.Printf("  - score=%.2f acc=%.2f nat=%.2f eff=%.2f pass=%t\n", res.Score.Overall, res.Score.Accuracy, res.Score.Natural, res.Score.Efficiency, res.Outcome.Passed)
 	}
@@ -458,12 +444,37 @@ func main() {
 	}
 }
 
-func runTask(ctx context.Context, svc *ai.Service, modelID string, sourceWorkspace string, taskWorkspaceRoot string, task evalTask) taskResult {
-	taskWorkspace, err := prepareTaskWorkspace(taskWorkspaceRoot, task.ID, sourceWorkspace)
-	inputs := renderTaskTurns(task.Turns, taskWorkspace)
+func runTask(
+	ctx context.Context,
+	aiCfg *config.AIConfig,
+	resolveProviderAPIKey evalProviderKeyResolver,
+	modelID string,
+	sourceWorkspace string,
+	taskWorkspaceRoot string,
+	taskStateRoot string,
+	task evalTask,
+) taskResult {
+	sandbox, err := prepareTaskSandbox(taskWorkspaceRoot, taskStateRoot, task.ID, sourceWorkspace)
+	inputs := renderTaskTurns(task.Turns, sandbox.WorkspacePath)
 	if err != nil {
-		return failedTaskResult(task, sourceWorkspace, taskWorkspace, inputs, "prepare_task_workspace_failed", err)
+		return failedTaskResult(task, sourceWorkspace, sandbox.WorkspacePath, inputs, "prepare_task_workspace_failed", err)
 	}
+
+	svc, err := ai.NewService(ai.Options{
+		StateDir:              sandbox.StateDir,
+		AgentHomeDir:          sandbox.WorkspacePath,
+		Shell:                 "bash",
+		Config:                aiCfg,
+		RunMaxWallTime:        3 * time.Minute,
+		RunIdleTimeout:        75 * time.Second,
+		ToolApprovalTimeout:   20 * time.Second,
+		PersistOpTimeout:      10 * time.Second,
+		ResolveProviderAPIKey: resolveProviderAPIKey,
+	})
+	if err != nil {
+		return failedTaskResult(task, sourceWorkspace, sandbox.WorkspacePath, inputs, "init_task_service_failed", err)
+	}
+	defer func() { _ = svc.Close() }()
 
 	channelID := sanitizeID("ch_eval_" + task.ID)
 	meta := &session.Meta{
@@ -477,9 +488,9 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, sourceWorkspa
 		CanExecute:        true,
 		CanAdmin:          false,
 	}
-	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, task.Runtime.ExecutionMode, taskWorkspace)
+	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, task.Runtime.ExecutionMode, sandbox.WorkspacePath)
 	if err != nil {
-		return failedTaskResult(task, sourceWorkspace, taskWorkspace, inputs, "create_thread_failed", err)
+		return failedTaskResult(task, sourceWorkspace, sandbox.WorkspacePath, inputs, "create_thread_failed", err)
 	}
 
 	turns := make([]turnMetrics, 0, len(inputs))
@@ -591,13 +602,13 @@ func runTask(ctx context.Context, svc *ai.Service, modelID string, sourceWorkspa
 		FinalText:           finalText,
 		DurationTotalMS:     totalDur.Milliseconds(),
 		SourceWorkspacePath: sourceWorkspace,
-		WorkspacePath:       taskWorkspace,
+		WorkspacePath:       sandbox.WorkspacePath,
 		ThreadState:         summarizeThreadState(threadView),
 		ToolCalls:           summarizeToolCalls(toolCalls),
 		TodoSnapshot:        buildTodoSnapshotSummary(todoView),
 		EventCounts:         eventCounts,
 		FinalizationReasons: uniqueStrings(finalizationReasons),
-		EvidencePaths:       extractEvidencePaths(finalText, taskWorkspace),
+		EvidencePaths:       extractEvidencePaths(finalText, sandbox.WorkspacePath),
 		rawThread:           threadView,
 		rawTodos:            todoView,
 		rawToolCalls:        toolCalls,
