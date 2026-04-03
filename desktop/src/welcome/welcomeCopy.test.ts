@@ -8,8 +8,10 @@ import {
   compactOpenLocalEnvironmentLabel,
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
+  compactSettingsFieldLabel,
   compactSessionAvailabilityLabel,
   compactSettingsActionLabel,
+  plainTextFromHelpHTML,
 } from './welcomeCopy';
 
 describe('welcomeCopy', () => {
@@ -19,6 +21,11 @@ describe('welcomeCopy', () => {
     expect(compactOpenLocalEnvironmentLabel(false)).toBe('Open');
     expect(compactOpenLocalEnvironmentLabel(true)).toBe('Resume');
     expect(compactSettingsActionLabel()).toBe('Settings');
+    expect(compactSettingsFieldLabel('Local UI bind address')).toBe('Bind address');
+    expect(compactSettingsFieldLabel('Local UI password')).toBe('Password');
+    expect(compactSettingsFieldLabel('Control plane URL')).toBe('Control plane');
+    expect(compactSettingsFieldLabel('Environment ID')).toBe('Env ID');
+    expect(compactSettingsFieldLabel('Environment token')).toBe('Env token');
     expect(compactAddConnectionLabel()).toBe('Add');
     expect(compactSaveActionLabel()).toBe('Save');
     expect(compactClearRequestLabel()).toBe('Clear request');
@@ -31,5 +38,11 @@ describe('welcomeCopy', () => {
     expect(compactPasswordStateTagLabel('Password will be replaced on save')).toBe('Update on save');
     expect(compactBootstrapStatusTagLabel('Registration queued for next start')).toBe('Queued');
     expect(compactBootstrapStatusTagLabel('No bootstrap request queued')).toBe('No request');
+  });
+
+  it('converts field help HTML into compact plain text for tooltips', () => {
+    expect(plainTextFromHelpHTML('Examples: <code>localhost:23998</code>, <code>127.0.0.1:0</code>.')).toBe(
+      'Examples: localhost:23998, 127.0.0.1:0.',
+    );
   });
 });

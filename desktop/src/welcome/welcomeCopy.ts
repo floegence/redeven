@@ -18,6 +18,23 @@ export function compactSettingsActionLabel(): string {
   return 'Settings';
 }
 
+export function compactSettingsFieldLabel(label: string): string {
+  switch (label) {
+    case 'Local UI bind address':
+      return 'Bind address';
+    case 'Local UI password':
+      return 'Password';
+    case 'Control plane URL':
+      return 'Control plane';
+    case 'Environment ID':
+      return 'Env ID';
+    case 'Environment token':
+      return 'Env token';
+    default:
+      return label;
+  }
+}
+
 export function compactAddConnectionLabel(): string {
   return 'Add';
 }
@@ -60,4 +77,13 @@ export function compactBootstrapStatusTagLabel(label: string): string {
     default:
       return label;
   }
+}
+
+export function plainTextFromHelpHTML(html: string): string {
+  return String(html ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim();
 }

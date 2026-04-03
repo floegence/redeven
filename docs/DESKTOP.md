@@ -141,12 +141,14 @@ Rules:
 - The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
 - Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
 - The dialog starts with a compact summary grid for visibility, next-start address, password state, and next start status.
+- Summary-card details and field-level help stay available through compact question-mark tooltip affordances instead of always-visible helper paragraphs.
 - The first decision is a visibility intent, not a raw bind field:
   - `Local only`
   - `Shared on your local network`
   - `Custom exposure`
 - The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving, but it keeps port selection as a separate control instead of hiding it inside the scope preset.
 - The settings dialog also shows the current managed runtime URL separately from the next-start configuration when the local environment is already running.
+- The main editor uses a wider two-column card layout so visibility changes keep the form aligned instead of reflowing a long stack of helper text.
 - The one-shot bootstrap request stays in a compact `Advanced` section so the main settings flow stays focused on common local access decisions.
 
 ## Desktop Preferences
