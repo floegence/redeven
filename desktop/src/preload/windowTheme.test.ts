@@ -2,6 +2,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  desktopWindowChromeCSSVariables,
+  resolveDesktopWindowChromeConfig,
+} from '../shared/windowChromePlatform';
+
 const exposeInMainWorld = vi.fn();
 const ipcRendererOn = vi.fn();
 const ipcRendererSendSync = vi.fn();
@@ -67,17 +72,27 @@ describe('bootstrapDesktopThemeBridge', () => {
 
   it('exposes the desktop theme bridge and applies the initial snapshot to the document', async () => {
     const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
+    const windowChromeConfig = resolveDesktopWindowChromeConfig(process.platform);
+    const windowChromeVars = desktopWindowChromeCSSVariables(process.platform);
 
     bootstrapDesktopThemeBridge();
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('dark');
-    expect(document.documentElement.dataset.redevenDesktopWindowChromeMode).toBe('hidden-inset');
-    expect(document.documentElement.dataset.redevenDesktopWindowControlsSide).toBe('left');
+    expect(document.documentElement.dataset.redevenDesktopWindowChromeMode).toBe(windowChromeConfig.mode);
+    expect(document.documentElement.dataset.redevenDesktopWindowControlsSide).toBe(windowChromeConfig.controlsSide);
 
     const style = document.getElementById('redeven-desktop-window-chrome');
     expect(style).toBeTruthy();
-    expect(style?.textContent).toContain('--redeven-desktop-titlebar-height: 40px;');
+    expect(style?.textContent).toContain(
+      `--redeven-desktop-titlebar-height: ${windowChromeVars['--redeven-desktop-titlebar-height']};`,
+    );
+    expect(style?.textContent).toContain(
+      `--redeven-desktop-titlebar-start-inset: ${windowChromeVars['--redeven-desktop-titlebar-start-inset']};`,
+    );
+    expect(style?.textContent).toContain(
+      `--redeven-desktop-titlebar-end-inset: ${windowChromeVars['--redeven-desktop-titlebar-end-inset']};`,
+    );
     expect(style?.textContent).toContain("[data-floe-shell-slot='top-bar']");
     expect(style?.textContent).toContain("[data-redeven-desktop-titlebar-no-drag='true']");
 
