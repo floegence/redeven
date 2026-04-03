@@ -704,6 +704,28 @@ describe('CodexPage', () => {
     });
   });
 
+  it('shows the transcript FAB when only the working directory is available', async () => {
+    fetchCodexStatusMock.mockResolvedValue({
+      available: false,
+      ready: false,
+      error: 'host codex binary not found on PATH',
+      agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+  });
+
   it('disables host-backed composer controls while Codex is unavailable', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: false,
