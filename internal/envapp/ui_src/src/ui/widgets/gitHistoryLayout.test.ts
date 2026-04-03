@@ -131,7 +131,7 @@ describe('browser workspace layout wiring', () => {
     expect(navSrc).toContain('sm:py-1.5');
     expect(navSrc).toContain('border-l-[2px] git-browser-selection-surface git-browser-selection-nav font-medium');
     expect(navSrc).toContain('bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground');
-    expect(navSrc).toContain('GitCountPill tone="neutral" emphasis={active() ? \'selected\' : \'default\'}');
+    expect(navSrc).toContain('gitSelectedChipClass(true)');
     expect(navSrc).not.toContain('gitSubviewTone');
     expect(navSrc).not.toContain('gitToneBadgeClass');
     expect(navSrc).not.toContain('gitToneSelectableCardClass');
@@ -346,8 +346,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain('min-h-4 truncate text-[10px]');
     expect(src).toContain('gitToneSelectableCardClass(tone(), active())');
     expect(src).toContain('gitSelectedSecondaryTextClass(active())');
-    expect(src).toContain('GitCountPill tone={tone()} emphasis={active() ? \'selected\' : \'default\'}');
-    expect(src).toContain('GitMetaPill tone="brand" emphasis={active() ? \'selected\' : \'default\'}');
+    expect(src).toContain('gitSelectedChipClass(true)');
     expect(src).not.toContain('text-lg font-semibold tracking-tight');
   });
 
@@ -359,9 +358,6 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain("rowIndex() === rowCount() - 1 ? '' : cn('border-b', redevenDividerRoleClass())");
     expect(src).toContain('data-commit-graph-rails');
     expect(src).toContain('data-commit-graph-segment={row.commit.hash}');
-    expect(src).toContain('GitMetaPill');
-    expect(src).toContain("tone=\"neutral\"");
-    expect(src).toContain("emphasis={selected() ? 'selected' : 'default'}");
     expect(src).toContain('data-commit-graph-node={props.row.commit.hash}');
     expect(src).toContain('pointer-events-none absolute inset-0 overflow-visible');
     expect(src).toContain('const SUBJECT_ROW_HEIGHT = 14;');

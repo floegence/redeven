@@ -24,7 +24,7 @@ import {
 } from '../utils/gitWorkbench';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { gitChangePathClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
+import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitVirtualTable } from './GitVirtualTable';
 import {
@@ -343,18 +343,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   >
                                     <div class={cn('min-w-0 truncate text-xs font-semibold', active() ? 'text-current' : 'text-foreground')}>{stash.message || stash.ref || 'Unnamed stash'}</div>
                                     <div class={cn('flex flex-wrap items-center gap-1.5 text-[11px]', gitSelectedSecondaryTextClass(active()))}>
-                                      <GitMetaPill tone="violet" emphasis={active() ? 'selected' : 'default'}>
-                                        {stash.ref || shortGitHash(stash.id)}
-                                      </GitMetaPill>
+                                      <GitMetaPill tone="violet" class={gitSelectedChipClass(active())}>{stash.ref || shortGitHash(stash.id)}</GitMetaPill>
                                       <Show when={stash.branchName}>
-                                        <GitMetaPill tone="neutral" emphasis={active() ? 'selected' : 'default'}>
-                                          {stash.branchName}
-                                        </GitMetaPill>
+                                        <GitMetaPill tone="neutral" class={gitSelectedChipClass(active())}>{stash.branchName}</GitMetaPill>
                                       </Show>
                                       <Show when={stash.hasUntracked}>
-                                        <GitMetaPill tone="warning" emphasis={active() ? 'selected' : 'default'}>
-                                          Untracked
-                                        </GitMetaPill>
+                                        <GitMetaPill tone="warning" class={gitSelectedChipClass(active())}>Untracked</GitMetaPill>
                                       </Show>
                                     </div>
                                     <div class={cn('text-[10px]', gitSelectedSecondaryTextClass(active()))}>{formatStashTime(stash.createdAtUnixMs)}</div>

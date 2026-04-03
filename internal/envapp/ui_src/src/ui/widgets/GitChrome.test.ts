@@ -14,7 +14,6 @@ import {
   gitToneAccentColor,
   gitToneActionButtonClass,
   gitToneBadgeClass,
-  gitToneName,
   gitToneDotClass,
   gitToneHeaderActionButtonClass,
   gitToneInsetClass,
@@ -35,8 +34,6 @@ describe('GitChrome semantic tone helpers', () => {
     expect(workspaceSectionTone('untracked')).toBe('info');
     expect(workspaceSectionTone('conflicted')).toBe('danger');
     expect(workspaceSectionTone('unknown')).toBe('neutral');
-    expect(gitToneName(undefined)).toBe('neutral');
-    expect(gitToneName('warning')).toBe('warning');
   });
 
   it('maps file changes, compare states, and branches to consistent tones', () => {

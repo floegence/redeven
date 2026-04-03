@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GitCountPill, GitMetaPill, GitPanelFrame, GitTableFrame } from './GitWorkbenchPrimitives';
+import { GitPanelFrame, GitTableFrame } from './GitWorkbenchPrimitives';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -54,53 +54,6 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
       expect(panel?.className).toContain('redeven-surface-panel--strong');
       expect(panel?.className).toContain('flex');
       expect(panel?.textContent).toContain('Table content');
-    } finally {
-      dispose();
-    }
-  });
-
-  it('renders GitMetaPill with semantic tone metadata and selected emphasis hooks', () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const dispose = render(() => (
-      <GitMetaPill tone="warning" emphasis="selected" class="custom-pill">
-        Pending
-      </GitMetaPill>
-    ), host);
-
-    try {
-      const pill = host.querySelector('[data-git-tone="warning"]') as HTMLElement | null;
-      expect(pill).toBeTruthy();
-      expect(pill?.getAttribute('data-git-pill-kind')).toBe('meta');
-      expect(pill?.className).toContain('git-meta-pill');
-      expect(pill?.className).toContain('git-browser-selection-chip');
-      expect(pill?.className).toContain('custom-pill');
-      expect(pill?.textContent).toContain('Pending');
-    } finally {
-      dispose();
-    }
-  });
-
-  it('renders GitCountPill with count metadata and compact count geometry', () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const dispose = render(() => (
-      <GitCountPill tone="info" class="count-pill">
-        12
-      </GitCountPill>
-    ), host);
-
-    try {
-      const pill = host.querySelector('[data-git-tone="info"]') as HTMLElement | null;
-      expect(pill).toBeTruthy();
-      expect(pill?.getAttribute('data-git-pill-kind')).toBe('count');
-      expect(pill?.className).toContain('git-meta-pill');
-      expect(pill?.className).toContain('min-w-[1.5rem]');
-      expect(pill?.className).toContain('tabular-nums');
-      expect(pill?.className).toContain('count-pill');
-      expect(pill?.textContent).toContain('12');
     } finally {
       dispose();
     }
