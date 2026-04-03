@@ -42,6 +42,7 @@ describe('DesktopWelcomeShell', () => {
           },
         ],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+        control_planes: [],
       },
       surface: 'connect_environment',
     });
@@ -72,6 +73,7 @@ describe('DesktopWelcomeShell', () => {
         },
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       },
       surface: 'local_environment_settings',
     });
@@ -129,6 +131,7 @@ describe('DesktopWelcomeShell', () => {
           'http://192.168.1.12:24000/',
           'http://192.168.1.11:24000/',
         ],
+        control_planes: [],
       },
       openSessions: [
         {
@@ -208,5 +211,14 @@ describe('DesktopWelcomeShell', () => {
     expect(tooltipSrc).toContain('<Portal>');
     expect(tooltipSrc).toContain('role="tooltip"');
     expect(tooltipSrc).toContain('fixed z-[220]');
+  });
+
+  it('includes Control Plane management copy inside the launcher source', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('Control Planes');
+    expect(appSrc).toContain('Add Control Plane');
+    expect(appSrc).toContain('Desktop Session Token');
+    expect(appSrc).toContain('fixed provider protocol');
   });
 });

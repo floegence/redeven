@@ -6,6 +6,15 @@ import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionTypes';
 import { DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND } from '../shared/desktopAccessModel';
 import {
+  desktopControlPlaneKey,
+  normalizeDesktopControlPlaneAccount,
+  normalizeDesktopControlPlaneProvider,
+  normalizeDesktopProviderEnvironmentList,
+  type DesktopControlPlaneAccount,
+  type DesktopControlPlaneProvider,
+  type DesktopProviderEnvironment,
+} from '../shared/controlPlaneProvider';
+import {
   normalizeDesktopLocalUIPasswordMode,
   type DesktopLocalUIPasswordMode,
   type DesktopSettingsDraft,
@@ -25,6 +34,13 @@ export type DesktopSavedEnvironment = Readonly<{
   last_used_at_ms: number;
 }>;
 
+export type DesktopSavedControlPlane = Readonly<{
+  provider: DesktopControlPlaneProvider;
+  account: DesktopControlPlaneAccount;
+  environments: readonly DesktopProviderEnvironment[];
+  last_synced_at_ms: number;
+}>;
+
 export type DesktopPreferences = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
@@ -32,6 +48,7 @@ export type DesktopPreferences = Readonly<{
   pending_bootstrap: PendingBootstrap | null;
   saved_environments: readonly DesktopSavedEnvironment[];
   recent_external_local_ui_urls: readonly string[];
+  control_planes: readonly DesktopSavedControlPlane[];
 }>;
 
 export type DesktopPreferencesPaths = Readonly<{
@@ -52,20 +69,41 @@ type DesktopSavedEnvironmentFile = Readonly<{
   last_used_at_ms?: unknown;
 }>;
 
+type DesktopControlPlaneAccountFile = Readonly<{
+  user_public_id?: unknown;
+  user_display_name?: unknown;
+  expires_at_unix_ms?: unknown;
+}>;
+
+type DesktopControlPlaneFile = Readonly<{
+  provider?: unknown;
+  account?: DesktopControlPlaneAccountFile;
+  environments?: readonly unknown[];
+  last_synced_at_ms?: unknown;
+}>;
+
 type DesktopPreferencesFile = Readonly<{
   version?: number;
   local_ui_bind?: string;
   saved_environments?: readonly DesktopSavedEnvironmentFile[];
   recent_external_local_ui_urls?: readonly unknown[];
+  control_planes?: readonly DesktopControlPlaneFile[];
   pending_bootstrap?: Readonly<{
     controlplane_url?: string;
     env_id?: string;
   }>;
 }>;
 
+type DesktopControlPlaneSecretFile = Readonly<{
+  provider_origin?: unknown;
+  provider_id?: unknown;
+  session_token?: StoredSecret;
+}>;
+
 type DesktopSecretsFile = Readonly<{
   version?: number;
   local_ui_password?: StoredSecret;
+  control_planes?: readonly DesktopControlPlaneSecretFile[];
   pending_bootstrap?: Readonly<{
     env_token?: StoredSecret;
   }>;
@@ -88,6 +126,13 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   local_ui_url: string;
   source?: DesktopSavedEnvironmentSource;
   last_used_at_ms?: number;
+}>;
+
+export type UpsertDesktopSavedControlPlaneInput = Readonly<{
+  provider: DesktopControlPlaneProvider;
+  account: DesktopControlPlaneAccount;
+  environments?: readonly DesktopProviderEnvironment[];
+  last_synced_at_ms?: number;
 }>;
 
 const MAX_RECENT_EXTERNAL_LOCAL_UI_URLS = 5;
@@ -135,6 +180,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     pending_bootstrap: null,
     saved_environments: [],
     recent_external_local_ui_urls: [],
+    control_planes: [],
   };
 }
 
@@ -199,6 +245,16 @@ function sortSavedEnvironmentsByLastUsed(
   ));
 }
 
+function sortSavedControlPlanes(
+  controlPlanes: readonly DesktopSavedControlPlane[],
+): readonly DesktopSavedControlPlane[] {
+  return [...controlPlanes].sort((left, right) => (
+    right.last_synced_at_ms - left.last_synced_at_ms
+    || left.provider.display_name.localeCompare(right.provider.display_name)
+    || left.provider.provider_origin.localeCompare(right.provider.provider_origin)
+  ));
+}
+
 function normalizeSavedEnvironmentCandidate(
   value: unknown,
   fallbackLastUsedAtMS: number,
@@ -223,6 +279,47 @@ function normalizeSavedEnvironmentCandidate(
     local_ui_url: normalizedURL,
     source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
+  };
+}
+
+function normalizeSavedControlPlaneCandidate(
+  value: unknown,
+  sessionTokensByKey: ReadonlyMap<string, string>,
+  fallbackLastSyncedAtMS: number,
+): DesktopSavedControlPlane | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as DesktopControlPlaneFile;
+  const provider = normalizeDesktopControlPlaneProvider(candidate.provider);
+  if (!provider) {
+    return null;
+  }
+
+  let sessionToken = '';
+  try {
+    sessionToken = String(sessionTokensByKey.get(desktopControlPlaneKey(provider.provider_origin, provider.provider_id)) ?? '');
+  } catch {
+    return null;
+  }
+  if (compact(sessionToken) === '') {
+    return null;
+  }
+
+  const account = normalizeDesktopControlPlaneAccount(candidate.account, {
+    provider,
+    sessionToken,
+  });
+  if (!account) {
+    return null;
+  }
+
+  return {
+    provider,
+    account,
+    environments: normalizeDesktopProviderEnvironmentList({ environments: candidate.environments }, { provider }),
+    last_synced_at_ms: normalizeLastUsedAtMS(candidate.last_synced_at_ms, fallbackLastSyncedAtMS),
   };
 }
 
@@ -313,6 +410,59 @@ export function normalizeSavedEnvironments(
   return sortSavedEnvironmentsByLastUsed(normalized).slice(0, MAX_SAVED_ENVIRONMENTS);
 }
 
+function decodeDesktopControlPlaneSessionTokens(
+  codec: DesktopSecretCodec,
+  values: readonly DesktopControlPlaneSecretFile[] | null | undefined,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(values)) {
+    return out;
+  }
+
+  for (const value of values) {
+    const providerOrigin = compact(value?.provider_origin);
+    const providerID = compact(value?.provider_id);
+    const sessionToken = decodeOptionalSecret(codec, value?.session_token);
+    if (providerOrigin === '' || providerID === '' || compact(sessionToken) === '') {
+      continue;
+    }
+    try {
+      out.set(desktopControlPlaneKey(providerOrigin, providerID), compact(sessionToken));
+    } catch {
+      // Ignore malformed secret entries during recovery.
+    }
+  }
+  return out;
+}
+
+export function normalizeSavedControlPlanes(
+  values: readonly unknown[] | null | undefined,
+  sessionTokensByKey: ReadonlyMap<string, string>,
+): readonly DesktopSavedControlPlane[] {
+  const sourceValues = Array.isArray(values) ? values : [];
+  const normalized: DesktopSavedControlPlane[] = [];
+  const seenKeys = new Set<string>();
+
+  for (let index = 0; index < sourceValues.length; index += 1) {
+    const controlPlane = normalizeSavedControlPlaneCandidate(
+      sourceValues[index],
+      sessionTokensByKey,
+      sourceValues.length - index,
+    );
+    if (!controlPlane) {
+      continue;
+    }
+    const key = desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id);
+    if (seenKeys.has(key)) {
+      continue;
+    }
+    seenKeys.add(key);
+    normalized.push(controlPlane);
+  }
+
+  return sortSavedControlPlanes(normalized);
+}
+
 export function deriveRecentExternalLocalUIURLs(
   savedEnvironments: readonly DesktopSavedEnvironment[],
 ): readonly string[] {
@@ -357,6 +507,30 @@ export function upsertSavedEnvironment(
   };
 }
 
+export function upsertSavedControlPlane(
+  preferences: DesktopPreferences,
+  input: UpsertDesktopSavedControlPlaneInput,
+): DesktopPreferences {
+  const nextControlPlane: DesktopSavedControlPlane = {
+    provider: input.provider,
+    account: input.account,
+    environments: input.environments ?? [],
+    last_synced_at_ms: normalizeLastUsedAtMS(input.last_synced_at_ms, Date.now()),
+  };
+  const key = desktopControlPlaneKey(nextControlPlane.provider.provider_origin, nextControlPlane.provider.provider_id);
+  const controlPlanes = sortSavedControlPlanes([
+    nextControlPlane,
+    ...preferences.control_planes.filter((controlPlane) => (
+      desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) !== key
+    )),
+  ]);
+
+  return {
+    ...preferences,
+    control_planes: controlPlanes,
+  };
+}
+
 export function deleteSavedEnvironment(
   preferences: DesktopPreferences,
   environmentID: string,
@@ -367,6 +541,20 @@ export function deleteSavedEnvironment(
     ...preferences,
     saved_environments: savedEnvironments,
     recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
+  };
+}
+
+export function deleteSavedControlPlane(
+  preferences: DesktopPreferences,
+  providerOrigin: string,
+  providerID: string,
+): DesktopPreferences {
+  const key = desktopControlPlaneKey(providerOrigin, providerID);
+  return {
+    ...preferences,
+    control_planes: preferences.control_planes.filter((controlPlane) => (
+      desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) !== key
+    )),
   };
 }
 
@@ -500,6 +688,7 @@ export function validateDesktopSettingsDraft(
     pending_bootstrap: pendingBootstrap,
     saved_environments: [],
     recent_external_local_ui_urls: [],
+    control_planes: [],
   };
 }
 
@@ -622,6 +811,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
   const localUIPasswordConfigured = Boolean(secretsFile?.local_ui_password);
   const localUIPassword = decodeOptionalSecret(codec, secretsFile?.local_ui_password);
+  const controlPlaneSessionTokensByKey = decodeDesktopControlPlaneSessionTokens(codec, secretsFile?.control_planes);
 
   const recovered = validateDesktopSettingsDraft(recoverDesktopPreferencesDraft({
     local_ui_bind: preferencesFile?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
@@ -641,11 +831,16 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     preferencesFile?.saved_environments,
     preferencesFile?.recent_external_local_ui_urls,
   );
+  const controlPlanes = normalizeSavedControlPlanes(
+    preferencesFile?.control_planes,
+    controlPlaneSessionTokensByKey,
+  );
 
   return {
     ...recovered,
     saved_environments: savedEnvironments,
     recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
+    control_planes: controlPlanes,
   };
 }
 
@@ -663,10 +858,11 @@ export async function saveDesktopPreferences(
     preferences.saved_environments,
     preferences.recent_external_local_ui_urls,
   );
+  const controlPlanes = sortSavedControlPlanes(preferences.control_planes);
   const recentExternalLocalUIURLs = deriveRecentExternalLocalUIURLs(savedEnvironments);
 
   const preferencesFile: DesktopPreferencesFile = {
-    version: 3,
+    version: 4,
     local_ui_bind: nextPreferences.local_ui_bind,
     saved_environments: savedEnvironments.map((environment) => ({
       id: environment.id,
@@ -676,6 +872,31 @@ export async function saveDesktopPreferences(
       last_used_at_ms: environment.last_used_at_ms,
     })),
     recent_external_local_ui_urls: recentExternalLocalUIURLs,
+    control_planes: controlPlanes.map((controlPlane) => ({
+      provider: {
+        protocol_version: controlPlane.provider.protocol_version,
+        provider_id: controlPlane.provider.provider_id,
+        display_name: controlPlane.provider.display_name,
+        provider_origin: controlPlane.provider.provider_origin,
+        documentation_url: controlPlane.provider.documentation_url,
+      },
+      account: {
+        user_public_id: controlPlane.account.user_public_id,
+        user_display_name: controlPlane.account.user_display_name,
+        expires_at_unix_ms: controlPlane.account.expires_at_unix_ms,
+      },
+      environments: controlPlane.environments.map((environment) => ({
+        env_public_id: environment.env_public_id,
+        name: environment.label,
+        description: environment.description,
+        namespace_public_id: environment.namespace_public_id,
+        namespace_name: environment.namespace_name,
+        status: environment.status,
+        lifecycle_status: environment.lifecycle_status,
+        last_seen_at_unix_ms: environment.last_seen_at_unix_ms,
+      })),
+      last_synced_at_ms: controlPlane.last_synced_at_ms,
+    })),
     pending_bootstrap: nextPreferences.pending_bootstrap
       ? {
           controlplane_url: nextPreferences.pending_bootstrap.controlplane_url,
@@ -690,6 +911,11 @@ export async function saveDesktopPreferences(
           ? codec.encodeSecret(nextPreferences.local_ui_password)
           : existingSecretsFile?.local_ui_password)
       : undefined,
+    control_planes: controlPlanes.map((controlPlane) => ({
+      provider_origin: controlPlane.provider.provider_origin,
+      provider_id: controlPlane.provider.provider_id,
+      session_token: codec.encodeSecret(controlPlane.account.session_token),
+    })),
     pending_bootstrap: nextPreferences.pending_bootstrap
       ? {
           env_token: codec.encodeSecret(nextPreferences.pending_bootstrap.env_token),

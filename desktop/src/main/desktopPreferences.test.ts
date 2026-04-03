@@ -41,6 +41,7 @@ describe('desktopPreferences', () => {
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
+      control_planes: [],
     });
   });
 
@@ -128,6 +129,7 @@ describe('desktopPreferences', () => {
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -165,6 +167,7 @@ describe('desktopPreferences', () => {
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -205,6 +208,7 @@ describe('desktopPreferences', () => {
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -228,6 +232,7 @@ describe('desktopPreferences', () => {
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -274,6 +279,7 @@ describe('desktopPreferences', () => {
           },
         ],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+        control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -485,6 +491,7 @@ describe('desktopPreferences', () => {
         },
       ],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+      control_planes: [],
     })).toEqual({
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password: '',
@@ -515,6 +522,7 @@ describe('desktopPreferences', () => {
         },
       ],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+      control_planes: [],
     })).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
@@ -530,6 +538,7 @@ describe('desktopPreferences', () => {
         },
       ],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+      control_planes: [],
     });
   });
 
@@ -541,6 +550,7 @@ describe('desktopPreferences', () => {
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
+      control_planes: [],
     });
     const right = managedDesktopLaunchKey({
       local_ui_bind: '0.0.0.0:24000',
@@ -549,6 +559,7 @@ describe('desktopPreferences', () => {
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
+      control_planes: [],
     });
 
     expect(left).not.toBe(right);
@@ -572,6 +583,7 @@ describe('desktopPreferences', () => {
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
+      control_planes: [],
     });
   });
 
@@ -593,6 +605,7 @@ describe('desktopPreferences', () => {
       pending_bootstrap: null,
       saved_environments: [],
       recent_external_local_ui_urls: [],
+      control_planes: [],
     });
   });
 });

@@ -21,15 +21,18 @@ This document describes the public Electron desktop shell that ships with each `
 - Session deduplication happens in Electron main through a canonical session key:
   - `managed_local` for the desktop-managed Local Environment
   - `url:<normalized-local-ui-origin>` for remote Local UI targets
+  - `cp:<encoded-provider-origin>:env:<env_public_id>` for Control Plane environments
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
   - `Local Environment`
   - a remembered recent Environment
   - a newly entered Redeven Local UI URL
+  - a saved compatible `Control Plane`
 - Reopening the launcher from an active session does not disconnect anything. Existing Environment windows stay live until the user closes those specific session windows.
 - Common startup failures return to the launcher with inline context instead of bouncing users to a separate blocked-first flow.
 - Electron only allows session-owned navigation to the exact reported Local UI origin for that session and opens all other URLs in the system browser.
+- Control Plane providers use one fixed public protocol surface (`RCPP v1`). Desktop does not negotiate capability matrices with providers.
 
 ## Runtime Contract
 
@@ -52,12 +55,14 @@ Desktop may add user-configured startup flags on top of that base command:
 - `--controlplane <url>`
 - `--env-id <env_public_id>`
 - `--env-token-env REDEVEN_DESKTOP_ENV_TOKEN`
+- `--bootstrap-ticket-env REDEVEN_DESKTOP_BOOTSTRAP_TICKET`
 
 Behavior:
 
 - Local UI always starts for `Local Environment`.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - The Local UI password stays out of process args and environment variables.
+- The one-time bootstrap ticket also stays out of process args and is passed only through a desktop-owned environment variable.
 - Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
 - Remote control is enabled only when the local config is already bootstrapped and remote-valid.
 - `--desktop-managed` disables CLI self-upgrade semantics.
@@ -97,6 +102,7 @@ Visual hierarchy:
   - `Local Environment`
 - secondary workbench column:
   - `Environment Library`
+  - `Control Planes`
   - `Add` (`Add Connection` in tooltip and accessibility copy)
   - `All / Open / Recent / Saved` filters
 - activity bar:
@@ -109,6 +115,7 @@ Interaction rules:
 - `Local Environment` is the primary path and behaves like a workbench-style open action.
 - `Local Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window.
 - The `Add` action opens a dialog that can either connect immediately or save a remote Environment into the library.
+- `Add Control Plane` opens a separate dialog that accepts a Provider URL plus a `desktop_session_token`.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -117,6 +124,7 @@ Interaction rules:
 - The launcher shows every currently open Environment window and can focus any of them without opening duplicates.
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a compact library table and can be opened, edited, or deleted inline.
+- Saved Control Planes render as a separate provider list with refresh, delete, and per-environment open/focus actions.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
@@ -167,6 +175,7 @@ Desktop keeps one persisted preference model for stable `Local Environment` conf
 - `pending_bootstrap`
 - `saved_environments`
 - `recent_external_local_ui_urls`
+- `control_planes`
 
 Semantics:
 
@@ -176,6 +185,7 @@ Semantics:
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
+- `control_planes` stores normalized provider discovery data, the desktop account snapshot, the cached environment list, and the last sync time.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 
 Desktop maps user-facing local-access decisions back onto the same runtime contract:
@@ -198,6 +208,37 @@ Target validation rules:
 - The shell normalizes the configured target to the Local UI origin root.
 
 Desktop shell preferences live under the Electron user data directory, not inside the git checkout.
+
+## Control Plane Provider Protocol
+
+Desktop supports compatible first-party and third-party control planes through one fixed provider contract:
+
+- discovery: `GET /.well-known/redeven-provider.json`
+- desktop session token account lookup: `GET /api/rcpp/v1/me`
+- provider environment list: `GET /api/rcpp/v1/environments`
+- per-environment bootstrap ticket: `POST /api/rcpp/v1/environments/:env_public_id/desktop/bootstrap-ticket`
+- runtime bootstrap exchange: `POST /api/rcpp/v1/runtime/bootstrap/exchange`
+
+Desktop assumptions:
+
+- The provider either implements the fixed contract or it does not.
+- Desktop does not ask the provider for a capability matrix.
+- Runtime features still come from the runtime itself, not from provider feature declarations.
+
+The Control Plane flow is:
+
+1. Desktop discovers the provider from its origin.
+2. The user pastes a short-lived `desktop_session_token`.
+3. Desktop loads `me` and `environments`.
+4. Desktop requests a one-time `bootstrap_ticket` for one environment.
+5. The managed runtime exchanges that ticket for direct connect info.
+
+Browser handoff may also open Desktop through a custom protocol link:
+
+- `redeven://control-plane/connect?...`
+- `redeven://control-plane/open?...`
+
+For `open`, the provider origin, target environment ID, and one-time `bootstrap_ticket` are sufficient. `provider_id` is optional because Desktop can resolve it through discovery.
 
 ## Shell-Owned Theme State
 
@@ -251,6 +292,7 @@ Non-goals:
 - Cold app launch opens the singleton launcher window.
 - The native app menu exposes one primary shell action: `Connect Environment...`
 - Shell window aliases such as `connect` route to the same welcome launcher.
+- Compatible providers may also enter through the registered `redeven://` deep-link scheme.
 - Generic settings aliases such as `advanced_settings` route to the launcher-owned `Local Environment Settings` dialog.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
 - `Switch Environment` focuses or opens the singleton launcher instead of replacing the active Environment session window.

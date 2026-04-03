@@ -77,3 +77,68 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		t.Fatalf("Direct = %#v", cfg.Direct)
 	}
 }
+
+func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("method = %s, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/rcpp/v1/runtime/bootstrap/exchange" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
+			t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+  "direct": {
+    "ws_url": "wss://region.example.invalid/control/ws",
+    "channel_id": "ch_ticket",
+    "e2ee_psk_b64u": "cHNr",
+    "channel_init_expire_at_unix_s": 4102444800
+  }
+}`))
+	}))
+	defer server.Close()
+
+	cfgPath := filepath.Join(t.TempDir(), "config.json")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
+		ControlplaneBaseURL: server.URL,
+		EnvironmentID:       "env_123",
+		BootstrapTicket:     "ticket-123",
+		ConfigPath:          cfgPath,
+	})
+	if err != nil {
+		t.Fatalf("BootstrapConfig() error = %v", err)
+	}
+	if writtenPath != cfgPath {
+		t.Fatalf("writtenPath = %q, want %q", writtenPath, cfgPath)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_ticket" {
+		t.Fatalf("Direct = %#v", cfg.Direct)
+	}
+}
+
+func TestBootstrapConfigRejectsMultipleCredentials(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err := BootstrapConfig(ctx, BootstrapArgs{
+		ControlplaneBaseURL: "https://region.example.invalid",
+		EnvironmentID:       "env_123",
+		EnvironmentToken:    "token-123",
+		BootstrapTicket:     "ticket-123",
+		ConfigPath:          filepath.Join(t.TempDir(), "config.json"),
+	})
+	if err == nil || err.Error() != "provide only one of environment token or bootstrap ticket" {
+		t.Fatalf("BootstrapConfig() error = %v", err)
+	}
+}

@@ -14,6 +14,7 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"env_123",
 			"token-123",
 			"",
+			"",
 			runModeDesktop,
 			true,
 		)
@@ -30,6 +31,7 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"https://region.example.invalid",
 			"env_123",
 			"token-123",
+			"",
 			"execute_read",
 			runModeHybrid,
 			false,
@@ -43,6 +45,26 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 		}
 		assertRunBootstrapArgsCore(t, got)
 	})
+
+	t.Run("bootstrap ticket args populate the alternate credential field", func(t *testing.T) {
+		got := buildRunBootstrapArgs(
+			"/tmp/redeven/envs/env_123/config.json",
+			"https://region.example.invalid",
+			"env_123",
+			"",
+			"ticket-123",
+			"",
+			runModeDesktop,
+			false,
+		)
+
+		if got.EnvironmentToken != "" {
+			t.Fatalf("EnvironmentToken = %q, want empty", got.EnvironmentToken)
+		}
+		if got.BootstrapTicket != "ticket-123" {
+			t.Fatalf("BootstrapTicket = %q, want %q", got.BootstrapTicket, "ticket-123")
+		}
+	})
 }
 
 func assertRunBootstrapArgsCore(t *testing.T, got config.BootstrapArgs) {
@@ -55,5 +77,8 @@ func assertRunBootstrapArgsCore(t *testing.T, got config.BootstrapArgs) {
 	}
 	if got.EnvironmentToken != "token-123" {
 		t.Fatalf("EnvironmentToken = %q", got.EnvironmentToken)
+	}
+	if got.BootstrapTicket != "" {
+		t.Fatalf("BootstrapTicket = %q, want empty", got.BootstrapTicket)
 	}
 }

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildControlPlaneDesktopTarget,
   buildExternalLocalUIDesktopTarget,
   buildManagedLocalDesktopTarget,
+  controlPlaneDesktopSessionKey,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
 } from './desktopTarget';
@@ -41,5 +43,23 @@ describe('desktopTarget', () => {
       }),
     );
     expect(desktopSessionStateKeyFragment('url:http://192.168.1.12:24000/')).toBe('url%3Ahttp%3A%2F%2F192.168.1.12%3A24000%2F');
+  });
+
+  it('builds provider-backed targets with provider-scoped session keys', () => {
+    expect(controlPlaneDesktopSessionKey('https://cp.example.invalid/path', ' env_demo ')).toBe(
+      'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+    );
+    expect(buildControlPlaneDesktopTarget('https://cp.example.invalid/path', ' env_demo ', {
+      providerID: ' redeven_portal ',
+      label: ' Demo Environment ',
+    })).toEqual({
+      kind: 'controlplane_environment',
+      session_key: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      environment_id: 'env_demo',
+      provider_id: 'redeven_portal',
+      provider_origin: 'https://cp.example.invalid',
+      env_public_id: 'env_demo',
+      label: 'Demo Environment',
+    });
   });
 });

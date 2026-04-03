@@ -12,7 +12,9 @@ const (
 	exampleControlplaneURL = "https://region.example.invalid"
 	exampleEnvID           = "env_123"
 	exampleEnvToken        = "<token>"
+	exampleBootstrapTicket = "<bootstrap-ticket>"
 	examplePasswordEnv     = "REDEVEN_LOCAL_UI_PASSWORD"
+	exampleBootstrapEnv    = "REDEVEN_BOOTSTRAP_TICKET"
 )
 
 func rootHelpText() string {
@@ -62,13 +64,16 @@ redeven bootstrap
 Exchange an environment token for local runtime config.
 
 Usage:
-  redeven bootstrap --controlplane <url> --env-id <env_public_id> (--env-token <token> | --env-token-env <env_name>) [flags]
+  redeven bootstrap --controlplane <url> --env-id <env_public_id> [credential flags] [flags]
 
 Required flags:
   --controlplane <url>              Controlplane base URL.
   --env-id <env_public_id>          Environment public ID.
-  --env-token <token>               Environment token. "Bearer <token>" is also accepted.
-  --env-token-env <env_name>        Read the environment token from an environment variable.
+  One bootstrap credential:
+    --env-token <token>               Environment token. "Bearer <token>" is also accepted.
+    --env-token-env <env_name>        Read the environment token from an environment variable.
+    --bootstrap-ticket <ticket>       One-time bootstrap ticket. "Bearer <ticket>" is also accepted.
+    --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
 
 Optional flags:
   --agent-home-dir <path>           Runtime home dir for filesystem-facing features.
@@ -87,13 +92,16 @@ Examples:
   Minimal bootstrap:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
 
+  Bootstrap from a one-time desktop handoff ticket:
+    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[4]s
+
   Bootstrap with a stricter permission preset:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s --permission-policy read_only
 
   Bootstrap, then start the runtime:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
     redeven run --mode hybrid
-`, exampleControlplaneURL, exampleEnvID, exampleEnvToken), "\n")
+`, exampleControlplaneURL, exampleEnvID, exampleEnvToken, exampleBootstrapTicket), "\n")
 }
 
 func runHelpText() string {
@@ -113,7 +121,7 @@ Modes:
 
 Bootstrap rules:
   - Recommended flow: run %[5]s once, then use %[6]s.
-  - One-shot flow: pass --controlplane, --env-id, and either --env-token or --env-token-env to %[6]s.
+  - One-shot flow: pass --controlplane, --env-id, and exactly one bootstrap credential to %[6]s.
 
 Local UI bind rules:
   - Default bind: localhost:23998
@@ -133,6 +141,8 @@ Flags:
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
   --env-token <token>               Environment token for one-shot bootstrap.
   --env-token-env <env_name>        Read the environment token from an environment variable.
+  --bootstrap-ticket <ticket>       One-time bootstrap ticket for one-shot bootstrap.
+  --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
   --permission-policy <preset>      Local permission policy when bootstrapping inline.
   --password <password>             Access password for the Local UI.
   --password-stdin                  Read the Local UI password from stdin.
@@ -158,12 +168,15 @@ Examples:
     redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000
 
   Hybrid mode exposed to another machine on a trusted network:
-    %[4]s=replace-with-a-long-password \
-    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[4]s
+    %[8]s=replace-with-a-long-password \
+    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[8]s
 
   One-shot hybrid run without a separate bootstrap step:
     redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --env-token %[3]s
-`, exampleControlplaneURL, exampleEnvID, exampleEnvToken, examplePasswordEnv, "`redeven bootstrap`", "`redeven run`"), "\n")
+
+  One-shot desktop handoff run with a bootstrap ticket:
+    %[7]s=%[4]s redeven run --mode desktop --desktop-managed --controlplane %[1]s --env-id %[2]s --bootstrap-ticket-env %[7]s
+`, exampleControlplaneURL, exampleEnvID, exampleEnvToken, exampleBootstrapTicket, "`redeven bootstrap`", "`redeven run`", exampleBootstrapEnv, examplePasswordEnv), "\n")
 }
 
 func searchHelpText() string {
@@ -449,6 +462,24 @@ func translateEnvTokenOptionError(err error, command string) (string, []string) 
 		}
 	}
 	return fmt.Sprintf("invalid environment token flags: %v", err), nil
+}
+
+func translateBootstrapTicketOptionError(err error, command string) (string, []string) {
+	var optErr *bootstrapTicketOptionError
+	if errors.As(err, &optErr) {
+		switch optErr.kind {
+		case bootstrapTicketOptionErrorMultipleSources:
+			return "invalid bootstrap ticket flags: use only one of --bootstrap-ticket or --bootstrap-ticket-env",
+				[]string{fmt.Sprintf("Hint: choose a single bootstrap ticket source for `%s`.", command)}
+		case bootstrapTicketOptionErrorEnvNotSet:
+			return fmt.Sprintf("invalid bootstrap ticket flags: bootstrap ticket env var %q is not set", optErr.envName),
+				[]string{fmt.Sprintf("Hint: export %s with a non-empty ticket before running `%s`.", optErr.envName, command)}
+		case bootstrapTicketOptionErrorEnvEmpty:
+			return fmt.Sprintf("invalid bootstrap ticket flags: bootstrap ticket env var %q is empty", optErr.envName),
+				[]string{fmt.Sprintf("Hint: set %s to a non-empty ticket and retry.", optErr.envName)}
+		}
+	}
+	return fmt.Sprintf("invalid bootstrap ticket flags: %v", err), nil
 }
 
 func translatePasswordVerificationError(err error) (string, []string) {

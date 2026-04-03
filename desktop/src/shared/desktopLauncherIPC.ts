@@ -1,11 +1,12 @@
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
+import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
 export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launcher-snapshot-updated';
 
-export type DesktopTargetKind = 'managed_local' | 'external_local_ui';
+export type DesktopTargetKind = 'managed_local' | 'external_local_ui' | 'controlplane_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'local_environment_settings';
@@ -15,8 +16,12 @@ export type DesktopEnvironmentEntryCategory = 'local_environment' | 'open_unsave
 export type DesktopLauncherActionKind =
   | 'open_local_environment'
   | 'open_remote_environment'
+  | 'connect_control_plane'
   | 'open_local_environment_settings'
   | 'focus_environment_window'
+  | 'open_control_plane_environment'
+  | 'refresh_control_plane'
+  | 'delete_control_plane'
   | 'upsert_saved_environment'
   | 'delete_saved_environment'
   | 'close_launcher_or_quit';
@@ -61,6 +66,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
   close_action_label: 'Quit' | 'Close Launcher';
   open_windows: readonly DesktopOpenEnvironmentWindow[];
   environments: readonly DesktopEnvironmentEntry[];
+  control_planes: readonly DesktopControlPlaneSummary[];
   suggested_remote_url: string;
   issue: DesktopWelcomeIssue | null;
   settings_surface: DesktopSettingsSurfaceSnapshot;
@@ -77,11 +83,32 @@ export type DesktopLauncherActionRequest = Readonly<
       label?: string;
     }
   | {
+      kind: 'connect_control_plane';
+      provider_origin: string;
+      session_token: string;
+    }
+  | {
       kind: 'open_local_environment_settings';
     }
   | {
       kind: 'focus_environment_window';
       session_key: string;
+    }
+  | {
+      kind: 'open_control_plane_environment';
+      provider_origin: string;
+      provider_id: string;
+      env_public_id: string;
+    }
+  | {
+      kind: 'refresh_control_plane';
+      provider_origin: string;
+      provider_id: string;
+    }
+  | {
+      kind: 'delete_control_plane';
+      provider_origin: string;
+      provider_id: string;
     }
   | {
       kind: 'upsert_saved_environment';
@@ -104,6 +131,9 @@ export type DesktopLauncherActionResult = Readonly<{
     | 'focused_environment_window'
     | 'opened_utility_window'
     | 'focused_utility_window'
+    | 'connected_control_plane'
+    | 'refreshed_control_plane'
+    | 'deleted_control_plane'
     | 'saved_environment'
     | 'deleted_environment'
     | 'closed_launcher'
@@ -135,6 +165,12 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
         label: compact((candidate as { label?: unknown }).label) || undefined,
       };
+    case 'connect_control_plane':
+      return {
+        kind,
+        provider_origin: compact((candidate as { provider_origin?: unknown }).provider_origin),
+        session_token: compact((candidate as { session_token?: unknown }).session_token),
+      };
     case 'focus_environment_window': {
       const sessionKey = compact((candidate as { session_key?: unknown }).session_key);
       if (sessionKey === '') {
@@ -143,6 +179,32 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         session_key: sessionKey,
+      };
+    }
+    case 'open_control_plane_environment':
+    case 'refresh_control_plane':
+    case 'delete_control_plane': {
+      const providerOrigin = compact((candidate as { provider_origin?: unknown }).provider_origin);
+      const providerID = compact((candidate as { provider_id?: unknown }).provider_id);
+      if (providerOrigin === '' || providerID === '') {
+        return null;
+      }
+      if (kind === 'delete_control_plane' || kind === 'refresh_control_plane') {
+        return {
+          kind,
+          provider_origin: providerOrigin,
+          provider_id: providerID,
+        };
+      }
+      const envPublicID = compact((candidate as { env_public_id?: unknown }).env_public_id);
+      if (envPublicID === '') {
+        return null;
+      }
+      return {
+        kind,
+        provider_origin: providerOrigin,
+        provider_id: providerID,
+        env_public_id: envPublicID,
       };
     }
     case 'upsert_saved_environment':

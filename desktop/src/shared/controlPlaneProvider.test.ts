@@ -1,0 +1,125 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  normalizeControlPlaneOrigin,
+  normalizeDesktopControlPlaneAccount,
+  normalizeDesktopControlPlaneProvider,
+  normalizeDesktopProviderEnvironmentList,
+} from './controlPlaneProvider';
+
+describe('controlPlaneProvider', () => {
+  it('normalizes provider origins to a stable root URL', () => {
+    expect(normalizeControlPlaneOrigin(' https://cp.example.invalid/env/list?q=1#hash ')).toBe(
+      'https://cp.example.invalid',
+    );
+    expect(normalizeControlPlaneOrigin('http://127.0.0.1:8094/base/')).toBe(
+      'http://127.0.0.1:8094',
+    );
+  });
+
+  it('rejects invalid provider origins', () => {
+    expect(() => normalizeControlPlaneOrigin('')).toThrow('Control Plane URL is required.');
+    expect(() => normalizeControlPlaneOrigin('cp.example.invalid')).toThrow(
+      'Control Plane URL must be a valid absolute URL.',
+    );
+    expect(() => normalizeControlPlaneOrigin('ftp://cp.example.invalid')).toThrow(
+      'Control Plane URL must start with http:// or https://.',
+    );
+  });
+
+  it('normalizes discovery payloads', () => {
+    expect(normalizeDesktopControlPlaneProvider({
+      protocol_version: 'rcpp-v1',
+      provider_id: ' redeven_portal ',
+      display_name: ' Redeven Portal ',
+      provider_origin: 'https://cp.example.invalid/root/path',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    })).toEqual({
+      protocol_version: 'rcpp-v1',
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    });
+    expect(normalizeDesktopControlPlaneProvider({
+      protocol_version: 'unknown',
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    })).toBeNull();
+  });
+
+  it('normalizes provider accounts from me responses', () => {
+    const provider = normalizeDesktopControlPlaneProvider({
+      protocol_version: 'rcpp-v1',
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    });
+    expect(provider).not.toBeNull();
+
+    expect(normalizeDesktopControlPlaneAccount({
+      user_public_id: ' user_demo ',
+      user_display_name: ' Demo User ',
+      expires_at_unix_ms: 1_770_000_000_000,
+    }, {
+      provider: provider!,
+      sessionToken: ' token-123 ',
+    })).toEqual({
+      provider_id: 'redeven_portal',
+      provider_origin: 'https://cp.example.invalid',
+      display_name: 'Redeven Portal',
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      session_token: 'token-123',
+      expires_at_unix_ms: 1_770_000_000_000,
+    });
+  });
+
+  it('normalizes provider environment lists while dropping malformed rows', () => {
+    const provider = normalizeDesktopControlPlaneProvider({
+      protocol_version: 'rcpp-v1',
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    });
+    expect(provider).not.toBeNull();
+
+    expect(normalizeDesktopProviderEnvironmentList({
+      environments: [
+        {
+          env_public_id: ' env_123 ',
+          name: ' Staging ',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 10,
+        },
+        {
+          env_public_id: '',
+          name: 'Broken',
+        },
+      ],
+    }, {
+      provider: provider!,
+    })).toEqual([
+      {
+        provider_id: 'redeven_portal',
+        provider_origin: 'https://cp.example.invalid',
+        env_public_id: 'env_123',
+        label: 'Staging',
+        description: 'team sandbox',
+        namespace_public_id: 'ns_demo',
+        namespace_name: 'Demo Team',
+        status: 'online',
+        lifecycle_status: 'active',
+        last_seen_at_unix_ms: 10,
+      },
+    ]);
+  });
+});

@@ -53,6 +53,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 - Keep application data on the endpoint while the control plane only issues grants and metadata.
 - Give users one entry point for files, terminals, monitoring, codespaces, and optional AI workflows.
 - Ship the same runtime as a CLI and as a desktop app, with versioned GitHub Release artifacts and verification steps.
+- Let compatible first-party or third-party control planes integrate through one fixed provider protocol instead of product-specific desktop adapters.
 
 ## Key technologies
 
@@ -69,7 +70,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 | --- | --- | --- | --- |
 | `Env App` 🗂️ | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Runtime Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | `Code App` 💻 | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
-| `Desktop Shell` 🖥️ | Native Electron app that keeps a singleton launcher/settings shell plus multiple deduplicated Environment windows | Local UX, chooser-first environment selection, multi-environment desktop sessions, blocked-state recovery, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| `Desktop Shell` 🖥️ | Native Electron app that keeps a singleton launcher/settings shell plus multiple deduplicated Environment windows | Local UX, chooser-first environment selection, multi-environment desktop sessions, compatible Control Plane providers, blocked-state recovery, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | `Flower` (optional) 🌸 | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
 | `Codex` (optional) 🤖 | Independent Codex conversation threads backed by the host machine's `codex app-server` | Keeps Codex UI, official Codex branding, and upgrade cadence separate from Flower while giving Codex its own navigator/chat shell inside Env App | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 
@@ -79,7 +80,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 | --- | --- | --- |
 | Secure remote environment access 🔐 | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
 | Browser-based development ⚙️ | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the local runtime gateway and Flowersec E2EE proxy |
-| Desktop operations 🖥️ | Start Redeven Desktop, open the Local Environment or multiple remote Environments, and move between them without duplicate windows | Use the startup launcher, dedicated Local Environment Settings window, diagnostics, and shell-owned connection management around the same runtime contract |
+| Desktop operations 🖥️ | Start Redeven Desktop, open the Local Environment, direct Local UI URLs, or compatible Control Plane environments, and move between them without duplicate windows | Use the startup launcher, dedicated Local Environment Settings window, diagnostics, and shell-owned connection management around the same runtime contract |
 
 ## Quick start
 
@@ -105,6 +106,8 @@ redeven bootstrap \
 ```
 
 Bootstrap writes the default local config to `~/.redeven/config.json` and applies the local permission cap preset `execute_read_write`.
+
+Desktop and browser handoff flows may use one-time `bootstrap_ticket` credentials instead of a long-lived `env_token`. The runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
 ### 3. Run the endpoint
 

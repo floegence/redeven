@@ -121,6 +121,8 @@ func (c *cli) bootstrapCmd(args []string) int {
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (raw token; 'Bearer <token>' is also accepted)")
 	envTokenEnv := fs.String("env-token-env", "", "Environment variable name holding the environment token")
+	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket (raw ticket; 'Bearer <ticket>' is also accepted)")
+	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
 
 	agentHomeDir := fs.String("agent-home-dir", "", "Runtime home dir used for filesystem-facing features (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
@@ -151,11 +153,29 @@ func (c *cli) bootstrapCmd(args []string) int {
 		writeErrorWithHelp(c.stderr, message, details, bootstrapHelpText())
 		return 2
 	}
+	resolvedBootstrapTicket, err := resolveBootstrapTicket(bootstrapTicketOptions{
+		ticket:    *bootstrapTicket,
+		ticketEnv: *bootstrapTicketEnv,
+	})
+	if err != nil {
+		message, details := translateBootstrapTicketOptionError(err, "redeven bootstrap")
+		writeErrorWithHelp(c.stderr, message, details, bootstrapHelpText())
+		return 2
+	}
+	if resolvedEnvToken != "" && resolvedBootstrapTicket != "" {
+		writeErrorWithHelp(
+			c.stderr,
+			"invalid bootstrap flags for `redeven bootstrap`: choose either an environment token or a bootstrap ticket",
+			[]string{"Hint: use exactly one bootstrap credential source for each bootstrap command."},
+			bootstrapHelpText(),
+		)
+		return 2
+	}
 
 	missing := findMissingFlags(
 		requiredFlag{name: "--controlplane", value: *controlplane},
 		requiredFlag{name: "--env-id", value: *envID},
-		requiredFlag{name: "one of --env-token or --env-token-env", value: resolvedEnvToken},
+		requiredFlag{name: "one bootstrap credential (--env-token/--env-token-env or --bootstrap-ticket/--bootstrap-ticket-env)", value: firstNonEmptyString([]string{resolvedEnvToken, resolvedBootstrapTicket})},
 	)
 	if len(missing) > 0 {
 		writeErrorWithHelp(
@@ -181,6 +201,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 		ControlplaneBaseURL:    *controlplane,
 		EnvironmentID:          *envID,
 		EnvironmentToken:       resolvedEnvToken,
+		BootstrapTicket:        resolvedBootstrapTicket,
 		AgentHomeDir:           *agentHomeDir,
 		Shell:                  *shell,
 		LogFormat:              *logFormat,
@@ -202,6 +223,8 @@ func (c *cli) runCmd(args []string) int {
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	envToken := fs.String("env-token", "", "Environment token (required when --controlplane/--env-id is set)")
 	envTokenEnv := fs.String("env-token-env", "", "Environment variable name holding the environment token")
+	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket (required when used instead of --env-token)")
+	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (optional; applies when bootstrapping)")
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
@@ -256,6 +279,24 @@ func (c *cli) runCmd(args []string) int {
 		writeErrorWithHelp(c.stderr, message, details, runHelpText())
 		return 2
 	}
+	resolvedBootstrapTicket, err := resolveBootstrapTicket(bootstrapTicketOptions{
+		ticket:    *bootstrapTicket,
+		ticketEnv: *bootstrapTicketEnv,
+	})
+	if err != nil {
+		message, details := translateBootstrapTicketOptionError(err, "redeven run")
+		writeErrorWithHelp(c.stderr, message, details, runHelpText())
+		return 2
+	}
+	if resolvedEnvToken != "" && resolvedBootstrapTicket != "" {
+		writeErrorWithHelp(
+			c.stderr,
+			"invalid bootstrap flags for `redeven run`: choose either an environment token or a bootstrap ticket",
+			[]string{"Hint: use exactly one bootstrap credential source for each run command."},
+			runHelpText(),
+		)
+		return 2
+	}
 
 	if *desktopManaged && mode == runModeRemote {
 		writeErrorWithHelp(
@@ -285,12 +326,13 @@ func (c *cli) runCmd(args []string) int {
 	// This avoids overwriting the global ~/.redeven/config.json.
 	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
 		strings.TrimSpace(*envID) != "" ||
-		resolvedEnvToken != ""
+		resolvedEnvToken != "" ||
+		resolvedBootstrapTicket != ""
 	if bootstrapViaFlags {
 		missing := findMissingFlags(
 			requiredFlag{name: "--controlplane", value: *controlplane},
 			requiredFlag{name: "--env-id", value: *envID},
-			requiredFlag{name: "one of --env-token or --env-token-env", value: resolvedEnvToken},
+			requiredFlag{name: "one bootstrap credential (--env-token/--env-token-env or --bootstrap-ticket/--bootstrap-ticket-env)", value: firstNonEmptyString([]string{resolvedEnvToken, resolvedBootstrapTicket})},
 		)
 		if len(missing) > 0 {
 			label := "flags"
@@ -301,12 +343,20 @@ func (c *cli) runCmd(args []string) int {
 				c.stderr,
 				fmt.Sprintf("incomplete bootstrap flags for `redeven run`: missing %s %s", label, formatFlagList(missing)),
 				[]string{
-					"Hint: provide --controlplane, --env-id, and either --env-token or --env-token-env together, or run `redeven bootstrap` first.",
+					"Hint: provide --controlplane, --env-id, and exactly one bootstrap credential together, or run `redeven bootstrap` first.",
 					fmt.Sprintf(
 						"Example: redeven run --mode hybrid --controlplane %s --env-id %s --env-token %s",
 						exampleControlplaneURL,
 						exampleEnvID,
 						exampleEnvToken,
+					),
+					fmt.Sprintf(
+						"Example: %s=%s redeven run --mode desktop --desktop-managed --controlplane %s --env-id %s --bootstrap-ticket-env %s",
+						exampleBootstrapEnv,
+						exampleBootstrapTicket,
+						exampleControlplaneURL,
+						exampleEnvID,
+						exampleBootstrapEnv,
 					),
 				},
 				runHelpText(),
@@ -399,6 +449,7 @@ func (c *cli) runCmd(args []string) int {
 			*controlplane,
 			*envID,
 			resolvedEnvToken,
+			resolvedBootstrapTicket,
 			*permissionPolicy,
 			mode,
 			*desktopManaged,
@@ -569,6 +620,7 @@ func buildRunBootstrapArgs(
 	controlplane string,
 	envID string,
 	envToken string,
+	bootstrapTicket string,
 	permissionPolicy string,
 	mode runMode,
 	desktopManaged bool,
@@ -577,6 +629,7 @@ func buildRunBootstrapArgs(
 		ControlplaneBaseURL:    controlplane,
 		EnvironmentID:          envID,
 		EnvironmentToken:       envToken,
+		BootstrapTicket:        bootstrapTicket,
 		ConfigPath:             configPath,
 		PermissionPolicyPreset: permissionPolicy,
 	}
@@ -593,10 +646,11 @@ func (c *cli) printNotBootstrappedGuidance(reason error) int {
 		c.stderr,
 		fmt.Sprintf("runtime is not bootstrapped for remote or hybrid mode: %v", reason),
 		[]string{
-			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and either --env-token or --env-token-env directly to `redeven run`.",
+			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and exactly one bootstrap credential directly to `redeven run`.",
 			"Examples:",
 			fmt.Sprintf("  redeven bootstrap --controlplane %s --env-id %s --env-token %s", exampleControlplaneURL, exampleEnvID, exampleEnvToken),
 			fmt.Sprintf("  redeven run --mode hybrid --controlplane %s --env-id %s --env-token %s", exampleControlplaneURL, exampleEnvID, exampleEnvToken),
+			fmt.Sprintf("  %s=%s redeven run --mode desktop --desktop-managed --controlplane %s --env-id %s --bootstrap-ticket-env %s", exampleBootstrapEnv, exampleBootstrapTicket, exampleControlplaneURL, exampleEnvID, exampleBootstrapEnv),
 		},
 		"",
 	)

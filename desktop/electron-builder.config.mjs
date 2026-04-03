@@ -62,6 +62,12 @@ export default {
   appId: 'com.floegence.redeven.desktop',
   productName: 'Redeven Desktop',
   artifactName: 'Redeven-Desktop-${version}-${os}-${arch}.${ext}',
+  protocols: [
+    {
+      name: 'Redeven Control Plane Link',
+      schemes: ['redeven'],
+    },
+  ],
   afterAllArtifactBuild: async (buildResult) => {
     const artifactPaths = await normalizeLinuxDesktopArtifactPaths(buildResult.artifactPaths);
     buildResult.artifactPaths.splice(0, buildResult.artifactPaths.length, ...artifactPaths);

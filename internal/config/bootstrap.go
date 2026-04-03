@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -21,6 +22,7 @@ type BootstrapArgs struct {
 	ControlplaneBaseURL string
 	EnvironmentID       string
 	EnvironmentToken    string
+	BootstrapTicket     string
 
 	ConfigPath string
 
@@ -38,6 +40,10 @@ type bootstrapResponse struct {
 	Direct *directv1.DirectConnectInfo `json:"direct"`
 }
 
+type bootstrapTicketExchangeRequest struct {
+	EnvPublicID string `json:"env_public_id"`
+}
+
 type bootstrapEnvelope struct {
 	Success bool              `json:"success"`
 	Data    bootstrapResponse `json:"data"`
@@ -51,13 +57,20 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	baseURL := strings.TrimSpace(args.ControlplaneBaseURL)
 	envID := strings.TrimSpace(args.EnvironmentID)
 	envToken := normalizeBearerToken(args.EnvironmentToken)
+	bootstrapTicket := normalizeBearerToken(args.BootstrapTicket)
 	cfgPath := strings.TrimSpace(args.ConfigPath)
 	if cfgPath == "" {
 		cfgPath = DefaultConfigPath()
 	}
 
-	if baseURL == "" || envID == "" || envToken == "" {
-		return "", errors.New("missing controlplane/env-id/env-token")
+	if baseURL == "" || envID == "" {
+		return "", errors.New("missing controlplane/env-id")
+	}
+	if envToken == "" && bootstrapTicket == "" {
+		return "", errors.New("missing bootstrap credential")
+	}
+	if envToken != "" && bootstrapTicket != "" {
+		return "", errors.New("provide only one of environment token or bootstrap ticket")
 	}
 
 	// Load previous config if present to preserve stable agent_instance_id.
@@ -66,7 +79,12 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		prev = c
 	}
 
-	direct, err := fetchBootstrap(ctx, baseURL, envID, envToken)
+	var direct *directv1.DirectConnectInfo
+	if bootstrapTicket != "" {
+		direct, err = exchangeBootstrapTicket(ctx, baseURL, envID, bootstrapTicket)
+	} else {
+		direct, err = fetchBootstrap(ctx, baseURL, envID, envToken)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -198,6 +216,49 @@ func fetchBootstrap(ctx context.Context, baseURL string, envID string, envToken 
 		return nil, errors.New("invalid bootstrap response: missing direct")
 	}
 	return env.Data.Direct, nil
+}
+
+func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, bootstrapTicket string) (*directv1.DirectConnectInfo, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return nil, fmt.Errorf("invalid controlplane url: %w", err)
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v1/runtime/bootstrap/exchange"
+	u.RawQuery = ""
+
+	payload, err := json.Marshal(bootstrapTicketExchangeRequest{EnvPublicID: envID})
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+bootstrapTicket)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bootstrap exchange failed: %s", strings.TrimSpace(string(body)))
+	}
+
+	var out bootstrapResponse
+	if err := json.Unmarshal(body, &out); err != nil {
+		return nil, fmt.Errorf("invalid bootstrap exchange json: %w", err)
+	}
+	if out.Direct == nil || strings.TrimSpace(out.Direct.WsUrl) == "" {
+		return nil, errors.New("invalid bootstrap exchange response: missing direct")
+	}
+	return out.Direct, nil
 }
 
 func newAgentInstanceID() (string, error) {

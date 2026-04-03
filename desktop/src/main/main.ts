@@ -6,18 +6,23 @@ import { buildAppMenuTemplate } from './appMenu';
 import {
   clearPendingBootstrap,
   createSafeStorageSecretCodec,
+  deleteSavedControlPlane,
   deleteSavedEnvironment,
   defaultDesktopPreferencesPaths,
   loadDesktopPreferences,
   rememberRecentExternalLocalUITarget,
   saveDesktopPreferences,
+  upsertSavedControlPlane,
   upsertSavedEnvironment,
   validateDesktopSettingsDraft,
+  type DesktopSavedControlPlane,
   type DesktopPreferences,
 } from './desktopPreferences';
 import {
+  buildControlPlaneDesktopTarget,
   buildExternalLocalUIDesktopTarget,
   buildManagedLocalDesktopTarget,
+  controlPlaneDesktopSessionKey,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
   managedLocalDesktopSessionKey,
@@ -25,10 +30,15 @@ import {
   type DesktopSessionSummary,
   type DesktopSessionTarget,
 } from './desktopTarget';
-import { buildDesktopAgentArgs, buildDesktopAgentEnvironment } from './desktopLaunch';
+import {
+  buildDesktopAgentArgs,
+  buildDesktopAgentEnvironment,
+  type DesktopAgentBootstrap,
+} from './desktopLaunch';
 import { parseLocalUIBind } from './localUIBind';
 import {
   buildBlockedLaunchIssue,
+  buildControlPlaneIssue,
   buildDesktopWelcomeSnapshot,
   buildRemoteConnectionIssue,
   type BuildDesktopWelcomeSnapshotArgs,
@@ -41,6 +51,12 @@ import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveWelcomeRende
 import { loadExternalLocalUIStartup } from './runtimeState';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
+import {
+  fetchProviderAccount,
+  fetchProviderDiscovery,
+  fetchProviderEnvironments,
+  requestDesktopBootstrapTicket,
+} from './controlPlaneProviderClient';
 import {
   applyRestoredWindowState,
   attachDesktopWindowStatePersistence,
@@ -97,6 +113,7 @@ import {
   type DesktopWelcomeEntryReason,
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
+import { desktopControlPlaneKey, normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
 
 type OpenDesktopWelcomeOptions = Readonly<{
   surface?: DesktopLauncherSurface;
@@ -184,6 +201,8 @@ let desktopThemeStateCache: DesktopThemeState | null = null;
 const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.REDEVEN_DESKTOP_OPEN_DEVTOOLS ?? '').trim().toLowerCase(),
 );
+const DESKTOP_PROTOCOL_SCHEME = 'redeven';
+const pendingDesktopDeepLinks: string[] = [];
 
 installStdioBrokenPipeGuards();
 
@@ -738,10 +757,16 @@ async function createSessionRecord(
 
   recordWindowLifecycle(
     diagnostics,
-    target.kind === 'managed_local' ? 'agent_started' : 'external_target_connected',
+    target.kind === 'managed_local'
+      ? 'agent_started'
+      : target.kind === 'controlplane_environment'
+        ? 'control_plane_environment_connected'
+        : 'external_target_connected',
     target.kind === 'managed_local'
       ? 'desktop opened a managed Local Environment session'
-      : 'desktop connected to an external Redeven Local UI target',
+      : target.kind === 'controlplane_environment'
+        ? 'desktop opened a Control Plane environment session'
+        : 'desktop connected to an external Redeven Local UI target',
     {
       target_url: startup.local_ui_url,
       attached: options.managedAgent?.attached === true,
@@ -903,6 +928,7 @@ async function prepareExternalTarget(targetURL: string): Promise<PreparedExterna
 
 type PrepareManagedTargetOptions = Readonly<{
   localUIBind?: string;
+  bootstrap?: DesktopAgentBootstrap | null;
 }>;
 
 async function prepareManagedTarget(
@@ -916,8 +942,13 @@ async function prepareManagedTarget(
   });
   const launch = await startManagedAgent({
     executablePath,
-    agentArgs: buildDesktopAgentArgs(preferences, { localUIBind: options?.localUIBind }),
-    env: buildDesktopAgentEnvironment(preferences),
+    agentArgs: buildDesktopAgentArgs(preferences, {
+      localUIBind: options?.localUIBind,
+      bootstrap: options?.bootstrap,
+    }),
+    env: buildDesktopAgentEnvironment(preferences, process.env, {
+      bootstrap: options?.bootstrap,
+    }),
     passwordStdin: preferences.local_ui_password,
     tempRoot: app.getPath('temp'),
     onLog: (stream, chunk) => {
@@ -974,6 +1005,128 @@ function resolveManagedRestartBindOverride(preferences: DesktopPreferences, star
 async function rememberRecentExternalTarget(rawURL: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await persistDesktopPreferences(rememberRecentExternalLocalUITarget(preferences, rawURL));
+}
+
+function savedControlPlaneByIdentity(
+  preferences: DesktopPreferences,
+  providerOrigin: string,
+  providerID: string,
+): DesktopSavedControlPlane | null {
+  const key = desktopControlPlaneKey(providerOrigin, providerID);
+  return preferences.control_planes.find((controlPlane) => (
+    desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) === key
+  )) ?? null;
+}
+
+async function syncControlPlaneAccount(
+  preferences: DesktopPreferences,
+  providerOrigin: string,
+  sessionToken: string,
+  expectedProviderID?: string,
+): Promise<Readonly<{
+  preferences: DesktopPreferences;
+  controlPlane: DesktopSavedControlPlane;
+}>> {
+  const provider = await fetchProviderDiscovery(providerOrigin);
+  const cleanExpectedProviderID = String(expectedProviderID ?? '').trim();
+  if (cleanExpectedProviderID !== '' && provider.provider_id !== cleanExpectedProviderID) {
+    throw new Error(`Provider ID mismatch: expected ${cleanExpectedProviderID}, got ${provider.provider_id}.`);
+  }
+  const account = await fetchProviderAccount(provider, sessionToken);
+  const environments = await fetchProviderEnvironments(provider, sessionToken);
+  const nextPreferences = upsertSavedControlPlane(preferences, {
+    provider,
+    account,
+    environments,
+    last_synced_at_ms: Date.now(),
+  });
+  const controlPlane = savedControlPlaneByIdentity(nextPreferences, provider.provider_origin, provider.provider_id);
+  if (!controlPlane) {
+    throw new Error('Desktop failed to save the Control Plane account.');
+  }
+  await persistDesktopPreferences(nextPreferences);
+  return {
+    preferences: nextPreferences,
+    controlPlane,
+  };
+}
+
+function controlPlaneEnvironmentLabel(
+  controlPlane: DesktopSavedControlPlane | null,
+  envPublicID: string,
+  fallbackLabel = '',
+): string {
+  const cleanEnvPublicID = String(envPublicID ?? '').trim();
+  const cleanFallback = String(fallbackLabel ?? '').trim();
+  const environment = controlPlane?.environments.find((entry) => entry.env_public_id === cleanEnvPublicID) ?? null;
+  return environment?.label || cleanFallback || cleanEnvPublicID;
+}
+
+async function openControlPlaneEnvironmentWithBootstrapTicket(args: Readonly<{
+  providerOrigin: string;
+  providerID?: string;
+  envPublicID: string;
+  bootstrapTicket: string;
+  label?: string;
+}>): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  const providerOrigin = normalizeControlPlaneOrigin(args.providerOrigin);
+  let providerID = String(args.providerID ?? '').trim();
+  let controlPlane = providerID === ''
+    ? preferences.control_planes.find((entry) => entry.provider.provider_origin === providerOrigin) ?? null
+    : savedControlPlaneByIdentity(preferences, providerOrigin, providerID);
+  if (providerID === '') {
+    if (controlPlane) {
+      providerID = controlPlane.provider.provider_id;
+    } else {
+      const provider = await fetchProviderDiscovery(providerOrigin);
+      providerID = provider.provider_id;
+      controlPlane = savedControlPlaneByIdentity(preferences, provider.provider_origin, provider.provider_id);
+    }
+  }
+  if (providerID === '') {
+    throw new Error('Desktop could not resolve the Control Plane provider ID.');
+  }
+  const sessionKey = controlPlaneDesktopSessionKey(args.providerOrigin, args.envPublicID);
+  const existingSession = liveSession(sessionKey);
+  if (existingSession) {
+    focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
+    return {
+      outcome: 'focused_environment_window',
+      session_key: existingSession.session_key,
+    };
+  }
+
+  const prepared = await prepareManagedTarget(preferences, {
+    bootstrap: {
+      kind: 'bootstrap_ticket',
+      controlplane_url: args.providerOrigin,
+      env_id: args.envPublicID,
+      bootstrap_ticket: args.bootstrapTicket,
+    },
+  });
+  if (!prepared.ok) {
+    return openUtilityWindow('launcher', {
+      entryReason: prepared.entryReason,
+      issue: prepared.issue,
+      stealAppFocus: true,
+    });
+  }
+
+  const target = buildControlPlaneDesktopTarget(args.providerOrigin, args.envPublicID, {
+    providerID,
+    label: controlPlaneEnvironmentLabel(controlPlane, args.envPublicID, args.label),
+  });
+  await createSessionRecord(target, prepared.launch.managedAgent.startup, {
+    managedAgent: prepared.launch.managedAgent,
+    stealAppFocus: true,
+  });
+  resetLauncherIssueState();
+  broadcastDesktopWelcomeSnapshots();
+  return {
+    outcome: 'opened_environment_window',
+    session_key: target.session_key,
+  };
 }
 
 async function openLocalEnvironmentFromLauncher(): Promise<DesktopLauncherActionResult> {
@@ -1074,6 +1227,87 @@ async function openRemoteEnvironmentFromLauncher(
     outcome: 'opened_environment_window',
     session_key: target.session_key,
   };
+}
+
+async function connectControlPlaneFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'connect_control_plane' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  await syncControlPlaneAccount(preferences, request.provider_origin, request.session_token);
+  resetLauncherIssueState();
+  return {
+    outcome: 'connected_control_plane',
+    utility_window_kind: 'launcher',
+  };
+}
+
+async function refreshControlPlaneFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'refresh_control_plane' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  const controlPlane = savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id);
+  if (!controlPlane) {
+    throw new Error('That Control Plane is no longer saved.');
+  }
+  await syncControlPlaneAccount(
+    preferences,
+    controlPlane.provider.provider_origin,
+    controlPlane.account.session_token,
+    controlPlane.provider.provider_id,
+  );
+  resetLauncherIssueState();
+  return {
+    outcome: 'refreshed_control_plane',
+    utility_window_kind: 'launcher',
+  };
+}
+
+async function deleteControlPlaneFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'delete_control_plane' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  await persistDesktopPreferences(deleteSavedControlPlane(preferences, request.provider_origin, request.provider_id));
+  resetLauncherIssueState();
+  return {
+    outcome: 'deleted_control_plane',
+    utility_window_kind: 'launcher',
+  };
+}
+
+async function openControlPlaneEnvironmentFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_control_plane_environment' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  const controlPlane = savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id);
+  if (!controlPlane) {
+    throw new Error('That Control Plane is no longer saved.');
+  }
+  const environment = controlPlane.environments.find((entry) => entry.env_public_id === request.env_public_id) ?? null;
+  if (!environment) {
+    throw new Error('That Control Plane environment is no longer available. Refresh the Control Plane and try again.');
+  }
+
+  try {
+    const bootstrapTicket = await requestDesktopBootstrapTicket(
+      controlPlane.provider,
+      controlPlane.account.session_token,
+      request.env_public_id,
+    );
+    return openControlPlaneEnvironmentWithBootstrapTicket({
+      providerOrigin: controlPlane.provider.provider_origin,
+      providerID: controlPlane.provider.provider_id,
+      envPublicID: request.env_public_id,
+      bootstrapTicket: bootstrapTicket.bootstrap_ticket,
+      label: environment.label,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return openUtilityWindow('launcher', {
+      entryReason: 'connect_failed',
+      issue: buildControlPlaneIssue('control_plane_request_failed', message || 'Desktop failed to talk to the Control Plane.'),
+      stealAppFocus: true,
+    });
+  }
 }
 
 async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLauncherActionResult> {
@@ -1204,6 +1438,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return openLocalEnvironmentFromLauncher();
     case 'open_remote_environment':
       return openRemoteEnvironmentFromLauncher(request);
+    case 'connect_control_plane':
+      return connectControlPlaneFromLauncher(request);
     case 'open_local_environment_settings':
       return openUtilityWindow('launcher', {
         surface: 'local_environment_settings',
@@ -1211,6 +1447,12 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       });
     case 'focus_environment_window':
       return focusEnvironmentWindow(request.session_key);
+    case 'open_control_plane_environment':
+      return openControlPlaneEnvironmentFromLauncher(request);
+    case 'refresh_control_plane':
+      return refreshControlPlaneFromLauncher(request);
+    case 'delete_control_plane':
+      return deleteControlPlaneFromLauncher(request);
     case 'upsert_saved_environment':
       await upsertSavedEnvironmentFromWelcome(request.environment_id, request.label, request.external_local_ui_url);
       return {
@@ -1321,11 +1563,153 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   await Promise.allSettled([...sessionCloseTasks.values()]);
 }
 
+type DesktopDeepLinkRequest =
+  | Readonly<{
+      kind: 'connect_control_plane';
+      provider_origin: string;
+      session_token: string;
+    }>
+  | Readonly<{
+      kind: 'open_control_plane_environment';
+      provider_origin: string;
+      provider_id?: string;
+      env_public_id: string;
+      bootstrap_ticket: string;
+      label?: string;
+    }>;
+
+function detectDesktopDeepLink(argv: readonly string[]): string | null {
+  return argv.find((value) => String(value ?? '').trim().toLowerCase().startsWith(`${DESKTOP_PROTOCOL_SCHEME}://`)) ?? null;
+}
+
+function parseDesktopDeepLink(rawURL: string): DesktopDeepLinkRequest | null {
+  try {
+    const parsed = new URL(String(rawURL ?? '').trim());
+    if (parsed.protocol !== `${DESKTOP_PROTOCOL_SCHEME}:`) {
+      return null;
+    }
+
+    if (parsed.hostname === 'control-plane' && parsed.pathname === '/connect') {
+      const providerOrigin = String(parsed.searchParams.get('provider_origin') ?? '').trim();
+      const sessionToken = String(parsed.searchParams.get('session_token') ?? '').trim();
+      if (providerOrigin === '' || sessionToken === '') {
+        return null;
+      }
+      return {
+        kind: 'connect_control_plane',
+        provider_origin: providerOrigin,
+        session_token: sessionToken,
+      };
+    }
+
+    if (parsed.hostname === 'control-plane' && parsed.pathname === '/open') {
+      const providerOrigin = String(parsed.searchParams.get('provider_origin') ?? '').trim();
+      const envPublicID = String(parsed.searchParams.get('env_public_id') ?? '').trim();
+      const bootstrapTicket = String(parsed.searchParams.get('bootstrap_ticket') ?? '').trim();
+      const label = String(parsed.searchParams.get('label') ?? '').trim();
+      if (providerOrigin === '' || envPublicID === '' || bootstrapTicket === '') {
+        return null;
+      }
+      return {
+        kind: 'open_control_plane_environment',
+        provider_origin: providerOrigin,
+        provider_id: String(parsed.searchParams.get('provider_id') ?? '').trim() || undefined,
+        env_public_id: envPublicID,
+        bootstrap_ticket: bootstrapTicket,
+        label: label || undefined,
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+async function handleDesktopDeepLink(rawURL: string): Promise<void> {
+  const request = parseDesktopDeepLink(rawURL);
+  if (!request) {
+    await openDesktopWelcomeWindow({
+      entryReason: 'connect_failed',
+      issue: buildControlPlaneIssue('control_plane_invalid', 'Desktop received an invalid Control Plane deep link.'),
+      stealAppFocus: true,
+    });
+    return;
+  }
+
+  try {
+    if (request.kind === 'connect_control_plane') {
+      await connectControlPlaneFromLauncher(request);
+      await openDesktopWelcomeWindow({
+        entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
+        stealAppFocus: true,
+      });
+      return;
+    }
+
+    await openControlPlaneEnvironmentWithBootstrapTicket({
+      providerOrigin: request.provider_origin,
+      providerID: request.provider_id,
+      envPublicID: request.env_public_id,
+      bootstrapTicket: request.bootstrap_ticket,
+      label: request.label,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await openDesktopWelcomeWindow({
+      entryReason: 'connect_failed',
+      issue: buildControlPlaneIssue('control_plane_request_failed', message || 'Desktop failed to process the Control Plane deep link.'),
+      stealAppFocus: true,
+    });
+  }
+}
+
+function queueDesktopDeepLink(rawURL: string): void {
+  const clean = String(rawURL ?? '').trim();
+  if (clean === '') {
+    return;
+  }
+  pendingDesktopDeepLinks.push(clean);
+  if (!app.isReady()) {
+    return;
+  }
+  const nextURL = pendingDesktopDeepLinks.shift();
+  if (nextURL) {
+    void handleDesktopDeepLink(nextURL);
+  }
+}
+
+function registerDesktopProtocolClient(): void {
+  try {
+    if (process.defaultApp) {
+      app.setAsDefaultProtocolClient(DESKTOP_PROTOCOL_SCHEME, process.execPath, [app.getAppPath()]);
+      return;
+    }
+    app.setAsDefaultProtocolClient(DESKTOP_PROTOCOL_SCHEME);
+  } catch {
+    // Best-effort only. Installed app metadata remains the source of truth.
+  }
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  const initialDesktopDeepLink = detectDesktopDeepLink(process.argv);
+  if (initialDesktopDeepLink) {
+    pendingDesktopDeepLinks.push(initialDesktopDeepLink);
+  }
+
+  app.on('second-instance', (_event, argv) => {
+    const deepLink = detectDesktopDeepLink(argv);
+    if (deepLink) {
+      queueDesktopDeepLink(deepLink);
+      return;
+    }
     void restoreBestAvailableWindow({ stealAppFocus: true });
+  });
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    queueDesktopDeepLink(url);
   });
 
   ipcMain.on(DESKTOP_STATE_GET_CHANNEL, (event, key) => {
@@ -1367,6 +1751,7 @@ if (!app.requestSingleInstanceLock()) {
         ...validated,
         saved_environments: previous.saved_environments,
         recent_external_local_ui_urls: previous.recent_external_local_ui_urls,
+        control_planes: previous.control_planes,
       };
       await persistDesktopPreferences(next);
       return { ok: true };
@@ -1460,6 +1845,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     installDesktopDiagnosticsHooks();
+    registerDesktopProtocolClient();
     Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
       openConnectionCenter: () => {
         void openDesktopWelcomeWindow({
@@ -1482,6 +1868,19 @@ if (!app.requestSingleInstanceLock()) {
     })));
 
     try {
+      if (pendingDesktopDeepLinks.length > 0) {
+        while (pendingDesktopDeepLinks.length > 0) {
+          const nextDeepLink = pendingDesktopDeepLinks.shift();
+          if (!nextDeepLink) {
+            continue;
+          }
+          await handleDesktopDeepLink(nextDeepLink);
+        }
+        if (sessionsByKey.size <= 0 && !liveUtilityWindow('launcher')) {
+          await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
+        }
+        return;
+      }
       await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

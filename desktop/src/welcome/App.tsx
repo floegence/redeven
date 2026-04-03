@@ -45,6 +45,7 @@ import type {
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
+import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
   normalizeDesktopLocalUIPasswordMode,
   type DesktopLocalUIPasswordMode,
@@ -89,6 +90,7 @@ import {
 } from './desktopTheme';
 import { DesktopTooltip } from './DesktopTooltip';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
+import { controlPlaneDesktopSessionKey } from '../main/desktopTarget';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -126,8 +128,12 @@ type BusyAction =
   | ''
   | 'open_local_environment'
   | 'open_remote_environment'
+  | 'connect_control_plane'
   | 'focus_environment_window'
   | 'open_local_environment_settings'
+  | 'open_control_plane_environment'
+  | 'refresh_control_plane'
+  | 'delete_control_plane'
   | 'close_launcher_or_quit'
   | 'save_settings'
   | 'save_environment'
@@ -138,6 +144,11 @@ type ConnectionDialogState = Readonly<{
   environment_id: string;
   label: string;
   external_local_ui_url: string;
+}> | null;
+
+type ControlPlaneDialogState = Readonly<{
+  provider_origin: string;
+  session_token: string;
 }> | null;
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
@@ -472,10 +483,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [connectError, setConnectError] = createSignal('');
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
+  const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
   const [busyAction, setBusyAction] = createSignal<BusyAction>('');
   const [draft, setDraft] = createSignal<DesktopSettingsDraft>(props.snapshot.settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
   const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
+  const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const [libraryFilter, setLibraryFilter] = createSignal<EnvironmentLibraryFilter>('all');
   const [libraryQuery, setLibraryQuery] = createSignal('');
   let issueRef: HTMLElement | undefined;
@@ -489,6 +503,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const localEnvironmentEntry = createMemo(() => (
     snapshot().environments.find((environment) => environment.kind === 'local_environment') ?? null
   ));
+  const controlPlanes = createMemo(() => snapshot().control_planes);
   const openWindowsSubtitle = createMemo(() => {
     const openWindows = snapshot().open_windows;
     if (openWindows.length <= 0) {
@@ -545,14 +560,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
+    setControlPlaneDialogError('');
   }
 
   function showConnectEnvironment(message = ''): void {
     setConnectionDialogState(null);
+    setControlPlaneDialogState(null);
     setFeedback(trimString(message));
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
+    setControlPlaneDialogError('');
     if (snapshot().surface === 'connect_environment') {
       return;
     }
@@ -568,6 +586,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function openSettingsSurface(): void {
     resetMessages();
     setConnectionDialogState(null);
+    setControlPlaneDialogState(null);
     setBusyAction('open_local_environment_settings');
     void props.runtime.launcher.performAction({ kind: 'open_local_environment_settings' })
       .catch((error) => {
@@ -587,6 +606,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
+    setControlPlaneDialogError('');
+    setControlPlaneDialogState(null);
     setConnectionDialogState({
       mode: 'create',
       environment_id: '',
@@ -610,6 +631,40 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogError('');
   }
 
+  function openCreateControlPlaneDialog(message = ''): void {
+    if (snapshot().surface !== 'connect_environment') {
+      showConnectEnvironment(message || 'Open the launcher to add a Control Plane.');
+      return;
+    }
+    setConnectionDialogState(null);
+    setFeedback(trimString(message));
+    setConnectError('');
+    setSettingsError('');
+    setConnectionDialogError('');
+    setControlPlaneDialogError('');
+    setControlPlaneDialogState({
+      provider_origin: '',
+      session_token: '',
+    });
+  }
+
+  function closeControlPlaneDialog(): void {
+    setControlPlaneDialogState(null);
+    setControlPlaneDialogError('');
+  }
+
+  function updateControlPlaneDialogField(name: 'provider_origin' | 'session_token', value: string): void {
+    setControlPlaneDialogState((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        [name]: value,
+      };
+    });
+  }
+
   function updateConnectionDialogField(name: 'label' | 'external_local_ui_url', value: string): void {
     setConnectionDialogState((current) => {
       if (!current) {
@@ -622,9 +677,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function setErrorMessage(target: 'connect' | 'settings' | 'dialog', message: string): void {
+  function setErrorMessage(target: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog', message: string): void {
     if (target === 'settings') {
       setSettingsError(message);
+      return;
+    }
+    if (target === 'control_plane_dialog') {
+      setControlPlaneDialogError(message);
       return;
     }
     if (target === 'dialog') {
@@ -636,7 +695,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function performLauncherAction(
     request: DesktopLauncherActionRequest,
-    errorTarget: 'connect' | 'settings' | 'dialog' = 'connect',
+    errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' = 'connect',
   ): Promise<DesktopLauncherActionResult | null> {
     resetMessages();
     setBusyAction(busyActionForLauncherRequest(request));
@@ -652,7 +711,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function focusEnvironmentWindow(
     sessionKey: string,
-    errorTarget: 'connect' | 'settings' | 'dialog' = 'connect',
+    errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' = 'connect',
   ): Promise<boolean> {
     const result = await performLauncherAction({
       kind: 'focus_environment_window',
@@ -693,6 +752,56 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
       closeConnectionDialog();
+    }
+    return opened;
+  }
+
+  async function connectControlPlaneFromDialog(): Promise<void> {
+    const state = controlPlaneDialogState();
+    if (!state) {
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'connect_control_plane',
+      provider_origin: trimString(state.provider_origin),
+      session_token: trimString(state.session_token),
+    }, 'control_plane_dialog');
+    if (result?.outcome === 'connected_control_plane') {
+      closeControlPlaneDialog();
+      setFeedback('Control Plane connected.');
+    }
+  }
+
+  async function refreshControlPlane(controlPlane: DesktopControlPlaneSummary): Promise<void> {
+    const result = await performLauncherAction({
+      kind: 'refresh_control_plane',
+      provider_origin: controlPlane.provider.provider_origin,
+      provider_id: controlPlane.provider.provider_id,
+    });
+    if (result?.outcome === 'refreshed_control_plane') {
+      setFeedback(`Refreshed ${controlPlane.provider.display_name}.`);
+    }
+  }
+
+  async function openControlPlaneEnvironment(
+    controlPlane: DesktopControlPlaneSummary,
+    envPublicID: string,
+  ): Promise<boolean> {
+    const sessionKey = controlPlaneDesktopSessionKey(controlPlane.provider.provider_origin, envPublicID);
+    const openWindow = snapshot().open_windows.find((window) => window.session_key === sessionKey) ?? null;
+    if (openWindow) {
+      return focusEnvironmentWindow(openWindow.session_key);
+    }
+
+    const result = await performLauncherAction({
+      kind: 'open_control_plane_environment',
+      provider_origin: controlPlane.provider.provider_origin,
+      provider_id: controlPlane.provider.provider_id,
+      env_public_id: envPublicID,
+    });
+    const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+    if (opened) {
+      setFeedback('Control Plane environment opened.');
     }
     return opened;
   }
@@ -887,6 +996,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function deleteControlPlane(): Promise<void> {
+    const target = deleteControlPlaneTarget();
+    if (!target) {
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'delete_control_plane',
+      provider_origin: target.provider.provider_origin,
+      provider_id: target.provider.provider_id,
+    });
+    if (result?.outcome === 'deleted_control_plane') {
+      setDeleteControlPlaneTarget(null);
+      setFeedback('Control Plane removed from Desktop.');
+    }
+  }
+
   return (
     <>
       <DesktopCommandRegistrar
@@ -961,11 +1086,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openLocalEnvironment={openLocalEnvironment}
           openSettingsSurface={openSettingsSurface}
           openCreateConnectionDialog={openCreateConnectionDialog}
+          openCreateControlPlaneDialog={openCreateControlPlaneDialog}
           openRemoteEnvironment={openRemoteEnvironment}
           focusEnvironmentWindow={focusEnvironmentWindow}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
           editEnvironment={startEditingEnvironment}
           deleteEnvironment={setDeleteTarget}
+          controlPlanes={controlPlanes()}
+          openControlPlaneEnvironment={openControlPlaneEnvironment}
+          refreshControlPlane={refreshControlPlane}
+          deleteControlPlane={setDeleteControlPlaneTarget}
           closeLauncherOrQuit={closeLauncherOrQuit}
           copyDiagnostics={async () => {
             await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
@@ -1007,6 +1137,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onSave={saveConnectionFromDialog}
       />
 
+      <ControlPlaneDialog
+        state={controlPlaneDialogState()}
+        error={controlPlaneDialogError()}
+        busyAction={busyAction()}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeControlPlaneDialog();
+          }
+        }}
+        updateField={updateControlPlaneDialogField}
+        onConnect={connectControlPlaneFromDialog}
+      />
+
       <ConfirmDialog
         open={deleteTarget() !== null}
         onOpenChange={(open) => {
@@ -1025,6 +1168,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
           </p>
           <p class="text-xs text-muted-foreground">This only removes the saved Desktop entry. It does not stop the remote Environment.</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deleteControlPlaneTarget() !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteControlPlaneTarget(null);
+          }
+        }}
+        title="Delete Control Plane"
+        confirmText="Delete Control Plane"
+        variant="destructive"
+        loading={busyAction() === 'delete_control_plane'}
+        onConfirm={() => void deleteControlPlane()}
+      >
+        <div class="space-y-2">
+          <p class="text-sm">
+            Remove <span class="font-semibold">{deleteControlPlaneTarget()?.provider.display_name}</span> from Desktop?
+          </p>
+          <p class="text-xs text-muted-foreground">This only removes the saved Desktop session token and cached environment list.</p>
         </div>
       </ConfirmDialog>
     </>
@@ -1047,6 +1211,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: () => void;
   openCreateConnectionDialog: (message?: string) => void;
+  openCreateControlPlaneDialog: (message?: string) => void;
   openRemoteEnvironment: (
     targetURL: string,
     errorTarget?: 'connect' | 'dialog',
@@ -1056,6 +1221,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  controlPlanes: readonly DesktopControlPlaneSummary[];
+  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
+  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
   closeLauncherOrQuit: () => Promise<void>;
   copyDiagnostics: () => Promise<void>;
 }>) {
@@ -1168,21 +1337,33 @@ function ConnectEnvironmentSurface(props: Readonly<{
             </Show>
           </div>
 
-          <EnvironmentLibraryPanel
-            snapshot={props.snapshot}
-            filter={props.libraryFilter}
-            query={props.libraryQuery}
-            entries={props.libraryEntries}
-            filterOptions={libraryFilterOptions()}
-            busyAction={props.busyAction}
-            setFilter={props.setLibraryFilter}
-            setQuery={props.setLibraryQuery}
-            openCreateConnectionDialog={props.openCreateConnectionDialog}
-            openRemoteEnvironment={props.openRemoteEnvironment}
-            saveEnvironment={props.saveEnvironmentFromLibrary}
-            editEnvironment={props.editEnvironment}
-            deleteEnvironment={props.deleteEnvironment}
-          />
+          <div class="space-y-4">
+            <EnvironmentLibraryPanel
+              snapshot={props.snapshot}
+              filter={props.libraryFilter}
+              query={props.libraryQuery}
+              entries={props.libraryEntries}
+              filterOptions={libraryFilterOptions()}
+              busyAction={props.busyAction}
+              setFilter={props.setLibraryFilter}
+              setQuery={props.setLibraryQuery}
+              openCreateConnectionDialog={props.openCreateConnectionDialog}
+              openRemoteEnvironment={props.openRemoteEnvironment}
+              saveEnvironment={props.saveEnvironmentFromLibrary}
+              editEnvironment={props.editEnvironment}
+              deleteEnvironment={props.deleteEnvironment}
+            />
+
+            <ControlPlanesPanel
+              controlPlanes={props.controlPlanes}
+              openWindows={props.snapshot.open_windows}
+              busyAction={props.busyAction}
+              openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
+              openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+              refreshControlPlane={props.refreshControlPlane}
+              deleteControlPlane={props.deleteControlPlane}
+            />
+          </div>
         </div>
       </main>
     </div>
@@ -1721,6 +1902,193 @@ function EnvironmentLibraryRow(props: Readonly<{
   );
 }
 
+function ControlPlanesPanel(props: Readonly<{
+  controlPlanes: readonly DesktopControlPlaneSummary[];
+  openWindows: readonly DesktopOpenEnvironmentWindow[];
+  busyAction: BusyAction;
+  openCreateControlPlaneDialog: (message?: string) => void;
+  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
+  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+}>) {
+  return (
+    <Card class="overflow-hidden shadow-sm">
+      <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div class="min-w-0">
+            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Control planes</div>
+            <CardTitle class="mt-1 text-lg">Control Planes</CardTitle>
+            <CardDescription class="mt-1 text-sm">
+              Connect a compatible Control Plane once, then open its environments directly from Desktop.
+            </CardDescription>
+          </div>
+          <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:items-end">
+            <div class={PANEL_HEADER_BADGES_CLASS}>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {props.controlPlanes.length === 1 ? '1 provider' : `${props.controlPlanes.length} providers`}
+              </Tag>
+            </div>
+            <div class={PANEL_HEADER_ACTIONS_CLASS}>
+              <Button
+                size="sm"
+                variant="default"
+                aria-label="Add Control Plane"
+                title="Add Control Plane"
+                onClick={() => props.openCreateControlPlaneDialog()}
+              >
+                <Plus class="mr-1 h-3.5 w-3.5" />
+                Add Control Plane
+              </Button>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-4 px-4 py-4 sm:px-5">
+        <Show
+          when={props.controlPlanes.length > 0}
+          fallback={(
+            <div class="rounded-lg border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">
+              No Control Planes connected yet.
+            </div>
+          )}
+        >
+          <div class="space-y-4">
+            <For each={props.controlPlanes}>
+              {(controlPlane) => (
+                <ControlPlaneCard
+                  controlPlane={controlPlane}
+                  openWindows={props.openWindows}
+                  busyAction={props.busyAction}
+                  openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                  refreshControlPlane={props.refreshControlPlane}
+                  deleteControlPlane={props.deleteControlPlane}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ControlPlaneCard(props: Readonly<{
+  controlPlane: DesktopControlPlaneSummary;
+  openWindows: readonly DesktopOpenEnvironmentWindow[];
+  busyAction: BusyAction;
+  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
+  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+}>) {
+  return (
+    <div class="rounded-lg border border-border/70 bg-background px-4 py-4 shadow-sm">
+      <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="text-sm font-medium text-foreground">{props.controlPlane.provider.display_name}</div>
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {props.controlPlane.provider.provider_id}
+            </Tag>
+          </div>
+          <div class="mt-1 text-xs text-muted-foreground">
+            {props.controlPlane.account.user_display_name} · {props.controlPlane.account.user_public_id}
+          </div>
+          <div class="mt-2 break-all font-mono text-xs text-muted-foreground">{props.controlPlane.provider.provider_origin}</div>
+          <div class="mt-2 text-xs text-muted-foreground">
+            Synced {formatTimestamp(props.controlPlane.last_synced_at_ms) || 'unknown'} · Session expires {formatTimestamp(props.controlPlane.account.expires_at_unix_ms) || 'unknown'}
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            loading={props.busyAction === 'refresh_control_plane'}
+            onClick={() => {
+              void props.refreshControlPlane(props.controlPlane);
+            }}
+          >
+            Refresh
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="text-muted-foreground hover:text-destructive"
+            onClick={() => props.deleteControlPlane(props.controlPlane)}
+            aria-label={`Delete ${props.controlPlane.provider.display_name}`}
+            title="Delete Control Plane"
+          >
+            <Trash class="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      <Show
+        when={props.controlPlane.environments.length > 0}
+        fallback={<div class="mt-4 text-xs text-muted-foreground">No environments available from this Control Plane.</div>}
+      >
+        <div class="mt-4 overflow-x-auto">
+          <table class="min-w-full border-collapse text-sm">
+            <thead class="bg-muted/20 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              <tr>
+                <th class="px-3 py-2">Environment</th>
+                <th class="px-3 py-2">Namespace</th>
+                <th class="px-3 py-2">Status</th>
+                <th class="px-3 py-2">Last seen</th>
+                <th class="px-3 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-border/70">
+              <For each={props.controlPlane.environments}>
+                {(environment) => {
+                  const sessionKey = controlPlaneDesktopSessionKey(
+                    props.controlPlane.provider.provider_origin,
+                    environment.env_public_id,
+                  );
+                  const openWindow = props.openWindows.find((window) => window.session_key === sessionKey) ?? null;
+                  return (
+                    <tr class="align-top">
+                      <td class="px-3 py-2">
+                        <div class="font-medium text-foreground">{environment.label}</div>
+                        <div class="mt-1 font-mono text-xs text-muted-foreground">{environment.env_public_id}</div>
+                        <Show when={trimString(environment.description)}>
+                          <div class="mt-1 text-xs text-muted-foreground">{environment.description}</div>
+                        </Show>
+                      </td>
+                      <td class="px-3 py-2 text-xs text-muted-foreground">
+                        {environment.namespace_name || environment.namespace_public_id || 'Unknown'}
+                      </td>
+                      <td class="px-3 py-2 text-xs text-muted-foreground">
+                        {environment.status || environment.lifecycle_status || 'Unknown'}
+                      </td>
+                      <td class="px-3 py-2 text-xs text-muted-foreground">
+                        {formatTimestamp(environment.last_seen_at_unix_ms) || 'Unknown'}
+                      </td>
+                      <td class="px-3 py-2">
+                        <div class="flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            loading={props.busyAction === 'open_control_plane_environment' || props.busyAction === 'focus_environment_window'}
+                            onClick={() => {
+                              void props.openControlPlaneEnvironment(props.controlPlane, environment.env_public_id);
+                            }}
+                          >
+                            {openWindow ? 'Focus' : 'Open'}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }}
+              </For>
+            </tbody>
+          </table>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
@@ -2046,6 +2414,76 @@ function ConnectionDialog(props: Readonly<{
             spellcheck={false}
             autofocus={props.state?.mode === 'create'}
           />
+        </div>
+        <Show when={props.error}>
+          <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {props.error}
+          </div>
+        </Show>
+      </div>
+    </Dialog>
+  );
+}
+
+function ControlPlaneDialog(props: Readonly<{
+  state: ControlPlaneDialogState;
+  error: string;
+  busyAction: BusyAction;
+  onOpenChange: (open: boolean) => void;
+  updateField: (name: 'provider_origin' | 'session_token', value: string) => void;
+  onConnect: () => Promise<void>;
+}>) {
+  return (
+    <Dialog
+      open={props.state !== null}
+      onOpenChange={props.onOpenChange}
+      title="Add Control Plane"
+      footer={(
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            loading={props.busyAction === 'connect_control_plane'}
+            onClick={() => {
+              void props.onConnect();
+            }}
+          >
+            Connect
+          </Button>
+        </div>
+      )}
+    >
+      <div class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="control-plane-origin" class="block text-xs font-medium text-foreground">Control Plane URL</label>
+          <Input
+            id="control-plane-origin"
+            value={props.state?.provider_origin ?? ''}
+            onInput={(event) => props.updateField('provider_origin', event.currentTarget.value)}
+            placeholder="https://region.example.invalid"
+            size="sm"
+            class="w-full font-mono"
+            spellcheck={false}
+            autofocus
+          />
+        </div>
+        <div class="space-y-1.5">
+          <label for="control-plane-session-token" class="block text-xs font-medium text-foreground">Desktop Session Token</label>
+          <Input
+            id="control-plane-session-token"
+            value={props.state?.session_token ?? ''}
+            onInput={(event) => props.updateField('session_token', event.currentTarget.value)}
+            placeholder="Paste a desktop_session_token"
+            size="sm"
+            class="w-full font-mono"
+            spellcheck={false}
+          />
+        </div>
+        <div class="text-xs text-muted-foreground">
+          Desktop stores the token locally, then uses the fixed provider protocol to load your Control Plane environments.
         </div>
         <Show when={props.error}>
           <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import {
   buildBlockedLaunchIssue,
   buildDesktopWelcomeSnapshot,
@@ -9,6 +10,14 @@ import {
   buildExternalLocalUIDesktopTarget,
   buildManagedLocalDesktopTarget,
 } from './desktopTarget';
+
+const testProvider = normalizeDesktopControlPlaneProvider({
+  protocol_version: 'rcpp-v1',
+  provider_id: 'redeven_portal',
+  display_name: 'Redeven Portal',
+  provider_origin: 'https://cp.example.invalid',
+  documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+});
 
 describe('desktopWelcomeState', () => {
   it('builds launcher snapshots around open windows and saved environments', () => {
@@ -38,6 +47,31 @@ describe('desktopWelcomeState', () => {
           'http://192.168.1.12:24000/',
           'http://192.168.1.11:24000/',
         ],
+        control_planes: testProvider ? [{
+          provider: testProvider,
+          account: {
+            provider_id: testProvider.provider_id,
+            provider_origin: testProvider.provider_origin,
+            display_name: testProvider.display_name,
+            user_public_id: 'user_demo',
+            user_display_name: 'Demo User',
+            session_token: 'token-123',
+            expires_at_unix_ms: 1000,
+          },
+          environments: [{
+            provider_id: testProvider.provider_id,
+            provider_origin: testProvider.provider_origin,
+            env_public_id: 'env_demo',
+            label: 'Demo Environment',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'online',
+            lifecycle_status: 'active',
+            last_seen_at_unix_ms: 123,
+          }],
+          last_synced_at_ms: 500,
+        }] : [],
       },
       openSessions: [
         {
@@ -122,6 +156,17 @@ describe('desktopWelcomeState', () => {
         can_save: true,
       }),
     ]);
+    expect(snapshot.control_planes).toEqual([
+      expect.objectContaining({
+        provider: expect.objectContaining({
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+        }),
+        account: expect.objectContaining({
+          user_public_id: 'user_demo',
+        }),
+      }),
+    ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
     expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
@@ -136,6 +181,7 @@ describe('desktopWelcomeState', () => {
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       },
       openSessions: [
         {
@@ -178,6 +224,7 @@ describe('desktopWelcomeState', () => {
         },
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       },
       surface: 'local_environment_settings',
     });
@@ -218,6 +265,7 @@ describe('desktopWelcomeState', () => {
         pending_bootstrap: null,
         saved_environments: [],
         recent_external_local_ui_urls: [],
+        control_planes: [],
       },
       openSessions: [
         {

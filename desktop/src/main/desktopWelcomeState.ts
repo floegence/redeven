@@ -53,6 +53,24 @@ export function buildRemoteConnectionIssue(
   };
 }
 
+export function buildControlPlaneIssue(
+  code: string,
+  message: string,
+): DesktopWelcomeIssue {
+  return {
+    scope: 'startup',
+    code,
+    title: code === 'control_plane_invalid' ? 'Control Plane configuration is invalid' : 'Unable to use that Control Plane',
+    message,
+    diagnostics_copy: diagnosticsLines([
+      'status: blocked',
+      `code: ${code}`,
+      `message: ${message}`,
+    ]),
+    target_url: '',
+  };
+}
+
 export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWelcomeIssue {
   if (report.code === 'state_dir_locked') {
     if (report.lock_owner?.local_ui_enabled === true) {
@@ -245,6 +263,7 @@ export function buildDesktopWelcomeSnapshot(
     close_action_label: openSessions.length > 0 ? 'Close Launcher' : 'Quit',
     open_windows: buildOpenEnvironmentWindows(openSessions),
     environments,
+    control_planes: preferences.control_planes,
     suggested_remote_url: suggestedRemoteURL(issue, openSessions, environments),
     issue,
     settings_surface: buildDesktopSettingsSurfaceSnapshot('local_environment_settings', desktopPreferencesToDraft(preferences), {

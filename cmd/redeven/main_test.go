@@ -57,6 +57,8 @@ func TestRunCLIHelp(t *testing.T) {
 			"--env-id <env_public_id>",
 			"--env-token <token>",
 			"--env-token-env <env_name>",
+			"--bootstrap-ticket <ticket>",
+			"--bootstrap-ticket-env <env_name>",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 		)
 	})
@@ -114,7 +116,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"missing required flags for `redeven bootstrap`: --controlplane, --env-id, one of --env-token or --env-token-env",
+			"missing required flags for `redeven bootstrap`: --controlplane, --env-id, one bootstrap credential (--env-token/--env-token-env or --bootstrap-ticket/--bootstrap-ticket-env)",
 			"Example: redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 		)
 	})
@@ -125,8 +127,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"incomplete bootstrap flags for `redeven run`: missing flag one of --env-token or --env-token-env",
-			"Hint: provide --controlplane, --env-id, and either --env-token or --env-token-env together, or run `redeven bootstrap` first.",
+			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap credential (--env-token/--env-token-env or --bootstrap-ticket/--bootstrap-ticket-env)",
+			"Hint: provide --controlplane, --env-id, and exactly one bootstrap credential together, or run `redeven bootstrap` first.",
 		)
 	})
 
@@ -254,6 +256,28 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		)
 	})
 
+	t.Run("multiple bootstrap credential types explain the conflict", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token", "token-1", "--bootstrap-ticket", "ticket-1")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"invalid bootstrap flags for `redeven run`: choose either an environment token or a bootstrap ticket",
+			"Hint: use exactly one bootstrap credential source for each run command.",
+		)
+	})
+
+	t.Run("missing bootstrap ticket env gives export guidance", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket-env", "REDEVEN_BOOTSTRAP_TICKET")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"invalid bootstrap ticket flags: bootstrap ticket env var \"REDEVEN_BOOTSTRAP_TICKET\" is not set",
+			"Hint: export REDEVEN_BOOTSTRAP_TICKET with a non-empty ticket before running `redeven run`.",
+		)
+	})
+
 	t.Run("missing env token env gives export guidance", func(t *testing.T) {
 		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--env-token-env", "REDEVEN_ENV_TOKEN")
 		if code != 2 {
@@ -289,9 +313,10 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"runtime is not bootstrapped for remote or hybrid mode:",
-			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and either --env-token or --env-token-env directly to `redeven run`.",
+			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and exactly one bootstrap credential directly to `redeven run`.",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 			"redeven run --mode hybrid --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
+			"REDEVEN_BOOTSTRAP_TICKET=<bootstrap-ticket> redeven run --mode desktop --desktop-managed --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket-env REDEVEN_BOOTSTRAP_TICKET",
 		)
 	})
 }
