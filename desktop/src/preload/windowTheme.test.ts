@@ -72,7 +72,14 @@ describe('bootstrapDesktopThemeBridge', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('dark');
-    expect(document.getElementById('redeven-desktop-window-chrome')).toBeTruthy();
+    expect(document.documentElement.dataset.redevenDesktopWindowChromeMode).toBe('hidden-inset');
+    expect(document.documentElement.dataset.redevenDesktopWindowControlsSide).toBe('left');
+
+    const style = document.getElementById('redeven-desktop-window-chrome');
+    expect(style).toBeTruthy();
+    expect(style?.textContent).toContain('--redeven-desktop-titlebar-height: 40px;');
+    expect(style?.textContent).toContain("[data-floe-shell-slot='top-bar']");
+    expect(style?.textContent).toContain("[data-redeven-desktop-titlebar-no-drag='true']");
 
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
     expect(bridge.getSnapshot()).toEqual(darkSnapshot());

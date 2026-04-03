@@ -14,7 +14,7 @@ import {
   Sun,
   Trash,
 } from '@floegence/floe-webapp-core/icons';
-import { BottomBarItem, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
+import { BottomBarItem, StatusIndicator, TopBarIconButton } from '@floegence/floe-webapp-core/layout';
 import {
   Button,
   Card,
@@ -87,6 +87,7 @@ import {
   desktopThemeBridge,
   toggleDesktopTheme,
 } from './desktopTheme';
+import { DesktopLauncherShell } from './DesktopLauncherShell';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -152,6 +153,11 @@ const EMPTY_SETTINGS_DRAFT: DesktopSettingsDraft = {
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
+const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
+const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
+const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
+const DESKTOP_COMMAND_PALETTE_TITLE = 'Command palette';
+const DESKTOP_COMMAND_PALETTE_KEYBIND = 'mod+k';
 
 function buildDesktopFloeConfig() {
   const themeBridge = desktopThemeBridge();
@@ -178,8 +184,8 @@ function buildDesktopFloeConfig() {
     },
     accessibility: {
       mainContentId: 'redeven-desktop-main',
-      skipLinkLabel: 'Skip to Redeven Desktop content',
-      topBarLabel: 'Redeven Desktop toolbar',
+      skipLinkLabel: DESKTOP_SKIP_LINK_LABEL,
+      topBarLabel: DESKTOP_TOP_BAR_LABEL,
       primaryNavigationLabel: 'Redeven Desktop navigation',
       mobileNavigationLabel: 'Redeven Desktop navigation',
       sidebarLabel: 'Redeven Desktop sidebar',
@@ -187,7 +193,7 @@ function buildDesktopFloeConfig() {
     },
     strings: {
       topBar: {
-        searchPlaceholder: 'Search desktop commands...',
+        searchPlaceholder: DESKTOP_COMMAND_PLACEHOLDER,
       },
     },
   } as const;
@@ -493,14 +499,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     return `${openWindows.length} environment windows open`;
   });
-  const activityItems = createMemo<ActivityBarItem[]>(() => ([
-    {
-      id: 'connect_environment',
-      icon: Globe,
-      label: 'Connect Environment',
-      onClick: () => showConnectEnvironment(),
-    },
-  ]));
   const libraryEntries = createMemo(() => filterEnvironmentLibrary(snapshot(), libraryFilter(), libraryQuery()));
 
   if (shellTheme) {
@@ -900,11 +898,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         openRemoteEnvironment={openRemoteEnvironment}
         closeLauncherOrQuit={closeLauncherOrQuit}
       />
-      <Shell
-        sidebarMode="hidden"
-        activityItems={activityItems()}
-        activityBottomItems={[]}
-        activityBottomItemsMobileMode="topBar"
+      <DesktopLauncherShell
+        mainContentId="redeven-desktop-main"
+        skipLinkLabel={DESKTOP_SKIP_LINK_LABEL}
+        topBarLabel={DESKTOP_TOP_BAR_LABEL}
         logo={(
           <TopBarIconButton label="Connect Environment" onClick={() => showConnectEnvironment()}>
             <img
@@ -915,11 +912,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             />
           </TopBarIconButton>
         )}
-        topBarActions={(
+        commandPlaceholder={DESKTOP_COMMAND_PLACEHOLDER}
+        commandKeybind={cmd.getKeybindDisplay(DESKTOP_COMMAND_PALETTE_KEYBIND)}
+        commandTitle={DESKTOP_COMMAND_PALETTE_TITLE}
+        onOpenCommandPalette={() => cmd.open()}
+        trailingActions={(
           <div class="flex items-center gap-1">
-            <TopBarIconButton label="Command palette" onClick={() => cmd.open()}>
-              <Search class="h-4 w-4" />
-            </TopBarIconButton>
             <TopBarIconButton
               label={theme.resolvedTheme() === 'light' ? 'Use dark theme' : 'Use light theme'}
               onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
@@ -928,24 +926,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             </TopBarIconButton>
           </div>
         )}
-        bottomBarItems={(
+        bottomBarLeading={(
           <>
-            <div class="flex min-w-0 items-center gap-2">
-              <BottomBarItem class="min-w-0">
-                <span class="truncate">{shellView().surface_title}</span>
+            <BottomBarItem class="min-w-0">
+              <span class="truncate">{shellView().surface_title}</span>
+            </BottomBarItem>
+            <BottomBarItem class="min-w-0">
+              <span class="truncate">{openWindowsSubtitle()}</span>
+            </BottomBarItem>
+          </>
+        )}
+        bottomBarTrailing={(
+          <>
+            <StatusIndicator status={status().tone} label={status().label} />
+            <Show when={snapshot().surface === 'connect_environment'}>
+              <BottomBarItem class="cursor-pointer" onClick={() => void closeLauncherOrQuit()}>
+                {snapshot().close_action_label}
               </BottomBarItem>
-              <BottomBarItem class="min-w-0">
-                <span class="truncate">{openWindowsSubtitle()}</span>
-              </BottomBarItem>
-            </div>
-            <div class="flex items-center gap-2">
-              <StatusIndicator status={status().tone} label={status().label} />
-              <Show when={snapshot().surface === 'connect_environment'}>
-                <BottomBarItem class="cursor-pointer" onClick={() => void closeLauncherOrQuit()}>
-                  {snapshot().close_action_label}
-                </BottomBarItem>
-              </Show>
-            </div>
+            </Show>
           </>
         )}
       >
@@ -983,7 +981,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             }}
           />
         </Show>
-      </Shell>
+      </DesktopLauncherShell>
 
       <LocalEnvironmentSettingsDialog
         open={snapshot().surface === 'local_environment_settings'}

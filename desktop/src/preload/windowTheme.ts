@@ -13,7 +13,10 @@ import {
   type DesktopThemeSnapshot,
   type DesktopThemeSource,
 } from '../shared/desktopTheme';
-import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
+import {
+  desktopWindowChromeCSSVariables,
+  resolveDesktopWindowChromeConfig,
+} from '../shared/windowChromePlatform';
 
 declare global {
   interface Window {
@@ -28,12 +31,46 @@ export interface DesktopThemeBridge {
 }
 
 const WINDOW_CHROME_STYLE_ID = 'redeven-desktop-window-chrome';
-const WINDOW_CHROME_STYLE_TEXT = `
-body > #root {
-  box-sizing: border-box;
-  padding-top: ${desktopWindowTitleBarInsetCSSValue(process.platform)};
+const WINDOW_CHROME_CONFIG = resolveDesktopWindowChromeConfig(process.platform);
+
+function buildWindowChromeStyleText(platform: NodeJS.Platform = process.platform): string {
+  const chromeVars = desktopWindowChromeCSSVariables(platform);
+  const declarations = Object.entries(chromeVars)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n');
+
+  return `
+:root {
+${declarations}
+}
+
+[data-floe-shell-slot='top-bar'] {
+  app-region: drag;
+  user-select: none;
+}
+
+[data-floe-shell-slot='top-bar'] > div:first-child {
+  padding-inline-start: calc(0.75rem + var(--redeven-desktop-titlebar-start-inset));
+  padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset));
+}
+
+[data-floe-shell-slot='top-bar'] button,
+[data-floe-shell-slot='top-bar'] a,
+[data-floe-shell-slot='top-bar'] input,
+[data-floe-shell-slot='top-bar'] textarea,
+[data-floe-shell-slot='top-bar'] select,
+[data-floe-shell-slot='top-bar'] [role='button'],
+[data-redeven-desktop-titlebar-no-drag='true'] {
+  app-region: no-drag;
+  user-select: auto;
+}
+
+[data-redeven-desktop-titlebar-drag-region='true'] {
+  app-region: drag;
+  user-select: none;
 }
 `;
+}
 
 const listeners = new Set<(snapshot: DesktopThemeSnapshot) => void>();
 let currentSnapshot = readDesktopThemeSnapshot();
@@ -64,18 +101,28 @@ function applyDesktopThemeToDocument(snapshot: DesktopThemeSnapshot): void {
   root.style.colorScheme = snapshot.resolvedTheme;
 }
 
+function applyDesktopWindowChromeToDocument(): void {
+  const root = document.documentElement;
+  if (!root) {
+    return;
+  }
+  root.dataset.redevenDesktopWindowChromeMode = WINDOW_CHROME_CONFIG.mode;
+  root.dataset.redevenDesktopWindowControlsSide = WINDOW_CHROME_CONFIG.controlsSide;
+}
+
 function ensureWindowChromeStyle(): void {
   if (!document.head || document.getElementById(WINDOW_CHROME_STYLE_ID)) {
     return;
   }
   const style = document.createElement('style');
   style.id = WINDOW_CHROME_STYLE_ID;
-  style.textContent = WINDOW_CHROME_STYLE_TEXT;
+  style.textContent = buildWindowChromeStyleText(process.platform);
   document.head.appendChild(style);
 }
 
 function syncCurrentDocument(snapshot: DesktopThemeSnapshot): void {
   applyDesktopThemeToDocument(snapshot);
+  applyDesktopWindowChromeToDocument();
   ensureWindowChromeStyle();
 }
 

@@ -22,6 +22,49 @@ body {
   min-height: 100vh;
 }
 
+.redeven-desktop-titlebar {
+  min-height: var(--redeven-desktop-titlebar-height, 40px);
+}
+
+.redeven-desktop-titlebar-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--redeven-desktop-titlebar-height, 40px);
+  padding-inline-start: var(--redeven-desktop-titlebar-start-inset, 1rem);
+  padding-inline-end: var(--redeven-desktop-titlebar-end-inset, 1rem);
+}
+
+.redeven-desktop-titlebar-center-cluster {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  gap: 0.5rem;
+}
+
+.redeven-desktop-command-trigger {
+  width: min(32rem, 50vw);
+}
+
+@media (max-width: 900px) {
+  .redeven-desktop-titlebar-grid {
+    gap: 0.5rem;
+  }
+
+  .redeven-desktop-command-trigger {
+    width: min(24rem, 52vw);
+  }
+}
+
+@media (max-width: 640px) {
+  .redeven-desktop-command-trigger {
+    width: min(18rem, 42vw);
+  }
+}
+
 code,
 pre,
 .font-mono {
