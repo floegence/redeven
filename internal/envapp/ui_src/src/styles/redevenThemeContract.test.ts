@@ -87,7 +87,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-browser-selection-nav {');
     expect(src).toContain('.git-browser-selection-secondary {');
     expect(src).toContain('html.dark .git-meta-pill:not(.git-browser-selection-chip) {');
-    expect(src).toContain('background-color: color-mix(in srgb, var(--tag-bg) 72%, white 28%);');
+    expect(src).toContain('background-color: color-mix(in srgb, white 84%, var(--tag-bg) 16%);');
     expect(src).toContain('.git-browser-selection-chip {');
     expect(src).toContain('--tag-bg: var(--git-browser-selection-chip-bg);');
     expect(src).toContain('--tag-border: var(--git-browser-selection-chip-border);');
