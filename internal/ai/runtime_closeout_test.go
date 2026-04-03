@@ -7,7 +7,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-func TestFinalizeIfContextCanceledWithRuntimeCloseout_FinalizesStructuredSuccess(t *testing.T) {
+func TestFinalizeIfContextCanceledWithRuntimeCloseout_PreservesInterruptedOutcome(t *testing.T) {
 	t.Parallel()
 
 	r := &run{messageID: "msg_runtime_closeout_timeout"}
@@ -23,12 +23,12 @@ func TestFinalizeIfContextCanceledWithRuntimeCloseout_FinalizesStructuredSuccess
 		CompletedActionFacts: []string{"file.write: updated note"},
 	}
 	if !r.finalizeIfContextCanceledWithRuntimeCloseout(ctx, 2, state, TaskComplexityStandard, config.AIModeAct, defaultStructuredProtocolProfile(), false) {
-		t.Fatalf("expected runtime closeout recovery on canceled context")
+		t.Fatalf("expected interrupted run to finalize through the cancel path")
 	}
-	if got := r.getFinalizationReason(); got != finalizationReasonProtocolCloseout {
-		t.Fatalf("finalization_reason=%q, want %q", got, finalizationReasonProtocolCloseout)
+	if got := r.getFinalizationReason(); got != "disconnected" {
+		t.Fatalf("finalization_reason=%q, want disconnected", got)
 	}
-	if got := r.getEndReason(); got != "complete" {
-		t.Fatalf("end_reason=%q, want complete", got)
+	if got := r.getEndReason(); got != "disconnected" {
+		t.Fatalf("end_reason=%q, want disconnected", got)
 	}
 }

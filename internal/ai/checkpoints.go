@@ -27,6 +27,7 @@ func (r *run) ensureWorkspaceCheckpoint(ctx context.Context) (workspaceCheckpoin
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	r.touchActivity()
 
 	r.muCheckpoint.Lock()
 	defer r.muCheckpoint.Unlock()
@@ -51,10 +52,15 @@ func (r *run) ensureWorkspaceCheckpoint(ctx context.Context) (workspaceCheckpoin
 	if err != nil {
 		return meta, err
 	}
-	cp, err := createWorkspaceCheckpoint(ctx, stateDir, checkpointID, workingDirAbs)
+	checkpointFn := r.createWorkspaceCheckpoint
+	if checkpointFn == nil {
+		checkpointFn = createWorkspaceCheckpoint
+	}
+	cp, err := checkpointFn(ctx, stateDir, checkpointID, workingDirAbs)
 	if err != nil {
 		return meta, err
 	}
+	r.touchActivity()
 	b, err := json.Marshal(cp)
 	if err != nil {
 		return meta, err

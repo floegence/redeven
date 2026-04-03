@@ -267,6 +267,9 @@ func TestIntegration_NativeSDK_OpenAI_RuntimeCloseoutWithoutTaskComplete(t *test
 			continue
 		}
 		if passed, _ := payload["gate_passed"].(bool); passed {
+			if interrupted, _ := payload["interrupted"].(bool); interrupted {
+				t.Fatalf("successful runtime closeout must not be marked interrupted: %+v", payload)
+			}
 			foundProtocolCloseout = true
 			break
 		}

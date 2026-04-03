@@ -2983,7 +2983,10 @@ mainLoop:
 			return nil
 		}
 
-		if r.attemptRuntimeCloseout(step, state, taskComplexity, req.Options.Mode, capabilityContract.ProtocolProfile, req.Options.RequireUserConfirmOnTaskComplete, "text_only_turn", stepResult.Text) {
+		if r.attemptRuntimeCloseout(step, state, taskComplexity, req.Options.Mode, capabilityContract.ProtocolProfile, req.Options.RequireUserConfirmOnTaskComplete, runtimeCloseoutAttempt{
+			Source:   runtimeCloseoutAttemptSourceTextOnlyTurn,
+			Fallback: stepResult.Text,
+		}) {
 			return nil
 		}
 
