@@ -163,6 +163,61 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
+  it('keeps the live agent markdown node mounted while append-only content updates for the same item id', async () => {
+    const [items, setItems] = createSignal<CodexTranscriptItem[]>([
+      {
+        id: 'item_agent_live',
+        type: 'agentMessage',
+        text: 'Streaming response',
+        status: 'inProgress',
+        order: 0,
+      },
+    ]);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => (
+      <CodexTranscript
+        items={items()}
+        emptyTitle="Empty"
+        emptyBody="Nothing yet."
+      />
+    ), host);
+
+    const initialNode = host.querySelector('[data-codex-item-type="agentMessage"] [data-markdown-streaming="true"]');
+    expect(initialNode).toBeTruthy();
+
+    setItems([
+      {
+        id: 'item_agent_live',
+        type: 'agentMessage',
+        text: 'Streaming response with more detail',
+        status: 'inProgress',
+        order: 0,
+      },
+    ]);
+    await flushAsync();
+
+    const updatedNode = host.querySelector('[data-codex-item-type="agentMessage"] [data-markdown-streaming="true"]');
+    expect(updatedNode).toBe(initialNode);
+    expect(updatedNode?.textContent).toContain('Streaming response with more detail');
+
+    setItems([
+      {
+        id: 'item_agent_live',
+        type: 'agentMessage',
+        text: 'Streaming response with more detail',
+        status: 'completed',
+        order: 0,
+      },
+    ]);
+    await flushAsync();
+
+    const completedNode = host.querySelector('[data-codex-item-type="agentMessage"] [data-markdown-streaming="false"]');
+    expect(completedNode).toBe(initialNode);
+
+    dispose();
+  });
+
   it('keeps the pre-output cursor visible for a new optimistic turn even when the previous run already has assistant output', () => {
     const { host, dispose } = renderTranscript([
       {

@@ -19,6 +19,8 @@ High-level design:
 - Transport between Redeven and Codex uses stdio (`codex app-server --listen stdio://`).
 - The bridge initializes the app-server with `experimentalApi=true` so it can consume upstream raw response notifications and extended-history controls that are required for refresh-safe transcript projection.
 - The bridge keeps a per-thread projected state so browser bootstrap and SSE replay always agree on the same applied event cursor.
+- The gateway compacts adjacent additive Codex delta notifications (`agentMessage`, reasoning, plan, command output, file diff) into frame-sized SSE batches before flushing them to the browser, so live transcript updates do not turn one upstream token burst into dozens of browser layout passes.
+- Browser-side stream rebinding now resumes from the latest live-applied session sequence rather than from the older bootstrap baseline, so reselecting a cached thread does not replay already-projected additive deltas.
 - Thread bootstrap uses `thread/read(includeTurns=true)` semantics, while live work uses `thread/resume` only when a thread must become active for `turn/start`.
 - Read/bootstrap stays recency-neutral: selecting an existing thread may cache transcript/runtime state locally, but it must not fabricate a newer `updated_at` or reorder the sidebar on its own.
 - When a freshly started upstream thread has not materialized its first-user-message rollout yet, the bridge falls back from `thread/read(includeTurns=true)` to a summary-only `thread/read(includeTurns=false)` and merges the result with projected state, so the browser does not see the transient upstream error.
@@ -237,10 +239,11 @@ Current Env App behavior:
   - `paused`: when the user scrolls away from the bottom, later transcript reflow preserves the visible anchor row instead of yanking the viewport back to the bottom.
 - Follow-bottom intent handling is Codex-local. `CodexProvider` emits explicit bottom-intent requests, and `createFollowBottomController()` resolves them without changing Flower-owned pages or shared Flower transcript selectors.
 - System restore intents such as `bootstrap` and `thread_switch` stay instant so thread hydration and late layout reconciliation converge deterministically without introducing extra motion.
-- Explicit user intents such as `send` and manual “return to bottom” requests use smooth convergence when reduced motion is not requested, so streaming output can keep advancing the viewport without the old jump/retry feel.
+- Explicit manual “return to bottom” requests use smooth convergence when reduced motion is not requested, but `send` re-enters follow-bottom with an instant pin so heavy live Codex output does not spend the whole turn chasing a moving animated target.
 - The controller now targets the real bottom scroll position (`scrollHeight - clientHeight`) instead of the raw content height, which keeps bottom-follow math correct for both instant and animated follow paths.
 - Empty and loading heroes depend on that Codex-owned transcript shell rather than on ad-hoc top spacing, so viewport centering stays stable without patching Flower-owned selectors.
 - Empty reasoning shells from upstream placeholder events are suppressed until they contain summary or body content.
+- Transcript feed rows are keyed by semantic transcript item id, not by transient `CodexTranscriptItem` object identity. That keeps each live row mounted across append-only updates so `MarkdownBlock` can retain its committed streaming snapshot instead of bouncing between raw append-only text and rebuilt markdown HTML.
 - Web search evidence renders normalized action details such as search queries and opened page URLs instead of falling back to generic `No content.` placeholders.
 - The header renders projected token/context usage from official `thread/tokenUsage/updated` notifications, following the same “context left / used tokens” semantics exposed by the upstream Codex app-server.
 - Codex icon rendering prefers a bundled official artwork asset, but it now also keeps an inline fallback glyph so embedded builds never surface the browser's broken-image placeholder if artwork loading fails.

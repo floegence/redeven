@@ -70,12 +70,17 @@ type CodexScrollIntentPolicy = Omit<FollowBottomRequest, 'seq'>;
 
 function codexScrollIntentPolicy(reason: CodexScrollToBottomReason): CodexScrollIntentPolicy {
   switch (reason) {
-    case 'send':
     case 'manual':
       return {
         reason,
         source: 'user',
         behavior: 'smooth',
+      };
+    case 'send':
+      return {
+        reason,
+        source: 'user',
+        behavior: 'auto',
       };
     case 'bootstrap':
     case 'thread_switch':
@@ -1027,7 +1032,7 @@ export function CodexProvider(props: ParentProps) {
       if (current?.threadID === threadID) return current;
       return {
         threadID,
-        afterSeq: Math.max(0, Number(entry.lastBootstrapSeq ?? entry.session.last_applied_seq ?? 0) || 0),
+        afterSeq: Math.max(0, Number(entry.session.last_applied_seq ?? entry.lastBootstrapSeq ?? 0) || 0),
       };
     });
   });

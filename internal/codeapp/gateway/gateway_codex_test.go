@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -614,4 +615,66 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 			t.Fatalf("unexpected body: %s", rr.Body.String())
 		}
 	})
+
+	t.Run("event stream compacts adjacent deltas", func(t *testing.T) {
+		gw.codex = &stubCodexBackend{
+			subscribeThreadEvent: func(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error) {
+				ch := make(chan codexbridge.Event)
+				close(ch)
+				return []codexbridge.Event{
+					{Seq: 3, Type: "agent_message_delta", ThreadID: threadID, TurnID: "turn_1", ItemID: "item_1", Delta: "Hel"},
+					{Seq: 4, Type: "agent_message_delta", ThreadID: threadID, TurnID: "turn_1", ItemID: "item_1", Delta: "lo"},
+					{Seq: 5, Type: "thread_status_changed", ThreadID: threadID, Status: "running"},
+				}, ch, nil
+			},
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/threads/thread_1/events", nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		body := rr.Body.String()
+		if strings.Count(body, "event: codex_event") != 2 {
+			t.Fatalf("expected 2 compacted SSE events, body=%s", body)
+		}
+		if !strings.Contains(body, `"seq":4`) || !strings.Contains(body, `"delta":"Hello"`) {
+			t.Fatalf("expected merged delta event in body=%s", body)
+		}
+	})
+}
+
+func TestCompactCodexEvents(t *testing.T) {
+	t.Parallel()
+
+	summaryIndex := int64(1)
+	contentIndex := int64(2)
+	events := compactCodexEvents([]codexbridge.Event{
+		{Seq: 1, Type: "agent_message_delta", ThreadID: "thread_1", TurnID: "turn_1", ItemID: "item_1", Delta: "Hel"},
+		{Seq: 2, Type: "agent_message_delta", ThreadID: "thread_1", TurnID: "turn_1", ItemID: "item_1", Delta: "lo"},
+		{Seq: 3, Type: "reasoning_summary_delta", ThreadID: "thread_1", TurnID: "turn_1", ItemID: "item_2", SummaryIndex: &summaryIndex, Delta: "Plan"},
+		{Seq: 4, Type: "reasoning_summary_delta", ThreadID: "thread_1", TurnID: "turn_1", ItemID: "item_2", SummaryIndex: &summaryIndex, Delta: " more"},
+		{Seq: 5, Type: "reasoning_delta", ThreadID: "thread_1", TurnID: "turn_1", ItemID: "item_3", ContentIndex: &contentIndex, Delta: "body"},
+		{Seq: 6, Type: "reasoning_delta", ThreadID: "thread_1", TurnID: "turn_1", ItemID: "item_3", ContentIndex: &contentIndex, Delta: " text"},
+		{Seq: 7, Type: "reasoning_delta", ThreadID: "thread_1", TurnID: "turn_1", ItemID: "item_3", Delta: "other slot"},
+	})
+
+	if len(events) != 4 {
+		t.Fatalf("len(events)=%d, want=4", len(events))
+	}
+	if got := events[0].Delta; got != "Hello" || events[0].Seq != 2 {
+		t.Fatalf("agent delta = %+v, want merged seq=2 delta=Hello", events[0])
+	}
+	if got := events[1].Delta; got != "Plan more" || events[1].Seq != 4 {
+		t.Fatalf("summary delta = %+v, want merged seq=4 delta=Plan more", events[1])
+	}
+	if got := events[2].Delta; got != "body text" || events[2].Seq != 6 {
+		t.Fatalf("reasoning delta = %+v, want merged seq=6 delta=body text", events[2])
+	}
+	if got := events[3].Delta; got != "other slot" || events[3].Seq != 7 {
+		t.Fatalf("non-matching reasoning delta should stay separate: %+v", events[3])
+	}
 }

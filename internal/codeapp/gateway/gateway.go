@@ -98,6 +98,8 @@ type CodexBackend interface {
 	RespondToRequest(ctx context.Context, threadID string, requestID string, resp codexbridge.PendingRequestResponse) error
 }
 
+const codexEventBatchWindow = 16 * time.Millisecond
+
 type SpaceStatus struct {
 	CodeSpaceID        string `json:"code_space_id"`
 	Name               string `json:"name"`
@@ -715,34 +717,131 @@ func (g *Gateway) handleCodexEventStream(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Connection", "keep-alive")
-	for _, ev := range snapshot {
-		if err := writeCodexSSEEvent(w, ev); err != nil {
-			return
-		}
-		flusher.Flush()
+	if err := flushCodexSSEEvents(w, flusher, snapshot); err != nil {
+		return
 	}
 
 	keepAlive := time.NewTicker(20 * time.Second)
 	defer keepAlive.Stop()
+	var (
+		pendingEvents []codexbridge.Event
+		batchTimer    *time.Timer
+		batchTimerCh  <-chan time.Time
+	)
+	stopBatchTimer := func() {
+		if batchTimer == nil {
+			return
+		}
+		if !batchTimer.Stop() {
+			select {
+			case <-batchTimer.C:
+			default:
+			}
+		}
+		batchTimer = nil
+		batchTimerCh = nil
+	}
+	flushPending := func() bool {
+		if len(pendingEvents) == 0 {
+			stopBatchTimer()
+			return true
+		}
+		events := pendingEvents
+		pendingEvents = nil
+		stopBatchTimer()
+		return flushCodexSSEEvents(w, flusher, events) == nil
+	}
 	for {
 		select {
 		case <-r.Context().Done():
+			flushPending()
 			return
 		case <-keepAlive.C:
+			if !flushPending() {
+				return
+			}
 			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
 				return
 			}
 			flusher.Flush()
+		case <-batchTimerCh:
+			if !flushPending() {
+				return
+			}
 		case ev, ok := <-ch:
 			if !ok {
+				flushPending()
 				return
 			}
-			if err := writeCodexSSEEvent(w, ev); err != nil {
-				return
+			pendingEvents = append(pendingEvents, ev)
+			if batchTimer == nil {
+				batchTimer = time.NewTimer(codexEventBatchWindow)
+				batchTimerCh = batchTimer.C
 			}
-			flusher.Flush()
 		}
 	}
+}
+
+func flushCodexSSEEvents(w io.Writer, flusher http.Flusher, events []codexbridge.Event) error {
+	compacted := compactCodexEvents(events)
+	if len(compacted) == 0 {
+		return nil
+	}
+	for _, ev := range compacted {
+		if err := writeCodexSSEEvent(w, ev); err != nil {
+			return err
+		}
+	}
+	flusher.Flush()
+	return nil
+}
+
+func compactCodexEvents(events []codexbridge.Event) []codexbridge.Event {
+	if len(events) <= 1 {
+		return append([]codexbridge.Event(nil), events...)
+	}
+	compacted := make([]codexbridge.Event, 0, len(events))
+	for _, event := range events {
+		if len(compacted) == 0 {
+			compacted = append(compacted, event)
+			continue
+		}
+		lastIndex := len(compacted) - 1
+		if !canCompactCodexEvent(compacted[lastIndex], event) {
+			compacted = append(compacted, event)
+			continue
+		}
+		compacted[lastIndex].Seq = event.Seq
+		compacted[lastIndex].Delta += event.Delta
+	}
+	return compacted
+}
+
+func canCompactCodexEvent(left codexbridge.Event, right codexbridge.Event) bool {
+	if left.Type != right.Type {
+		return false
+	}
+	switch left.Type {
+	case "agent_message_delta", "command_output_delta", "file_change_delta", "plan_delta":
+		return sameCodexEventTarget(left, right)
+	case "reasoning_delta":
+		return sameCodexEventTarget(left, right) && sameOptionalInt64(left.ContentIndex, right.ContentIndex)
+	case "reasoning_summary_delta":
+		return sameCodexEventTarget(left, right) && sameOptionalInt64(left.SummaryIndex, right.SummaryIndex)
+	default:
+		return false
+	}
+}
+
+func sameCodexEventTarget(left codexbridge.Event, right codexbridge.Event) bool {
+	return left.ThreadID == right.ThreadID && left.TurnID == right.TurnID && left.ItemID == right.ItemID
+}
+
+func sameOptionalInt64(left *int64, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func writeCodexSSEEvent(w io.Writer, ev codexbridge.Event) error {
