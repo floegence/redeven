@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GitPanelFrame, GitTableFrame } from './GitWorkbenchPrimitives';
+import { GitMetaPill, GitPanelFrame, GitTableFrame } from './GitWorkbenchPrimitives';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -54,6 +54,27 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
       expect(panel?.className).toContain('redeven-surface-panel--strong');
       expect(panel?.className).toContain('flex');
       expect(panel?.textContent).toContain('Table content');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders GitMetaPill with the local git tag class hook', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <GitMetaPill tone="info" class="custom-pill">
+        Git tag
+      </GitMetaPill>
+    ), host);
+
+    try {
+      const pill = host.firstElementChild as HTMLSpanElement | null;
+      expect(pill).toBeTruthy();
+      expect(pill?.className).toContain('git-meta-pill');
+      expect(pill?.className).toContain('custom-pill');
+      expect(pill?.textContent).toContain('Git tag');
     } finally {
       dispose();
     }

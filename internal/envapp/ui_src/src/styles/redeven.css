@@ -81,7 +81,7 @@ html.dark {
   --git-browser-selection-border-strong: color-mix(in srgb, var(--primary) 68%, #30415b);
   --git-browser-selection-fg: color-mix(in srgb, white 92%, var(--primary) 8%);
   --git-browser-selection-secondary-fg: color-mix(in srgb, var(--git-browser-selection-fg) 82%, transparent);
-  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 12%, transparent);
+  --git-browser-selection-chip-bg: color-mix(in srgb, var(--git-browser-selection-fg) 10%, transparent);
   --git-browser-selection-chip-border: color-mix(in srgb, var(--git-browser-selection-fg) 18%, var(--git-browser-selection-border) 82%);
   --git-browser-selection-chip-fg: var(--git-browser-selection-fg);
   --git-browser-selection-shadow:
@@ -158,6 +158,10 @@ html.dark {
 
 .git-browser-selection-secondary {
   color: var(--git-browser-selection-secondary-fg);
+}
+
+html.dark .git-meta-pill:not(.git-browser-selection-chip) {
+  background-color: color-mix(in srgb, var(--tag-bg) 88%, white 12%);
 }
 
 .git-browser-selection-chip {

@@ -341,7 +341,7 @@ export interface GitMetaPillProps {
 
 export function GitMetaPill(props: GitMetaPillProps) {
   return (
-    <Tag variant={gitTagVariant(props.tone)} tone="soft" size="sm" class={cn('max-w-full align-middle', props.class)}>
+    <Tag variant={gitTagVariant(props.tone)} tone="soft" size="sm" class={cn('git-meta-pill', 'max-w-full align-middle', props.class)}>
       {props.children}
     </Tag>
   );
