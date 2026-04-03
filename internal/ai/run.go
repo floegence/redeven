@@ -68,6 +68,7 @@ type runOptions struct {
 	SkillManager          *skillManager
 
 	createWorkspaceCheckpoint func(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error)
+	terminalExecRunner        func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 }
 
 type run struct {
@@ -161,6 +162,7 @@ type run struct {
 	muCheckpoint               sync.Mutex
 	workspaceCheckpointCreated bool
 	createWorkspaceCheckpoint  func(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error)
+	terminalExecRunner         func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 }
 
 type assistantAnswerState struct {
@@ -229,9 +231,13 @@ func newRun(opts runOptions) *run {
 			return opts.SubagentDepth <= 0
 		}(),
 		createWorkspaceCheckpoint: opts.createWorkspaceCheckpoint,
+		terminalExecRunner:        opts.terminalExecRunner,
 	}
 	if r.createWorkspaceCheckpoint == nil {
 		r.createWorkspaceCheckpoint = createWorkspaceCheckpoint
+	}
+	if r.terminalExecRunner == nil {
+		r.terminalExecRunner = defaultTerminalExecRunner
 	}
 	if r.idleTimeout > 0 {
 		r.activityCh = make(chan struct{}, 1)
@@ -3483,6 +3489,23 @@ const (
 	terminalExecMaxTimeout     = 30 * time.Minute
 )
 
+type terminalExecInvocation struct {
+	Shell         string
+	Command       string
+	Stdin         string
+	WorkingDirAbs string
+	Env           []string
+}
+
+type terminalExecOutcome struct {
+	Stdout     string
+	Stderr     string
+	ExitCode   int
+	DurationMS int64
+	Truncated  bool
+	TimedOut   bool
+}
+
 func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string, cwd string, timeoutMS int64) (any, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -3522,40 +3545,67 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string
 	if shell == "" {
 		shell = "/bin/bash"
 	}
-	cmd := exec.CommandContext(execCtx, shell, "-lc", command)
-	cmd.Dir = cwdAbs
-	cmd.Env = prependRedevenBinToEnv(os.Environ())
-	if stdin != "" {
-		cmd.Stdin = strings.NewReader(stdin)
+	runner := r.terminalExecRunner
+	if runner == nil {
+		runner = defaultTerminalExecRunner
+	}
+	outcome, runErr := runner(execCtx, terminalExecInvocation{
+		Shell:         shell,
+		Command:       command,
+		Stdin:         stdin,
+		WorkingDirAbs: cwdAbs,
+		Env:           prependRedevenBinToEnv(os.Environ()),
+	})
+	if runErr != nil {
+		return nil, runErr
+	}
+	if outcome.DurationMS <= 0 {
+		outcome.DurationMS = time.Since(started).Milliseconds()
 	}
 
+	return map[string]any{
+		"stdout":      outcome.Stdout,
+		"stderr":      outcome.Stderr,
+		"exit_code":   outcome.ExitCode,
+		"duration_ms": outcome.DurationMS,
+		"truncated":   outcome.Truncated,
+		"timed_out":   outcome.TimedOut,
+	}, nil
+}
+
+func defaultTerminalExecRunner(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error) {
+	cmd := exec.CommandContext(ctx, inv.Shell, "-lc", inv.Command)
+	cmd.Dir = inv.WorkingDirAbs
+	cmd.Env = append([]string(nil), inv.Env...)
+	if inv.Stdin != "" {
+		cmd.Stdin = strings.NewReader(inv.Stdin)
+	}
+
+	started := time.Now()
 	lim := newCombinedLimitedBuffers(200_000)
 	cmd.Stdout = lim.Stdout()
 	cmd.Stderr = lim.Stderr()
 
 	runErr := cmd.Run()
-	durationMS := time.Since(started).Milliseconds()
-	timedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded)
-
-	exitCode := 0
-	if runErr != nil {
-		if timedOut {
-			exitCode = 124
-		} else if ee := (*exec.ExitError)(nil); errors.As(runErr, &ee) {
-			exitCode = ee.ExitCode()
-		} else {
-			return nil, runErr
-		}
+	outcome := terminalExecOutcome{
+		Stdout:     lim.StdoutString(),
+		Stderr:     lim.StderrString(),
+		DurationMS: time.Since(started).Milliseconds(),
+		Truncated:  lim.Truncated(),
+		TimedOut:   errors.Is(ctx.Err(), context.DeadlineExceeded),
 	}
-
-	return map[string]any{
-		"stdout":      lim.StdoutString(),
-		"stderr":      lim.StderrString(),
-		"exit_code":   exitCode,
-		"duration_ms": durationMS,
-		"truncated":   lim.Truncated(),
-		"timed_out":   timedOut,
-	}, nil
+	if runErr == nil {
+		return outcome, nil
+	}
+	if outcome.TimedOut {
+		outcome.ExitCode = 124
+		return outcome, nil
+	}
+	if ee := (*exec.ExitError)(nil); errors.As(runErr, &ee) {
+		outcome.ExitCode = ee.ExitCode()
+		return outcome, nil
+	}
+	return terminalExecOutcome{}, runErr
 }
 
 func buildTerminalExecBlockResult(runID string, toolID string, raw any) map[string]any {

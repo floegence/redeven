@@ -137,6 +137,20 @@ func TestBuiltInToolHandler_TerminalExecTimeout_MapsToTimeoutWithPartialData(t *
 		AgentHomeDir: agentHomeDir,
 		Shell:        "bash",
 		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+		terminalExecRunner: func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error) {
+			if strings.TrimSpace(inv.Command) != "printf partial && sleep 0.1" {
+				t.Fatalf("command=%q, want %q", inv.Command, "printf partial && sleep 0.1")
+			}
+			if strings.TrimSpace(inv.WorkingDirAbs) == "" {
+				t.Fatalf("working directory must be resolved before invoking the runner")
+			}
+			return terminalExecOutcome{
+				Stdout:     "partial",
+				ExitCode:   124,
+				DurationMS: 20,
+				TimedOut:   true,
+			}, nil
+		},
 	})
 	h := &builtInToolHandler{r: r, toolName: "terminal.exec"}
 
