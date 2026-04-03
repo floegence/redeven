@@ -18,9 +18,11 @@ import { LoadingOverlay, SnakeLoader } from '@floegence/floe-webapp-core/loading
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog, Dialog, Dropdown, Input, Select, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import {
+  AttachmentPreview,
   ChatProvider,
   VirtualMessageList,
   useChatContext,
+  useAttachments,
   type Attachment,
   type ChatCallbacks,
   type ChatContextValue,
@@ -54,13 +56,15 @@ import {
 } from './aiDataNormalizers';
 import { hasRWXPermissions } from './aiPermissions';
 import type { AskFlowerIntent } from './askFlowerIntent';
-import { buildAskFlowerDraftMarkdown } from '../utils/askFlowerContextTemplate';
+import { buildAskFlowerDraftMarkdown, mergeAskFlowerDraft } from '../utils/askFlowerContextTemplate';
 import { createClientId } from '../utils/clientId';
 import {
   normalizeAbsolutePath as normalizeAskFlowerAbsolutePath,
   resolveSuggestedWorkingDirAbsolute,
   toHomeDisplayPath,
 } from '../utils/askFlowerPath';
+import { readLiveTextValue, syncLiveTextValue } from '../utils/liveTextValue';
+import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 import { readUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
 import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
 import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
@@ -78,16 +82,11 @@ import {
   reorderFollowupsByIDs,
   reindexFollowups,
   shouldAutoloadRecoveredFollowup,
+  type ComposerDraftSnapshot,
   type FollowupItem,
   type FollowupLane,
   type ListFollowupsResponse,
 } from './followupsState';
-import {
-  FlowerComposer,
-  type FlowerComposerApi,
-  type FlowerComposerAttachmentDraftSnapshot,
-  type FlowerComposerSendIntent,
-} from '../flower/FlowerComposer';
 import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator';
 import { FlowerLiveAssistantSurface } from '../widgets/FlowerLiveAssistantSurface';
 import { createAIThreadRenderController } from './createAIThreadRenderController';
@@ -136,8 +135,8 @@ type RunContextEventsResponse = {
   has_more?: boolean;
 };
 
-type SendIntent = FlowerComposerSendIntent;
-type AIChatInputDraftSnapshot = FlowerComposerAttachmentDraftSnapshot;
+type SendIntent = 'default' | 'queue_after_waiting_user';
+type AIChatInputDraftSnapshot = ComposerDraftSnapshot<Attachment>;
 
 type PendingDraftLoad = {
   followup: FollowupItem;
@@ -160,7 +159,393 @@ const ChatCapture: Component<{ onReady: (ctx: ChatContextValue) => void }> = (pr
   return null;
 };
 
-type AIChatInputApi = FlowerComposerApi;
+type AIChatInputApi = {
+  applyDraftText: (nextText: string, mode: 'append' | 'replace') => void;
+  addAttachmentFiles: (files: File[]) => void;
+  replaceDraft: (nextDraft: AIChatInputDraftSnapshot) => void;
+  snapshotDraft: () => AIChatInputDraftSnapshot;
+  clearDraft: () => void;
+  focusInput: () => void;
+};
+
+const AIChatInput: Component<{
+  class?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  waitingForUser?: boolean;
+  workingDirLabel?: string;
+  workingDirTitle?: string;
+  workingDirLocked?: boolean;
+  workingDirDisabled?: boolean;
+  onPickWorkingDir?: () => void;
+  onSendIntent?: (intent: SendIntent) => void;
+  getSendBlockReason?: (content: string, attachments: Attachment[]) => string | null;
+  onApiReady?: (api: AIChatInputApi | null) => void;
+}> = (props) => {
+  const ctx = useChatContext();
+  const notify = useNotification();
+  const [text, setText] = createSignal('');
+  const [isFocused, setIsFocused] = createSignal(false);
+  const [isComposing, setIsComposing] = createSignal(false);
+  const [sending, setSending] = createSignal(false);
+
+  let textareaRef: HTMLTextAreaElement | undefined;
+  let rafId: number | null = null;
+
+  const attachments = useAttachments({
+    maxAttachments: ctx.config().maxAttachments,
+    maxSize: ctx.config().maxAttachmentSize,
+    acceptedTypes: ctx.config().acceptedFileTypes,
+    onUpload: ctx.config().allowAttachments ? (file) => ctx.uploadAttachment(file) : undefined,
+    uploadMode: 'deferred',
+  });
+
+  const placeholder = () => props.placeholder || ctx.config().placeholder || 'Type a message...';
+  const currentText = () => readLiveTextValue(textareaRef, text());
+  const syncTextFromTextarea = () => syncLiveTextValue(textareaRef, setText, text());
+  const hasDraftPayload = () => currentText().trim().length > 0 || attachments.attachments().length > 0;
+  const sendBlockReason = () => {
+    if (!hasDraftPayload()) return '';
+    return String(props.getSendBlockReason?.(currentText(), attachments.attachments()) ?? '').trim();
+  };
+
+  const canSend = () =>
+    hasDraftPayload() &&
+    !props.disabled &&
+    !sending() &&
+    !attachments.hasUploading() &&
+    !sendBlockReason();
+
+  const adjustHeight = () => {
+    const el = textareaRef;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
+  };
+
+  const scheduleAdjustHeight = () => {
+    if (rafId !== null) return;
+    if (typeof requestAnimationFrame === 'undefined') {
+      adjustHeight();
+      return;
+    }
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      adjustHeight();
+    });
+  };
+
+  const focusComposer = () => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        textareaRef?.focus();
+      });
+      return;
+    }
+    textareaRef?.focus();
+  };
+
+  const snapshotDraft = (): AIChatInputDraftSnapshot => ({
+    text: currentText(),
+    attachments: attachments.attachments().map((attachment) => ({ ...attachment })),
+  });
+
+  const clearDraft = () => {
+    setIsComposing(false);
+    setText('');
+    attachments.clearAttachments();
+    if (textareaRef) textareaRef.style.height = 'auto';
+  };
+
+  const replaceDraft = (nextDraft: AIChatInputDraftSnapshot) => {
+    setIsComposing(false);
+    setText(String(nextDraft?.text ?? ''));
+    attachments.replaceAttachments(Array.isArray(nextDraft?.attachments) ? nextDraft.attachments : []);
+    if (textareaRef) textareaRef.style.height = 'auto';
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        scheduleAdjustHeight();
+        const el = textareaRef;
+        if (!el) return;
+        el.focus();
+        const cursor = el.value.length;
+        try {
+          el.setSelectionRange(cursor, cursor);
+        } catch {
+          // ignore cursor placement failures on older browsers
+        }
+      });
+      return;
+    }
+    scheduleAdjustHeight();
+    focusComposer();
+  };
+
+  const handleSend = async (intent: SendIntent = 'default') => {
+    if (!canSend()) return;
+
+    setSending(true);
+    const content = syncTextFromTextarea().trim();
+    try {
+      const upload = await attachments.uploadAll();
+      if (!upload.ok) {
+        const firstError = upload.failed
+          .map((attachment) => String(attachment.error ?? '').trim())
+          .find((message) => message.length > 0);
+        notify.error('Attachment upload failed', firstError || 'Remove failed attachments and try again.');
+        return;
+      }
+
+      const files = upload.attachments.filter((attachment) => attachment.status === 'uploaded');
+      const restoreDraft: AIChatInputDraftSnapshot = {
+        text: content,
+        attachments: upload.attachments.map((attachment) => ({ ...attachment })),
+      };
+      props.onSendIntent?.(intent);
+      clearDraft();
+      try {
+        await ctx.sendMessage(content, files);
+      } catch {
+        replaceDraft(restoreDraft);
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (shouldSubmitOnEnterKeydown({ event: e, isComposing: isComposing() })) {
+      e.preventDefault();
+      void handleSend();
+    }
+  };
+
+  const handlePaste = async (e: ClipboardEvent) => {
+    if (!ctx.config().allowAttachments) return;
+    await attachments.handlePaste(e);
+  };
+
+  const canPickWorkingDir = () => !!props.onPickWorkingDir && !props.disabled && !props.workingDirDisabled && !props.workingDirLocked;
+
+  const applyDraftText = (nextText: string, mode: 'append' | 'replace') => {
+    const normalized = String(nextText ?? '').trim();
+    if (!normalized) return;
+
+    setText((prev) =>
+      mergeAskFlowerDraft({
+        currentText: prev,
+        nextText: normalized,
+        mode,
+      }),
+    );
+
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        scheduleAdjustHeight();
+        const el = textareaRef;
+        if (!el) return;
+        el.focus();
+        const cursor = el.value.length;
+        try {
+          el.setSelectionRange(cursor, cursor);
+        } catch {
+          // ignore cursor placement failures on older browsers
+        }
+      });
+      return;
+    }
+    scheduleAdjustHeight();
+    focusComposer();
+  };
+
+  const addAttachmentFiles = (files: File[]) => {
+    if (!ctx.config().allowAttachments) return;
+    if (!Array.isArray(files) || files.length <= 0) return;
+    attachments.addFiles(files);
+  };
+
+  const focusInput = () => {
+    focusComposer();
+  };
+
+  createEffect(() => {
+    props.onApiReady?.({
+      applyDraftText,
+      addAttachmentFiles,
+      replaceDraft,
+      snapshotDraft,
+      clearDraft,
+      focusInput,
+    });
+  });
+
+  onCleanup(() => {
+    props.onApiReady?.(null);
+    if (rafId !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  });
+
+  return (
+    <div
+      class={cn(
+        'chat-input-container',
+        isFocused() && 'chat-input-container-focused',
+        attachments.isDragging() && 'chat-input-container-dragging',
+        props.class,
+      )}
+      onDragEnter={attachments.handleDragEnter}
+      onDragLeave={attachments.handleDragLeave}
+      onDragOver={attachments.handleDragOver}
+      onDrop={attachments.handleDrop}
+    >
+      <Show when={attachments.isDragging()}>
+        <div class="chat-input-drop-overlay">
+          <UploadIcon />
+          <span>Drop files here</span>
+        </div>
+      </Show>
+
+      <Show when={attachments.attachments().length > 0}>
+        <AttachmentPreview
+          attachments={attachments.attachments()}
+          onRemove={attachments.removeAttachment}
+        />
+      </Show>
+
+      <div class="chat-input-body flower-chat-input-body">
+        <div class="flower-chat-input-primary-row">
+          <textarea
+            ref={textareaRef}
+            class="chat-input-textarea flower-chat-input-textarea"
+            value={text()}
+            onInput={(e) => {
+              setText(e.currentTarget.value);
+              scheduleAdjustHeight();
+            }}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionUpdate={() => {
+              syncTextFromTextarea();
+              scheduleAdjustHeight();
+            }}
+            onCompositionEnd={() => {
+              setIsComposing(false);
+              syncTextFromTextarea();
+              scheduleAdjustHeight();
+            }}
+            onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder={placeholder()}
+            disabled={props.disabled}
+            rows={2}
+          />
+
+          <div class="flower-chat-input-send-slot">
+            <button
+              type="button"
+              class={cn(
+                'chat-input-send-btn flower-chat-input-send-btn',
+                canSend() && 'chat-input-send-btn-active',
+                props.waitingForUser && 'flower-chat-input-send-btn-reply',
+              )}
+              onClick={() => void handleSend()}
+              disabled={!canSend()}
+              title={props.waitingForUser ? 'Reply now' : 'Send message'}
+            >
+              <Show when={props.waitingForUser}>
+                <span class="chat-input-send-btn-label">Reply</span>
+              </Show>
+              <SendIcon />
+            </button>
+          </div>
+        </div>
+
+        <div class="flower-chat-input-meta">
+          <div class="flower-chat-input-meta-rail" role="toolbar" aria-label="Chat input secondary actions">
+            <Show when={props.onPickWorkingDir}>
+              <button
+                type="button"
+                class={cn(
+                  'flower-chat-chip flower-chat-working-dir-chip',
+                  canPickWorkingDir()
+                    ? 'flower-chat-chip-actionable'
+                    : 'flower-chat-chip-disabled',
+                )}
+                onClick={() => {
+                  if (!canPickWorkingDir()) return;
+                  props.onPickWorkingDir?.();
+                }}
+                title={String(props.workingDirTitle ?? '').trim() || String(props.workingDirLabel ?? '').trim() || 'Working dir'}
+              >
+                <FolderIcon />
+                <span class="flower-chat-working-dir-chip-label">{String(props.workingDirLabel ?? '').trim() || 'Working dir'}</span>
+                <Show when={!!props.workingDirLocked}>
+                  <LockIcon />
+                </Show>
+              </button>
+            </Show>
+
+            <Show when={ctx.config().allowAttachments}>
+              <button
+                type="button"
+                class="flower-chat-meta-btn"
+                onClick={attachments.openFilePicker}
+                title="Add attachments"
+              >
+                <PaperclipIcon />
+              </button>
+            </Show>
+
+            <Show when={props.waitingForUser}>
+              <button
+                type="button"
+                class="flower-chat-chip flower-chat-secondary-chip"
+                onClick={() => void handleSend('queue_after_waiting_user')}
+                disabled={!canSend()}
+                title="Queue for later"
+              >
+                Queue for later
+              </button>
+            </Show>
+          </div>
+
+          <Show when={sendBlockReason()}>
+            <div class="flower-chat-input-status text-error">{sendBlockReason()}</div>
+          </Show>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PaperclipIcon: Component = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+  </svg>
+);
+
+const FolderIcon: Component = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </svg>
+);
+
+const LockIcon: Component = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 1 1 8 0v4" />
+  </svg>
+);
+
+const SendIcon: Component = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="22" y1="2" x2="11" y2="13" />
+    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+  </svg>
+);
 
 const MoreVerticalIcon: Component<{ class?: string }> = (props) => (
   <svg
@@ -176,6 +561,14 @@ const MoreVerticalIcon: Component<{ class?: string }> = (props) => (
     <circle cx="12" cy="12" r="1" />
     <circle cx="12" cy="5" r="1" />
     <circle cx="12" cy="19" r="1" />
+  </svg>
+);
+
+const UploadIcon: Component = () => (
+  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
   </svg>
 );
 
@@ -3690,7 +4083,7 @@ export function EnvAIPage() {
                       </div>
                     </Show>
 
-                    <FlowerComposer
+                    <AIChatInput
                       class="flower-chat-input"
                       disabled={!canInteract()}
                       waitingForUser={activeThreadWaitingUser()}
@@ -3699,11 +4092,6 @@ export function EnvAIPage() {
                       workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
                       workingDirLocked={workingDirLocked()}
                       workingDirDisabled={workingDirDisabled()}
-                      historyScopeKey={`env:${String(env.env_id() ?? '').trim() || 'global'}:flower`}
-                      executionMode={executionMode()}
-                      onExecutionModeChange={(mode) => {
-                        void updateExecutionMode(mode);
-                      }}
                       onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
                       onSendIntent={(intent) => {
                         nextSendIntent = intent;

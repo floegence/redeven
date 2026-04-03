@@ -36,7 +36,6 @@ type MockWaitingPrompt = {
 const notificationErrorMock = vi.fn();
 const notificationInfoMock = vi.fn();
 const notificationSuccessMock = vi.fn();
-const uiStorageState = new Map<string, string>();
 
 const protocolState = {
   status: 'connected' as 'connected' | 'disconnected',
@@ -138,18 +137,6 @@ const envContextValue = {
   aiThreadFocusId: () => null,
   focusAIThread: () => {},
 };
-
-const threadsResource = (() => {
-  const resource = (() => {
-    runStateVersion();
-    return {
-      threads: aiState.activeThread ? [aiState.activeThread] : [],
-    };
-  }) as any;
-  resource.loading = false;
-  resource.error = null;
-  return resource;
-})();
 
 const aiState = {
   activeThreadId: '' as string,
@@ -276,7 +263,7 @@ function applyMockRealtimeEvent(event: any): void {
 const aiContextValue = new Proxy({
   settings: { error: null },
   models: { loading: false, error: null },
-  threads: threadsResource,
+  threads: { loading: false, error: null },
   aiEnabled: () => true,
   modelsReady: () => true,
   modelOptions: () => [{ value: 'model-test', label: 'Model Test' }],
@@ -285,7 +272,7 @@ const aiContextValue = new Proxy({
   selectedThreadModel: () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test',
   selectThreadModel: vi.fn(),
   selectedSendModel: () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test',
-  activeThreadModelLocked: (): boolean => false,
+  activeThreadModelLocked: () => false,
   activeThreadId: () => aiState.activeThreadId || null,
   activeThread: () => aiState.activeThread,
   activeThreadWaitingPrompt: () => aiState.waitingPrompt,
@@ -751,28 +738,6 @@ function inputComposer(host: HTMLElement, value: string) {
   return element;
 }
 
-function setComposerSelection(host: HTMLElement, start: number, end = start) {
-  const textarea = host.querySelector('textarea');
-  expect(textarea).toBeTruthy();
-  const element = textarea as HTMLTextAreaElement;
-  element.focus();
-  element.setSelectionRange(start, end);
-  element.dispatchEvent(new Event('select', { bubbles: true }));
-  return element;
-}
-
-function pressComposerKey(host: HTMLElement, key: string) {
-  const textarea = host.querySelector('textarea');
-  expect(textarea).toBeTruthy();
-  const element = textarea as HTMLTextAreaElement;
-  element.dispatchEvent(new KeyboardEvent('keydown', {
-    key,
-    bubbles: true,
-    cancelable: true,
-  }));
-  return element;
-}
-
 function composeTextWithoutInput(host: HTMLElement, value: string) {
   const textarea = host.querySelector('textarea');
   expect(textarea).toBeTruthy();
@@ -876,17 +841,6 @@ export function registerEnvAIPageSendTests() {
     vi.resetModules();
     vi.clearAllMocks();
     resetScenario();
-    uiStorageState.clear();
-    window.redevenDesktopStateStorage = {
-      getItem: (key) => uiStorageState.get(key) ?? null,
-      setItem: (key, value) => {
-        uiStorageState.set(key, value);
-      },
-      removeItem: (key) => {
-        uiStorageState.delete(key);
-      },
-      keys: () => Array.from(uiStorageState.keys()),
-    };
 
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -1834,35 +1788,6 @@ export function registerEnvAIPageSendTests() {
           }),
         }));
         expect(textarea.value).toBe('');
-      } finally {
-        dispose();
-      }
-    });
-
-    it('applies /plan in the composer before sending and forwards the plan mode to sendUserTurn', async () => {
-      const { host, dispose } = await renderPage();
-      try {
-        const textarea = inputComposer(host, '/plan Inspect the failing tests.');
-        setComposerSelection(host, 5);
-        await flushAsync();
-
-        pressComposerKey(host, 'Enter');
-        await flushAsync();
-
-        expect(textarea.value).toBe('Inspect the failing tests.');
-
-        submitComposer(host, 'enter', 'Send message');
-        await flushAsync();
-
-        expect(sendUserTurnMock).toHaveBeenCalledTimes(1);
-        expect(sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
-          input: expect.objectContaining({
-            text: 'Inspect the failing tests.',
-          }),
-          options: expect.objectContaining({
-            mode: 'plan',
-          }),
-        }));
       } finally {
         dispose();
       }
