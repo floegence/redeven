@@ -1750,6 +1750,58 @@ func (r *run) persistToolCallSnapshot(toolID string, toolName string, status Too
 	r.persistToolCall(rec)
 }
 
+func (r *run) persistSyntheticToolSuccess(toolID string, toolName string, args map[string]any, result any) string {
+	if r == nil {
+		return strings.TrimSpace(toolID)
+	}
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return strings.TrimSpace(toolID)
+	}
+	toolID = strings.TrimSpace(toolID)
+	if toolID == "" {
+		if id, err := newToolID(); err == nil {
+			toolID = id
+		} else {
+			toolID = "tool_" + strings.ReplaceAll(strings.ToLower(toolName), ".", "_")
+		}
+	}
+	argsCopy := cloneAnyMap(args)
+	startedAt := time.Now()
+	r.recordRuntimeToolCall()
+	r.persistRunEvent("tool.call", RealtimeStreamKindTool, map[string]any{
+		"tool_id":   toolID,
+		"tool_name": toolName,
+		"args":      redactAnyForLog("args", argsCopy, 0),
+	})
+	r.persistToolCallSnapshot(toolID, toolName, ToolCallStatusSuccess, argsCopy, result, nil, "", startedAt, startedAt)
+	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
+		"tool_id":   toolID,
+		"tool_name": toolName,
+		"status":    "success",
+	})
+	successPayload := map[string]any{
+		"tool_id":   toolID,
+		"tool_name": toolName,
+		"status":    "success",
+		"result":    redactAnyForLog("result", result, 0),
+	}
+	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+		SpanID:          executionSpanID(r.id, toolName, toolID),
+		EndpointID:      strings.TrimSpace(r.endpointID),
+		ThreadID:        strings.TrimSpace(r.threadID),
+		RunID:           strings.TrimSpace(r.id),
+		Kind:            "tool",
+		Name:            toolName,
+		Status:          "success",
+		PayloadJSON:     marshalPersistJSON(successPayload, 6000),
+		StartedAtUnixMs: startedAt.UnixMilli(),
+		EndedAtUnixMs:   startedAt.UnixMilli(),
+		UpdatedAtUnixMs: startedAt.UnixMilli(),
+	})
+	return toolID
+}
+
 func cloneAnyMap(in map[string]any) map[string]any {
 	if in == nil {
 		return map[string]any{}
@@ -2041,7 +2093,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			Retryable: false,
 			SuggestedFixes: []string{
 				"Switch AI mode to act to enable mutating tools.",
-				"If edits are required, call ask_user to request switching to act mode.",
+				"If execution is required, call exit_plan_mode to request switching to act mode.",
 			},
 		}
 		setToolError(toolErr, "", nil)
@@ -2440,7 +2492,9 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 func extractAskUserSummaryFromBlock(block any) string {
 	switch v := block.(type) {
 	case ToolCallBlock:
-		if strings.TrimSpace(v.ToolName) != "ask_user" {
+		switch strings.TrimSpace(v.ToolName) {
+		case "ask_user", "exit_plan_mode":
+		default:
 			return ""
 		}
 		if summary := extractAskUserSummaryFromAny(v.Args); summary != "" {
@@ -2448,7 +2502,12 @@ func extractAskUserSummaryFromBlock(block any) string {
 		}
 		return extractAskUserSummaryFromAny(v.Result)
 	case *ToolCallBlock:
-		if v == nil || strings.TrimSpace(v.ToolName) != "ask_user" {
+		if v == nil {
+			return ""
+		}
+		switch strings.TrimSpace(v.ToolName) {
+		case "ask_user", "exit_plan_mode":
+		default:
 			return ""
 		}
 		if summary := extractAskUserSummaryFromAny(v.Args); summary != "" {
@@ -2461,7 +2520,9 @@ func extractAskUserSummaryFromBlock(block any) string {
 			return ""
 		}
 		toolName, _ := v["toolName"].(string)
-		if strings.TrimSpace(toolName) != "ask_user" {
+		switch strings.TrimSpace(toolName) {
+		case "ask_user", "exit_plan_mode":
+		default:
 			return ""
 		}
 		if summary := extractAskUserSummaryFromAny(v["args"]); summary != "" {
@@ -2488,6 +2549,9 @@ func assistantVisibleTextFromBlock(block any) string {
 func extractAskUserSummaryFromAny(value any) string {
 	switch v := value.(type) {
 	case map[string]any:
+		if prompt := requestUserInputPromptFromAnyValue(v["waiting_prompt"], "", ""); prompt != nil {
+			return formatRequestUserInputAssistantSummary(*prompt)
+		}
 		if questions := parseAskUserQuestionsAny(v["questions"]); len(questions) > 0 {
 			return formatRequestUserInputAssistantSummary(RequestUserInputPrompt{Questions: questions})
 		}
@@ -2497,6 +2561,27 @@ func extractAskUserSummaryFromAny(value any) string {
 		}
 	}
 	return ""
+}
+
+func requestUserInputPromptFromAnyValue(value any, messageID string, toolID string) *RequestUserInputPrompt {
+	if value == nil {
+		return nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	var prompt RequestUserInputPrompt
+	if err := json.Unmarshal(raw, &prompt); err != nil {
+		return nil
+	}
+	if strings.TrimSpace(prompt.MessageID) == "" {
+		prompt.MessageID = strings.TrimSpace(messageID)
+	}
+	if strings.TrimSpace(prompt.ToolID) == "" {
+		prompt.ToolID = strings.TrimSpace(toolID)
+	}
+	return normalizeRequestUserInputPrompt(&prompt)
 }
 
 func toAnySlice(value any) []any {
@@ -2578,29 +2663,65 @@ func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
 func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waitingUser bool, questions []RequestUserInputQuestion) {
 	switch v := block.(type) {
 	case ToolCallBlock:
-		if strings.TrimSpace(v.ToolName) != "ask_user" {
+		switch strings.TrimSpace(v.ToolName) {
+		case "ask_user":
+			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserQuestions(v.Args, v.Result)
+		case "exit_plan_mode":
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID))
+			if prompt == nil {
+				return "", false, false, nil
+			}
+			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
+		default:
 			return "", false, false, nil
 		}
-		return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserQuestions(v.Args, v.Result)
 	case *ToolCallBlock:
-		if v == nil || strings.TrimSpace(v.ToolName) != "ask_user" {
+		if v == nil {
 			return "", false, false, nil
 		}
-		return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserQuestions(v.Args, v.Result)
+		switch strings.TrimSpace(v.ToolName) {
+		case "ask_user":
+			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserQuestions(v.Args, v.Result)
+		case "exit_plan_mode":
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID))
+			if prompt == nil {
+				return "", false, false, nil
+			}
+			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
+		default:
+			return "", false, false, nil
+		}
 	case map[string]any:
 		typ, _ := v["type"].(string)
 		if strings.TrimSpace(typ) != "tool-call" {
 			return "", false, false, nil
 		}
 		toolName, _ := v["toolName"].(string)
-		if strings.TrimSpace(toolName) != "ask_user" {
+		switch strings.TrimSpace(toolName) {
+		case "ask_user":
+			toolID, _ := v["toolId"].(string)
+			return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), extractAskUserQuestions(v["args"], v["result"])
+		case "exit_plan_mode":
+			toolID, _ := v["toolId"].(string)
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v["result"]), "", strings.TrimSpace(toolID))
+			if prompt == nil {
+				return "", false, false, nil
+			}
+			return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), prompt.Questions
+		default:
 			return "", false, false, nil
 		}
-		toolID, _ := v["toolId"].(string)
-		return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), extractAskUserQuestions(v["args"], v["result"])
 	default:
 		return "", false, false, nil
 	}
+}
+
+func extractNestedWaitingPromptAny(value any) any {
+	m, _ := value.(map[string]any)
+	if len(m) == 0 {
+		return nil
+	}
+	return m["waiting_prompt"]
 }
 
 func extractAskUserWaitingFlag(value any) bool {
@@ -2653,6 +2774,10 @@ func extractAskUserPromptSnapshot(block any, messageID string) (*RequestUserInpu
 	}
 	if payload == nil {
 		payload = map[string]any{}
+	}
+
+	if prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(result), strings.TrimSpace(messageID), strings.TrimSpace(toolID)); prompt != nil {
+		return prompt, waitingUser
 	}
 
 	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
@@ -3007,6 +3132,39 @@ func (r *run) emitSourcesToolBlock(source string) {
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
 	switch toolName {
+	case "file.read":
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p FileReadArgs
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolFileRead(ctx, p)
+
+	case "file.edit":
+		if meta == nil || !meta.CanWrite {
+			return nil, errors.New("write permission denied")
+		}
+		var p FileEditArgs
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolFileEdit(ctx, p)
+
+	case "file.write":
+		if meta == nil || !meta.CanWrite {
+			return nil, errors.New("write permission denied")
+		}
+		var p FileWriteArgs
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolFileWrite(ctx, p)
+
 	case "apply_patch":
 		if meta == nil || !meta.CanWrite {
 			return nil, errors.New("write permission denied")
@@ -3137,6 +3295,14 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("invalid args")
 		}
 		return r.toolWriteTodos(ctx, toolID, p.Todos, p.ExpectedVersion, p.Explanation)
+
+	case "exit_plan_mode":
+		var p ExitPlanModeArgs
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolExitPlanMode(toolID, p)
 
 	case "use_skill":
 		if meta == nil || !meta.CanExecute {

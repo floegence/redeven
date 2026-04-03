@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestBuildLayeredSystemPrompt_UsesCanonicalApplyPatchContract(t *testing.T) {
+func TestBuildLayeredSystemPrompt_PrefersStructuredFileOpsButKeepsApplyPatchCompatibility(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
@@ -21,14 +21,20 @@ func TestBuildLayeredSystemPrompt_UsesCanonicalApplyPatchContract(t *testing.T) 
 		0,
 		4,
 		true,
-		[]ToolDef{{Name: "terminal.exec"}, {Name: "apply_patch"}},
+		[]ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "file.edit"}, {Name: "file.write"}, {Name: "apply_patch"}},
 		newRuntimeState("Update a source file"),
 		"",
-		runCapabilityContract{},
+		runCapabilityContract{ProtocolProfile: defaultStructuredProtocolProfile()},
 	)
 
-	if !strings.Contains(prompt, "Use apply_patch in canonical Begin/End Patch format for file edits") {
-		t.Fatalf("prompt missing canonical apply_patch workflow: %q", prompt)
+	if !strings.Contains(prompt, "`apply_patch` remains available as a compatibility fallback") {
+		t.Fatalf("prompt should still keep apply_patch compatibility guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Primary file tools: `file.read`, `file.edit`, and `file.write`.") {
+		t.Fatalf("prompt missing structured file tool guidance: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Use file.read for focused inspection, file.edit for exact replacements, file.write for full-file writes") {
+		t.Fatalf("prompt missing structured workflow guidance: %q", prompt)
 	}
 	if !strings.Contains(prompt, "send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch`") {
 		t.Fatalf("prompt missing canonical patch envelope guidance: %q", prompt)

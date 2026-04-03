@@ -3,6 +3,21 @@ package tools
 import "strings"
 
 var builtinDefinitions = map[string]Definition{
+	"file.read": {
+		Name:             "file.read",
+		Mutating:         false,
+		RequiresApproval: false,
+	},
+	"file.edit": {
+		Name:             "file.edit",
+		Mutating:         true,
+		RequiresApproval: true,
+	},
+	"file.write": {
+		Name:             "file.write",
+		Mutating:         true,
+		RequiresApproval: true,
+	},
 	"apply_patch": {
 		Name:             "apply_patch",
 		Mutating:         true,
@@ -25,6 +40,11 @@ var builtinDefinitions = map[string]Definition{
 	},
 	"write_todos": {
 		Name:             "write_todos",
+		Mutating:         false,
+		RequiresApproval: false,
+	},
+	"exit_plan_mode": {
+		Name:             "exit_plan_mode",
 		Mutating:         false,
 		RequiresApproval: false,
 	},

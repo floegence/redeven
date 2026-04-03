@@ -29,12 +29,14 @@ func TestClassifyFinalizationReason(t *testing.T) {
 	}{
 		{reason: "task_complete", want: finalizationClassSuccess},
 		{reason: "task_complete_forced", want: finalizationClassSuccess},
+		{reason: finalizationReasonProtocolCloseout, want: finalizationClassSuccess},
 		{reason: "social_reply", want: finalizationClassSuccess},
 		{reason: "creative_reply", want: finalizationClassSuccess},
 		{reason: "hybrid_first_turn_reply", want: finalizationClassSuccess},
 		{reason: "ask_user_waiting", want: finalizationClassWaitingUser},
 		{reason: "ask_user_waiting_model", want: finalizationClassWaitingUser},
 		{reason: "ask_user_waiting_guard", want: finalizationClassWaitingUser},
+		{reason: finalizationReasonExitPlanModeWaiting, want: finalizationClassWaitingUser},
 		{reason: "implicit_complete_backpressure", want: finalizationClassFailure},
 	}
 	for _, tc := range cases {
@@ -99,5 +101,25 @@ func TestEvaluateTaskCompletionGate(t *testing.T) {
 		InteractionContract: interactionContract{Enabled: true},
 	}, TaskComplexityStandard, config.AIModeAct); !pass || reason != "ok" {
 		t.Fatalf("question-shaped completion should no longer be blocked => pass=%v reason=%q", pass, reason)
+	}
+}
+
+func TestBuildRuntimeCloseout(t *testing.T) {
+	t.Parallel()
+
+	closeout, ok, reason := buildRuntimeCloseout("Final verified answer.", runtimeState{
+		CompletedActionFacts: []string{"file.write: file.updated"},
+	}, TaskComplexityStandard, config.AIModeAct)
+	if !ok || reason != "ok" {
+		t.Fatalf("buildRuntimeCloseout => ok=%v reason=%q", ok, reason)
+	}
+	if closeout.Source != finalizationReasonProtocolCloseout {
+		t.Fatalf("closeout source=%q, want %q", closeout.Source, finalizationReasonProtocolCloseout)
+	}
+
+	if _, ok, reason := buildRuntimeCloseout("Final answer.", runtimeState{
+		CompletedActionFacts: []string{"write_todos: todos.updated"},
+	}, TaskComplexityStandard, config.AIModeAct); ok || reason != "missing_verified_tool_work" {
+		t.Fatalf("missing verified work => ok=%v reason=%q", ok, reason)
 	}
 }

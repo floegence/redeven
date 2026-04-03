@@ -6,6 +6,7 @@ type signalSplitResult struct {
 	NormalCalls      []ToolCall
 	TaskCompleteCall *ToolCall
 	AskUserCall      *ToolCall
+	ExitPlanModeCall *ToolCall
 	ForbiddenSignals []ToolCall
 }
 
@@ -35,6 +36,15 @@ func splitSignalsByPolicy(calls []ToolCall, capability runCapabilityContract) si
 			if result.AskUserCall == nil {
 				copyCall := call
 				result.AskUserCall = &copyCall
+			}
+		case "exit_plan_mode":
+			if !capability.allowsSignal(name) {
+				result.ForbiddenSignals = append(result.ForbiddenSignals, call)
+				continue
+			}
+			if result.ExitPlanModeCall == nil {
+				copyCall := call
+				result.ExitPlanModeCall = &copyCall
 			}
 		default:
 			result.NormalCalls = append(result.NormalCalls, call)
