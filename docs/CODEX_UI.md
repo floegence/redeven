@@ -205,10 +205,16 @@ Current Env App behavior:
 - Draft mentions and attachments render as a lower-priority draft-object lane beneath the control row instead of sharing the same visual weight as runtime controls.
 - Generic onboarding copy such as `@` / `/` / image hints is conditional; it only appears when the composer is still empty or when capability/state feedback is genuinely needed.
 - The transcript-to-composer boundary is intentionally soft: the Codex send bar should read as floating over the transcript tail rather than as a second hard-split footer panel.
+- The Codex transcript now also exposes the same floating `Browse files` FAB pattern used by Flower, seeded from the resolved Codex working directory and routed through the shared Env App file-browser surface instead of a Codex-local browser implementation.
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.
 - New threads can choose working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn.
 - The working-directory picker uses the shared floe-webapp async path-resolution contract plus an Env App directory data source that hydrates ancestor folders on demand, so deep initial cwd values, typed path entry, breadcrumb jumps, and tree reselection all resolve against the same lazy-loaded tree state.
 - Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.
+- The transcript FAB follows the same resolved working-directory precedence as the rest of the Codex page (`workingDirDraft -> runtime_config.cwd -> thread.cwd -> agent_home_dir`), so the browser always opens at the directory Codex itself currently considers active.
+- The transcript FAB is availability-gated with the rest of the Codex host-backed controls: when host Codex is unavailable or the thread state disables host-backed actions, the FAB stays hidden instead of exposing a disconnected browser shortcut.
+- Browser-surface ownership remains shared rather than Codex-local:
+  - Codex owns only the directory seed and transcript mount point;
+  - Env App shell still owns floating-window persistence, detached desktop fallback, and `RemoteFileBrowser` rendering through `FileBrowserSurfaceContext`, `FileBrowserSurfaceHost`, and `openFileBrowserSurface()`.
 - Archiving a thread hides it from the browser conversation list after the active-thread list refreshes.
 - Later turns may still adjust model, reasoning effort, approval policy, and sandbox mode through the Codex composer controls.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.

@@ -31,6 +31,10 @@ const notification = {
   error: vi.fn(),
   info: vi.fn(),
 };
+const fileBrowserSurfaceState = vi.hoisted(() => ({
+  openBrowser: vi.fn(async () => undefined),
+  open: vi.fn(() => false),
+}));
 const desktopStorageState = new Map<string, string>();
 let lastDirectoryPickerProps: any = null;
 
@@ -73,6 +77,12 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Trash: Icon,
   };
 });
+
+vi.mock('solid-motionone', () => ({
+  Motion: {
+    div: (props: any) => <div>{props.children}</div>,
+  },
+}));
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: (props: any) => <div>{props.message}</div>,
@@ -208,10 +218,33 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => rpcMocks,
 }));
 
+vi.mock('../widgets/FileBrowserSurfaceContext', () => ({
+  useFileBrowserSurfaceContext: () => ({
+    controller: {
+      open: fileBrowserSurfaceState.open,
+    },
+    openBrowser: fileBrowserSurfaceState.openBrowser,
+    closeBrowser: vi.fn(),
+  }),
+}));
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function clickFab(button: HTMLButtonElement): void {
+  (button as any).setPointerCapture = vi.fn();
+  (button as any).releasePointerCapture = vi.fn();
+
+  const pointerDown = new PointerEvent('pointerdown', { bubbles: true, clientX: 10, clientY: 10 });
+  Object.defineProperty(pointerDown, 'pointerId', { value: 1 });
+  const pointerUp = new PointerEvent('pointerup', { bubbles: true, clientX: 10, clientY: 10 });
+  Object.defineProperty(pointerUp, 'pointerId', { value: 1 });
+
+  button.dispatchEvent(pointerDown);
+  button.dispatchEvent(pointerUp);
 }
 
 function createRafHarness() {
@@ -528,6 +561,9 @@ afterEach(() => {
   document.body.innerHTML = '';
   desktopStorageState.clear();
   lastDirectoryPickerProps = null;
+  fileBrowserSurfaceState.openBrowser.mockReset();
+  fileBrowserSurfaceState.open.mockReset();
+  fileBrowserSurfaceState.open.mockReturnValue(false);
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   rpcMocks.fs.list.mockReset();
@@ -613,6 +649,59 @@ describe('CodexPage', () => {
     expect(emptyState?.className).toContain('codex-transcript-state');
     expect(emptyState?.textContent).toContain('Start a Codex conversation with a prompt');
     expect(host.querySelector('.codex-transcript-shell-feed')).toBeNull();
+  });
+
+  it('opens the shared working-directory file browser from the Codex transcript FAB', async () => {
+    (window as any).PointerEvent = window.MouseEvent;
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+
+    clickFab(button!);
+    await flushAsync();
+
+    expect(fileBrowserSurfaceState.openBrowser).toHaveBeenCalledWith({
+      path: '/workspace/ui',
+      homePath: '/workspace',
+    });
   });
 
   it('disables host-backed composer controls while Codex is unavailable', async () => {

@@ -8,6 +8,7 @@ import {
   toPickerTreePath,
 } from '../utils/directoryPickerTree';
 import { createDirectoryPickerDataSource } from '../utils/createDirectoryPickerDataSource';
+import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import { useCodexContext } from './CodexProvider';
 import { CodexComposerShell } from './CodexComposerShell';
 import { CodexHeaderBar, type CodexHeaderAction } from './CodexHeaderBar';
@@ -40,6 +41,7 @@ export function CodexPageShell() {
   const rpc = useRedevenRpc();
   const followBottomController = createFollowBottomController();
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
+  let transcriptContainerRef: HTMLDivElement | undefined;
 
   onCleanup(() => {
     followBottomController.dispose();
@@ -342,7 +344,10 @@ export function CodexPageShell() {
           </Show>
 
           <div
-            ref={followBottomController.setScrollContainer}
+            ref={(element) => {
+              transcriptContainerRef = element;
+              followBottomController.setScrollContainer(element);
+            }}
             class="codex-page-transcript-main"
             data-codex-transcript-scroll-region="true"
             onScroll={followBottomController.handleScroll}
@@ -359,6 +364,12 @@ export function CodexPageShell() {
               loadingBody="Loading the selected Codex thread."
               emptyTitle={emptyStateTitle()}
               emptyBody={emptyStateBody()}
+            />
+            <ChatFileBrowserFAB
+              workingDir={workingDirPath()}
+              homePath={homePath()}
+              enabled={composerHostAvailable()}
+              containerRef={transcriptContainerRef}
             />
           </div>
         </div>

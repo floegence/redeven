@@ -66,7 +66,8 @@ Key points:
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
 - Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
 - The page browser, detached file-browser scene, Ask Flower linked-directory browser, and Flower chat floating browser all reuse the same `RemoteFileBrowser` surface; chat-specific code only owns the floating-shell behavior that opens it.
-- Env App now keeps the reusable chat/terminal floating browser shell at the root level, so cross-surface entry points share the same detached fallback, persistence, and explicit browser-seed handling.
+- Codex transcript now reuses that same floating browser shell as well, seeded from the resolved Codex working directory instead of introducing a Codex-specific file-browser surface.
+- Env App now keeps the reusable chat/terminal/Codex floating browser shell at the root level, so cross-surface entry points share the same detached fallback, persistence, and explicit browser-seed handling.
 
 ## Accessibility baseline
 
