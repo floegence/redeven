@@ -36,6 +36,10 @@ const notificationMocks = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
+const clipboardMocks = vi.hoisted(() => ({
+  writeText: vi.fn(),
+}));
+
 const envContextMocks = vi.hoisted(() => ({
   openAskFlowerComposer: vi.fn(),
 }));
@@ -123,7 +127,16 @@ describe('AgentMonitorPanel', () => {
     rpcMocks.monitor.killProcess.mockResolvedValue({ ok: true, pid: 4242 });
     notificationMocks.success.mockReset();
     notificationMocks.error.mockReset();
+    clipboardMocks.writeText.mockReset();
+    clipboardMocks.writeText.mockResolvedValue(undefined);
     envContextMocks.openAskFlowerComposer.mockReset();
+
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: clipboardMocks.writeText,
+      },
+    });
 
     host = document.createElement('div');
     document.body.appendChild(host);
@@ -219,6 +232,43 @@ describe('AgentMonitorPanel', () => {
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(2);
   });
 
+  it('shows a persistent selected state when a process row is clicked', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1, [
+        { pid: 1001, name: 'node', cpuPercent: 20.1, memoryBytes: 134_217_728, username: 'alice' },
+        { pid: 1002, name: 'vite', cpuPercent: 15.4, memoryBytes: 67_108_864, username: 'bob' },
+      ]),
+    );
+
+    render(() => <AgentMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    const processRows = Array.from(
+      host.querySelectorAll('tr[data-monitor-process-selected]'),
+    ) as HTMLTableRowElement[];
+    expect(processRows).toHaveLength(2);
+
+    processRows[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPanel();
+
+    let selectedRows = Array.from(
+      host.querySelectorAll('tr[data-monitor-process-selected]'),
+    ) as HTMLTableRowElement[];
+
+    expect(selectedRows[0]?.getAttribute('data-monitor-process-selected')).toBe('true');
+    expect(selectedRows[1]?.getAttribute('data-monitor-process-selected')).toBe('false');
+
+    selectedRows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPanel();
+
+    selectedRows = Array.from(
+      host.querySelectorAll('tr[data-monitor-process-selected]'),
+    ) as HTMLTableRowElement[];
+
+    expect(selectedRows[0]?.getAttribute('data-monitor-process-selected')).toBe('false');
+    expect(selectedRows[1]?.getAttribute('data-monitor-process-selected')).toBe('true');
+  });
+
   it('renders Ask Flower before the destructive Kill action in the row context menu', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(
       makeSnapshot(1, [
@@ -244,11 +294,59 @@ describe('AgentMonitorPanel', () => {
     expect(menu).toBeTruthy();
 
     const menuButtons = Array.from(menu?.querySelectorAll('button') ?? []) as HTMLButtonElement[];
-    expect(menuButtons).toHaveLength(2);
+    expect(menuButtons).toHaveLength(4);
     expect(menuButtons[0]?.textContent).toContain('Ask Flower');
-    expect(menuButtons[1]?.textContent).toContain('Kill');
-    expect(menuButtons[1]?.className).toContain('text-destructive');
+    expect(menuButtons[1]?.textContent).toContain('Copy name');
+    expect(menuButtons[2]?.textContent).toContain('Copy PID');
+    expect(menuButtons[3]?.textContent).toContain('Kill');
+    expect(menuButtons[3]?.className).toContain('text-destructive');
     expect(menu?.querySelectorAll('[role="separator"]')).toHaveLength(1);
+  });
+
+  it('copies process name and pid from the row context menu', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(
+      makeSnapshot(1, [
+        { pid: 4242, name: 'node', cpuPercent: 87.3, memoryBytes: 268_435_456, username: 'alice' },
+      ]),
+    );
+
+    render(() => <AgentMonitorPanel variant="deck" />, host);
+    await flushPanel();
+
+    const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
+    expect(processRow).toBeTruthy();
+
+    processRow?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 40,
+      clientY: 56,
+    }));
+    await flushPanel();
+
+    const copyNameButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Copy name'));
+    expect(copyNameButton).toBeTruthy();
+    copyNameButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPanel();
+
+    expect(clipboardMocks.writeText).toHaveBeenNthCalledWith(1, 'node');
+    expect(notificationMocks.success).toHaveBeenNthCalledWith(1, 'Copied', 'Process name copied to clipboard');
+
+    processRow?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 44,
+      clientY: 60,
+    }));
+    await flushPanel();
+
+    const copyPidButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Copy PID'));
+    expect(copyPidButton).toBeTruthy();
+    copyPidButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushPanel();
+
+    expect(clipboardMocks.writeText).toHaveBeenNthCalledWith(2, '4242');
+    expect(notificationMocks.success).toHaveBeenNthCalledWith(2, 'Copied', 'Process PID copied to clipboard');
   });
 
   it('opens Ask Flower from the row context menu with process snapshot context', async () => {

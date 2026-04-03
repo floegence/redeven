@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
-import { Trash } from '@floegence/floe-webapp-core/icons';
+import { Copy, Trash } from '@floegence/floe-webapp-core/icons';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 import { MonitoringChart } from '@floegence/floe-webapp-core/ui';
@@ -96,6 +96,14 @@ function formatTunnelHost(tunnelURL: string): string {
   }
 }
 
+function normalizeProcessPid(value: unknown): number | null {
+  const pid = Math.trunc(Number(value ?? 0));
+  return Number.isFinite(pid) && pid > 0 ? pid : null;
+}
+
+const PROCESS_CONTEXT_MENU_ACTION_COUNT = 4;
+const PROCESS_CONTEXT_MENU_SEPARATOR_COUNT = 1;
+
 export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -111,6 +119,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
   const [loading, setLoading] = createSignal(false);
   const [executeDenied, setExecuteDenied] = createSignal(false);
   const [killingPid, setKillingPid] = createSignal<number | null>(null);
+  const [selectedProcessPid, setSelectedProcessPid] = createSignal<number | null>(null);
   const [processContextMenu, setProcessContextMenu] = createSignal<{
     x: number;
     y: number;
@@ -314,6 +323,14 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
     }
   });
 
+  createEffect(() => {
+    const selectedPid = selectedProcessPid();
+    if (selectedPid === null) return;
+    if (!processes().some((process) => normalizeProcessPid(process.pid) === selectedPid)) {
+      setSelectedProcessPid(null);
+    }
+  });
+
   onCleanup(() => stopPolling());
 
   const clampProcessMenuPosition = (x: number, y: number): { x: number; y: number } => {
@@ -321,7 +338,10 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
 
     const margin = 8;
     const menuWidth = FLOATING_CONTEXT_MENU_WIDTH_PX;
-    const menuHeight = estimateFloatingContextMenuHeight(2, 1);
+    const menuHeight = estimateFloatingContextMenuHeight(
+      PROCESS_CONTEXT_MENU_ACTION_COUNT,
+      PROCESS_CONTEXT_MENU_SEPARATOR_COUNT,
+    );
     const maxX = Math.max(margin, window.innerWidth - menuWidth - margin);
     const maxY = Math.max(margin, window.innerHeight - menuHeight - margin);
 
@@ -363,6 +383,7 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
     const pos = clampProcessMenuPosition(event.clientX, event.clientY);
     event.preventDefault();
     event.stopPropagation();
+    setSelectedProcessPid(normalizeProcessPid(process.pid));
     const snapshot = data();
     setProcessContextMenu({
       x: pos.x,
@@ -376,8 +397,8 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
     const menu = processContextMenu();
     if (!menu) return;
 
-    const pid = Math.trunc(Number(menu.process.pid ?? 0));
-    if (pid <= 0) {
+    const pid = normalizeProcessPid(menu.process.pid);
+    if (pid === null) {
       setProcessContextMenu(null);
       notify.error('Kill failed', 'Invalid process PID.');
       return;
@@ -406,6 +427,26 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
     }
   };
 
+  const handleCopyProcessName = async () => {
+    const menu = processContextMenu();
+    if (!menu) return;
+    setProcessContextMenu(null);
+    await copy('Process name', menu.process.name);
+  };
+
+  const handleCopyProcessPid = async () => {
+    const menu = processContextMenu();
+    if (!menu) return;
+
+    const pid = normalizeProcessPid(menu.process.pid);
+    setProcessContextMenu(null);
+    if (pid === null) {
+      notify.error('Copy failed', 'Invalid process PID.');
+      return;
+    }
+    await copy('Process PID', String(pid));
+  };
+
   const buildProcessContextMenuItems = (menu: NonNullable<ReturnType<typeof processContextMenu>>): FloatingContextMenuItem[] => [
     {
       id: 'ask-flower',
@@ -413,6 +454,24 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
       label: 'Ask Flower',
       icon: FlowerContextMenuIcon,
       onSelect: handleAskFlowerFromProcess,
+    },
+    {
+      id: 'copy-name',
+      kind: 'action',
+      label: 'Copy name',
+      icon: Copy,
+      onSelect: () => {
+        void handleCopyProcessName();
+      },
+    },
+    {
+      id: 'copy-pid',
+      kind: 'action',
+      label: 'Copy PID',
+      icon: Copy,
+      onSelect: () => {
+        void handleCopyProcessPid();
+      },
     },
     {
       id: 'primary-secondary-separator',
@@ -626,11 +685,18 @@ export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
                         {(proc) => {
                           const cpuPresentation = getMonitorProcessCpuUsagePresentation(Number(proc.cpuPercent ?? 0));
                           const memoryPresentation = getMonitorProcessMemoryUsagePresentation(Number(proc.memoryBytes ?? 0));
+                          const pid = normalizeProcessPid(proc.pid);
+                          const selected = () => {
+                            const activePid = selectedProcessPid();
+                            return activePid !== null && activePid === pid;
+                          };
                           return (
                             <tr
-                              class={`border-b border-border/40 transition-colors hover:bg-muted/30 ${processContextMenu()?.process.pid === proc.pid ? 'bg-muted/40' : ''}`}
+                              class={`border-b border-border/40 cursor-pointer transition-colors ${selected() ? 'bg-primary/10 hover:bg-primary/10' : 'hover:bg-muted/30'}`}
+                              data-monitor-process-selected={selected() ? 'true' : 'false'}
+                              onClick={() => setSelectedProcessPid(pid)}
                               onContextMenu={(event) => openProcessContextMenu(event, proc)}
-                              title="Right-click for actions"
+                              title="Click to select. Right-click for actions."
                             >
                               <td class="py-2 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
                               <td class="py-2 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
