@@ -791,6 +791,50 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
+  it('returns to the breadcrumb after the path input loses focus', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="h-[560px]">
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            captureTypingFromPage
+            files={[
+              { id: 'folder-src', name: 'src', type: 'folder', path: '/Users/tester/src', children: [] },
+            ]}
+            currentPath="/Users/tester/src"
+            initialPath="/Users/tester/src"
+            homePath="/Users/tester"
+            persistenceKey="test-files-workspace-path-editor-blur"
+            instanceId="test-files-workspace-path-editor-blur"
+            resetKey={0}
+            width={260}
+            open
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, bubbles: true }));
+      await flush();
+
+      const pathInput = host.querySelector('input[aria-label="Go to path"]') as HTMLInputElement | null;
+      expect(pathInput).toBeTruthy();
+
+      pathInput!.dispatchEvent(new FocusEvent('blur'));
+      await flush();
+
+      expect(host.querySelector('input[aria-label="Go to path"]')).toBeNull();
+      expect(host.querySelector('nav[aria-label="Breadcrumb"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('treats the path edit request key as an edge-trigger instead of reopening after submit state changes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
