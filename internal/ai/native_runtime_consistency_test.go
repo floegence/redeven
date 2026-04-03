@@ -129,8 +129,6 @@ func TestBuiltInToolHandler_ApprovalTimeout_MapsToTimeout(t *testing.T) {
 }
 
 func TestBuiltInToolHandler_TerminalExecTimeout_MapsToTimeoutWithPartialData(t *testing.T) {
-	t.Parallel()
-
 	agentHomeDir := t.TempDir()
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
