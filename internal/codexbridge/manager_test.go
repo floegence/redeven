@@ -551,6 +551,97 @@ func TestListThreads_ForwardsArchivedFilter(t *testing.T) {
 	}
 }
 
+func TestReadCapabilities_DefaultOperationsMatchActiveOnlyBrowserSurface(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "model/list",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireModelListParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.IncludeHidden == nil || *params.IncludeHidden {
+					t.Fatalf("IncludeHidden=%v, want false", params.IncludeHidden)
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID:     env.ID,
+					Result: mustJSONRaw(wireModelListResponse{}),
+				})
+			},
+		},
+		{
+			method: "config/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireConfigReadParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.CWD == nil || *params.CWD != "/workspace" {
+					t.Fatalf("CWD=%v, want /workspace", params.CWD)
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireConfigReadResponse{
+						Config: wireConfig{
+							Model:             stringPtr("gpt-5.4"),
+							ModelProvider:     stringPtr("openai"),
+							ApprovalPolicy:    json.RawMessage(`"on-request"`),
+							ApprovalsReviewer: stringPtr("user"),
+							SandboxMode:       stringPtr("workspace-write"),
+						},
+					}),
+				})
+			},
+		},
+		{
+			method: "configRequirements/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireConfigRequirementsReadResponse{
+						Requirements: &wireConfigRequirements{
+							AllowedApprovalPolicies: []json.RawMessage{json.RawMessage(`"on-request"`)},
+							AllowedSandboxModes:     []string{"workspace-write"},
+						},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	capabilities, err := manager.ReadCapabilities(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ReadCapabilities: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	want := []OperationName{
+		OperationThreadArchive,
+		OperationThreadFork,
+		OperationTurnInterrupt,
+		OperationReviewStart,
+	}
+	if len(capabilities.Operations) != len(want) {
+		t.Fatalf("Operations=%v, want=%v", capabilities.Operations, want)
+	}
+	for index, operation := range want {
+		if capabilities.Operations[index] != operation {
+			t.Fatalf("Operations[%d]=%q, want=%q", index, capabilities.Operations[index], operation)
+		}
+	}
+}
+
 func TestForkThread_UsesNormalizedOverrides(t *testing.T) {
 	t.Parallel()
 

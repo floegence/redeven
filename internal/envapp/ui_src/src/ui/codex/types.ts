@@ -46,8 +46,6 @@ export type CodexCapabilitiesSnapshot = Readonly<{
   operations?: CodexOperationName[];
 }>;
 
-export type CodexThreadListFilter = 'active' | 'archived';
-
 export type CodexForkThreadRequest = Readonly<{
   thread_id: string;
   model?: string;

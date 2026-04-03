@@ -96,6 +96,8 @@ The event stream endpoint is SSE and is used for live transcript / approval upda
 - `limit`
 - `archived`
 
+The gateway keeps the `archived` filter for Codex app-server compatibility, but the browser UI uses `thread/list` as an active-thread navigator only and does not expose archived-thread browsing.
+
 `GET /_redeven_proxy/api/codex/threads/:id` returns a projected bootstrap payload with:
 
 - `thread`
@@ -147,9 +149,7 @@ When the target thread is not currently live-loaded on the bridge connection, th
 `GET /_redeven_proxy/api/codex/capabilities` now also returns `operations`, a browser-facing list of lifecycle/control actions currently exposed by the Redeven Codex surface. Phase 1 operations are:
 
 - `thread_archive`
-- `thread_unarchive`
 - `thread_fork`
-- `thread_list_archived`
 - `turn_interrupt`
 - `review_start`
 
@@ -176,7 +176,7 @@ Current Env App behavior:
 - Codex visual styling uses a Codex-local semantic surface token family on `.codex-page-shell` (`--codex-surface-*`, `--codex-border-*`, `--codex-text-secondary`) so page, dock, transcript, reasoning, and markdown surfaces share one flat presentation contract instead of per-selector decorative gradients.
 - Codex intentionally excludes decorative `linear-gradient(...)` / `radial-gradient(...)` treatments from its page shell; when Codex needs to neutralize shared chat styling such as user bubbles or the send button, it does so through `.codex-page-shell .chat-*` overrides instead of mutating Flower-owned selectors.
 - The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
-- The sidebar now exposes `Active` and `Archived` thread filters instead of treating archive as a one-way disappearance from the browser surface.
+- The sidebar treats archive as a one-way disappearance from the browser conversation list, matching Codex's default active-thread navigation model rather than exposing a dedicated archived browser.
 - Sidebar thread order changes only for real thread activity such as new-thread creation, user turn sends, or live lifecycle updates. Clicking an existing thread to read/bootstrap it must not reorder the list by itself.
 - Codex unread state is server-backed. Opening a thread marks the current browser-visible snapshot as read through the gateway instead of writing unread state to desktop/local browser storage.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
@@ -201,12 +201,11 @@ Current Env App behavior:
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.
 - New threads can choose working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn.
 - Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.
-- Restoring an archived thread switches the browser back to the active-thread view and reopens that thread.
+- Archiving a thread hides it from the browser conversation list after the active-thread list refreshes.
 - Later turns may still adjust model, reasoning effort, approval policy, and sandbox mode through the Codex composer controls.
-- Archived threads are read-only in the browser UI until they are restored.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.
 - The thread header now exposes capability-gated lifecycle actions:
-  - archive / restore
+  - archive
   - fork
   - review current workspace changes
   - stop the active turn when the current thread has an in-progress turn

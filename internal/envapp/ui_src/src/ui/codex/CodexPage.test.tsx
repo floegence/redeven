@@ -657,9 +657,7 @@ describe('CodexPage', () => {
       },
       operations: [
         'thread_archive',
-        'thread_unarchive',
         'thread_fork',
-        'thread_list_archived',
         'turn_interrupt',
         'review_start',
       ],
@@ -1136,9 +1134,7 @@ describe('CodexPage', () => {
       },
       operations: [
         'thread_archive',
-        'thread_unarchive',
         'thread_fork',
-        'thread_list_archived',
         'turn_interrupt',
         'review_start',
       ],

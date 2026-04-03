@@ -182,9 +182,7 @@ export function codexAllowedSandboxModes(
 
 const DEFAULT_CODEX_OPERATIONS: readonly CodexOperationName[] = [
   'thread_archive',
-  'thread_unarchive',
   'thread_fork',
-  'thread_list_archived',
   'turn_interrupt',
   'review_start',
 ];

@@ -1520,9 +1520,7 @@ func normalizeReviewTarget(v string) string {
 func defaultCapabilityOperations() []OperationName {
 	return []OperationName{
 		OperationThreadArchive,
-		OperationThreadUnarchive,
 		OperationThreadFork,
-		OperationThreadListArchived,
 		OperationTurnInterrupt,
 		OperationReviewStart,
 	}
