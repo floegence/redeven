@@ -42,7 +42,7 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitChangeTone('deleted')).toBe('danger');
     expect(gitChangeTone('renamed')).toBe('violet');
     expect(gitChangeTone('copied')).toBe('brand');
-    expect(gitChangeTone('modified')).toBe('info');
+    expect(gitChangeTone('modified')).toBe('brand');
 
     expect(gitChangeLabel('added')).toBe('Added');
     expect(gitChangeLabel('conflicted')).toBe('Conflicted');

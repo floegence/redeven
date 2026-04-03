@@ -184,7 +184,7 @@ export function gitChangeTone(change: string | undefined): GitChromeTone {
       return 'brand';
     case 'modified':
     default:
-      return 'info';
+      return 'brand';
   }
 }
 
