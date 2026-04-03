@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type Accessor, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { ChevronRight, Sparkles } from '@floegence/floe-webapp-core/icons';
 import { Tag } from '@floegence/floe-webapp-core/ui';
@@ -21,6 +21,11 @@ import type { CodexOptimisticUserTurn, CodexTranscriptItem } from './types';
 
 type CodexTranscriptSurfaceMode = 'empty' | 'loading' | 'feed';
 type CodexTranscriptSurfaceName = 'empty-state' | 'loading-state';
+type CodexTranscriptRenderRow = Readonly<{
+  id: string;
+  item: CodexTranscriptItem;
+  showAssistantAvatar: boolean;
+}>;
 type CodexTranscriptFallbackState = Readonly<{
   mode: Exclude<CodexTranscriptSurfaceMode, 'feed'>;
   surface: CodexTranscriptSurfaceName;
@@ -548,33 +553,37 @@ function shouldShowWorkingAvatar(items: readonly CodexTranscriptItem[]): boolean
 }
 
 function TranscriptRow(props: {
-  item: CodexTranscriptItem;
-  showAssistantAvatar?: boolean;
+  item: Accessor<CodexTranscriptItem | null>;
+  showAssistantAvatar: Accessor<boolean>;
   reasoningExpanded?: boolean;
   onReasoningExpandedChange?: (expanded: boolean) => void;
 }) {
-  if (!shouldRenderTranscriptItem(props.item)) {
-    return null;
-  }
-  if (props.item.type === 'userMessage') {
-    return <UserMessageRow item={props.item} />;
-  }
-  if (props.item.type === 'agentMessage') {
-    return <AgentMessageRow item={props.item} showAvatar={props.showAssistantAvatar} />;
-  }
-  if (props.item.type === 'commandExecution') {
-    return <CommandExecutionRow item={props.item} />;
-  }
-  if (props.item.type === 'reasoning' || props.item.type === 'plan') {
-    return (
-      <ReasoningRow
-        item={props.item}
-        expanded={Boolean(props.reasoningExpanded)}
-        onExpandedChange={(expanded) => props.onReasoningExpandedChange?.(expanded)}
-      />
-    );
-  }
-  return <TranscriptEvidenceRow item={props.item} />;
+  return (
+    <Show when={props.item()}>
+      {(itemAccessor) => {
+        const item = () => itemAccessor();
+        if (item().type === 'userMessage') {
+          return <UserMessageRow item={item()} />;
+        }
+        if (item().type === 'agentMessage') {
+          return <AgentMessageRow item={item()} showAvatar={props.showAssistantAvatar()} />;
+        }
+        if (item().type === 'commandExecution') {
+          return <CommandExecutionRow item={item()} />;
+        }
+        if (item().type === 'reasoning' || item().type === 'plan') {
+          return (
+            <ReasoningRow
+              item={item()}
+              expanded={Boolean(props.reasoningExpanded)}
+              onExpandedChange={(expanded) => props.onReasoningExpandedChange?.(expanded)}
+            />
+          );
+        }
+        return <TranscriptEvidenceRow item={item()} />;
+      }}
+    </Show>
+  );
 }
 
 export function CodexTranscript(props: {
@@ -592,7 +601,25 @@ export function CodexTranscript(props: {
 }) {
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
   const [reasoningExpandedByID, setReasoningExpandedByID] = createSignal<Record<string, boolean>>({});
-  const hasRows = () => props.items.length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
+  const transcriptRows = createMemo<readonly CodexTranscriptRenderRow[]>(() => {
+    const rows: CodexTranscriptRenderRow[] = [];
+    props.items.forEach((item, index) => {
+      if (!shouldRenderTranscriptItem(item)) return;
+      const itemID = String(item.id ?? '').trim();
+      if (!itemID) return;
+      rows.push({
+        id: itemID,
+        item,
+        showAssistantAvatar: shouldShowAgentAvatar(props.items, index),
+      });
+    });
+    return rows;
+  });
+  const transcriptRowsByID = createMemo<Record<string, CodexTranscriptRenderRow>>(() => Object.fromEntries(
+    transcriptRows().map((row) => [row.id, row]),
+  ));
+  const transcriptRowOrder = createMemo<string[]>(() => transcriptRows().map((row) => row.id));
+  const hasRows = () => transcriptRowOrder().length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
   const transcriptSurfaceState = createMemo<CodexTranscriptSurfaceState>(() => resolveCodexTranscriptSurfaceState({
     hasRows: hasRows(),
     loading: props.loading,
@@ -676,16 +703,14 @@ export function CodexTranscript(props: {
                 </div>
               )}
             </For>
-            <For each={props.items}>
-              {(item, index) => (
-                <div class="codex-transcript-row" data-follow-bottom-anchor-id={`item:${item.id}`}>
+            <For each={transcriptRowOrder()}>
+              {(itemID) => (
+                <div class="codex-transcript-row" data-follow-bottom-anchor-id={`item:${itemID}`}>
                   <TranscriptRow
-                    item={item}
-                    showAssistantAvatar={shouldShowAgentAvatar(props.items, index())}
-                    reasoningExpanded={Boolean(reasoningExpandedByID()[String(item.id ?? '').trim()])}
+                    item={() => transcriptRowsByID()[itemID]?.item ?? null}
+                    showAssistantAvatar={() => Boolean(transcriptRowsByID()[itemID]?.showAssistantAvatar)}
+                    reasoningExpanded={Boolean(reasoningExpandedByID()[itemID])}
                     onReasoningExpandedChange={(expanded) => {
-                      const itemID = String(item.id ?? '').trim();
-                      if (!itemID) return;
                       setReasoningExpandedByID((current) => {
                         if (Boolean(current[itemID]) === expanded) return current;
                         return {

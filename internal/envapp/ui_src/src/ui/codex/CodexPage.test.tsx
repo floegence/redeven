@@ -1776,6 +1776,152 @@ describe('CodexPage', () => {
     expect(host.textContent).toContain('Stream update');
   });
 
+  it('resumes a cached thread from the latest live-applied sequence after switching away and back', async () => {
+    let codexContext!: ReturnType<typeof useCodexContext>;
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [],
+      effective_config: {
+        cwd: '/workspace/ui',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Stable stream thread',
+        preview: 'Keep the Codex stream stable',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 20,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+      {
+        id: 'thread_2',
+        name: 'Secondary thread',
+        preview: 'Switch away and back',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 2,
+        updated_at_unix_s: 10,
+        status: 'completed',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
+      thread: {
+        id: threadID,
+        name: threadID === 'thread_1' ? 'Stable stream thread' : 'Secondary thread',
+        preview: threadID === 'thread_1' ? 'Keep the Codex stream stable' : 'Switch away and back',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: threadID === 'thread_1' ? 1 : 2,
+        updated_at_unix_s: threadID === 'thread_1' ? 20 : 10,
+        status: threadID === 'thread_1' ? 'running' : 'completed',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: `${threadID}_turn_1`,
+            status: 'completed',
+            items: [
+              {
+                id: `${threadID}_item_user`,
+                type: 'userMessage',
+                text: `Open ${threadID}`,
+              },
+              {
+                id: `${threadID}_item_agent`,
+                type: 'agentMessage',
+                text: `Loaded ${threadID}`,
+                status: threadID === 'thread_1' ? 'inProgress' : 'completed',
+              },
+            ],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: threadID === 'thread_1' ? 4 : 2,
+      active_status: threadID === 'thread_1' ? 'running' : 'completed',
+      active_status_flags: [],
+    }));
+    let deliveredThreadOneUpdate = false;
+    connectCodexEventStreamMock.mockImplementation(async (args: { threadID: string; onEvent: (event: unknown) => void }) => {
+      if (args.threadID === 'thread_1' && !deliveredThreadOneUpdate) {
+        deliveredThreadOneUpdate = true;
+        args.onEvent({
+          seq: 5,
+          type: 'agent_message_delta',
+          thread_id: 'thread_1',
+          item_id: 'thread_1_item_agent',
+          delta: ' with live update',
+        });
+      }
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPageWithHarness(host, (codex) => {
+      codexContext = codex;
+    });
+
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    expect(connectCodexEventStreamMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        threadID: 'thread_1',
+        afterSeq: 4,
+      }),
+    );
+    expect(host.textContent).toContain('Loaded thread_1 with live update');
+
+    codexContext.selectThread('thread_2');
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    expect(connectCodexEventStreamMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        threadID: 'thread_2',
+        afterSeq: 2,
+      }),
+    );
+
+    codexContext.selectThread('thread_1');
+    await flushAsync();
+    await flushAsync();
+    await flushAsync();
+
+    expect(connectCodexEventStreamMock).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        threadID: 'thread_1',
+        afterSeq: 5,
+      }),
+    );
+  });
+
   it('keeps the transcript pinned to the bottom while live Codex output appends', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
@@ -2062,7 +2208,7 @@ describe('CodexPage', () => {
     }
   });
 
-  it('resumes bottom follow after a paused scroll when the user sends a new turn', async () => {
+  it('re-pins to the bottom immediately when the user sends a new turn from a paused scroll position', async () => {
     const raf = createRafHarness();
     vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
     vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
@@ -2196,8 +2342,7 @@ describe('CodexPage', () => {
       raf.flushOne();
       expect(scrollRegion?.scrollTop).toBe(40);
       raf.flushOne();
-      expect(scrollRegion?.scrollTop).toBeGreaterThan(40);
-      expect(scrollRegion?.scrollTop).toBeLessThan(expectedTranscriptBottomScrollTop(360));
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(360));
       raf.flushAll();
       expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(360));
     } finally {
