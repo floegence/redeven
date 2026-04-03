@@ -59,6 +59,10 @@ export function FileBrowserPathControl(props: FileBrowserPathControlProps) {
         )}
         onInput={(event) => props.onDraftChange(event.currentTarget.value)}
         onKeyDown={(event) => handlePathInputKeyDown(event, props)}
+        onBlur={() => {
+          if (props.submitting) return;
+          props.onCancel();
+        }}
       />
     </Show>
   );
