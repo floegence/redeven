@@ -59,7 +59,7 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     }
   });
 
-  it('renders GitMetaPill with the local git tag class hook', () => {
+  it('renders GitMetaPill with caller classes while deferring theme styling to the shared Tag contract', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -72,7 +72,6 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     try {
       const pill = host.firstElementChild as HTMLSpanElement | null;
       expect(pill).toBeTruthy();
-      expect(pill?.className).toContain('git-meta-pill');
       expect(pill?.className).toContain('custom-pill');
       expect(pill?.textContent).toContain('Git tag');
     } finally {

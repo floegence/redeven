@@ -158,18 +158,10 @@ html.dark {
   color: var(--git-browser-selection-secondary-fg);
 }
 
-html.dark .git-meta-pill:not(.git-browser-selection-chip) {
-  background-color: color-mix(in srgb, white 84%, var(--tag-bg) 16%);
-}
-
 .git-browser-selection-chip {
-  --tag-bg: var(--git-browser-selection-chip-bg);
-  --tag-border: var(--git-browser-selection-chip-border);
-  --tag-color: var(--git-browser-selection-chip-fg);
-  border: 1px solid var(--git-browser-selection-border);
-  border-color: var(--git-browser-selection-chip-border);
-  background: var(--git-browser-selection-chip-bg);
-  color: var(--git-browser-selection-chip-fg);
+  --tag-surface: var(--git-browser-selection-chip-bg);
+  --tag-line: var(--git-browser-selection-chip-border);
+  --tag-ink: var(--git-browser-selection-chip-fg);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
