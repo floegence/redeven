@@ -74,6 +74,15 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('filter: none;');
   });
 
+  it('keeps the terminal surface focus state free of an outer halo ring', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.redeven-terminal-surface:focus,');
+    expect(src).toContain('.redeven-terminal-surface:focus-visible {');
+    expect(src).toContain('box-shadow: none !important;');
+    expect(src).not.toContain('0 0 0 2px color-mix(in srgb, var(--ring) 72%, transparent)');
+  });
+
   it('defines reusable semantic surface and divider classes for local Env App consumers', () => {
     const src = readRedevenCss();
 
