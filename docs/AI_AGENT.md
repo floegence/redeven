@@ -12,6 +12,21 @@ High-level design:
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
   - Anthropic: `anthropic-sdk-go` (Messages API)
 
+## Prompt architecture
+
+Flower task prompts are built through a section-oriented runtime prompt builder rather than one monolithic string assembly path.
+
+- The prompt is split into:
+  - a cacheable static prefix for durable operating policy;
+  - a dynamic runtime tail for execution/completion contracts, runtime context, interaction contract, and skills;
+  - overlay sections for recovery or exception guidance.
+- Static prefix caching is intentionally conservative and excludes volatile facts such as the current objective text, round counters, todo counts, recent errors, skill overlays, and exception overlays.
+- Runtime gates remain authoritative for `ask_user` and `task_complete`; prompt structure guides model behavior but does not replace deterministic runtime validation.
+- `prompt_profile` is a real behavior switch, not metadata only:
+  - `main_interactive`: the normal top-level Flower run that may ask the user for structured input when capability allows it;
+  - `main_autonomous`: a top-level Flower run with user interaction disabled that still writes as the main assistant for the user-facing thread;
+  - `subagent_autonomous`: a delegated child run that must stay parent-facing, must not pretend to address the end user directly, and should report verified findings, blockers, and suggested parent actions.
+
 ## Requirements
 
 - Runtime path does **not** require Node.js.
@@ -151,7 +166,8 @@ Behavior summary:
 - A `response_mode:"write"` or `response_mode:"select_or_write"` path is incomplete until the user provides its text payload.
 - If a turn is going to end in `waiting_user` via `ask_user`, Flower should put the user-facing question inside the structured `ask_user` payload rather than first emitting a duplicated standalone markdown questionnaire or option list.
 - Intent routing should classify guided structured interactions that need `ask_user` as `task`, not `social`; `social` is reserved for casual freeform chat without structured interaction needs.
-- In no-user-interaction runs, Flower cannot ask for a mode switch and must finish with blockers in `task_complete`.
+- In no-user-interaction runs, Flower cannot ask for a mode switch and must finish through `task_complete`.
+- Top-level no-user-interaction runs should stay user-facing (`main_autonomous`), while delegated child runs should stay parent-facing (`subagent_autonomous`).
 - The Env App shows approval prompts only when `require_user_approval` is enabled.
 - `write_todos` is expected for multi-step tasks; exactly one todo should stay in `in_progress`.
 - `task_complete` is rejected when todo tracking is active and open todos still exist.

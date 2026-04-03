@@ -43,12 +43,9 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, supportsAskUserQuesti
 		AllowToolApprovalWait:          allowUserInteraction,
 		AllowedSignals:                 append([]string(nil), allowedSignals...),
 		AllowedTools:                   append([]string(nil), allowedTools...),
-		PromptProfile:                  runPromptProfileMainInteractive,
+		PromptProfile:                  resolveRunPromptProfile("", r, allowUserInteraction),
 		SupportsAskUserQuestionBatches: supportsAskUserQuestionBatches,
 		allowedSignalSet:               make(map[string]struct{}, len(allowedSignals)),
-	}
-	if !allowUserInteraction {
-		contract.PromptProfile = runPromptProfileSubagentAutonomous
 	}
 	for _, signal := range allowedSignals {
 		signal = strings.TrimSpace(signal)
