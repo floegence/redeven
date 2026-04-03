@@ -305,6 +305,54 @@ func TestHandleToolCall_PlanModeAllowsReadonlyCurlFetchWithoutApproval(t *testin
 	}
 }
 
+func TestHandleToolCall_PlanModeAllowsReadonlyCurlPipePythonJSONToolWithoutApproval(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "payload.json")
+	if err := os.WriteFile(target, []byte(`{"city":"Changsha","days":3}`), 0o644); err != nil {
+		t.Fatalf("write seed file: %v", err)
+	}
+
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		Shell:        "bash",
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		MessageID: "msg_plan_readonly_curl_python_json_tool_guard",
+	})
+	r.runMode = config.AIModePlan
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_plan_readonly_curl_python_json_tool", "terminal.exec", map[string]any{
+		"command": "curl -s file://" + target + " | python3 -m json.tool",
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall returned error: %v", err)
+	}
+	if outcome == nil {
+		t.Fatalf("missing tool call outcome")
+	}
+	if !outcome.Success {
+		if outcome.ToolError != nil {
+			t.Fatalf("readonly curl|python json.tool failed: code=%q message=%q", outcome.ToolError.Code, outcome.ToolError.Message)
+		}
+		t.Fatalf("readonly curl|python json.tool failed without tool error details")
+	}
+
+	r.mu.Lock()
+	_, pending := r.toolApprovals["tool_plan_readonly_curl_python_json_tool"]
+	waiting := r.waitingApproval
+	r.mu.Unlock()
+	if pending || waiting {
+		t.Fatalf("readonly curl|python json.tool should not enter approval flow")
+	}
+}
+
 func TestHandleToolCall_PlanModeBlocksCurlOutputFile(t *testing.T) {
 	t.Parallel()
 
