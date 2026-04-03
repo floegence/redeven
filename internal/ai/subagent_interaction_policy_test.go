@@ -86,7 +86,7 @@ func TestRegisterBuiltInTools_IncludesAskUserByDefault(t *testing.T) {
 	}
 }
 
-func TestResolveRunCapabilityContract_NoUserInteraction(t *testing.T) {
+func TestResolveRunCapabilityContract_MainAutonomousNoUserInteraction(t *testing.T) {
 	tools := []ToolDef{
 		{Name: "terminal.exec"},
 		{Name: "task_complete"},
@@ -97,7 +97,7 @@ func TestResolveRunCapabilityContract_NoUserInteraction(t *testing.T) {
 	if contract.AllowUserInteraction {
 		t.Fatalf("expected no user interaction")
 	}
-	if contract.PromptProfile != runPromptProfileSubagentAutonomous {
+	if contract.PromptProfile != runPromptProfileMainAutonomous {
 		t.Fatalf("unexpected prompt profile=%q", contract.PromptProfile)
 	}
 	if len(contract.AllowedSignals) != 1 || contract.AllowedSignals[0] != "task_complete" {
@@ -105,6 +105,21 @@ func TestResolveRunCapabilityContract_NoUserInteraction(t *testing.T) {
 	}
 	if containsString(contract.AllowedTools, "ask_user") {
 		t.Fatalf("allowed tools should not contain ask_user: %v", contract.AllowedTools)
+	}
+}
+
+func TestResolveRunCapabilityContract_SubagentAutonomousNoUserInteraction(t *testing.T) {
+	tools := []ToolDef{
+		{Name: "terminal.exec"},
+		{Name: "task_complete"},
+	}
+	r := &run{
+		noUserInteraction: true,
+		subagentDepth:     1,
+	}
+	contract := resolveRunCapabilityContract(r, tools, false)
+	if contract.PromptProfile != runPromptProfileSubagentAutonomous {
+		t.Fatalf("unexpected prompt profile=%q", contract.PromptProfile)
 	}
 }
 
@@ -159,6 +174,33 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testi
 	if !strings.Contains(prompt, "User interaction is disabled in this run.") {
 		t.Fatalf("no-user prompt missing disabled interaction guidance: %q", prompt)
 	}
+	if !strings.Contains(prompt, "Continue autonomously as the main assistant for the user-facing thread.") {
+		t.Fatalf("no-user prompt missing main-autonomous guidance: %q", prompt)
+	}
+	if strings.Contains(prompt, "suggested parent actions") {
+		t.Fatalf("main-autonomous prompt should not use parent-facing blocker wording: %q", prompt)
+	}
+}
+
+func TestBuildLayeredSystemPrompt_SubagentAutonomousUsesDelegatedWording(t *testing.T) {
+	r := newRun(runOptions{
+		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir:      t.TempDir(),
+		NoUserInteraction: true,
+		SubagentDepth:     1,
+	})
+	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
+	contract := resolveRunCapabilityContract(r, tools, false)
+	prompt := r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
+	if !strings.Contains(prompt, "You are Flower operating as a delegated autonomous subagent") {
+		t.Fatalf("subagent prompt missing delegated identity: %q", prompt)
+	}
+	if !strings.Contains(prompt, "suggested parent actions") {
+		t.Fatalf("subagent prompt missing parent-facing blocker guidance: %q", prompt)
+	}
+	if strings.Contains(prompt, "Continue autonomously as the main assistant for the user-facing thread.") {
+		t.Fatalf("subagent prompt should not use top-level autonomous wording: %q", prompt)
+	}
 }
 
 func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndAskUserSwitch(t *testing.T) {
@@ -192,7 +234,22 @@ func TestBuildLayeredSystemPrompt_PlanModeNoUserInteractionUsesTaskCompleteBlock
 	if !strings.Contains(prompt, "User interaction is disabled in this run, so do NOT call ask_user.") {
 		t.Fatalf("plan no-user prompt missing no-ask_user guidance: %q", prompt)
 	}
-	if !strings.Contains(prompt, "If edits are required, finish with task_complete and report blockers plus suggested parent actions.") {
+	if !strings.Contains(prompt, "If edits are required, finish with task_complete and report blockers plus concrete next-step guidance for the user-facing thread.") {
 		t.Fatalf("plan no-user prompt missing blocker completion guidance: %q", prompt)
+	}
+}
+
+func TestBuildLayeredSystemPrompt_PlanModeSubagentNoUserInteractionUsesParentActions(t *testing.T) {
+	r := newRun(runOptions{
+		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir:      t.TempDir(),
+		NoUserInteraction: true,
+		SubagentDepth:     1,
+	})
+	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "task_complete"}}
+	contract := resolveRunCapabilityContract(r, tools, false)
+	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
+	if !strings.Contains(prompt, "If edits are required, finish with task_complete and report blockers plus suggested parent actions.") {
+		t.Fatalf("plan subagent prompt missing parent-action guidance: %q", prompt)
 	}
 }
