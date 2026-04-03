@@ -74,8 +74,10 @@ import {
   compactOpenLocalEnvironmentLabel,
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
+  compactSettingsFieldLabel,
   compactSessionAvailabilityLabel,
   compactSettingsActionLabel,
+  plainTextFromHelpHTML,
 } from './welcomeCopy';
 import {
   createDesktopThemeStorageAdapter,
@@ -1234,21 +1236,108 @@ function LocalEnvironmentLauncherCard(props: Readonly<{
   );
 }
 
+const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
+  'flex max-w-none flex-col overflow-hidden rounded-md p-0',
+  '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
+  '[&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:overflow-auto [&>div:last-child]:pt-2',
+  'max-h-[calc(100dvh-1rem)] w-[min(64rem,96vw)]',
+);
+
+const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'rounded-lg border border-border/70 bg-background px-4 py-4 shadow-sm';
+
+function settingsAddressCardTitle(accessMode: DesktopAccessMode): string {
+  return accessMode === 'custom_exposure' ? 'Bind address' : 'Port';
+}
+
+function settingsAddressCardHelp(accessMode: DesktopAccessMode): string {
+  if (accessMode === 'custom_exposure') {
+    return 'Edit the bind host and port directly for the next desktop-managed start. Non-loopback binds require a password.';
+  }
+  return accessMode === 'shared_local_network'
+    ? 'Choose the fixed port other devices on your local network will use to open this Environment.'
+    : 'Choose the localhost port for the next desktop-managed start.';
+}
+
+function settingsProtectionCardTitle(accessMode: DesktopAccessMode): string {
+  return accessMode === 'local_only' ? 'Auto port' : 'Password';
+}
+
+function settingsProtectionCardHelp(accessMode: DesktopAccessMode): string {
+  if (accessMode === 'shared_local_network') {
+    return 'Shared local network access requires a password before other devices can open this Environment.';
+  }
+  if (accessMode === 'custom_exposure') {
+    return 'Review the password used with your custom bind rules before the next desktop-managed start.';
+  }
+  return 'Desktop can auto-select a free localhost port when you do not need a fixed local address.';
+}
+
+function SettingsHelpBadge(props: Readonly<{
+  label: string;
+  content?: string;
+}>) {
+  const tooltip = createMemo(() => trimString(props.content));
+
+  return (
+    <Show when={tooltip()}>
+      <span
+        role="img"
+        aria-label={`${props.label}: ${tooltip()}`}
+        title={tooltip()}
+        class="inline-flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-border/70 text-[10px] font-semibold leading-none text-muted-foreground"
+      >
+        ?
+      </span>
+    </Show>
+  );
+}
+
+function SettingsCardHeading(props: Readonly<{
+  title: string;
+  help?: string;
+  accessory?: JSX.Element;
+}>) {
+  return (
+    <div class="flex w-full items-start justify-between gap-3">
+      <div class="flex min-w-0 items-center gap-2">
+        <div class="min-w-0 text-sm font-medium text-foreground">{props.title}</div>
+        <SettingsHelpBadge label={props.title} content={props.help} />
+      </div>
+      {props.accessory}
+    </div>
+  );
+}
+
+function SettingsSurfaceCard(props: Readonly<{
+  title: string;
+  help?: string;
+  accessory?: JSX.Element;
+  class?: string;
+  children: JSX.Element;
+}>) {
+  return (
+    <section class={cn(LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS, props.class)}>
+      <SettingsCardHeading title={props.title} help={props.help} accessory={props.accessory} />
+      <div class="mt-4">{props.children}</div>
+    </section>
+  );
+}
+
 function SummaryItemTile(props: Readonly<{
   item: DesktopSettingsSummaryItem;
 }>) {
   return (
     <div class={cn('rounded-lg border px-3 py-3', summaryItemToneClasses(props.item.tone))}>
-      <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{props.item.label}</div>
+      <div class="flex items-start justify-between gap-2">
+        <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{props.item.label}</div>
+        <SettingsHelpBadge label={props.item.label} content={props.item.detail} />
+      </div>
       <div class={cn(
-        'mt-1 text-sm font-medium text-foreground',
+        'mt-2 text-sm font-medium text-foreground',
         props.item.id === 'next_start_address' && 'break-all font-mono text-xs',
       )}>
         {props.item.value}
       </div>
-      <Show when={props.item.detail}>
-        <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.item.detail}</div>
-      </Show>
     </div>
   );
 }
@@ -1511,6 +1600,10 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   const liveBootstrapStatus = createMemo(() => buildDesktopBootstrapStatus(props.draft));
   const selectedOption = createMemo(() => props.snapshot.access_mode_options.find((option) => option.value === accessModel().access_mode) ?? null);
   const nextStartSummary = createMemo(() => liveSummaryItems().find((item) => item.id === 'next_start') ?? null);
+  const addressCardTitle = createMemo(() => settingsAddressCardTitle(accessModel().access_mode));
+  const addressCardHelp = createMemo(() => settingsAddressCardHelp(accessModel().access_mode));
+  const protectionCardTitle = createMemo(() => settingsProtectionCardTitle(accessModel().access_mode));
+  const protectionCardHelp = createMemo(() => settingsProtectionCardHelp(accessModel().access_mode));
 
   createEffect(() => {
     setAdvancedOpen(props.snapshot.bootstrap_pending);
@@ -1531,6 +1624,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
         }
       }}
       title={props.snapshot.window_title}
+      class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={props.cancelSettings}>
@@ -1553,28 +1647,25 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     >
       <div class="space-y-5">
         <Show when={accessModel().current_runtime_url !== ''}>
-          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
-            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Current runtime address</div>
-            <div class="mt-1 break-all font-mono text-xs text-foreground">{accessModel().current_runtime_url}</div>
-            <div class="mt-1 text-xs leading-5 text-muted-foreground">
-              This is the address the managed Local Environment is using right now.
-            </div>
-          </div>
+          <SettingsSurfaceCard
+            title="Current runtime"
+            help="This is the address the managed Local Environment is using right now."
+            class="bg-muted/[0.12]"
+          >
+            <div class="break-all font-mono text-xs text-foreground">{accessModel().current_runtime_url}</div>
+          </SettingsSurfaceCard>
         </Show>
 
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 [&>*]:h-full">
           <For each={liveSummaryItems()}>
             {(item) => <SummaryItemTile item={item} />}
           </For>
         </div>
 
-        <div class="space-y-3">
-          <div>
-            <div class="text-sm font-medium text-foreground">Visibility</div>
-            <div class="mt-1 text-xs leading-5 text-muted-foreground">
-              {selectedOption()?.description}
-            </div>
-          </div>
+        <SettingsSurfaceCard
+          title="Visibility"
+          help={selectedOption()?.description ?? 'Choose how the next desktop-managed start should be exposed.'}
+        >
           <SegmentedControl
             value={accessModel().access_mode}
             onChange={(value) => {
@@ -1592,93 +1683,103 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             }))}
             size="sm"
           />
-        </div>
+        </SettingsSurfaceCard>
 
-        <Show when={accessModel().access_mode !== 'custom_exposure'}>
-          <div class="grid gap-4 md:grid-cols-2">
-            <label class="grid gap-1.5">
-              <span class="text-xs font-medium text-foreground">Port</span>
-              <Input
-                value={accessModel().fixed_port_value}
-                inputMode="numeric"
-                disabled={accessModel().port_mode === 'auto'}
-                size="sm"
-                class="w-full"
-                onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
-              />
-              <span class="text-xs leading-5 text-muted-foreground">
-                {accessModel().access_mode === 'local_only'
-                  ? 'Use a fixed localhost port when you want a predictable Desktop address.'
-                  : 'Use the same fixed port that other devices on your local network will open.'}
-              </span>
-            </label>
-
+        <div class="grid gap-4 lg:grid-cols-2 [&>*]:h-full">
+          <SettingsSurfaceCard
+            title={addressCardTitle()}
+            help={addressCardHelp()}
+            class="min-h-[11.5rem]"
+          >
             <Show
-              when={accessModel().access_mode === 'shared_local_network'}
+              when={accessModel().access_mode === 'custom_exposure'}
               fallback={(
-                <div class="rounded-lg border border-border/70 bg-background px-3 py-3">
-                  <Checkbox
-                    checked={accessModel().port_mode === 'auto'}
-                    onChange={props.toggleAutoPort}
-                    label="Auto-select an available port"
-                    size="sm"
-                  />
-                  <div class="mt-2 text-xs leading-5 text-muted-foreground">
-                    Use this only when you do not need a predictable localhost address. Turning it off restores the fixed Desktop port.
+                <label class="grid gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-medium text-foreground">Port</span>
+                    <SettingsHelpBadge label="Port" content={addressCardHelp()} />
                   </div>
-                </div>
+                  <Input
+                    value={accessModel().fixed_port_value}
+                    inputMode="numeric"
+                    disabled={accessModel().port_mode === 'auto'}
+                    size="sm"
+                    class="w-full"
+                    onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
+                  />
+                </label>
               )}
             >
               <SettingsFieldInput
-                field={props.snapshot.host_fields[1]!}
-                value={props.draft.local_ui_password}
+                field={props.snapshot.host_fields[0]!}
+                value={props.draft.local_ui_bind}
                 updateDraftField={props.updateDraftField}
               />
             </Show>
-          </div>
-        </Show>
+          </SettingsSurfaceCard>
 
-        <Show when={accessModel().access_mode === 'custom_exposure'}>
-          <div class="grid gap-4 md:grid-cols-2">
-            <SettingsFieldInput
-              field={props.snapshot.host_fields[0]!}
-              value={props.draft.local_ui_bind}
-              updateDraftField={props.updateDraftField}
-            />
-            <LocalUIPasswordField
-              snapshot={props.snapshot}
-              draft={props.draft}
-              updateDraftField={props.updateDraftField}
-              clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
-            />
-          </div>
-        </Show>
+          <SettingsSurfaceCard
+            title={protectionCardTitle()}
+            help={protectionCardHelp()}
+            class="min-h-[11.5rem]"
+          >
+            <Show
+              when={accessModel().access_mode === 'local_only'}
+              fallback={(
+                <LocalUIPasswordField
+                  snapshot={props.snapshot}
+                  draft={props.draft}
+                  updateDraftField={props.updateDraftField}
+                  clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
+                />
+              )}
+            >
+              <div class="flex h-full flex-col justify-between gap-4">
+                <div class="flex items-center gap-2">
+                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                    {accessModel().port_mode === 'auto' ? 'Enabled' : 'Off'}
+                  </Tag>
+                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                    No password
+                  </Tag>
+                </div>
+                <Checkbox
+                  checked={accessModel().port_mode === 'auto'}
+                  onChange={props.toggleAutoPort}
+                  label="Auto port"
+                  size="sm"
+                />
+              </div>
+            </Show>
+          </SettingsSurfaceCard>
+        </div>
+
         <div class="overflow-hidden rounded-lg border border-border/70">
           <button
             type="button"
             class="flex w-full cursor-pointer items-center justify-between gap-3 bg-muted/20 px-3 py-3 text-left"
             onClick={() => setAdvancedOpen(!advancedOpen())}
           >
-            <div class="min-w-0">
-              <div class="text-sm font-medium text-foreground">Advanced</div>
-              <div class="mt-1 text-xs leading-5 text-muted-foreground">
-                One-shot registration for the next desktop-managed start.
-              </div>
-            </div>
-            <Tag
-              variant={liveBootstrapStatus().pending ? 'primary' : 'neutral'}
-              tone="soft"
-              size="sm"
-              class="cursor-default whitespace-nowrap"
-              title={nextStartSummary()?.value ?? liveBootstrapStatus().label}
-            >
-              {compactBootstrapStatusTagLabel(nextStartSummary()?.value ?? liveBootstrapStatus().label)}
-            </Tag>
+            <SettingsCardHeading
+              title="Advanced"
+              help="Queue a one-shot registration request for the next desktop-managed start."
+              accessory={(
+                <Tag
+                  variant={liveBootstrapStatus().pending ? 'primary' : 'neutral'}
+                  tone="soft"
+                  size="sm"
+                  class="cursor-default whitespace-nowrap"
+                  title={nextStartSummary()?.value ?? liveBootstrapStatus().label}
+                >
+                  {compactBootstrapStatusTagLabel(nextStartSummary()?.value ?? liveBootstrapStatus().label)}
+                </Tag>
+              )}
+            />
           </button>
 
           <Show when={advancedOpen()}>
-            <div class="space-y-4 border-t border-border/70 px-3 py-3">
-              <div class="grid gap-4 md:grid-cols-2">
+            <div class="space-y-4 border-t border-border/70 px-4 py-4">
+              <div class="grid gap-4 lg:grid-cols-3 [&>*]:h-full">
                 <For each={props.snapshot.bootstrap_fields}>
                   {(field) => (
                     <SettingsFieldInput
@@ -1813,20 +1914,22 @@ function LocalUIPasswordField(props: Readonly<{
   clearStoredLocalUIPassword: () => void;
 }>) {
   return (
-    <div class="space-y-2">
+    <div class="flex h-full flex-col justify-between gap-3">
       <SettingsFieldInput
         field={props.snapshot.host_fields[1]!}
         value={props.draft.local_ui_password}
         updateDraftField={props.updateDraftField}
       />
       <Show when={props.snapshot.local_ui_password_can_clear}>
-        <button
-          type="button"
-          class="inline-flex cursor-pointer items-center justify-start rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-          onClick={props.clearStoredLocalUIPassword}
-        >
-          Remove stored password
-        </button>
+        <div class="flex justify-end">
+          <button
+            type="button"
+            class="inline-flex cursor-pointer items-center justify-start rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            onClick={props.clearStoredLocalUIPassword}
+          >
+            Remove stored password
+          </button>
+        </div>
       </Show>
     </div>
   );
@@ -1837,9 +1940,23 @@ function SettingsFieldInput(props: Readonly<{
   value: string;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
 }>) {
+  const helpText = createMemo(() => plainTextFromHelpHTML(props.field.helpHTML ?? ''));
+  const describedBy = createMemo(() => {
+    const values = (props.field.describedBy ?? []).filter((value) => {
+      if (value === props.field.helpId) {
+        return helpText() !== '';
+      }
+      return true;
+    });
+    return values.length > 0 ? values.join(' ') : undefined;
+  });
+
   return (
-    <label classList={{ hidden: props.field.hidden }} class="grid gap-1.5">
-      <span class="text-xs font-medium text-foreground">{props.field.label}</span>
+    <label classList={{ hidden: props.field.hidden }} class="grid h-full gap-2.5">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-medium text-foreground">{compactSettingsFieldLabel(props.field.label)}</span>
+        <SettingsHelpBadge label={props.field.label} content={helpText()} />
+      </div>
       <Input
         id={props.field.id}
         name={props.field.name}
@@ -1849,13 +1966,13 @@ function SettingsFieldInput(props: Readonly<{
         inputMode={props.field.inputMode}
         placeholder={props.field.placeholder}
         spellcheck={false}
-        aria-describedby={props.field.describedBy?.join(' ') || undefined}
+        aria-describedby={describedBy()}
         size="sm"
         class="w-full"
         onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
       />
-      <Show when={props.field.helpHTML && props.field.helpId}>
-        <div id={props.field.helpId!} class="text-xs leading-5 text-muted-foreground" innerHTML={props.field.helpHTML!} />
+      <Show when={helpText() !== '' && props.field.helpId}>
+        <div id={props.field.helpId!} class="sr-only">{helpText()}</div>
       </Show>
     </label>
   );
