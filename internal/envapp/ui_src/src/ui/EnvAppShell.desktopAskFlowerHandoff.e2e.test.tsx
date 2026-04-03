@@ -95,6 +95,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Activity: Icon,
+    ArrowRightLeft: Icon,
     Code: Icon,
     Copy: Icon,
     Files: Icon,

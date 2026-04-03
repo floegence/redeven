@@ -142,6 +142,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Activity: Icon,
+    ArrowRightLeft: Icon,
     Code: Icon,
     Copy: Icon,
     Files: Icon,
@@ -349,7 +350,7 @@ describe('EnvAppShell top bar affordances', () => {
     }
   }, 10000);
 
-  it('renders Switch Machine in the bottom activity area when the desktop bridge is available', async () => {
+  it('renders Switch Environment in the bottom activity area when the desktop bridge is available', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const openConnectionCenterMock = vi.fn().mockResolvedValue(undefined);
@@ -364,11 +365,11 @@ describe('EnvAppShell top bar affordances', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.textContent).toContain('Switch Machine');
-      const switchMachineButton = host.querySelector('[data-activity-id="switch-machine"]');
-      expect(switchMachineButton).toBeTruthy();
+      expect(host.textContent).toContain('Switch Environment');
+      const switchEnvironmentButton = host.querySelector('[data-activity-id="switch-environment"]');
+      expect(switchEnvironmentButton).toBeTruthy();
 
-      (switchMachineButton as HTMLButtonElement).click();
+      (switchEnvironmentButton as HTMLButtonElement).click();
       await flushAsync();
 
       expect(openConnectionCenterMock).toHaveBeenCalledTimes(1);

@@ -3,6 +3,7 @@ import { deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotifica
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import {
   Activity,
+  ArrowRightLeft,
   Code,
   Copy,
   Files,
@@ -1736,9 +1737,9 @@ export function EnvAppShell() {
     const items: ActivityBarItem[] = [];
     if (desktopShellBridgeAvailable()) {
       items.push({
-        id: 'switch-machine',
-        icon: Search,
-        label: 'Switch Machine',
+        id: 'switch-environment',
+        icon: ArrowRightLeft,
+        label: 'Switch Environment',
         onClick: () => {
           void openConnectionCenter();
         },

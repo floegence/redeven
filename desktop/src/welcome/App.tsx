@@ -67,6 +67,17 @@ import {
   shellStatus,
 } from './viewModel';
 import {
+  compactAddConnectionLabel,
+  compactBootstrapStatusTagLabel,
+  compactClearRequestLabel,
+  compactCloseActionLabel,
+  compactOpenLocalEnvironmentLabel,
+  compactPasswordStateTagLabel,
+  compactSaveActionLabel,
+  compactSessionAvailabilityLabel,
+  compactSettingsActionLabel,
+} from './welcomeCopy';
+import {
   createDesktopThemeStorageAdapter,
   desktopStateStorageBridge,
   desktopThemeBridge,
@@ -1026,13 +1037,25 @@ function ConnectEnvironmentSurface(props: Readonly<{
                   issue={issue()}
                   issueRef={props.issueRef}
                   primaryAction={(
-                    <Button size="sm" variant="default" onClick={() => { void props.openLocalEnvironment(); }}>
-                      Open Local Environment
+                    <Button
+                      size="sm"
+                      variant="default"
+                      aria-label="Open Local Environment"
+                      title="Open Local Environment"
+                      onClick={() => { void props.openLocalEnvironment(); }}
+                    >
+                      Open
                     </Button>
                   )}
                   secondaryAction={(
-                    <Button size="sm" variant="outline" onClick={props.openSettingsSurface}>
-                      Local Environment Settings
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      aria-label="Open Local Environment Settings"
+                      title="Open Local Environment Settings"
+                      onClick={props.openSettingsSurface}
+                    >
+                      {compactSettingsActionLabel()}
                     </Button>
                   )}
                   tertiaryAction={(
@@ -1107,12 +1130,20 @@ function CurrentSessionStrip(props: Readonly<{
         </div>
         <div class="flex items-center gap-2">
           <Show when={props.snapshot.current_session_target_kind}>
-            <Tag variant="success" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              Session available
-            </Tag>
+            <span title="Current environment is still available.">
+              <Tag variant="success" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {compactSessionAvailabilityLabel()}
+              </Tag>
+            </span>
           </Show>
-          <Button size="sm" variant="outline" onClick={() => { void props.returnOrQuit(); }}>
-            {props.snapshot.close_action_label}
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={props.snapshot.close_action_label}
+            title={props.snapshot.close_action_label}
+            onClick={() => { void props.returnOrQuit(); }}
+          >
+            {compactCloseActionLabel(props.snapshot.close_action_label)}
           </Button>
         </div>
       </CardContent>
@@ -1139,25 +1170,31 @@ function LocalEnvironmentLauncherCard(props: Readonly<{
             <CardDescription class="mt-1 text-sm">Desktop-managed environment on this machine.</CardDescription>
           </div>
           <div class="flex flex-wrap gap-2">
-            <Tag variant={isCurrent() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {isCurrent() ? 'Current' : 'Ready'}
-            </Tag>
-            <Tag
-              variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
-              tone="soft"
-              size="sm"
-              class="cursor-default whitespace-nowrap"
-            >
-              {props.settingsSurface.password_state_label}
-            </Tag>
-            <Tag
-              variant={props.settingsSurface.bootstrap_pending ? 'primary' : 'neutral'}
-              tone="soft"
-              size="sm"
-              class="cursor-default whitespace-nowrap"
-            >
-              {props.settingsSurface.bootstrap_status_label}
-            </Tag>
+            <span title={isCurrent() ? 'Local Environment is currently open.' : 'Local Environment is ready to open.'}>
+              <Tag variant={isCurrent() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {isCurrent() ? 'Current' : 'Ready'}
+              </Tag>
+            </span>
+            <span title={props.settingsSurface.password_state_label}>
+              <Tag
+                variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
+                tone="soft"
+                size="sm"
+                class="cursor-default whitespace-nowrap"
+              >
+                {compactPasswordStateTagLabel(props.settingsSurface.password_state_label)}
+              </Tag>
+            </span>
+            <span title={props.settingsSurface.bootstrap_status_label}>
+              <Tag
+                variant={props.settingsSurface.bootstrap_pending ? 'primary' : 'neutral'}
+                tone="soft"
+                size="sm"
+                class="cursor-default whitespace-nowrap"
+              >
+                {compactBootstrapStatusTagLabel(props.settingsSurface.bootstrap_status_label)}
+              </Tag>
+            </span>
           </div>
         </div>
       </CardHeader>
@@ -1173,15 +1210,23 @@ function LocalEnvironmentLauncherCard(props: Readonly<{
             size="sm"
             variant="default"
             loading={props.busyAction === 'open_local_environment'}
+            aria-label={isCurrent() ? 'Return to Local Environment' : 'Open Local Environment'}
+            title={isCurrent() ? 'Return to Local Environment' : 'Open Local Environment'}
             onClick={() => {
               void props.openLocalEnvironment();
             }}
           >
-            {isCurrent() ? 'Return to Local Environment' : 'Open Local Environment'}
+            {compactOpenLocalEnvironmentLabel(isCurrent())}
           </Button>
-          <Button size="sm" variant="outline" onClick={props.openSettingsSurface}>
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label="Open Local Environment Settings"
+            title="Open Local Environment Settings"
+            onClick={props.openSettingsSurface}
+          >
             <Settings class="mr-1 h-3.5 w-3.5" />
-            Local Environment Settings
+            {compactSettingsActionLabel()}
           </Button>
         </div>
       </CardContent>
@@ -1268,9 +1313,15 @@ function EnvironmentLibraryPanel(props: Readonly<{
             <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
               {environmentLibraryCount(props.snapshot, 'all')} connections
             </Tag>
-            <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
+            <Button
+              size="sm"
+              variant="default"
+              aria-label="Add Connection"
+              title="Add Connection"
+              onClick={() => props.openCreateConnectionDialog()}
+            >
               <Plus class="mr-1 h-3.5 w-3.5" />
-              Add Connection
+              {compactAddConnectionLabel()}
             </Button>
           </div>
         </div>
@@ -1489,11 +1540,13 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             size="sm"
             variant="default"
             loading={props.busyAction === 'save_settings'}
+            aria-label={props.snapshot.save_label}
+            title={props.snapshot.save_label}
             onClick={() => {
               void props.saveSettings();
             }}
           >
-            {props.snapshot.save_label}
+            {compactSaveActionLabel()}
           </Button>
         </div>
       )}
@@ -1617,8 +1670,9 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               tone="soft"
               size="sm"
               class="cursor-default whitespace-nowrap"
+              title={nextStartSummary()?.value ?? liveBootstrapStatus().label}
             >
-              {nextStartSummary()?.value ?? liveBootstrapStatus().label}
+              {compactBootstrapStatusTagLabel(nextStartSummary()?.value ?? liveBootstrapStatus().label)}
             </Tag>
           </button>
 
@@ -1637,8 +1691,14 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               </div>
               <Show when={liveBootstrapStatus().pending}>
                 <div class="flex justify-end">
-                  <Button size="sm" variant="outline" onClick={props.clearBootstrapDraft}>
-                    Clear queued request
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label="Clear queued request"
+                    title="Clear queued request"
+                    onClick={props.clearBootstrapDraft}
+                  >
+                    {compactClearRequestLabel()}
                   </Button>
                 </div>
               </Show>
@@ -1687,12 +1747,14 @@ function ConnectionDialog(props: Readonly<{
             size="sm"
             variant={isCreate() ? 'outline' : 'default'}
             loading={props.busyAction === 'save_environment'}
+            aria-label="Save Connection"
+            title="Save Connection"
             onClick={() => {
               void props.onSave();
             }}
           >
             <Save class="mr-1 h-3.5 w-3.5" />
-            Save Connection
+            {compactSaveActionLabel()}
           </Button>
           <Show when={isCreate()}>
             <Button
