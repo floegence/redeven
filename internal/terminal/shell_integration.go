@@ -150,25 +150,20 @@ __redeven_terminal_precmd() {
 if [ -z "${__REDEVEN_TERMINAL_SHELL_INTEGRATION_LOADED:-}" ]; then
     export __REDEVEN_TERMINAL_SHELL_INTEGRATION_LOADED=1
 
-    if [ "${BASH_VERSINFO[0]:-0}" -gt 4 ] || { [ "${BASH_VERSINFO[0]:-0}" -eq 4 ] && [ "${BASH_VERSINFO[1]:-0}" -ge 4 ]; }; then
-        if [ -n "${PS0:-}" ]; then
-            PS0='$(__redeven_terminal_command_start)'${PS0}
-        else
-            PS0='$(__redeven_terminal_command_start)'
-        fi
-    else
-        __redeven_terminal_existing_debug_trap=""
-        if __redeven_terminal_trap_output=$(trap -p DEBUG 2>/dev/null); then
-            __redeven_terminal_existing_debug_trap=$(printf '%s\n' "$__redeven_terminal_trap_output" | sed -E "s/^trap -- '(.*)' DEBUG$/\1/")
-        fi
-        __redeven_terminal_debug_trap() {
-            __redeven_terminal_command_start
-            if [ -n "${__redeven_terminal_existing_debug_trap:-}" ]; then
-                eval "$__redeven_terminal_existing_debug_trap"
-            fi
-        }
-        trap '__redeven_terminal_debug_trap' DEBUG
+    # Keep command lifecycle state in the parent shell.
+    # A PS0 command substitution runs in a subshell on modern bash, which
+    # means state mutations do not survive until PROMPT_COMMAND emits D;<code>.
+    __redeven_terminal_existing_debug_trap=""
+    if __redeven_terminal_trap_output=$(trap -p DEBUG 2>/dev/null); then
+        __redeven_terminal_existing_debug_trap=$(printf '%s\n' "$__redeven_terminal_trap_output" | sed -E "s/^trap -- '(.*)' DEBUG$/\1/")
     fi
+    __redeven_terminal_debug_trap() {
+        __redeven_terminal_command_start
+        if [ -n "${__redeven_terminal_existing_debug_trap:-}" ]; then
+            eval "$__redeven_terminal_existing_debug_trap"
+        fi
+    }
+    trap '__redeven_terminal_debug_trap' DEBUG
 
     if [ -n "${PROMPT_COMMAND:-}" ]; then
         PROMPT_COMMAND="__redeven_terminal_precmd;${PROMPT_COMMAND}"
