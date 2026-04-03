@@ -70,22 +70,14 @@ export function CodexPageShell() {
   );
 
   const emptyStateTitle = () => (
-    codex.threadFilter() === 'archived' && !codex.activeThreadID()
-      ? 'Archived Codex Threads'
-      : (
     summary().hostReady
       ? 'Codex'
       : 'Install Codex on the host'
-      )
   );
   const emptyStateBody = () => (
-    codex.threadFilter() === 'archived' && !codex.activeThreadID()
-      ? 'Select an archived thread to inspect it, or switch back to Active to start a new Codex conversation.'
-      : (
     summary().hostReady
       ? 'Start a Codex conversation with a prompt, paste an image, use @ to reference files, or use / for local composer commands.'
       : 'Redeven does not install Codex for you. Put the host machine\'s `codex` binary on PATH, then refresh this page to start a dedicated Codex chat.'
-      )
   );
   const modelValue = createMemo(() => String(codex.modelDraft() ?? '').trim());
   const effortValue = createMemo(() => String(codex.effortDraft() ?? '').trim());
@@ -165,15 +157,12 @@ export function CodexPageShell() {
     !!activeInterruptTurnID() && codex.interruptingTurnID() === activeInterruptTurnID()
   ));
   const threadArchived = createMemo(() => String(codex.activeThread()?.status ?? '').trim().toLowerCase() === 'archived');
-  const archivedBrowseMode = createMemo(() => codex.threadFilter() === 'archived' && !codex.activeThreadID());
-  const composerHostAvailable = createMemo(() => summary().hostReady && !threadArchived() && !archivedBrowseMode());
+  const composerHostAvailable = createMemo(() => summary().hostReady && !threadArchived());
   const composerDisabledReason = createMemo(() => (
-    archivedBrowseMode()
-      ? 'Switch back to Active to start a new Codex conversation.'
-      : !summary().hostReady
+    !summary().hostReady
       ? codex.hostDisabledReason()
       : threadArchived()
-        ? 'Restore the archived thread before sending another turn.'
+        ? 'Archived threads are hidden from the conversation list.'
         : ''
   ));
   const runtimeControls = createMemo<readonly CodexComposerControlSpec[]>(() => ([
@@ -247,20 +236,9 @@ export function CodexPageShell() {
     const actions: CodexHeaderAction[] = [];
     const hostUnavailableReason = codex.hostDisabledReason();
     const archivePending = codex.archivingThreadID() === threadID;
-    const restorePending = codex.restoringThreadID() === threadID;
     const forkPending = codex.forkingThreadID() === threadID;
     const reviewPending = codex.reviewingThreadID() === threadID;
-    if (threadArchived()) {
-      actions.push({
-        key: 'restore',
-        label: restorePending ? 'Restoring…' : 'Restore',
-        aria_label: 'Restore Codex thread',
-        onClick: () => void codex.restoreActiveThread(),
-        disabled: !summary().hostReady || restorePending,
-        disabled_reason: !summary().hostReady ? hostUnavailableReason : restorePending ? 'Restore in progress.' : '',
-      });
-      return actions;
-    }
+    if (threadArchived()) return actions;
     actions.push({
       key: 'archive',
       label: archivePending ? 'Archiving…' : 'Archive',

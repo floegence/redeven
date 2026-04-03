@@ -246,9 +246,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 					},
 					Operations: []codexbridge.OperationName{
 						codexbridge.OperationThreadArchive,
-						codexbridge.OperationThreadUnarchive,
 						codexbridge.OperationThreadFork,
-						codexbridge.OperationThreadListArchived,
 						codexbridge.OperationTurnInterrupt,
 						codexbridge.OperationReviewStart,
 					},

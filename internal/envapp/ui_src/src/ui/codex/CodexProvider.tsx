@@ -32,7 +32,6 @@ import {
   startCodexThread,
   startCodexReview,
   startCodexTurn,
-  unarchiveCodexThread,
 } from './api';
 import {
   CODEX_NEW_THREAD_OWNER,
@@ -56,7 +55,6 @@ import type {
   CodexPendingRequest,
   CodexStatus,
   CodexThread,
-  CodexThreadListFilter,
   CodexThreadReadStatus,
   CodexThreadTokenUsage,
   CodexThreadRuntimeConfig,
@@ -158,12 +156,8 @@ function patchThreadDisplayFallbacks(
   };
 }
 
-function matchesThreadFilter(thread: CodexThread, filter: CodexThreadListFilter): boolean {
-  const status = String(thread.status ?? '').trim().toLowerCase();
-  if (filter === 'archived') {
-    return status === 'archived';
-  }
-  return status !== 'archived';
+function isVisibleThread(thread: CodexThread | null | undefined): boolean {
+  return String(thread?.status ?? '').trim().toLowerCase() !== 'archived';
 }
 
 function findInterruptibleTurnID(thread: CodexThread | null | undefined): string | null {
@@ -409,8 +403,6 @@ export type CodexContextValue = Readonly<{
   hostDisabledReason: Accessor<string>;
   capabilities: Accessor<CodexCapabilitiesSnapshot | null | undefined>;
   capabilitiesLoading: Accessor<boolean>;
-  threadFilter: Accessor<CodexThreadListFilter>;
-  setThreadFilter: (value: CodexThreadListFilter) => void;
   supportsOperation: (operation: CodexOperationName) => boolean;
   activeThreadID: Accessor<string | null>;
   displayedThreadID: Accessor<string | null>;
@@ -456,7 +448,6 @@ export type CodexContextValue = Readonly<{
   submitting: Accessor<boolean>;
   streamError: Accessor<string | null>;
   archivingThreadID: Accessor<string | null>;
-  restoringThreadID: Accessor<string | null>;
   forkingThreadID: Accessor<string | null>;
   interruptingTurnID: Accessor<string | null>;
   reviewingThreadID: Accessor<string | null>;
@@ -468,8 +459,6 @@ export type CodexContextValue = Readonly<{
   sendTurn: () => Promise<void>;
   archiveThread: (threadID: string) => Promise<void>;
   archiveActiveThread: () => Promise<void>;
-  restoreThread: (threadID: string) => Promise<void>;
-  restoreActiveThread: () => Promise<void>;
   forkActiveThread: () => Promise<void>;
   interruptActiveTurn: () => Promise<void>;
   reviewActiveThread: () => Promise<void>;
@@ -490,12 +479,10 @@ export function CodexProvider(props: ParentProps) {
 
   const [optimisticThreadsByID, setOptimisticThreadsByID] = createSignal<CodexThreadMap>({});
   const [optimisticTurnsByThreadID, setOptimisticTurnsByThreadID] = createSignal<CodexOptimisticTurnMap>({});
-  const [threadFilter, setThreadFilter] = createSignal<CodexThreadListFilter>('active');
   const [submitting, setSubmitting] = createSignal(false);
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
   const [streamError, setStreamError] = createSignal<string | null>(null);
   const [archivingThreadID, setArchivingThreadID] = createSignal<string | null>(null);
-  const [restoringThreadID, setRestoringThreadID] = createSignal<string | null>(null);
   const [forkingThreadID, setForkingThreadID] = createSignal<string | null>(null);
   const [interruptingTurnID, setInterruptingTurnID] = createSignal<string | null>(null);
   const [reviewingThreadID, setReviewingThreadID] = createSignal<string | null>(null);
@@ -520,11 +507,10 @@ export function CodexProvider(props: ParentProps) {
     async (settingsSeq) => (settingsSeq === null ? null : fetchCodexStatus()),
   );
   const [threadsResource, { refetch: refetchThreads, mutate: mutateThreads }] = createResource(
-    () => (codexVisible() && !status.loading && status()?.available ? `${env.settingsSeq()}::${threadFilter()}` : null),
-    async (key) => {
+    () => (codexVisible() && !status.loading && status()?.available ? env.settingsSeq() : null),
+    async () => {
       if (!status()?.available) return [];
-      const archived = String(key ?? '').endsWith('::archived');
-      return listCodexThreads({ limit: 100, archived });
+      return listCodexThreads({ limit: 100, archived: false });
     },
   );
   const threadListReady = createMemo(() => {
@@ -577,7 +563,7 @@ export function CodexProvider(props: ParentProps) {
     return sortThreads(Array.from(merged.values()));
   });
 
-  const threads = createMemo<CodexThread[]>(() => allThreads().filter((thread) => matchesThreadFilter(thread, threadFilter())));
+  const threads = createMemo<CodexThread[]>(() => allThreads().filter((thread) => isVisibleThread(thread)));
 
   const threadReadStatusForThread = (threadID: string | null | undefined): CodexThreadReadStatus => {
     const normalizedThreadID = String(threadID ?? '').trim();
@@ -909,21 +895,16 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(() => {
     if (!codexVisible()) return;
-    const filter = threadFilter();
     const current = selectedThread();
-    if (current && matchesThreadFilter(current, filter)) return;
+    if (current && isVisibleThread(current)) return;
     const list = threads();
     if (list.length === 0) {
       if (!threadListReady()) return;
-      if (filter === 'active') {
-        if (threadController.blankDraftActive()) return;
-        untrack(() => threadController.startNewThreadDraft());
-        return;
-      }
-      untrack(() => threadController.clearSelection());
+      if (threadController.blankDraftActive()) return;
+      untrack(() => threadController.startNewThreadDraft());
       return;
     }
-    if (filter === 'active' && threadController.blankDraftActive() && !current) return;
+    if (threadController.blankDraftActive() && !current) return;
     untrack(() => {
       threadController.selectThread(list[0].id);
       requestScrollToBottom('bootstrap');
@@ -1250,9 +1231,6 @@ export function CodexProvider(props: ParentProps) {
 
   const startNewThreadDraft = () => {
     if (!hasHostBinary()) return;
-    if (threadFilter() !== 'active') {
-      setThreadFilter('active');
-    }
     threadController.startNewThreadDraft();
     setStreamError(null);
   };
@@ -1304,7 +1282,7 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
     if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
-      notify.error('Thread archived', 'Restore the archived thread before sending a new turn.');
+      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
       return;
     }
 
@@ -1458,39 +1436,6 @@ export function CodexProvider(props: ParentProps) {
     await archiveThread(String(selectedThreadID() ?? '').trim());
   };
 
-  const restoreThread = async (threadID: string) => {
-    const normalizedThreadID = String(threadID ?? '').trim();
-    if (!normalizedThreadID) return;
-    if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
-      return;
-    }
-    if (!supportsOperation('thread_unarchive')) {
-      notify.error('Action unavailable', 'This Codex host does not support thread restore from Redeven yet.');
-      return;
-    }
-    setRestoringThreadID(normalizedThreadID);
-    try {
-      await unarchiveCodexThread(normalizedThreadID);
-      removeOptimisticThread(normalizedThreadID);
-      draftController.removeOwner(codexOwnerIDForThread(normalizedThreadID));
-      threadController.removeThreadState(normalizedThreadID);
-      setThreadFilter('active');
-      await refetchThreads();
-      threadController.selectThread(normalizedThreadID);
-      requestScrollToBottom('bootstrap');
-      notify.success('Restored', 'The archived Codex thread is active again.');
-    } catch (error) {
-      notify.error('Restore failed', error instanceof Error ? error.message : String(error));
-    } finally {
-      setRestoringThreadID((current) => (current === normalizedThreadID ? null : current));
-    }
-  };
-
-  const restoreActiveThread = async () => {
-    await restoreThread(String(selectedThreadID() ?? '').trim());
-  };
-
   const forkActiveThread = async () => {
     const threadID = String(selectedThreadID() ?? '').trim();
     if (!threadID) return;
@@ -1512,7 +1457,6 @@ export function CodexProvider(props: ParentProps) {
         sandbox_mode: ownerDraft.runtime.sandboxMode,
         approvals_reviewer: String(activeRuntimeConfig().approvals_reviewer ?? '').trim(),
       });
-      setThreadFilter('active');
       threadController.adoptThreadDetail(detail);
       upsertOptimisticThread(detail.thread);
       draftController.mergeOwnerRuntimeConfig(
@@ -1571,7 +1515,7 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
     if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
-      notify.error('Thread archived', 'Restore the archived thread before starting a review.');
+      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
       return;
     }
     setReviewingThreadID(threadID);
@@ -1615,8 +1559,6 @@ export function CodexProvider(props: ParentProps) {
     hostDisabledReason,
     capabilities,
     capabilitiesLoading: () => capabilities.loading,
-    threadFilter,
-    setThreadFilter,
     supportsOperation,
     activeThreadID: selectedThreadID,
     displayedThreadID,
@@ -1658,7 +1600,6 @@ export function CodexProvider(props: ParentProps) {
     submitting,
     streamError,
     archivingThreadID,
-    restoringThreadID,
     forkingThreadID,
     interruptingTurnID,
     reviewingThreadID,
@@ -1670,8 +1611,6 @@ export function CodexProvider(props: ParentProps) {
     sendTurn,
     archiveThread,
     archiveActiveThread,
-    restoreThread,
-    restoreActiveThread,
     forkActiveThread,
     interruptActiveTurn,
     reviewActiveThread,

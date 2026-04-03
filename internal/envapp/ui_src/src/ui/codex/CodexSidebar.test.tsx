@@ -654,7 +654,7 @@ describe('CodexSidebar', () => {
     });
   });
 
-  it('loads archived threads and restores them back into the active list', async () => {
+  it('archives a thread without exposing archived browsing controls', async () => {
     const activeThread = {
       id: 'thread_active',
       preview: 'Active planning thread',
@@ -662,15 +662,6 @@ describe('CodexSidebar', () => {
       created_at_unix_s: 100,
       updated_at_unix_s: 110,
       status: 'active',
-      cwd: '/workspace',
-    };
-    const archivedThread = {
-      id: 'thread_archived',
-      preview: 'Archived release summary',
-      model_provider: 'openai/gpt-5.4',
-      created_at_unix_s: 90,
-      updated_at_unix_s: 95,
-      status: 'archived',
       cwd: '/workspace',
     };
 
@@ -687,30 +678,26 @@ describe('CodexSidebar', () => {
       },
       operations: [
         'thread_archive',
-        'thread_unarchive',
         'thread_fork',
-        'thread_list_archived',
         'turn_interrupt',
         'review_start',
       ],
     });
-    listCodexThreadsMock.mockImplementation(async (args?: { archived?: boolean }) => (
-      args?.archived ? [archivedThread] : [activeThread]
+    listCodexThreadsMock.mockImplementation(async () => (
+      archiveCodexThreadMock.mock.calls.length === 0 ? [activeThread] : []
     ));
-    openCodexThreadMock.mockImplementation(async (threadID: string) => ({
-      thread: threadID === 'thread_archived' && unarchiveCodexThreadMock.mock.calls.length === 0
-        ? archivedThread
-        : (threadID === 'thread_archived' ? { ...archivedThread, status: 'active' } : activeThread),
+    openCodexThreadMock.mockImplementation(async () => ({
+      thread: activeThread,
       runtime_config: {
         cwd: '/workspace',
         model: 'gpt-5.4',
       },
       pending_requests: [],
       last_applied_seq: 1,
-      active_status: threadID === 'thread_archived' && unarchiveCodexThreadMock.mock.calls.length === 0 ? 'archived' : 'active',
+      active_status: 'active',
       active_status_flags: [],
     }));
-    unarchiveCodexThreadMock.mockResolvedValue(undefined);
+    archiveCodexThreadMock.mockResolvedValue(undefined);
     connectCodexEventStreamMock.mockResolvedValue(undefined);
 
     const host = document.createElement('div');
@@ -718,22 +705,21 @@ describe('CodexSidebar', () => {
 
     renderSurface(host);
     await flushAsync();
+    await flushAsync();
 
     const archivedToggle = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Archived'));
-    expect(archivedToggle).toBeTruthy();
-    archivedToggle?.click();
+    expect(archivedToggle).toBeFalsy();
+    expect(sidebarThreadIDs(host)).toContain('thread_active');
+
+    const archiveButton = host.querySelector('button[aria-label^="Archive chat"]') as HTMLButtonElement | null;
+    expect(archiveButton).toBeTruthy();
+    archiveButton?.click();
+    await flushAsync();
     await flushAsync();
 
-    expect(listCodexThreadsMock.mock.calls.some((call) => call[0]?.archived === true)).toBe(true);
-    expect(sidebarThreadIDs(host)).toContain('thread_archived');
-
-    const restoreButton = host.querySelector('button[aria-label^="Restore chat"]') as HTMLButtonElement | null;
-    expect(restoreButton).toBeTruthy();
-    restoreButton?.click();
-    await flushAsync();
-
-    expect(unarchiveCodexThreadMock).toHaveBeenCalledWith('thread_archived');
     expect(listCodexThreadsMock.mock.calls.some((call) => call[0]?.archived === false)).toBe(true);
+    expect(archiveCodexThreadMock).toHaveBeenCalledWith('thread_active');
+    expect(sidebarThreadIDs(host)).not.toContain('thread_active');
   });
 
   it('keeps the existing sidebar threads visible during a background refresh', async () => {
