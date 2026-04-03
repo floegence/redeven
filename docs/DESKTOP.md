@@ -219,9 +219,19 @@ Authoritative state:
 Behavior:
 
 - Every `BrowserWindow` is created from the latest shell snapshot, so the native window background is correct before the first renderer paint.
-- Linux title bar overlay colors still come from the desktop shell, but that overlay behavior is no longer coupled to renderer-side color reporting.
+- Desktop main resolves one platform-aware window chrome contract per process:
+  - `mode` (`hidden-inset` or `overlay`)
+  - native controls side (`left` or `right`)
+  - titlebar height
+  - renderer safe insets for start/end chrome reservations
+- Linux and Windows title bar overlay colors still come from the desktop shell, but that overlay behavior is no longer coupled to renderer-side color reporting.
 - Preload exposes `window.redevenDesktopTheme` with synchronous `getSnapshot()`, `setSource(...)`, and `subscribe(...)`.
 - Preload applies `html.light` / `html.dark` and `color-scheme` as soon as the document is available, then keeps the current document synchronized when theme updates arrive from Electron main.
+- Preload also publishes the desktop chrome contract through CSS custom properties:
+  - `--redeven-desktop-titlebar-height`
+  - `--redeven-desktop-titlebar-start-inset`
+  - `--redeven-desktop-titlebar-end-inset`
+- Floe shell top bars and desktop-owned launcher chrome both receive drag / no-drag semantics from preload so BrowserWindow movement keeps working after the app takes over the title bar area.
 - Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
 - Theme toggles from either welcome or Env App update native chrome and all registered renderer windows together, including detached desktop child windows.
 - When the stored source is `system`, Electron main rebroadcasts a fresh snapshot whenever the OS theme changes.

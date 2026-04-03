@@ -30,7 +30,7 @@ describe('blockedPage', () => {
     expect(html).toContain('id="blocked-main"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-label="Blocked page actions"');
-    expect(html).toContain('env(titlebar-area-height, 0px)');
+    expect(html).toContain('env(titlebar-area-height, 40px)');
   });
 
   it('renders the local-ui-enabled blocked explanation', () => {
@@ -46,8 +46,8 @@ describe('blockedPage', () => {
 
     expect(html).toContain('Redeven is already starting elsewhere');
     expect(html).toContain('appears to provide Local UI');
-    expect(html).toContain('calc(24px + 0px)');
-    expect(html).not.toContain('env(titlebar-area-height, 0px)');
+    expect(html).toContain('calc(24px + 40px)');
+    expect(html).not.toContain('env(titlebar-area-height, 40px)');
     expect(html).toContain("queueMicrotask(() => blockedSummary.focus())");
   });
 

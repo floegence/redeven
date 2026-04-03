@@ -2,7 +2,10 @@ import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 
 import { desktopTheme } from './desktopTheme';
 import type { DesktopWindowThemeSnapshot } from '../shared/desktopTheme';
-import { LINUX_TITLE_BAR_OVERLAY_HEIGHT, usesDesktopWindowThemeOverlay } from '../shared/windowChromePlatform';
+import {
+  resolveDesktopWindowChromeConfig,
+  usesDesktopWindowThemeOverlay,
+} from '../shared/windowChromePlatform';
 
 export function defaultDesktopWindowThemeSnapshot(): DesktopWindowThemeSnapshot {
   return {
@@ -14,21 +17,25 @@ export function defaultDesktopWindowThemeSnapshot(): DesktopWindowThemeSnapshot 
 export function buildDesktopWindowChromeOptions(
   platform: NodeJS.Platform = process.platform,
   snapshot: DesktopWindowThemeSnapshot = defaultDesktopWindowThemeSnapshot(),
-): Pick<BrowserWindowConstructorOptions, 'backgroundColor' | 'titleBarStyle' | 'titleBarOverlay'> {
-  if (usesDesktopWindowThemeOverlay(platform)) {
+): Pick<BrowserWindowConstructorOptions, 'backgroundColor' | 'titleBarStyle' | 'titleBarOverlay' | 'trafficLightPosition'> {
+  const chrome = resolveDesktopWindowChromeConfig(platform);
+
+  if (chrome.mode === 'overlay') {
     return {
       backgroundColor: snapshot.backgroundColor,
       titleBarStyle: 'hidden',
       titleBarOverlay: {
         color: snapshot.backgroundColor,
         symbolColor: snapshot.symbolColor,
-        height: LINUX_TITLE_BAR_OVERLAY_HEIGHT,
+        height: chrome.titleBarHeight,
       },
     };
   }
 
   return {
     backgroundColor: snapshot.backgroundColor,
+    titleBarStyle: 'hidden',
+    trafficLightPosition: chrome.trafficLightPosition,
   };
 }
 
@@ -40,10 +47,11 @@ export function applyDesktopWindowTheme(
   win.setBackgroundColor(snapshot.backgroundColor);
 
   if (usesDesktopWindowThemeOverlay(platform)) {
+    const chrome = resolveDesktopWindowChromeConfig(platform);
     win.setTitleBarOverlay({
       color: snapshot.backgroundColor,
       symbolColor: snapshot.symbolColor,
-      height: LINUX_TITLE_BAR_OVERLAY_HEIGHT,
+      height: chrome.titleBarHeight,
     });
   }
 }

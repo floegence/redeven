@@ -5,28 +5,38 @@ import {
   buildDesktopWindowChromeOptions,
   defaultDesktopWindowThemeSnapshot,
 } from './windowChrome';
-import { LINUX_TITLE_BAR_OVERLAY_HEIGHT } from '../shared/windowChromePlatform';
 
 describe('windowChrome', () => {
-  it('uses the native macOS title bar so the system controls and drag region stay intact', () => {
+  it('uses a hidden macOS title bar with a traffic-light position so content owns the top chrome', () => {
     expect(buildDesktopWindowChromeOptions('darwin')).toEqual({
       backgroundColor: defaultDesktopWindowThemeSnapshot().backgroundColor,
+      titleBarStyle: 'hidden',
+      trafficLightPosition: { x: 14, y: 12 },
     });
   });
 
-  it('uses a themed title bar overlay on Linux', () => {
+  it('uses a themed title bar overlay on Windows and Linux', () => {
+    expect(buildDesktopWindowChromeOptions('win32')).toEqual({
+      backgroundColor: defaultDesktopWindowThemeSnapshot().backgroundColor,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: {
+        color: defaultDesktopWindowThemeSnapshot().backgroundColor,
+        symbolColor: defaultDesktopWindowThemeSnapshot().symbolColor,
+        height: 40,
+      },
+    });
     expect(buildDesktopWindowChromeOptions('linux')).toEqual({
       backgroundColor: defaultDesktopWindowThemeSnapshot().backgroundColor,
       titleBarStyle: 'hidden',
       titleBarOverlay: {
         color: defaultDesktopWindowThemeSnapshot().backgroundColor,
         symbolColor: defaultDesktopWindowThemeSnapshot().symbolColor,
-        height: LINUX_TITLE_BAR_OVERLAY_HEIGHT,
+        height: 40,
       },
     });
   });
 
-  it('updates the Linux title bar overlay colors from the renderer theme', () => {
+  it('updates overlay colors for overlay-backed platforms only', () => {
     const win = {
       setBackgroundColor: vi.fn(),
       setTitleBarOverlay: vi.fn(),
@@ -35,17 +45,17 @@ describe('windowChrome', () => {
     applyDesktopWindowTheme(win, {
       backgroundColor: '#0e121b',
       symbolColor: '#f9fafb',
-    }, 'linux');
+    }, 'win32');
 
     expect(win.setBackgroundColor).toHaveBeenCalledWith('#0e121b');
     expect(win.setTitleBarOverlay).toHaveBeenCalledWith({
       color: '#0e121b',
       symbolColor: '#f9fafb',
-      height: LINUX_TITLE_BAR_OVERLAY_HEIGHT,
+      height: 40,
     });
   });
 
-  it('does not apply a title bar overlay on macOS', () => {
+  it('does not call setTitleBarOverlay for macOS hidden-inset chrome', () => {
     const win = {
       setBackgroundColor: vi.fn(),
       setTitleBarOverlay: vi.fn(),
