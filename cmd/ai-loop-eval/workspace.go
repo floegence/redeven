@@ -8,6 +8,11 @@ import (
 	"path/filepath"
 )
 
+type evalTaskSandbox struct {
+	WorkspacePath string
+	StateDir      string
+}
+
 func cloneWorkspace(src string, dst string) error {
 	src = filepath.Clean(src)
 	dst = filepath.Clean(dst)
@@ -79,17 +84,28 @@ func copyRegularFile(src string, dst string, perm fs.FileMode) error {
 	return out.Close()
 }
 
-func prepareTaskWorkspace(root string, taskID string, sourceWorkspace string) (string, error) {
-	root = filepath.Clean(root)
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return "", err
+func prepareTaskSandbox(workspaceRoot string, stateRoot string, taskID string, sourceWorkspace string) (evalTaskSandbox, error) {
+	sandbox := evalTaskSandbox{
+		WorkspacePath: filepath.Join(filepath.Clean(workspaceRoot), sanitizeID(taskID)),
+		StateDir:      filepath.Join(filepath.Clean(stateRoot), sanitizeID(taskID)),
 	}
-	path := filepath.Join(root, sanitizeID(taskID))
-	if err := os.RemoveAll(path); err != nil {
-		return "", err
+	if err := os.MkdirAll(filepath.Clean(workspaceRoot), 0o700); err != nil {
+		return sandbox, err
 	}
-	if err := cloneWorkspace(sourceWorkspace, path); err != nil {
-		return "", err
+	if err := os.MkdirAll(filepath.Clean(stateRoot), 0o700); err != nil {
+		return sandbox, err
 	}
-	return path, nil
+	if err := os.RemoveAll(sandbox.WorkspacePath); err != nil {
+		return sandbox, err
+	}
+	if err := os.RemoveAll(sandbox.StateDir); err != nil {
+		return sandbox, err
+	}
+	if err := cloneWorkspace(sourceWorkspace, sandbox.WorkspacePath); err != nil {
+		return sandbox, err
+	}
+	if err := os.MkdirAll(sandbox.StateDir, 0o700); err != nil {
+		return sandbox, err
+	}
+	return sandbox, nil
 }

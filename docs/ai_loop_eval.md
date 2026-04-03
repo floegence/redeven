@@ -17,6 +17,12 @@ Behavioral suite:
 ./scripts/eval_ai_loop_matrix.sh /abs/path/to/target-repo
 ```
 
+Local-config sandbox suite:
+
+```bash
+./scripts/eval_local_config_sandbox_suite.sh /abs/path/to/target-repo
+```
+
 Hard-gate suite:
 
 ```bash
@@ -24,6 +30,8 @@ Hard-gate suite:
 ```
 
 `eval_ai_loop_matrix.sh` keeps its historical name for compatibility, but it now runs the single behavioral suite rather than a prompt/loop profile matrix.
+
+`eval_local_config_sandbox_suite.sh` is the dedicated entry point for validating the locally active Flower model configuration. It does not force a provider or model on the command line; instead it uses the current `ai.current_model_id` from local config, so if your current local setup is `moonshot/kimi-k2.5`, the suite runs on that model automatically. The wrapper also disables benchmark baselines by default unless you explicitly provide `BASELINE_PATH`, because this suite is meant for provider-specific local diagnostics rather than the shared open-source promotion gate.
 
 ## Inputs
 
@@ -54,7 +62,7 @@ Each task runs against the real Flower runtime with:
 - real runtime policy decisions, including `intent` and `execution_contract`
 - real tools and real persisted runtime state
 
-Each task gets its own isolated workspace copy under the report directory. This protects the source repo while still allowing Flower to run with normal RWX permissions and real tool semantics.
+Each task gets its own isolated workspace copy under the report directory, and the eval runner now also gives each task its own runtime state directory with that cloned workspace as the runtime home. This protects the source repo and keeps tool path scope pinned to the isolated copy while still allowing Flower to run with normal RWX permissions and real tool semantics.
 
 ## Task spec schema
 
@@ -69,6 +77,8 @@ Tasks are loaded from YAML under `eval/tasks/` and support:
 - `assertions.tools`
 - `assertions.events`
 - `assertions.todos`
+
+Tool assertions also support `workspace_scoped_tools`, which fails a task when those tool calls contain path arguments that escape the isolated task workspace.
 
 Assertion groups are intentionally structural:
 
@@ -102,6 +112,8 @@ Artifacts:
 Default output directory:
 
 - `~/.redeven/ai/evals/<timestamp>/`
+
+The local-config sandbox suite writes the same report shape and is intended for provider-specific smoke/regression runs such as "verify my current Kimi setup can inspect, plan, write safely inside the sandbox, and refuse outside-workspace edits."
 
 ## Hard gate
 

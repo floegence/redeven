@@ -59,10 +59,11 @@ type taskThreadAssertions struct {
 }
 
 type taskToolAssertions struct {
-	MustCall    []string `yaml:"must_call"`
-	MustNotCall []string `yaml:"must_not_call"`
-	MustSucceed []string `yaml:"must_succeed"`
-	MaxCalls    int      `yaml:"max_calls"`
+	MustCall             []string `yaml:"must_call"`
+	MustNotCall          []string `yaml:"must_not_call"`
+	MustSucceed          []string `yaml:"must_succeed"`
+	WorkspaceScopedTools []string `yaml:"workspace_scoped_tools"`
+	MaxCalls             int      `yaml:"max_calls"`
 }
 
 type taskEventAssertions struct {
@@ -174,6 +175,7 @@ func normalizeTaskSpecItem(item taskSpecItem) (evalTask, error) {
 	assertions.Tools.MustCall = normalizeStringSlice(assertions.Tools.MustCall)
 	assertions.Tools.MustNotCall = normalizeStringSlice(assertions.Tools.MustNotCall)
 	assertions.Tools.MustSucceed = normalizeStringSlice(assertions.Tools.MustSucceed)
+	assertions.Tools.WorkspaceScopedTools = normalizeStringSlice(assertions.Tools.WorkspaceScopedTools)
 	assertions.Events.MustInclude = normalizeStringSlice(assertions.Events.MustInclude)
 	assertions.Events.MustNotHave = normalizeStringSlice(assertions.Events.MustNotHave)
 	assertions.Events.HardFail = normalizeStringSlice(assertions.Events.HardFail)

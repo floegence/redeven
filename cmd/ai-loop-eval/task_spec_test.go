@@ -38,6 +38,8 @@ tasks:
       tools:
         must_call:
           - "ask_user"
+        workspace_scoped_tools:
+          - "apply_patch"
 `
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatalf("write task spec: %v", err)
@@ -61,5 +63,8 @@ tasks:
 	}
 	if tasks[0].Assertions.Thread.WaitingPrompt != "required" {
 		t.Fatalf("waiting_prompt=%q", tasks[0].Assertions.Thread.WaitingPrompt)
+	}
+	if len(tasks[0].Assertions.Tools.WorkspaceScopedTools) != 1 || tasks[0].Assertions.Tools.WorkspaceScopedTools[0] != "apply_patch" {
+		t.Fatalf("workspace_scoped_tools=%v", tasks[0].Assertions.Tools.WorkspaceScopedTools)
 	}
 }
