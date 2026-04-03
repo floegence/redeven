@@ -409,6 +409,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft);
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated);
   --flower-chat-surface-border: var(--redeven-surface-panel-border);
+  --flower-chat-dock-track-max-width: 56rem;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -508,20 +509,44 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   flex: 1 1 auto;
   background: var(--flower-chat-surface);
   --flower-chat-transcript-overlay-edge-gap: 12px;
-  --flower-chat-transcript-overlay-bottom-inset: calc(5rem + env(safe-area-inset-bottom, 0px));
+  --flower-chat-transcript-overlay-bottom-inset: calc(6.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .flower-chat-bottom-dock {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   flex-shrink: 0;
   flex-direction: column;
-  border-top: 1px solid var(--flower-chat-surface-border);
-  background: var(--flower-chat-surface-soft);
+  background: transparent;
+}
+
+.flower-chat-bottom-dock::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1.5rem;
+  pointer-events: none;
+  box-shadow: 0 -20px 32px -28px color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+.flower-chat-bottom-dock-lane {
+  width: 100%;
+  padding-inline: clamp(0.625rem, 1.8vw, 1rem);
+}
+
+.flower-chat-bottom-dock-track {
+  width: min(100%, var(--flower-chat-dock-track-max-width));
+  margin: 0 auto;
+}
+
+.flower-chat-bottom-dock-lane-composer {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .flower-chat-toolbar {
-  padding: 0.25rem 0.75rem 0.375rem;
+  padding: 0.25rem 0 0.125rem;
 }
 
 .flower-chat-toolbar-main {
@@ -564,7 +589,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0 0.75rem 0.25rem;
+  padding: 0 0 0.25rem;
 }
 
 .flower-chat-input.chat-input-container {
@@ -585,6 +610,24 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 
 .flower-chat-input.chat-input-container-dragging {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
+.flower-chat-input-floating.chat-input-container {
+  overflow: visible;
+  margin: 0;
+  border-color: color-mix(in srgb, var(--redeven-stroke-overlay) 72%, transparent);
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent);
+  box-shadow:
+    0 12px 28px -20px color-mix(in srgb, black 38%, transparent),
+    0 2px 10px -8px color-mix(in srgb, var(--foreground) 28%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.flower-chat-input-floating.chat-input-container-focused {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--redeven-stroke-overlay));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent),
+    0 16px 32px -24px color-mix(in srgb, black 42%, transparent);
 }
 
 .flower-chat-input .chat-attachment-preview {
@@ -746,6 +789,30 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   padding-inline: 0.875rem;
 }
 
+.flower-chat-input-floating .flower-chat-input-meta-rail {
+  border-top-color: color-mix(in srgb, var(--border) 52%, transparent);
+}
+
+.flower-chat-input-floating .flower-chat-chip {
+  border-color: color-mix(in srgb, var(--redeven-stroke-control) 74%, transparent);
+  background: color-mix(in srgb, var(--flower-chat-surface) 68%, transparent);
+}
+
+.flower-chat-input-floating .flower-chat-chip-actionable:hover:not(:disabled),
+.flower-chat-input-floating .flower-chat-chip-actionable:focus-visible {
+  background: color-mix(in srgb, var(--flower-chat-surface-soft) 86%, transparent);
+}
+
+.flower-chat-input-floating .flower-chat-meta-btn {
+  border: 1px solid color-mix(in srgb, var(--redeven-stroke-control) 74%, transparent);
+  background: color-mix(in srgb, var(--flower-chat-surface) 64%, transparent);
+}
+
+.flower-chat-input-floating .flower-chat-meta-btn:hover:not(:disabled),
+.flower-chat-input-floating .flower-chat-meta-btn:focus-visible {
+  background: color-mix(in srgb, var(--flower-chat-surface-soft) 86%, transparent);
+}
+
 .flower-chat-input-meta {
   display: flex;
   flex-direction: column;
@@ -815,7 +882,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--muted) 36%, var(--background));
   color: var(--muted-foreground);
@@ -990,15 +1057,18 @@ html.dark .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
     box-shadow: none;
   }
 
-  .flower-chat-toolbar {
+  .flower-chat-bottom-dock-lane {
     padding-inline: 0.5rem;
   }
 
   .flower-chat-bottom-dock-support {
     max-height: min(38vh, 18rem);
     overflow-y: auto;
-    padding-inline: 0.5rem;
     padding-bottom: 0.125rem;
+  }
+
+  .flower-chat-bottom-dock-lane-composer {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .ask-flower-composer-dock {
@@ -1010,6 +1080,10 @@ html.dark .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
     margin-top: 0.375rem;
     margin-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
     border-radius: 0.875rem;
+  }
+
+  .flower-chat-input-floating.chat-input-container {
+    margin: 0;
   }
 
   .flower-chat-input .chat-attachment-preview {
@@ -2592,7 +2666,7 @@ a.chat-sources-cell-url:focus-visible {
 }
 
 .flower-queued-turns-panel {
-  margin: 0.25rem 0 0.5rem;
+  margin: 0;
   border-radius: 0.9rem;
   border: 1px solid var(--flower-chat-surface-border);
   background: var(--flower-chat-surface-elevated);

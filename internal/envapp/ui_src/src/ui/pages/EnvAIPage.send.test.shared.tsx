@@ -33,6 +33,11 @@ type MockWaitingPrompt = {
   }>;
 };
 
+type ResizeObserverRecord = {
+  callback: ResizeObserverCallback;
+  targets: Set<Element>;
+};
+
 const notificationErrorMock = vi.fn();
 const notificationInfoMock = vi.fn();
 const notificationSuccessMock = vi.fn();
@@ -150,6 +155,7 @@ const aiState = {
 const [runStateVersion, setRunStateVersion] = createSignal(0);
 
 const realtimeListeners = new Set<(event: any) => void>();
+let resizeObserverRecords: ResizeObserverRecord[] = [];
 
 function touchRunState(): void {
   setRunStateVersion((version) => version + 1);
@@ -697,6 +703,62 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function installResizeObserverHarness() {
+  resizeObserverRecords = [];
+  vi.stubGlobal('ResizeObserver', class {
+    private readonly record: ResizeObserverRecord;
+
+    constructor(callback: ResizeObserverCallback) {
+      this.record = {
+        callback,
+        targets: new Set<Element>(),
+      };
+      resizeObserverRecords.push(this.record);
+    }
+
+    observe(target: Element) {
+      this.record.targets.add(target);
+    }
+
+    disconnect() {
+      this.record.targets.clear();
+    }
+
+    unobserve(target: Element) {
+      this.record.targets.delete(target);
+    }
+  });
+}
+
+function notifyResizeObserver(target: Element) {
+  for (const record of resizeObserverRecords) {
+    if (!record.targets.has(target)) continue;
+    record.callback([
+      {
+        target,
+        contentRect: target.getBoundingClientRect(),
+      } as ResizeObserverEntry,
+    ], {} as ResizeObserver);
+  }
+}
+
+function setElementRect(element: HTMLElement, height: number, width = 640) {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      width,
+      height,
+      top: 0,
+      right: width,
+      bottom: height,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
+  });
+}
+
 function queuedPanel(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.flower-queued-turns-panel:not(.flower-followups-drafts-panel)');
 }
@@ -715,6 +777,10 @@ function bottomDock(host: HTMLElement): HTMLElement | null {
 
 function bottomDockSupport(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.flower-chat-bottom-dock-support');
+}
+
+function bottomDockTrack(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('.flower-chat-bottom-dock-track');
 }
 
 function headerActions(host: HTMLElement): HTMLElement | null {
@@ -859,11 +925,7 @@ export function registerEnvAIPageSendTests() {
     const raf = (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0);
     vi.stubGlobal('requestAnimationFrame', raf);
     vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
-    vi.stubGlobal('ResizeObserver', class {
-      observe() {}
-      disconnect() {}
-      unobserve() {}
-    });
+    installResizeObserverHarness();
   });
 
   afterEach(() => {
@@ -980,6 +1042,8 @@ export function registerEnvAIPageSendTests() {
       const { host, dispose } = await renderPage();
       try {
         const actions = headerActions(host);
+        const dock = bottomDock(host);
+        const dockTrack = bottomDockTrack(host);
         const primaryRow = composerPrimaryRow(host);
         const metaRail = composerMetaRail(host);
 
@@ -992,6 +1056,10 @@ export function registerEnvAIPageSendTests() {
         expect(host.textContent).toContain('Delete chat');
         expect(host.textContent).toContain('AI settings');
 
+        expect(dock).toBeTruthy();
+        expect(dockTrack).toBeTruthy();
+        expect(dock?.querySelector('.flower-chat-toolbar')).toBeTruthy();
+        expect(dock?.querySelector('.flower-chat-bottom-dock-lane-composer .flower-chat-input-floating')).toBeTruthy();
         expect(primaryRow).toBeTruthy();
         expect(primaryRow?.querySelector('textarea')).toBeTruthy();
         expect(primaryRow?.querySelector('button[title="Send message"]')).toBeTruthy();
@@ -1001,6 +1069,24 @@ export function registerEnvAIPageSendTests() {
         expect(metaRail?.querySelector('button[title="Edit working directory"]')).toBeNull();
         expect(host.querySelector('.chat-input-toolbar-left')).toBeNull();
         expect(host.querySelector('.chat-input-toolbar-right')).toBeNull();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('measures the bottom dock and writes transcript clearance so the floating composer cannot cover transcript output', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const transcript = transcriptRegion(host);
+        const dock = bottomDock(host);
+
+        expect(transcript).toBeTruthy();
+        expect(dock).toBeTruthy();
+
+        setElementRect(dock!, 164);
+        notifyResizeObserver(dock!);
+
+        expect(transcript?.style.getPropertyValue('--flower-chat-transcript-overlay-bottom-inset')).toBe('176px');
       } finally {
         dispose();
       }

@@ -91,6 +91,7 @@ import { FlowerMessageRunIndicator } from '../widgets/FlowerMessageRunIndicator'
 import { FlowerLiveAssistantSurface } from '../widgets/FlowerLiveAssistantSurface';
 import { createAIThreadRenderController } from './createAIThreadRenderController';
 import { createAIContextTelemetryController } from './createAIContextTelemetryController';
+import { createFlowerBottomDockLayoutController } from './flowerBottomDockLayout';
 import { CompactContextSummary } from './AIContextSummary';
 
 type DirCache = Map<string, FileItem[]>;
@@ -1394,6 +1395,7 @@ export function EnvAIPage() {
   const contextCompactions = contextTelemetryController.contextCompactions;
   const hasContextTelemetry = contextTelemetryController.hasContextTelemetry;
   const hasKnownContextRun = contextTelemetryController.hasKnownContextRun;
+  const bottomDockLayoutController = createFlowerBottomDockLayoutController();
   let lastFollowupsReq = 0;
   let nextSendIntent: SendIntent = 'default';
   const sendIntentByMessageId = new Map<string, SendIntent>();
@@ -1410,6 +1412,10 @@ export function EnvAIPage() {
   const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
   let queuedAskFlowerIntents: AskFlowerIntent[] = [];
   let messageAreaRef: HTMLDivElement | undefined;
+
+  onCleanup(() => {
+    bottomDockLayoutController.dispose();
+  });
 
   // Working dir (draft-only; locked after thread creation)
   const [homePath, setHomePath] = createSignal<string | undefined>(undefined);
@@ -3747,7 +3753,13 @@ export function EnvAIPage() {
                     </Show>
 
                     {/* Message list with empty state + file browser FAB */}
-                    <div ref={messageAreaRef} class="flower-chat-transcript-main">
+                    <div
+                      ref={(element) => {
+                        messageAreaRef = element;
+                        bottomDockLayoutController.setTranscriptElement(element);
+                      }}
+                      class="flower-chat-transcript-main"
+                    >
                       <MessageListWithEmptyState
                         hasMessages={hasMessages()}
                         loading={messagesLoading()}
@@ -3766,339 +3778,356 @@ export function EnvAIPage() {
                     </div>
                   </div>
 
-                  <div class="flower-chat-bottom-dock">
-                    {/* Toolbar: runtime chips + execution mode toggle */}
-                    <div class="chat-toolbar-separator flower-chat-toolbar">
-                      <div class="flower-chat-toolbar-main">
-                        <div class="flower-chat-toolbar-lane">
-                          <Show when={ai.activeThreadId() && activeThreadTodos().length > 0}>
-                            <CompactTasksSummary
-                              executionMode={executionMode()}
-                              todos={activeThreadTodos()}
-                              unresolvedCount={unresolvedTodoCount()}
-                              todosLoading={todosLoading()}
-                              todosError={todosError()}
-                              todosView={threadTodos()}
-                              todoUpdatedLabel={todoUpdatedLabel()}
-                            />
-                          </Show>
-                          <Show when={ai.activeThreadId() && activeThreadSubagents().length > 0}>
-                            <CompactSubagentsSummary
-                              subagents={activeThreadSubagents()}
-                              updatedLabel={subagentsUpdatedLabel()}
-                            />
-                          </Show>
-                          <Show when={shouldShowContextSummary()}>
-                            <CompactContextSummary
-                              usage={contextUsage()}
-                              compactions={contextCompactions()}
-                            />
-                          </Show>
-                          <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !shouldShowContextSummary())}>
-                            <span class="text-[11px] text-muted-foreground">Execution mode</span>
-                          </Show>
-                        </div>
-                        <div class="flower-chat-toolbar-mode">
-                          <ExecutionModeToggle
-                            value={executionMode()}
-                            disabled={activeThreadRunning()}
-                            onChange={(mode) => {
-                              void updateExecutionMode(mode);
-                            }}
-                          />
+                  <div
+                    ref={(element) => {
+                      bottomDockLayoutController.setDockElement(element);
+                    }}
+                    class="flower-chat-bottom-dock"
+                  >
+                    <div class="flower-chat-bottom-dock-lane">
+                      <div class="flower-chat-bottom-dock-track">
+                        {/* Toolbar: runtime chips + execution mode toggle */}
+                        <div class="chat-toolbar-separator flower-chat-toolbar">
+                          <div class="flower-chat-toolbar-main">
+                            <div class="flower-chat-toolbar-lane">
+                              <Show when={ai.activeThreadId() && activeThreadTodos().length > 0}>
+                                <CompactTasksSummary
+                                  executionMode={executionMode()}
+                                  todos={activeThreadTodos()}
+                                  unresolvedCount={unresolvedTodoCount()}
+                                  todosLoading={todosLoading()}
+                                  todosError={todosError()}
+                                  todosView={threadTodos()}
+                                  todoUpdatedLabel={todoUpdatedLabel()}
+                                />
+                              </Show>
+                              <Show when={ai.activeThreadId() && activeThreadSubagents().length > 0}>
+                                <CompactSubagentsSummary
+                                  subagents={activeThreadSubagents()}
+                                  updatedLabel={subagentsUpdatedLabel()}
+                                />
+                              </Show>
+                              <Show when={shouldShowContextSummary()}>
+                                <CompactContextSummary
+                                  usage={contextUsage()}
+                                  compactions={contextCompactions()}
+                                />
+                              </Show>
+                              <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !shouldShowContextSummary())}>
+                                <span class="text-[11px] text-muted-foreground">Execution mode</span>
+                              </Show>
+                            </div>
+                            <div class="flower-chat-toolbar-mode">
+                              <ExecutionModeToggle
+                                value={executionMode()}
+                                disabled={activeThreadRunning()}
+                                onChange={(mode) => {
+                                  void updateExecutionMode(mode);
+                                }}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
 
                     <Show when={hasBottomDockPanels()}>
-                      <div class="flower-chat-bottom-dock-support">
-                        <Show when={draftFollowups().length > 0}>
-                          <div class="flower-queued-turns-panel flower-followups-drafts-panel">
-                            <div class="flower-queued-turns-header">
-                              <div class="flower-queued-turns-header-main">
-                                <span class="flower-queued-turns-title">Draft follow-ups</span>
-                                <span class="flower-queued-turns-count">{draftFollowups().length}</span>
-                              </div>
-                              <div class="flower-queued-turns-hint">These stay under your control until you load them or queue them later.</div>
-                            </div>
-                            <div class="flower-queued-turns-list">
-                              <For each={draftFollowups()}>
-                                {(item, index) => {
-                                  const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
-                                  const attachmentCount = () => attachments().length;
-                                  const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
-                                  const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
-                                  const executionModeLabel = () => {
-                                    const mode = String(item.execution_mode ?? '').trim().toLowerCase();
-                                    return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
-                                  };
-                                  const followupID = () => String(item.followup_id ?? '').trim();
-                                  const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
-                                  const deleting = () => followupDeletingID() === followupID();
-                                  const isLoaded = () => loadedDraftFollowupID() === followupID();
-                                  const reorderDisabled = () => !canInteract() || !!followupReorderingLane() || isLoaded();
-                                  return (
-                                    <div
-                                      class={cn('flower-queued-turn-item', isLoaded() && 'flower-followup-item-loaded')}
-                                      draggable={!reorderDisabled()}
-                                      onDragStart={() => handleFollowupDragStart('draft', followupID())}
-                                      onDragEnd={() => handleFollowupDragEnd()}
-                                      onDragOver={(e) => {
-                                        if (draggingFollowupLane() !== 'draft') return;
-                                        e.preventDefault();
-                                      }}
-                                      onDrop={(e) => {
-                                        e.preventDefault();
-                                        handleFollowupDrop('draft', followupID());
-                                      }}
-                                    >
-                                      <div class="flower-queued-turn-item-main">
-                                        <div class="flower-followup-leading">
-                                          <button
-                                            type="button"
-                                            class="flower-followup-drag-handle"
-                                            disabled={reorderDisabled()}
-                                            onMouseDown={(e) => e.preventDefault()}
-                                            title="Drag to reorder"
-                                          >
-                                            ⋮⋮
-                                          </button>
-                                          <div class="flower-queued-turn-position">{item.position}</div>
-                                        </div>
-                                        <div class="min-w-0 flex-1">
-                                          <div class="flower-queued-turn-item-meta">
-                                            <Show when={createdAtLabel()}>
-                                              <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
-                                            </Show>
-                                            <Show when={executionModeLabel()}>
-                                              <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
-                                            </Show>
-                                            <Show when={String(item.model_id ?? '').trim()}>
-                                              <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
-                                                {String(item.model_id ?? '').trim()}
-                                              </span>
-                                            </Show>
-                                            <Show when={attachmentCount() > 0}>
-                                              <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
-                                            </Show>
-                                            <Show when={isLoaded()}>
-                                              <span class="flower-followup-state-chip">Loaded</span>
-                                            </Show>
+                      <div class="flower-chat-bottom-dock-lane">
+                        <div class="flower-chat-bottom-dock-track">
+                          <div class="flower-chat-bottom-dock-support">
+                            <Show when={draftFollowups().length > 0}>
+                              <div class="flower-queued-turns-panel flower-followups-drafts-panel">
+                                <div class="flower-queued-turns-header">
+                                  <div class="flower-queued-turns-header-main">
+                                    <span class="flower-queued-turns-title">Draft follow-ups</span>
+                                    <span class="flower-queued-turns-count">{draftFollowups().length}</span>
+                                  </div>
+                                  <div class="flower-queued-turns-hint">These stay under your control until you load them or queue them later.</div>
+                                </div>
+                                <div class="flower-queued-turns-list">
+                                  <For each={draftFollowups()}>
+                                    {(item, index) => {
+                                      const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
+                                      const attachmentCount = () => attachments().length;
+                                      const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
+                                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
+                                      const executionModeLabel = () => {
+                                        const mode = String(item.execution_mode ?? '').trim().toLowerCase();
+                                        return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
+                                      };
+                                      const followupID = () => String(item.followup_id ?? '').trim();
+                                      const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
+                                      const deleting = () => followupDeletingID() === followupID();
+                                      const isLoaded = () => loadedDraftFollowupID() === followupID();
+                                      const reorderDisabled = () => !canInteract() || !!followupReorderingLane() || isLoaded();
+                                      return (
+                                        <div
+                                          class={cn('flower-queued-turn-item', isLoaded() && 'flower-followup-item-loaded')}
+                                          draggable={!reorderDisabled()}
+                                          onDragStart={() => handleFollowupDragStart('draft', followupID())}
+                                          onDragEnd={() => handleFollowupDragEnd()}
+                                          onDragOver={(e) => {
+                                            if (draggingFollowupLane() !== 'draft') return;
+                                            e.preventDefault();
+                                          }}
+                                          onDrop={(e) => {
+                                            e.preventDefault();
+                                            handleFollowupDrop('draft', followupID());
+                                          }}
+                                        >
+                                          <div class="flower-queued-turn-item-main">
+                                            <div class="flower-followup-leading">
+                                              <button
+                                                type="button"
+                                                class="flower-followup-drag-handle"
+                                                disabled={reorderDisabled()}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                title="Drag to reorder"
+                                              >
+                                                ⋮⋮
+                                              </button>
+                                              <div class="flower-queued-turn-position">{item.position}</div>
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                              <div class="flower-queued-turn-item-meta">
+                                                <Show when={createdAtLabel()}>
+                                                  <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
+                                                </Show>
+                                                <Show when={executionModeLabel()}>
+                                                  <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
+                                                </Show>
+                                                <Show when={String(item.model_id ?? '').trim()}>
+                                                  <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
+                                                    {String(item.model_id ?? '').trim()}
+                                                  </span>
+                                                </Show>
+                                                <Show when={attachmentCount() > 0}>
+                                                  <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
+                                                </Show>
+                                                <Show when={isLoaded()}>
+                                                  <span class="flower-followup-state-chip">Loaded</span>
+                                                </Show>
+                                              </div>
+                                              <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
+                                            </div>
                                           </div>
-                                          <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
+                                          <div class="flower-queued-turn-actions">
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Move up"
+                                              onClick={() => moveFollowup('draft', index(), -1)}
+                                              disabled={reorderDisabled() || index() === 0}
+                                            >
+                                              <ChevronUp class="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Move down"
+                                              onClick={() => moveFollowup('draft', index(), 1)}
+                                              disabled={reorderDisabled() || index() === draftFollowups().length - 1}
+                                            >
+                                              <ChevronUp class="w-3.5 h-3.5 rotate-180" />
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant={isLoaded() ? 'outline' : 'ghost'}
+                                              title={isLoaded() ? 'Draft already loaded' : 'Load into editor'}
+                                              onClick={() => requestLoadFollowup(item)}
+                                              disabled={deleting()}
+                                            >
+                                              {isLoaded() ? 'Loaded' : 'Load'}
+                                            </Button>
+                                            <Show when={activeThreadWaitingUser() && !isLoaded()}>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                title="Queue for later"
+                                                onClick={() => void queueDraftForLater(item)}
+                                                disabled={!canInteract() || deleting() || followupReorderingLane() === 'draft'}
+                                              >
+                                                Queue
+                                              </Button>
+                                            </Show>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Edit draft follow-up"
+                                              onClick={() => openFollowupEditor(item)}
+                                              disabled={!canInteract() || deleting() || isLoaded()}
+                                            >
+                                              <Pencil class="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Remove draft follow-up"
+                                              onClick={() => void deleteFollowup(item)}
+                                              disabled={!canInteract() || deleting() || isLoaded()}
+                                            >
+                                              <Trash class="w-3.5 h-3.5" />
+                                            </Button>
+                                          </div>
                                         </div>
-                                      </div>
-                                      <div class="flower-queued-turn-actions">
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Move up"
-                                          onClick={() => moveFollowup('draft', index(), -1)}
-                                          disabled={reorderDisabled() || index() === 0}
-                                        >
-                                          <ChevronUp class="w-3.5 h-3.5" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Move down"
-                                          onClick={() => moveFollowup('draft', index(), 1)}
-                                          disabled={reorderDisabled() || index() === draftFollowups().length - 1}
-                                        >
-                                          <ChevronUp class="w-3.5 h-3.5 rotate-180" />
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant={isLoaded() ? 'outline' : 'ghost'}
-                                          title={isLoaded() ? 'Draft already loaded' : 'Load into editor'}
-                                          onClick={() => requestLoadFollowup(item)}
-                                          disabled={deleting()}
-                                        >
-                                          {isLoaded() ? 'Loaded' : 'Load'}
-                                        </Button>
-                                        <Show when={activeThreadWaitingUser() && !isLoaded()}>
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            title="Queue for later"
-                                            onClick={() => void queueDraftForLater(item)}
-                                            disabled={!canInteract() || deleting() || followupReorderingLane() === 'draft'}
-                                          >
-                                            Queue
-                                          </Button>
-                                        </Show>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Edit draft follow-up"
-                                          onClick={() => openFollowupEditor(item)}
-                                          disabled={!canInteract() || deleting() || isLoaded()}
-                                        >
-                                          <Pencil class="w-3.5 h-3.5" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Remove draft follow-up"
-                                          onClick={() => void deleteFollowup(item)}
-                                          disabled={!canInteract() || deleting() || isLoaded()}
-                                        >
-                                          <Trash class="w-3.5 h-3.5" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  );
-                                }}
-                              </For>
-                            </div>
-                          </div>
-                        </Show>
+                                      );
+                                    }}
+                                  </For>
+                                </div>
+                              </div>
+                            </Show>
 
-                        <Show when={shouldShowQueuedTurnsPanel()}>
-                          <div class="flower-queued-turns-panel">
-                            <div class="flower-queued-turns-header">
-                              <div class="flower-queued-turns-header-main">
-                                <span class="flower-queued-turns-title">Queued follow-ups</span>
-                                <span class="flower-queued-turns-count">{activeQueuedTurnCount()}</span>
-                                <Show when={followupsPausedReason() === 'waiting_user'}>
-                                  <span class="flower-followup-state-chip">Paused</span>
-                                </Show>
-                              </div>
-                              <div class="flower-queued-turns-hint">{queuedTurnHint()}</div>
-                            </div>
-                            <div class="flower-queued-turns-list">
-                              <Show when={followupsError() && queuedFollowups().length === 0}>
-                                <div class="flower-queued-turns-empty">{followupsError()}</div>
-                              </Show>
-                              <Show when={followupsLoading() && queuedFollowups().length === 0 && !followupsError()}>
-                                <div class="flower-queued-turns-empty">Loading queued follow-ups...</div>
-                              </Show>
-                              <For each={queuedFollowups()}>
-                                {(item, index) => {
-                                  const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
-                                  const attachmentCount = () => attachments().length;
-                                  const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
-                                  const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
-                                  const executionModeLabel = () => {
-                                    const mode = String(item.execution_mode ?? '').trim().toLowerCase();
-                                    return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
-                                  };
-                                  const followupID = () => String(item.followup_id ?? '').trim();
-                                  const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
-                                  const deleting = () => followupDeletingID() === followupID();
-                                  const reorderDisabled = () => !canInteract() || !!followupReorderingLane();
-                                  return (
-                                    <div
-                                      class="flower-queued-turn-item"
-                                      draggable={!reorderDisabled()}
-                                      onDragStart={() => handleFollowupDragStart('queued', followupID())}
-                                      onDragEnd={() => handleFollowupDragEnd()}
-                                      onDragOver={(e) => {
-                                        if (draggingFollowupLane() !== 'queued') return;
-                                        e.preventDefault();
-                                      }}
-                                      onDrop={(e) => {
-                                        e.preventDefault();
-                                        handleFollowupDrop('queued', followupID());
-                                      }}
-                                    >
-                                      <div class="flower-queued-turn-item-main">
-                                        <div class="flower-followup-leading">
-                                          <button
-                                            type="button"
-                                            class="flower-followup-drag-handle"
-                                            disabled={reorderDisabled()}
-                                            onMouseDown={(e) => e.preventDefault()}
-                                            title="Drag to reorder"
-                                          >
-                                            ⋮⋮
-                                          </button>
-                                          <div class="flower-queued-turn-position">{item.position}</div>
-                                        </div>
-                                        <div class="min-w-0 flex-1">
-                                          <div class="flower-queued-turn-item-meta">
-                                            <Show when={createdAtLabel()}>
-                                              <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
-                                            </Show>
-                                            <Show when={executionModeLabel()}>
-                                              <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
-                                            </Show>
-                                            <Show when={String(item.model_id ?? '').trim()}>
-                                              <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
-                                                {String(item.model_id ?? '').trim()}
-                                              </span>
-                                            </Show>
-                                            <Show when={attachmentCount() > 0}>
-                                              <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
-                                            </Show>
+                            <Show when={shouldShowQueuedTurnsPanel()}>
+                              <div class="flower-queued-turns-panel">
+                                <div class="flower-queued-turns-header">
+                                  <div class="flower-queued-turns-header-main">
+                                    <span class="flower-queued-turns-title">Queued follow-ups</span>
+                                    <span class="flower-queued-turns-count">{activeQueuedTurnCount()}</span>
+                                    <Show when={followupsPausedReason() === 'waiting_user'}>
+                                      <span class="flower-followup-state-chip">Paused</span>
+                                    </Show>
+                                  </div>
+                                  <div class="flower-queued-turns-hint">{queuedTurnHint()}</div>
+                                </div>
+                                <div class="flower-queued-turns-list">
+                                  <Show when={followupsError() && queuedFollowups().length === 0}>
+                                    <div class="flower-queued-turns-empty">{followupsError()}</div>
+                                  </Show>
+                                  <Show when={followupsLoading() && queuedFollowups().length === 0 && !followupsError()}>
+                                    <div class="flower-queued-turns-empty">Loading queued follow-ups...</div>
+                                  </Show>
+                                  <For each={queuedFollowups()}>
+                                    {(item, index) => {
+                                      const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
+                                      const attachmentCount = () => attachments().length;
+                                      const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
+                                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
+                                      const executionModeLabel = () => {
+                                        const mode = String(item.execution_mode ?? '').trim().toLowerCase();
+                                        return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
+                                      };
+                                      const followupID = () => String(item.followup_id ?? '').trim();
+                                      const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
+                                      const deleting = () => followupDeletingID() === followupID();
+                                      const reorderDisabled = () => !canInteract() || !!followupReorderingLane();
+                                      return (
+                                        <div
+                                          class="flower-queued-turn-item"
+                                          draggable={!reorderDisabled()}
+                                          onDragStart={() => handleFollowupDragStart('queued', followupID())}
+                                          onDragEnd={() => handleFollowupDragEnd()}
+                                          onDragOver={(e) => {
+                                            if (draggingFollowupLane() !== 'queued') return;
+                                            e.preventDefault();
+                                          }}
+                                          onDrop={(e) => {
+                                            e.preventDefault();
+                                            handleFollowupDrop('queued', followupID());
+                                          }}
+                                        >
+                                          <div class="flower-queued-turn-item-main">
+                                            <div class="flower-followup-leading">
+                                              <button
+                                                type="button"
+                                                class="flower-followup-drag-handle"
+                                                disabled={reorderDisabled()}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                title="Drag to reorder"
+                                              >
+                                                ⋮⋮
+                                              </button>
+                                              <div class="flower-queued-turn-position">{item.position}</div>
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                              <div class="flower-queued-turn-item-meta">
+                                                <Show when={createdAtLabel()}>
+                                                  <span class="flower-queued-turn-chip">{createdAtLabel()}</span>
+                                                </Show>
+                                                <Show when={executionModeLabel()}>
+                                                  <span class="flower-queued-turn-chip">{executionModeLabel()}</span>
+                                                </Show>
+                                                <Show when={String(item.model_id ?? '').trim()}>
+                                                  <span class="flower-queued-turn-chip truncate max-w-[14rem]" title={String(item.model_id ?? '').trim()}>
+                                                    {String(item.model_id ?? '').trim()}
+                                                  </span>
+                                                </Show>
+                                                <Show when={attachmentCount() > 0}>
+                                                  <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
+                                                </Show>
+                                              </div>
+                                              <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
+                                            </div>
                                           </div>
-                                          <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
+                                          <div class="flower-queued-turn-actions">
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Move up"
+                                              onClick={() => moveFollowup('queued', index(), -1)}
+                                              disabled={reorderDisabled() || index() === 0}
+                                            >
+                                              <ChevronUp class="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Move down"
+                                              onClick={() => moveFollowup('queued', index(), 1)}
+                                              disabled={reorderDisabled() || index() === queuedFollowups().length - 1}
+                                            >
+                                              <ChevronUp class="w-3.5 h-3.5 rotate-180" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Edit queued follow-up"
+                                              onClick={() => openFollowupEditor(item)}
+                                              disabled={!canInteract() || deleting()}
+                                            >
+                                              <Pencil class="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button
+                                              size="icon"
+                                              variant="ghost"
+                                              title="Remove queued follow-up"
+                                              onClick={() => void deleteFollowup(item)}
+                                              disabled={!canInteract() || deleting()}
+                                            >
+                                              <Trash class="w-3.5 h-3.5" />
+                                            </Button>
+                                          </div>
                                         </div>
-                                      </div>
-                                      <div class="flower-queued-turn-actions">
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Move up"
-                                          onClick={() => moveFollowup('queued', index(), -1)}
-                                          disabled={reorderDisabled() || index() === 0}
-                                        >
-                                          <ChevronUp class="w-3.5 h-3.5" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Move down"
-                                          onClick={() => moveFollowup('queued', index(), 1)}
-                                          disabled={reorderDisabled() || index() === queuedFollowups().length - 1}
-                                        >
-                                          <ChevronUp class="w-3.5 h-3.5 rotate-180" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Edit queued follow-up"
-                                          onClick={() => openFollowupEditor(item)}
-                                          disabled={!canInteract() || deleting()}
-                                        >
-                                          <Pencil class="w-3.5 h-3.5" />
-                                        </Button>
-                                        <Button
-                                          size="icon"
-                                          variant="ghost"
-                                          title="Remove queued follow-up"
-                                          onClick={() => void deleteFollowup(item)}
-                                          disabled={!canInteract() || deleting()}
-                                        >
-                                          <Trash class="w-3.5 h-3.5" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  );
-                                }}
-                              </For>
-                            </div>
+                                      );
+                                    }}
+                                  </For>
+                                </div>
+                              </div>
+                            </Show>
                           </div>
-                        </Show>
+                        </div>
                       </div>
                     </Show>
 
-                    <AIChatInput
-                      class="flower-chat-input"
-                      disabled={!canInteract()}
-                      waitingForUser={activeThreadWaitingUser()}
-                      placeholder={chatInputPlaceholder()}
-                      workingDirLabel={workingDirLabel() || 'Working dir'}
-                      workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
-                      workingDirLocked={workingDirLocked()}
-                      workingDirDisabled={workingDirDisabled()}
-                      onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
-                      onSendIntent={(intent) => {
-                        nextSendIntent = intent;
-                      }}
-                      getSendBlockReason={waitingUserComposerSendBlockReason}
-                      onApiReady={setChatInputApi}
-                    />
+                    <div class="flower-chat-bottom-dock-lane flower-chat-bottom-dock-lane-composer">
+                      <div class="flower-chat-bottom-dock-track">
+                        <AIChatInput
+                          class="flower-chat-input flower-chat-input-floating"
+                          disabled={!canInteract()}
+                          waitingForUser={activeThreadWaitingUser()}
+                          placeholder={chatInputPlaceholder()}
+                          workingDirLabel={workingDirLabel() || 'Working dir'}
+                          workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
+                          workingDirLocked={workingDirLocked()}
+                          workingDirDisabled={workingDirDisabled()}
+                          onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
+                          onSendIntent={(intent) => {
+                            nextSendIntent = intent;
+                          }}
+                          getSendBlockReason={waitingUserComposerSendBlockReason}
+                          onApiReady={setChatInputApi}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

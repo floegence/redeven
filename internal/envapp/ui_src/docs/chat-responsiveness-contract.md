@@ -27,6 +27,8 @@ the interaction and performance contract, not the exact UI tree.
 - `ChatContainer` must continue using `VirtualMessageList` by default.
 - Stream event reconciliation must stay batched outside the synchronous event stack.
 - Host callbacks that can run arbitrary logic must leave the hot path first.
+- Transcript bottom clearance must stay transcript-owned even when a page-specific floating composer is used.
+- Page-level floating composer layouts must measure the real dock height and synchronize transcript bottom inset from that measured value instead of relying on a fixed magic-number spacer.
 
 ### Markdown
 
