@@ -165,9 +165,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
   MobileKeyboard: (props: any) => <div ref={props.ref} aria-hidden={!props.visible} />,
   Tabs: (props: any) => (
-    <div>
+    <div role="tablist">
       {props.items.map((item: any) => (
-        <button type="button" onClick={() => props.onChange?.(item.id)}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={item.id === props.activeId}
+          onClick={() => props.onChange?.(item.id)}
+        >
           {item.icon}
           {item.label}
         </button>
@@ -367,8 +372,8 @@ function emitTerminalData(sessionId: string, data: string, sequence?: number) {
   }
 }
 
-function findTerminalTab(host: HTMLElement, label: string): HTMLButtonElement | undefined {
-  return Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(label)) as HTMLButtonElement | undefined;
+function findTerminalTab(host: HTMLElement, label: string): HTMLElement | undefined {
+  return Array.from(host.querySelectorAll<HTMLElement>('[role="tab"], button')).find((button) => button.textContent?.includes(label));
 }
 
 function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread'): Element | null {
@@ -439,5 +444,37 @@ describe('TerminalPanel browser activity integration', () => {
 
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+  });
+
+  it('keeps tab switching responsive while a background session is receiving heavy live output', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    for (let index = 0; index < 120; index += 1) {
+      emitTerminalData('session-2', `chunk-${index}\n`, index + 2);
+    }
+    await settleTerminalPanel();
+
+    const terminal2TabBeforeSwitch = findTerminalTab(host, 'Terminal 2');
+    expect(terminal2TabBeforeSwitch?.getAttribute('aria-selected')).toBe('false');
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+
+    terminal2TabBeforeSwitch?.click();
+    await settleTerminalPanel();
+
+    const terminal2TabAfterSwitch = findTerminalTab(host, 'Terminal 2');
+    expect(terminal2TabAfterSwitch?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
   });
 });
