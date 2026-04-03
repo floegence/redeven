@@ -1,4 +1,4 @@
-import { ErrorBoundary, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
+import { ErrorBoundary, For, Suspense, Show, createEffect, createMemo, createSignal, lazy, on } from 'solid-js';
 import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 
@@ -25,7 +25,14 @@ interface StaticTextPreviewPaneProps {
   showEditorUnavailableNotice?: boolean;
 }
 
+function splitPreviewLines(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return normalized.split('\n');
+}
+
 function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
+  const lines = createMemo(() => splitPreviewLines(props.text));
+
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <Show when={props.showEditorUnavailableNotice}>
@@ -34,14 +41,36 @@ function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
         </div>
       </Show>
 
-      <pre
+      <div
         data-testid="text-preview-fallback"
-        class={`min-h-0 flex-1 overflow-auto px-3 py-3 font-mono text-xs leading-5 text-foreground ${
-          props.wrapText === false ? 'whitespace-pre' : 'whitespace-pre-wrap break-words'
-        }`}
+        class="min-h-0 flex-1 overflow-auto font-mono text-xs leading-5 text-foreground"
       >
-        <code>{props.text}</code>
-      </pre>
+        <table class="min-w-full border-collapse">
+          <tbody>
+            <For each={lines()}>
+              {(line, index) => (
+                <tr class="align-top">
+                  <td
+                    data-testid="text-preview-fallback-line-number"
+                    class="select-none border-r border-border/70 px-3 py-0 text-right text-muted-foreground/70"
+                  >
+                    {index() + 1}
+                  </td>
+                  <td class="w-full px-3 py-0">
+                    <code
+                      class={`block min-h-5 ${
+                        props.wrapText === false ? 'whitespace-pre' : 'whitespace-pre-wrap break-words'
+                      }`}
+                    >
+                      {line.length > 0 ? line : ' '}
+                    </code>
+                  </td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -69,8 +98,8 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
     ...PREVIEW_MONACO_INTERACTION_OPTIONS,
     readOnly: !props.editing,
     wordWrap: props.descriptor.wrapText === false ? ('off' as const) : ('on' as const),
-    lineNumbers: props.descriptor.textPresentation === 'code' ? ('on' as const) : ('off' as const),
-    lineNumbersMinChars: props.descriptor.textPresentation === 'code' ? 3 : 0,
+    lineNumbers: 'on' as const,
+    lineNumbersMinChars: 3,
     folding: props.descriptor.textPresentation === 'code',
     renderLineHighlight: props.editing ? ('line' as const) : ('none' as const),
     renderWhitespace: 'selection' as const,

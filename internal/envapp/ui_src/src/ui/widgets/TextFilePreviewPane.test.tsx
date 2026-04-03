@@ -23,6 +23,8 @@ vi.mock('@floegence/floe-webapp-core/editor', () => ({
         data-instance-id={instanceId}
         data-language={String(props.language)}
         data-read-only={String(props.options.readOnly)}
+        data-line-numbers={String(props.options.lineNumbers)}
+        data-line-numbers-min-chars={String(props.options.lineNumbersMinChars)}
         data-hover-enabled={String(props.options.hover?.enabled)}
         data-code-lens={String(props.options.codeLens)}
         data-inlay-hints={String(props.options.inlayHints?.enabled)}
@@ -78,6 +80,8 @@ describe('TextFilePreviewPane', () => {
     expect(editor).toBeTruthy();
     expect(host.querySelector('[data-testid="text-preview-fallback"]')).toBeNull();
     expect(host.textContent).toContain('typescript:const value = 1;:ro');
+    expect(editor?.dataset.lineNumbers).toBe('on');
+    expect(editor?.dataset.lineNumbersMinChars).toBe('3');
     expect(onSelectionChange).not.toHaveBeenCalled();
   });
 
@@ -249,6 +253,7 @@ describe('TextFilePreviewPane', () => {
     expect(host.querySelector('[data-testid="mock-editor"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="text-preview-fallback"]')).toBeNull();
     expect(host.textContent).toContain('markdown:hello\nredeven:ro');
+    expect((host.querySelector('[data-testid="mock-editor"]') as HTMLButtonElement | null)?.dataset.lineNumbers).toBe('on');
   });
 
   it('uses the plain-text fallback for truncated previews and clears selection state', async () => {
@@ -269,8 +274,30 @@ describe('TextFilePreviewPane', () => {
 
     expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
     expect(host.querySelector('[data-testid="text-preview-fallback"]')).toBeTruthy();
+    expect(Array.from(host.querySelectorAll('[data-testid="text-preview-fallback-line-number"]')).map((el) => el.textContent)).toEqual(['1']);
     expect(host.textContent).toContain('echo "redeven"');
     expect(onSelectionChange).toHaveBeenCalledWith('');
+  });
+
+  it('renders manual line numbers in the plain-text fallback for multiline previews', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    editorRenderState.errorMessage = 'monaco unavailable';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TextFilePreviewPane
+        path="/workspace/demo.txt"
+        descriptor={{ mode: 'text', textPresentation: 'plain', wrapText: true }}
+        text={'alpha\nbeta\n'}
+      />
+    ), host);
+    await flushAsync();
+
+    expect(host.querySelector('[data-testid="mock-editor"]')).toBeNull();
+    expect(Array.from(host.querySelectorAll('[data-testid="text-preview-fallback-line-number"]')).map((el) => el.textContent)).toEqual(['1', '2', '3']);
+    expect(host.textContent).toContain('alpha');
+    expect(host.textContent).toContain('beta');
   });
 
   it('shows an explicit editor-unavailable state instead of a fake editable fallback when Monaco fails in edit mode', async () => {
@@ -320,6 +347,7 @@ describe('TextFilePreviewPane', () => {
     expect(host.querySelector('[data-testid="text-preview-fallback"]')).toBeTruthy();
     expect(host.textContent).toContain('Editor unavailable. Showing a plain-text fallback for this preview.');
     expect(host.textContent).toContain('const value = 1;');
+    expect(Array.from(host.querySelectorAll('[data-testid="text-preview-fallback-line-number"]')).map((el) => el.textContent)).toEqual(['1']);
     expect(onSelectionChange).toHaveBeenCalledWith('');
   });
 });
