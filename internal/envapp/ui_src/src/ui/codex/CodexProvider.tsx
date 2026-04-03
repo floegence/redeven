@@ -140,6 +140,88 @@ function sortThreads(threads: readonly CodexThread[]): CodexThread[] {
     .map((entry) => entry.thread);
 }
 
+function sameStringList(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function normalizeThreadFlags(values: readonly string[] | null | undefined): string[] {
+  return [...(values ?? [])]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean);
+}
+
+function sameReadStatus(
+  left: CodexThreadReadStatus | null | undefined,
+  right: CodexThreadReadStatus | null | undefined,
+): boolean {
+  const normalizedLeft = normalizeCodexThreadReadStatus(left);
+  const normalizedRight = normalizeCodexThreadReadStatus(right);
+  return (
+    normalizedLeft.is_unread === normalizedRight.is_unread &&
+    normalizedLeft.snapshot.updated_at_unix_s === normalizedRight.snapshot.updated_at_unix_s &&
+    String(normalizedLeft.snapshot.activity_signature ?? '').trim() === String(normalizedRight.snapshot.activity_signature ?? '').trim() &&
+    normalizedLeft.read_state.last_read_updated_at_unix_s === normalizedRight.read_state.last_read_updated_at_unix_s &&
+    String(normalizedLeft.read_state.last_seen_activity_signature ?? '').trim() === String(normalizedRight.read_state.last_seen_activity_signature ?? '').trim()
+  );
+}
+
+function sameTurnSummary(left: CodexThread['turns'], right: CodexThread['turns']): boolean {
+  const normalizedLeft = Array.isArray(left) ? left : [];
+  const normalizedRight = Array.isArray(right) ? right : [];
+  if (normalizedLeft.length !== normalizedRight.length) return false;
+  return normalizedLeft.every((turn, index) => {
+    const other = normalizedRight[index];
+    if (!other) return false;
+    return (
+      String(turn.id ?? '').trim() === String(other.id ?? '').trim() &&
+      String(turn.status ?? '').trim() === String(other.status ?? '').trim() &&
+      String(turn.error?.message ?? '').trim() === String(other.error?.message ?? '').trim() &&
+      (turn.items?.length ?? 0) === (other.items?.length ?? 0)
+    );
+  });
+}
+
+function sameThreadSnapshot(left: CodexThread, right: CodexThread): boolean {
+  return (
+    String(left.id ?? '').trim() === String(right.id ?? '').trim() &&
+    String(left.name ?? '').trim() === String(right.name ?? '').trim() &&
+    String(left.preview ?? '').trim() === String(right.preview ?? '').trim() &&
+    Boolean(left.ephemeral) === Boolean(right.ephemeral) &&
+    String(left.model_provider ?? '').trim() === String(right.model_provider ?? '').trim() &&
+    Math.floor(Number(left.created_at_unix_s ?? 0) || 0) === Math.floor(Number(right.created_at_unix_s ?? 0) || 0) &&
+    Math.floor(Number(left.updated_at_unix_s ?? 0) || 0) === Math.floor(Number(right.updated_at_unix_s ?? 0) || 0) &&
+    String(left.status ?? '').trim() === String(right.status ?? '').trim() &&
+    String(left.path ?? '').trim() === String(right.path ?? '').trim() &&
+    String(left.cwd ?? '').trim() === String(right.cwd ?? '').trim() &&
+    String(left.cli_version ?? '').trim() === String(right.cli_version ?? '').trim() &&
+    String(left.source ?? '').trim() === String(right.source ?? '').trim() &&
+    String(left.agent_nickname ?? '').trim() === String(right.agent_nickname ?? '').trim() &&
+    String(left.agent_role ?? '').trim() === String(right.agent_role ?? '').trim() &&
+    sameStringList(normalizeThreadFlags(left.active_flags), normalizeThreadFlags(right.active_flags)) &&
+    sameReadStatus(left.read_status, right.read_status) &&
+    sameTurnSummary(left.turns, right.turns)
+  );
+}
+
+function reconcileListedThreads(
+  previous: readonly CodexThread[] | null | undefined,
+  incoming: readonly CodexThread[],
+): CodexThread[] {
+  const previousByID = new Map<string, CodexThread>();
+  for (const thread of previous ?? []) {
+    const threadID = String(thread.id ?? '').trim();
+    if (!threadID) continue;
+    previousByID.set(threadID, thread);
+  }
+  return incoming.map((thread) => {
+    const threadID = String(thread.id ?? '').trim();
+    const existing = previousByID.get(threadID);
+    if (!existing) return thread;
+    return sameThreadSnapshot(existing, thread) ? existing : thread;
+  });
+}
+
 function patchThreadDisplayFallbacks(
   thread: CodexThread,
   fallbackPreview?: string,
@@ -197,11 +279,6 @@ function attachmentSignatures(inputs: readonly CodexUserInputEntry[] | null | un
     .map((entry) => attachmentSignature(entry))
     .filter(Boolean)
     .sort();
-}
-
-function sameStringList(left: readonly string[], right: readonly string[]): boolean {
-  if (left.length !== right.length) return false;
-  return left.every((value, index) => value === right[index]);
 }
 
 function sessionContainsOptimisticTurn(
@@ -506,11 +583,12 @@ export function CodexProvider(props: ParentProps) {
     () => (codexVisible() ? env.settingsSeq() : null),
     async (settingsSeq) => (settingsSeq === null ? null : fetchCodexStatus()),
   );
-  const [threadsResource, { refetch: refetchThreads, mutate: mutateThreads }] = createResource(
+  const [threadsResource, { refetch: refetchThreads, mutate: mutateThreads }] = createResource<CodexThread[], number | null>(
     () => (codexVisible() && !status.loading && status()?.available ? env.settingsSeq() : null),
-    async () => {
-      if (!status()?.available) return [];
-      return listCodexThreads({ limit: 100, archived: false });
+    async (settingsSeq, info) => {
+      if (settingsSeq == null || !status()?.available) return [];
+      const incoming = await listCodexThreads({ limit: 100, archived: false });
+      return reconcileListedThreads(Array.isArray(info.value) ? info.value : [], incoming);
     },
   );
   const threadListReady = createMemo(() => {
@@ -1005,10 +1083,21 @@ export function CodexProvider(props: ParentProps) {
     if (normalizedThreadID === String(selectedThreadID() ?? '').trim()) return false;
     return threadReadStatusForThread(normalizedThreadID).is_unread;
   };
-  const hasRunningThread = createMemo(() => threads().some((thread) => isThreadRunning(thread.id)));
+  const hasBackgroundRunningThread = createMemo(() => {
+    const excludedThreadIDs = new Set(
+      [selectedThreadID(), displayedThreadID()]
+        .map((threadID) => String(threadID ?? '').trim())
+        .filter(Boolean),
+    );
+    return threads().some((thread) => {
+      const threadID = String(thread.id ?? '').trim();
+      if (!threadID || excludedThreadIDs.has(threadID)) return false;
+      return isThreadRunning(threadID);
+    });
+  });
 
   createEffect(() => {
-    if (!codexVisible() || status.loading || !hasHostBinary() || !hasRunningThread()) return;
+    if (!codexVisible() || status.loading || !hasHostBinary() || !hasBackgroundRunningThread()) return;
     const timer = window.setInterval(() => {
       void refetchThreads();
     }, 1500);

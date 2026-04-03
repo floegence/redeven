@@ -400,7 +400,6 @@ export function CodexComposerShell(props: {
   });
 
   const sendLabel = () => 'Send to Codex';
-  const stopLabel = () => (props.stopPending ? 'Stopping...' : 'Stop');
   const canOpenWorkingDirPicker = () => props.hostAvailable && !props.workingDirDisabled && !props.workingDirLocked;
   const workingDirChipTitle = () => {
     const absolutePath = String(props.workingDirTitle ?? '').trim() || 'Working directory';
@@ -444,7 +443,7 @@ export function CodexComposerShell(props: {
   );
   const primaryActionTitle = () => {
     if (primaryActionKind() === 'stop') {
-      return String(props.stopDisabledReason ?? '').trim() || stopLabel();
+      return String(props.stopDisabledReason ?? '').trim() || (props.stopPending ? 'Stopping...' : 'Stop active Codex turn');
     }
     return props.submitting ? 'Sending...' : sendLabel();
   };
@@ -684,7 +683,7 @@ export function CodexComposerShell(props: {
               class={cn(
                 'chat-input-send-btn codex-chat-input-send-btn',
                 primaryActionActive() && 'chat-input-send-btn-active',
-                props.showStopAction && 'chat-input-send-btn-expanded codex-chat-input-send-btn-expanded codex-chat-input-send-btn-stop',
+                props.showStopAction && 'codex-chat-input-send-btn-stop',
               )}
               onClick={handlePrimaryAction}
               disabled={primaryActionDisabled()}
@@ -696,7 +695,6 @@ export function CodexComposerShell(props: {
                 fallback={<Send class="h-[18px] w-[18px]" />}
               >
                 <StopIcon />
-                <span class="chat-input-send-btn-label">{stopLabel()}</span>
               </Show>
             </button>
           </div>
@@ -944,7 +942,7 @@ const LockIcon: Component = () => (
 );
 
 const StopIcon: Component = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <rect x="6.5" y="6.5" width="11" height="11" rx="2.25" />
   </svg>
 );

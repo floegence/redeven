@@ -146,11 +146,12 @@ export function CodexPageShell() {
     return out;
   });
   const supportsImages = createMemo(() => codexModelSupportsImages(codex.capabilities(), modelValue()));
+  const hasActiveRun = createMemo(() => (
+    codex.submitting() ||
+    isWorkingStatus(codex.activeStatus())
+  ));
   const shouldShowWorkingState = createMemo(() => (
-    summary().hostReady && (
-      codex.submitting() ||
-      isWorkingStatus(codex.activeStatus())
-    )
+    summary().hostReady && hasActiveRun()
   ));
   const activeInterruptTurnID = createMemo(() => String(codex.activeInterruptTurnID() ?? '').trim());
   const interruptPending = createMemo(() => (
@@ -207,7 +208,7 @@ export function CodexPageShell() {
       onChange: codex.setSandboxModeDraft,
     },
   ]));
-  const composerStopVisible = createMemo(() => codex.submitting() || !!activeInterruptTurnID());
+  const composerStopVisible = createMemo(() => hasActiveRun());
   const composerStopDisabledReason = createMemo(() => {
     if (!composerStopVisible()) return '';
     if (!summary().hostReady) {
@@ -219,7 +220,7 @@ export function CodexPageShell() {
     if (!activeInterruptTurnID()) {
       return codex.submitting()
         ? 'Waiting for the active turn to start.'
-        : 'No active turn is available to stop.';
+        : 'Waiting for Codex to expose an interruptible turn.';
     }
     if (!codex.supportsOperation('turn_interrupt')) {
       return 'Turn interruption is unavailable on this host.';
@@ -281,20 +282,26 @@ export function CodexPageShell() {
             ? 'Review already in progress.'
             : '',
     });
-    if (activeInterruptTurnID()) {
+    if (hasActiveRun()) {
       actions.push({
         key: 'stop',
         label: interruptPending() ? 'Stopping…' : 'Stop',
         aria_label: 'Stop active Codex turn',
         onClick: () => void codex.interruptActiveTurn(),
-        disabled: !summary().hostReady || interruptPending() || !codex.supportsOperation('turn_interrupt'),
+        disabled: !summary().hostReady || interruptPending() || !codex.supportsOperation('turn_interrupt') || !activeInterruptTurnID(),
         disabled_reason: !summary().hostReady
           ? hostUnavailableReason
           : !codex.supportsOperation('turn_interrupt')
             ? 'Turn interruption is unavailable on this host.'
             : interruptPending()
               ? 'Stop request in progress.'
-              : '',
+              : !activeInterruptTurnID()
+                ? (
+                  codex.submitting()
+                    ? 'Stop will be available once the turn starts.'
+                    : 'Waiting for Codex to expose an interruptible turn.'
+                )
+                : '',
       });
     }
     return actions;

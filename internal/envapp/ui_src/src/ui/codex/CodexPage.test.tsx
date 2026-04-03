@@ -973,7 +973,7 @@ describe('CodexPage', () => {
     expect(host.querySelectorAll('.codex-chat-input-meta-subgroup-policies [data-codex-select-variant="policy"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
     expect(host.querySelector('.codex-chat-draft-objects')).toBeNull();
-    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
@@ -1170,8 +1170,111 @@ describe('CodexPage', () => {
     const stopButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
     if (!stopButton) throw new Error('composer stop button not found');
 
-    expect(stopButton.textContent).toContain('Stop');
+    expect(stopButton.textContent?.trim()).toBe('');
     expect(startCodexThreadMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the composer send action once the active turn completes', async () => {
+    let streamOnEvent: ((event: unknown) => void) | undefined;
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+      operations: ['turn_interrupt'],
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Active Codex run',
+        preview: 'Running now',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Active Codex run',
+        preview: 'Running now',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace',
+        turns: [
+          {
+            id: 'turn_1',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      },
+      pending_requests: [],
+      last_applied_seq: 1,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
+      streamOnEvent = args.onEvent;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
+
+    streamOnEvent?.({
+      seq: 2,
+      type: 'turn_completed',
+      thread_id: 'thread_1',
+      turn: {
+        id: 'turn_1',
+        status: 'completed',
+        items: [],
+      },
+    });
+    await flushAsync();
+
+    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
   });
 
   it('renders stream disconnect failures with the shared highlight block styling', async () => {
