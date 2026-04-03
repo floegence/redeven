@@ -161,7 +161,7 @@ html.dark {
 }
 
 html.dark .git-meta-pill:not(.git-browser-selection-chip) {
-  background-color: color-mix(in srgb, var(--tag-bg) 88%, white 12%);
+  background-color: color-mix(in srgb, var(--tag-bg) 72%, white 28%);
 }
 
 .git-browser-selection-chip {
