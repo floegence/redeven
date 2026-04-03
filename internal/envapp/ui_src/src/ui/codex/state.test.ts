@@ -212,6 +212,40 @@ describe('applyCodexEvent', () => {
     expect(next?.last_applied_seq).toBe(5);
   });
 
+  it('keeps thread turn snapshots aligned with turn lifecycle events', () => {
+    const initial = buildCodexThreadSession(sampleDetail());
+
+    const started = applyCodexEvent(initial, {
+      seq: 5,
+      type: 'turn_started',
+      thread_id: 'thread_1',
+      turn: {
+        id: 'turn_2',
+        status: 'in_progress',
+        items: [],
+      },
+    });
+    expect(started?.thread.turns?.map((turn) => ({ id: turn.id, status: turn.status }))).toEqual([
+      { id: 'turn_1', status: 'completed' },
+      { id: 'turn_2', status: 'in_progress' },
+    ]);
+
+    const completed = applyCodexEvent(started ?? null, {
+      seq: 6,
+      type: 'turn_completed',
+      thread_id: 'thread_1',
+      turn: {
+        id: 'turn_2',
+        status: 'completed',
+        items: [],
+      },
+    });
+    expect(completed?.thread.turns?.map((turn) => ({ id: turn.id, status: turn.status }))).toEqual([
+      { id: 'turn_1', status: 'completed' },
+      { id: 'turn_2', status: 'completed' },
+    ]);
+  });
+
   it('projects completed web search items from bridge-normalized events', () => {
     const initial = buildCodexThreadSession(sampleDetail());
 

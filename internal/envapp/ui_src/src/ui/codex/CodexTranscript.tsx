@@ -261,26 +261,16 @@ function workingPhaseLabel(label: string, flags: readonly string[]): string {
   }
 }
 
-function ReasoningRow(props: { item: CodexTranscriptItem }) {
+function ReasoningRow(props: {
+  item: CodexTranscriptItem;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+}) {
   const markdown = createMemo(() => reasoningMarkdown(props.item));
   const preview = createMemo(() => reasoningPreview(props.item));
   const isActive = createMemo(() => isWorkingStatus(props.item.status));
   const bodyId = createMemo(() => `codex-reasoning-body-${props.item.id}`);
-  const [expanded, setExpanded] = createSignal(false);
-
-  createEffect<boolean | undefined>((wasActive) => {
-    const active = isActive();
-    if (wasActive === undefined) {
-      setExpanded(active);
-      return active;
-    }
-    if (!wasActive && active) {
-      setExpanded(true);
-    } else if (wasActive && !active) {
-      setExpanded(false);
-    }
-    return active;
-  });
+  const expanded = () => props.expanded;
 
   return (
     <CodexMessageLane role="assistant">
@@ -297,7 +287,7 @@ function ReasoningRow(props: { item: CodexTranscriptItem }) {
               class="codex-chat-reasoning-toggle"
               aria-expanded={expanded() ? 'true' : 'false'}
               aria-controls={bodyId()}
-              onClick={() => setExpanded((current) => !current)}
+              onClick={() => props.onExpandedChange(!expanded())}
             >
               <span class="codex-chat-reasoning-kicker" aria-hidden="true">
                 <Sparkles />
@@ -557,7 +547,12 @@ function shouldShowWorkingAvatar(items: readonly CodexTranscriptItem[]): boolean
   return !hasAssistantMessageInCurrentRun(items, items.length);
 }
 
-function TranscriptRow(props: { item: CodexTranscriptItem; showAssistantAvatar?: boolean }) {
+function TranscriptRow(props: {
+  item: CodexTranscriptItem;
+  showAssistantAvatar?: boolean;
+  reasoningExpanded?: boolean;
+  onReasoningExpandedChange?: (expanded: boolean) => void;
+}) {
   if (!shouldRenderTranscriptItem(props.item)) {
     return null;
   }
@@ -571,7 +566,13 @@ function TranscriptRow(props: { item: CodexTranscriptItem; showAssistantAvatar?:
     return <CommandExecutionRow item={props.item} />;
   }
   if (props.item.type === 'reasoning' || props.item.type === 'plan') {
-    return <ReasoningRow item={props.item} />;
+    return (
+      <ReasoningRow
+        item={props.item}
+        expanded={Boolean(props.reasoningExpanded)}
+        onExpandedChange={(expanded) => props.onReasoningExpandedChange?.(expanded)}
+      />
+    );
   }
   return <TranscriptEvidenceRow item={props.item} />;
 }
@@ -590,6 +591,7 @@ export function CodexTranscript(props: {
   emptyBody: string;
 }) {
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
+  const [reasoningExpandedByID, setReasoningExpandedByID] = createSignal<Record<string, boolean>>({});
   const hasRows = () => props.items.length > 0 || optimisticUserTurns().length > 0 || Boolean(props.showWorkingState);
   const transcriptSurfaceState = createMemo<CodexTranscriptSurfaceState>(() => resolveCodexTranscriptSurfaceState({
     hasRows: hasRows(),
@@ -618,6 +620,32 @@ export function CodexTranscript(props: {
     };
   });
   const showStandaloneWorkingRow = createMemo(() => Boolean(props.showWorkingState) && !pendingAssistantState().show);
+
+  createEffect(() => {
+    const visibleReasoningIDs = new Set<string>();
+    setReasoningExpandedByID((current) => {
+      let next = current;
+      let changed = false;
+      for (const item of props.items) {
+        if (item.type !== 'reasoning' && item.type !== 'plan') continue;
+        const itemID = String(item.id ?? '').trim();
+        if (!itemID) continue;
+        visibleReasoningIDs.add(itemID);
+        if (!isWorkingStatus(item.status) || current[itemID] === true) continue;
+        if (next === current) next = { ...current };
+        next[itemID] = true;
+        changed = true;
+      }
+      for (const itemID of Object.keys(current)) {
+        if (visibleReasoningIDs.has(itemID)) continue;
+        if (next === current) next = { ...current };
+        delete next[itemID];
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  });
+
   return (
     <div
       ref={props.rootRef}
@@ -651,7 +679,22 @@ export function CodexTranscript(props: {
             <For each={props.items}>
               {(item, index) => (
                 <div class="codex-transcript-row" data-follow-bottom-anchor-id={`item:${item.id}`}>
-                  <TranscriptRow item={item} showAssistantAvatar={shouldShowAgentAvatar(props.items, index())} />
+                  <TranscriptRow
+                    item={item}
+                    showAssistantAvatar={shouldShowAgentAvatar(props.items, index())}
+                    reasoningExpanded={Boolean(reasoningExpandedByID()[String(item.id ?? '').trim()])}
+                    onReasoningExpandedChange={(expanded) => {
+                      const itemID = String(item.id ?? '').trim();
+                      if (!itemID) return;
+                      setReasoningExpandedByID((current) => {
+                        if (Boolean(current[itemID]) === expanded) return current;
+                        return {
+                          ...current,
+                          [itemID]: expanded,
+                        };
+                      });
+                    }}
+                  />
                 </div>
               )}
             </For>

@@ -598,7 +598,7 @@ describe('CodexComposerShell', () => {
     const stopButton = host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
     if (!stopButton) throw new Error('stop button not found');
 
-    expect(stopButton.textContent).toContain('Stop');
+    expect(stopButton.textContent?.trim()).toBe('');
     expect(host.querySelector('button[aria-label="Send to Codex"]')).toBeNull();
 
     stopButton.click();

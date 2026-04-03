@@ -282,6 +282,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   desktopStorageState.clear();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('CodexSidebar', () => {
@@ -305,6 +306,98 @@ describe('CodexSidebar', () => {
     expect(newChatButton).toBeTruthy();
     expect(newChatButton?.hasAttribute('disabled')).toBe(true);
     expect(newChatButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toContain('host codex binary not found on PATH');
+  });
+
+  it('does not poll the thread list when the only running thread is already active in the transcript', async () => {
+    vi.useFakeTimers();
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Active thread',
+        preview: 'Running review',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Active thread',
+        preview: 'Running review',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 10,
+        status: 'running',
+        cwd: '/workspace',
+        turns: [
+          {
+            id: 'turn_1',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+      },
+      pending_requests: [],
+      last_applied_seq: 1,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderSurface(host);
+    for (let index = 0; index < 6; index += 1) {
+      await Promise.resolve();
+    }
+
+    expect(listCodexThreadsMock).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5000);
+    for (let index = 0; index < 6; index += 1) {
+      await Promise.resolve();
+    }
+
+    expect(listCodexThreadsMock).toHaveBeenCalledTimes(1);
   });
 
   it('shows an unread dot when a completed thread has unseen activity after a prior running snapshot', async () => {
@@ -964,7 +1057,7 @@ describe('CodexSidebar', () => {
     expect(host.textContent).not.toContain('Review recent changes');
     expect(host.textContent).toContain('GPT-5.4');
     expect(host.querySelector('.codex-page-header-context')).toBeNull();
-    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
     expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
     expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
   });

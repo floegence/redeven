@@ -2,6 +2,7 @@ import type {
   CodexEvent,
   CodexItem,
   CodexPendingRequest,
+  CodexTurn,
   CodexThreadTokenUsage,
   CodexThread,
   CodexThreadDetail,
@@ -41,6 +42,41 @@ function cloneSession(session: CodexThreadSession): MutableCodexThreadSession {
     pending_requests: { ...session.pending_requests },
     token_usage: cloneTokenUsage(session.token_usage),
     active_status_flags: [...session.active_status_flags],
+  };
+}
+
+function cloneTurn(turn: CodexTurn): CodexTurn {
+  return {
+    ...turn,
+    items: [...(turn.items ?? [])],
+  };
+}
+
+function cloneTurnList(turns: readonly CodexTurn[] | null | undefined): CodexTurn[] {
+  return [...(turns ?? [])].map(cloneTurn);
+}
+
+function mergeTurn(existing: CodexTurn | null | undefined, incoming: CodexTurn): CodexTurn {
+  return {
+    ...(existing ?? {}),
+    ...incoming,
+    items: Array.isArray(incoming.items)
+      ? [...incoming.items]
+      : [...(existing?.items ?? [])],
+  };
+}
+
+function upsertThreadTurn(thread: CodexThread, incoming: CodexTurn): CodexThread {
+  const turns = cloneTurnList(thread.turns);
+  const index = turns.findIndex((turn) => String(turn.id ?? '').trim() === String(incoming.id ?? '').trim());
+  if (index >= 0) {
+    turns[index] = mergeTurn(turns[index], incoming);
+  } else {
+    turns.push(mergeTurn(null, incoming));
+  }
+  return {
+    ...thread,
+    turns,
   };
 }
 
@@ -309,6 +345,7 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
     case 'turn_completed':
       if (event.turn) {
         next.active_status = String(event.turn.status ?? next.active_status).trim();
+        next.thread = upsertThreadTurn(next.thread, event.turn);
       }
       return next;
     case 'item_started':

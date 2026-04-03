@@ -41,6 +41,9 @@ The browser-side Codex UI uses an explicit controller split so thread switching,
 - `CodexProvider` is orchestration glue only. It wires resources, user actions, SSE, and view-facing accessors.
 - `createCodexThreadController()` owns thread selection/display state, cached sessions, bootstrap status, stale-response guards, and event application into the correct cached thread.
 - `createCodexDraftController()` owns per-owner drafts for runtime fields, composer text, and attachments.
+- The active thread's foreground lifecycle state is session-owned:
+  - detail bootstrap + SSE drive transcript, pending requests, token usage, and stop/send state;
+  - thread-list polling stays a summary-only mechanism and must not become a second foreground source of truth.
 - A shared follow-bottom scroll controller owns transcript follow/pause state for Codex transcript surfaces; Codex drives it through explicit bottom-intent requests instead of ad hoc per-render `scrollTop = scrollHeight` calls.
 - Draft ownership is explicit:
   - `draft:new` for the blank New Chat surface
@@ -176,8 +179,10 @@ Current Env App behavior:
 - Codex visual styling uses a Codex-local semantic surface token family on `.codex-page-shell` (`--codex-surface-*`, `--codex-border-*`, `--codex-text-secondary`) so page, dock, transcript, reasoning, and markdown surfaces share one flat presentation contract instead of per-selector decorative gradients.
 - Codex intentionally excludes decorative `linear-gradient(...)` / `radial-gradient(...)` treatments from its page shell; when Codex needs to neutralize shared chat styling such as user bubbles or the send button, it does so through `.codex-page-shell .chat-*` overrides instead of mutating Flower-owned selectors.
 - The sidebar keeps stable thread row height in both selected and unselected states; Codex-only active chrome never inserts extra row content that would shift Flower-like list rhythm.
+- The sidebar keeps stable thread row identity as well: unchanged list summaries reuse their previous browser objects so running indicators remain mounted instead of replaying animation on every refresh.
 - The sidebar treats archive as a one-way disappearance from the browser conversation list, matching Codex's default active-thread navigation model rather than exposing a dedicated archived browser.
 - Sidebar thread order changes only for real thread activity such as new-thread creation, user turn sends, or live lifecycle updates. Clicking an existing thread to read/bootstrap it must not reorder the list by itself.
+- Active-thread foreground work must not trigger list polling. Polling is reserved for background running threads whose lifecycle is not already covered by the selected thread's detail bootstrap + SSE stream.
 - Codex unread state is server-backed. Opening a thread marks the current browser-visible snapshot as read through the gateway instead of writing unread state to desktop/local browser storage.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
 - Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
@@ -209,11 +214,13 @@ Current Env App behavior:
   - fork
   - review current workspace changes
   - stop the active turn when the current thread has an in-progress turn
+- Turn interrupt affordances derive from the same active-run model as the transcript working indicator, and the browser keeps `thread.turns` aligned with `turn_started` / `turn_completed` events so stop/send transitions do not depend on stale bootstrap metadata.
 - Transcript rows project user prompts, Codex replies, command executions, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
 - The transcript root now owns an explicit full-height Codex shell that resolves one render mode before children are laid out:
   - `empty`: center the welcome or diagnostic hero against the real transcript viewport;
   - `loading`: reuse the same viewport shell for selected-thread hydration;
   - `feed`: render transcript rows and pending assistant lanes.
+- Reasoning and plan expansion state is transcript-owned and keyed by logical item id so stream updates or completion snapshots cannot accidentally remount the row into a collapsed state.
 - Command execution rows render the collapsible shell block directly in the transcript lane instead of nesting it inside an extra evidence-card header chrome.
 - User-message rendering is intentionally separate from assistant/evidence markdown rendering:
   - assistant/evidence items still use the markdown renderer;

@@ -263,7 +263,7 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
-  it('renders reasoning as a collapsible markdown block and auto-collapses it after completion', async () => {
+  it('renders reasoning as a collapsible markdown block and keeps it expanded after completion', async () => {
     const [items, setItems] = createSignal<CodexTranscriptItem[]>([
       {
         id: 'item_reasoning_live',
@@ -301,14 +301,14 @@ describe('CodexTranscript', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('false');
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.textContent).toContain('Investigating the event replay path.');
 
     const toggle = host.querySelector('.codex-chat-reasoning-toggle') as HTMLButtonElement | null;
     toggle?.click();
     await Promise.resolve();
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
-    expect(host.textContent).toContain('Investigating the event replay path.');
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('false');
 
     dispose();
   });
