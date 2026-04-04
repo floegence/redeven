@@ -477,7 +477,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 	}
 	lines = append(lines,
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
-		"- For long-running commands (tests/build/lint), increase terminal.exec timeout_ms (up to 30 minutes).",
+		"- For long-running commands (tests/build/lint), increase terminal.exec timeout_ms when justified, up to 10 minutes.",
 		"- Do NOT wrap terminal.exec commands with an extra `bash -lc` (terminal.exec already runs a shell with -lc).",
 		"- For multi-line scripts, pass content via terminal.exec `stdin` and use a stdin-reading command (e.g. `python -`, `bash`, `cat`). Avoid heredocs/here-strings.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",

@@ -126,6 +126,8 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
             outputRef?: { runId: string; toolId: string };
             cwd?: string;
             timeoutMs?: number;
+            requestedTimeoutMs?: number;
+            timeoutSource?: string;
             durationMs?: number;
             timedOut?: boolean;
             truncated?: boolean;
@@ -139,6 +141,8 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               outputRef={b.outputRef}
               cwd={b.cwd}
               timeoutMs={b.timeoutMs}
+              requestedTimeoutMs={b.requestedTimeoutMs}
+              timeoutSource={b.timeoutSource}
               durationMs={b.durationMs}
               timedOut={b.timedOut}
               truncated={b.truncated}

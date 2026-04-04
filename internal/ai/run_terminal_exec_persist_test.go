@@ -233,6 +233,12 @@ func TestHandleToolCall_TerminalExec_AlwaysEmitsOutputRefForStatusFrames(t *test
 		if got := strings.TrimSpace(anyToString(outputRef["tool_id"])); got != toolID {
 			t.Fatalf("status=%s output_ref.tool_id=%q, want %q", frame.Status, got, toolID)
 		}
+		if got := readInt64Field(resultMap, "timeout_ms", "timeoutMs"); got != 120_000 {
+			t.Fatalf("status=%s timeout_ms=%d, want 120000", frame.Status, got)
+		}
+		if got := strings.TrimSpace(anyToString(resultMap["timeout_source"])); got != terminalExecTimeoutSourceDefault {
+			t.Fatalf("status=%s timeout_source=%q, want %q", frame.Status, got, terminalExecTimeoutSourceDefault)
+		}
 	}
 
 	for _, status := range []ToolCallStatus{ToolCallStatusPending, ToolCallStatusRunning, ToolCallStatusSuccess} {
@@ -422,6 +428,12 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	if !readBoolField(resultMap, "timed_out", "timedOut") {
 		t.Fatalf("timed_out=%v, want true", resultMap["timed_out"])
 	}
+	if got := readInt64Field(resultMap, "timeout_ms", "timeoutMs"); got != 20 {
+		t.Fatalf("timeout_ms=%d, want 20", got)
+	}
+	if got := strings.TrimSpace(anyToString(resultMap["timeout_source"])); got != terminalExecTimeoutSourceRequested {
+		t.Fatalf("timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
+	}
 
 	mu.Lock()
 	frame := errorFrame
@@ -446,6 +458,12 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	if !readBoolField(frameResult, "timed_out", "timedOut") {
 		t.Fatalf("frame timed_out=%v, want true", frameResult["timed_out"])
 	}
+	if got := readInt64Field(frameResult, "timeout_ms", "timeoutMs"); got != 20 {
+		t.Fatalf("frame timeout_ms=%d, want 20", got)
+	}
+	if got := strings.TrimSpace(anyToString(frameResult["timeout_source"])); got != terminalExecTimeoutSourceRequested {
+		t.Fatalf("frame timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
+	}
 
 	rec, err := store.GetToolCall(ctx, "env_1", "run_terminal_timeout", toolID)
 	if err != nil {
@@ -467,5 +485,11 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	}
 	if !readBoolField(persisted, "timed_out", "timedOut") {
 		t.Fatalf("persisted timed_out=%v, want true", persisted["timed_out"])
+	}
+	if got := readInt64Field(persisted, "timeout_ms", "timeoutMs"); got != 20 {
+		t.Fatalf("persisted timeout_ms=%d, want 20", got)
+	}
+	if got := strings.TrimSpace(anyToString(persisted["timeout_source"])); got != terminalExecTimeoutSourceRequested {
+		t.Fatalf("persisted timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
 	}
 }

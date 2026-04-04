@@ -129,6 +129,9 @@ Patch execution notes:
 Terminal execution notes:
 
 - `terminal.exec` command classification is effect-oriented: common local inspection commands (for example file metadata probes and archive-to-stdout inspection flows) stay readonly, while explicit writes / uploads / extraction-to-disk remain mutating.
+- `terminal.exec` uses a bounded execution policy by default: when `timeout_ms` is omitted, Flower applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.
+- `terminal.exec` timeout decisions are explicit and observable: the persisted terminal result records the effective timeout plus whether it came from the default policy, an explicit request, or a capped request.
+- `terminal.exec` timeout/cancel handling now terminates the full shell process tree/group rather than only the direct shell process.
 - Mutating workspace actions create a pre-run workspace checkpoint. Tar-based checkpoints now skip unreadable paths and record the skipped entries in checkpoint metadata instead of failing the whole run on unrelated permission-denied filesystem branches.
 
 Online research notes:

@@ -179,6 +179,12 @@ func TestBuiltInToolHandler_TerminalExecTimeout_MapsToTimeoutWithPartialData(t *
 	if !readBoolField(data, "timed_out", "timedOut") {
 		t.Fatalf("timed_out=%v, want true", data["timed_out"])
 	}
+	if got := readInt64Field(data, "timeout_ms", "timeoutMs"); got != 20 {
+		t.Fatalf("timeout_ms=%d, want 20", got)
+	}
+	if got := strings.TrimSpace(anyToString(data["timeout_source"])); got != terminalExecTimeoutSourceRequested {
+		t.Fatalf("timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
+	}
 	if res.Error == nil || res.Error.Code != "TIMEOUT" {
 		t.Fatalf("error=%+v, want TIMEOUT", res.Error)
 	}

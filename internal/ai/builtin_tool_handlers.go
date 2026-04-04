@@ -499,8 +499,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Execute a shell command on the local machine. Defaults to the run working directory, but you may set cwd/workdir or use absolute paths to operate outside the workspace when needed.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 1800000}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
+			Description:      "Execute a shell command on the local machine. Defaults to the run working directory. When timeout_ms is omitted, the runtime applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 600000}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         false,
 			RequiresApproval: false,

@@ -29,6 +29,11 @@ export type AIExecutionPolicy = Readonly<{
   block_dangerous_commands?: boolean;
 }>;
 
+export type AITerminalExecPolicy = Readonly<{
+  default_timeout_ms?: number;
+  max_timeout_ms?: number;
+}>;
+
 export type AIConfig = Readonly<{
   current_model_id: string;
   providers: AIProvider[];
@@ -40,6 +45,7 @@ export type AIConfig = Readonly<{
   tool_recovery_allow_probe_tools?: boolean;
   tool_recovery_fail_on_repeated_signature?: boolean;
   execution_policy?: AIExecutionPolicy;
+  terminal_exec_policy?: AITerminalExecPolicy;
 }>;
 
 export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
@@ -244,4 +250,5 @@ export type AIPreservedUIFields = {
   tool_recovery_allow_path_rewrite?: boolean;
   tool_recovery_allow_probe_tools?: boolean;
   tool_recovery_fail_on_repeated_signature?: boolean;
+  terminal_exec_policy?: AITerminalExecPolicy;
 };

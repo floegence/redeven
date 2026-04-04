@@ -538,6 +538,9 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-shell-exit-inline { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.625rem; flex-shrink: 0; margin-left: 0.125rem; }
 .chat-shell-exit-inline-success { color: #8b949e; }
 .chat-shell-exit-inline-error { color: #ff7b72; }
+.chat-shell-timeout-inline { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.625rem; flex-shrink: 0; margin-left: 0.125rem; color: #8b949e; }
+.chat-shell-timeout-inline-auto { color: #79c0ff; }
+.chat-shell-timeout-inline-capped { color: #ffa657; }
 .chat-shell-toggle-label { font-size: 0.625rem; color: #8b949e; flex-shrink: 0; margin-left: 0.125rem; }
 .chat-shell-toggle { display: flex; align-items: center; flex-shrink: 0; color: #8b949e; transform: rotate(-90deg); transition: transform 180ms ease; }
 .chat-shell-toggle-open { transform: rotate(0deg); }

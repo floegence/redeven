@@ -132,3 +132,25 @@ Current behavior:
 - If a task in `plan` requires edits, Flower must ask for a mode switch when interaction is allowed.
 
 The execution-policy UI is exposed under Runtime Settings -> `AI & Extensions` -> Flower -> Execution policy.
+
+## 8. Terminal execution policy
+
+`ai.terminal_exec_policy` controls the bounded execution contract for `terminal.exec`:
+
+```json
+{
+  "terminal_exec_policy": {
+    "default_timeout_ms": 120000,
+    "max_timeout_ms": 600000
+  }
+}
+```
+
+Current behavior:
+
+- If `terminal.exec.timeout_ms` is omitted, Flower applies `default_timeout_ms`.
+- Any requested `timeout_ms` is capped at `max_timeout_ms`.
+- The built-in defaults are Claude-style:
+  - `default_timeout_ms = 120000`
+  - `max_timeout_ms = 600000`
+- Timeout and cancel handling terminate the full shell process tree/group when the platform supports it.

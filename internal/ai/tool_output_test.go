@@ -69,6 +69,12 @@ func TestGetTerminalToolOutput(t *testing.T) {
 	if out.TimeoutMS != 60000 {
 		t.Fatalf("timeout_ms=%d, want 60000", out.TimeoutMS)
 	}
+	if out.RequestedTimeoutMS != 60000 {
+		t.Fatalf("requested_timeout_ms=%d, want 60000", out.RequestedTimeoutMS)
+	}
+	if out.TimeoutSource != terminalExecTimeoutSourceRequested {
+		t.Fatalf("timeout_source=%q, want %q", out.TimeoutSource, terminalExecTimeoutSourceRequested)
+	}
 }
 
 func TestGetTerminalToolOutput_RawFallbackForInvalidJSON(t *testing.T) {
@@ -119,6 +125,63 @@ func TestGetTerminalToolOutput_RawFallbackForInvalidJSON(t *testing.T) {
 	}
 	if strings.TrimSpace(out.RawResult) == "" {
 		t.Fatalf("RawResult should not be empty for invalid result_json")
+	}
+}
+
+func TestGetTerminalToolOutput_UsesResultTimeoutMetadataWhenArgsOmitTimeout(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	store, err := threadstore.Open(dbPath)
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	if err := store.UpsertRun(ctx, threadstore.RunRecord{
+		RunID:      "run_1",
+		EndpointID: "env_1",
+		ThreadID:   "th_1",
+		MessageID:  "msg_1",
+		State:      "running",
+	}); err != nil {
+		t.Fatalf("UpsertRun: %v", err)
+	}
+	if err := store.UpsertToolCall(ctx, threadstore.ToolCallRecord{
+		RunID:      "run_1",
+		ToolID:     "tool_1",
+		ToolName:   "terminal.exec",
+		Status:     "running",
+		ArgsJSON:   `{"command":"go test ./..."}`,
+		ResultJSON: `{"timeout_ms":120000,"timeout_source":"default"}`,
+	}); err != nil {
+		t.Fatalf("UpsertToolCall: %v", err)
+	}
+
+	svc := &Service{threadsDB: store}
+	meta := &session.Meta{
+		EndpointID: "env_1",
+		CanRead:    true,
+		CanWrite:   true,
+		CanExecute: true,
+	}
+
+	out, err := svc.GetTerminalToolOutput(ctx, meta, "run_1", "tool_1")
+	if err != nil {
+		t.Fatalf("GetTerminalToolOutput: %v", err)
+	}
+	if out == nil {
+		t.Fatalf("GetTerminalToolOutput returned nil")
+	}
+	if out.TimeoutMS != 120000 {
+		t.Fatalf("timeout_ms=%d, want 120000", out.TimeoutMS)
+	}
+	if out.RequestedTimeoutMS != 0 {
+		t.Fatalf("requested_timeout_ms=%d, want 0", out.RequestedTimeoutMS)
+	}
+	if out.TimeoutSource != terminalExecTimeoutSourceDefault {
+		t.Fatalf("timeout_source=%q, want %q", out.TimeoutSource, terminalExecTimeoutSourceDefault)
 	}
 }
 

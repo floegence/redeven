@@ -59,6 +59,13 @@ type AIConfig struct {
 	// - no dangerous-command hard block
 	ExecutionPolicy *AIExecutionPolicy `json:"execution_policy,omitempty"`
 
+	// TerminalExecPolicy controls the bounded execution policy for terminal.exec.
+	//
+	// The built-in defaults intentionally mimic Claude-style shell behavior:
+	// - default timeout: 2 minutes
+	// - maximum timeout cap: 10 minutes
+	TerminalExecPolicy *AITerminalExecPolicy `json:"terminal_exec_policy,omitempty"`
+
 	// WebSearchProvider controls which web search backend is enabled for AI runs.
 	//
 	// Supported values:
@@ -77,6 +84,14 @@ type AIExecutionPolicy struct {
 
 	// BlockDangerousCommands controls whether dangerous terminal commands are hard-blocked.
 	BlockDangerousCommands bool `json:"block_dangerous_commands"`
+}
+
+type AITerminalExecPolicy struct {
+	// DefaultTimeoutMS is the timeout applied when terminal.exec does not specify timeout_ms.
+	DefaultTimeoutMS *int `json:"default_timeout_ms,omitempty"`
+
+	// MaxTimeoutMS is the hard upper cap for any terminal.exec timeout_ms request.
+	MaxTimeoutMS *int `json:"max_timeout_ms,omitempty"`
 }
 
 type AIProvider struct {
@@ -142,6 +157,9 @@ const (
 	defaultAIRequireUserApproval   = false
 	defaultAIBlockDangerousCommand = false
 
+	defaultAITerminalExecDefaultTimeoutMS = 120_000
+	defaultAITerminalExecMaxTimeoutMS     = 600_000
+
 	defaultAIWebSearchProvider                 = "prefer_openai"
 	defaultAIEffectiveContextWindowPercent int = 95
 )
@@ -206,6 +224,25 @@ func (c *AIConfig) Validate() error {
 	if c.ToolRecoveryMaxSteps != nil {
 		if *c.ToolRecoveryMaxSteps < 0 || *c.ToolRecoveryMaxSteps > 8 {
 			return fmt.Errorf("invalid tool_recovery_max_steps %d (must be in [0,8])", *c.ToolRecoveryMaxSteps)
+		}
+	}
+	if c.TerminalExecPolicy != nil {
+		if c.TerminalExecPolicy.DefaultTimeoutMS != nil {
+			v := *c.TerminalExecPolicy.DefaultTimeoutMS
+			if v < 1 || v > defaultAITerminalExecMaxTimeoutMS {
+				return fmt.Errorf("invalid terminal_exec_policy.default_timeout_ms %d (must be in [1,%d])", v, defaultAITerminalExecMaxTimeoutMS)
+			}
+		}
+		if c.TerminalExecPolicy.MaxTimeoutMS != nil {
+			v := *c.TerminalExecPolicy.MaxTimeoutMS
+			if v < 1 || v > defaultAITerminalExecMaxTimeoutMS {
+				return fmt.Errorf("invalid terminal_exec_policy.max_timeout_ms %d (must be in [1,%d])", v, defaultAITerminalExecMaxTimeoutMS)
+			}
+		}
+		if c.TerminalExecPolicy.DefaultTimeoutMS != nil && c.TerminalExecPolicy.MaxTimeoutMS != nil {
+			if *c.TerminalExecPolicy.DefaultTimeoutMS > *c.TerminalExecPolicy.MaxTimeoutMS {
+				return fmt.Errorf("invalid terminal_exec_policy: default_timeout_ms %d exceeds max_timeout_ms %d", *c.TerminalExecPolicy.DefaultTimeoutMS, *c.TerminalExecPolicy.MaxTimeoutMS)
+			}
 		}
 	}
 	// Validate providers.
@@ -467,4 +504,39 @@ func (c *AIConfig) EffectiveBlockDangerousCommands() bool {
 		return defaultAIBlockDangerousCommand
 	}
 	return c.ExecutionPolicy.BlockDangerousCommands
+}
+
+func (c *AIConfig) EffectiveTerminalExecMaxTimeoutMS() int64 {
+	if c == nil || c.TerminalExecPolicy == nil || c.TerminalExecPolicy.MaxTimeoutMS == nil {
+		return defaultAITerminalExecMaxTimeoutMS
+	}
+	v := *c.TerminalExecPolicy.MaxTimeoutMS
+	if v < 1 {
+		return defaultAITerminalExecMaxTimeoutMS
+	}
+	if v > defaultAITerminalExecMaxTimeoutMS {
+		return defaultAITerminalExecMaxTimeoutMS
+	}
+	return int64(v)
+}
+
+func (c *AIConfig) EffectiveTerminalExecDefaultTimeoutMS() int64 {
+	maxTimeoutMS := c.EffectiveTerminalExecMaxTimeoutMS()
+	if c == nil || c.TerminalExecPolicy == nil || c.TerminalExecPolicy.DefaultTimeoutMS == nil {
+		if int64(defaultAITerminalExecDefaultTimeoutMS) > maxTimeoutMS {
+			return maxTimeoutMS
+		}
+		return defaultAITerminalExecDefaultTimeoutMS
+	}
+	v := *c.TerminalExecPolicy.DefaultTimeoutMS
+	if v < 1 {
+		if int64(defaultAITerminalExecDefaultTimeoutMS) > maxTimeoutMS {
+			return maxTimeoutMS
+		}
+		return defaultAITerminalExecDefaultTimeoutMS
+	}
+	if int64(v) > maxTimeoutMS {
+		return maxTimeoutMS
+	}
+	return int64(v)
 }

@@ -14,6 +14,8 @@ export interface ShellBlockProps {
   };
   cwd?: string;
   timeoutMs?: number;
+  requestedTimeoutMs?: number;
+  timeoutSource?: string;
   durationMs?: number;
   timedOut?: boolean;
   truncated?: boolean;
@@ -57,6 +59,8 @@ interface TerminalToolOutputPayload {
   truncated?: boolean;
   cwd?: string;
   timeout_ms?: number;
+  requested_timeout_ms?: number;
+  timeout_source?: string;
   raw_result?: string;
 }
 
@@ -274,6 +278,8 @@ function composeDeferredOutput(parts: {
   rawResult: string;
   cwd: string;
   timeoutMs?: number;
+  requestedTimeoutMs?: number;
+  timeoutSource?: string;
   durationMs?: number;
   timedOut: boolean;
   truncated: boolean;
@@ -281,7 +287,18 @@ function composeDeferredOutput(parts: {
   const info: string[] = [];
   if (parts.cwd) info.push(`[cwd] ${parts.cwd}`);
   if (typeof parts.timeoutMs === 'number' && Number.isFinite(parts.timeoutMs) && parts.timeoutMs > 0) {
-    info.push(`[timeout] ${Math.round(parts.timeoutMs)}ms`);
+    const roundedTimeout = Math.round(parts.timeoutMs);
+    const roundedRequested =
+      typeof parts.requestedTimeoutMs === 'number' && Number.isFinite(parts.requestedTimeoutMs)
+        ? Math.round(parts.requestedTimeoutMs)
+        : undefined;
+    if (parts.timeoutSource === 'default') {
+      info.push(`[timeout] auto ${roundedTimeout}ms`);
+    } else if (parts.timeoutSource === 'capped' && typeof roundedRequested === 'number' && roundedRequested > roundedTimeout) {
+      info.push(`[timeout] capped ${roundedTimeout}ms (requested ${roundedRequested}ms)`);
+    } else {
+      info.push(`[timeout] ${roundedTimeout}ms`);
+    }
   }
   if (typeof parts.durationMs === 'number' && Number.isFinite(parts.durationMs) && parts.durationMs >= 0) {
     info.push(`[duration] ${Math.round(parts.durationMs)}ms`);
@@ -334,6 +351,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const [runtimeTruncated, setRuntimeTruncated] = createSignal<boolean | undefined>(undefined);
   const [runtimeCwd, setRuntimeCwd] = createSignal<string | undefined>(undefined);
   const [runtimeTimeoutMs, setRuntimeTimeoutMs] = createSignal<number | undefined>(undefined);
+  const [runtimeRequestedTimeoutMs, setRuntimeRequestedTimeoutMs] = createSignal<number | undefined>(undefined);
+  const [runtimeTimeoutSource, setRuntimeTimeoutSource] = createSignal<string | undefined>(undefined);
   const commandTokens = createMemo(() => tokenizeShellCommand(props.command));
 
   const hasOutputRef = () =>
@@ -346,6 +365,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const displayTruncated = () => (typeof props.truncated === 'boolean' ? props.truncated : runtimeTruncated() ?? false);
   const displayCwd = () => props.cwd ?? runtimeCwd() ?? '';
   const displayTimeoutMs = () => props.timeoutMs ?? runtimeTimeoutMs();
+  const displayRequestedTimeoutMs = () => props.requestedTimeoutMs ?? runtimeRequestedTimeoutMs();
+  const displayTimeoutSource = () => props.timeoutSource ?? runtimeTimeoutSource() ?? '';
   const resolvedOutput = () => props.output ?? loadedOutput();
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
   const canToggle = () => hasOutput() || hasOutputRef() || displayStatus() === 'running';
@@ -364,6 +385,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     setRuntimeTruncated(undefined);
     setRuntimeCwd(undefined);
     setRuntimeTimeoutMs(undefined);
+    setRuntimeRequestedTimeoutMs(undefined);
+    setRuntimeTimeoutSource(undefined);
     setLoadedOutput(undefined);
     setLoadError('');
     setLoadAttempted(false);
@@ -428,6 +451,12 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     if (typeof data.timeout_ms === 'number' && Number.isFinite(data.timeout_ms) && data.timeout_ms > 0) {
       setRuntimeTimeoutMs(Math.round(data.timeout_ms));
     }
+    if (typeof data.requested_timeout_ms === 'number' && Number.isFinite(data.requested_timeout_ms) && data.requested_timeout_ms > 0) {
+      setRuntimeRequestedTimeoutMs(Math.round(data.requested_timeout_ms));
+    }
+    if (typeof data.timeout_source === 'string' && data.timeout_source.trim()) {
+      setRuntimeTimeoutSource(data.timeout_source.trim());
+    }
   };
 
   const ensureOutputLoaded = async () => {
@@ -448,6 +477,10 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         cwd: String(data.cwd ?? displayCwd()),
         timeoutMs:
           typeof data.timeout_ms === 'number' ? data.timeout_ms : displayTimeoutMs(),
+        requestedTimeoutMs:
+          typeof data.requested_timeout_ms === 'number' ? data.requested_timeout_ms : displayRequestedTimeoutMs(),
+        timeoutSource:
+          typeof data.timeout_source === 'string' ? data.timeout_source : displayTimeoutSource(),
         durationMs:
           typeof data.duration_ms === 'number' ? data.duration_ms : displayDurationMs(),
         timedOut:
@@ -583,6 +616,22 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             )}
           >
             exit {displayExitCode()}
+          </span>
+        </Show>
+
+        <Show when={displayTimeoutMs() !== undefined}>
+          <span
+            class={cn(
+              'chat-shell-timeout-inline',
+              displayTimeoutSource() === 'default' && 'chat-shell-timeout-inline-auto',
+              displayTimeoutSource() === 'capped' && 'chat-shell-timeout-inline-capped',
+            )}
+          >
+            {displayTimeoutSource() === 'default'
+              ? `auto timeout ${Math.max(1, Math.floor((displayTimeoutMs() ?? 0) / 1000))}s`
+              : displayTimeoutSource() === 'capped'
+                ? `timeout ${Math.max(1, Math.floor((displayTimeoutMs() ?? 0) / 1000))}s capped`
+                : `timeout ${Math.max(1, Math.floor((displayTimeoutMs() ?? 0) / 1000))}s`}
           </span>
         </Show>
 

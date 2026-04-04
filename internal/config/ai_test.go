@@ -461,3 +461,88 @@ func TestAIConfig_EffectiveExecutionPolicyDefaults(t *testing.T) {
 		t.Fatalf("EffectiveBlockDangerousCommands explicit=%v, want true", got)
 	}
 }
+
+func TestAIConfig_EffectiveTerminalExecPolicyDefaults(t *testing.T) {
+	t.Parallel()
+
+	nilCfg := (*AIConfig)(nil)
+	if got := nilCfg.EffectiveTerminalExecDefaultTimeoutMS(); got != 120_000 {
+		t.Fatalf("EffectiveTerminalExecDefaultTimeoutMS nil=%d, want 120000", got)
+	}
+	if got := nilCfg.EffectiveTerminalExecMaxTimeoutMS(); got != 600_000 {
+		t.Fatalf("EffectiveTerminalExecMaxTimeoutMS nil=%d, want 600000", got)
+	}
+
+	cfg := &AIConfig{}
+	if got := cfg.EffectiveTerminalExecDefaultTimeoutMS(); got != 120_000 {
+		t.Fatalf("EffectiveTerminalExecDefaultTimeoutMS empty=%d, want 120000", got)
+	}
+	if got := cfg.EffectiveTerminalExecMaxTimeoutMS(); got != 600_000 {
+		t.Fatalf("EffectiveTerminalExecMaxTimeoutMS empty=%d, want 600000", got)
+	}
+
+	cfg.TerminalExecPolicy = &AITerminalExecPolicy{
+		DefaultTimeoutMS: intPtr(45_000),
+		MaxTimeoutMS:     intPtr(90_000),
+	}
+	if got := cfg.EffectiveTerminalExecDefaultTimeoutMS(); got != 45_000 {
+		t.Fatalf("EffectiveTerminalExecDefaultTimeoutMS explicit=%d, want 45000", got)
+	}
+	if got := cfg.EffectiveTerminalExecMaxTimeoutMS(); got != 90_000 {
+		t.Fatalf("EffectiveTerminalExecMaxTimeoutMS explicit=%d, want 90000", got)
+	}
+
+	cfg.TerminalExecPolicy = &AITerminalExecPolicy{
+		MaxTimeoutMS: intPtr(30_000),
+	}
+	if got := cfg.EffectiveTerminalExecDefaultTimeoutMS(); got != 30_000 {
+		t.Fatalf("EffectiveTerminalExecDefaultTimeoutMS clamped=%d, want 30000", got)
+	}
+}
+
+func TestAIConfigValidate_RejectsInvalidTerminalExecPolicy(t *testing.T) {
+	t.Parallel()
+
+	base := AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
+		Providers: []AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
+			},
+		},
+	}
+
+	cfg1 := base
+	cfg1.TerminalExecPolicy = &AITerminalExecPolicy{DefaultTimeoutMS: intPtr(0)}
+	if err := cfg1.Validate(); err == nil {
+		t.Fatalf("expected validation error for terminal_exec_policy.default_timeout_ms=0")
+	}
+
+	cfg2 := base
+	cfg2.TerminalExecPolicy = &AITerminalExecPolicy{MaxTimeoutMS: intPtr(600_001)}
+	if err := cfg2.Validate(); err == nil {
+		t.Fatalf("expected validation error for terminal_exec_policy.max_timeout_ms=600001")
+	}
+
+	cfg3 := base
+	cfg3.TerminalExecPolicy = &AITerminalExecPolicy{
+		DefaultTimeoutMS: intPtr(90_000),
+		MaxTimeoutMS:     intPtr(60_000),
+	}
+	if err := cfg3.Validate(); err == nil {
+		t.Fatalf("expected validation error for terminal_exec_policy.default_timeout_ms > max_timeout_ms")
+	}
+
+	cfg4 := base
+	cfg4.TerminalExecPolicy = &AITerminalExecPolicy{
+		DefaultTimeoutMS: intPtr(30_000),
+		MaxTimeoutMS:     intPtr(90_000),
+	}
+	if err := cfg4.Validate(); err != nil {
+		t.Fatalf("Validate terminal_exec_policy: %v", err)
+	}
+}

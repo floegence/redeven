@@ -67,6 +67,8 @@ export interface ShellBlock {
   };
   cwd?: string;
   timeoutMs?: number;
+  requestedTimeoutMs?: number;
+  timeoutSource?: string;
   durationMs?: number;
   timedOut?: boolean;
   truncated?: boolean;

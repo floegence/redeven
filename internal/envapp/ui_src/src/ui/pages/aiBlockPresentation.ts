@@ -168,7 +168,10 @@ function buildTerminalExecShellBlock(block: ChatToolCallBlock): MessageBlock | n
 
   const command = readString(args, ['command']) || '(empty command)';
   const cwd = readString(args, ['cwd', 'workdir']);
-  const timeoutMs = readNumber(args, ['timeout_ms', 'timeoutMs']);
+  const timeoutMs = readNumber(result, ['timeout_ms', 'timeoutMs']) ?? readNumber(args, ['timeout_ms', 'timeoutMs']);
+  const requestedTimeoutMs =
+    readNumber(result, ['requested_timeout_ms', 'requestedTimeoutMs']) ?? readNumber(args, ['timeout_ms', 'timeoutMs']);
+  const timeoutSource = readString(result, ['timeout_source', 'timeoutSource']);
 
   const stdout = readString(result, ['stdout']);
   const stderr = readString(result, ['stderr']);
@@ -184,6 +187,8 @@ function buildTerminalExecShellBlock(block: ChatToolCallBlock): MessageBlock | n
     stderr,
     cwd,
     timeoutMs,
+    requestedTimeoutMs,
+    timeoutSource,
     durationMs,
     timedOut,
     truncated,
@@ -197,6 +202,11 @@ function buildTerminalExecShellBlock(block: ChatToolCallBlock): MessageBlock | n
     outputRef: outputRef || undefined,
     cwd: cwd || undefined,
     timeoutMs: typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0 ? Math.round(timeoutMs) : undefined,
+    requestedTimeoutMs:
+      typeof requestedTimeoutMs === 'number' && Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
+        ? Math.round(requestedTimeoutMs)
+        : undefined,
+    timeoutSource: timeoutSource || undefined,
     durationMs: typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0 ? Math.round(durationMs) : undefined,
     timedOut,
     truncated,
@@ -420,6 +430,8 @@ type TerminalOutputParts = Readonly<{
   stderr: string;
   cwd: string;
   timeoutMs?: number;
+  requestedTimeoutMs?: number;
+  timeoutSource: string;
   durationMs?: number;
   timedOut: boolean;
   truncated: boolean;
@@ -432,7 +444,17 @@ function composeTerminalOutput(parts: TerminalOutputParts): string {
     info.push(`[cwd] ${parts.cwd}`);
   }
   if (typeof parts.timeoutMs === 'number' && Number.isFinite(parts.timeoutMs) && parts.timeoutMs > 0) {
-    info.push(`[timeout] ${Math.max(0, Math.round(parts.timeoutMs))}ms`);
+    const roundedTimeout = Math.max(0, Math.round(parts.timeoutMs));
+    const roundedRequested = typeof parts.requestedTimeoutMs === 'number' && Number.isFinite(parts.requestedTimeoutMs)
+      ? Math.max(0, Math.round(parts.requestedTimeoutMs))
+      : undefined;
+    if (parts.timeoutSource === 'default') {
+      info.push(`[timeout] auto ${roundedTimeout}ms`);
+    } else if (parts.timeoutSource === 'capped' && typeof roundedRequested === 'number' && roundedRequested > roundedTimeout) {
+      info.push(`[timeout] capped ${roundedTimeout}ms (requested ${roundedRequested}ms)`);
+    } else {
+      info.push(`[timeout] ${roundedTimeout}ms`);
+    }
   }
   if (typeof parts.durationMs === 'number' && Number.isFinite(parts.durationMs) && parts.durationMs >= 0) {
     info.push(`[duration] ${Math.round(parts.durationMs)}ms`);

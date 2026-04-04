@@ -1870,6 +1870,12 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	normalizedCommand := strings.TrimSpace(commandProfile.NormalizedCommand)
 	commandEffects := append([]string(nil), commandProfile.Effects...)
 	classificationReason := strings.TrimSpace(commandProfile.Reason)
+	var terminalTimeoutDecision terminalExecTimeoutDecision
+	var terminalExecResultMeta map[string]any
+	if toolName == "terminal.exec" {
+		terminalTimeoutDecision = resolveTerminalExecTimeoutDecision(r.cfg, readInt64Field(args, "timeout_ms", "timeoutMs"))
+		terminalExecResultMeta = terminalExecTimeoutDecisionResult(terminalTimeoutDecision)
+	}
 	readonlyRisk := string(aitools.TerminalCommandRiskReadonly)
 	denyReadonlyExec := r.forceReadonlyExec && toolName == "terminal.exec" && commandRisk != "" && commandRisk != readonlyRisk
 	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec
@@ -1915,6 +1921,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			"policy_no_user_interaction":      r.noUserInteraction,
 			"policy_plan_mode_readonly":       isPlanMode,
 			"policy_block_dangerous_commands": blockDangerousCommands,
+			"timeout_requested_ms":            terminalTimeoutDecision.RequestedMS,
+			"timeout_effective_ms":            terminalTimeoutDecision.EffectiveMS,
+			"timeout_default_ms":              terminalTimeoutDecision.DefaultMS,
+			"timeout_max_ms":                  terminalTimeoutDecision.MaxMS,
+			"timeout_source":                  terminalTimeoutDecision.Source,
 		})
 	}
 	toolCallPayload := map[string]any{
@@ -1972,7 +1983,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 	if toolName == "terminal.exec" {
 		// Keep output_ref available across pending/running/error so the UI can always reconcile runtime status.
-		block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), nil)
+		block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), terminalExecResultMeta)
 	}
 
 	if requireApprovalForInvocation {
@@ -1981,7 +1992,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 
 	r.emitPersistedToolBlockSet(idx, block)
-	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
+	persistResult := any(nil)
+	if toolName == "terminal.exec" {
+		persistResult = terminalExecResultMeta
+	}
+	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, persistResult, nil, "", toolStartedAt, time.Now())
 
 	setToolError := func(toolErr *aitools.ToolError, recoveryAction string, partialResult any) {
 		if toolErr == nil {
@@ -2011,14 +2026,18 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				"error", toolErr.Message,
 			)
 		}
+		errorResult := partialResult
+		if toolName == "terminal.exec" && errorResult == nil {
+			errorResult = terminalExecResultMeta
+		}
 		block.Status = ToolCallStatusError
 		block.Error = toolErr.Message
 		block.ErrorDetails = toolErr
 		if toolName == "terminal.exec" {
-			block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), partialResult)
+			block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), errorResult)
 		}
 		r.emitPersistedToolBlockSet(idx, block)
-		r.persistToolCallSnapshot(toolID, toolName, block.Status, args, partialResult, toolErr, recoveryAction, toolStartedAt, time.Now())
+		r.persistToolCallSnapshot(toolID, toolName, block.Status, args, errorResult, toolErr, recoveryAction, toolStartedAt, time.Now())
 		r.persistRunEvent("tool.error", RealtimeStreamKindTool, map[string]any{
 			"tool_id":   toolID,
 			"tool_name": toolName,
@@ -2183,7 +2202,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	defer endBusy()
 	block.Status = ToolCallStatusRunning
 	r.emitPersistedToolBlockSet(idx, block)
-	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, nil, nil, "", toolStartedAt, time.Now())
+	persistResult = nil
+	if toolName == "terminal.exec" {
+		persistResult = terminalExecResultMeta
+	}
+	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, persistResult, nil, "", toolStartedAt, time.Now())
 
 	if mutating {
 		r.touchActivity()
@@ -2221,7 +2244,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 
 	if toolName == "terminal.exec" {
-		if toolErr := terminalExecTimeoutToolError(result, args); toolErr != nil {
+		if toolErr := terminalExecTimeoutToolError(result); toolErr != nil {
 			setToolError(toolErr, "", result)
 			return outcome, nil
 		}
@@ -3485,9 +3508,23 @@ func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additi
 // --- terminal.exec ---
 
 const (
-	terminalExecDefaultTimeout = 10 * time.Minute
-	terminalExecMaxTimeout     = 30 * time.Minute
+	terminalExecFallbackDefaultTimeoutMS = 120_000
+	terminalExecWaitAfterKillTimeout     = 2 * time.Second
 )
+
+const (
+	terminalExecTimeoutSourceDefault   = "default"
+	terminalExecTimeoutSourceRequested = "requested"
+	terminalExecTimeoutSourceCapped    = "capped"
+)
+
+type terminalExecTimeoutDecision struct {
+	RequestedMS int64
+	EffectiveMS int64
+	DefaultMS   int64
+	MaxMS       int64
+	Source      string
+}
 
 type terminalExecInvocation struct {
 	Shell         string
@@ -3506,6 +3543,50 @@ type terminalExecOutcome struct {
 	TimedOut   bool
 }
 
+func resolveTerminalExecTimeoutDecision(cfg *config.AIConfig, requestedMS int64) terminalExecTimeoutDecision {
+	defaultMS := cfg.EffectiveTerminalExecDefaultTimeoutMS()
+	maxMS := cfg.EffectiveTerminalExecMaxTimeoutMS()
+	if maxMS <= 0 {
+		maxMS = terminalExecFallbackDefaultTimeoutMS
+	}
+	if defaultMS <= 0 {
+		defaultMS = terminalExecFallbackDefaultTimeoutMS
+	}
+	if defaultMS > maxMS {
+		defaultMS = maxMS
+	}
+
+	decision := terminalExecTimeoutDecision{
+		RequestedMS: requestedMS,
+		EffectiveMS: defaultMS,
+		DefaultMS:   defaultMS,
+		MaxMS:       maxMS,
+		Source:      terminalExecTimeoutSourceDefault,
+	}
+	if requestedMS <= 0 {
+		return decision
+	}
+	if requestedMS > maxMS {
+		decision.EffectiveMS = maxMS
+		decision.Source = terminalExecTimeoutSourceCapped
+		return decision
+	}
+	decision.EffectiveMS = requestedMS
+	decision.Source = terminalExecTimeoutSourceRequested
+	return decision
+}
+
+func terminalExecTimeoutDecisionResult(decision terminalExecTimeoutDecision) map[string]any {
+	out := map[string]any{
+		"timeout_ms":     decision.EffectiveMS,
+		"timeout_source": strings.TrimSpace(decision.Source),
+	}
+	if decision.RequestedMS > 0 {
+		out["requested_timeout_ms"] = decision.RequestedMS
+	}
+	return out
+}
+
 func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string, cwd string, timeoutMS int64) (any, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -3514,12 +3595,8 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string
 	if len(stdin) > 200_000 {
 		return nil, errors.New("stdin too large")
 	}
-	if timeoutMS <= 0 {
-		timeoutMS = int64(terminalExecDefaultTimeout / time.Millisecond)
-	}
-	if timeoutMS > int64(terminalExecMaxTimeout/time.Millisecond) {
-		timeoutMS = int64(terminalExecMaxTimeout / time.Millisecond)
-	}
+	timeoutDecision := resolveTerminalExecTimeoutDecision(r.cfg, timeoutMS)
+	timeoutMS = timeoutDecision.EffectiveMS
 
 	workingDirAbs, err := r.workingDirAbs()
 	if err != nil {
@@ -3563,20 +3640,25 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string
 		outcome.DurationMS = time.Since(started).Milliseconds()
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"stdout":      outcome.Stdout,
 		"stderr":      outcome.Stderr,
 		"exit_code":   outcome.ExitCode,
 		"duration_ms": outcome.DurationMS,
 		"truncated":   outcome.Truncated,
 		"timed_out":   outcome.TimedOut,
-	}, nil
+	}
+	for k, v := range terminalExecTimeoutDecisionResult(timeoutDecision) {
+		result[k] = v
+	}
+	return result, nil
 }
 
 func defaultTerminalExecRunner(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error) {
-	cmd := exec.CommandContext(ctx, inv.Shell, "-lc", inv.Command)
+	cmd := exec.Command(inv.Shell, "-lc", inv.Command)
 	cmd.Dir = inv.WorkingDirAbs
 	cmd.Env = append([]string(nil), inv.Env...)
+	configureTerminalExecProcessGroup(cmd)
 	if inv.Stdin != "" {
 		cmd.Stdin = strings.NewReader(inv.Stdin)
 	}
@@ -3586,7 +3668,26 @@ func defaultTerminalExecRunner(ctx context.Context, inv terminalExecInvocation) 
 	cmd.Stdout = lim.Stdout()
 	cmd.Stderr = lim.Stderr()
 
-	runErr := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return terminalExecOutcome{}, err
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	runErr := error(nil)
+	select {
+	case runErr = <-done:
+	case <-ctx.Done():
+		_ = terminateTerminalExecProcessTree(cmd)
+		select {
+		case runErr = <-done:
+		case <-time.After(terminalExecWaitAfterKillTimeout):
+			return terminalExecOutcome{}, ctx.Err()
+		}
+	}
+
 	outcome := terminalExecOutcome{
 		Stdout:     lim.StdoutString(),
 		Stderr:     lim.StderrString(),
@@ -3600,6 +3701,9 @@ func defaultTerminalExecRunner(ctx context.Context, inv terminalExecInvocation) 
 	if outcome.TimedOut {
 		outcome.ExitCode = 124
 		return outcome, nil
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return terminalExecOutcome{}, context.Canceled
 	}
 	if ee := (*exec.ExitError)(nil); errors.As(runErr, &ee) {
 		outcome.ExitCode = ee.ExitCode()
@@ -3628,6 +3732,9 @@ func buildTerminalExecBlockResult(runID string, toolID string, raw any) map[stri
 	copyField("duration_ms")
 	copyField("timed_out")
 	copyField("truncated")
+	copyField("timeout_ms")
+	copyField("requested_timeout_ms")
+	copyField("timeout_source")
 	if stdout, _ := resultMap["stdout"].(string); stdout != "" {
 		out["stdout_bytes"] = len(stdout)
 	}
@@ -3637,15 +3744,17 @@ func buildTerminalExecBlockResult(runID string, toolID string, raw any) map[stri
 	return out
 }
 
-func terminalExecTimeoutToolError(result any, args map[string]any) *aitools.ToolError {
+func terminalExecTimeoutToolError(result any) *aitools.ToolError {
 	resultMap, _ := result.(map[string]any)
 	if resultMap == nil || !readBoolField(resultMap, "timed_out", "timedOut") {
 		return nil
 	}
-	timeoutMS := readInt64Field(args, "timeout_ms", "timeoutMs")
+	timeoutMS := readInt64Field(resultMap, "timeout_ms", "timeoutMs")
 	if timeoutMS <= 0 {
-		timeoutMS = int64(terminalExecDefaultTimeout / time.Millisecond)
+		timeoutMS = terminalExecFallbackDefaultTimeoutMS
 	}
+	timeoutSource := strings.TrimSpace(readStringField(resultMap, "timeout_source", "timeoutSource"))
+	requestedTimeoutMS := readInt64Field(resultMap, "requested_timeout_ms", "requestedTimeoutMs")
 	exitCode := readIntField(resultMap, "exit_code", "exitCode")
 	toolErr := &aitools.ToolError{
 		Code:      aitools.ErrorCodeTimeout,
@@ -3660,6 +3769,12 @@ func terminalExecTimeoutToolError(result any, args map[string]any) *aitools.Tool
 			"timed_out":  true,
 			"timeout_ms": timeoutMS,
 		},
+	}
+	if timeoutSource != "" {
+		toolErr.Meta["timeout_source"] = timeoutSource
+	}
+	if requestedTimeoutMS > 0 {
+		toolErr.Meta["requested_timeout_ms"] = requestedTimeoutMS
 	}
 	if exitCode != 0 {
 		toolErr.Meta["exit_code"] = exitCode

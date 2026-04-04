@@ -197,6 +197,10 @@ function defaultAIConfig(): AIConfig {
       require_user_approval: false,
       block_dangerous_commands: false,
     },
+    terminal_exec_policy: {
+      default_timeout_ms: 120000,
+      max_timeout_ms: 600000,
+    },
     providers: [
       {
         id: 'openai',
@@ -811,6 +815,11 @@ export function EnvSettingsPage() {
     if (typeof preserved.tool_recovery_fail_on_repeated_signature === 'boolean') {
       out.tool_recovery_fail_on_repeated_signature = preserved.tool_recovery_fail_on_repeated_signature;
     }
+    if (preserved.terminal_exec_policy) {
+      out.terminal_exec_policy = {
+        ...preserved.terminal_exec_policy,
+      };
+    }
     out.execution_policy = {
       require_user_approval: !!aiRequireUserApproval(),
       block_dangerous_commands: !!aiBlockDangerousCommands(),
@@ -863,6 +872,37 @@ export function EnvSettingsPage() {
       }
       if ((ep as any).block_dangerous_commands !== undefined && typeof (ep as any).block_dangerous_commands !== 'boolean') {
         throw new Error('execution_policy.block_dangerous_commands must be a boolean.');
+      }
+    }
+    const terminalExecPolicy = (cfg as any).terminal_exec_policy;
+    if (terminalExecPolicy !== undefined && terminalExecPolicy !== null) {
+      if (!isJSONObject(terminalExecPolicy)) throw new Error('terminal_exec_policy must be an object.');
+      const defaultTimeoutMS = (terminalExecPolicy as any).default_timeout_ms;
+      const maxTimeoutMS = (terminalExecPolicy as any).max_timeout_ms;
+      if (defaultTimeoutMS !== undefined) {
+        if (typeof defaultTimeoutMS !== 'number' || !Number.isFinite(defaultTimeoutMS) || !Number.isInteger(defaultTimeoutMS)) {
+          throw new Error('terminal_exec_policy.default_timeout_ms must be an integer.');
+        }
+        if (defaultTimeoutMS < 1 || defaultTimeoutMS > 600000) {
+          throw new Error('terminal_exec_policy.default_timeout_ms must be in [1,600000].');
+        }
+      }
+      if (maxTimeoutMS !== undefined) {
+        if (typeof maxTimeoutMS !== 'number' || !Number.isFinite(maxTimeoutMS) || !Number.isInteger(maxTimeoutMS)) {
+          throw new Error('terminal_exec_policy.max_timeout_ms must be an integer.');
+        }
+        if (maxTimeoutMS < 1 || maxTimeoutMS > 600000) {
+          throw new Error('terminal_exec_policy.max_timeout_ms must be in [1,600000].');
+        }
+      }
+      if (
+        typeof defaultTimeoutMS === 'number' &&
+        Number.isFinite(defaultTimeoutMS) &&
+        typeof maxTimeoutMS === 'number' &&
+        Number.isFinite(maxTimeoutMS) &&
+        defaultTimeoutMS > maxTimeoutMS
+      ) {
+        throw new Error('terminal_exec_policy.default_timeout_ms must not exceed max_timeout_ms.');
       }
     }
 
@@ -1008,6 +1048,22 @@ export function EnvSettingsPage() {
     }
     if (typeof (cfg as any).tool_recovery_fail_on_repeated_signature === 'boolean') {
       out.tool_recovery_fail_on_repeated_signature = !!(cfg as any).tool_recovery_fail_on_repeated_signature;
+    }
+    if (isJSONObject((cfg as any).terminal_exec_policy)) {
+      const raw = (cfg as any).terminal_exec_policy as Record<string, unknown>;
+      const terminalExecPolicy: { default_timeout_ms?: number; max_timeout_ms?: number } = {};
+      if (typeof raw.default_timeout_ms === 'number' && Number.isFinite(raw.default_timeout_ms)) {
+        terminalExecPolicy.default_timeout_ms = Math.trunc(raw.default_timeout_ms);
+      }
+      if (typeof raw.max_timeout_ms === 'number' && Number.isFinite(raw.max_timeout_ms)) {
+        terminalExecPolicy.max_timeout_ms = Math.trunc(raw.max_timeout_ms);
+      }
+      if (
+        terminalExecPolicy.default_timeout_ms !== undefined ||
+        terminalExecPolicy.max_timeout_ms !== undefined
+      ) {
+        out.terminal_exec_policy = terminalExecPolicy;
+      }
     }
     return out;
   };

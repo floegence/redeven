@@ -13,19 +13,21 @@ import (
 )
 
 type TerminalToolOutput struct {
-	RunID      string `json:"run_id"`
-	ToolID     string `json:"tool_id"`
-	ToolName   string `json:"tool_name"`
-	Status     string `json:"status"`
-	Stdout     string `json:"stdout"`
-	Stderr     string `json:"stderr"`
-	ExitCode   int    `json:"exit_code"`
-	DurationMS int64  `json:"duration_ms"`
-	TimedOut   bool   `json:"timed_out"`
-	Truncated  bool   `json:"truncated"`
-	Cwd        string `json:"cwd,omitempty"`
-	TimeoutMS  int64  `json:"timeout_ms,omitempty"`
-	RawResult  string `json:"raw_result,omitempty"`
+	RunID              string `json:"run_id"`
+	ToolID             string `json:"tool_id"`
+	ToolName           string `json:"tool_name"`
+	Status             string `json:"status"`
+	Stdout             string `json:"stdout"`
+	Stderr             string `json:"stderr"`
+	ExitCode           int    `json:"exit_code"`
+	DurationMS         int64  `json:"duration_ms"`
+	TimedOut           bool   `json:"timed_out"`
+	Truncated          bool   `json:"truncated"`
+	Cwd                string `json:"cwd,omitempty"`
+	TimeoutMS          int64  `json:"timeout_ms,omitempty"`
+	RequestedTimeoutMS int64  `json:"requested_timeout_ms,omitempty"`
+	TimeoutSource      string `json:"timeout_source,omitempty"`
+	RawResult          string `json:"raw_result,omitempty"`
 }
 
 func (s *Service) GetTerminalToolOutput(ctx context.Context, meta *session.Meta, runID string, toolID string) (*TerminalToolOutput, error) {
@@ -68,18 +70,36 @@ func (s *Service) GetTerminalToolOutput(ctx context.Context, meta *session.Meta,
 	argsObj, _ := parseObjectJSON(rec.ArgsJSON)
 
 	out := &TerminalToolOutput{
-		RunID:      strings.TrimSpace(rec.RunID),
-		ToolID:     strings.TrimSpace(rec.ToolID),
-		ToolName:   strings.TrimSpace(rec.ToolName),
-		Status:     strings.TrimSpace(rec.Status),
-		Stdout:     readStringField(resultObj, "stdout"),
-		Stderr:     readStringField(resultObj, "stderr"),
-		ExitCode:   readIntField(resultObj, "exit_code", "exitCode"),
-		DurationMS: readInt64Field(resultObj, "duration_ms", "durationMs"),
-		TimedOut:   readBoolField(resultObj, "timed_out", "timedOut"),
-		Truncated:  readBoolField(resultObj, "truncated"),
-		Cwd:        readStringField(argsObj, "cwd", "workdir"),
-		TimeoutMS:  readInt64Field(argsObj, "timeout_ms", "timeoutMs"),
+		RunID:              strings.TrimSpace(rec.RunID),
+		ToolID:             strings.TrimSpace(rec.ToolID),
+		ToolName:           strings.TrimSpace(rec.ToolName),
+		Status:             strings.TrimSpace(rec.Status),
+		Stdout:             readStringField(resultObj, "stdout"),
+		Stderr:             readStringField(resultObj, "stderr"),
+		ExitCode:           readIntField(resultObj, "exit_code", "exitCode"),
+		DurationMS:         readInt64Field(resultObj, "duration_ms", "durationMs"),
+		TimedOut:           readBoolField(resultObj, "timed_out", "timedOut"),
+		Truncated:          readBoolField(resultObj, "truncated"),
+		Cwd:                readStringField(argsObj, "cwd", "workdir"),
+		TimeoutMS:          readInt64Field(resultObj, "timeout_ms", "timeoutMs"),
+		RequestedTimeoutMS: readInt64Field(resultObj, "requested_timeout_ms", "requestedTimeoutMs"),
+		TimeoutSource:      readStringField(resultObj, "timeout_source", "timeoutSource"),
+	}
+	if out.TimeoutMS <= 0 {
+		out.TimeoutMS = readInt64Field(argsObj, "timeout_ms", "timeoutMs")
+	}
+	if out.RequestedTimeoutMS <= 0 {
+		out.RequestedTimeoutMS = readInt64Field(argsObj, "timeout_ms", "timeoutMs")
+	}
+	if out.TimeoutSource == "" {
+		switch {
+		case out.RequestedTimeoutMS > 0 && out.TimeoutMS > 0 && out.TimeoutMS < out.RequestedTimeoutMS:
+			out.TimeoutSource = terminalExecTimeoutSourceCapped
+		case out.RequestedTimeoutMS > 0:
+			out.TimeoutSource = terminalExecTimeoutSourceRequested
+		case out.TimeoutMS > 0:
+			out.TimeoutSource = terminalExecTimeoutSourceDefault
+		}
 	}
 	if parseErr != nil && strings.TrimSpace(rec.ResultJSON) != "" {
 		out.RawResult = strings.TrimSpace(rec.ResultJSON)
