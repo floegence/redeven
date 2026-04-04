@@ -413,6 +413,8 @@ describe('desktopPreferences', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'auto',
+      release_base_url: '',
       label: 'Lab',
     });
 
@@ -423,6 +425,8 @@ describe('desktopPreferences', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'auto',
+        release_base_url: '',
         source: 'recent_auto',
         last_used_at_ms: expect.any(Number),
       },
@@ -434,6 +438,8 @@ describe('desktopPreferences', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases',
       source: 'saved',
       last_used_at_ms: 500,
     });
@@ -445,12 +451,41 @@ describe('desktopPreferences', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: 'https://mirror.example.invalid/releases',
         source: 'saved',
         last_used_at_ms: 500,
       },
     ]);
 
     expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:remote_default').saved_ssh_environments).toEqual([]);
+  });
+
+  it('round-trips saved SSH bootstrap strategy settings through the preference files', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const preferences: DesktopPreferences = {
+        ...defaultDesktopPreferences(),
+        saved_ssh_environments: [{
+          id: 'ssh:devbox:2222:remote_default',
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: 'https://mirror.example.invalid/releases',
+          source: 'saved',
+          last_used_at_ms: 100,
+        }],
+      };
+
+      await saveDesktopPreferences(paths, preferences, codec);
+      await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual(preferences);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 
   it('remembers recent environment targets through the saved catalog', () => {

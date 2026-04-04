@@ -231,8 +231,15 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH'");
     expect(appSrc).toContain('Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.');
+    expect(appSrc).toContain('Bootstrap Delivery');
+    expect(appSrc).toContain("label: 'Automatic'");
+    expect(appSrc).toContain("label: 'Desktop Upload'");
+    expect(appSrc).toContain("label: 'Remote Install'");
+    expect(appSrc).toContain('Automatic prefers a desktop-managed upload for offline targets, then falls back to the remote installer.');
     expect(appSrc).toContain('SSH Destination');
     expect(appSrc).toContain('Remote Install Directory');
+    expect(appSrc).toContain('Release Base URL');
+    expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
     expect(appSrc).toContain('Forwarded UI:');
   });
 });

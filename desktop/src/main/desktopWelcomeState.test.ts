@@ -229,6 +229,8 @@ describe('desktopWelcomeState', () => {
           ssh_destination: 'devbox',
           ssh_port: 2222,
           remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: 'https://mirror.example.invalid/releases',
           source: 'saved',
           last_used_at_ms: 100,
         }],
@@ -242,6 +244,8 @@ describe('desktopWelcomeState', () => {
             ssh_destination: 'devbox',
             ssh_port: 2222,
             remote_install_dir: 'remote_default',
+            bootstrap_strategy: 'desktop_upload',
+            release_base_url: 'https://mirror.example.invalid/releases',
           }, {
             label: 'SSH Lab',
             forwardedLocalUIURL: 'http://127.0.0.1:40111/',
@@ -256,6 +260,8 @@ describe('desktopWelcomeState', () => {
         ssh_destination: 'devbox',
         ssh_port: 2222,
         remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: 'https://mirror.example.invalid/releases',
       }, 'ssh_target_unreachable', 'Desktop could not reach that SSH target.'),
     });
 
@@ -276,6 +282,8 @@ describe('desktopWelcomeState', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases',
     });
   });
 

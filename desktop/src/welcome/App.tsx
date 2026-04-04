@@ -53,8 +53,11 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL,
+  DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL,
+  type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
@@ -161,6 +164,8 @@ type SSHConnectionDialogState = Readonly<{
   ssh_destination: string;
   ssh_port: string;
   remote_install_dir: string;
+  bootstrap_strategy: DesktopSSHBootstrapStrategy;
+  release_base_url: string;
 }>;
 
 type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
@@ -287,6 +292,8 @@ function createSSHConnectionDialogState(
     ssh_destination: trimString(overrides.ssh_destination),
     ssh_port: trimString(overrides.ssh_port),
     remote_install_dir: trimString(overrides.remote_install_dir),
+    bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+    release_base_url: trimString(overrides.release_base_url),
   };
 }
 
@@ -671,6 +678,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: environment.ssh_details?.remote_install_dir === DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR
           ? ''
           : (environment.ssh_details?.remote_install_dir ?? ''),
+        bootstrap_strategy: environment.ssh_details?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+        release_base_url: environment.ssh_details?.release_base_url ?? '',
       }));
     } else {
       setConnectionDialogState(createExternalURLConnectionDialogState('edit', {
@@ -729,6 +738,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (kind === 'ssh_environment') {
         return createSSHConnectionDialogState('create', {
           label: current.label,
+          bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         });
       }
       return createExternalURLConnectionDialogState('create', {
@@ -741,7 +751,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -751,6 +761,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         ...current,
         [name]: value,
+      };
+    });
+  }
+
+  function switchSSHBootstrapStrategy(strategy: DesktopSSHBootstrapStrategy): void {
+    setConnectionDialogState((current) => {
+      if (!current || current.connection_kind !== 'ssh_environment') {
+        return current;
+      }
+      return {
+        ...current,
+        bootstrap_strategy: strategy,
       };
     });
   }
@@ -850,6 +872,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ssh_destination: details.ssh_destination,
       ssh_port: details.ssh_port,
       remote_install_dir: details.remote_install_dir,
+      bootstrap_strategy: details.bootstrap_strategy,
+      release_base_url: details.release_base_url,
     }, errorTarget);
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
@@ -1073,6 +1097,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: request.details.ssh_destination,
         ssh_port: request.details.ssh_port,
         remote_install_dir: request.details.remote_install_dir,
+        bootstrap_strategy: request.details.bootstrap_strategy,
+        release_base_url: request.details.release_base_url,
       });
       await refreshSnapshot();
       setFeedback(request.successMessage);
@@ -1128,6 +1154,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ssh_destination: state.ssh_destination,
           ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
           remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+          bootstrap_strategy: state.bootstrap_strategy,
+          release_base_url: trimString(state.release_base_url),
         },
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
@@ -1158,6 +1186,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         ssh_destination: state.ssh_destination,
         ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
         remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+        bootstrap_strategy: state.bootstrap_strategy,
+        release_base_url: trimString(state.release_base_url),
       }, 'dialog');
       return;
     }
@@ -1325,6 +1355,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }}
         updateField={updateConnectionDialogField}
         switchKind={switchConnectionDialogKind}
+        switchBootstrapStrategy={switchSSHBootstrapStrategy}
         onConnect={connectFromDialog}
         onSave={saveConnectionFromDialog}
       />
@@ -2553,10 +2584,11 @@ function ConnectionDialog(props: Readonly<{
   busyAction: BusyAction;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
     value: string,
   ) => void;
   switchKind: (kind: 'external_local_ui' | 'ssh_environment') => void;
+  switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
 }>) {
@@ -2564,11 +2596,26 @@ function ConnectionDialog(props: Readonly<{
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
   const [advancedOpen, setAdvancedOpen] = createSignal(false);
   const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedOpen());
-  const sshInstallDirLabel = createMemo(() => (
-    trimString(props.state?.connection_kind === 'ssh_environment' ? props.state.remote_install_dir : '') === ''
-      ? DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL
-      : 'Custom path'
+  const sshBootstrapStrategy = createMemo(() => (
+    props.state?.connection_kind === 'ssh_environment'
+      ? props.state.bootstrap_strategy
+      : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
   ));
+  const sshReleaseBaseURLLabel = createMemo(() => (
+    trimString(props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : '') === ''
+      ? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL
+      : 'Custom mirror'
+  ));
+  const sshBootstrapSummaryLabel = createMemo(() => {
+    switch (sshBootstrapStrategy()) {
+      case 'desktop_upload':
+        return sshReleaseBaseURLLabel();
+      case 'remote_install':
+        return 'Remote installer';
+      default:
+        return 'Auto';
+    }
+  });
 
   createEffect(() => {
     const state = props.state;
@@ -2679,6 +2726,22 @@ function ConnectionDialog(props: Readonly<{
                   autofocus={props.state?.mode === 'create'}
                 />
               </div>
+              <div class="space-y-1.5">
+                <label class="block text-xs font-medium text-foreground">Bootstrap Delivery</label>
+                <SegmentedControl
+                  value={sshBootstrapStrategy()}
+                  onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
+                  options={[
+                    { value: 'auto', label: 'Automatic' },
+                    { value: 'desktop_upload', label: 'Desktop Upload' },
+                    { value: 'remote_install', label: 'Remote Install' },
+                  ]}
+                  size="sm"
+                />
+                <div class="text-[11px] text-muted-foreground">
+                  Automatic prefers a desktop-managed upload for offline targets, then falls back to the remote installer.
+                </div>
+              </div>
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
                 <div class="space-y-1.5">
                   <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">Port</label>
@@ -2693,9 +2756,9 @@ function ConnectionDialog(props: Readonly<{
                   />
                 </div>
                 <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-foreground">Install Dir</label>
+                  <label class="block text-xs font-medium text-foreground">Source</label>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                    {sshInstallDirLabel()}
+                    {sshBootstrapSummaryLabel()}
                   </Tag>
                 </div>
               </div>
@@ -2717,19 +2780,39 @@ function ConnectionDialog(props: Readonly<{
                 </button>
                 <Show when={showSSHAdvanced()}>
                   <div class="border-t border-border/70 px-3 py-3">
-                    <div class="space-y-1.5">
-                      <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
-                      <Input
-                        id="environment-ssh-install-dir"
-                        value={props.state?.connection_kind === 'ssh_environment' ? props.state.remote_install_dir : ''}
-                        onInput={(event) => props.updateField('remote_install_dir', event.currentTarget.value)}
-                        placeholder="/opt/redeven-desktop/runtime"
-                        size="sm"
-                        class="w-full font-mono"
-                        spellcheck={false}
-                      />
-                      <div class="text-[11px] text-muted-foreground">
-                        Leave blank to use the default remote user cache: {DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL}.
+                    <div class="space-y-3">
+                      <div class="space-y-1.5">
+                        <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
+                        <Input
+                          id="environment-ssh-install-dir"
+                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.remote_install_dir : ''}
+                          onInput={(event) => props.updateField('remote_install_dir', event.currentTarget.value)}
+                          placeholder="/opt/redeven-desktop/runtime"
+                          size="sm"
+                          class="w-full font-mono"
+                          spellcheck={false}
+                        />
+                        <div class="text-[11px] text-muted-foreground">
+                          Leave blank to use the default remote user cache: {DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL}.
+                        </div>
+                      </div>
+                      <div class="space-y-1.5">
+                        <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">Release Base URL</label>
+                        <Input
+                          id="environment-ssh-release-base-url"
+                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : ''}
+                          onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
+                          placeholder="https://github.com/floegence/redeven/releases"
+                          size="sm"
+                          class="w-full font-mono"
+                          spellcheck={false}
+                        />
+                        <div class="text-[11px] text-muted-foreground">
+                          Leave blank to use {DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL}. Set an internal release mirror when this desktop cannot use GitHub directly.
+                        </div>
+                      </div>
+                      <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
+                        Desktop Upload resolves the remote OS and architecture first, then uploads the matching Redeven release tarball over SSH.
                       </div>
                     </div>
                   </div>

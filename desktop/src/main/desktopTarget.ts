@@ -36,6 +36,8 @@ export type SSHDesktopTarget = Readonly<{
   ssh_destination: string;
   ssh_port: number | null;
   remote_install_dir: string;
+  bootstrap_strategy: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
+  release_base_url: string;
   forwarded_local_ui_url: string;
 }>;
 
@@ -136,6 +138,8 @@ export function buildSSHDesktopTarget(
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
     remote_install_dir: details.remote_install_dir,
+    bootstrap_strategy: details.bootstrap_strategy,
+    release_base_url: details.release_base_url,
     forwarded_local_ui_url: forwardedLocalUIURL,
   };
 }

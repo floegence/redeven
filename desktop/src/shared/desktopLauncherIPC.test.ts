@@ -50,6 +50,8 @@ describe('desktopLauncherIPC', () => {
       ssh_destination: ' devbox ',
       ssh_port: ' 2222 ',
       remote_install_dir: ' /opt/redeven ',
+      bootstrap_strategy: ' desktop_upload ',
+      release_base_url: ' https://mirror.example.invalid/releases/ ',
     })).toEqual({
       kind: 'open_ssh_environment',
       environment_id: 'ssh-1',
@@ -57,6 +59,8 @@ describe('desktopLauncherIPC', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: '/opt/redeven',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases/',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_saved_ssh_environment',
@@ -65,6 +69,8 @@ describe('desktopLauncherIPC', () => {
       ssh_destination: ' devbox ',
       ssh_port: '',
       remote_install_dir: ' ',
+      bootstrap_strategy: ' ',
+      release_base_url: ' ',
     })).toEqual({
       kind: 'upsert_saved_ssh_environment',
       environment_id: 'ssh-1',
@@ -72,6 +78,8 @@ describe('desktopLauncherIPC', () => {
       ssh_destination: 'devbox',
       ssh_port: null,
       remote_install_dir: '',
+      bootstrap_strategy: '',
+      release_base_url: '',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_ssh_environment',

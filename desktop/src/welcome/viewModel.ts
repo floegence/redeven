@@ -106,6 +106,8 @@ export function environmentMatchesLibrarySearch(
     environment.secondary_text,
     environment.ssh_details?.ssh_destination ?? '',
     environment.ssh_details?.remote_install_dir ?? '',
+    environment.ssh_details?.release_base_url ?? '',
+    environment.ssh_details?.bootstrap_strategy ?? '',
   ].some((value) => value.toLowerCase().includes(clean));
 }
 

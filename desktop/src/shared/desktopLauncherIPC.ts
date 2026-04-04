@@ -197,6 +197,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ? null
           : Number.parseInt(sshPortText, 10),
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+        bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
+        release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
       };
       }
     case 'connect_control_plane':
@@ -260,6 +262,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ? null
           : Number.parseInt(sshPortText, 10),
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+        bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
+        release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
       };
       }
     case 'delete_saved_environment': {

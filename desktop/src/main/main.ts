@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { launchStartedFreshManagedRuntime, startManagedAgent } from './agentProcess';
@@ -1052,6 +1053,8 @@ async function rememberRecentSSHTarget(
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
     remote_install_dir: input.remote_install_dir,
+    bootstrap_strategy: input.bootstrap_strategy,
+    release_base_url: input.release_base_url,
     label: input.label,
     environment_id: input.environmentID,
   }));
@@ -1288,6 +1291,8 @@ async function openSSHEnvironmentFromLauncher(
     ssh_destination: request.ssh_destination,
     ssh_port: request.ssh_port,
     remote_install_dir: request.remote_install_dir,
+    bootstrap_strategy: request.bootstrap_strategy,
+    release_base_url: request.release_base_url,
   };
   const optimisticSessionKey = sshDesktopSessionKey(sshDetails);
   const optimisticSession = liveSession(optimisticSessionKey);
@@ -1317,6 +1322,7 @@ async function openSSHEnvironmentFromLauncher(
       target: sshDetails,
       runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
       tempRoot: app.getPath('temp'),
+      assetCacheRoot: path.join(app.getPath('userData'), 'ssh-runtime-cache'),
       onLog: (stream, chunk) => {
         const text = String(chunk ?? '').trim();
         if (!text) {
@@ -1587,6 +1593,8 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
     remote_install_dir: details.remote_install_dir,
+    bootstrap_strategy: details.bootstrap_strategy,
+    release_base_url: details.release_base_url,
     source: 'saved',
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
@@ -1636,6 +1644,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         ssh_destination: request.ssh_destination,
         ssh_port: request.ssh_port,
         remote_install_dir: request.remote_install_dir,
+        bootstrap_strategy: request.bootstrap_strategy,
+        release_base_url: request.release_base_url,
       });
       return {
         outcome: 'saved_environment',

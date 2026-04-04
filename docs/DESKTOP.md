@@ -83,23 +83,32 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
 
 1. Validates the SSH target fields.
 2. Uses the host `ssh` client in non-interactive batch mode.
-3. Ensures the matching Redeven release exists on the remote machine through the public installer.
-4. Starts `redeven run --mode local --local-ui-bind 127.0.0.1:0` remotely.
-5. Waits for the remote startup report.
-6. Creates a local SSH port forward to that remote Local UI port.
-7. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
+3. Opens a shared SSH control socket.
+4. Checks whether the matching Redeven release is already installed remotely.
+5. If installation is needed, uses one of three bootstrap strategies:
+   - `desktop_upload`
+   - `remote_install`
+   - `auto`
+6. Starts `redeven run --mode local --local-ui-bind 127.0.0.1:0` remotely.
+7. Waits for the remote startup report.
+8. Creates a local SSH port forward to that remote Local UI port.
+9. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
 
 ### SSH Bootstrap Environment
 
 SSH bootstrap is intentionally transport-light and runtime-heavy:
 
-- Desktop does not ship a platform-specific remote binary blob to copy over SSH.
+- Desktop does not introduce a second SSH-native runtime protocol.
 - Desktop pins the remote install to the same Redeven release tag as the running desktop build.
 - The remote install path defaults to the remote user's cache and can be overridden with an absolute path.
+- Desktop can probe the remote OS/architecture (`linux` / `darwin`, `amd64` / `arm64` / `arm` / `386`) and choose the matching release package for desktop-managed upload.
+- `desktop_upload` lets the local machine download and verify the matching release tarball, then upload it over SSH so the target host does not need public internet access.
+- `release_base_url` lets operators point the desktop-upload path at a compatible internal release mirror instead of public GitHub Releases.
+- `auto` prefers desktop upload for restricted networks, then falls back to the remote installer path.
 - The forwarded localhost URL is session-ephemeral and only used as the live session origin.
 - Session identity is derived from SSH destination, SSH port, and remote install directory so reconnecting does not create duplicates just because the forwarded local port changed.
 - Closing the Desktop session tears down the local forward and the SSH-owned remote runtime together.
-- This first phase assumes non-interactive SSH authentication (`BatchMode=yes`), so missing keys or host-key trust issues surface as actionable launcher errors instead of prompting through Desktop UI.
+- SSH bootstrap still assumes non-interactive SSH authentication (`BatchMode=yes`), so missing keys or host-key trust issues surface as actionable launcher errors instead of prompting through Desktop UI.
 
 ### Launch Outcomes
 
@@ -148,9 +157,13 @@ Interaction rules:
   - `Label`
   - `SSH Destination`
   - optional `Port`
-  - compact `Advanced` section for `Remote Install Directory`
+  - `Bootstrap Delivery`
+  - compact `Advanced` section for:
+    - `Remote Install Directory`
+    - `Release Base URL`
 - SSH mode explains the actual behavior inline:
   - Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.
+  - Automatic prefers a desktop-managed upload for offline targets, then falls back to the remote installer.
 - `Add Control Plane` opens a separate dialog that accepts a Provider URL plus a `desktop_session_token`.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
@@ -222,7 +235,7 @@ Semantics:
 - `local_ui_bind`, `local_ui_password`, and `local_ui_password_configured` apply only to future `Local Environment` opens.
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
-- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
+- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - `control_planes` stores normalized provider discovery data, the desktop account snapshot, the cached environment list, and the last sync time.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
@@ -248,6 +261,8 @@ Target validation rules:
 - SSH targets accept `[user@]host` or SSH config host aliases.
 - SSH ports must be valid TCP ports when present.
 - SSH remote install directories must either use the default remote cache behavior or an absolute path.
+- SSH bootstrap delivery must be one of `auto`, `desktop_upload`, or `remote_install`.
+- SSH release base URLs must be blank or absolute `http://` / `https://` URLs.
 
 Desktop shell preferences live under the Electron user data directory, not inside the git checkout.
 

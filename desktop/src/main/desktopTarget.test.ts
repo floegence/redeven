@@ -70,12 +70,16 @@ describe('desktopTarget', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'auto',
+      release_base_url: '',
     })).toBe('ssh:devbox:2222:remote_default');
 
     expect(buildSSHDesktopTarget({
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases',
     }, {
       forwardedLocalUIURL: 'http://127.0.0.1:41111/',
       label: 'SSH Lab',
@@ -87,6 +91,8 @@ describe('desktopTarget', () => {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases',
       forwarded_local_ui_url: 'http://127.0.0.1:41111/',
     });
   });

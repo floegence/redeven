@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   desktopSSHAuthority,
   desktopSSHEnvironmentID,
+  normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHEnvironmentDetails,
   normalizeDesktopSSHPort,
+  normalizeDesktopSSHReleaseBaseURL,
   normalizeDesktopSSHRemoteInstallDir,
 } from './desktopSSH';
 
@@ -15,10 +18,14 @@ describe('desktopSSH', () => {
       ssh_destination: '  devbox  ',
       ssh_port: normalizeDesktopSSHPort(''),
       remote_install_dir: '',
+      bootstrap_strategy: '',
+      release_base_url: '',
     })).toEqual({
       ssh_destination: 'devbox',
       ssh_port: null,
       remote_install_dir: DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+      bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+      release_base_url: '',
     });
   });
 
@@ -27,18 +34,29 @@ describe('desktopSSH', () => {
       ssh_destination: 'user@example.internal',
       ssh_port: 2222,
       remote_install_dir: DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+      bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+      release_base_url: '',
     })).toBe('user@example.internal:2222');
 
     expect(desktopSSHEnvironmentID({
       ssh_destination: 'user@example.internal',
       ssh_port: 2222,
       remote_install_dir: '/opt/redeven',
+      bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+      release_base_url: '',
     })).toBe('ssh:user%40example.internal:2222:%2Fopt%2Fredeven');
   });
 
   it('requires custom remote install directories to be absolute paths', () => {
     expect(() => normalizeDesktopSSHRemoteInstallDir('relative/path')).toThrow(
       'Remote install directory must be an absolute path or use the default remote cache.',
+    );
+  });
+
+  it('normalizes bootstrap delivery and release base URL inputs', () => {
+    expect(normalizeDesktopSSHBootstrapStrategy(' desktop_upload ')).toBe('desktop_upload');
+    expect(normalizeDesktopSSHReleaseBaseURL('https://mirror.example.invalid/releases/')).toBe(
+      'https://mirror.example.invalid/releases',
     );
   });
 });

@@ -1,10 +1,17 @@
 export const DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR = 'remote_default';
 export const DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL = 'Remote user cache';
+export const DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY = 'auto';
+export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL = '';
+export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL = 'Public GitHub Releases';
+
+export type DesktopSSHBootstrapStrategy = 'auto' | 'desktop_upload' | 'remote_install';
 
 export type DesktopSSHEnvironmentDetails = Readonly<{
   ssh_destination: string;
   ssh_port: number | null;
   remote_install_dir: string;
+  bootstrap_strategy: DesktopSSHBootstrapStrategy;
+  release_base_url: string;
 }>;
 
 function compact(value: unknown): string {
@@ -54,13 +61,54 @@ export function normalizeDesktopSSHRemoteInstallDir(value: unknown): string {
   return text;
 }
 
+export function normalizeDesktopSSHBootstrapStrategy(value: unknown): DesktopSSHBootstrapStrategy {
+  const text = compact(value).toLowerCase();
+  switch (text) {
+    case '':
+    case DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY:
+      return DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY;
+    case 'desktop_upload':
+    case 'remote_install':
+      return text;
+    default:
+      throw new Error('SSH bootstrap delivery must be Automatic, Desktop Upload, or Remote Install.');
+  }
+}
+
+export function normalizeDesktopSSHReleaseBaseURL(value: unknown): string {
+  const text = compact(value);
+  if (text === '') {
+    return DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(text);
+  } catch {
+    throw new Error('Release base URL must be an absolute http:// or https:// URL.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Release base URL must use http:// or https://.');
+  }
+  parsed.hash = '';
+  parsed.search = '';
+  return parsed.toString().replace(/\/$/u, '');
+}
+
 export function normalizeDesktopSSHEnvironmentDetails(
-  value: DesktopSSHEnvironmentDetails,
+  value: Readonly<{
+    ssh_destination: unknown;
+    ssh_port: unknown;
+    remote_install_dir: unknown;
+    bootstrap_strategy: unknown;
+    release_base_url: unknown;
+  }>,
 ): DesktopSSHEnvironmentDetails {
   return {
     ssh_destination: normalizeDesktopSSHDestination(value.ssh_destination),
     ssh_port: normalizeDesktopSSHPort(value.ssh_port),
     remote_install_dir: normalizeDesktopSSHRemoteInstallDir(value.remote_install_dir),
+    bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(value.bootstrap_strategy),
+    release_base_url: normalizeDesktopSSHReleaseBaseURL(value.release_base_url),
   };
 }
 

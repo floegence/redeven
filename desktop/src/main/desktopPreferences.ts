@@ -8,8 +8,10 @@ import { DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND } from '../shared/desktopAccessModel
 import {
   defaultSavedSSHEnvironmentLabel,
   desktopSSHEnvironmentID,
+  normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHEnvironmentDetails,
   normalizeDesktopSSHPort,
+  normalizeDesktopSSHReleaseBaseURL,
   normalizeDesktopSSHRemoteInstallDir,
   normalizeDesktopSSHDestination,
   type DesktopSSHEnvironmentDetails,
@@ -92,6 +94,8 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   ssh_destination?: unknown;
   ssh_port?: unknown;
   remote_install_dir?: unknown;
+  bootstrap_strategy?: unknown;
+  release_base_url?: unknown;
   source?: unknown;
   last_used_at_ms?: unknown;
 }>;
@@ -346,6 +350,8 @@ function normalizeSavedSSHEnvironmentCandidate(
       ssh_destination: normalizeDesktopSSHDestination(candidate.ssh_destination),
       ssh_port: normalizeDesktopSSHPort(candidate.ssh_port),
       remote_install_dir: normalizeDesktopSSHRemoteInstallDir(candidate.remote_install_dir),
+      bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(candidate.bootstrap_strategy),
+      release_base_url: normalizeDesktopSSHReleaseBaseURL(candidate.release_base_url),
     };
   } catch {
     return null;
@@ -359,6 +365,8 @@ function normalizeSavedSSHEnvironmentCandidate(
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
     remote_install_dir: details.remote_install_dir,
+    bootstrap_strategy: details.bootstrap_strategy,
+    release_base_url: details.release_base_url,
     source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
@@ -635,6 +643,8 @@ export function upsertSavedSSHEnvironment(
     ssh_destination: details.ssh_destination,
     ssh_port: details.ssh_port,
     remote_install_dir: details.remote_install_dir,
+    bootstrap_strategy: details.bootstrap_strategy,
+    release_base_url: details.release_base_url,
     source,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
   };
@@ -742,6 +752,8 @@ export function rememberRecentSSHEnvironmentTarget(
     ssh_destination: input.ssh_destination,
     ssh_port: input.ssh_port,
     remote_install_dir: input.remote_install_dir,
+    bootstrap_strategy: input.bootstrap_strategy,
+    release_base_url: input.release_base_url,
     source: 'recent_auto',
     last_used_at_ms: Date.now(),
   });
@@ -1042,7 +1054,7 @@ export async function saveDesktopPreferences(
   const recentExternalLocalUIURLs = deriveRecentExternalLocalUIURLs(savedEnvironments);
 
   const preferencesFile: DesktopPreferencesFile = {
-    version: 5,
+    version: 6,
     local_ui_bind: nextPreferences.local_ui_bind,
     saved_environments: savedEnvironments.map((environment) => ({
       id: environment.id,
@@ -1057,6 +1069,8 @@ export async function saveDesktopPreferences(
       ssh_destination: environment.ssh_destination,
       ssh_port: environment.ssh_port,
       remote_install_dir: environment.remote_install_dir,
+      bootstrap_strategy: environment.bootstrap_strategy,
+      release_base_url: environment.release_base_url,
       source: environment.source,
       last_used_at_ms: environment.last_used_at_ms,
     })),

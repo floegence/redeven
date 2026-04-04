@@ -1,18 +1,20 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
-import type { Readable } from 'node:stream';
+import type { Readable, Writable } from 'node:stream';
 
+import { ensureDesktopSSHReleaseAsset, resolveDesktopSSHRemotePlatform, type DesktopSSHRemotePlatform } from './sshReleaseAssets';
 import { loadExternalLocalUIStartup } from './runtimeState';
-import { parseStartupReport, type StartupReport } from './startup';
 import type { DesktopSessionRuntimeHandle } from './sessionRuntime';
+import { parseStartupReport, type StartupReport } from './startup';
 import {
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   normalizeDesktopSSHEnvironmentDetails,
+  type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 
@@ -23,7 +25,11 @@ const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 15;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
 const MAX_RECENT_LOG_CHARS = 8_000;
 
-type SpawnedSSHProcess = ChildProcessByStdio<null, Readable | null, Readable>;
+type SpawnedSSHProcess = ChildProcessByStdio<Writable | null, Readable | null, Readable>;
+type RemoteInstallStrategy = 'desktop_upload' | 'remote_install';
+type PreparedDesktopSSHUploadAsset = Readonly<{
+  archiveData: Buffer;
+}>;
 
 type RecentLogs = Readonly<{
   master_stderr: string;
@@ -46,6 +52,13 @@ type SSHCommandResult = Readonly<{
   stderr: string;
 }>;
 
+class DesktopSSHUploadAssetPreparationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DesktopSSHUploadAssetPreparationError';
+  }
+}
+
 export type ManagedSSHRuntime = Readonly<{
   startup: StartupReport;
   local_forward_url: string;
@@ -59,6 +72,7 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   sshBinary?: string;
   installScriptURL?: string;
   tempRoot?: string;
+  assetCacheRoot?: string;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
   connectTimeoutSeconds?: number;
@@ -163,21 +177,28 @@ function buildRemoteInstallRootShell(): string {
   ].join('\n');
 }
 
-export function buildManagedSSHControlScript(): string {
+export function buildManagedSSHRuntimeReadyScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
     'release_tag="$2"',
-    'session_token="$3"',
-    'install_script_url="$4"',
+    'binary="${install_root%/}/${release_tag}/bin/redeven"',
+    'if [ ! -x "$binary" ]; then',
+    '  exit 1',
+    'fi',
+    '"$binary" version >/dev/null 2>&1',
+  ].join('\n');
+}
+
+export function buildManagedSSHRemoteInstallScript(): string {
+  return [
+    'set -eu',
+    buildRemoteInstallRootShell(),
+    'release_tag="$2"',
+    'install_script_url="$3"',
     'version_root="${install_root%/}/${release_tag}"',
     'bin_dir="${version_root}/bin"',
     'binary="${bin_dir}/redeven"',
-    'session_dir="${version_root}/sessions/${session_token}"',
-    'report_path="${session_dir}/startup-report.json"',
-    'cleanup() { rm -rf "$session_dir"; }',
-    'trap cleanup EXIT INT TERM',
-    'mkdir -p "$session_dir"',
     'install_runtime() {',
     '  curl -fsSL "$install_script_url" | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$release_tag" REDEVEN_INSTALL_DIR="$bin_dir" sh',
     '}',
@@ -186,6 +207,58 @@ export function buildManagedSSHControlScript(): string {
     'fi',
     'if ! "$binary" version >/dev/null 2>&1; then',
     '  install_runtime',
+    'fi',
+  ].join('\n');
+}
+
+export function buildManagedSSHUploadedInstallScript(): string {
+  return [
+    'set -eu',
+    buildRemoteInstallRootShell(),
+    'release_tag="$2"',
+    'archive_path="$3"',
+    'upload_dir="$4"',
+    'version_root="${install_root%/}/${release_tag}"',
+    'bin_dir="${version_root}/bin"',
+    'extract_dir="$(mktemp -d "${upload_dir%/}/extract.XXXXXX")"',
+    'cleanup() { rm -rf "$extract_dir" "$upload_dir"; }',
+    'trap cleanup EXIT INT TERM',
+    'mkdir -p "$bin_dir"',
+    'if tar --warning=no-unknown-keyword -xzf "$archive_path" -C "$extract_dir" 2>/dev/null; then',
+    '  :',
+    'elif tar -xzf "$archive_path" -C "$extract_dir"; then',
+    '  :',
+    'else',
+    '  echo "failed to extract uploaded Redeven archive" >&2',
+    '  exit 1',
+    'fi',
+    'binary_path="${extract_dir}/redeven"',
+    'if [ ! -f "$binary_path" ]; then',
+    '  echo "uploaded Redeven archive did not contain redeven" >&2',
+    '  exit 1',
+    'fi',
+    'mv "$binary_path" "${bin_dir}/redeven"',
+    'chmod +x "${bin_dir}/redeven"',
+  ].join('\n');
+}
+
+export function buildManagedSSHStartScript(): string {
+  return [
+    'set -eu',
+    buildRemoteInstallRootShell(),
+    'release_tag="$2"',
+    'session_token="$3"',
+    'version_root="${install_root%/}/${release_tag}"',
+    'bin_dir="${version_root}/bin"',
+    'binary="${bin_dir}/redeven"',
+    'session_dir="${version_root}/sessions/${session_token}"',
+    'report_path="${session_dir}/startup-report.json"',
+    'cleanup() { rm -rf "$session_dir"; }',
+    'trap cleanup EXIT INT TERM',
+    'mkdir -p "$session_dir"',
+    'if [ ! -x "$binary" ]; then',
+    '  echo "Redeven runtime is not installed at ${binary}" >&2',
+    '  exit 1',
     'fi',
     'exec "$binary" run --mode local --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
   ].join('\n');
@@ -280,10 +353,11 @@ async function runSSHOnce(
   logs: MutableRecentLogs,
   key: keyof MutableRecentLogs,
   onLog: StartManagedSSHRuntimeArgs['onLog'],
+  stdinData?: Buffer,
 ): Promise<SSHCommandResult> {
   return new Promise<SSHCommandResult>((resolve, reject) => {
     const child = spawn(sshBinary, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     let stdout = '';
     let stderr = '';
@@ -292,6 +366,12 @@ async function runSSHOnce(
     child.once('error', (error) => {
       spawnError = error instanceof Error ? error : new Error(String(error));
     });
+
+    if (stdinData) {
+      child.stdin?.end(stdinData);
+    } else {
+      child.stdin?.end();
+    }
 
     if (child.stdout) {
       child.stdout.setEncoding('utf8');
@@ -368,6 +448,313 @@ async function waitForMasterReady(args: Readonly<{
   }
 }
 
+async function remoteRuntimeIsInstalled(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  runtimeReleaseTag: string;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<boolean> {
+  const result = await runSSHOnce(
+    args.sshBinary,
+    [
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshTargetArgs(args.target),
+      'sh', '-lc', buildManagedSSHRuntimeReadyScript(), 'redeven-ssh-runtime-ready',
+      args.target.remote_install_dir,
+      args.runtimeReleaseTag,
+    ],
+    args.logs,
+    'control_stderr',
+    args.onLog,
+  );
+  return result.exit_code === 0;
+}
+
+async function probeRemotePlatform(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<DesktopSSHRemotePlatform> {
+  const result = await runSSHOnce(
+    args.sshBinary,
+    [
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshTargetArgs(args.target),
+      'sh', '-lc', 'set -eu\nuname -s\nuname -m',
+    ],
+    args.logs,
+    'control_stderr',
+    args.onLog,
+  );
+  if (result.exit_code !== 0) {
+    throw readinessFailure('Desktop could not determine the remote platform for SSH bootstrap.', args.logs);
+  }
+  const lines = result.stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+  if (lines.length < 2) {
+    throw readinessFailure('Desktop received an incomplete remote platform probe result over SSH.', args.logs);
+  }
+  return resolveDesktopSSHRemotePlatform(lines[0], lines[1]);
+}
+
+async function createRemoteTempDir(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<string> {
+  const result = await runSSHOnce(
+    args.sshBinary,
+    [
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshTargetArgs(args.target),
+      'sh', '-lc', 'set -eu\numask 077\nmktemp -d "${TMPDIR:-/tmp}/redeven-ssh-upload.XXXXXX"',
+    ],
+    args.logs,
+    'control_stderr',
+    args.onLog,
+  );
+  if (result.exit_code !== 0) {
+    throw readinessFailure('Desktop could not allocate a remote temporary directory for SSH upload.', args.logs);
+  }
+  const remoteDir = compact(result.stdout);
+  if (remoteDir === '') {
+    throw readinessFailure('Desktop received an empty remote upload directory from SSH bootstrap.', args.logs);
+  }
+  return remoteDir;
+}
+
+async function removeRemotePath(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  remotePath: string;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<void> {
+  if (compact(args.remotePath) === '') {
+    return;
+  }
+  await runSSHOnce(
+    args.sshBinary,
+    [
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshTargetArgs(args.target),
+      'sh', '-lc', 'set -eu\nrm -rf "$1"', 'redeven-ssh-cleanup-path',
+      args.remotePath,
+    ],
+    args.logs,
+    'control_stderr',
+    args.onLog,
+  ).catch(() => undefined);
+}
+
+function installStrategyOrder(strategy: DesktopSSHBootstrapStrategy): readonly RemoteInstallStrategy[] {
+  switch (strategy) {
+    case 'desktop_upload':
+      return ['desktop_upload'];
+    case 'remote_install':
+      return ['remote_install'];
+    default:
+      return ['desktop_upload', 'remote_install'];
+  }
+}
+
+async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  runtimeReleaseTag: string;
+  installScriptURL: string;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<void> {
+  const result = await runSSHOnce(
+    args.sshBinary,
+    [
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+      ...sshTargetArgs(args.target),
+      'sh', '-lc', buildManagedSSHRemoteInstallScript(), 'redeven-ssh-remote-install',
+      args.target.remote_install_dir,
+      args.runtimeReleaseTag,
+      args.installScriptURL,
+    ],
+    args.logs,
+    'control_stderr',
+    args.onLog,
+  );
+  if (result.exit_code !== 0) {
+    throw readinessFailure('Desktop could not install Redeven on the remote host using the remote installer.', args.logs);
+  }
+}
+
+async function prepareDesktopSSHUploadAsset(args: Readonly<{
+  target: DesktopSSHEnvironmentDetails;
+  runtimeReleaseTag: string;
+  assetCacheRoot: string;
+  platform: DesktopSSHRemotePlatform;
+}>): Promise<PreparedDesktopSSHUploadAsset> {
+  try {
+    const asset = await ensureDesktopSSHReleaseAsset({
+      releaseTag: args.runtimeReleaseTag,
+      releaseBaseURL: args.target.release_base_url,
+      platform: args.platform,
+      cacheRoot: args.assetCacheRoot,
+    });
+    return {
+      archiveData: await fs.readFile(asset.archive_path),
+    };
+  } catch (error) {
+    throw new DesktopSSHUploadAssetPreparationError(
+      `Desktop could not prepare the ${args.platform.platform_label} Redeven release archive locally: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  runtimeReleaseTag: string;
+  platform: DesktopSSHRemotePlatform;
+  archiveData: Buffer;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<void> {
+  const remoteTempDir = await createRemoteTempDir(args);
+  const remoteArchivePath = `${remoteTempDir}/redeven.tar.gz`;
+
+  try {
+    const uploadResult = await runSSHOnce(
+      args.sshBinary,
+      [
+        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+        ...sshTargetArgs(args.target),
+        'sh', '-lc', 'set -eu\ncat > "$1"', 'redeven-ssh-upload-archive',
+        remoteArchivePath,
+      ],
+      args.logs,
+      'control_stderr',
+      args.onLog,
+      args.archiveData,
+    );
+    if (uploadResult.exit_code !== 0) {
+      throw readinessFailure(
+        `Desktop could not upload the ${args.platform.release_package_name} release archive over SSH.`,
+        args.logs,
+      );
+    }
+
+    const installResult = await runSSHOnce(
+      args.sshBinary,
+      [
+        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
+        ...sshTargetArgs(args.target),
+        'sh', '-lc', buildManagedSSHUploadedInstallScript(), 'redeven-ssh-upload-install',
+        args.target.remote_install_dir,
+        args.runtimeReleaseTag,
+        remoteArchivePath,
+        remoteTempDir,
+      ],
+      args.logs,
+      'control_stderr',
+      args.onLog,
+    );
+    if (installResult.exit_code !== 0) {
+      throw readinessFailure(
+        `Desktop could not install the uploaded ${args.platform.platform_label} Redeven package on the remote host.`,
+        args.logs,
+      );
+    }
+  } finally {
+    await removeRemotePath({
+      ...args,
+      remotePath: remoteTempDir,
+    });
+  }
+}
+
+async function ensureRemoteRuntimeInstalled(args: Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  runtimeReleaseTag: string;
+  installScriptURL: string;
+  assetCacheRoot: string;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+}>): Promise<void> {
+  if (await remoteRuntimeIsInstalled(args)) {
+    return;
+  }
+
+  const failures: string[] = [];
+  for (const strategy of installStrategyOrder(args.target.bootstrap_strategy)) {
+    try {
+      if (strategy === 'desktop_upload') {
+        const platform = await probeRemotePlatform(args);
+        let preparedUpload: PreparedDesktopSSHUploadAsset;
+        try {
+          preparedUpload = await prepareDesktopSSHUploadAsset({
+            target: args.target,
+            runtimeReleaseTag: args.runtimeReleaseTag,
+            assetCacheRoot: args.assetCacheRoot,
+            platform,
+          });
+        } catch (error) {
+          if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError) {
+            failures.push(`${strategy}: ${error.message}`);
+            continue;
+          }
+          throw error;
+        }
+        await installRemoteRuntimeViaDesktopUpload({
+          sshBinary: args.sshBinary,
+          target: args.target,
+          controlSocketPath: args.controlSocketPath,
+          connectTimeoutSeconds: args.connectTimeoutSeconds,
+          runtimeReleaseTag: args.runtimeReleaseTag,
+          platform,
+          archiveData: preparedUpload.archiveData,
+          logs: args.logs,
+          onLog: args.onLog,
+        });
+      } else {
+        await installRemoteRuntimeViaRemoteInstall(args);
+      }
+      if (await remoteRuntimeIsInstalled(args)) {
+        return;
+      }
+      failures.push(`${strategy}: remote runtime remained unavailable after installation.`);
+    } catch (error) {
+      failures.push(`${strategy}: ${error instanceof Error ? error.message : String(error)}`);
+      if (strategy === 'desktop_upload' && args.target.bootstrap_strategy === 'auto') {
+        break;
+      }
+    }
+  }
+
+  const attempts = failures.map((failure) => `- ${failure}`).join('\n');
+  throw readinessFailure(
+    `Desktop could not install the remote Redeven runtime over SSH.\n\nAttempts:\n${attempts}`,
+    args.logs,
+  );
+}
+
 async function waitForRemoteStartupReport(args: Readonly<{
   sshBinary: string;
   target: DesktopSSHEnvironmentDetails;
@@ -429,6 +816,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   const sshBinary = compact(args.sshBinary) || 'ssh';
   const installScriptURL = compact(args.installScriptURL) || PUBLIC_INSTALL_SCRIPT_URL;
   const tempRoot = compact(args.tempRoot) || os.tmpdir();
+  const assetCacheRoot = compact(args.assetCacheRoot) || path.join(tempRoot, 'redeven-ssh-release-cache');
   const startupTimeoutMs = args.startupTimeoutMs ?? DEFAULT_SSH_STARTUP_TIMEOUT_MS;
   const stopTimeoutMs = args.stopTimeoutMs ?? DEFAULT_SSH_STOP_TIMEOUT_MS;
   const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
@@ -484,15 +872,25 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       getMasterProcess: () => masterProcess,
     });
 
-    const controlScript = buildManagedSSHControlScript();
+    await ensureRemoteRuntimeInstalled({
+      sshBinary,
+      target,
+      controlSocketPath,
+      connectTimeoutSeconds,
+      runtimeReleaseTag,
+      installScriptURL,
+      assetCacheRoot,
+      logs,
+      onLog: args.onLog,
+    });
+
     controlProcess = spawn(sshBinary, [
       ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds),
       ...sshTargetArgs(target),
-      'sh', '-lc', controlScript, 'redeven-ssh-start',
+      'sh', '-lc', buildManagedSSHStartScript(), 'redeven-ssh-start',
       target.remote_install_dir,
       runtimeReleaseTag,
       sessionToken,
-      installScriptURL,
     ], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
