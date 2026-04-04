@@ -4911,14 +4911,7 @@ func (r *run) buildSocialSystemPrompt() string {
 	}
 	core = append(core, "")
 	core = append(core, buildMarkdownOutputContractLines()...)
-	cwd := strings.TrimSpace(r.workingDir)
-	if cwd == "" {
-		cwd = strings.TrimSpace(r.agentHomeDir)
-	}
-	runtime := []string{
-		"## Current Context",
-		fmt.Sprintf("- Working directory: %s", cwd),
-	}
+	runtime := buildBasicPromptCurrentContextLines(promptWorkingDirForRun(r), currentPromptLocalTimeContext(time.Now))
 	return strings.Join([]string{strings.Join(core, "\n"), strings.Join(runtime, "\n")}, "\n\n")
 }
 
@@ -4937,14 +4930,7 @@ func (r *run) buildCreativeSystemPrompt() string {
 	}
 	core = append(core, "")
 	core = append(core, buildMarkdownOutputContractLines()...)
-	cwd := strings.TrimSpace(r.workingDir)
-	if cwd == "" {
-		cwd = strings.TrimSpace(r.agentHomeDir)
-	}
-	runtime := []string{
-		"## Current Context",
-		fmt.Sprintf("- Working directory: %s", cwd),
-	}
+	runtime := buildBasicPromptCurrentContextLines(promptWorkingDirForRun(r), currentPromptLocalTimeContext(time.Now))
 	return strings.Join([]string{strings.Join(core, "\n"), strings.Join(runtime, "\n")}, "\n\n")
 }
 

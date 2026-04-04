@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/floegence/redeven/internal/config"
 )
@@ -29,6 +30,7 @@ type promptTodoStatus struct {
 
 type promptRuntimeSnapshot struct {
 	WorkingDir                     string
+	LocalTime                      promptLocalTimeContext
 	RoundIndex                     int
 	IsFirstRound                   bool
 	Mode                           string
@@ -209,13 +211,7 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 		state.InteractionContract,
 	)
 	completionContract := completionContractForExecutionContract(executionContract)
-	cwd := ""
-	if r != nil {
-		cwd = strings.TrimSpace(r.workingDir)
-		if cwd == "" {
-			cwd = strings.TrimSpace(r.agentHomeDir)
-		}
-	}
+	cwd := promptWorkingDirForRun(r)
 
 	availableToolNames := joinToolNames(tools)
 	if len(capability.AllowedTools) > 0 {
@@ -232,6 +228,7 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 
 	return promptRuntimeSnapshot{
 		WorkingDir:          cwd,
+		LocalTime:           currentPromptLocalTimeContext(time.Now),
 		RoundIndex:          round,
 		IsFirstRound:        isFirstRound,
 		Mode:                strings.TrimSpace(mode),
@@ -484,6 +481,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
 		"- Prefer autonomous continuation whenever available tools can make progress.",
 		"- If information is insufficient and tools cannot help, follow the interaction policy in runtime context.",
+		"- When the user uses relative dates such as today, tomorrow, or yesterday, resolve them against the current date and timezone in runtime context, and prefer explicit absolute dates when clarity matters.",
 		"- Prefer concrete choices over template placeholders like `YYYY-MM-DD`; the UI already provides a custom fallback input.",
 	)
 	return newPromptSection("mandatory_rules", lines...)
@@ -701,6 +699,9 @@ func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSect
 	lines := []string{
 		"## Current Context",
 		fmt.Sprintf("- Working directory: %s", snapshot.WorkingDir),
+	}
+	lines = append(lines, renderPromptLocalTimeContextLines(snapshot.LocalTime)...)
+	lines = append(lines,
 		fmt.Sprintf("- Current round: %d (first_round=%t)", snapshot.RoundIndex+1, snapshot.IsFirstRound),
 		fmt.Sprintf("- Mode: %s", snapshot.Mode),
 		fmt.Sprintf("- Prompt profile: %s", snapshot.PromptProfile),
@@ -715,7 +716,7 @@ func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSect
 		fmt.Sprintf("- Objective: %s", snapshot.Objective),
 		fmt.Sprintf("- Recent errors: %s", recentErrors),
 		fmt.Sprintf("- Todo tracking: %s", todoStatus),
-	}
+	)
 	lines = append(lines, interactionContractRuntimeLines(snapshot.InteractionContract)...)
 	if snapshot.AllowUserInteraction {
 		lines = append(lines, fmt.Sprintf("- Ask-user question batches supported: %t", snapshot.SupportsAskUserQuestionBatches))

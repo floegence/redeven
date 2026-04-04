@@ -20,7 +20,8 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
   - a cacheable static prefix for durable operating policy;
   - a dynamic runtime tail for execution/completion contracts, runtime context, interaction contract, and skills;
   - overlay sections for recovery or exception guidance.
-- Static prefix caching is intentionally conservative and excludes volatile facts such as the current objective text, round counters, todo counts, recent errors, skill overlays, and exception overlays.
+- Static prefix caching is intentionally conservative and excludes volatile facts such as the current objective text, round counters, local date/timezone context, todo counts, recent errors, skill overlays, and exception overlays.
+- Runtime context includes authoritative local date and timezone facts sampled from the runtime host when the prompt is built, so relative date references can be grounded without adding scenario-specific heuristics.
 - Runtime gates remain authoritative for `ask_user` and `task_complete`; prompt structure guides model behavior but does not replace deterministic runtime validation.
 - `prompt_profile` is a real behavior switch, not metadata only:
   - `main_interactive`: the normal top-level Flower run that may ask the user for structured input when capability allows it;
