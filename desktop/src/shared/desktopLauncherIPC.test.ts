@@ -43,6 +43,43 @@ describe('desktopLauncherIPC', () => {
       kind: 'delete_saved_environment',
       environment_id: 'env-1',
     });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_ssh_environment',
+      environment_id: ' ssh-1 ',
+      label: ' SSH lab ',
+      ssh_destination: ' devbox ',
+      ssh_port: ' 2222 ',
+      remote_install_dir: ' /opt/redeven ',
+    })).toEqual({
+      kind: 'open_ssh_environment',
+      environment_id: 'ssh-1',
+      label: 'SSH lab',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: '/opt/redeven',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'upsert_saved_ssh_environment',
+      environment_id: ' ssh-1 ',
+      label: ' SSH lab ',
+      ssh_destination: ' devbox ',
+      ssh_port: '',
+      remote_install_dir: ' ',
+    })).toEqual({
+      kind: 'upsert_saved_ssh_environment',
+      environment_id: 'ssh-1',
+      label: 'SSH lab',
+      ssh_destination: 'devbox',
+      ssh_port: null,
+      remote_install_dir: '',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'delete_saved_ssh_environment',
+      environment_id: ' ssh-1 ',
+    })).toEqual({
+      kind: 'delete_saved_ssh_environment',
+      environment_id: 'ssh-1',
+    });
   });
 
   it('rejects unsupported or incomplete launcher actions', () => {

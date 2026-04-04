@@ -41,6 +41,7 @@ describe('DesktopWelcomeShell', () => {
             last_used_at_ms: 10,
           },
         ],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
         control_planes: [],
       },
@@ -72,6 +73,7 @@ describe('DesktopWelcomeShell', () => {
           env_token: 'token-123',
         },
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       },
@@ -127,6 +129,7 @@ describe('DesktopWelcomeShell', () => {
             last_used_at_ms: 10,
           },
         ],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [
           'http://192.168.1.12:24000/',
           'http://192.168.1.11:24000/',
@@ -220,5 +223,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Add Control Plane');
     expect(appSrc).toContain('Desktop Session Token');
     expect(appSrc).toContain('fixed provider protocol');
+  });
+
+  it('includes SSH connection mode copy inside the connection dialog source', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("label: 'Redeven URL'");
+    expect(appSrc).toContain("label: 'SSH'");
+    expect(appSrc).toContain('Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.');
+    expect(appSrc).toContain('SSH Destination');
+    expect(appSrc).toContain('Remote Install Directory');
+    expect(appSrc).toContain('Forwarded UI:');
   });
 });

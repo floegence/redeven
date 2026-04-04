@@ -6,6 +6,15 @@ import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionTypes';
 import { DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND } from '../shared/desktopAccessModel';
 import {
+  defaultSavedSSHEnvironmentLabel,
+  desktopSSHEnvironmentID,
+  normalizeDesktopSSHEnvironmentDetails,
+  normalizeDesktopSSHPort,
+  normalizeDesktopSSHRemoteInstallDir,
+  normalizeDesktopSSHDestination,
+  type DesktopSSHEnvironmentDetails,
+} from '../shared/desktopSSH';
+import {
   desktopControlPlaneKey,
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
@@ -34,6 +43,13 @@ export type DesktopSavedEnvironment = Readonly<{
   last_used_at_ms: number;
 }>;
 
+export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails & {
+  id: string;
+  label: string;
+  source: DesktopSavedEnvironmentSource;
+  last_used_at_ms: number;
+}>;
+
 export type DesktopSavedControlPlane = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
@@ -47,6 +63,7 @@ export type DesktopPreferences = Readonly<{
   local_ui_password_configured: boolean;
   pending_bootstrap: PendingBootstrap | null;
   saved_environments: readonly DesktopSavedEnvironment[];
+  saved_ssh_environments: readonly DesktopSavedSSHEnvironment[];
   recent_external_local_ui_urls: readonly string[];
   control_planes: readonly DesktopSavedControlPlane[];
 }>;
@@ -69,6 +86,16 @@ type DesktopSavedEnvironmentFile = Readonly<{
   last_used_at_ms?: unknown;
 }>;
 
+type DesktopSavedSSHEnvironmentFile = Readonly<{
+  id?: unknown;
+  label?: unknown;
+  ssh_destination?: unknown;
+  ssh_port?: unknown;
+  remote_install_dir?: unknown;
+  source?: unknown;
+  last_used_at_ms?: unknown;
+}>;
+
 type DesktopControlPlaneAccountFile = Readonly<{
   user_public_id?: unknown;
   user_display_name?: unknown;
@@ -86,6 +113,7 @@ type DesktopPreferencesFile = Readonly<{
   version?: number;
   local_ui_bind?: string;
   saved_environments?: readonly DesktopSavedEnvironmentFile[];
+  saved_ssh_environments?: readonly DesktopSavedSSHEnvironmentFile[];
   recent_external_local_ui_urls?: readonly unknown[];
   control_planes?: readonly DesktopControlPlaneFile[];
   pending_bootstrap?: Readonly<{
@@ -128,6 +156,13 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   last_used_at_ms?: number;
 }>;
 
+export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironmentDetails & {
+  environment_id: string;
+  label: string;
+  source?: DesktopSavedEnvironmentSource;
+  last_used_at_ms?: number;
+}>;
+
 export type UpsertDesktopSavedControlPlaneInput = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
@@ -137,6 +172,7 @@ export type UpsertDesktopSavedControlPlaneInput = Readonly<{
 
 const MAX_RECENT_EXTERNAL_LOCAL_UI_URLS = 5;
 const MAX_SAVED_ENVIRONMENTS = 20;
+const MAX_SAVED_SSH_ENVIRONMENTS = 20;
 
 export function createPlaintextSecretCodec(): DesktopSecretCodec {
   return {
@@ -179,6 +215,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     local_ui_password_configured: false,
     pending_bootstrap: null,
     saved_environments: [],
+    saved_ssh_environments: [],
     recent_external_local_ui_urls: [],
     control_planes: [],
   };
@@ -245,6 +282,18 @@ function sortSavedEnvironmentsByLastUsed(
   ));
 }
 
+function sortSavedSSHEnvironmentsByLastUsed(
+  environments: readonly DesktopSavedSSHEnvironment[],
+): readonly DesktopSavedSSHEnvironment[] {
+  return [...environments].sort((left, right) => (
+    right.last_used_at_ms - left.last_used_at_ms
+    || left.label.localeCompare(right.label)
+    || left.ssh_destination.localeCompare(right.ssh_destination)
+    || String(left.ssh_port ?? '').localeCompare(String(right.ssh_port ?? ''))
+    || left.remote_install_dir.localeCompare(right.remote_install_dir)
+  ));
+}
+
 function sortSavedControlPlanes(
   controlPlanes: readonly DesktopSavedControlPlane[],
 ): readonly DesktopSavedControlPlane[] {
@@ -277,6 +326,39 @@ function normalizeSavedEnvironmentCandidate(
     id: environmentID,
     label,
     local_ui_url: normalizedURL,
+    source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
+    last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
+  };
+}
+
+function normalizeSavedSSHEnvironmentCandidate(
+  value: unknown,
+  fallbackLastUsedAtMS: number,
+): DesktopSavedSSHEnvironment | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as DesktopSavedSSHEnvironmentFile;
+  let details: DesktopSSHEnvironmentDetails;
+  try {
+    details = {
+      ssh_destination: normalizeDesktopSSHDestination(candidate.ssh_destination),
+      ssh_port: normalizeDesktopSSHPort(candidate.ssh_port),
+      remote_install_dir: normalizeDesktopSSHRemoteInstallDir(candidate.remote_install_dir),
+    };
+  } catch {
+    return null;
+  }
+
+  const environmentID = compact(candidate.id) || desktopSSHEnvironmentID(details);
+  const label = compact(candidate.label) || defaultSavedSSHEnvironmentLabel(details);
+  return {
+    id: environmentID,
+    label,
+    ssh_destination: details.ssh_destination,
+    ssh_port: details.ssh_port,
+    remote_install_dir: details.remote_install_dir,
     source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
@@ -410,6 +492,25 @@ export function normalizeSavedEnvironments(
   return sortSavedEnvironmentsByLastUsed(normalized).slice(0, MAX_SAVED_ENVIRONMENTS);
 }
 
+export function normalizeSavedSSHEnvironments(
+  values: readonly unknown[] | null | undefined,
+): readonly DesktopSavedSSHEnvironment[] {
+  const sourceValues = Array.isArray(values) ? values : [];
+  const normalized: DesktopSavedSSHEnvironment[] = [];
+  const seenIDs = new Set<string>();
+
+  for (let index = 0; index < sourceValues.length; index += 1) {
+    const environment = normalizeSavedSSHEnvironmentCandidate(sourceValues[index], sourceValues.length - index);
+    if (!environment || seenIDs.has(environment.id)) {
+      continue;
+    }
+    seenIDs.add(environment.id);
+    normalized.push(environment);
+  }
+
+  return sortSavedSSHEnvironmentsByLastUsed(normalized).slice(0, MAX_SAVED_SSH_ENVIRONMENTS);
+}
+
 function decodeDesktopControlPlaneSessionTokens(
   codec: DesktopSecretCodec,
   values: readonly DesktopControlPlaneSecretFile[] | null | undefined,
@@ -467,7 +568,9 @@ export function deriveRecentExternalLocalUIURLs(
   savedEnvironments: readonly DesktopSavedEnvironment[],
 ): readonly string[] {
   return normalizeRecentExternalLocalUIURLs(
-    sortSavedEnvironmentsByLastUsed(savedEnvironments).map((environment) => environment.local_ui_url),
+    sortSavedEnvironmentsByLastUsed(
+      savedEnvironments.filter((environment) => environment.source === 'saved' || environment.source === 'recent_auto'),
+    ).map((environment) => environment.local_ui_url),
   );
 }
 
@@ -504,6 +607,53 @@ export function upsertSavedEnvironment(
     ...preferences,
     saved_environments: savedEnvironments,
     recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
+  };
+}
+
+export function upsertSavedSSHEnvironment(
+  preferences: DesktopPreferences,
+  input: UpsertDesktopSavedSSHEnvironmentInput,
+): DesktopPreferences {
+  const details = normalizeDesktopSSHEnvironmentDetails(input);
+  const environmentID = compact(input.environment_id) || desktopSSHEnvironmentID(details);
+  const existing = preferences.saved_ssh_environments.find((environment) => (
+    environment.id === environmentID
+    || (
+      environment.ssh_destination === details.ssh_destination
+      && environment.ssh_port === details.ssh_port
+      && environment.remote_install_dir === details.remote_install_dir
+    )
+  ));
+  const label = compact(input.label) || existing?.label || defaultSavedSSHEnvironmentLabel(details);
+  const requestedSource = input.source;
+  const source: DesktopSavedEnvironmentSource = existing?.source === 'saved' || requestedSource === 'saved'
+    ? 'saved'
+    : normalizeSavedEnvironmentSource(requestedSource, existing?.source ?? 'saved');
+  const nextEnvironment: DesktopSavedSSHEnvironment = {
+    id: environmentID,
+    label,
+    ssh_destination: details.ssh_destination,
+    ssh_port: details.ssh_port,
+    remote_install_dir: details.remote_install_dir,
+    source,
+    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
+  };
+
+  const savedSSHEnvironments = sortSavedSSHEnvironmentsByLastUsed([
+    nextEnvironment,
+    ...preferences.saved_ssh_environments.filter((environment) => (
+      environment.id !== environmentID
+      && (
+        environment.ssh_destination !== details.ssh_destination
+        || environment.ssh_port !== details.ssh_port
+        || environment.remote_install_dir !== details.remote_install_dir
+      )
+    )),
+  ]).slice(0, MAX_SAVED_SSH_ENVIRONMENTS);
+
+  return {
+    ...preferences,
+    saved_ssh_environments: savedSSHEnvironments,
   };
 }
 
@@ -544,6 +694,17 @@ export function deleteSavedEnvironment(
   };
 }
 
+export function deleteSavedSSHEnvironment(
+  preferences: DesktopPreferences,
+  environmentID: string,
+): DesktopPreferences {
+  const cleanEnvironmentID = compact(environmentID);
+  return {
+    ...preferences,
+    saved_ssh_environments: preferences.saved_ssh_environments.filter((environment) => environment.id !== cleanEnvironmentID),
+  };
+}
+
 export function deleteSavedControlPlane(
   preferences: DesktopPreferences,
   providerOrigin: string,
@@ -566,6 +727,21 @@ export function rememberRecentExternalLocalUITarget(
     environment_id: desktopEnvironmentID(rawURL),
     label: '',
     local_ui_url: rawURL,
+    source: 'recent_auto',
+    last_used_at_ms: Date.now(),
+  });
+}
+
+export function rememberRecentSSHEnvironmentTarget(
+  preferences: DesktopPreferences,
+  input: DesktopSSHEnvironmentDetails & Readonly<{ label?: string; environment_id?: string }>,
+): DesktopPreferences {
+  return upsertSavedSSHEnvironment(preferences, {
+    environment_id: compact(input.environment_id) || desktopSSHEnvironmentID(input),
+    label: compact(input.label),
+    ssh_destination: input.ssh_destination,
+    ssh_port: input.ssh_port,
+    remote_install_dir: input.remote_install_dir,
     source: 'recent_auto',
     last_used_at_ms: Date.now(),
   });
@@ -687,6 +863,7 @@ export function validateDesktopSettingsDraft(
     local_ui_password_configured: passwordState.local_ui_password_configured,
     pending_bootstrap: pendingBootstrap,
     saved_environments: [],
+    saved_ssh_environments: [],
     recent_external_local_ui_urls: [],
     control_planes: [],
   };
@@ -831,6 +1008,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     preferencesFile?.saved_environments,
     preferencesFile?.recent_external_local_ui_urls,
   );
+  const savedSSHEnvironments = normalizeSavedSSHEnvironments(preferencesFile?.saved_ssh_environments);
   const controlPlanes = normalizeSavedControlPlanes(
     preferencesFile?.control_planes,
     controlPlaneSessionTokensByKey,
@@ -839,6 +1017,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   return {
     ...recovered,
     saved_environments: savedEnvironments,
+    saved_ssh_environments: savedSSHEnvironments,
     recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
     control_planes: controlPlanes,
   };
@@ -858,16 +1037,26 @@ export async function saveDesktopPreferences(
     preferences.saved_environments,
     preferences.recent_external_local_ui_urls,
   );
+  const savedSSHEnvironments = normalizeSavedSSHEnvironments(preferences.saved_ssh_environments);
   const controlPlanes = sortSavedControlPlanes(preferences.control_planes);
   const recentExternalLocalUIURLs = deriveRecentExternalLocalUIURLs(savedEnvironments);
 
   const preferencesFile: DesktopPreferencesFile = {
-    version: 4,
+    version: 5,
     local_ui_bind: nextPreferences.local_ui_bind,
     saved_environments: savedEnvironments.map((environment) => ({
       id: environment.id,
       label: environment.label,
       local_ui_url: environment.local_ui_url,
+      source: environment.source,
+      last_used_at_ms: environment.last_used_at_ms,
+    })),
+    saved_ssh_environments: savedSSHEnvironments.map((environment) => ({
+      id: environment.id,
+      label: environment.label,
+      ssh_destination: environment.ssh_destination,
+      ssh_port: environment.ssh_port,
+      remote_install_dir: environment.remote_install_dir,
       source: environment.source,
       last_used_at_ms: environment.last_used_at_ms,
     })),

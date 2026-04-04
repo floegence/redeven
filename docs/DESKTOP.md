@@ -7,6 +7,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Keep `redeven` as the single runtime authority for endpoint behavior.
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse Redeven Local UI instead of introducing a second app runtime.
+- Let Desktop bootstrap a remote Redeven runtime over SSH without requiring a manual preinstall on the target machine.
 - Make environment choice explicit on every cold desktop launch.
 - Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around a launcher-window plus session-window model.
 
@@ -21,6 +22,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Session deduplication happens in Electron main through a canonical session key:
   - `managed_local` for the desktop-managed Local Environment
   - `url:<normalized-local-ui-origin>` for remote Local UI targets
+  - `ssh:<normalized-ssh-identity>` for SSH-bootstrap targets
   - `cp:<encoded-provider-origin>:env:<env_public_id>` for Control Plane environments
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
@@ -28,6 +30,7 @@ This document describes the public Electron desktop shell that ships with each `
   - `Local Environment`
   - a remembered recent Environment
   - a newly entered Redeven Local UI URL
+  - a newly entered SSH target that Desktop bootstraps on demand
   - a saved compatible `Control Plane`
 - Reopening the launcher from an active session does not disconnect anything. Existing Environment windows stay live until the user closes those specific session windows.
 - Common startup failures return to the launcher with inline context instead of bouncing users to a separate blocked-first flow.
@@ -75,6 +78,29 @@ Behavior:
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 
+When the selected target is `SSH Environment`, Desktop still keeps Redeven Local UI as the only runtime contract.
+It does not introduce a second SSH-native file or terminal protocol. Instead, Electron main:
+
+1. Validates the SSH target fields.
+2. Uses the host `ssh` client in non-interactive batch mode.
+3. Ensures the matching Redeven release exists on the remote machine through the public installer.
+4. Starts `redeven run --mode local --local-ui-bind 127.0.0.1:0` remotely.
+5. Waits for the remote startup report.
+6. Creates a local SSH port forward to that remote Local UI port.
+7. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
+
+### SSH Bootstrap Environment
+
+SSH bootstrap is intentionally transport-light and runtime-heavy:
+
+- Desktop does not ship a platform-specific remote binary blob to copy over SSH.
+- Desktop pins the remote install to the same Redeven release tag as the running desktop build.
+- The remote install path defaults to the remote user's cache and can be overridden with an absolute path.
+- The forwarded localhost URL is session-ephemeral and only used as the live session origin.
+- Session identity is derived from SSH destination, SSH port, and remote install directory so reconnecting does not create duplicates just because the forwarded local port changed.
+- Closing the Desktop session tears down the local forward and the SSH-owned remote runtime together.
+- This first phase assumes non-interactive SSH authentication (`BatchMode=yes`), so missing keys or host-key trust issues surface as actionable launcher errors instead of prompting through Desktop UI.
+
 ### Launch Outcomes
 
 The launch report distinguishes these outcomes:
@@ -115,6 +141,16 @@ Interaction rules:
 - `Local Environment` is the primary path and behaves like a workbench-style open action.
 - `Local Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window.
 - The `Add` action opens a dialog that can either connect immediately or save a remote Environment into the library.
+- `Add Connection` is a two-mode dialog:
+  - `Redeven URL`
+  - `SSH`
+- SSH mode keeps the same compact launcher shell but adds:
+  - `Label`
+  - `SSH Destination`
+  - optional `Port`
+  - compact `Advanced` section for `Remote Install Directory`
+- SSH mode explains the actual behavior inline:
+  - Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.
 - `Add Control Plane` opens a separate dialog that accepts a Provider URL plus a `desktop_session_token`.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
@@ -124,6 +160,7 @@ Interaction rules:
 - The launcher shows every currently open Environment window and can focus any of them without opening duplicates.
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a compact library table and can be opened, edited, or deleted inline.
+- Saved SSH Environments render in that same library table, but the visible target stays the SSH identity (`destination[:port]`) instead of the ephemeral forwarded localhost URL.
 - Saved Control Planes render as a separate provider list with refresh, delete, and per-environment open/focus actions.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
@@ -174,6 +211,7 @@ Desktop keeps one persisted preference model for stable `Local Environment` conf
 - `local_ui_password_configured`
 - `pending_bootstrap`
 - `saved_environments`
+- `saved_ssh_environments`
 - `recent_external_local_ui_urls`
 - `control_planes`
 
@@ -184,6 +222,7 @@ Semantics:
 - `local_ui_bind`, `local_ui_password`, and `local_ui_password_configured` apply only to future `Local Environment` opens.
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
+- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - `control_planes` stores normalized provider discovery data, the desktop account snapshot, the cached environment list, and the last sync time.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
@@ -206,6 +245,9 @@ Target validation rules:
 - External targets must use an absolute `http://` or `https://` URL.
 - The host must be `localhost` or an IP literal.
 - The shell normalizes the configured target to the Local UI origin root.
+- SSH targets accept `[user@]host` or SSH config host aliases.
+- SSH ports must be valid TCP ports when present.
+- SSH remote install directories must either use the default remote cache behavior or an absolute path.
 
 Desktop shell preferences live under the Electron user data directory, not inside the git checkout.
 
@@ -308,6 +350,8 @@ Non-goals:
 
 - Remote target unreachable
   - launcher reloads with the failing URL preserved and an inline remote-environment issue
+- SSH bootstrap failed
+  - launcher reloads with the SSH target preserved in diagnostics and an inline remote-environment issue
 - Desktop-managed startup blocked
   - launcher reloads with a `Local Environment` issue and diagnostics copy
 - Detached child windows and Ask Flower handoff stay session-scoped during recovery; only the owning Environment window receives those callbacks

@@ -1,19 +1,22 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
 import { pathToFileURL } from 'node:url';
 
-import { launchStartedFreshManagedRuntime, startManagedAgent, type ManagedAgent } from './agentProcess';
+import { launchStartedFreshManagedRuntime, startManagedAgent } from './agentProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
   clearPendingBootstrap,
   createSafeStorageSecretCodec,
   deleteSavedControlPlane,
   deleteSavedEnvironment,
+  deleteSavedSSHEnvironment,
   defaultDesktopPreferencesPaths,
   loadDesktopPreferences,
   rememberRecentExternalLocalUITarget,
+  rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
+  upsertSavedSSHEnvironment,
   validateDesktopSettingsDraft,
   type DesktopSavedControlPlane,
   type DesktopPreferences,
@@ -22,10 +25,12 @@ import {
   buildControlPlaneDesktopTarget,
   buildExternalLocalUIDesktopTarget,
   buildManagedLocalDesktopTarget,
+  buildSSHDesktopTarget,
   controlPlaneDesktopSessionKey,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
   managedLocalDesktopSessionKey,
+  sshDesktopSessionKey,
   type DesktopSessionKey,
   type DesktopSessionSummary,
   type DesktopSessionTarget,
@@ -39,6 +44,7 @@ import { parseLocalUIBind } from './localUIBind';
 import {
   buildBlockedLaunchIssue,
   buildControlPlaneIssue,
+  buildSSHConnectionIssue,
   buildDesktopWelcomeSnapshot,
   buildRemoteConnectionIssue,
   type BuildDesktopWelcomeSnapshotArgs,
@@ -49,6 +55,8 @@ import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { isAllowedAppNavigation } from './navigation';
 import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
+import { desktopSessionRuntimeHandleFromManagedAgent, type DesktopSessionRuntimeHandle } from './sessionRuntime';
+import { startManagedSSHRuntime } from './sshRuntime';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
 import {
@@ -114,6 +122,7 @@ import {
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
 import { desktopControlPlaneKey, normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
+import type { DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
 
 type OpenDesktopWelcomeOptions = Readonly<{
   surface?: DesktopLauncherSurface;
@@ -139,7 +148,7 @@ type DesktopSessionRecord = {
   child_windows: Map<string, BrowserWindow>;
   diagnostics: DesktopDiagnosticsRecorder;
   pending_handoffs: DesktopAskFlowerHandoffPayload[];
-  managed_agent: ManagedAgent | null;
+  runtime_handle: DesktopSessionRuntimeHandle | null;
   closing: boolean;
 };
 
@@ -255,11 +264,25 @@ function syncOpenSessionTargetsWithPreferences(preferences: DesktopPreferences):
   const savedLabelByURL = new Map(
     preferences.saved_environments.map((environment) => [environment.local_ui_url, environment.label]),
   );
+  const savedSSHLabelByID = new Map(
+    preferences.saved_ssh_environments.map((environment) => [environment.id, environment.label]),
+  );
   for (const session of sessionsByKey.values()) {
-    if (session.target.kind !== 'external_local_ui') {
+    if (session.target.kind === 'external_local_ui') {
+      const savedLabel = savedLabelByURL.get(session.startup.local_ui_url);
+      if (!savedLabel || savedLabel === session.target.label) {
+        continue;
+      }
+      session.target = {
+        ...session.target,
+        label: savedLabel,
+      };
       continue;
     }
-    const savedLabel = savedLabelByURL.get(session.startup.local_ui_url);
+    if (session.target.kind !== 'ssh_environment') {
+      continue;
+    }
+    const savedLabel = savedSSHLabelByID.get(session.target.environment_id);
     if (!savedLabel || savedLabel === session.target.label) {
       continue;
     }
@@ -719,7 +742,8 @@ async function createSessionRecord(
   target: DesktopSessionTarget,
   startup: StartupReport,
   options: Readonly<{
-    managedAgent?: ManagedAgent | null;
+    runtimeHandle?: DesktopSessionRuntimeHandle | null;
+    attached?: boolean;
     stealAppFocus?: boolean;
   }> = {},
 ): Promise<DesktopSessionRecord> {
@@ -738,7 +762,7 @@ async function createSessionRecord(
     child_windows: new Map(),
     diagnostics,
     pending_handoffs: [],
-    managed_agent: options.managedAgent ?? null,
+    runtime_handle: options.runtimeHandle ?? null,
     closing: false,
   };
 
@@ -759,17 +783,21 @@ async function createSessionRecord(
     diagnostics,
     target.kind === 'managed_local'
       ? 'agent_started'
+      : target.kind === 'ssh_environment'
+        ? 'ssh_environment_connected'
       : target.kind === 'controlplane_environment'
         ? 'control_plane_environment_connected'
         : 'external_target_connected',
     target.kind === 'managed_local'
       ? 'desktop opened a managed Local Environment session'
+      : target.kind === 'ssh_environment'
+        ? 'desktop opened an SSH-bootstrapped environment session'
       : target.kind === 'controlplane_environment'
         ? 'desktop opened a Control Plane environment session'
         : 'desktop connected to an external Redeven Local UI target',
     {
       target_url: startup.local_ui_url,
-      attached: options.managedAgent?.attached === true,
+      attached: options.attached === true,
       effective_run_mode: startup.effective_run_mode ?? '',
     },
   );
@@ -822,11 +850,11 @@ async function finalizeSessionClosure(
       },
     );
 
-    const managedAgent = sessionRecord.managed_agent;
-    sessionRecord.managed_agent = null;
+    const runtimeHandle = sessionRecord.runtime_handle;
+    sessionRecord.runtime_handle = null;
     sessionRecord.diagnostics.clearRuntime();
-    if (managedAgent) {
-      await managedAgent.stop();
+    if (runtimeHandle) {
+      await runtimeHandle.stop();
     }
   })().finally(() => {
     sessionCloseTasks.delete(sessionKey);
@@ -1002,9 +1030,31 @@ function resolveManagedRestartBindOverride(preferences: DesktopPreferences, star
   }
 }
 
+function resolveSSHRuntimeReleaseTag(): string {
+  const appVersion = String(process.env.REDEVEN_DESKTOP_VERSION ?? '').trim() || app.getVersion();
+  const clean = String(appVersion ?? '').trim();
+  if (clean === '') {
+    throw new Error('Desktop could not resolve the bundled runtime release tag for SSH bootstrap.');
+  }
+  return clean.startsWith('v') ? clean : `v${clean}`;
+}
+
 async function rememberRecentExternalTarget(rawURL: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await persistDesktopPreferences(rememberRecentExternalLocalUITarget(preferences, rawURL));
+}
+
+async function rememberRecentSSHTarget(
+  input: DesktopSSHEnvironmentDetails & Readonly<{ label?: string; environmentID?: string }>,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  await persistDesktopPreferences(rememberRecentSSHEnvironmentTarget(preferences, {
+    ssh_destination: input.ssh_destination,
+    ssh_port: input.ssh_port,
+    remote_install_dir: input.remote_install_dir,
+    label: input.label,
+    environment_id: input.environmentID,
+  }));
 }
 
 function savedControlPlaneByIdentity(
@@ -1118,7 +1168,8 @@ async function openControlPlaneEnvironmentWithBootstrapTicket(args: Readonly<{
     label: controlPlaneEnvironmentLabel(controlPlane, args.envPublicID, args.label),
   });
   await createSessionRecord(target, prepared.launch.managedAgent.startup, {
-    managedAgent: prepared.launch.managedAgent,
+    runtimeHandle: desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent),
+    attached: prepared.launch.managedAgent.attached,
     stealAppFocus: true,
   });
   resetLauncherIssueState();
@@ -1157,7 +1208,8 @@ async function openLocalEnvironmentFromLauncher(): Promise<DesktopLauncherAction
 
   const target = buildManagedLocalDesktopTarget();
   await createSessionRecord(target, prepared.launch.managedAgent.startup, {
-    managedAgent: prepared.launch.managedAgent,
+    runtimeHandle: desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent),
+    attached: prepared.launch.managedAgent.attached,
     stealAppFocus: true,
   });
   resetLauncherIssueState();
@@ -1223,6 +1275,102 @@ async function openRemoteEnvironmentFromLauncher(
   await createSessionRecord(target, prepared.startup, { stealAppFocus: true });
   resetLauncherIssueState();
   await rememberRecentExternalTarget(prepared.startup.local_ui_url);
+  return {
+    outcome: 'opened_environment_window',
+    session_key: target.session_key,
+  };
+}
+
+async function openSSHEnvironmentFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_ssh_environment' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const sshDetails: DesktopSSHEnvironmentDetails = {
+    ssh_destination: request.ssh_destination,
+    ssh_port: request.ssh_port,
+    remote_install_dir: request.remote_install_dir,
+  };
+  const optimisticSessionKey = sshDesktopSessionKey(sshDetails);
+  const optimisticSession = liveSession(optimisticSessionKey);
+  if (optimisticSession) {
+    if (optimisticSession.target.kind === 'ssh_environment' && request.label) {
+      optimisticSession.target = {
+        ...optimisticSession.target,
+        label: String(request.label).trim() || optimisticSession.target.label,
+      };
+    }
+    resetLauncherIssueState();
+    await rememberRecentSSHTarget({
+      ...sshDetails,
+      label: request.label,
+      environmentID: request.environment_id,
+    });
+    focusEnvironmentSession(optimisticSession.session_key, { stealAppFocus: true });
+    return {
+      outcome: 'focused_environment_window',
+      session_key: optimisticSession.session_key,
+    };
+  }
+
+  let managedSSHRuntime;
+  try {
+    managedSSHRuntime = await startManagedSSHRuntime({
+      target: sshDetails,
+      runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
+      tempRoot: app.getPath('temp'),
+      onLog: (stream, chunk) => {
+        const text = String(chunk ?? '').trim();
+        if (!text) {
+          return;
+        }
+        console.log(`[redeven:${stream}] ${text}`);
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return openUtilityWindow('launcher', {
+      entryReason: 'connect_failed',
+      issue: buildSSHConnectionIssue(
+        sshDetails,
+        'ssh_target_unreachable',
+        message || 'Desktop could not bootstrap that SSH Environment.',
+      ),
+      stealAppFocus: true,
+    });
+  }
+
+  const target = buildSSHDesktopTarget(sshDetails, {
+    environmentID: request.environment_id,
+    label: request.label,
+    forwardedLocalUIURL: managedSSHRuntime.local_forward_url,
+  });
+  const existingSession = liveSession(target.session_key);
+  if (existingSession) {
+    existingSession.target = target;
+    resetLauncherIssueState();
+    await rememberRecentSSHTarget({
+      ...sshDetails,
+      label: request.label,
+      environmentID: request.environment_id,
+    });
+    focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
+    broadcastDesktopWelcomeSnapshots();
+    await managedSSHRuntime.stop();
+    return {
+      outcome: 'focused_environment_window',
+      session_key: existingSession.session_key,
+    };
+  }
+
+  await createSessionRecord(target, managedSSHRuntime.startup, {
+    runtimeHandle: managedSSHRuntime.runtime_handle,
+    stealAppFocus: true,
+  });
+  resetLauncherIssueState();
+  await rememberRecentSSHTarget({
+    ...sshDetails,
+    label: target.label,
+    environmentID: target.environment_id,
+  });
   return {
     outcome: 'opened_environment_window',
     session_key: target.session_key,
@@ -1325,17 +1473,16 @@ async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLaunch
 
 async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActionResponse> {
   const sessionRecord = liveSession(managedLocalDesktopSessionKey());
-  if (!sessionRecord || !sessionRecord.managed_agent) {
+  if (!sessionRecord || !sessionRecord.runtime_handle || sessionRecord.runtime_handle.owner_kind !== 'managed_local_runtime') {
     return {
       ok: false,
       started: false,
       message: 'Managed runtime is not active.',
     };
   }
-
-  const previousManagedAgent = sessionRecord.managed_agent;
+  const previousRuntimeHandle = sessionRecord.runtime_handle;
   const preferences = await loadDesktopPreferencesCached();
-  const localUIBind = resolveManagedRestartBindOverride(preferences, previousManagedAgent.startup) ?? undefined;
+  const localUIBind = resolveManagedRestartBindOverride(preferences, sessionRecord.startup) ?? undefined;
 
   for (const childWindow of sessionRecord.child_windows.values()) {
     sessionKeyByWebContentsID.delete(childWindow.webContents.id);
@@ -1350,11 +1497,11 @@ async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActi
       'target_restarting',
       'desktop requested a managed agent restart',
       {
-        attached: previousManagedAgent.attached,
+        attached: true,
         local_ui_bind_override: localUIBind ?? '',
       },
     );
-    await previousManagedAgent.stop();
+    await previousRuntimeHandle.stop();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -1364,7 +1511,7 @@ async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActi
     };
   }
 
-  sessionRecord.managed_agent = null;
+  sessionRecord.runtime_handle = null;
 
   const prepared = await prepareManagedTarget(preferences, { localUIBind });
   if (!prepared.ok) {
@@ -1385,7 +1532,7 @@ async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActi
     await persistDesktopPreferences(clearPendingBootstrap(preferences));
   }
 
-  sessionRecord.managed_agent = prepared.launch.managedAgent;
+  sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent);
   sessionRecord.startup = prepared.launch.managedAgent.startup;
   sessionRecord.allowed_base_url = prepared.launch.managedAgent.startup.local_ui_url;
   sessionRecord.target = buildManagedLocalDesktopTarget();
@@ -1427,9 +1574,33 @@ async function upsertSavedEnvironmentFromWelcome(
   await persistDesktopPreferences(next);
 }
 
+async function upsertSavedSSHEnvironmentFromWelcome(
+  environmentID: string,
+  label: string,
+  details: DesktopSSHEnvironmentDetails,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const existing = preferences.saved_ssh_environments.find((environment) => environment.id === environmentID);
+  const next = upsertSavedSSHEnvironment(preferences, {
+    environment_id: environmentID,
+    label,
+    ssh_destination: details.ssh_destination,
+    ssh_port: details.ssh_port,
+    remote_install_dir: details.remote_install_dir,
+    source: 'saved',
+    last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
+  });
+  await persistDesktopPreferences(next);
+}
+
 async function deleteSavedEnvironmentFromWelcome(environmentID: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await persistDesktopPreferences(deleteSavedEnvironment(preferences, environmentID));
+}
+
+async function deleteSavedSSHEnvironmentFromWelcome(environmentID: string): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));
 }
 
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> {
@@ -1438,6 +1609,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return openLocalEnvironmentFromLauncher();
     case 'open_remote_environment':
       return openRemoteEnvironmentFromLauncher(request);
+    case 'open_ssh_environment':
+      return openSSHEnvironmentFromLauncher(request);
     case 'connect_control_plane':
       return connectControlPlaneFromLauncher(request);
     case 'open_local_environment_settings':
@@ -1458,8 +1631,22 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return {
         outcome: 'saved_environment',
       };
+    case 'upsert_saved_ssh_environment':
+      await upsertSavedSSHEnvironmentFromWelcome(request.environment_id, request.label, {
+        ssh_destination: request.ssh_destination,
+        ssh_port: request.ssh_port,
+        remote_install_dir: request.remote_install_dir,
+      });
+      return {
+        outcome: 'saved_environment',
+      };
     case 'delete_saved_environment':
       await deleteSavedEnvironmentFromWelcome(request.environment_id);
+      return {
+        outcome: 'deleted_environment',
+      };
+    case 'delete_saved_ssh_environment':
+      await deleteSavedSSHEnvironmentFromWelcome(request.environment_id);
       return {
         outcome: 'deleted_environment',
       };
@@ -1750,6 +1937,7 @@ if (!app.requestSingleInstanceLock()) {
       const next: DesktopPreferences = {
         ...validated,
         saved_environments: previous.saved_environments,
+        saved_ssh_environments: previous.saved_ssh_environments,
         recent_external_local_ui_urls: previous.recent_external_local_ui_urls,
         control_planes: previous.control_planes,
       };
