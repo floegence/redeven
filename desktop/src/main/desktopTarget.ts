@@ -1,10 +1,17 @@
 import { defaultSavedEnvironmentLabel, desktopEnvironmentID } from './desktopPreferences';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import { normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
+import {
+  defaultSavedSSHEnvironmentLabel,
+  desktopSSHEnvironmentID,
+  desktopSSHEnvironmentID as buildSSHEnvironmentID,
+  normalizeDesktopSSHEnvironmentDetails,
+  type DesktopSSHEnvironmentDetails,
+} from '../shared/desktopSSH';
 import type { StartupReport } from './startup';
 
-export type DesktopTargetKind = 'managed_local' | 'external_local_ui' | 'controlplane_environment';
-export type DesktopSessionKey = 'managed_local' | `url:${string}` | `cp:${string}:env:${string}`;
+export type DesktopTargetKind = 'managed_local' | 'external_local_ui' | 'ssh_environment' | 'controlplane_environment';
+export type DesktopSessionKey = 'managed_local' | `url:${string}` | `ssh:${string}` | `cp:${string}:env:${string}`;
 
 export type ManagedLocalDesktopTarget = Readonly<{
   kind: 'managed_local';
@@ -21,6 +28,17 @@ export type ExternalLocalUIDesktopTarget = Readonly<{
   label: string;
 }>;
 
+export type SSHDesktopTarget = Readonly<{
+  kind: 'ssh_environment';
+  session_key: `ssh:${string}`;
+  environment_id: string;
+  label: string;
+  ssh_destination: string;
+  ssh_port: number | null;
+  remote_install_dir: string;
+  forwarded_local_ui_url: string;
+}>;
+
 export type ControlPlaneDesktopTarget = Readonly<{
   kind: 'controlplane_environment';
   session_key: `cp:${string}:env:${string}`;
@@ -31,7 +49,7 @@ export type ControlPlaneDesktopTarget = Readonly<{
   label: string;
 }>;
 
-export type DesktopSessionTarget = ManagedLocalDesktopTarget | ExternalLocalUIDesktopTarget | ControlPlaneDesktopTarget;
+export type DesktopSessionTarget = ManagedLocalDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget | ControlPlaneDesktopTarget;
 
 export type DesktopSessionSummary = Readonly<{
   session_key: DesktopSessionKey;
@@ -49,6 +67,10 @@ export function managedLocalDesktopSessionKey(): 'managed_local' {
 
 export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSessionKey {
   return `url:${normalizeLocalUIBaseURL(rawURL)}`;
+}
+
+export function sshDesktopSessionKey(rawDetails: DesktopSSHEnvironmentDetails): `ssh:${string}` {
+  return desktopSSHEnvironmentID(rawDetails);
 }
 
 export function controlPlaneDesktopSessionKey(rawProviderOrigin: string, rawEnvPublicID: string): `cp:${string}:env:${string}` {
@@ -90,6 +112,31 @@ export function buildExternalLocalUIDesktopTarget(
     environment_id: environmentID,
     external_local_ui_url: normalizedURL,
     label: compact(options.label) || defaultSavedEnvironmentLabel(normalizedURL),
+  };
+}
+
+type BuildSSHDesktopTargetOptions = Readonly<{
+  environmentID?: string;
+  label?: string;
+  forwardedLocalUIURL: string;
+}>;
+
+export function buildSSHDesktopTarget(
+  rawDetails: DesktopSSHEnvironmentDetails,
+  options: BuildSSHDesktopTargetOptions,
+): SSHDesktopTarget {
+  const details = normalizeDesktopSSHEnvironmentDetails(rawDetails);
+  const forwardedLocalUIURL = normalizeLocalUIBaseURL(options.forwardedLocalUIURL);
+  const environmentID = compact(options.environmentID) || buildSSHEnvironmentID(details);
+  return {
+    kind: 'ssh_environment',
+    session_key: sshDesktopSessionKey(details),
+    environment_id: environmentID,
+    label: compact(options.label) || defaultSavedSSHEnvironmentLabel(details),
+    ssh_destination: details.ssh_destination,
+    ssh_port: details.ssh_port,
+    remote_install_dir: details.remote_install_dir,
+    forwarded_local_ui_url: forwardedLocalUIURL,
   };
 }
 

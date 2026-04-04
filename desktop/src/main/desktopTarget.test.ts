@@ -4,9 +4,11 @@ import {
   buildControlPlaneDesktopTarget,
   buildExternalLocalUIDesktopTarget,
   buildManagedLocalDesktopTarget,
+  buildSSHDesktopTarget,
   controlPlaneDesktopSessionKey,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
+  sshDesktopSessionKey,
 } from './desktopTarget';
 
 describe('desktopTarget', () => {
@@ -60,6 +62,32 @@ describe('desktopTarget', () => {
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
+    });
+  });
+
+  it('builds SSH targets with stable session keys that ignore forwarded local ports', () => {
+    expect(sshDesktopSessionKey({
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: 'remote_default',
+    })).toBe('ssh:devbox:2222:remote_default');
+
+    expect(buildSSHDesktopTarget({
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: 'remote_default',
+    }, {
+      forwardedLocalUIURL: 'http://127.0.0.1:41111/',
+      label: 'SSH Lab',
+    })).toEqual({
+      kind: 'ssh_environment',
+      session_key: 'ssh:devbox:2222:remote_default',
+      environment_id: 'ssh:devbox:2222:remote_default',
+      label: 'SSH Lab',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: 'remote_default',
+      forwarded_local_ui_url: 'http://127.0.0.1:41111/',
     });
   });
 });

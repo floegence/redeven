@@ -12,6 +12,7 @@ import {
   defaultDesktopPreferencesPaths,
   defaultSavedEnvironmentLabel,
   deleteSavedEnvironment,
+  deleteSavedSSHEnvironment,
   deriveRecentExternalLocalUIURLs,
   desktopEnvironmentID,
   desktopPreferencesToDraft,
@@ -20,8 +21,10 @@ import {
   normalizeRecentExternalLocalUIURLs,
   normalizeSavedEnvironments,
   rememberRecentExternalLocalUITarget,
+  rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
   upsertSavedEnvironment,
+  upsertSavedSSHEnvironment,
   validateDesktopSettingsDraft,
 } from './desktopPreferences';
 
@@ -40,6 +43,7 @@ describe('desktopPreferences', () => {
       local_ui_password_configured: false,
       pending_bootstrap: null,
       saved_environments: [],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
       control_planes: [],
     });
@@ -128,6 +132,7 @@ describe('desktopPreferences', () => {
         local_ui_password_configured: true,
         pending_bootstrap: null,
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       });
@@ -166,6 +171,7 @@ describe('desktopPreferences', () => {
         local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       });
@@ -207,6 +213,7 @@ describe('desktopPreferences', () => {
         local_ui_password_configured: true,
         pending_bootstrap: null,
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       });
@@ -231,6 +238,7 @@ describe('desktopPreferences', () => {
         local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       });
@@ -278,6 +286,7 @@ describe('desktopPreferences', () => {
             last_used_at_ms: 20,
           },
         ],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
         control_planes: [],
       });
@@ -399,6 +408,51 @@ describe('desktopPreferences', () => {
     ]);
   });
 
+  it('remembers, saves, and deletes SSH environments through the saved catalog', () => {
+    const remembered = rememberRecentSSHEnvironmentTarget(defaultDesktopPreferences(), {
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: 'remote_default',
+      label: 'Lab',
+    });
+
+    expect(remembered.saved_ssh_environments).toEqual([
+      {
+        id: 'ssh:devbox:2222:remote_default',
+        label: 'Lab',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        remote_install_dir: 'remote_default',
+        source: 'recent_auto',
+        last_used_at_ms: expect.any(Number),
+      },
+    ]);
+
+    const saved = upsertSavedSSHEnvironment(remembered, {
+      environment_id: '',
+      label: 'SSH Lab',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: 'remote_default',
+      source: 'saved',
+      last_used_at_ms: 500,
+    });
+
+    expect(saved.saved_ssh_environments).toEqual([
+      {
+        id: 'ssh:devbox:2222:remote_default',
+        label: 'SSH Lab',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        remote_install_dir: 'remote_default',
+        source: 'saved',
+        last_used_at_ms: 500,
+      },
+    ]);
+
+    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:remote_default').saved_ssh_environments).toEqual([]);
+  });
+
   it('remembers recent environment targets through the saved catalog', () => {
     const preferences = rememberRecentExternalLocalUITarget(
       rememberRecentExternalLocalUITarget(
@@ -490,6 +544,7 @@ describe('desktopPreferences', () => {
           last_used_at_ms: 100,
         },
       ],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
       control_planes: [],
     })).toEqual({
@@ -521,6 +576,7 @@ describe('desktopPreferences', () => {
           last_used_at_ms: 100,
         },
       ],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
       control_planes: [],
     })).toEqual({
@@ -537,6 +593,7 @@ describe('desktopPreferences', () => {
           last_used_at_ms: 100,
         },
       ],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
       control_planes: [],
     });
@@ -549,6 +606,7 @@ describe('desktopPreferences', () => {
       local_ui_password_configured: false,
       pending_bootstrap: null,
       saved_environments: [],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
       control_planes: [],
     });
@@ -558,6 +616,7 @@ describe('desktopPreferences', () => {
       local_ui_password_configured: true,
       pending_bootstrap: null,
       saved_environments: [],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
       control_planes: [],
     });
@@ -582,6 +641,7 @@ describe('desktopPreferences', () => {
       local_ui_password_configured: true,
       pending_bootstrap: null,
       saved_environments: [],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
       control_planes: [],
     });
@@ -604,6 +664,7 @@ describe('desktopPreferences', () => {
       local_ui_password_configured: false,
       pending_bootstrap: null,
       saved_environments: [],
+      saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
       control_planes: [],
     });

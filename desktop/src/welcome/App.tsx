@@ -53,6 +53,11 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+  DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL,
+  type DesktopSSHEnvironmentDetails,
+} from '../shared/desktopSSH';
+import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
@@ -128,6 +133,7 @@ type BusyAction =
   | ''
   | 'open_local_environment'
   | 'open_remote_environment'
+  | 'open_ssh_environment'
   | 'connect_control_plane'
   | 'focus_environment_window'
   | 'open_local_environment_settings'
@@ -139,12 +145,25 @@ type BusyAction =
   | 'save_environment'
   | 'delete_environment';
 
-type ConnectionDialogState = Readonly<{
+type ExternalURLConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
+  connection_kind: 'external_local_ui';
   environment_id: string;
   label: string;
   external_local_ui_url: string;
-}> | null;
+}>;
+
+type SSHConnectionDialogState = Readonly<{
+  mode: 'create' | 'edit';
+  connection_kind: 'ssh_environment';
+  environment_id: string;
+  label: string;
+  ssh_destination: string;
+  ssh_port: string;
+  remote_install_dir: string;
+}>;
+
+type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
 
 type ControlPlaneDialogState = Readonly<{
   provider_origin: string;
@@ -243,6 +262,34 @@ function formatTimestamp(unixMS: number): string {
   }
 }
 
+function createExternalURLConnectionDialogState(
+  mode: 'create' | 'edit',
+  overrides: Partial<ExternalURLConnectionDialogState> = {},
+): ExternalURLConnectionDialogState {
+  return {
+    mode,
+    connection_kind: 'external_local_ui',
+    environment_id: trimString(overrides.environment_id),
+    label: trimString(overrides.label),
+    external_local_ui_url: trimString(overrides.external_local_ui_url),
+  };
+}
+
+function createSSHConnectionDialogState(
+  mode: 'create' | 'edit',
+  overrides: Partial<SSHConnectionDialogState> = {},
+): SSHConnectionDialogState {
+  return {
+    mode,
+    connection_kind: 'ssh_environment',
+    environment_id: trimString(overrides.environment_id),
+    label: trimString(overrides.label),
+    ssh_destination: trimString(overrides.ssh_destination),
+    ssh_port: trimString(overrides.ssh_port),
+    remote_install_dir: trimString(overrides.remote_install_dir),
+  };
+}
+
 function issueKicker(issue: DesktopWelcomeIssue): string {
   switch (issue.scope) {
     case 'remote_environment':
@@ -268,8 +315,10 @@ function environmentTagVariant(tag: DesktopEnvironmentEntry['tag']): 'neutral' |
 function busyActionForLauncherRequest(request: DesktopLauncherActionRequest): BusyAction {
   switch (request.kind) {
     case 'upsert_saved_environment':
+    case 'upsert_saved_ssh_environment':
       return 'save_environment';
     case 'delete_saved_environment':
+    case 'delete_saved_ssh_environment':
       return 'delete_environment';
     default:
       return request.kind;
@@ -362,10 +411,9 @@ function DesktopCommandRegistrar(props: Readonly<{
   openCreateConnectionDialog: (message?: string) => void;
   openSettingsSurface: () => void;
   openLocalEnvironment: () => Promise<void>;
-  openRemoteEnvironment: (
-    targetURL: string,
+  openEnvironment: (
+    environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
-    environment?: DesktopEnvironmentEntry,
   ) => Promise<boolean>;
   closeLauncherOrQuit: () => Promise<void>;
 }>): null {
@@ -408,10 +456,10 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.focusEnvironmentURL',
         title: 'Connect Another Environment',
-        description: 'Open the Add Connection dialog',
+        description: 'Open the Add Connection dialog for a Redeven URL or SSH target',
         category: 'Desktop',
         icon: Search,
-        execute: () => props.openCreateConnectionDialog('Enter an Environment URL or choose a saved connection.'),
+        execute: () => props.openCreateConnectionDialog('Enter a Redeven URL, SSH target, or choose a saved connection.'),
       },
       {
         id: 'redeven.desktop.closeLauncherOrQuit',
@@ -444,15 +492,15 @@ function DesktopCommandRegistrar(props: Readonly<{
       },
     ];
 
-    for (const environment of snapshot.environments.filter((entry) => entry.kind === 'external_local_ui').slice(0, 5)) {
+    for (const environment of snapshot.environments.filter((entry) => entry.kind !== 'local_environment').slice(0, 5)) {
       list.push({
         id: `redeven.desktop.openEnvironment.${environment.id}`,
         title: `${environment.open_action_label} ${environment.label}`,
-        description: environment.local_ui_url,
+        description: environment.secondary_text,
         category: 'Recent Environments',
         icon: Globe,
         execute: () => {
-          void props.openRemoteEnvironment(environment.local_ui_url, 'connect', environment);
+          void props.openEnvironment(environment, 'connect');
         },
       });
     }
@@ -608,21 +656,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogError('');
     setControlPlaneDialogError('');
     setControlPlaneDialogState(null);
-    setConnectionDialogState({
-      mode: 'create',
-      environment_id: '',
-      label: '',
+    setConnectionDialogState(createExternalURLConnectionDialogState('create', {
       external_local_ui_url: trimString(snapshot().suggested_remote_url),
-    });
+    }));
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
-    setConnectionDialogState({
-      mode: 'edit',
-      environment_id: environment.id,
-      label: environment.label,
-      external_local_ui_url: environment.local_ui_url,
-    });
+    if (environment.kind === 'ssh_environment') {
+      setConnectionDialogState(createSSHConnectionDialogState('edit', {
+        environment_id: environment.id,
+        label: environment.label,
+        ssh_destination: environment.ssh_details?.ssh_destination ?? '',
+        ssh_port: environment.ssh_details?.ssh_port == null ? '' : String(environment.ssh_details.ssh_port),
+        remote_install_dir: environment.ssh_details?.remote_install_dir === DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR
+          ? ''
+          : (environment.ssh_details?.remote_install_dir ?? ''),
+      }));
+    } else {
+      setConnectionDialogState(createExternalURLConnectionDialogState('edit', {
+        environment_id: environment.id,
+        label: environment.label,
+        external_local_ui_url: environment.local_ui_url,
+      }));
+    }
     setConnectionDialogError('');
   }
 
@@ -665,7 +721,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function updateConnectionDialogField(name: 'label' | 'external_local_ui_url', value: string): void {
+  function switchConnectionDialogKind(kind: 'external_local_ui' | 'ssh_environment'): void {
+    setConnectionDialogState((current) => {
+      if (!current || current.mode !== 'create' || current.connection_kind === kind) {
+        return current;
+      }
+      if (kind === 'ssh_environment') {
+        return createSSHConnectionDialogState('create', {
+          label: current.label,
+        });
+      }
+      return createExternalURLConnectionDialogState('create', {
+        label: current.label,
+        external_local_ui_url: current.connection_kind === 'external_local_ui'
+          ? current.external_local_ui_url
+          : trimString(snapshot().suggested_remote_url),
+      });
+    });
+  }
+
+  function updateConnectionDialogField(
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir',
+    value: string,
+  ): void {
     setConnectionDialogState((current) => {
       if (!current) {
         return current;
@@ -754,6 +832,45 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       closeConnectionDialog();
     }
     return opened;
+  }
+
+  async function openSSHEnvironment(
+    details: DesktopSSHEnvironmentDetails,
+    errorTarget: 'connect' | 'dialog' = 'connect',
+    environment?: DesktopEnvironmentEntry,
+  ): Promise<boolean> {
+    if (environment?.is_open && environment.open_session_key) {
+      return focusEnvironmentWindow(environment.open_session_key, errorTarget);
+    }
+
+    const result = await performLauncherAction({
+      kind: 'open_ssh_environment',
+      environment_id: environment?.id,
+      label: environment?.label,
+      ssh_destination: details.ssh_destination,
+      ssh_port: details.ssh_port,
+      remote_install_dir: details.remote_install_dir,
+    }, errorTarget);
+    const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+    if (opened && errorTarget === 'dialog') {
+      closeConnectionDialog();
+    }
+    return opened;
+  }
+
+  async function openEnvironment(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind === 'ssh_environment') {
+      const details = environment.ssh_details;
+      if (!details) {
+        setErrorMessage(errorTarget, 'SSH connection details are missing.');
+        return false;
+      }
+      return openSSHEnvironment(details, errorTarget, environment);
+    }
+    return openRemoteEnvironment(environment.local_ui_url, errorTarget, environment);
   }
 
   async function connectControlPlaneFromDialog(): Promise<void> {
@@ -936,7 +1053,57 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function upsertSavedSSHEnvironment(
+    request: Readonly<{
+      environment_id: string;
+      label: string;
+      details: DesktopSSHEnvironmentDetails;
+      errorTarget: 'connect' | 'dialog';
+      successMessage: string;
+    }>,
+  ): Promise<boolean> {
+    setConnectError('');
+    setConnectionDialogError('');
+    setBusyAction('save_environment');
+    try {
+      await props.runtime.launcher.performAction({
+        kind: 'upsert_saved_ssh_environment',
+        environment_id: trimString(request.environment_id),
+        label: trimString(request.label),
+        ssh_destination: request.details.ssh_destination,
+        ssh_port: request.details.ssh_port,
+        remote_install_dir: request.details.remote_install_dir,
+      });
+      await refreshSnapshot();
+      setFeedback(request.successMessage);
+      return true;
+    } catch (error) {
+      setErrorMessage(request.errorTarget, getErrorMessage(error));
+      return false;
+    } finally {
+      setBusyAction('');
+    }
+  }
+
   async function saveEnvironmentFromLibrary(environment: DesktopEnvironmentEntry): Promise<void> {
+    if (environment.kind === 'ssh_environment') {
+      const details = environment.ssh_details;
+      if (!details) {
+        setConnectError('SSH connection details are missing.');
+        return;
+      }
+      await upsertSavedSSHEnvironment({
+        environment_id: environment.id,
+        label: environment.label,
+        details,
+        errorTarget: 'connect',
+        successMessage: environment.category === 'saved'
+          ? 'Connection updated.'
+          : 'Connection saved to Environment Library.',
+      });
+      return;
+    }
+
     await upsertSavedEnvironment({
       environment_id: environment.id,
       label: environment.label,
@@ -953,15 +1120,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!state) {
       return;
     }
-    const saved = await upsertSavedEnvironment({
-      environment_id: state.environment_id,
-      label: state.label,
-      external_local_ui_url: state.external_local_ui_url,
-      errorTarget: 'dialog',
-      successMessage: state.mode === 'edit'
-        ? 'Connection updated.'
-        : 'Connection saved to Environment Library.',
-    });
+    const saved = state.connection_kind === 'ssh_environment'
+      ? await upsertSavedSSHEnvironment({
+        environment_id: state.environment_id,
+        label: state.label,
+        details: {
+          ssh_destination: state.ssh_destination,
+          ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
+          remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+        },
+        errorTarget: 'dialog',
+        successMessage: state.mode === 'edit'
+          ? 'Connection updated.'
+          : 'Connection saved to Environment Library.',
+      })
+      : await upsertSavedEnvironment({
+        environment_id: state.environment_id,
+        label: state.label,
+        external_local_ui_url: state.external_local_ui_url,
+        errorTarget: 'dialog',
+        successMessage: state.mode === 'edit'
+          ? 'Connection updated.'
+          : 'Connection saved to Environment Library.',
+      });
     if (saved) {
       closeConnectionDialog();
     }
@@ -970,6 +1151,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function connectFromDialog(): Promise<void> {
     const state = connectionDialogState();
     if (!state) {
+      return;
+    }
+    if (state.connection_kind === 'ssh_environment') {
+      await openSSHEnvironment({
+        ssh_destination: state.ssh_destination,
+        ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(state.ssh_port, 10),
+        remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
+      }, 'dialog');
       return;
     }
     await openRemoteEnvironment(state.external_local_ui_url, 'dialog');
@@ -983,7 +1172,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setBusyAction('delete_environment');
     try {
       await props.runtime.launcher.performAction({
-        kind: 'delete_saved_environment',
+        kind: target.kind === 'ssh_environment' ? 'delete_saved_ssh_environment' : 'delete_saved_environment',
         environment_id: target.id,
       });
       await refreshSnapshot();
@@ -1020,7 +1209,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         openCreateConnectionDialog={openCreateConnectionDialog}
         openSettingsSurface={openSettingsSurface}
         openLocalEnvironment={openLocalEnvironment}
-        openRemoteEnvironment={openRemoteEnvironment}
+        openEnvironment={openEnvironment}
         closeLauncherOrQuit={closeLauncherOrQuit}
       />
       <DesktopLauncherShell
@@ -1088,6 +1277,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openCreateConnectionDialog={openCreateConnectionDialog}
           openCreateControlPlaneDialog={openCreateControlPlaneDialog}
           openRemoteEnvironment={openRemoteEnvironment}
+          openSSHEnvironment={openSSHEnvironment}
+          openEnvironment={openEnvironment}
           focusEnvironmentWindow={focusEnvironmentWindow}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
           editEnvironment={startEditingEnvironment}
@@ -1133,6 +1324,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           }
         }}
         updateField={updateConnectionDialogField}
+        switchKind={switchConnectionDialogKind}
         onConnect={connectFromDialog}
         onSave={saveConnectionFromDialog}
       />
@@ -1217,6 +1409,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     environment?: DesktopEnvironmentEntry,
   ) => Promise<boolean>;
+  openSSHEnvironment: (
+    details: DesktopSSHEnvironmentDetails,
+    errorTarget?: 'connect' | 'dialog',
+    environment?: DesktopEnvironmentEntry,
+  ) => Promise<boolean>;
+  openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
   focusEnvironmentWindow: (sessionKey: string, errorTarget?: 'connect' | 'settings' | 'dialog') => Promise<boolean>;
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1320,6 +1518,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       size="sm"
                       variant="default"
                       onClick={() => {
+                        if (issue().ssh_details) {
+                          void props.openSSHEnvironment(issue().ssh_details!, 'connect');
+                          return;
+                        }
                         void props.openRemoteEnvironment(issue().target_url);
                       }}
                     >
@@ -1348,7 +1550,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               setFilter={props.setLibraryFilter}
               setQuery={props.setLibraryQuery}
               openCreateConnectionDialog={props.openCreateConnectionDialog}
-              openRemoteEnvironment={props.openRemoteEnvironment}
+              openEnvironment={props.openEnvironment}
               saveEnvironment={props.saveEnvironmentFromLibrary}
               editEnvironment={props.editEnvironment}
               deleteEnvironment={props.deleteEnvironment}
@@ -1705,11 +1907,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
   setFilter: (value: EnvironmentLibraryFilter) => void;
   setQuery: (value: string) => void;
   openCreateConnectionDialog: (message?: string) => void;
-  openRemoteEnvironment: (
-    targetURL: string,
-    errorTarget?: 'connect' | 'dialog',
-    environment?: DesktopEnvironmentEntry,
-  ) => Promise<boolean>;
+  openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1746,7 +1944,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
           <Input
             value={props.query}
             onInput={(event) => props.setQuery(event.currentTarget.value)}
-            placeholder="Search label or Environment URL"
+            placeholder="Search label, Redeven URL, or SSH target"
             size="sm"
             class="w-full"
           />
@@ -1778,7 +1976,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
               <thead class="bg-muted/30 text-left text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
                 <tr>
                   <th class="px-4 py-3 sm:px-5">Connection</th>
-                  <th class="px-4 py-3">Environment URL</th>
+                  <th class="px-4 py-3">Target</th>
                   <th class="px-4 py-3">Source</th>
                   <th class="px-4 py-3">Last used</th>
                   <th class="px-4 py-3 text-right sm:px-5">Actions</th>
@@ -1790,7 +1988,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
                     <EnvironmentLibraryRow
                       environment={environment}
                       busyAction={props.busyAction}
-                      openRemoteEnvironment={props.openRemoteEnvironment}
+                      openEnvironment={props.openEnvironment}
                       saveEnvironment={props.saveEnvironment}
                       editEnvironment={props.editEnvironment}
                       deleteEnvironment={props.deleteEnvironment}
@@ -1809,11 +2007,7 @@ function EnvironmentLibraryPanel(props: Readonly<{
 function EnvironmentLibraryRow(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
-  openRemoteEnvironment: (
-    targetURL: string,
-    errorTarget?: 'connect' | 'dialog',
-    environment?: DesktopEnvironmentEntry,
-  ) => Promise<boolean>;
+  openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1823,6 +2017,9 @@ function EnvironmentLibraryRow(props: Readonly<{
       <td class="px-4 py-3 sm:px-5">
         <div class="flex flex-wrap items-center gap-2">
           <div class="max-w-[240px] truncate font-medium text-foreground">{props.environment.label}</div>
+          <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+            {props.environment.kind === 'ssh_environment' ? 'SSH' : 'URL'}
+          </Tag>
           <Show when={props.environment.tag}>
             <Tag variant={environmentTagVariant(props.environment.tag)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
               {props.environment.tag}
@@ -1831,7 +2028,12 @@ function EnvironmentLibraryRow(props: Readonly<{
         </div>
       </td>
       <td class="px-4 py-3">
-        <div class="max-w-[320px] break-all font-mono text-xs text-muted-foreground">{props.environment.local_ui_url}</div>
+        <div class="max-w-[320px] break-all font-mono text-xs text-muted-foreground">{props.environment.secondary_text}</div>
+        <Show when={props.environment.kind === 'ssh_environment' && trimString(props.environment.local_ui_url) !== ''}>
+          <div class="mt-1 max-w-[320px] break-all text-[11px] text-muted-foreground">
+            Forwarded UI: <span class="font-mono">{props.environment.local_ui_url}</span>
+          </div>
+        </Show>
       </td>
       <td class="px-4 py-3 text-xs text-muted-foreground">
         {environmentSourceLabel(props.environment)}
@@ -1852,9 +2054,13 @@ function EnvironmentLibraryRow(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'open_remote_environment' || props.busyAction === 'focus_environment_window'}
+            loading={
+              props.busyAction === 'open_remote_environment'
+              || props.busyAction === 'open_ssh_environment'
+              || props.busyAction === 'focus_environment_window'
+            }
             onClick={() => {
-              void props.openRemoteEnvironment(props.environment.local_ui_url, 'connect', props.environment);
+              void props.openEnvironment(props.environment, 'connect');
             }}
           >
             {props.environment.open_action_label}
@@ -2346,11 +2552,32 @@ function ConnectionDialog(props: Readonly<{
   error: string;
   busyAction: BusyAction;
   onOpenChange: (open: boolean) => void;
-  updateField: (name: 'label' | 'external_local_ui_url', value: string) => void;
+  updateField: (
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir',
+    value: string,
+  ) => void;
+  switchKind: (kind: 'external_local_ui' | 'ssh_environment') => void;
   onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
 }>) {
   const isCreate = createMemo(() => props.state?.mode === 'create');
+  const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
+  const [advancedOpen, setAdvancedOpen] = createSignal(false);
+  const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedOpen());
+  const sshInstallDirLabel = createMemo(() => (
+    trimString(props.state?.connection_kind === 'ssh_environment' ? props.state.remote_install_dir : '') === ''
+      ? DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL
+      : 'Custom path'
+  ));
+
+  createEffect(() => {
+    const state = props.state;
+    if (!state || state.connection_kind !== 'ssh_environment') {
+      setAdvancedOpen(false);
+      return;
+    }
+    setAdvancedOpen(trimString(state.remote_install_dir) !== '' || state.mode === 'edit');
+  });
 
   return (
     <Dialog
@@ -2379,7 +2606,7 @@ function ConnectionDialog(props: Readonly<{
             <Button
               size="sm"
               variant="default"
-              loading={props.busyAction === 'open_remote_environment'}
+              loading={props.busyAction === 'open_remote_environment' || props.busyAction === 'open_ssh_environment'}
               onClick={() => {
                 void props.onConnect();
               }}
@@ -2391,6 +2618,20 @@ function ConnectionDialog(props: Readonly<{
       )}
     >
       <div class="space-y-4">
+        <Show when={isCreate()}>
+          <div class="space-y-1.5">
+            <label class="block text-xs font-medium text-foreground">Connection Type</label>
+            <SegmentedControl
+              value={connectionKind()}
+              onChange={(value) => props.switchKind(value as 'external_local_ui' | 'ssh_environment')}
+              options={[
+                { value: 'external_local_ui', label: 'Redeven URL' },
+                { value: 'ssh_environment', label: 'SSH' },
+              ]}
+              size="sm"
+            />
+          </div>
+        </Show>
         <div class="space-y-1.5">
           <label for="environment-label" class="block text-xs font-medium text-foreground">Label</label>
           <Input
@@ -2402,19 +2643,101 @@ function ConnectionDialog(props: Readonly<{
             class="w-full"
           />
         </div>
-        <div class="space-y-1.5">
-          <label for="environment-url" class="block text-xs font-medium text-foreground">Environment URL</label>
-          <Input
-            id="environment-url"
-            value={props.state?.external_local_ui_url ?? ''}
-            onInput={(event) => props.updateField('external_local_ui_url', event.currentTarget.value)}
-            placeholder="http://192.168.1.11:24000/"
-            size="sm"
-            class="w-full font-mono"
-            spellcheck={false}
-            autofocus={props.state?.mode === 'create'}
-          />
-        </div>
+        <Show
+          when={connectionKind() === 'ssh_environment'}
+          fallback={(
+            <div class="space-y-1.5">
+              <label for="environment-url" class="block text-xs font-medium text-foreground">Environment URL</label>
+              <Input
+                id="environment-url"
+                value={props.state?.connection_kind === 'external_local_ui' ? props.state.external_local_ui_url : ''}
+                onInput={(event) => props.updateField('external_local_ui_url', event.currentTarget.value)}
+                placeholder="http://192.168.1.11:24000/"
+                size="sm"
+                class="w-full font-mono"
+                spellcheck={false}
+                autofocus={props.state?.mode === 'create'}
+              />
+            </div>
+          )}
+        >
+          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+            <div class="text-xs leading-5 text-muted-foreground">
+              Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.
+            </div>
+            <div class="mt-3 space-y-3">
+              <div class="space-y-1.5">
+                <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">SSH Destination</label>
+                <Input
+                  id="environment-ssh-destination"
+                  value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_destination : ''}
+                  onInput={(event) => props.updateField('ssh_destination', event.currentTarget.value)}
+                  placeholder="user@host or ssh-config-alias"
+                  size="sm"
+                  class="w-full font-mono"
+                  spellcheck={false}
+                  autofocus={props.state?.mode === 'create'}
+                />
+              </div>
+              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+                <div class="space-y-1.5">
+                  <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">Port</label>
+                  <Input
+                    id="environment-ssh-port"
+                    value={props.state?.connection_kind === 'ssh_environment' ? props.state.ssh_port : ''}
+                    onInput={(event) => props.updateField('ssh_port', event.currentTarget.value)}
+                    placeholder="22"
+                    inputMode="numeric"
+                    size="sm"
+                    class="w-full font-mono"
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-foreground">Install Dir</label>
+                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                    {sshInstallDirLabel()}
+                  </Tag>
+                </div>
+              </div>
+              <div class="overflow-hidden rounded-lg border border-border/70 bg-background/80">
+                <button
+                  type="button"
+                  class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left"
+                  onClick={() => setAdvancedOpen(!advancedOpen())}
+                >
+                  <div>
+                    <div class="text-xs font-medium text-foreground">Advanced</div>
+                    <div class="mt-1 text-[11px] text-muted-foreground">
+                      Keep the default remote cache or pin a custom absolute install directory.
+                    </div>
+                  </div>
+                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                    {showSSHAdvanced() ? 'Shown' : 'Hidden'}
+                  </Tag>
+                </button>
+                <Show when={showSSHAdvanced()}>
+                  <div class="border-t border-border/70 px-3 py-3">
+                    <div class="space-y-1.5">
+                      <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
+                      <Input
+                        id="environment-ssh-install-dir"
+                        value={props.state?.connection_kind === 'ssh_environment' ? props.state.remote_install_dir : ''}
+                        onInput={(event) => props.updateField('remote_install_dir', event.currentTarget.value)}
+                        placeholder="/opt/redeven-desktop/runtime"
+                        size="sm"
+                        class="w-full font-mono"
+                        spellcheck={false}
+                      />
+                      <div class="text-[11px] text-muted-foreground">
+                        Leave blank to use the default remote user cache: {DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL}.
+                      </div>
+                    </div>
+                  </div>
+                </Show>
+              </div>
+            </div>
+          </div>
+        </Show>
         <Show when={props.error}>
           <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {props.error}

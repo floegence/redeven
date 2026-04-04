@@ -1,21 +1,23 @@
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
+import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
 export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launcher-snapshot-updated';
 
-export type DesktopTargetKind = 'managed_local' | 'external_local_ui' | 'controlplane_environment';
+export type DesktopTargetKind = 'managed_local' | 'external_local_ui' | 'ssh_environment' | 'controlplane_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'local_environment_settings';
-export type DesktopEnvironmentEntryKind = 'local_environment' | 'external_local_ui';
+export type DesktopEnvironmentEntryKind = 'local_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Local' | '';
 export type DesktopEnvironmentEntryCategory = 'local_environment' | 'open_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopLauncherActionKind =
   | 'open_local_environment'
   | 'open_remote_environment'
+  | 'open_ssh_environment'
   | 'connect_control_plane'
   | 'open_local_environment_settings'
   | 'focus_environment_window'
@@ -23,7 +25,9 @@ export type DesktopLauncherActionKind =
   | 'refresh_control_plane'
   | 'delete_control_plane'
   | 'upsert_saved_environment'
+  | 'upsert_saved_ssh_environment'
   | 'delete_saved_environment'
+  | 'delete_saved_ssh_environment'
   | 'close_launcher_or_quit';
 
 export type DesktopWelcomeIssue = Readonly<{
@@ -33,6 +37,7 @@ export type DesktopWelcomeIssue = Readonly<{
   message: string;
   diagnostics_copy: string;
   target_url: string;
+  ssh_details?: DesktopSSHEnvironmentDetails;
 }>;
 
 export type DesktopOpenEnvironmentWindow = Readonly<{
@@ -49,6 +54,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   label: string;
   local_ui_url: string;
   secondary_text: string;
+  ssh_details?: DesktopSSHEnvironmentDetails;
   tag: DesktopEnvironmentEntryTag;
   category: DesktopEnvironmentEntryCategory;
   is_open: boolean;
@@ -82,6 +88,11 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id?: string;
       label?: string;
     }
+  | ({
+      kind: 'open_ssh_environment';
+      environment_id?: string;
+      label?: string;
+    } & DesktopSSHEnvironmentDetails)
   | {
       kind: 'connect_control_plane';
       provider_origin: string;
@@ -116,8 +127,17 @@ export type DesktopLauncherActionRequest = Readonly<
       label: string;
       external_local_ui_url: string;
     }
+  | ({
+      kind: 'upsert_saved_ssh_environment';
+      environment_id: string;
+      label: string;
+    } & DesktopSSHEnvironmentDetails)
   | {
       kind: 'delete_saved_environment';
+      environment_id: string;
+    }
+  | {
+      kind: 'delete_saved_ssh_environment';
       environment_id: string;
     }
   | {
@@ -165,6 +185,20 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
         label: compact((candidate as { label?: unknown }).label) || undefined,
       };
+    case 'open_ssh_environment':
+      {
+        const sshPortText = compact((candidate as { ssh_port?: unknown }).ssh_port);
+      return {
+        kind,
+        environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
+        label: compact((candidate as { label?: unknown }).label) || undefined,
+        ssh_destination: compact((candidate as { ssh_destination?: unknown }).ssh_destination),
+        ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
+          ? null
+          : Number.parseInt(sshPortText, 10),
+        remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+      };
+      }
     case 'connect_control_plane':
       return {
         kind,
@@ -214,7 +248,31 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         label: compact((candidate as { label?: unknown }).label),
         external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
       };
+    case 'upsert_saved_ssh_environment':
+      {
+        const sshPortText = compact((candidate as { ssh_port?: unknown }).ssh_port);
+      return {
+        kind,
+        environment_id: compact((candidate as { environment_id?: unknown }).environment_id),
+        label: compact((candidate as { label?: unknown }).label),
+        ssh_destination: compact((candidate as { ssh_destination?: unknown }).ssh_destination),
+        ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
+          ? null
+          : Number.parseInt(sshPortText, 10),
+        remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+      };
+      }
     case 'delete_saved_environment': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+      };
+    }
+    case 'delete_saved_ssh_environment': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
         return null;

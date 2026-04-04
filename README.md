@@ -70,7 +70,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 | --- | --- | --- | --- |
 | `Env App` 🗂️ | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Runtime Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | `Code App` 💻 | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
-| `Desktop Shell` 🖥️ | Native Electron app that keeps a singleton launcher/settings shell plus multiple deduplicated Environment windows | Local UX, chooser-first environment selection, multi-environment desktop sessions, compatible Control Plane providers, blocked-state recovery, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| `Desktop Shell` 🖥️ | Native Electron app that keeps a singleton launcher/settings shell plus multiple deduplicated Environment windows | Local UX, chooser-first environment selection, SSH-bootstrap remote access without preinstalling Redeven manually, multi-environment desktop sessions, compatible Control Plane providers, blocked-state recovery, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | `Flower` (optional) 🌸 | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
 | `Codex` (optional) 🤖 | Independent Codex conversation threads backed by the host machine's `codex app-server` | Keeps Codex UI, official Codex branding, and upgrade cadence separate from Flower while giving Codex its own navigator/chat shell inside Env App | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 
@@ -80,7 +80,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 | --- | --- | --- |
 | Secure remote environment access 🔐 | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
 | Browser-based development ⚙️ | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the local runtime gateway and Flowersec E2EE proxy |
-| Desktop operations 🖥️ | Start Redeven Desktop, open the Local Environment, direct Local UI URLs, or compatible Control Plane environments, and move between them without duplicate windows | Use the startup launcher, dedicated Local Environment Settings window, diagnostics, and shell-owned connection management around the same runtime contract |
+| Desktop operations 🖥️ | Start Redeven Desktop, open the Local Environment, direct Local UI URLs, SSH targets that Desktop bootstraps on demand, or compatible Control Plane environments, and move between them without duplicate windows | Use the startup launcher, SSH bootstrap flow, dedicated Local Environment Settings window, diagnostics, and shell-owned connection management around the same runtime contract |
 
 ## Quick start
 
@@ -93,6 +93,8 @@ curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/inst
 ```
 
 If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven/releases).
+
+Redeven Desktop can open the bundled `Local Environment`, attach to a reachable Redeven Local UI URL, or SSH into another machine, install the matching Redeven runtime on demand, and tunnel its Local UI back into the same desktop shell.
 
 The public installer endpoint used by runtime self-upgrade is [https://redeven.com/install.sh](https://redeven.com/install.sh).
 

@@ -1,10 +1,11 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import {
-  defaultSavedEnvironmentLabel,
-  desktopEnvironmentID,
   desktopPreferencesToDraft,
   type DesktopSavedEnvironment,
+  type DesktopSavedSSHEnvironment,
   type DesktopPreferences,
+  defaultSavedEnvironmentLabel,
+  desktopEnvironmentID,
 } from './desktopPreferences';
 import type { DesktopSessionSummary } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
@@ -16,6 +17,11 @@ import type {
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
+import {
+  defaultSavedSSHEnvironmentLabel,
+  desktopSSHEnvironmentID,
+  type DesktopSSHEnvironmentDetails,
+} from '../shared/desktopSSH';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
@@ -50,6 +56,29 @@ export function buildRemoteConnectionIssue(
       `target url: ${targetURL}`,
     ]),
     target_url: targetURL,
+  };
+}
+
+export function buildSSHConnectionIssue(
+  details: DesktopSSHEnvironmentDetails,
+  code: string,
+  message: string,
+): DesktopWelcomeIssue {
+  return {
+    scope: 'remote_environment',
+    code,
+    title: 'Unable to open that SSH Environment',
+    message,
+    diagnostics_copy: diagnosticsLines([
+      'status: blocked',
+      `code: ${code}`,
+      `message: ${message}`,
+      `ssh destination: ${details.ssh_destination}`,
+      `ssh port: ${details.ssh_port ?? 'default'}`,
+      `remote install dir: ${details.remote_install_dir}`,
+    ]),
+    target_url: '',
+    ssh_details: details,
   };
 }
 
@@ -142,12 +171,30 @@ function openSessionByURL(
   )) ?? null;
 }
 
+function openSessionBySSHEnvironment(
+  sessions: readonly DesktopSessionSummary[],
+  environment: DesktopSavedSSHEnvironment,
+): DesktopSessionSummary | null {
+  return sessions.find((session) => (
+    session.target.kind === 'ssh_environment'
+    && (
+      session.target.environment_id === environment.id
+      || (
+        session.target.ssh_destination === environment.ssh_destination
+        && session.target.ssh_port === environment.ssh_port
+        && session.target.remote_install_dir === environment.remote_install_dir
+      )
+    )
+  )) ?? null;
+}
+
 function buildEnvironmentEntries(
   preferences: DesktopPreferences,
   openSessions: readonly DesktopSessionSummary[],
 ): readonly DesktopEnvironmentEntry[] {
   const managedSession = openSessions.find((session) => session.target.kind === 'managed_local') ?? null;
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
+  const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
   const entries: DesktopEnvironmentEntry[] = [
     {
       id: 'local_environment',
@@ -168,6 +215,7 @@ function buildEnvironmentEntries(
   ];
 
   const catalog = preferences.saved_environments;
+  const sshCatalog = preferences.saved_ssh_environments;
   const seenRemoteURLs = new Set<string>();
 
   for (const session of openRemoteSessions) {
@@ -200,8 +248,51 @@ function buildEnvironmentEntries(
     });
   }
 
+  for (const session of openSSHSessions) {
+    const target = session.target;
+    if (target.kind !== 'ssh_environment') {
+      continue;
+    }
+    if (sshCatalog.some((environment) => (
+      environment.id === target.environment_id
+      || (
+        environment.ssh_destination === target.ssh_destination
+        && environment.ssh_port === target.ssh_port
+        && environment.remote_install_dir === target.remote_install_dir
+      )
+    ))) {
+      continue;
+    }
+    entries.push({
+      id: desktopSSHEnvironmentID(target),
+      kind: 'ssh_environment',
+      label: target.label || defaultSavedSSHEnvironmentLabel(target),
+      local_ui_url: session.startup.local_ui_url,
+      secondary_text: target.ssh_port === null
+        ? target.ssh_destination
+        : `${target.ssh_destination}:${target.ssh_port}`,
+      ssh_details: {
+        ssh_destination: target.ssh_destination,
+        ssh_port: target.ssh_port,
+        remote_install_dir: target.remote_install_dir,
+      },
+      tag: 'Open',
+      category: 'open_unsaved',
+      is_open: true,
+      open_session_key: session.session_key,
+      open_action_label: 'Focus',
+      can_edit: true,
+      can_delete: false,
+      can_save: true,
+      last_used_at_ms: Date.now(),
+    });
+  }
+
   for (const environment of catalog) {
     entries.push(buildSavedEnvironmentEntry(environment, openSessionByURL(openSessions, environment.local_ui_url)));
+  }
+  for (const environment of sshCatalog) {
+    entries.push(buildSavedSSHEnvironmentEntry(environment, openSessionBySSHEnvironment(openSessions, environment)));
   }
 
   return entries;
@@ -230,12 +321,42 @@ function buildSavedEnvironmentEntry(
   };
 }
 
+function buildSavedSSHEnvironmentEntry(
+  environment: DesktopSavedSSHEnvironment,
+  openSession: DesktopSessionSummary | null,
+): DesktopEnvironmentEntry {
+  const isOpen = openSession !== null;
+  return {
+    id: environment.id,
+    kind: 'ssh_environment',
+    label: environment.label,
+    local_ui_url: openSession?.startup.local_ui_url ?? '',
+    secondary_text: environment.ssh_port === null
+      ? environment.ssh_destination
+      : `${environment.ssh_destination}:${environment.ssh_port}`,
+    ssh_details: {
+      ssh_destination: environment.ssh_destination,
+      ssh_port: environment.ssh_port,
+      remote_install_dir: environment.remote_install_dir,
+    },
+    tag: isOpen ? 'Open' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',
+    category: environment.source,
+    is_open: isOpen,
+    open_session_key: openSession?.session_key ?? '',
+    open_action_label: isOpen ? 'Focus' : 'Open',
+    can_edit: true,
+    can_delete: true,
+    can_save: environment.source === 'recent_auto',
+    last_used_at_ms: environment.last_used_at_ms,
+  };
+}
+
 function suggestedRemoteURL(
   issue: DesktopWelcomeIssue | null,
   openSessions: readonly DesktopSessionSummary[],
   environments: readonly DesktopEnvironmentEntry[],
 ): string {
-  if (issue?.scope === 'remote_environment' && issue.target_url) {
+  if (issue?.scope === 'remote_environment' && issue.target_url && !issue.ssh_details) {
     return issue.target_url;
   }
 

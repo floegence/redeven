@@ -5,10 +5,12 @@ import {
   buildBlockedLaunchIssue,
   buildDesktopWelcomeSnapshot,
   buildRemoteConnectionIssue,
+  buildSSHConnectionIssue,
 } from './desktopWelcomeState';
 import {
   buildExternalLocalUIDesktopTarget,
   buildManagedLocalDesktopTarget,
+  buildSSHDesktopTarget,
 } from './desktopTarget';
 
 const testProvider = normalizeDesktopControlPlaneProvider({
@@ -43,6 +45,7 @@ describe('desktopWelcomeState', () => {
             last_used_at_ms: 100,
           },
         ],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [
           'http://192.168.1.12:24000/',
           'http://192.168.1.11:24000/',
@@ -180,6 +183,7 @@ describe('desktopWelcomeState', () => {
         local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       },
@@ -211,6 +215,70 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.77:24000/');
   });
 
+  it('builds saved and open SSH environments without replacing them with forwarded localhost urls', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: {
+        local_ui_bind: '127.0.0.1:0',
+        local_ui_password: '',
+        local_ui_password_configured: false,
+        pending_bootstrap: null,
+        saved_environments: [],
+        saved_ssh_environments: [{
+          id: 'ssh:devbox:2222:remote_default',
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          remote_install_dir: 'remote_default',
+          source: 'saved',
+          last_used_at_ms: 100,
+        }],
+        recent_external_local_ui_urls: [],
+        control_planes: [],
+      },
+      openSessions: [
+        {
+          session_key: 'ssh:devbox:2222:remote_default',
+          target: buildSSHDesktopTarget({
+            ssh_destination: 'devbox',
+            ssh_port: 2222,
+            remote_install_dir: 'remote_default',
+          }, {
+            label: 'SSH Lab',
+            forwardedLocalUIURL: 'http://127.0.0.1:40111/',
+          }),
+          startup: {
+            local_ui_url: 'http://127.0.0.1:40111/',
+            local_ui_urls: ['http://127.0.0.1:40111/'],
+          },
+        },
+      ],
+      issue: buildSSHConnectionIssue({
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        remote_install_dir: 'remote_default',
+      }, 'ssh_target_unreachable', 'Desktop could not reach that SSH target.'),
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'ssh:devbox:2222:remote_default',
+        kind: 'ssh_environment',
+        label: 'SSH Lab',
+        secondary_text: 'devbox:2222',
+        local_ui_url: 'http://127.0.0.1:40111/',
+        tag: 'Open',
+        category: 'saved',
+        is_open: true,
+      }),
+    ]));
+    expect(snapshot.suggested_remote_url).toBe('');
+    expect(snapshot.issue?.ssh_details).toEqual({
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: 'remote_default',
+    });
+  });
+
   it('builds a dedicated settings snapshot when requested by the desktop shell', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: {
@@ -223,6 +291,7 @@ describe('desktopWelcomeState', () => {
           env_token: 'token-123',
         },
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       },
@@ -264,6 +333,7 @@ describe('desktopWelcomeState', () => {
         local_ui_password_configured: false,
         pending_bootstrap: null,
         saved_environments: [],
+        saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_planes: [],
       },

@@ -53,8 +53,8 @@ export function buildDesktopWelcomeShellViewModel(
   };
 }
 
-export function isExternalEnvironmentEntry(environment: DesktopEnvironmentEntry): boolean {
-  return environment.kind === 'external_local_ui';
+export function isRemoteEnvironmentEntry(environment: DesktopEnvironmentEntry): boolean {
+  return environment.kind === 'external_local_ui' || environment.kind === 'ssh_environment';
 }
 
 export function libraryFilterLabel(filter: EnvironmentLibraryFilter): string {
@@ -74,7 +74,7 @@ export function environmentMatchesLibraryFilter(
   environment: DesktopEnvironmentEntry,
   filter: EnvironmentLibraryFilter,
 ): boolean {
-  if (!isExternalEnvironmentEntry(environment)) {
+  if (!isRemoteEnvironmentEntry(environment)) {
     return false;
   }
   switch (filter) {
@@ -93,7 +93,7 @@ export function environmentMatchesLibrarySearch(
   environment: DesktopEnvironmentEntry,
   query: string,
 ): boolean {
-  if (!isExternalEnvironmentEntry(environment)) {
+  if (!isRemoteEnvironmentEntry(environment)) {
     return false;
   }
   const clean = query.trim().toLowerCase();
@@ -104,6 +104,8 @@ export function environmentMatchesLibrarySearch(
     environment.label,
     environment.local_ui_url,
     environment.secondary_text,
+    environment.ssh_details?.ssh_destination ?? '',
+    environment.ssh_details?.remote_install_dir ?? '',
   ].some((value) => value.toLowerCase().includes(clean));
 }
 
