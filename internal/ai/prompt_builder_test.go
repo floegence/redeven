@@ -80,6 +80,7 @@ func TestBuildPromptRuntimeContextSection_IncludesPromptProfileAndTodoFacts(t *t
 
 	section := buildPromptRuntimeContextSection(promptRuntimeSnapshot{
 		WorkingDir:          "/tmp/work",
+		LocalTime:           promptLocalTimeContext{CurrentDate: "2026-04-04", Timezone: "Asia/Shanghai"},
 		RoundIndex:          1,
 		IsFirstRound:        false,
 		Mode:                "act",
@@ -112,6 +113,8 @@ func TestBuildPromptRuntimeContextSection_IncludesPromptProfileAndTodoFacts(t *t
 	}).render()
 
 	for _, want := range []string{
+		"- Current date: 2026-04-04",
+		"- Timezone: Asia/Shanghai",
 		"- Prompt profile: subagent_autonomous",
 		"- Required todo minimum: 3",
 		"- Interaction contract: enabled",
@@ -121,5 +124,15 @@ func TestBuildPromptRuntimeContextSection_IncludesPromptProfileAndTodoFacts(t *t
 		if !strings.Contains(section, want) {
 			t.Fatalf("runtime context missing %q: %q", want, section)
 		}
+	}
+}
+
+func TestBuildPromptMandatoryRulesSection_UsesRuntimeDateContextForRelativeDates(t *testing.T) {
+	t.Parallel()
+
+	section := buildPromptMandatoryRulesSection(promptRuntimeSnapshot{}).render()
+	want := "resolve them against the current date and timezone in runtime context"
+	if !strings.Contains(section, want) {
+		t.Fatalf("mandatory rules missing relative-date guidance %q: %q", want, section)
 	}
 }
