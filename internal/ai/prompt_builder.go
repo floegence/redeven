@@ -31,6 +31,7 @@ type promptTodoStatus struct {
 type promptRuntimeSnapshot struct {
 	WorkingDir                     string
 	LocalTime                      promptLocalTimeContext
+	WorkspaceContext               promptWorkspaceContext
 	RoundIndex                     int
 	IsFirstRound                   bool
 	Mode                           string
@@ -229,6 +230,7 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 	return promptRuntimeSnapshot{
 		WorkingDir:          cwd,
 		LocalTime:           currentPromptLocalTimeContext(time.Now),
+		WorkspaceContext:    collectPromptWorkspaceContext(r, capability),
 		RoundIndex:          round,
 		IsFirstRound:        isFirstRound,
 		Mode:                strings.TrimSpace(mode),
@@ -321,6 +323,9 @@ func buildPromptDynamicSections(snapshot promptRuntimeSnapshot) []promptSection 
 		sections = append(sections, section)
 	}
 	sections = append(sections, buildPromptRuntimeContextSection(snapshot))
+	if section := buildPromptWorkspaceContextSection(snapshot); !section.isEmpty() {
+		sections = append(sections, section)
+	}
 	if section := newPromptSectionFromText("skill_catalog", buildSkillCatalogPrompt(snapshot.AvailableSkills)); !section.isEmpty() {
 		sections = append(sections, section)
 	}

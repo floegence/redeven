@@ -18,10 +18,15 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 
 - The prompt is split into:
   - a cacheable static prefix for durable operating policy;
-  - a dynamic runtime tail for execution/completion contracts, runtime context, interaction contract, and skills;
+  - a dynamic runtime tail for execution/completion contracts, runtime context, workspace context, interaction contract, and skills;
   - overlay sections for recovery or exception guidance.
-- Static prefix caching is intentionally conservative and excludes volatile facts such as the current objective text, round counters, local date/timezone context, todo counts, recent errors, skill overlays, and exception overlays.
+- Static prefix caching is intentionally conservative and excludes volatile facts such as the current objective text, round counters, local date/timezone context, git/worktree state, repository rule excerpts, delegation state, todo counts, recent errors, skill overlays, and exception overlays.
 - Runtime context includes authoritative local date and timezone facts sampled from the runtime host when the prompt is built, so relative date references can be grounded without adding scenario-specific heuristics.
+- Workspace context is collected at prompt-build time and exposes:
+  - environment facts such as shell, runtime home, approval policy, dangerous-command blocking, web-search provider, and whether subagent delegation is available;
+  - repository state such as git repository detection, worktree root, branch/upstream, ahead-behind, linked-worktree status, and a staged/unstaged/untracked summary;
+  - durable repository rule files discovered from the current worktree path (for example `AGENTS.md`, `CLAUDE.md`, `.develop.md`, `.introduce.md`) under an explicit prompt budget;
+  - active subagent/delegation state so the parent agent can see ongoing parallel work instead of redoing it.
 - Runtime gates remain authoritative for `ask_user` and `task_complete`; prompt structure guides model behavior but does not replace deterministic runtime validation.
 - `prompt_profile` is a real behavior switch, not metadata only:
   - `main_interactive`: the normal top-level Flower run that may ask the user for structured input when capability allows it;
