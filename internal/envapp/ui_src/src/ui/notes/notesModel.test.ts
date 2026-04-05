@@ -1,4 +1,8 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   applyNotesEvent,
   computeBoardBounds,
@@ -13,6 +17,8 @@ import {
   type NotesTopic,
   type NotesTrashItem,
 } from './notesModel';
+
+const NOTES_MODEL_PATH = path.resolve(process.cwd(), 'src/ui/notes/notesModel.ts');
 
 function topic(overrides?: Partial<NotesTopic>): NotesTopic {
   return {
@@ -97,6 +103,12 @@ function trashItem(overrides?: Partial<NotesTrashItem>): NotesTrashItem {
 }
 
 describe('notesModel', () => {
+  it('re-exports the canonical Notes DSL from floe-webapp-core instead of duplicating it locally', () => {
+    const source = fs.readFileSync(path.resolve(NOTES_MODEL_PATH), 'utf-8');
+
+    expect(source).toContain("from '@floegence/floe-webapp-core/notes'");
+  });
+
   it('normalizes snapshot ordering for topics and items', () => {
     const value = snapshot();
 

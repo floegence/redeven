@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
 import { deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme, useWidgetRegistry } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
+import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
   Activity,
   ArrowRightLeft,
@@ -68,7 +69,6 @@ import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
-import { NotesOverlayIcon } from './notes/notesAppearance';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';
