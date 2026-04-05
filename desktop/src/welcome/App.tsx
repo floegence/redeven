@@ -2712,7 +2712,7 @@ function ConnectionDialog(props: Readonly<{
         >
           <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
             <div class="text-xs leading-5 text-muted-foreground">
-              Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.
+              Desktop reuses only the exact Desktop-managed Redeven release, installs it on demand when needed, and tunnels its Local UI over SSH.
             </div>
             <div class="mt-3 space-y-3">
               <div class="space-y-1.5">
@@ -2741,7 +2741,7 @@ function ConnectionDialog(props: Readonly<{
                   size="sm"
                 />
                 <div class="text-[11px] text-muted-foreground">
-                  Automatic prefers a desktop-managed upload for offline targets, then falls back to the remote installer.
+                  Automatic reuses only the exact Desktop-managed release, prefers a desktop upload for offline targets, then falls back to the remote installer.
                 </div>
               </div>
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">

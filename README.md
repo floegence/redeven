@@ -94,13 +94,15 @@ curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/inst
 
 If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven/releases).
 
-Redeven Desktop can open the bundled `Local Environment`, attach to a reachable Redeven Local UI URL, or SSH into another machine, install the matching Redeven runtime on demand, and tunnel its Local UI back into the same desktop shell.
+Redeven Desktop can open the bundled `Local Environment`, attach to a reachable Redeven Local UI URL, or SSH into another machine, reuse only an exact matching Desktop-managed Redeven runtime, install the current Desktop release on demand when needed, and tunnel its Local UI back into the same desktop shell.
 
 For SSH Environments, Desktop now supports three bootstrap delivery modes:
 
 - `Automatic`: prefer a desktop-managed upload of the correct remote release package, then fall back to the remote installer
 - `Desktop Upload`: detect the remote OS/arch, download the matching release asset locally, upload it over SSH, and start Redeven without requiring target-machine internet access
 - `Remote Install`: keep the original remote `install.sh` flow for internet-connected targets
+
+Desktop only reuses a remote runtime when the binary reports the exact current Desktop release and the version root contains a valid Desktop-managed runtime stamp. Unrelated user-managed `redeven` installs elsewhere on the host are left alone and are not adopted automatically.
 
 `Desktop Upload` only trusts a release manifest after verifying `SHA256SUMS` against the published `SHA256SUMS.sig` and `SHA256SUMS.pem` GitHub Actions signing materials. Compatible internal mirrors must therefore publish the same release manifest trio plus the target tarballs. Desktop caches those assets by normalized `release_base_url`, release tag, and platform so different mirrors never share the same local cache entry.
 

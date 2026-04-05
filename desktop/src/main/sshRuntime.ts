@@ -30,11 +30,36 @@ const DEFAULT_SSH_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 15;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
 const MAX_RECENT_LOG_CHARS = 8_000;
+export const MANAGED_SSH_RUNTIME_STAMP_FILENAME = 'desktop-runtime.stamp';
+export const MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION = 1;
 
 type SpawnedSSHProcess = ChildProcessByStdio<Writable | null, Readable | null, Readable>;
 type RemoteInstallStrategy = 'desktop_upload' | 'remote_install';
 type PreparedDesktopSSHUploadAsset = Readonly<{
   archiveData: Buffer;
+}>;
+export type DesktopSSHRemoteRuntimeStamp = Readonly<{
+  schema_version: typeof MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION;
+  managed_by: 'redeven-desktop';
+  runtime_release_tag: string;
+  install_strategy: RemoteInstallStrategy;
+}>;
+export type DesktopSSHRemoteRuntimeProbeStatus =
+  | 'ready'
+  | 'missing_binary'
+  | 'binary_not_executable'
+  | 'version_command_failed'
+  | 'version_output_invalid'
+  | 'version_mismatch'
+  | 'stamp_missing'
+  | 'stamp_invalid';
+export type DesktopSSHRemoteRuntimeProbeResult = Readonly<{
+  status: DesktopSSHRemoteRuntimeProbeStatus;
+  expected_release_tag: string;
+  reported_release_tag: string | null;
+  binary_path: string;
+  stamp_path: string;
+  reason: string;
 }>;
 
 type RecentLogs = Readonly<{
@@ -183,16 +208,131 @@ function buildRemoteInstallRootShell(): string {
   ].join('\n');
 }
 
-export function buildManagedSSHRuntimeReadyScript(): string {
+function buildManagedSSHRuntimePathShell(): string {
+  return [
+    'release_tag="$2"',
+    'version_root="${install_root%/}/${release_tag}"',
+    'bin_dir="${version_root}/bin"',
+    'binary="${bin_dir}/redeven"',
+    `stamp_path="\${version_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+  ].join('\n');
+}
+
+function buildManagedSSHRuntimeProbeShell(): string {
+  return [
+    'probe_status=""',
+    'probe_reason=""',
+    'reported_release_tag=""',
+    'read_install_strategy_line() {',
+    '  install_strategy_line=""',
+    '  while IFS= read -r stamp_line; do',
+    '    case "$stamp_line" in',
+    '      install_strategy=*)',
+    '        install_strategy_line="$stamp_line"',
+    '        break',
+    '        ;;',
+    '    esac',
+    '  done < "$stamp_path"',
+    '}',
+    'runtime_is_compatible() {',
+    '  if [ ! -e "$binary" ]; then',
+    '    probe_status="missing_binary"',
+    '    probe_reason="managed runtime binary is missing"',
+    '    return 1',
+    '  fi',
+    '  if [ ! -x "$binary" ]; then',
+    '    probe_status="binary_not_executable"',
+    '    probe_reason="managed runtime binary is not executable"',
+    '    return 1',
+    '  fi',
+    '  if ! version_output="$("$binary" version 2>/dev/null)"; then',
+    '    probe_status="version_command_failed"',
+    '    probe_reason="managed runtime failed to report its version"',
+    '    return 1',
+    '  fi',
+    '  set -- $version_output',
+    '  if [ "${1:-}" != "redeven" ] || [ -z "${2:-}" ]; then',
+    '    probe_status="version_output_invalid"',
+    '    probe_reason="managed runtime returned an invalid version string"',
+    '    return 1',
+    '  fi',
+    '  reported_release_tag="$2"',
+    '  case "$reported_release_tag" in',
+    '    v*) ;;',
+    '    *) reported_release_tag="v$reported_release_tag" ;;',
+    '  esac',
+    '  if [ "$reported_release_tag" != "$release_tag" ]; then',
+    '    probe_status="version_mismatch"',
+    '    probe_reason="managed runtime version does not match the requested Desktop release"',
+    '    return 1',
+    '  fi',
+    '  if [ ! -f "$stamp_path" ]; then',
+    '    probe_status="stamp_missing"',
+    '    probe_reason="managed runtime stamp is missing"',
+    '    return 1',
+    '  fi',
+    `  if ! grep -Fx "schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}" "$stamp_path" >/dev/null 2>&1; then`,
+    '    probe_status="stamp_invalid"',
+    '    probe_reason="managed runtime stamp schema is invalid"',
+    '    return 1',
+    '  fi',
+    '  if ! grep -Fx "managed_by=redeven-desktop" "$stamp_path" >/dev/null 2>&1; then',
+    '    probe_status="stamp_invalid"',
+    '    probe_reason="managed runtime stamp owner is invalid"',
+    '    return 1',
+    '  fi',
+    '  if ! grep -Fx "runtime_release_tag=$release_tag" "$stamp_path" >/dev/null 2>&1; then',
+    '    probe_status="stamp_invalid"',
+    '    probe_reason="managed runtime stamp release does not match the requested Desktop release"',
+    '    return 1',
+    '  fi',
+    '  read_install_strategy_line',
+    '  case "$install_strategy_line" in',
+    '    install_strategy=desktop_upload|install_strategy=remote_install)',
+    '      ;;',
+    '    *)',
+    '      probe_status="stamp_invalid"',
+    '      probe_reason="managed runtime stamp install strategy is invalid"',
+    '      return 1',
+    '      ;;',
+    '  esac',
+    '  probe_status="ready"',
+    '  probe_reason="desktop-managed runtime is compatible"',
+    '  return 0',
+    '}',
+  ].join('\n');
+}
+
+function buildManagedSSHRuntimeStampShell(): string {
+  return [
+    'write_runtime_stamp() {',
+    '  install_strategy="$1"',
+    '  mkdir -p "$version_root"',
+    '  temp_stamp="${stamp_path}.tmp.$$"',
+    '  {',
+    `    printf 'schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}\\n'`,
+    "    printf 'managed_by=redeven-desktop\\n'",
+    "    printf 'runtime_release_tag=%s\\n' \"$release_tag\"",
+    "    printf 'install_strategy=%s\\n' \"$install_strategy\"",
+    '  } > "$temp_stamp"',
+    '  mv "$temp_stamp" "$stamp_path"',
+    '}',
+  ].join('\n');
+}
+
+export function buildManagedSSHRuntimeProbeScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    'release_tag="$2"',
-    'binary="${install_root%/}/${release_tag}/bin/redeven"',
-    'if [ ! -x "$binary" ]; then',
-    '  exit 1',
-    'fi',
-    '"$binary" version >/dev/null 2>&1',
+    buildManagedSSHRuntimePathShell(),
+    buildManagedSSHRuntimeProbeShell(),
+    'runtime_is_compatible || true',
+    "printf 'status=%s\\n' \"$probe_status\"",
+    "printf 'expected_release_tag=%s\\n' \"$release_tag\"",
+    "printf 'reported_release_tag=%s\\n' \"$reported_release_tag\"",
+    "printf 'binary_path=%s\\n' \"$binary\"",
+    "printf 'stamp_path=%s\\n' \"$stamp_path\"",
+    "printf 'reason=%s\\n' \"$probe_reason\"",
   ].join('\n');
 }
 
@@ -200,19 +340,23 @@ export function buildManagedSSHRemoteInstallScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    'release_tag="$2"',
+    buildManagedSSHRuntimePathShell(),
     'install_script_url="$3"',
-    'version_root="${install_root%/}/${release_tag}"',
-    'bin_dir="${version_root}/bin"',
-    'binary="${bin_dir}/redeven"',
+    buildManagedSSHRuntimeProbeShell(),
+    buildManagedSSHRuntimeStampShell(),
     'install_runtime() {',
-    '  curl -fsSL "$install_script_url" | REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$release_tag" REDEVEN_INSTALL_DIR="$bin_dir" sh',
+    '  script_path="${version_root}/install.sh.$$"',
+    '  mkdir -p "$bin_dir"',
+    '  curl -fsSL "$install_script_url" -o "$script_path"',
+    '  if ! REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$release_tag" REDEVEN_INSTALL_DIR="$bin_dir" sh "$script_path"; then',
+    '    rm -f "$script_path"',
+    '    return 1',
+    '  fi',
+    '  rm -f "$script_path"',
     '}',
-    'if [ ! -x "$binary" ]; then',
+    'if ! runtime_is_compatible; then',
     '  install_runtime',
-    'fi',
-    'if ! "$binary" version >/dev/null 2>&1; then',
-    '  install_runtime',
+    '  write_runtime_stamp "remote_install"',
     'fi',
   ].join('\n');
 }
@@ -221,11 +365,10 @@ export function buildManagedSSHUploadedInstallScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    'release_tag="$2"',
+    buildManagedSSHRuntimePathShell(),
     'archive_path="$3"',
     'upload_dir="$4"',
-    'version_root="${install_root%/}/${release_tag}"',
-    'bin_dir="${version_root}/bin"',
+    buildManagedSSHRuntimeStampShell(),
     'extract_dir="$(mktemp -d "${upload_dir%/}/extract.XXXXXX")"',
     'cleanup() { rm -rf "$extract_dir" "$upload_dir"; }',
     'trap cleanup EXIT INT TERM',
@@ -245,6 +388,7 @@ export function buildManagedSSHUploadedInstallScript(): string {
     'fi',
     'mv "$binary_path" "${bin_dir}/redeven"',
     'chmod +x "${bin_dir}/redeven"',
+    'write_runtime_stamp "desktop_upload"',
   ].join('\n');
 }
 
@@ -252,11 +396,8 @@ export function buildManagedSSHStartScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    'release_tag="$2"',
+    buildManagedSSHRuntimePathShell(),
     'session_token="$3"',
-    'version_root="${install_root%/}/${release_tag}"',
-    'bin_dir="${version_root}/bin"',
-    'binary="${bin_dir}/redeven"',
     'session_dir="${version_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
     'cleanup() { rm -rf "$session_dir"; }',
@@ -282,6 +423,98 @@ export function buildManagedSSHReportReadScript(): string {
     'fi',
     'cat "$report_path"',
   ].join('\n');
+}
+
+function probeResultFallbackReason(status: DesktopSSHRemoteRuntimeProbeStatus): string {
+  switch (status) {
+    case 'ready':
+      return 'desktop-managed runtime is compatible';
+    case 'missing_binary':
+      return 'managed runtime binary is missing';
+    case 'binary_not_executable':
+      return 'managed runtime binary is not executable';
+    case 'version_command_failed':
+      return 'managed runtime failed to report its version';
+    case 'version_output_invalid':
+      return 'managed runtime returned an invalid version string';
+    case 'version_mismatch':
+      return 'managed runtime version does not match the requested Desktop release';
+    case 'stamp_missing':
+      return 'managed runtime stamp is missing';
+    case 'stamp_invalid':
+      return 'managed runtime stamp is invalid';
+  }
+}
+
+function normalizeProbeStatus(value: string): DesktopSSHRemoteRuntimeProbeStatus {
+  const clean = compact(value);
+  switch (clean) {
+    case 'ready':
+    case 'missing_binary':
+    case 'binary_not_executable':
+    case 'version_command_failed':
+    case 'version_output_invalid':
+    case 'version_mismatch':
+    case 'stamp_missing':
+    case 'stamp_invalid':
+      return clean as DesktopSSHRemoteRuntimeProbeStatus;
+    default:
+      throw new Error(`Desktop received an unknown SSH runtime probe status: ${value}`);
+  }
+}
+
+function parseProbeResultLines(raw: string): ReadonlyMap<string, string> {
+  const values = new Map<string, string>();
+  for (const rawLine of String(raw ?? '').split(/\r?\n/u)) {
+    const line = rawLine.trim();
+    if (line === '') {
+      continue;
+    }
+    const separatorIndex = line.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+    values.set(line.slice(0, separatorIndex), line.slice(separatorIndex + 1));
+  }
+  return values;
+}
+
+export function parseManagedSSHRuntimeProbeResult(raw: string): DesktopSSHRemoteRuntimeProbeResult {
+  const values = parseProbeResultLines(raw);
+  const status = normalizeProbeStatus(values.get('status') ?? '');
+  const expectedReleaseTag = normalizeRuntimeReleaseTag(values.get('expected_release_tag') ?? '');
+  const reportedReleaseTagRaw = compact(values.get('reported_release_tag'));
+  const binaryPath = compact(values.get('binary_path'));
+  const stampPath = compact(values.get('stamp_path'));
+  if (binaryPath === '') {
+    throw new Error('Desktop SSH runtime probe did not include a binary path.');
+  }
+  if (stampPath === '') {
+    throw new Error('Desktop SSH runtime probe did not include a stamp path.');
+  }
+  return {
+    status,
+    expected_release_tag: expectedReleaseTag,
+    reported_release_tag: reportedReleaseTagRaw === '' ? null : normalizeRuntimeReleaseTag(reportedReleaseTagRaw),
+    binary_path: binaryPath,
+    stamp_path: stampPath,
+    reason: compact(values.get('reason')) || probeResultFallbackReason(status),
+  };
+}
+
+export function describeManagedSSHRuntimeProbeResult(result: DesktopSSHRemoteRuntimeProbeResult): string {
+  switch (result.status) {
+    case 'ready':
+      return `Desktop-managed runtime at ${result.binary_path} is ready for ${result.expected_release_tag}.`;
+    case 'version_mismatch':
+      return `Managed runtime at ${result.binary_path} reports ${result.reported_release_tag ?? 'an unknown version'} instead of ${result.expected_release_tag}.`;
+    case 'stamp_missing':
+      return `Managed runtime at ${result.binary_path} matches ${result.expected_release_tag}, but the Desktop stamp is missing at ${result.stamp_path}.`;
+    case 'stamp_invalid':
+      return `Managed runtime stamp at ${result.stamp_path} is invalid for ${result.expected_release_tag}.`;
+    default:
+      return `${result.reason} (${result.binary_path}).`;
+  }
 }
 
 function remotePortFromStartup(startup: StartupReport): number {
@@ -454,7 +687,7 @@ async function waitForMasterReady(args: Readonly<{
   }
 }
 
-async function remoteRuntimeIsInstalled(args: Readonly<{
+async function probeRemoteRuntimeCompatibility(args: Readonly<{
   sshBinary: string;
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
@@ -462,13 +695,13 @@ async function remoteRuntimeIsInstalled(args: Readonly<{
   runtimeReleaseTag: string;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
-}>): Promise<boolean> {
+}>): Promise<DesktopSSHRemoteRuntimeProbeResult> {
   const result = await runSSHOnce(
     args.sshBinary,
     [
       ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds),
       ...sshTargetArgs(args.target),
-      'sh', '-lc', buildManagedSSHRuntimeReadyScript(), 'redeven-ssh-runtime-ready',
+      'sh', '-lc', buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe',
       args.target.remote_install_dir,
       args.runtimeReleaseTag,
     ],
@@ -476,7 +709,17 @@ async function remoteRuntimeIsInstalled(args: Readonly<{
     'control_stderr',
     args.onLog,
   );
-  return result.exit_code === 0;
+  if (result.exit_code !== 0) {
+    throw readinessFailure('Desktop could not probe the managed Redeven runtime over SSH.', args.logs);
+  }
+  try {
+    return parseManagedSSHRuntimeProbeResult(result.stdout);
+  } catch (error) {
+    throw readinessFailure(
+      error instanceof Error ? error.message : 'Desktop received an invalid SSH runtime probe result.',
+      args.logs,
+    );
+  }
 }
 
 async function probeRemotePlatform(args: Readonly<{
@@ -716,11 +959,14 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
 }>): Promise<void> {
-  if (await remoteRuntimeIsInstalled(args)) {
+  const initialProbe = await probeRemoteRuntimeCompatibility(args);
+  if (initialProbe.status === 'ready') {
     return;
   }
 
-  const failures: string[] = [];
+  const failures: string[] = [
+    `existing runtime: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`,
+  ];
   for (const strategy of installStrategyOrder(args.target.bootstrap_strategy)) {
     try {
       if (strategy === 'desktop_upload') {
@@ -752,13 +998,23 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
           logs: args.logs,
           onLog: args.onLog,
         });
-      } else {
-        await installRemoteRuntimeViaRemoteInstall(args);
+        const uploadProbe = await probeRemoteRuntimeCompatibility(args);
+        if (uploadProbe.status === 'ready') {
+          return;
+        }
+        failures.push(`${strategy}: ${describeManagedSSHRuntimeProbeResult(uploadProbe)}`);
+        if (args.target.bootstrap_strategy === 'auto') {
+          break;
+        }
+        continue;
       }
-      if (await remoteRuntimeIsInstalled(args)) {
+
+      await installRemoteRuntimeViaRemoteInstall(args);
+      const installProbe = await probeRemoteRuntimeCompatibility(args);
+      if (installProbe.status === 'ready') {
         return;
       }
-      failures.push(`${strategy}: remote runtime remained unavailable after installation.`);
+      failures.push(`${strategy}: ${describeManagedSSHRuntimeProbeResult(installProbe)}`);
     } catch (error) {
       failures.push(`${strategy}: ${error instanceof Error ? error.message : String(error)}`);
       if (strategy === 'desktop_upload' && args.target.bootstrap_strategy === 'auto') {

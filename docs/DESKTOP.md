@@ -84,7 +84,7 @@ It does not introduce a second SSH-native file or terminal protocol. Instead, El
 1. Validates the SSH target fields.
 2. Uses the host `ssh` client in non-interactive batch mode.
 3. Opens a shared SSH control socket.
-4. Checks whether the matching Redeven release is already installed remotely.
+4. Probes whether a compatible Desktop-managed copy of the exact Redeven release is already installed remotely.
 5. If installation is needed, uses one of three bootstrap strategies:
    - `desktop_upload`
    - `remote_install`
@@ -100,6 +100,9 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 
 - Desktop does not introduce a second SSH-native runtime protocol.
 - Desktop pins the remote install to the same Redeven release tag as the running desktop build.
+- Desktop only reuses a remote runtime when the binary reports that exact release tag and a Desktop-managed runtime stamp in the same version root is valid.
+- Each managed version root contains `desktop-runtime.stamp`, which records the stamp schema, the owning shell (`redeven-desktop`), the exact release tag, and the install strategy.
+- Desktop intentionally does not adopt arbitrary user-installed `redeven` binaries outside that managed version root, so SSH bootstrap stays side-by-side with direct CLI installs instead of mutating them.
 - The remote install path defaults to the remote user's cache and can be overridden with an absolute path.
 - Desktop can probe the remote OS/architecture (`linux` / `darwin`, `amd64` / `arm64` / `arm` / `386`) and choose the matching release package for desktop-managed upload.
 - `desktop_upload` first resolves `SHA256SUMS`, `SHA256SUMS.sig`, and `SHA256SUMS.pem`, verifies that signed manifest against the pinned Sigstore Fulcio chain plus the Redeven GitHub Actions release-workflow identity policy, and only then trusts the per-asset checksums used for the tarball download.
@@ -171,8 +174,8 @@ Interaction rules:
     - `Release Base URL`
 - The SSH `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Release Base URL` or `Remote Install Directory` does not auto-collapse the section.
 - SSH mode explains the actual behavior inline:
-  - Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.
-  - Automatic prefers a desktop-managed upload for offline targets, then falls back to the remote installer.
+  - Desktop reuses only the exact Desktop-managed release, installs it on demand when needed, and tunnels its Local UI over SSH.
+  - Automatic reuses only the exact Desktop-managed release, prefers a desktop upload for offline targets, then falls back to the remote installer.
 - `Add Control Plane` opens a separate dialog that accepts a Provider URL plus a `desktop_session_token`.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
