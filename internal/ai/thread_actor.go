@@ -565,14 +565,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, err
 	}
 
-	checkpointID := checkpointIDForRun(runID)
-	if strings.TrimSpace(checkpointID) == "" {
-		return SendUserTurnResponse{}, errors.New("missing checkpoint id")
-	}
-	cctx, cancel := context.WithTimeout(ctx, persistTO)
-	_, cpErr := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
-	cancel()
-	if cpErr != nil {
+	if cpErr := a.mgr.svc.createPreRunThreadCheckpoint(ctx, endpointID, threadID, runID); cpErr != nil {
 		return SendUserTurnResponse{}, cpErr
 	}
 
@@ -729,14 +722,7 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	if err != nil {
 		return SubmitStructuredPromptResponseResponse{}, err
 	}
-	checkpointID := checkpointIDForRun(runID)
-	if strings.TrimSpace(checkpointID) == "" {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("missing checkpoint id")
-	}
-	cctx, cancel := context.WithTimeout(ctx, persistTO)
-	_, cpErr := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
-	cancel()
-	if cpErr != nil {
+	if cpErr := a.mgr.svc.createPreRunThreadCheckpoint(ctx, endpointID, threadID, runID); cpErr != nil {
 		return SubmitStructuredPromptResponseResponse{}, cpErr
 	}
 	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
@@ -789,7 +775,7 @@ func (a *threadActor) handleRewindThread(ctx context.Context, meta *session.Meta
 		return RewindThreadResponse{}, errors.New("invalid request")
 	}
 
-	// Best-effort: cancel any active run so it cannot keep mutating the workspace while rewinding.
+	// Best-effort: cancel any active run so it cannot keep mutating thread state while rewinding.
 	activeRunID, r := a.lookupActiveRun(endpointID, threadID)
 	if activeRunID != "" {
 		_ = a.mgr.svc.CancelRun(meta, activeRunID)

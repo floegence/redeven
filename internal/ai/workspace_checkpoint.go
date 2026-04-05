@@ -63,6 +63,52 @@ func checkpointArtifactsDir(stateDir string, checkpointID string) string {
 	return filepath.Join(strings.TrimSpace(stateDir), "ai", "workspace_checkpoints", strings.TrimSpace(checkpointID))
 }
 
+func workspaceCheckpointArtifactsRoot(stateDir string) string {
+	return filepath.Join(strings.TrimSpace(stateDir), "ai", "workspace_checkpoints")
+}
+
+func listWorkspaceCheckpointArtifactIDs(stateDir string) ([]string, error) {
+	root := workspaceCheckpointArtifactsRoot(stateDir)
+	if strings.TrimSpace(root) == "" {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry == nil || !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func removeWorkspaceCheckpointArtifacts(stateDir string, checkpointID string) error {
+	checkpointID = strings.TrimSpace(checkpointID)
+	if checkpointID == "" {
+		return nil
+	}
+	dir := checkpointArtifactsDir(stateDir, checkpointID)
+	if strings.TrimSpace(dir) == "" {
+		return nil
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	return nil
+}
+
 func defaultWorkspaceTarExcludes() []string {
 	return []string{
 		".git",
@@ -149,10 +195,6 @@ func runGitCombinedOutput(ctx context.Context, repoRoot string, env []string, ar
 	return gitutil.RunCombinedOutput(ctx, repoRoot, env, args...)
 }
 
-func gitShowTopLevel(ctx context.Context, dir string) (string, bool) {
-	return gitutil.ShowTopLevel(ctx, dir)
-}
-
 func parseZList(b []byte) []string {
 	if len(b) == 0 {
 		return nil
@@ -167,78 +209,6 @@ func parseZList(b []byte) []string {
 		out = append(out, p)
 	}
 	return out
-}
-
-func createWorkspaceCheckpoint(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error) {
-	meta := workspaceCheckpointMeta{}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	stateDir = strings.TrimSpace(stateDir)
-	checkpointID = strings.TrimSpace(checkpointID)
-	workingDirAbs = filepath.Clean(strings.TrimSpace(workingDirAbs))
-	if stateDir == "" || checkpointID == "" || workingDirAbs == "" || !filepath.IsAbs(workingDirAbs) {
-		return meta, errors.New("invalid workspace checkpoint request")
-	}
-
-	now := time.Now().UnixMilli()
-	if now <= 0 {
-		now = 1
-	}
-
-	if repoRoot, ok := gitShowTopLevel(ctx, workingDirAbs); ok {
-		cp, err := createGitTreeCheckpoint(ctx, stateDir, checkpointID, repoRoot, now)
-		if err == nil {
-			return cp, nil
-		}
-		// Fall back to tar on git failures to keep rewind available for non-standard repos.
-	}
-	return createTarCheckpoint(ctx, stateDir, checkpointID, workingDirAbs, now)
-}
-
-func createGitTreeCheckpoint(ctx context.Context, stateDir string, checkpointID string, repoRoot string, createdAtUnixMs int64) (workspaceCheckpointMeta, error) {
-	repoRoot = filepath.Clean(strings.TrimSpace(repoRoot))
-	if repoRoot == "" || !filepath.IsAbs(repoRoot) {
-		return workspaceCheckpointMeta{}, errors.New("invalid git repo root")
-	}
-
-	dir := checkpointArtifactsDir(stateDir, checkpointID)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return workspaceCheckpointMeta{}, err
-	}
-	indexPath := filepath.Join(dir, "git.index")
-
-	untrackedRaw, err := runGitCombinedOutput(ctx, repoRoot, nil, "ls-files", "--others", "--exclude-standard", "-z")
-	if err != nil {
-		return workspaceCheckpointMeta{}, err
-	}
-	untracked := parseZList(untrackedRaw)
-
-	env := append([]string(nil), os.Environ()...)
-	env = append(env, "GIT_INDEX_FILE="+indexPath)
-
-	if _, err := runGitCombinedOutput(ctx, repoRoot, env, "add", "-A"); err != nil {
-		return workspaceCheckpointMeta{}, err
-	}
-	treeRaw, err := runGitCombinedOutput(ctx, repoRoot, env, "write-tree")
-	if err != nil {
-		return workspaceCheckpointMeta{}, err
-	}
-	tree := strings.TrimSpace(string(treeRaw))
-	if tree == "" {
-		return workspaceCheckpointMeta{}, errors.New("git write-tree returned empty tree")
-	}
-
-	return workspaceCheckpointMeta{
-		Backend:         workspaceCheckpointBackendGitTree,
-		Root:            repoRoot,
-		CreatedAtUnixMs: createdAtUnixMs,
-		Git: &workspaceCheckpointGit{
-			RepoRoot:  repoRoot,
-			Tree:      tree,
-			Untracked: untracked,
-		},
-	}, nil
 }
 
 func createTarCheckpoint(ctx context.Context, stateDir string, checkpointID string, rootAbs string, createdAtUnixMs int64) (workspaceCheckpointMeta, error) {

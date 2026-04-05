@@ -30,7 +30,7 @@ type ThreadCheckpointRecord struct {
 
 	ThreadJSON    string `json:"thread_json"`
 	DerivedJSON   string `json:"derived_json"`
-	WorkspaceJSON string `json:"workspace_json"`
+	WorkspaceJSON string `json:"workspace_json"` // legacy compatibility payload; empty for new checkpoints
 
 	TranscriptMaxID int64 `json:"transcript_max_id"`
 	TurnsMaxID      int64 `json:"turns_max_id"`
@@ -156,9 +156,6 @@ INSERT INTO ai_thread_checkpoints(
 			return out, err
 		}
 	}
-
-	// Best-effort retention to avoid unbounded growth.
-	_ = pruneThreadCheckpointsTx(ctx, tx, endpointID, threadID, 40)
 
 	if err := tx.Commit(); err != nil {
 		return out, err
@@ -328,6 +325,113 @@ WHERE endpoint_id = ? AND thread_id = ? AND checkpoint_id = ?
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (s *Store) ListThreadCheckpointIDs(ctx context.Context, endpointID string, threadID string) ([]string, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT checkpoint_id
+FROM ai_thread_checkpoints
+WHERE endpoint_id = ? AND thread_id = ?
+ORDER BY created_at_unix_ms DESC, checkpoint_id DESC
+`, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, 8)
+	for rows.Next() {
+		var checkpointID string
+		if err := rows.Scan(&checkpointID); err != nil {
+			return nil, err
+		}
+		checkpointID = strings.TrimSpace(checkpointID)
+		if checkpointID == "" {
+			continue
+		}
+		out = append(out, checkpointID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) ListCheckpointIDs(ctx context.Context) ([]string, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT checkpoint_id
+FROM ai_thread_checkpoints
+ORDER BY created_at_unix_ms DESC, checkpoint_id DESC
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, 32)
+	for rows.Next() {
+		var checkpointID string
+		if err := rows.Scan(&checkpointID); err != nil {
+			return nil, err
+		}
+		checkpointID = strings.TrimSpace(checkpointID)
+		if checkpointID == "" {
+			continue
+		}
+		out = append(out, checkpointID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) PruneThreadCheckpoints(ctx context.Context, endpointID string, threadID string, keep int) ([]string, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	deletedIDs, err := pruneThreadCheckpointsTx(ctx, tx, endpointID, threadID, keep)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return deletedIDs, nil
 }
 
 func (s *Store) RestoreThreadCheckpoint(ctx context.Context, endpointID string, threadID string, checkpointID string) (*ThreadCheckpointRecord, error) {
@@ -1036,24 +1140,58 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return err
 }
 
-func pruneThreadCheckpointsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, keep int) error {
+func pruneThreadCheckpointsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, keep int) ([]string, error) {
 	if keep <= 0 {
 		keep = 20
 	}
 	if keep > 200 {
 		keep = 200
 	}
-	_, err := tx.ExecContext(ctx, `
-DELETE FROM ai_thread_checkpoints
-WHERE checkpoint_id IN (
-  SELECT checkpoint_id
-  FROM ai_thread_checkpoints
-  WHERE endpoint_id = ? AND thread_id = ?
-  ORDER BY created_at_unix_ms DESC, checkpoint_id DESC
-  LIMIT -1 OFFSET ?
-)
+
+	rows, err := tx.QueryContext(ctx, `
+SELECT checkpoint_id
+FROM ai_thread_checkpoints
+WHERE endpoint_id = ? AND thread_id = ?
+ORDER BY created_at_unix_ms DESC, checkpoint_id DESC
+LIMIT -1 OFFSET ?
 `, endpointID, threadID, keep)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	deletedIDs := make([]string, 0, 8)
+	for rows.Next() {
+		var checkpointID string
+		if err := rows.Scan(&checkpointID); err != nil {
+			return nil, err
+		}
+		checkpointID = strings.TrimSpace(checkpointID)
+		if checkpointID == "" {
+			continue
+		}
+		deletedIDs = append(deletedIDs, checkpointID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(deletedIDs) == 0 {
+		return nil, nil
+	}
+
+	args := make([]any, 0, len(deletedIDs)+2)
+	placeholders := make([]string, 0, len(deletedIDs))
+	args = append(args, endpointID, threadID)
+	for _, checkpointID := range deletedIDs {
+		args = append(args, checkpointID)
+		placeholders = append(placeholders, "?")
+	}
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM ai_thread_checkpoints
+WHERE endpoint_id = ? AND thread_id = ? AND checkpoint_id IN (`+strings.Join(placeholders, ",")+`)`, args...); err != nil {
+		return nil, err
+	}
+	return deletedIDs, nil
 }
 
 func maxInt64Tx(ctx context.Context, tx *sql.Tx, query string, args ...any) (int64, error) {

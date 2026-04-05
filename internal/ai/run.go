@@ -67,8 +67,7 @@ type runOptions struct {
 	NoUserInteraction     bool
 	SkillManager          *skillManager
 
-	createWorkspaceCheckpoint func(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error)
-	terminalExecRunner        func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
+	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 }
 
 type run struct {
@@ -159,10 +158,7 @@ type run struct {
 	skillManager    *skillManager
 	subagentManager *subagentManager
 
-	muCheckpoint               sync.Mutex
-	workspaceCheckpointCreated bool
-	createWorkspaceCheckpoint  func(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error)
-	terminalExecRunner         func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
+	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 }
 
 type assistantAnswerState struct {
@@ -230,11 +226,7 @@ func newRun(opts runOptions) *run {
 			}
 			return opts.SubagentDepth <= 0
 		}(),
-		createWorkspaceCheckpoint: opts.createWorkspaceCheckpoint,
-		terminalExecRunner:        opts.terminalExecRunner,
-	}
-	if r.createWorkspaceCheckpoint == nil {
-		r.createWorkspaceCheckpoint = createWorkspaceCheckpoint
+		terminalExecRunner: opts.terminalExecRunner,
 	}
 	if r.terminalExecRunner == nil {
 		r.terminalExecRunner = defaultTerminalExecRunner
@@ -2207,22 +2199,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		persistResult = terminalExecResultMeta
 	}
 	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, persistResult, nil, "", toolStartedAt, time.Now())
-
-	if mutating {
-		r.touchActivity()
-		if _, err := r.ensureWorkspaceCheckpoint(ctx); err != nil {
-			setToolError(&aitools.ToolError{
-				Code:      aitools.ErrorCodeUnknown,
-				Message:   "Failed to create workspace checkpoint: " + strings.TrimSpace(err.Error()),
-				Retryable: true,
-				SuggestedFixes: []string{
-					"Ensure the runtime state directory is writable.",
-					"Retry the tool call after fixing the checkpoint error.",
-				},
-			}, "", nil)
-			return outcome, nil
-		}
-	}
 
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {

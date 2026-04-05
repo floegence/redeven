@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -111,6 +113,13 @@ func TestService_DeleteThreadRemovesThreadScopedRunArtifacts(t *testing.T) {
 	if _, err := svc.threadsDB.CreateThreadCheckpoint(ctx, meta.EndpointID, th.ThreadID, "cp_cleanup_1", "run_cleanup_1", threadstore.CheckpointKindPreRun); err != nil {
 		t.Fatalf("CreateThreadCheckpoint: %v", err)
 	}
+	artifactDir := checkpointArtifactsDir(svc.stateDir, "cp_cleanup_1")
+	if err := os.MkdirAll(artifactDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll artifactDir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir, "snapshot.tar.gz"), []byte("legacy"), 0o600); err != nil {
+		t.Fatalf("WriteFile snapshot.tar.gz: %v", err)
+	}
 	if err := svc.threadsDB.UpsertProviderCapability(ctx, threadstore.ProviderCapabilityRecord{
 		ProviderID:     "openai",
 		ModelName:      "gpt-5-mini",
@@ -149,6 +158,9 @@ func TestService_DeleteThreadRemovesThreadScopedRunArtifacts(t *testing.T) {
 	}
 	if capability == nil {
 		t.Fatalf("provider capability should be retained as global cache")
+	}
+	if _, err := os.Stat(artifactDir); !os.IsNotExist(err) {
+		t.Fatalf("artifactDir stat err=%v, want not exist", err)
 	}
 }
 

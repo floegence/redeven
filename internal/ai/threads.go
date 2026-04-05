@@ -536,6 +536,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
 	r := s.runs[runID]
 	db := s.threadsDB
+	persistTO := s.persistOpTO
 	s.mu.Unlock()
 	if db == nil {
 		return errors.New("threads store not ready")
@@ -560,7 +561,22 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		s.mu.Unlock()
 	}
 
-	return db.DeleteThread(ctx, endpointID, threadID)
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+
+	listCtx, cancel := context.WithTimeout(ctx, persistTO)
+	checkpointIDs, err := db.ListThreadCheckpointIDs(listCtx, endpointID, threadID)
+	cancel()
+	if err != nil {
+		return err
+	}
+
+	if err := db.DeleteThread(ctx, endpointID, threadID); err != nil {
+		return err
+	}
+	s.cleanupLegacyWorkspaceCheckpointArtifacts(checkpointIDs)
+	return nil
 }
 
 func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, threadID string, limit int, beforeID int64) (*ListThreadMessagesResponse, error) {

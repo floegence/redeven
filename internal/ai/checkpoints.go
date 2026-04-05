@@ -2,13 +2,16 @@ package ai
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+)
+
+const (
+	threadCheckpointRetentionCount        = 40
+	legacyWorkspaceCheckpointSweepTimeout = 30 * time.Second
 )
 
 func checkpointIDForRun(runID string) string {
@@ -19,89 +22,137 @@ func checkpointIDForRun(runID string) string {
 	return "cp_" + runID
 }
 
-func (r *run) ensureWorkspaceCheckpoint(ctx context.Context) (workspaceCheckpointMeta, error) {
-	meta := workspaceCheckpointMeta{}
-	if r == nil {
-		return meta, errors.New("nil run")
+func (s *Service) createPreRunThreadCheckpoint(ctx context.Context, endpointID string, threadID string, runID string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	if endpointID == "" || threadID == "" || runID == "" {
+		return errors.New("invalid checkpoint scope")
+	}
+
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+
+	checkpointID := checkpointIDForRun(runID)
+	if checkpointID == "" {
+		return errors.New("missing checkpoint id")
+	}
+
+	cctx, cancel := context.WithTimeout(ctx, persistTO)
+	_, err := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
+	cancel()
+	if err != nil {
+		return err
+	}
+
+	pctx, pcancel := context.WithTimeout(context.Background(), persistTO)
+	deletedIDs, pruneErr := db.PruneThreadCheckpoints(pctx, endpointID, threadID, threadCheckpointRetentionCount)
+	pcancel()
+	if pruneErr != nil {
+		s.logLegacyWorkspaceCheckpointWarning("failed to prune old thread checkpoints", "endpoint_id", endpointID, "thread_id", threadID, "error", pruneErr)
+	}
+	s.cleanupLegacyWorkspaceCheckpointArtifacts(deletedIDs)
+	return nil
+}
+
+func (s *Service) cleanupLegacyWorkspaceCheckpointArtifacts(checkpointIDs []string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	stateDir := strings.TrimSpace(s.stateDir)
+	s.mu.Unlock()
+	if stateDir == "" || len(checkpointIDs) == 0 {
+		return
+	}
+	for _, checkpointID := range checkpointIDs {
+		checkpointID = strings.TrimSpace(checkpointID)
+		if checkpointID == "" {
+			continue
+		}
+		if err := removeWorkspaceCheckpointArtifacts(stateDir, checkpointID); err != nil {
+			s.logLegacyWorkspaceCheckpointWarning("failed to remove legacy workspace checkpoint artifacts", "checkpoint_id", checkpointID, "error", err)
+		}
+	}
+}
+
+func (s *Service) scheduleLegacyWorkspaceCheckpointSweep() {
+	if s == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), legacyWorkspaceCheckpointSweepTimeout)
+		defer cancel()
+		if err := s.sweepOrphanWorkspaceCheckpointArtifacts(ctx); err != nil {
+			s.logLegacyWorkspaceCheckpointWarning("failed to sweep orphan legacy workspace checkpoints", "error", err)
+		}
+	}()
+}
+
+func (s *Service) sweepOrphanWorkspaceCheckpointArtifacts(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	stateDir := strings.TrimSpace(s.stateDir)
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil || stateDir == "" {
+		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	r.touchActivity()
-
-	r.muCheckpoint.Lock()
-	defer r.muCheckpoint.Unlock()
-
-	if r.workspaceCheckpointCreated {
-		return meta, nil
-	}
-
-	checkpointID := checkpointIDForRun(r.id)
-	if strings.TrimSpace(checkpointID) == "" {
-		return meta, errors.New("missing checkpoint id")
-	}
-
-	stateDir := strings.TrimSpace(r.stateDir)
-	if stateDir == "" {
-		// Best-effort: allow tool execution in unit tests and other non-persistent runs.
-		r.workspaceCheckpointCreated = true
-		return meta, nil
-	}
-
-	workingDirAbs, err := r.workingDirAbs()
-	if err != nil {
-		return meta, err
-	}
-	checkpointFn := r.createWorkspaceCheckpoint
-	if checkpointFn == nil {
-		checkpointFn = createWorkspaceCheckpoint
-	}
-	cp, err := checkpointFn(ctx, stateDir, checkpointID, workingDirAbs)
-	if err != nil {
-		return meta, err
-	}
-	r.touchActivity()
-	b, err := json.Marshal(cp)
-	if err != nil {
-		return meta, err
-	}
-	workspaceJSON := strings.TrimSpace(string(b))
-
-	// Best-effort: allow tool execution even when thread persistence is unavailable (for example,
-	// in unit tests). In that mode we still snapshot the workspace, but rewind will not be able
-	// to discover the snapshot later.
-	if r.threadsDB == nil {
-		r.workspaceCheckpointCreated = true
-		return cp, nil
-	}
-
-	persistTO := r.persistOpTimeout
 	if persistTO <= 0 {
-		persistTO = 10 * time.Second
+		persistTO = defaultPersistOpTimeout
 	}
-	pctx, cancel := context.WithTimeout(context.Background(), persistTO)
-	setErr := r.threadsDB.SetThreadCheckpointWorkspaceJSON(pctx, strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID), checkpointID, workspaceJSON)
+
+	artifactIDs, err := listWorkspaceCheckpointArtifactIDs(stateDir)
+	if err != nil || len(artifactIDs) == 0 {
+		return err
+	}
+
+	lctx, cancel := context.WithTimeout(ctx, persistTO)
+	validIDs, err := db.ListCheckpointIDs(lctx)
 	cancel()
-	if setErr != nil {
-		// If the checkpoint record is missing (for example, an in-flight run from an older agent),
-		// create it best-effort so future rewinds still have a stable anchor.
-		if errors.Is(setErr, sql.ErrNoRows) {
-			cctx, ccancel := context.WithTimeout(context.Background(), persistTO)
-			_, _ = r.threadsDB.CreateThreadCheckpoint(cctx, strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID), checkpointID, strings.TrimSpace(r.id), threadstore.CheckpointKindPreRun)
-			ccancel()
-
-			pctx, cancel := context.WithTimeout(context.Background(), persistTO)
-			retryErr := r.threadsDB.SetThreadCheckpointWorkspaceJSON(pctx, strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID), checkpointID, workspaceJSON)
-			cancel()
-			if retryErr != nil && !errors.Is(retryErr, sql.ErrNoRows) {
-				return meta, retryErr
-			}
-			r.workspaceCheckpointCreated = true
-			return cp, nil
-		}
-		return meta, setErr
+	if err != nil {
+		return err
 	}
 
-	r.workspaceCheckpointCreated = true
-	return cp, nil
+	keep := make(map[string]struct{}, len(validIDs))
+	for _, checkpointID := range validIDs {
+		checkpointID = strings.TrimSpace(checkpointID)
+		if checkpointID == "" {
+			continue
+		}
+		keep[checkpointID] = struct{}{}
+	}
+	for _, checkpointID := range artifactIDs {
+		if _, ok := keep[checkpointID]; ok {
+			continue
+		}
+		if err := removeWorkspaceCheckpointArtifacts(stateDir, checkpointID); err != nil {
+			s.logLegacyWorkspaceCheckpointWarning("failed to remove orphan legacy workspace checkpoint artifacts", "checkpoint_id", checkpointID, "error", err)
+		}
+	}
+	return nil
+}
+
+func (s *Service) logLegacyWorkspaceCheckpointWarning(msg string, args ...any) {
+	if s == nil || s.log == nil {
+		return
+	}
+	s.log.Warn(msg, args...)
 }

@@ -138,7 +138,7 @@ Terminal execution notes:
 - `terminal.exec` uses a bounded execution policy by default: when `timeout_ms` is omitted, Flower applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.
 - `terminal.exec` timeout decisions are explicit and observable: the persisted terminal result records the effective timeout plus whether it came from the default policy, an explicit request, or a capped request.
 - `terminal.exec` timeout/cancel handling now terminates the full shell process tree/group rather than only the direct shell process.
-- Mutating workspace actions create a pre-run workspace checkpoint. Tar-based checkpoints now skip unreadable paths and record the skipped entries in checkpoint metadata instead of failing the whole run on unrelated permission-denied filesystem branches.
+- Flower does not create new workspace-wide checkpoints during normal tool execution. Rewind durability is thread-state scoped by default, while legacy checkpoints that already carry `workspace_json` are still restored best-effort for backward compatibility.
 
 Online research notes:
 
@@ -236,6 +236,7 @@ Installer note:
 
 - Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
 - Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
+- The `workspace_json` column is now a legacy compatibility payload only. New checkpoints are thread-state-only; old workspace checkpoint artifacts are cleaned up best-effort during retention pruning, thread deletion, and startup orphan sweeps.
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.
 - The current shipped schema keeps semantic memory in `memory_items`. Redeven does not currently ship a separate persistent embeddings table until the runtime fully owns that lifecycle.
 - Per-user thread read watermarks are intentionally stored outside the shared Flower threadstore because unread state is a user/session concern rather than collaborative thread content.

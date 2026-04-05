@@ -270,6 +270,7 @@ func NewService(opts Options) (*Service, error) {
 	if svc.threadTitleCoordinator != nil {
 		svc.threadTitleCoordinator.ScheduleRecovery()
 	}
+	svc.scheduleLegacyWorkspaceCheckpointSweep()
 	return svc, nil
 }
 
@@ -970,11 +971,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	// For StartRun / StartRunDetached flows (persisted user message is nil), create a checkpoint
 	// before mutating thread run state so the thread can be rewound consistently.
 	if persisted == nil && db != nil {
-		checkpointID := checkpointIDForRun(runID)
-		cctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_, cpErr := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
-		cancel()
-		if cpErr != nil {
+		if cpErr := s.createPreRunThreadCheckpoint(context.Background(), endpointID, threadID, runID); cpErr != nil {
 			// Cleanup: prepareRun already registered the run in memory; ensure we don't leak it.
 			s.mu.Lock()
 			delete(s.runs, runID)

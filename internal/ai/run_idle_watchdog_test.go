@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -51,78 +53,47 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 	}
 }
 
-func TestRunIdleWatchdog_DoesNotCancelWhileWorkspaceCheckpointBusy(t *testing.T) {
+func TestHandleToolCall_FileWriteDoesNotRequireWorkspaceCheckpoint(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true}
-	checkpointStarted := make(chan struct{}, 1)
+	stateRoot := t.TempDir()
+	stateFile := filepath.Join(stateRoot, "state-file")
+	if err := os.WriteFile(stateFile, []byte("x"), 0o600); err != nil {
+		t.Fatalf("WriteFile stateFile: %v", err)
+	}
+
+	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
 
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		StateDir:     t.TempDir(),
+		StateDir:     stateFile,
 		AgentHomeDir: root,
 		WorkingDir:   root,
 		Shell:        "bash",
 		SessionMeta:  meta,
-		RunID:        "run_test_idle_watchdog_checkpoint",
+		RunID:        "run_test_no_workspace_checkpoint",
 		ChannelID:    "ch_test",
 		EndpointID:   "env_test",
 		ThreadID:     "th_test",
-		MessageID:    "m_test_checkpoint",
-		IdleTimeout:  150 * time.Millisecond,
-		createWorkspaceCheckpoint: func(ctx context.Context, stateDir string, checkpointID string, workingDirAbs string) (workspaceCheckpointMeta, error) {
-			select {
-			case checkpointStarted <- struct{}{}:
-			default:
-			}
-			select {
-			case <-time.After(350 * time.Millisecond):
-				return workspaceCheckpointMeta{}, nil
-			case <-ctx.Done():
-				return workspaceCheckpointMeta{}, ctx.Err()
-			}
-		},
+		MessageID:    "m_test_no_workspace_checkpoint",
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	r.cancelFn = cancel
-
-	go r.runIdleWatchdog(ctx)
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
+	outcome, err := r.handleToolCall(context.Background(), "tool_file_write_1", "file.write", map[string]any{
+		"file_path": "note.txt",
+		"content":   "ok\n",
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall error: %v", err)
 	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := r.handleToolCall(ctx, "tool_checkpoint_1", "file.write", map[string]any{
-			"file_path": "note.txt",
-			"content":   "ok\n",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	select {
-	case <-checkpointStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatalf("checkpoint hook did not start")
+	if outcome == nil || !outcome.Success {
+		t.Fatalf("expected tool success outcome=%#v", outcome)
 	}
-
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("handleToolCall error: %v", res.err)
-		}
-		if res.outcome == nil || !res.outcome.Success {
-			t.Fatalf("expected tool success outcome=%#v", res.outcome)
-		}
-	case <-time.After(4 * time.Second):
-		t.Fatalf("timed out waiting for tool result")
+	content, err := os.ReadFile(filepath.Join(root, "note.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile note.txt: %v", err)
 	}
-
-	if reason := strings.TrimSpace(r.getCancelReason()); reason != "" {
-		t.Fatalf("expected no cancel reason, got %q", reason)
+	if string(content) != "ok\n" {
+		t.Fatalf("note.txt=%q, want ok", string(content))
 	}
 }

@@ -103,7 +103,8 @@ func (s *Service) rewindThreadCheckpoint(ctx context.Context, meta *session.Meta
 		if err := json.Unmarshal([]byte(workspaceJSON), &ws); err != nil {
 			return "", err
 		}
-		// Restore workspace first so DB rewind can be retried if files fail to restore.
+		// Legacy checkpoints may still carry workspace restore metadata. Restore those files first
+		// so DB rewind can be retried if the legacy file restore fails.
 		restoreTO := 2 * time.Minute
 		if dl, ok := ctx.Deadline(); ok {
 			remaining := time.Until(dl)
