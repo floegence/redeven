@@ -7,7 +7,13 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 
-import { ensureDesktopSSHReleaseAsset, resolveDesktopSSHRemotePlatform, type DesktopSSHRemotePlatform } from './sshReleaseAssets';
+import {
+  DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS,
+  ensureDesktopSSHReleaseAsset,
+  resolveDesktopSSHRemotePlatform,
+  type DesktopSSHRemotePlatform,
+  type DesktopSSHReleaseFetchPolicy,
+} from './sshReleaseAssets';
 import { loadExternalLocalUIStartup } from './runtimeState';
 import type { DesktopSessionRuntimeHandle } from './sessionRuntime';
 import { parseStartupReport, type StartupReport } from './startup';
@@ -571,6 +577,15 @@ function installStrategyOrder(strategy: DesktopSSHBootstrapStrategy): readonly R
   }
 }
 
+function resolveDesktopSSHReleaseFetchPolicy(startupTimeoutMs: number, connectTimeoutSeconds: number): DesktopSSHReleaseFetchPolicy {
+  return {
+    timeout_ms: Math.max(
+      1,
+      Math.floor(Math.min(startupTimeoutMs, Math.max(DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS, connectTimeoutSeconds * 1_000))),
+    ),
+  };
+}
+
 async function installRemoteRuntimeViaRemoteInstall(args: Readonly<{
   sshBinary: string;
   target: DesktopSSHEnvironmentDetails;
@@ -605,6 +620,7 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
   runtimeReleaseTag: string;
   assetCacheRoot: string;
   platform: DesktopSSHRemotePlatform;
+  fetchPolicy: DesktopSSHReleaseFetchPolicy;
 }>): Promise<PreparedDesktopSSHUploadAsset> {
   try {
     const asset = await ensureDesktopSSHReleaseAsset({
@@ -612,6 +628,7 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
       releaseBaseURL: args.target.release_base_url,
       platform: args.platform,
       cacheRoot: args.assetCacheRoot,
+      fetchPolicy: args.fetchPolicy,
     });
     return {
       archiveData: await fs.readFile(asset.archive_path),
@@ -695,6 +712,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
   runtimeReleaseTag: string;
   installScriptURL: string;
   assetCacheRoot: string;
+  fetchPolicy: DesktopSSHReleaseFetchPolicy;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
 }>): Promise<void> {
@@ -714,6 +732,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
             runtimeReleaseTag: args.runtimeReleaseTag,
             assetCacheRoot: args.assetCacheRoot,
             platform,
+            fetchPolicy: args.fetchPolicy,
           });
         } catch (error) {
           if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError) {
@@ -820,6 +839,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
   const startupTimeoutMs = args.startupTimeoutMs ?? DEFAULT_SSH_STARTUP_TIMEOUT_MS;
   const stopTimeoutMs = args.stopTimeoutMs ?? DEFAULT_SSH_STOP_TIMEOUT_MS;
   const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
+  const releaseFetchPolicy = resolveDesktopSSHReleaseFetchPolicy(startupTimeoutMs, connectTimeoutSeconds);
   const logs: MutableRecentLogs = {
     master_stderr: '',
     control_stdout: '',
@@ -880,6 +900,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       runtimeReleaseTag,
       installScriptURL,
       assetCacheRoot,
+      fetchPolicy: releaseFetchPolicy,
       logs,
       onLog: args.onLog,
     });

@@ -102,6 +102,10 @@ For SSH Environments, Desktop now supports three bootstrap delivery modes:
 - `Desktop Upload`: detect the remote OS/arch, download the matching release asset locally, upload it over SSH, and start Redeven without requiring target-machine internet access
 - `Remote Install`: keep the original remote `install.sh` flow for internet-connected targets
 
+`Desktop Upload` only trusts a release manifest after verifying `SHA256SUMS` against the published `SHA256SUMS.sig` and `SHA256SUMS.pem` GitHub Actions signing materials. Compatible internal mirrors must therefore publish the same release manifest trio plus the target tarballs. Desktop caches those assets by normalized `release_base_url`, release tag, and platform so different mirrors never share the same local cache entry.
+
+`Automatic` only falls back to the remote installer when the desktop cannot prepare a verified local release asset, including bounded desktop-side download timeouts. Once Desktop has started uploading or installing the tarball over SSH, later failures stay hard failures instead of silently degrading into `remote_install`.
+
 The public installer endpoint used by runtime self-upgrade is [https://redeven.com/install.sh](https://redeven.com/install.sh).
 
 ### 2. Bootstrap once

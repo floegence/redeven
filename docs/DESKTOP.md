@@ -102,9 +102,17 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - Desktop pins the remote install to the same Redeven release tag as the running desktop build.
 - The remote install path defaults to the remote user's cache and can be overridden with an absolute path.
 - Desktop can probe the remote OS/architecture (`linux` / `darwin`, `amd64` / `arm64` / `arm` / `386`) and choose the matching release package for desktop-managed upload.
-- `desktop_upload` lets the local machine download and verify the matching release tarball, then upload it over SSH so the target host does not need public internet access.
+- `desktop_upload` first resolves `SHA256SUMS`, `SHA256SUMS.sig`, and `SHA256SUMS.pem`, verifies that signed manifest against the pinned Sigstore Fulcio chain plus the Redeven GitHub Actions release-workflow identity policy, and only then trusts the per-asset checksums used for the tarball download.
 - `release_base_url` lets operators point the desktop-upload path at a compatible internal release mirror instead of public GitHub Releases.
-- `auto` prefers desktop upload for restricted networks, then falls back to the remote installer path.
+- Compatible internal mirrors must expose the same signed manifest contract as public releases:
+  - `SHA256SUMS`
+  - `SHA256SUMS.sig`
+  - `SHA256SUMS.pem`
+  - the matching `redeven_<goos>_<goarch>.tar.gz` assets
+- Desktop caches SSH bootstrap artifacts by normalized `release_base_url`, release tag, and platform so different mirrors cannot poison each other's local cache entries.
+- Desktop-side release downloads use explicit timeouts so restricted-network failures stay bounded and diagnosable.
+- `auto` prefers desktop upload for restricted networks, then falls back to the remote installer path only when desktop-side asset preparation fails before upload/install begins.
+- After Desktop starts uploading or installing the tarball over SSH, later failures stay first-class errors instead of silently degrading into `remote_install`.
 - The forwarded localhost URL is session-ephemeral and only used as the live session origin.
 - Session identity is derived from SSH destination, SSH port, and remote install directory so reconnecting does not create duplicates just because the forwarded local port changed.
 - Closing the Desktop session tears down the local forward and the SSH-owned remote runtime together.
@@ -161,6 +169,7 @@ Interaction rules:
   - compact `Advanced` section for:
     - `Remote Install Directory`
     - `Release Base URL`
+- The SSH `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Release Base URL` or `Remote Install Directory` does not auto-collapse the section.
 - SSH mode explains the actual behavior inline:
   - Desktop installs a matching Redeven runtime on demand and tunnels its Local UI over SSH.
   - Automatic prefers a desktop-managed upload for offline targets, then falls back to the remote installer.

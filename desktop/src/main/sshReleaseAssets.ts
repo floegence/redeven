@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { verifyDesktopSSHReleaseManifestSignature } from './sshReleaseTrust';
+
 export const PUBLIC_REDEVEN_RELEASE_BASE_URL = 'https://github.com/floegence/redeven/releases';
+export const DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS = 30_000;
 
 export type DesktopSSHRemotePlatform = Readonly<{
   goos: 'linux' | 'darwin';
@@ -15,9 +18,22 @@ export type DesktopSSHRemotePlatform = Readonly<{
 export type DesktopSSHResolvedReleaseAsset = Readonly<{
   release_tag: string;
   release_base_url: string;
+  source_cache_key: string;
   platform: DesktopSSHRemotePlatform;
   archive_path: string;
   sha256: string;
+}>;
+
+export type DesktopSSHVerifiedReleaseManifest = Readonly<{
+  release_tag: string;
+  release_base_url: string;
+  source_cache_key: string;
+  sums_text: string;
+  sha256_by_asset_name: ReadonlyMap<string, string>;
+}>;
+
+export type DesktopSSHReleaseFetchPolicy = Readonly<{
+  timeout_ms: number;
 }>;
 
 type EnsureDesktopSSHReleaseAssetArgs = Readonly<{
@@ -25,6 +41,21 @@ type EnsureDesktopSSHReleaseAssetArgs = Readonly<{
   releaseBaseURL: string;
   platform: DesktopSSHRemotePlatform;
   cacheRoot: string;
+  fetchPolicy?: DesktopSSHReleaseFetchPolicy;
+}>;
+
+type EnsureDesktopSSHVerifiedReleaseManifestArgs = Readonly<{
+  releaseTag: string;
+  releaseBaseURL: string;
+  cacheRoot: string;
+  fetchPolicy?: DesktopSSHReleaseFetchPolicy;
+}>;
+
+type EnsureDesktopSSHReleaseArchiveArgs = Readonly<{
+  manifest: DesktopSSHVerifiedReleaseManifest;
+  platform: DesktopSSHRemotePlatform;
+  cacheRoot: string;
+  fetchPolicy?: DesktopSSHReleaseFetchPolicy;
 }>;
 
 function compact(value: unknown): string {
@@ -33,7 +64,13 @@ function compact(value: unknown): string {
 
 function releaseBaseURL(rawURL: string): string {
   const clean = compact(rawURL);
-  return clean === '' ? PUBLIC_REDEVEN_RELEASE_BASE_URL : clean;
+  if (clean === '') {
+    return PUBLIC_REDEVEN_RELEASE_BASE_URL;
+  }
+  const parsed = new URL(clean);
+  parsed.hash = '';
+  parsed.search = '';
+  return parsed.toString().replace(/\/$/u, '');
 }
 
 function parseRemoteUnameOS(rawOS: string): 'linux' | 'darwin' {
@@ -88,10 +125,20 @@ export function buildDesktopSSHReleaseAssetURL(
   return `${releaseBaseURL(rawReleaseBaseURL)}/download/${encodeURIComponent(releaseTag)}/${encodeURIComponent(assetName)}`;
 }
 
-export function parseDesktopSSHReleaseSHA256(
-  sumsText: string,
-  assetName: string,
-): string {
+export function buildDesktopSSHReleaseSourceCacheKey(rawReleaseBaseURL: string): string {
+  const normalizedBaseURL = releaseBaseURL(rawReleaseBaseURL);
+  const { hostname, pathname } = new URL(normalizedBaseURL);
+  const slug = `${hostname}${pathname}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
+    .slice(0, 48) || 'release-source';
+  const digest = createHash('sha256').update(normalizedBaseURL).digest('hex').slice(0, 16);
+  return `${slug}-${digest}`;
+}
+
+function parseDesktopSSHReleaseSHA256Map(sumsText: string): ReadonlyMap<string, string> {
+  const sha256ByAssetName = new Map<string, string>();
   for (const rawLine of String(sumsText ?? '').split(/\r?\n/u)) {
     const line = rawLine.trim();
     if (line === '' || line.startsWith('#')) {
@@ -101,9 +148,18 @@ export function parseDesktopSSHReleaseSHA256(
     if (!match) {
       continue;
     }
-    if (match[2] === assetName) {
-      return match[1].toLowerCase();
-    }
+    sha256ByAssetName.set(match[2], match[1].toLowerCase());
+  }
+  return sha256ByAssetName;
+}
+
+export function parseDesktopSSHReleaseSHA256(
+  sumsText: string,
+  assetName: string,
+): string {
+  const sha256 = parseDesktopSSHReleaseSHA256Map(sumsText).get(assetName);
+  if (sha256) {
+    return sha256;
   }
   throw new Error(`SHA256SUMS did not include ${assetName}.`);
 }
@@ -125,58 +181,185 @@ export async function verifyDesktopSSHReleaseAsset(
   }
 }
 
-async function downloadURLToPath(sourceURL: string, targetPath: string): Promise<void> {
-  const response = await fetch(sourceURL);
-  if (!response.ok) {
-    throw new Error(`Download failed (${response.status}) for ${sourceURL}`);
+function normalizeFetchPolicy(fetchPolicy?: DesktopSSHReleaseFetchPolicy): DesktopSSHReleaseFetchPolicy {
+  const timeoutMs = Number(fetchPolicy?.timeout_ms ?? DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1) {
+    throw new Error('Desktop SSH release fetch timeout must be a positive integer.');
   }
+  return {
+    timeout_ms: timeoutMs,
+  };
+}
+
+async function fetchReleaseAsset(sourceURL: string, fetchPolicy?: DesktopSSHReleaseFetchPolicy): Promise<Response> {
+  const policy = normalizeFetchPolicy(fetchPolicy);
+  const signal = AbortSignal.timeout(policy.timeout_ms);
+  try {
+    const response = await fetch(sourceURL, { signal });
+    if (!response.ok) {
+      throw new Error(`Download failed (${response.status}) for ${sourceURL}`);
+    }
+    return response;
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException | DOMException | undefined;
+    if (signal.aborted || nodeError?.name === 'AbortError' || nodeError?.name === 'TimeoutError') {
+      throw new Error(`Timed out after ${policy.timeout_ms}ms downloading ${sourceURL}`);
+    }
+    throw error;
+  }
+}
+
+async function downloadURLToPath(
+  sourceURL: string,
+  targetPath: string,
+  fetchPolicy?: DesktopSSHReleaseFetchPolicy,
+): Promise<void> {
+  const response = await fetchReleaseAsset(sourceURL, fetchPolicy);
   const data = Buffer.from(await response.arrayBuffer());
   await fs.writeFile(targetPath, data);
 }
 
-async function downloadText(sourceURL: string): Promise<string> {
-  const response = await fetch(sourceURL);
-  if (!response.ok) {
-    throw new Error(`Download failed (${response.status}) for ${sourceURL}`);
-  }
+async function downloadText(sourceURL: string, fetchPolicy?: DesktopSSHReleaseFetchPolicy): Promise<string> {
+  const response = await fetchReleaseAsset(sourceURL, fetchPolicy);
   return response.text();
 }
 
-export async function ensureDesktopSSHReleaseAsset(
-  args: EnsureDesktopSSHReleaseAssetArgs,
-): Promise<DesktopSSHResolvedReleaseAsset> {
+async function downloadBuffer(sourceURL: string, fetchPolicy?: DesktopSSHReleaseFetchPolicy): Promise<Buffer> {
+  const response = await fetchReleaseAsset(sourceURL, fetchPolicy);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function readOptionalBuffer(filePath: string): Promise<Buffer | null> {
+  try {
+    return await fs.readFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
+export function verifyDesktopSSHReleaseManifest(args: Readonly<{
+  releaseTag: string;
+  releaseBaseURL: string;
+  sumsText: string;
+  signature: Buffer | string;
+  certificate: Buffer | string;
+}>): DesktopSSHVerifiedReleaseManifest {
   const baseURL = releaseBaseURL(args.releaseBaseURL);
-  const cacheDir = path.join(args.cacheRoot, args.releaseTag, args.platform.platform_id);
-  const archivePath = path.join(cacheDir, args.platform.release_package_name);
+  verifyDesktopSSHReleaseManifestSignature({
+    sumsText: args.sumsText,
+    signature: args.signature,
+    certificate: args.certificate,
+  });
+  return {
+    release_tag: args.releaseTag,
+    release_base_url: baseURL,
+    source_cache_key: buildDesktopSSHReleaseSourceCacheKey(baseURL),
+    sums_text: args.sumsText,
+    sha256_by_asset_name: parseDesktopSSHReleaseSHA256Map(args.sumsText),
+  };
+}
+
+export async function ensureDesktopSSHVerifiedReleaseManifest(
+  args: EnsureDesktopSSHVerifiedReleaseManifestArgs,
+): Promise<DesktopSSHVerifiedReleaseManifest> {
+  const baseURL = releaseBaseURL(args.releaseBaseURL);
+  const sourceCacheKey = buildDesktopSSHReleaseSourceCacheKey(baseURL);
+  const cacheDir = path.join(args.cacheRoot, sourceCacheKey, args.releaseTag);
   const sumsPath = path.join(cacheDir, 'SHA256SUMS');
+  const signaturePath = path.join(cacheDir, 'SHA256SUMS.sig');
+  const certificatePath = path.join(cacheDir, 'SHA256SUMS.pem');
 
   await fs.mkdir(cacheDir, { recursive: true });
 
-  let sumsText = '';
-  try {
-    sumsText = await fs.readFile(sumsPath, 'utf8');
-  } catch {
-    sumsText = await downloadText(buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, 'SHA256SUMS'));
-    await fs.writeFile(sumsPath, sumsText, 'utf8');
+  const cachedSums = await readOptionalBuffer(sumsPath);
+  const cachedSignature = await readOptionalBuffer(signaturePath);
+  const cachedCertificate = await readOptionalBuffer(certificatePath);
+  if (cachedSums && cachedSignature && cachedCertificate) {
+    try {
+      return verifyDesktopSSHReleaseManifest({
+        releaseTag: args.releaseTag,
+        releaseBaseURL: baseURL,
+        sumsText: cachedSums.toString('utf8'),
+        signature: cachedSignature,
+        certificate: cachedCertificate,
+      });
+    } catch {
+      // Re-download the manifest bundle if any cached verification material is stale or corrupted.
+    }
   }
 
-  const sha256 = parseDesktopSSHReleaseSHA256(sumsText, args.platform.release_package_name);
+  const [sumsText, signature, certificate] = await Promise.all([
+    downloadText(buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, 'SHA256SUMS'), args.fetchPolicy),
+    downloadBuffer(buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, 'SHA256SUMS.sig'), args.fetchPolicy),
+    downloadBuffer(buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, 'SHA256SUMS.pem'), args.fetchPolicy),
+  ]);
+  const manifest = verifyDesktopSSHReleaseManifest({
+    releaseTag: args.releaseTag,
+    releaseBaseURL: baseURL,
+    sumsText,
+    signature,
+    certificate,
+  });
+  await Promise.all([
+    fs.writeFile(sumsPath, sumsText, 'utf8'),
+    fs.writeFile(signaturePath, signature),
+    fs.writeFile(certificatePath, certificate),
+  ]);
+  return manifest;
+}
+
+export async function ensureDesktopSSHReleaseArchive(
+  args: EnsureDesktopSSHReleaseArchiveArgs,
+): Promise<DesktopSSHResolvedReleaseAsset> {
+  const cacheDir = path.join(
+    args.cacheRoot,
+    args.manifest.source_cache_key,
+    args.manifest.release_tag,
+    args.platform.platform_id,
+  );
+  const archivePath = path.join(cacheDir, args.platform.release_package_name);
+
+  await fs.mkdir(cacheDir, { recursive: true });
+
+  const sha256 = args.manifest.sha256_by_asset_name.get(args.platform.release_package_name);
+  if (!sha256) {
+    throw new Error(`SHA256SUMS did not include ${args.platform.release_package_name}.`);
+  }
 
   try {
     await verifyDesktopSSHReleaseAsset(archivePath, sha256);
   } catch {
     await downloadURLToPath(
-      buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, args.platform.release_package_name),
+      buildDesktopSSHReleaseAssetURL(args.manifest.release_base_url, args.manifest.release_tag, args.platform.release_package_name),
       archivePath,
+      args.fetchPolicy,
     );
     await verifyDesktopSSHReleaseAsset(archivePath, sha256);
   }
 
   return {
-    release_tag: args.releaseTag,
-    release_base_url: baseURL,
+    release_tag: args.manifest.release_tag,
+    release_base_url: args.manifest.release_base_url,
+    source_cache_key: args.manifest.source_cache_key,
     platform: args.platform,
     archive_path: archivePath,
     sha256,
   };
+}
+
+export async function ensureDesktopSSHReleaseAsset(
+  args: EnsureDesktopSSHReleaseAssetArgs,
+): Promise<DesktopSSHResolvedReleaseAsset> {
+  const manifest = await ensureDesktopSSHVerifiedReleaseManifest({
+    releaseTag: args.releaseTag,
+    releaseBaseURL: args.releaseBaseURL,
+    cacheRoot: args.cacheRoot,
+    fetchPolicy: args.fetchPolicy,
+  });
+  return ensureDesktopSSHReleaseArchive({
+    manifest,
+    platform: args.platform,
+    cacheRoot: args.cacheRoot,
+    fetchPolicy: args.fetchPolicy,
+  });
 }

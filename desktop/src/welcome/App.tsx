@@ -78,6 +78,10 @@ import {
   shellStatus,
 } from './viewModel';
 import {
+  syncSSHConnectionDialogAdvancedState,
+  type SSHConnectionDialogAdvancedState,
+} from './sshConnectionDialogState';
+import {
   compactAddConnectionLabel,
   compactBootstrapStatusTagLabel,
   compactClearRequestLabel,
@@ -2594,8 +2598,11 @@ function ConnectionDialog(props: Readonly<{
 }>) {
   const isCreate = createMemo(() => props.state?.mode === 'create');
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
-  const [advancedOpen, setAdvancedOpen] = createSignal(false);
-  const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedOpen());
+  const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
+    open: false,
+    initialized_for_state_key: 'closed',
+  });
+  const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedState().open);
   const sshBootstrapStrategy = createMemo(() => (
     props.state?.connection_kind === 'ssh_environment'
       ? props.state.bootstrap_strategy
@@ -2618,12 +2625,7 @@ function ConnectionDialog(props: Readonly<{
   });
 
   createEffect(() => {
-    const state = props.state;
-    if (!state || state.connection_kind !== 'ssh_environment') {
-      setAdvancedOpen(false);
-      return;
-    }
-    setAdvancedOpen(trimString(state.remote_install_dir) !== '' || state.mode === 'edit');
+    setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(current, props.state));
   });
 
   return (
@@ -2766,7 +2768,7 @@ function ConnectionDialog(props: Readonly<{
                 <button
                   type="button"
                   class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left"
-                  onClick={() => setAdvancedOpen(!advancedOpen())}
+                  onClick={() => setAdvancedState((current) => ({ ...current, open: !current.open }))}
                 >
                   <div>
                     <div class="text-xs font-medium text-foreground">Advanced</div>
