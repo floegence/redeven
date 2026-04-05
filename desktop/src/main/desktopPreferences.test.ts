@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import {
   clearPendingBootstrap,
   createPlaintextSecretCodec,
@@ -23,6 +24,7 @@ import {
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
+  upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
   validateDesktopSettingsDraft,
@@ -45,6 +47,7 @@ describe('desktopPreferences', () => {
       saved_environments: [],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     });
   });
@@ -105,6 +108,69 @@ describe('desktopPreferences', () => {
     }
   });
 
+  it('stores control plane refresh tokens only in secrets while keeping account summaries in preferences', async () => {
+    const provider = normalizeDesktopControlPlaneProvider({
+      protocol_version: 'rcpp-v1',
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://region.example.invalid',
+      documentation_url: 'https://region.example.invalid/docs/provider-protocol',
+    });
+    expect(provider).not.toBeNull();
+
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+    try {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const preferences = upsertSavedControlPlane(defaultDesktopPreferences(), {
+        provider: provider!,
+        account: {
+          provider_id: provider!.provider_id,
+          provider_origin: provider!.provider_origin,
+          display_name: provider!.display_name,
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: 1_770_000_000_000,
+        },
+        environments: [{
+          provider_id: provider!.provider_id,
+          provider_origin: provider!.provider_origin,
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 123,
+        }],
+        refresh_token: 'refresh-demo-token',
+        last_synced_at_ms: 456,
+      });
+
+      await saveDesktopPreferences(paths, preferences, codec);
+
+      const preferencesFile = JSON.parse(await fs.readFile(paths.preferencesFile, 'utf8')) as {
+        control_planes?: Array<{ account?: Record<string, unknown> }>;
+      };
+      const secretsFile = JSON.parse(await fs.readFile(paths.secretsFile, 'utf8')) as {
+        control_planes?: Array<{ refresh_token?: { data?: string } }>;
+      };
+
+      expect(JSON.stringify(preferencesFile)).not.toContain('refresh-demo-token');
+      expect(preferencesFile.control_planes?.[0]?.account).toEqual({
+        user_public_id: 'user_demo',
+        user_display_name: 'Demo User',
+        authorization_expires_at_unix_ms: 1_770_000_000_000,
+      });
+      expect(secretsFile.control_planes?.[0]?.refresh_token?.data).toBe('refresh-demo-token');
+
+      await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual(preferences);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('preserves an existing encoded password when saving configured write-only state', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
     try {
@@ -134,7 +200,8 @@ describe('desktopPreferences', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
-        control_planes: [],
+        control_plane_refresh_tokens: {},
+      control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -173,7 +240,8 @@ describe('desktopPreferences', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
-        control_planes: [],
+        control_plane_refresh_tokens: {},
+      control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -215,7 +283,8 @@ describe('desktopPreferences', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
-        control_planes: [],
+        control_plane_refresh_tokens: {},
+      control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -240,7 +309,8 @@ describe('desktopPreferences', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
-        control_planes: [],
+        control_plane_refresh_tokens: {},
+      control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -288,7 +358,8 @@ describe('desktopPreferences', () => {
         ],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
-        control_planes: [],
+        control_plane_refresh_tokens: {},
+      control_planes: [],
       });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
@@ -581,6 +652,7 @@ describe('desktopPreferences', () => {
       ],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     })).toEqual({
       local_ui_bind: '0.0.0.0:23998',
@@ -613,6 +685,7 @@ describe('desktopPreferences', () => {
       ],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     })).toEqual({
       local_ui_bind: '127.0.0.1:0',
@@ -630,6 +703,7 @@ describe('desktopPreferences', () => {
       ],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     });
   });
@@ -643,6 +717,7 @@ describe('desktopPreferences', () => {
       saved_environments: [],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     });
     const right = managedDesktopLaunchKey({
@@ -653,6 +728,7 @@ describe('desktopPreferences', () => {
       saved_environments: [],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     });
 
@@ -678,6 +754,7 @@ describe('desktopPreferences', () => {
       saved_environments: [],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     });
   });
@@ -701,6 +778,7 @@ describe('desktopPreferences', () => {
       saved_environments: [],
       saved_ssh_environments: [],
       recent_external_local_ui_urls: [],
+      control_plane_refresh_tokens: {},
       control_planes: [],
     });
   });

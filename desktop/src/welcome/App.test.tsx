@@ -43,6 +43,7 @@ describe('DesktopWelcomeShell', () => {
         ],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
+        control_plane_refresh_tokens: {},
         control_planes: [],
       },
       surface: 'connect_environment',
@@ -75,6 +76,7 @@ describe('DesktopWelcomeShell', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
+        control_plane_refresh_tokens: {},
         control_planes: [],
       },
       surface: 'local_environment_settings',
@@ -134,6 +136,7 @@ describe('DesktopWelcomeShell', () => {
           'http://192.168.1.12:24000/',
           'http://192.168.1.11:24000/',
         ],
+        control_plane_refresh_tokens: {},
         control_planes: [],
       },
       openSessions: [
@@ -221,8 +224,9 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('Control Planes');
     expect(appSrc).toContain('Add Control Plane');
-    expect(appSrc).toContain('Desktop Session Token');
-    expect(appSrc).toContain('fixed provider protocol');
+    expect(appSrc).toContain('Continue in Browser');
+    expect(appSrc).toContain('revocable desktop authorization');
+    expect(appSrc).toContain('Authorized until');
   });
 
   it('includes SSH connection mode copy inside the connection dialog source', () => {

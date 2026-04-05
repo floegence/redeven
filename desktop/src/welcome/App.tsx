@@ -141,7 +141,7 @@ type BusyAction =
   | 'open_local_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
-  | 'connect_control_plane'
+  | 'start_control_plane_connect'
   | 'focus_environment_window'
   | 'open_local_environment_settings'
   | 'open_control_plane_environment'
@@ -176,7 +176,6 @@ type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDia
 
 type ControlPlaneDialogState = Readonly<{
   provider_origin: string;
-  session_token: string;
 }> | null;
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
@@ -269,6 +268,10 @@ function formatTimestamp(unixMS: number): string {
   } catch {
     return '';
   }
+}
+
+function hasTimestampExpired(unixMS: number): boolean {
+  return Number.isFinite(unixMS) && unixMS > 0 && unixMS <= Date.now();
 }
 
 function createExternalURLConnectionDialogState(
@@ -713,7 +716,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setControlPlaneDialogError('');
     setControlPlaneDialogState({
       provider_origin: '',
-      session_token: '',
     });
   }
 
@@ -722,7 +724,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setControlPlaneDialogError('');
   }
 
-  function updateControlPlaneDialogField(name: 'provider_origin' | 'session_token', value: string): void {
+  function updateControlPlaneDialogField(name: 'provider_origin', value: string): void {
     setControlPlaneDialogState((current) => {
       if (!current) {
         return current;
@@ -907,13 +909,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     const result = await performLauncherAction({
-      kind: 'connect_control_plane',
+      kind: 'start_control_plane_connect',
       provider_origin: trimString(state.provider_origin),
-      session_token: trimString(state.session_token),
     }, 'control_plane_dialog');
-    if (result?.outcome === 'connected_control_plane') {
+    if (result?.outcome === 'started_control_plane_connect') {
       closeControlPlaneDialog();
-      setFeedback('Control Plane connected.');
+      setFeedback('Continue in your browser to finish authorizing this Control Plane.');
+    }
+  }
+
+  async function reconnectControlPlane(controlPlane: DesktopControlPlaneSummary): Promise<void> {
+    const result = await performLauncherAction({
+      kind: 'start_control_plane_connect',
+      provider_origin: controlPlane.provider.provider_origin,
+    });
+    if (result?.outcome === 'started_control_plane_connect') {
+      setFeedback(`Continue in your browser to reconnect ${controlPlane.provider.display_name}.`);
     }
   }
 
@@ -1319,6 +1330,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           deleteEnvironment={setDeleteTarget}
           controlPlanes={controlPlanes()}
           openControlPlaneEnvironment={openControlPlaneEnvironment}
+          reconnectControlPlane={reconnectControlPlane}
           refreshControlPlane={refreshControlPlane}
           deleteControlPlane={setDeleteControlPlaneTarget}
           closeLauncherOrQuit={closeLauncherOrQuit}
@@ -1415,7 +1427,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <p class="text-sm">
             Remove <span class="font-semibold">{deleteControlPlaneTarget()?.provider.display_name}</span> from Desktop?
           </p>
-          <p class="text-xs text-muted-foreground">This only removes the saved Desktop session token and cached environment list.</p>
+          <p class="text-xs text-muted-foreground">Desktop will revoke the saved authorization, then remove the local account snapshot and cached environment list.</p>
         </div>
       </ConfirmDialog>
     </>
@@ -1456,6 +1468,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
   openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
   closeLauncherOrQuit: () => Promise<void>;
@@ -1597,6 +1610,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               busyAction={props.busyAction}
               openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
               openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+              reconnectControlPlane={props.reconnectControlPlane}
               refreshControlPlane={props.refreshControlPlane}
               deleteControlPlane={props.deleteControlPlane}
             />
@@ -2149,6 +2163,7 @@ function ControlPlanesPanel(props: Readonly<{
   busyAction: BusyAction;
   openCreateControlPlaneDialog: (message?: string) => void;
   openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
@@ -2201,6 +2216,7 @@ function ControlPlanesPanel(props: Readonly<{
                   openWindows={props.openWindows}
                   busyAction={props.busyAction}
                   openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                  reconnectControlPlane={props.reconnectControlPlane}
                   refreshControlPlane={props.refreshControlPlane}
                   deleteControlPlane={props.deleteControlPlane}
                 />
@@ -2218,9 +2234,11 @@ function ControlPlaneCard(props: Readonly<{
   openWindows: readonly DesktopOpenEnvironmentWindow[];
   busyAction: BusyAction;
   openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
+  const authorizationExpired = hasTimestampExpired(props.controlPlane.account.authorization_expires_at_unix_ms);
   return (
     <div class="rounded-lg border border-border/70 bg-background px-4 py-4 shadow-sm">
       <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -2236,10 +2254,22 @@ function ControlPlaneCard(props: Readonly<{
           </div>
           <div class="mt-2 break-all font-mono text-xs text-muted-foreground">{props.controlPlane.provider.provider_origin}</div>
           <div class="mt-2 text-xs text-muted-foreground">
-            Synced {formatTimestamp(props.controlPlane.last_synced_at_ms) || 'unknown'} · Session expires {formatTimestamp(props.controlPlane.account.expires_at_unix_ms) || 'unknown'}
+            Synced {formatTimestamp(props.controlPlane.last_synced_at_ms) || 'unknown'} · {authorizationExpired
+              ? 'Authorization expired'
+              : `Authorized until ${formatTimestamp(props.controlPlane.account.authorization_expires_at_unix_ms) || 'unknown'}`}
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            loading={props.busyAction === 'start_control_plane_connect'}
+            onClick={() => {
+              void props.reconnectControlPlane(props.controlPlane);
+            }}
+          >
+            Reconnect
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -2838,7 +2868,7 @@ function ControlPlaneDialog(props: Readonly<{
   error: string;
   busyAction: BusyAction;
   onOpenChange: (open: boolean) => void;
-  updateField: (name: 'provider_origin' | 'session_token', value: string) => void;
+  updateField: (name: 'provider_origin', value: string) => void;
   onConnect: () => Promise<void>;
 }>) {
   return (
@@ -2854,12 +2884,12 @@ function ControlPlaneDialog(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'connect_control_plane'}
+            loading={props.busyAction === 'start_control_plane_connect'}
             onClick={() => {
               void props.onConnect();
             }}
           >
-            Connect
+            Continue in Browser
           </Button>
         </div>
       )}
@@ -2878,20 +2908,8 @@ function ControlPlaneDialog(props: Readonly<{
             autofocus
           />
         </div>
-        <div class="space-y-1.5">
-          <label for="control-plane-session-token" class="block text-xs font-medium text-foreground">Desktop Session Token</label>
-          <Input
-            id="control-plane-session-token"
-            value={props.state?.session_token ?? ''}
-            onInput={(event) => props.updateField('session_token', event.currentTarget.value)}
-            placeholder="Paste a desktop_session_token"
-            size="sm"
-            class="w-full font-mono"
-            spellcheck={false}
-          />
-        </div>
         <div class="text-xs text-muted-foreground">
-          Desktop stores the token locally, then uses the fixed provider protocol to load your Control Plane environments.
+          Desktop will open your browser, use your current Portal session to authorize this Control Plane, and store only a revocable desktop authorization locally.
         </div>
         <Show when={props.error}>
           <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">

@@ -63,18 +63,16 @@ describe('controlPlaneProvider', () => {
     expect(normalizeDesktopControlPlaneAccount({
       user_public_id: ' user_demo ',
       user_display_name: ' Demo User ',
-      expires_at_unix_ms: 1_770_000_000_000,
+      authorization_expires_at_unix_ms: 1_770_000_000_000,
     }, {
       provider: provider!,
-      sessionToken: ' token-123 ',
     })).toEqual({
       provider_id: 'redeven_portal',
       provider_origin: 'https://cp.example.invalid',
       display_name: 'Redeven Portal',
       user_public_id: 'user_demo',
       user_display_name: 'Demo User',
-      session_token: 'token-123',
-      expires_at_unix_ms: 1_770_000_000_000,
+      authorization_expires_at_unix_ms: 1_770_000_000_000,
     });
   });
 

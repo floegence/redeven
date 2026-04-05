@@ -34,6 +34,7 @@ describe('main routing', () => {
   it('routes launcher and shell actions into the multi-window desktop flow', () => {
     const mainSrc = readMainSource();
 
+    expect(mainSrc).toContain("case 'start_control_plane_connect':");
     expect(mainSrc).toContain("case 'open_local_environment_settings':");
     expect(mainSrc).toContain("case 'focus_environment_window':");
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
@@ -54,5 +55,14 @@ describe('main routing', () => {
     expect(mainSrc).toContain('function senderUtilityWindowKind(webContentsID: number): DesktopUtilityWindowKind {');
     expect(mainSrc).toContain('function handoffAskFlowerToOwningSession(senderWebContentsID: number, payload: DesktopAskFlowerHandoffPayload): Promise<void> {');
     expect(mainSrc).toContain('queueSessionAskFlowerHandoff(sessionKey, payload);');
+  });
+
+  it('parses Control Plane deep links through handoff tickets instead of pasted session tokens', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain("parsed.searchParams.get('handoff_ticket')");
+    expect(mainSrc).toContain('exchangeProviderDesktopOpenHandoff');
+    expect(mainSrc).toContain('exchangeProviderDesktopConnectHandoff');
+    expect(mainSrc).not.toContain("parsed.searchParams.get('session_token')");
   });
 });
