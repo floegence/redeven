@@ -312,6 +312,15 @@ type RunOptions struct {
 	// NoUserInteraction disables ask_user and approval waits for autonomous runs.
 	NoUserInteraction bool `json:"no_user_interaction,omitempty"`
 
+	// ToolAllowlist is an internal runtime guard that limits the visible tool surface
+	// for the current run. It is intended for runtime-owned callers such as evals and
+	// subagents rather than general user-facing requests.
+	ToolAllowlist []string `json:"tool_allowlist,omitempty"`
+
+	// ForceReadonlyExec is an internal runtime guard that blocks mutating
+	// terminal.exec invocations for the current run.
+	ForceReadonlyExec bool `json:"force_readonly_exec,omitempty"`
+
 	// Mode overrides runtime mode for this run (act|plan).
 	Mode string `json:"mode,omitempty"`
 

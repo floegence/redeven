@@ -918,6 +918,8 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ThreadsDB:           db,
 		PersistOpTimeout:    persistTO,
 		SkillManager:        s.skillManager,
+		ToolAllowlist:       append([]string(nil), req.Options.ToolAllowlist...),
+		ForceReadonlyExec:   req.Options.ForceReadonlyExec,
 		NoUserInteraction:   req.Options.NoUserInteraction,
 		OnStreamEvent: func(ev any) {
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {

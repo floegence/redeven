@@ -53,6 +53,8 @@ type taskResult struct {
 	Outcome             taskOutcome          `json:"outcome"`
 	SourceWorkspacePath string               `json:"source_workspace_path"`
 	WorkspacePath       string               `json:"workspace_path"`
+	WorkspaceMode       string               `json:"workspace_mode,omitempty"`
+	WorkspaceSeed       string               `json:"workspace_seed,omitempty"`
 	ThreadState         threadStateSummary   `json:"thread_state"`
 	ToolCalls           []toolCallSummary    `json:"tool_calls,omitempty"`
 	TodoSnapshot        *todoSnapshotSummary `json:"todo_snapshot,omitempty"`
@@ -103,16 +105,16 @@ type scoreBreakdown struct {
 }
 
 type evalReport struct {
-	GeneratedAt          time.Time               `json:"generated_at"`
-	ModelID              string                  `json:"model_id"`
-	TaskSpecPath         string                  `json:"task_spec_path"`
-	SourceWorkspacePath  string                  `json:"source_workspace_path"`
-	IsolatedWorkspaceDir string                  `json:"isolated_workspace_dir"`
-	TaskCount            int                     `json:"task_count"`
-	Results              []taskResult            `json:"results"`
-	Metrics              suiteMetrics            `json:"metrics"`
-	StageMetrics         map[string]suiteMetrics `json:"stage_metrics,omitempty"`
-	Gate                 gateReport              `json:"gate"`
+	GeneratedAt              time.Time               `json:"generated_at"`
+	ModelID                  string                  `json:"model_id"`
+	TaskSpecPath             string                  `json:"task_spec_path"`
+	SourceWorkspacePath      string                  `json:"source_workspace_path"`
+	MaterializedWorkspaceDir string                  `json:"materialized_workspace_dir,omitempty"`
+	TaskCount                int                     `json:"task_count"`
+	Results                  []taskResult            `json:"results"`
+	Metrics                  suiteMetrics            `json:"metrics"`
+	StageMetrics             map[string]suiteMetrics `json:"stage_metrics,omitempty"`
+	Gate                     gateReport              `json:"gate"`
 }
 
 type evalProviderKeyResolver func(providerID string) (string, bool, error)
@@ -346,9 +348,9 @@ func main() {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		fatalf("failed to create state dir: %v", err)
 	}
-	taskWorkspaceRoot := filepath.Join(outDir, "workspaces")
-	if err := os.MkdirAll(taskWorkspaceRoot, 0o700); err != nil {
-		fatalf("failed to create isolated workspace dir: %v", err)
+	materializedWorkspaceRoot := filepath.Join(outDir, "workspaces")
+	if err := os.MkdirAll(materializedWorkspaceRoot, 0o700); err != nil {
+		fatalf("failed to create task workspace dir: %v", err)
 	}
 
 	tasks, loadErr := loadTaskSpecs(strings.TrimSpace(*taskSpecPath))
@@ -363,7 +365,7 @@ func main() {
 	results := make([]taskResult, 0, len(tasks))
 	for i, task := range tasks {
 		fmt.Printf("[task] (%d/%d) %s\n", i+1, len(tasks), task.ID)
-		res := runTask(ctx, cfg.AI, resolver, modelID, workspacePath, taskWorkspaceRoot, stateDir, task)
+		res := runTask(ctx, cfg.AI, resolver, modelID, workspacePath, materializedWorkspaceRoot, stateDir, task)
 		results = append(results, res)
 		fmt.Printf("  - score=%.2f acc=%.2f nat=%.2f eff=%.2f pass=%t\n", res.Score.Overall, res.Score.Accuracy, res.Score.Natural, res.Score.Efficiency, res.Outcome.Passed)
 	}
@@ -404,16 +406,16 @@ func main() {
 	}
 
 	report := evalReport{
-		GeneratedAt:          time.Now(),
-		ModelID:              modelID,
-		TaskSpecPath:         filepath.Clean(strings.TrimSpace(*taskSpecPath)),
-		SourceWorkspacePath:  workspacePath,
-		IsolatedWorkspaceDir: taskWorkspaceRoot,
-		TaskCount:            len(results),
-		Results:              results,
-		Metrics:              metrics,
-		StageMetrics:         stageMetrics,
-		Gate:                 gate,
+		GeneratedAt:              time.Now(),
+		ModelID:                  modelID,
+		TaskSpecPath:             filepath.Clean(strings.TrimSpace(*taskSpecPath)),
+		SourceWorkspacePath:      workspacePath,
+		MaterializedWorkspaceDir: materializedWorkspaceRoot,
+		TaskCount:                len(results),
+		Results:                  results,
+		Metrics:                  metrics,
+		StageMetrics:             stageMetrics,
+		Gate:                     gate,
 	}
 
 	jsonPath := filepath.Join(outDir, "report.json")
@@ -454,10 +456,22 @@ func runTask(
 	taskStateRoot string,
 	task evalTask,
 ) taskResult {
-	sandbox, err := prepareTaskSandbox(taskWorkspaceRoot, taskStateRoot, task.ID, sourceWorkspace)
+	sandbox, err := prepareTaskSandbox(taskWorkspaceRoot, taskStateRoot, task.ID, sourceWorkspace, task.Runtime.Workspace)
 	inputs := renderTaskTurns(task.Turns, sandbox.WorkspacePath)
 	if err != nil {
-		return failedTaskResult(task, sourceWorkspace, sandbox.WorkspacePath, inputs, "prepare_task_workspace_failed", err)
+		return failedTaskResult(task, sourceWorkspace, sandbox, inputs, "prepare_task_workspace_failed", err)
+	}
+
+	runOptions := ai.RunOptions{
+		MaxSteps:                         task.Runtime.MaxSteps,
+		MaxNoToolRounds:                  task.Runtime.MaxNoToolRounds,
+		ReasoningOnly:                    task.Runtime.ReasoningOnly,
+		RequireUserConfirmOnTaskComplete: task.Runtime.RequireUserConfirmOnTaskComplete,
+		NoUserInteraction:                task.Runtime.NoUserInteraction,
+	}
+	if sandbox.WorkspaceMode == taskWorkspaceModeSourceReadonly {
+		runOptions.ToolAllowlist = evalReadonlyToolAllowlist()
+		runOptions.ForceReadonlyExec = true
 	}
 
 	svc, err := ai.NewService(ai.Options{
@@ -472,7 +486,7 @@ func runTask(
 		ResolveProviderAPIKey: resolveProviderAPIKey,
 	})
 	if err != nil {
-		return failedTaskResult(task, sourceWorkspace, sandbox.WorkspacePath, inputs, "init_task_service_failed", err)
+		return failedTaskResult(task, sourceWorkspace, sandbox, inputs, "init_task_service_failed", err)
 	}
 	defer func() { _ = svc.Close() }()
 
@@ -490,7 +504,7 @@ func runTask(
 	}
 	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, task.Runtime.ExecutionMode, sandbox.WorkspacePath)
 	if err != nil {
-		return failedTaskResult(task, sourceWorkspace, sandbox.WorkspacePath, inputs, "create_thread_failed", err)
+		return failedTaskResult(task, sourceWorkspace, sandbox, inputs, "create_thread_failed", err)
 	}
 
 	turns := make([]turnMetrics, 0, len(inputs))
@@ -517,13 +531,7 @@ func runTask(
 			ThreadID: thread.ThreadID,
 			Model:    modelID,
 			Input:    ai.RunInput{Text: turnText},
-			Options: ai.RunOptions{
-				MaxSteps:                         task.Runtime.MaxSteps,
-				MaxNoToolRounds:                  task.Runtime.MaxNoToolRounds,
-				ReasoningOnly:                    task.Runtime.ReasoningOnly,
-				RequireUserConfirmOnTaskComplete: task.Runtime.RequireUserConfirmOnTaskComplete,
-				NoUserInteraction:                task.Runtime.NoUserInteraction,
-			},
+			Options:  runOptions,
 		}, writer)
 		dur := time.Since(oneStart)
 		cancel()
@@ -603,6 +611,8 @@ func runTask(
 		DurationTotalMS:     totalDur.Milliseconds(),
 		SourceWorkspacePath: sourceWorkspace,
 		WorkspacePath:       sandbox.WorkspacePath,
+		WorkspaceMode:       sandbox.WorkspaceMode,
+		WorkspaceSeed:       sandbox.WorkspaceSeed,
 		ThreadState:         summarizeThreadState(threadView),
 		ToolCalls:           summarizeToolCalls(toolCalls),
 		TodoSnapshot:        buildTodoSnapshotSummary(todoView),
@@ -618,7 +628,20 @@ func runTask(
 	return result
 }
 
-func failedTaskResult(task evalTask, sourceWorkspace string, taskWorkspace string, inputs []string, reason string, err error) taskResult {
+func evalReadonlyToolAllowlist() []string {
+	return []string{
+		"ask_user",
+		"exit_plan_mode",
+		"file.read",
+		"knowledge.search",
+		"task_complete",
+		"terminal.exec",
+		"web.search",
+		"write_todos",
+	}
+}
+
+func failedTaskResult(task evalTask, sourceWorkspace string, sandbox evalTaskSandbox, inputs []string, reason string, err error) taskResult {
 	msg := strings.TrimSpace(reason)
 	if err != nil {
 		msg = msg + ": " + strings.TrimSpace(err.Error())
@@ -630,7 +653,9 @@ func failedTaskResult(task evalTask, sourceWorkspace string, taskWorkspace strin
 		Score:               scoreBreakdown{},
 		Outcome:             taskOutcome{Passed: false, LoopSafe: false, RecoverySucceeded: false, HardFailReasons: []string{reason}},
 		SourceWorkspacePath: sourceWorkspace,
-		WorkspacePath:       taskWorkspace,
+		WorkspacePath:       sandbox.WorkspacePath,
+		WorkspaceMode:       sandbox.WorkspaceMode,
+		WorkspaceSeed:       sandbox.WorkspaceSeed,
 		EventCounts:         map[string]int{},
 	}
 }
@@ -1213,7 +1238,7 @@ func writeMarkdown(path string, report evalReport) error {
 	b.WriteString(fmt.Sprintf("- Model: `%s`\n", report.ModelID))
 	b.WriteString(fmt.Sprintf("- Task spec: `%s`\n", report.TaskSpecPath))
 	b.WriteString(fmt.Sprintf("- Source workspace: `%s`\n", report.SourceWorkspacePath))
-	b.WriteString(fmt.Sprintf("- Isolated workspaces: `%s`\n", report.IsolatedWorkspaceDir))
+	b.WriteString(fmt.Sprintf("- Materialized task workspaces: `%s`\n", report.MaterializedWorkspaceDir))
 	b.WriteString(fmt.Sprintf("- Tasks: %d\n", report.TaskCount))
 
 	b.WriteString("\n## Suite Metrics\n\n")
@@ -1275,6 +1300,10 @@ func writeMarkdown(path string, report evalReport) error {
 			result.ThreadState.RunStatus,
 			result.ThreadState.WaitingPrompt,
 		))
+		b.WriteString(fmt.Sprintf("- Workspace: mode=`%s` path=`%s`\n", result.WorkspaceMode, result.WorkspacePath))
+		if seed := strings.TrimSpace(result.WorkspaceSeed); seed != "" {
+			b.WriteString(fmt.Sprintf("- Workspace seed: `%s`\n", seed))
+		}
 		b.WriteString(fmt.Sprintf("- Tool calls: %d\n", len(result.ToolCalls)))
 		if result.TodoSnapshot != nil {
 			b.WriteString(fmt.Sprintf("- Todos: total=%d pending=%d in_progress=%d completed=%d cancelled=%d\n",

@@ -25,14 +25,20 @@ type taskSpecItem struct {
 	Assertions taskAssertionsSpec `yaml:"assertions"`
 }
 
+type taskWorkspaceSpec struct {
+	Mode    string `yaml:"mode"`
+	Fixture string `yaml:"fixture"`
+}
+
 type taskRuntimeSpec struct {
-	ExecutionMode                    string `yaml:"execution_mode"`
-	MaxSteps                         int    `yaml:"max_steps"`
-	MaxNoToolRounds                  int    `yaml:"max_no_tool_rounds"`
-	TimeoutSeconds                   int    `yaml:"timeout_seconds"`
-	ReasoningOnly                    bool   `yaml:"reasoning_only"`
-	RequireUserConfirmOnTaskComplete bool   `yaml:"require_user_confirm_on_task_complete"`
-	NoUserInteraction                bool   `yaml:"no_user_interaction"`
+	ExecutionMode                    string            `yaml:"execution_mode"`
+	MaxSteps                         int               `yaml:"max_steps"`
+	MaxNoToolRounds                  int               `yaml:"max_no_tool_rounds"`
+	TimeoutSeconds                   int               `yaml:"timeout_seconds"`
+	ReasoningOnly                    bool              `yaml:"reasoning_only"`
+	RequireUserConfirmOnTaskComplete bool              `yaml:"require_user_confirm_on_task_complete"`
+	NoUserInteraction                bool              `yaml:"no_user_interaction"`
+	Workspace                        taskWorkspaceSpec `yaml:"workspace"`
 }
 
 type taskAssertionsSpec struct {
@@ -89,16 +95,28 @@ type evalTask struct {
 	Assertions taskAssertionsSpec `json:"assertions"`
 }
 
-type evalTaskRuntime struct {
-	ExecutionMode                    string        `json:"execution_mode"`
-	MaxSteps                         int           `json:"max_steps"`
-	MaxNoToolRounds                  int           `json:"max_no_tool_rounds,omitempty"`
-	TimeoutPerTurn                   time.Duration `json:"-"`
-	TimeoutSeconds                   int           `json:"timeout_seconds"`
-	ReasoningOnly                    bool          `json:"reasoning_only,omitempty"`
-	RequireUserConfirmOnTaskComplete bool          `json:"require_user_confirm_on_task_complete,omitempty"`
-	NoUserInteraction                bool          `json:"no_user_interaction,omitempty"`
+type evalTaskWorkspace struct {
+	Mode        string `json:"mode"`
+	FixturePath string `json:"fixture_path,omitempty"`
 }
+
+type evalTaskRuntime struct {
+	ExecutionMode                    string            `json:"execution_mode"`
+	MaxSteps                         int               `json:"max_steps"`
+	MaxNoToolRounds                  int               `json:"max_no_tool_rounds,omitempty"`
+	TimeoutPerTurn                   time.Duration     `json:"-"`
+	TimeoutSeconds                   int               `json:"timeout_seconds"`
+	ReasoningOnly                    bool              `json:"reasoning_only,omitempty"`
+	RequireUserConfirmOnTaskComplete bool              `json:"require_user_confirm_on_task_complete,omitempty"`
+	NoUserInteraction                bool              `json:"no_user_interaction,omitempty"`
+	Workspace                        evalTaskWorkspace `json:"workspace"`
+}
+
+const (
+	taskWorkspaceModeNone           = "none"
+	taskWorkspaceModeSourceReadonly = "source_readonly"
+	taskWorkspaceModeFixtureCopy    = "fixture_copy"
+)
 
 func loadTaskSpecs(specPath string) ([]evalTask, error) {
 	cleanPath := strings.TrimSpace(specPath)
@@ -117,9 +135,10 @@ func loadTaskSpecs(specPath string) ([]evalTask, error) {
 	if len(spec.Tasks) == 0 {
 		return nil, fmt.Errorf("task spec has no tasks")
 	}
+	specDir := filepath.Dir(cleanPath)
 	out := make([]evalTask, 0, len(spec.Tasks))
 	for _, item := range spec.Tasks {
-		task, err := normalizeTaskSpecItem(item)
+		task, err := normalizeTaskSpecItem(item, specDir)
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +147,7 @@ func loadTaskSpecs(specPath string) ([]evalTask, error) {
 	return out, nil
 }
 
-func normalizeTaskSpecItem(item taskSpecItem) (evalTask, error) {
+func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) {
 	id := strings.TrimSpace(item.ID)
 	if id == "" {
 		return evalTask{}, fmt.Errorf("task id is empty")
@@ -167,6 +186,10 @@ func normalizeTaskSpecItem(item taskSpecItem) (evalTask, error) {
 
 	if item.Runtime.MaxNoToolRounds < 0 {
 		return evalTask{}, fmt.Errorf("task %s has invalid max_no_tool_rounds", id)
+	}
+	workspace, err := normalizeTaskWorkspaceSpec(item.Runtime.Workspace, specDir)
+	if err != nil {
+		return evalTask{}, fmt.Errorf("task %s has invalid workspace config: %w", id, err)
 	}
 
 	assertions := item.Assertions
@@ -222,9 +245,56 @@ func normalizeTaskSpecItem(item taskSpecItem) (evalTask, error) {
 			ReasoningOnly:                    item.Runtime.ReasoningOnly,
 			RequireUserConfirmOnTaskComplete: item.Runtime.RequireUserConfirmOnTaskComplete,
 			NoUserInteraction:                item.Runtime.NoUserInteraction,
+			Workspace:                        workspace,
 		},
 		Assertions: assertions,
 	}, nil
+}
+
+func normalizeTaskWorkspaceSpec(raw taskWorkspaceSpec, specDir string) (evalTaskWorkspace, error) {
+	mode := strings.TrimSpace(strings.ToLower(raw.Mode))
+	if mode == "" {
+		mode = taskWorkspaceModeSourceReadonly
+	}
+	fixture := strings.TrimSpace(raw.Fixture)
+	switch mode {
+	case taskWorkspaceModeNone:
+		if fixture != "" {
+			return evalTaskWorkspace{}, fmt.Errorf("fixture is only supported for %s mode", taskWorkspaceModeFixtureCopy)
+		}
+		return evalTaskWorkspace{Mode: mode}, nil
+	case taskWorkspaceModeSourceReadonly:
+		if fixture != "" {
+			return evalTaskWorkspace{}, fmt.Errorf("fixture is only supported for %s mode", taskWorkspaceModeFixtureCopy)
+		}
+		return evalTaskWorkspace{Mode: mode}, nil
+	case taskWorkspaceModeFixtureCopy:
+		if fixture == "" {
+			return evalTaskWorkspace{}, fmt.Errorf("fixture is required for %s mode", taskWorkspaceModeFixtureCopy)
+		}
+		fixturePath := fixture
+		if !filepath.IsAbs(fixturePath) {
+			fixturePath = filepath.Join(specDir, fixturePath)
+		}
+		fixturePath, err := filepath.Abs(fixturePath)
+		if err != nil {
+			return evalTaskWorkspace{}, err
+		}
+		fixturePath = filepath.Clean(fixturePath)
+		info, err := os.Stat(fixturePath)
+		if err != nil {
+			return evalTaskWorkspace{}, err
+		}
+		if !info.IsDir() {
+			return evalTaskWorkspace{}, fmt.Errorf("fixture must be a directory")
+		}
+		return evalTaskWorkspace{
+			Mode:        mode,
+			FixturePath: fixturePath,
+		}, nil
+	default:
+		return evalTaskWorkspace{}, fmt.Errorf("unsupported mode %q", raw.Mode)
+	}
 }
 
 func normalizeExecutionMode(raw string) string {

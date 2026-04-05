@@ -73,7 +73,13 @@ Each task runs against the real Flower runtime with:
 - real runtime policy decisions, including `intent` and `execution_contract`
 - real tools and real persisted runtime state
 
-Each task gets its own isolated workspace copy under the report directory, and the eval runner now also gives each task its own runtime state directory with that cloned workspace as the runtime home. This protects the source repo and keeps tool path scope pinned to the isolated copy while still allowing Flower to run with normal RWX permissions and real tool semantics.
+Each task also declares an explicit workspace mode:
+
+- `source_readonly`: reuse the source workspace path directly, but force readonly `terminal.exec` and restrict the visible tool surface to non-mutating tools
+- `none`: create an empty task workspace directory for protocol-only tasks that do not need real repository contents
+- `fixture_copy`: materialize a small writable task workspace from a dedicated eval fixture tree
+
+Every task still gets its own runtime `state/` directory, and tasks that materialize a workspace do so under the report directory. This keeps task-local workspace boundaries explicit without copying the full source repository for every readonly eval.
 
 ## Task spec schema
 
@@ -89,7 +95,7 @@ Tasks are loaded from YAML under `eval/tasks/` and support:
 - `assertions.events`
 - `assertions.todos`
 
-Tool assertions also support `workspace_scoped_tools`, which fails a task when those tool calls contain path arguments that escape the isolated task workspace. Structured file tools (`file.read`, `file.edit`, `file.write`) participate in the same boundary checks as `apply_patch` and `terminal.exec`.
+Tool assertions also support `workspace_scoped_tools`, which fails a task when those tool calls contain path arguments that escape the task workspace boundary. Structured file tools (`file.read`, `file.edit`, `file.write`) participate in the same boundary checks as `apply_patch` and `terminal.exec`.
 
 Assertion groups are intentionally structural:
 
@@ -121,13 +127,13 @@ Artifacts:
 - `report.json`
 - `report.md`
 - `state/`
-- `workspaces/`
+- `workspaces/` for tasks that materialize a task-local workspace (`none` or `fixture_copy`)
 
 Default output directory:
 
 - `~/.redeven/ai/evals/<timestamp>/`
 
-The local-config sandbox suite writes the same report shape and is intended for provider-specific smoke/regression runs such as "verify my current Kimi setup can inspect with file.read, escalate with exit_plan_mode, write safely inside the sandbox, preserve apply_patch compatibility, and refuse outside-workspace edits."
+The local-config sandbox suite writes the same report shape and is intended for provider-specific smoke/regression runs such as "verify my current Kimi setup can inspect the real workspace with file.read, escalate with exit_plan_mode, write safely inside a task-local fixture workspace, preserve apply_patch compatibility, and refuse outside-workspace edits."
 
 ## Hard gate
 

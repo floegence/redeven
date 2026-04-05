@@ -254,7 +254,11 @@ The eval harness runs real Flower tasks and asserts:
 - todo discipline, including final closeout and single `in_progress` execution
 - assistant-visible output, evidence paths, and fallback-free closeout
 
-Each eval task runs in an isolated workspace copy so Flower can keep normal RWX permissions without mutating the source repository under test.
+Each eval task now declares a workspace mode instead of always cloning the full repository:
+
+- readonly repository tasks can run directly against the real source workspace with readonly exec enforcement
+- protocol-only tasks can use an empty task workspace
+- mutation tasks can use a tiny writable fixture workspace without touching the source repository under test
 
 See also:
 - `PERMISSION_POLICY.md` for how the local RWX cap works (and what it does not cap).

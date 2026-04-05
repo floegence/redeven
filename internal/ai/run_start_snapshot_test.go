@@ -135,3 +135,61 @@ func TestPrepareRun_InitializesActiveRunSnapshotImmediately(t *testing.T) {
 		t.Fatalf("block content=%q, want empty string", parsed.Blocks[0].Content)
 	}
 }
+
+func TestPrepareRun_PropagatesInternalReadonlyRunOptions(t *testing.T) {
+	t.Parallel()
+
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	meta := &session.Meta{
+		EndpointID:        "env_prepare_options",
+		NamespacePublicID: "ns_prepare_options",
+		ChannelID:         "ch_prepare_options",
+		UserPublicID:      "user_prepare_options",
+		UserEmail:         "prepare-options@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+
+	thread, err := svc.CreateThread(ctx, meta, "prepare options", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_prepare_internal_options"
+	prepared, err := svc.prepareRun(meta, runID, RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "hello"},
+		Options: RunOptions{
+			MaxSteps:          1,
+			ToolAllowlist:     []string{"terminal.exec", "task_complete"},
+			ForceReadonlyExec: true,
+		},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("prepareRun: %v", err)
+	}
+	t.Cleanup(func() {
+		svc.mu.Lock()
+		delete(svc.runs, runID)
+		delete(svc.activeRunByTh, runThreadKey(meta.EndpointID, thread.ThreadID))
+		svc.mu.Unlock()
+		prepared.r.markDone()
+	})
+
+	if !prepared.r.forceReadonlyExec {
+		t.Fatalf("forceReadonlyExec=false, want true")
+	}
+	if len(prepared.r.toolAllowlist) != 2 {
+		t.Fatalf("toolAllowlist size=%d, want 2", len(prepared.r.toolAllowlist))
+	}
+	if _, ok := prepared.r.toolAllowlist["terminal.exec"]; !ok {
+		t.Fatalf("toolAllowlist missing terminal.exec")
+	}
+	if _, ok := prepared.r.toolAllowlist["task_complete"]; !ok {
+		t.Fatalf("toolAllowlist missing task_complete")
+	}
+}

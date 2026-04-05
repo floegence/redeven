@@ -141,6 +141,49 @@ func TestHandleToolCall_DefaultPolicy_BlocksMutatingInPlanMode(t *testing.T) {
 	assertPlanMutatingBlocked(t, outcome, target)
 }
 
+func TestHandleToolCall_ForceReadonlyExecBlocksMutatingTerminalExec(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "note.txt")
+
+	r := newRun(runOptions{
+		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir:      workspace,
+		Shell:             "bash",
+		AIConfig:          &config.AIConfig{},
+		ForceReadonlyExec: true,
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		MessageID: "msg_force_readonly_exec",
+	})
+	r.runMode = config.AIModeAct
+
+	outcome := runToolCall(t, r, "tool_force_readonly_exec", map[string]any{
+		"command": "printf 'readonly denied' > note.txt",
+	}, true, false)
+
+	if outcome.Success {
+		t.Fatalf("mutating terminal.exec must be blocked when readonly exec is forced")
+	}
+	if outcome.ToolError == nil {
+		t.Fatalf("missing tool error for blocked terminal.exec")
+	}
+	if outcome.ToolError.Code != aitools.ErrorCodePermissionDenied {
+		t.Fatalf("tool error code=%q, want %q", outcome.ToolError.Code, aitools.ErrorCodePermissionDenied)
+	}
+	if !strings.Contains(strings.ToLower(strings.TrimSpace(outcome.ToolError.Message)), "readonly policy") {
+		t.Fatalf("tool error message=%q, want readonly policy hint", outcome.ToolError.Message)
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("target file should not be created, statErr=%v", statErr)
+	}
+}
+
 func TestHandleToolCall_RequireApproval_ActModeMutating(t *testing.T) {
 	t.Parallel()
 
