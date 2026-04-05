@@ -14,8 +14,7 @@ export type DesktopControlPlaneAccount = Readonly<{
   display_name: string;
   user_public_id: string;
   user_display_name: string;
-  session_token: string;
-  expires_at_unix_ms: number;
+  authorization_expires_at_unix_ms: number;
 }>;
 
 export type DesktopProviderEnvironment = Readonly<{
@@ -125,7 +124,6 @@ export function normalizeDesktopControlPlaneProvider(value: unknown): DesktopCon
 
 type NormalizeDesktopControlPlaneAccountOptions = Readonly<{
   provider: DesktopControlPlaneProvider;
-  sessionToken: string;
 }>;
 
 export function normalizeDesktopControlPlaneAccount(
@@ -139,9 +137,8 @@ export function normalizeDesktopControlPlaneAccount(
   const candidate = value as Record<string, unknown>;
   const userPublicID = compact(candidate.user_public_id);
   const userDisplayName = compact(candidate.user_display_name);
-  const sessionToken = compact(options.sessionToken);
-  const expiresAtUnixMS = normalizeUnixMS(candidate.expires_at_unix_ms);
-  if (userPublicID === '' || userDisplayName === '' || sessionToken === '' || expiresAtUnixMS <= 0) {
+  const authorizationExpiresAtUnixMS = normalizeUnixMS(candidate.authorization_expires_at_unix_ms);
+  if (userPublicID === '' || userDisplayName === '' || authorizationExpiresAtUnixMS <= 0) {
     return null;
   }
 
@@ -151,8 +148,7 @@ export function normalizeDesktopControlPlaneAccount(
     display_name: options.provider.display_name,
     user_public_id: userPublicID,
     user_display_name: userDisplayName,
-    session_token: sessionToken,
-    expires_at_unix_ms: expiresAtUnixMS,
+    authorization_expires_at_unix_ms: authorizationExpiresAtUnixMS,
   };
 }
 

@@ -67,6 +67,7 @@ export type DesktopPreferences = Readonly<{
   saved_environments: readonly DesktopSavedEnvironment[];
   saved_ssh_environments: readonly DesktopSavedSSHEnvironment[];
   recent_external_local_ui_urls: readonly string[];
+  control_plane_refresh_tokens: Readonly<Record<string, string>>;
   control_planes: readonly DesktopSavedControlPlane[];
 }>;
 
@@ -103,7 +104,7 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
 type DesktopControlPlaneAccountFile = Readonly<{
   user_public_id?: unknown;
   user_display_name?: unknown;
-  expires_at_unix_ms?: unknown;
+  authorization_expires_at_unix_ms?: unknown;
 }>;
 
 type DesktopControlPlaneFile = Readonly<{
@@ -129,7 +130,7 @@ type DesktopPreferencesFile = Readonly<{
 type DesktopControlPlaneSecretFile = Readonly<{
   provider_origin?: unknown;
   provider_id?: unknown;
-  session_token?: StoredSecret;
+  refresh_token?: StoredSecret;
 }>;
 
 type DesktopSecretsFile = Readonly<{
@@ -172,6 +173,7 @@ export type UpsertDesktopSavedControlPlaneInput = Readonly<{
   account: DesktopControlPlaneAccount;
   environments?: readonly DesktopProviderEnvironment[];
   last_synced_at_ms?: number;
+  refresh_token?: string;
 }>;
 
 const MAX_RECENT_EXTERNAL_LOCAL_UI_URLS = 5;
@@ -221,6 +223,7 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     saved_environments: [],
     saved_ssh_environments: [],
     recent_external_local_ui_urls: [],
+    control_plane_refresh_tokens: {},
     control_planes: [],
   };
 }
@@ -374,7 +377,7 @@ function normalizeSavedSSHEnvironmentCandidate(
 
 function normalizeSavedControlPlaneCandidate(
   value: unknown,
-  sessionTokensByKey: ReadonlyMap<string, string>,
+  refreshTokensByKey: ReadonlyMap<string, string>,
   fallbackLastSyncedAtMS: number,
 ): DesktopSavedControlPlane | null {
   if (!value || typeof value !== 'object') {
@@ -387,19 +390,18 @@ function normalizeSavedControlPlaneCandidate(
     return null;
   }
 
-  let sessionToken = '';
+  let refreshToken = '';
   try {
-    sessionToken = String(sessionTokensByKey.get(desktopControlPlaneKey(provider.provider_origin, provider.provider_id)) ?? '');
+    refreshToken = String(refreshTokensByKey.get(desktopControlPlaneKey(provider.provider_origin, provider.provider_id)) ?? '');
   } catch {
     return null;
   }
-  if (compact(sessionToken) === '') {
+  if (compact(refreshToken) === '') {
     return null;
   }
 
   const account = normalizeDesktopControlPlaneAccount(candidate.account, {
     provider,
-    sessionToken,
   });
   if (!account) {
     return null;
@@ -519,7 +521,7 @@ export function normalizeSavedSSHEnvironments(
   return sortSavedSSHEnvironmentsByLastUsed(normalized).slice(0, MAX_SAVED_SSH_ENVIRONMENTS);
 }
 
-function decodeDesktopControlPlaneSessionTokens(
+function decodeDesktopControlPlaneRefreshTokens(
   codec: DesktopSecretCodec,
   values: readonly DesktopControlPlaneSecretFile[] | null | undefined,
 ): Map<string, string> {
@@ -531,12 +533,12 @@ function decodeDesktopControlPlaneSessionTokens(
   for (const value of values) {
     const providerOrigin = compact(value?.provider_origin);
     const providerID = compact(value?.provider_id);
-    const sessionToken = decodeOptionalSecret(codec, value?.session_token);
-    if (providerOrigin === '' || providerID === '' || compact(sessionToken) === '') {
+    const refreshToken = decodeOptionalSecret(codec, value?.refresh_token);
+    if (providerOrigin === '' || providerID === '' || compact(refreshToken) === '') {
       continue;
     }
     try {
-      out.set(desktopControlPlaneKey(providerOrigin, providerID), compact(sessionToken));
+      out.set(desktopControlPlaneKey(providerOrigin, providerID), compact(refreshToken));
     } catch {
       // Ignore malformed secret entries during recovery.
     }
@@ -546,7 +548,7 @@ function decodeDesktopControlPlaneSessionTokens(
 
 export function normalizeSavedControlPlanes(
   values: readonly unknown[] | null | undefined,
-  sessionTokensByKey: ReadonlyMap<string, string>,
+  refreshTokensByKey: ReadonlyMap<string, string>,
 ): readonly DesktopSavedControlPlane[] {
   const sourceValues = Array.isArray(values) ? values : [];
   const normalized: DesktopSavedControlPlane[] = [];
@@ -555,7 +557,7 @@ export function normalizeSavedControlPlanes(
   for (let index = 0; index < sourceValues.length; index += 1) {
     const controlPlane = normalizeSavedControlPlaneCandidate(
       sourceValues[index],
-      sessionTokensByKey,
+      refreshTokensByKey,
       sourceValues.length - index,
     );
     if (!controlPlane) {
@@ -678,6 +680,13 @@ export function upsertSavedControlPlane(
     last_synced_at_ms: normalizeLastUsedAtMS(input.last_synced_at_ms, Date.now()),
   };
   const key = desktopControlPlaneKey(nextControlPlane.provider.provider_origin, nextControlPlane.provider.provider_id);
+  const nextRefreshTokens = {
+    ...preferences.control_plane_refresh_tokens,
+  };
+  const refreshToken = compact(input.refresh_token);
+  if (refreshToken !== '') {
+    nextRefreshTokens[key] = refreshToken;
+  }
   const controlPlanes = sortSavedControlPlanes([
     nextControlPlane,
     ...preferences.control_planes.filter((controlPlane) => (
@@ -687,6 +696,7 @@ export function upsertSavedControlPlane(
 
   return {
     ...preferences,
+    control_plane_refresh_tokens: nextRefreshTokens,
     control_planes: controlPlanes,
   };
 }
@@ -721,8 +731,13 @@ export function deleteSavedControlPlane(
   providerID: string,
 ): DesktopPreferences {
   const key = desktopControlPlaneKey(providerOrigin, providerID);
+  const nextRefreshTokens = {
+    ...preferences.control_plane_refresh_tokens,
+  };
+  delete nextRefreshTokens[key];
   return {
     ...preferences,
+    control_plane_refresh_tokens: nextRefreshTokens,
     control_planes: preferences.control_planes.filter((controlPlane) => (
       desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) !== key
     )),
@@ -877,6 +892,7 @@ export function validateDesktopSettingsDraft(
     saved_environments: [],
     saved_ssh_environments: [],
     recent_external_local_ui_urls: [],
+    control_plane_refresh_tokens: {},
     control_planes: [],
   };
 }
@@ -1000,7 +1016,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
   const localUIPasswordConfigured = Boolean(secretsFile?.local_ui_password);
   const localUIPassword = decodeOptionalSecret(codec, secretsFile?.local_ui_password);
-  const controlPlaneSessionTokensByKey = decodeDesktopControlPlaneSessionTokens(codec, secretsFile?.control_planes);
+  const controlPlaneRefreshTokensByKey = decodeDesktopControlPlaneRefreshTokens(codec, secretsFile?.control_planes);
 
   const recovered = validateDesktopSettingsDraft(recoverDesktopPreferencesDraft({
     local_ui_bind: preferencesFile?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
@@ -1023,7 +1039,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
   const savedSSHEnvironments = normalizeSavedSSHEnvironments(preferencesFile?.saved_ssh_environments);
   const controlPlanes = normalizeSavedControlPlanes(
     preferencesFile?.control_planes,
-    controlPlaneSessionTokensByKey,
+    controlPlaneRefreshTokensByKey,
   );
 
   return {
@@ -1031,6 +1047,7 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     saved_environments: savedEnvironments,
     saved_ssh_environments: savedSSHEnvironments,
     recent_external_local_ui_urls: deriveRecentExternalLocalUIURLs(savedEnvironments),
+    control_plane_refresh_tokens: Object.fromEntries(controlPlaneRefreshTokensByKey),
     control_planes: controlPlanes,
   };
 }
@@ -1054,7 +1071,7 @@ export async function saveDesktopPreferences(
   const recentExternalLocalUIURLs = deriveRecentExternalLocalUIURLs(savedEnvironments);
 
   const preferencesFile: DesktopPreferencesFile = {
-    version: 6,
+    version: 7,
     local_ui_bind: nextPreferences.local_ui_bind,
     saved_environments: savedEnvironments.map((environment) => ({
       id: environment.id,
@@ -1086,7 +1103,7 @@ export async function saveDesktopPreferences(
       account: {
         user_public_id: controlPlane.account.user_public_id,
         user_display_name: controlPlane.account.user_display_name,
-        expires_at_unix_ms: controlPlane.account.expires_at_unix_ms,
+        authorization_expires_at_unix_ms: controlPlane.account.authorization_expires_at_unix_ms,
       },
       environments: controlPlane.environments.map((environment) => ({
         env_public_id: environment.env_public_id,
@@ -1114,11 +1131,19 @@ export async function saveDesktopPreferences(
           ? codec.encodeSecret(nextPreferences.local_ui_password)
           : existingSecretsFile?.local_ui_password)
       : undefined,
-    control_planes: controlPlanes.map((controlPlane) => ({
-      provider_origin: controlPlane.provider.provider_origin,
-      provider_id: controlPlane.provider.provider_id,
-      session_token: codec.encodeSecret(controlPlane.account.session_token),
-    })),
+    control_planes: controlPlanes.flatMap((controlPlane) => {
+      const refreshToken = compact(preferences.control_plane_refresh_tokens[
+        desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id)
+      ]);
+      if (refreshToken === '') {
+        return [];
+      }
+      return [{
+        provider_origin: controlPlane.provider.provider_origin,
+        provider_id: controlPlane.provider.provider_id,
+        refresh_token: codec.encodeSecret(refreshToken),
+      }];
+    }),
     pending_bootstrap: nextPreferences.pending_bootstrap
       ? {
           env_token: codec.encodeSecret(nextPreferences.pending_bootstrap.env_token),

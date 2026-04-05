@@ -50,6 +50,9 @@ describe('desktopWelcomeState', () => {
           'http://192.168.1.12:24000/',
           'http://192.168.1.11:24000/',
         ],
+        control_plane_refresh_tokens: {
+          'https://cp.example.invalid|redeven_portal': 'refresh-123',
+        },
         control_planes: testProvider ? [{
           provider: testProvider,
           account: {
@@ -58,8 +61,7 @@ describe('desktopWelcomeState', () => {
             display_name: testProvider.display_name,
             user_public_id: 'user_demo',
             user_display_name: 'Demo User',
-            session_token: 'token-123',
-            expires_at_unix_ms: 1000,
+            authorization_expires_at_unix_ms: 1000,
           },
           environments: [{
             provider_id: testProvider.provider_id,
@@ -185,6 +187,7 @@ describe('desktopWelcomeState', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
+        control_plane_refresh_tokens: {},
         control_planes: [],
       },
       openSessions: [
@@ -235,6 +238,7 @@ describe('desktopWelcomeState', () => {
           last_used_at_ms: 100,
         }],
         recent_external_local_ui_urls: [],
+        control_plane_refresh_tokens: {},
         control_planes: [],
       },
       openSessions: [
@@ -301,6 +305,7 @@ describe('desktopWelcomeState', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
+        control_plane_refresh_tokens: {},
         control_planes: [],
       },
       surface: 'local_environment_settings',
@@ -343,6 +348,7 @@ describe('desktopWelcomeState', () => {
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
+        control_plane_refresh_tokens: {},
         control_planes: [],
       },
       openSessions: [

@@ -18,7 +18,7 @@ export type DesktopLauncherActionKind =
   | 'open_local_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
-  | 'connect_control_plane'
+  | 'start_control_plane_connect'
   | 'open_local_environment_settings'
   | 'focus_environment_window'
   | 'open_control_plane_environment'
@@ -94,9 +94,8 @@ export type DesktopLauncherActionRequest = Readonly<
       label?: string;
     } & DesktopSSHEnvironmentDetails)
   | {
-      kind: 'connect_control_plane';
+      kind: 'start_control_plane_connect';
       provider_origin: string;
-      session_token: string;
     }
   | {
       kind: 'open_local_environment_settings';
@@ -151,7 +150,7 @@ export type DesktopLauncherActionResult = Readonly<{
     | 'focused_environment_window'
     | 'opened_utility_window'
     | 'focused_utility_window'
-    | 'connected_control_plane'
+    | 'started_control_plane_connect'
     | 'refreshed_control_plane'
     | 'deleted_control_plane'
     | 'saved_environment'
@@ -201,11 +200,10 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
       };
       }
-    case 'connect_control_plane':
+    case 'start_control_plane_connect':
       return {
         kind,
         provider_origin: compact((candidate as { provider_origin?: unknown }).provider_origin),
-        session_token: compact((candidate as { session_token?: unknown }).session_token),
       };
     case 'focus_environment_window': {
       const sessionKey = compact((candidate as { session_key?: unknown }).session_key);

@@ -176,7 +176,7 @@ Interaction rules:
 - SSH mode explains the actual behavior inline:
   - Desktop reuses only the exact Desktop-managed release, installs it on demand when needed, and tunnels its Local UI over SSH.
   - Automatic reuses only the exact Desktop-managed release, prefers a desktop upload for offline targets, then falls back to the remote installer.
-- `Add Control Plane` opens a separate dialog that accepts a Provider URL plus a `desktop_session_token`.
+- `Add Control Plane` opens a separate dialog that accepts only a Provider URL and then continues in the system browser.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -238,6 +238,7 @@ Desktop keeps one persisted preference model for stable `Local Environment` conf
 - `saved_environments`
 - `saved_ssh_environments`
 - `recent_external_local_ui_urls`
+- `control_plane_refresh_tokens`
 - `control_planes`
 
 Semantics:
@@ -249,6 +250,7 @@ Semantics:
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
+- `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
 - `control_planes` stores normalized provider discovery data, the desktop account snapshot, the cached environment list, and the last sync time.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 
@@ -283,7 +285,12 @@ Desktop shell preferences live under the Electron user data directory, not insid
 Desktop supports compatible first-party and third-party control planes through one fixed provider contract:
 
 - discovery: `GET /.well-known/redeven-provider.json`
-- desktop session token account lookup: `GET /api/rcpp/v1/me`
+- browser handoff ticket: `POST /api/rcpp/v1/desktop/handoff-ticket`
+- desktop connect exchange: `POST /api/rcpp/v1/desktop/connect/exchange`
+- desktop open exchange: `POST /api/rcpp/v1/desktop/open/exchange`
+- desktop token refresh: `POST /api/rcpp/v1/desktop/token/refresh`
+- desktop token revoke: `POST /api/rcpp/v1/desktop/token/revoke`
+- desktop account lookup: `GET /api/rcpp/v1/me`
 - provider environment list: `GET /api/rcpp/v1/environments`
 - per-environment bootstrap ticket: `POST /api/rcpp/v1/environments/:env_public_id/desktop/bootstrap-ticket`
 - runtime bootstrap exchange: `POST /api/rcpp/v1/runtime/bootstrap/exchange`
@@ -297,17 +304,22 @@ Desktop assumptions:
 The Control Plane flow is:
 
 1. Desktop discovers the provider from its origin.
-2. The user pastes a short-lived `desktop_session_token`.
-3. Desktop loads `me` and `environments`.
-4. Desktop requests a one-time `bootstrap_ticket` for one environment.
-5. The managed runtime exchanges that ticket for direct connect info.
+2. Desktop opens the provider's browser bridge page at `/desktop/connect`.
+3. The browser session mints a one-time `handoff_ticket` and deep-links back to Desktop.
+4. Desktop exchanges the `connect` handoff for a short-lived in-memory access token plus a long-lived revocable refresh token.
+5. Desktop loads `me` and `environments` with the access token.
+6. Desktop refreshes access tokens on demand with the stored refresh token.
+7. Desktop requests a one-time `bootstrap_ticket` only when it opens a specific environment.
+8. The managed runtime exchanges that ticket for direct connect info.
 
 Browser handoff may also open Desktop through a custom protocol link:
 
 - `redeven://control-plane/connect?...`
 - `redeven://control-plane/open?...`
 
-For `open`, the provider origin, target environment ID, and one-time `bootstrap_ticket` are sufficient. `provider_id` is optional because Desktop can resolve it through discovery.
+For `connect`, the deep link carries a one-time `handoff_ticket`.
+
+For `open`, the provider origin, target environment ID, and one-time `handoff_ticket` are sufficient. Desktop exchanges that handoff for a one-time `bootstrap_ticket`. `provider_id` is optional because Desktop can resolve it through discovery.
 
 ## Shell-Owned Theme State
 
