@@ -25,7 +25,6 @@ const (
 	TypeID_AI_ACTIVE_RUN_SNAPSHOT               uint32 = 6007
 	TypeID_AI_SET_TOOL_COLLAPSED                uint32 = 6008
 	TypeID_AI_SUBSCRIBE_THREAD                  uint32 = 6009
-	TypeID_AI_THREAD_REWIND                     uint32 = 6010
 	TypeID_AI_STOP_THREAD                       uint32 = 6011
 	TypeID_AI_SUBMIT_STRUCTURED_PROMPT_RESPONSE uint32 = 6012
 )
@@ -87,15 +86,6 @@ type aiSubscribeThreadReq struct {
 
 type aiSubscribeThreadResp struct {
 	RunID string `json:"run_id,omitempty"`
-}
-
-type aiThreadRewindReq struct {
-	ThreadID string `json:"thread_id"`
-}
-
-type aiThreadRewindResp struct {
-	OK           bool   `json:"ok"`
-	CheckpointID string `json:"checkpoint_id,omitempty"`
 }
 
 type aiStopThreadReq struct {
@@ -299,24 +289,6 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			return nil, toAIRPCError(err)
 		}
 		return &aiSubscribeThreadResp{RunID: strings.TrimSpace(runID)}, nil
-	})
-
-	accessgate.RegisterTyped[aiThreadRewindReq, aiThreadRewindResp](r, TypeID_AI_THREAD_REWIND, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiThreadRewindReq) (*aiThreadRewindResp, error) {
-		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
-		}
-		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
-		}
-		threadID := strings.TrimSpace(req.ThreadID)
-		if threadID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
-		}
-		out, err := s.RewindThread(ctx, meta, threadID)
-		if err != nil {
-			return nil, toAIRPCError(err)
-		}
-		return &aiThreadRewindResp{OK: out.OK, CheckpointID: strings.TrimSpace(out.CheckpointID)}, nil
 	})
 
 	accessgate.RegisterTyped[aiStopThreadReq, aiStopThreadResp](r, TypeID_AI_STOP_THREAD, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiStopThreadReq) (*aiStopThreadResp, error) {

@@ -11,14 +11,14 @@ import (
 )
 
 const (
-	// CheckpointKindPreRun captures the stable thread state before a run starts.
+	// CheckpointKindPreRun identifies the legacy snapshot rows retained for compatibility.
 	CheckpointKindPreRun = "pre_run"
 )
 
-// ThreadCheckpointRecord is a persistence record for a single thread checkpoint.
+// ThreadCheckpointRecord is a persisted compatibility record for a single thread checkpoint.
 //
-// A checkpoint is created before a run starts (and before the user message is persisted) so the
-// caller can rewind the thread to a consistent prior state (transcript + derived context planes).
+// Normal Flower runs no longer create new thread checkpoints, but legacy rows may still exist and
+// need cleanup or best-effort restore handling.
 type ThreadCheckpointRecord struct {
 	CheckpointID string `json:"checkpoint_id"`
 	EndpointID   string `json:"endpoint_id"`

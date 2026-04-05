@@ -135,15 +135,6 @@ export type AISubscribeThreadResponse = {
   runId?: string;
 };
 
-export type AIThreadRewindRequest = {
-  threadId: string;
-};
-
-export type AIThreadRewindResponse = {
-  ok: boolean;
-  checkpointId?: string;
-};
-
 export type AIFollowupAttachment = {
   name: string;
   mimeType?: string;

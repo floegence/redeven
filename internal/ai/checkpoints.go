@@ -2,69 +2,13 @@ package ai
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
-
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const (
-	threadCheckpointRetentionCount        = 40
 	legacyWorkspaceCheckpointSweepTimeout = 30 * time.Second
 )
-
-func checkpointIDForRun(runID string) string {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return ""
-	}
-	return "cp_" + runID
-}
-
-func (s *Service) createPreRunThreadCheckpoint(ctx context.Context, endpointID string, threadID string, runID string) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	runID = strings.TrimSpace(runID)
-	if endpointID == "" || threadID == "" || runID == "" {
-		return errors.New("invalid checkpoint scope")
-	}
-
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-
-	checkpointID := checkpointIDForRun(runID)
-	if checkpointID == "" {
-		return errors.New("missing checkpoint id")
-	}
-
-	cctx, cancel := context.WithTimeout(ctx, persistTO)
-	_, err := db.CreateThreadCheckpoint(cctx, endpointID, threadID, checkpointID, runID, threadstore.CheckpointKindPreRun)
-	cancel()
-	if err != nil {
-		return err
-	}
-
-	pctx, pcancel := context.WithTimeout(context.Background(), persistTO)
-	deletedIDs, pruneErr := db.PruneThreadCheckpoints(pctx, endpointID, threadID, threadCheckpointRetentionCount)
-	pcancel()
-	if pruneErr != nil {
-		s.logLegacyWorkspaceCheckpointWarning("failed to prune old thread checkpoints", "endpoint_id", endpointID, "thread_id", threadID, "error", pruneErr)
-	}
-	s.cleanupLegacyWorkspaceCheckpointArtifacts(deletedIDs)
-	return nil
-}
 
 func (s *Service) cleanupLegacyWorkspaceCheckpointArtifacts(checkpointIDs []string) {
 	if s == nil {

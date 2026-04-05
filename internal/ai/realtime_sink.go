@@ -445,29 +445,6 @@ func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string,
 	s.broadcastRealtimeEvent(ev)
 }
 
-func (s *Service) broadcastTranscriptReset(endpointID string, threadID string, checkpointID string, reason string) {
-	if s == nil {
-		return
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	checkpointID = strings.TrimSpace(checkpointID)
-	reason = strings.TrimSpace(reason)
-	if endpointID == "" || threadID == "" {
-		return
-	}
-	ev := RealtimeEvent{
-		EventType:         RealtimeEventTypeTranscriptReset,
-		EndpointID:        endpointID,
-		ThreadID:          threadID,
-		RunID:             "",
-		AtUnixMs:          time.Now().UnixMilli(),
-		ResetReason:       reason,
-		ResetCheckpointID: checkpointID,
-	}
-	s.broadcastRealtimeEvent(ev)
-}
-
 func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 	if s == nil {
 		return

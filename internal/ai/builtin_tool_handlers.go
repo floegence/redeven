@@ -455,8 +455,8 @@ func builtInToolDefinitions() []ToolDef {
 	defs := []ToolDef{
 		{
 			Name:             "file.read",
-			Description:      "Read a workspace-scoped file from disk. Use this as the primary file inspection tool before editing.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to read. Relative paths resolve from the current working directory; absolute paths must stay within the runtime home."}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional 1-based starting line for partial reads."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Optional maximum number of lines to return for partial reads."}}, "required": []string{"file_path"}, "additionalProperties": false}),
+			Description:      "Read a project-scoped file from disk. Use this as the primary file inspection tool before editing.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to read. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional 1-based starting line for partial reads."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Optional maximum number of lines to return for partial reads."}}, "required": []string{"file_path"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,
 			RequiresApproval: false,
@@ -466,8 +466,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.edit",
-			Description:      "Edit a workspace-scoped text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must stay within the runtime home."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}, "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
+			Description:      "Edit a project-scoped text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}, "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
 			RequiresApproval: true,
@@ -477,8 +477,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "file.write",
-			Description:      "Write the full content of a workspace-scoped text file. Use this to create files or replace an entire file deterministically.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must stay within the runtime home."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}, "required": []string{"file_path", "content"}, "additionalProperties": false}),
+			Description:      "Write the full content of a project-scoped text file. Use this to create files or replace an entire file deterministically.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}, "required": []string{"file_path", "content"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
 			RequiresApproval: true,

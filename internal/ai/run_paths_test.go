@@ -63,6 +63,22 @@ func TestResolveToolPath(t *testing.T) {
 			t.Fatalf("resolved=%q, want runtime home=%q", resolved, root)
 		}
 	})
+
+	t.Run("rejects absolute path outside project root", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		project := filepath.Join(home, "workspace")
+		outsideProject := filepath.Join(home, "other")
+		if err := os.MkdirAll(project, 0o755); err != nil {
+			t.Fatalf("MkdirAll project: %v", err)
+		}
+		if err := os.MkdirAll(outsideProject, 0o755); err != nil {
+			t.Fatalf("MkdirAll outsideProject: %v", err)
+		}
+		if _, err := resolveToolPath(outsideProject, project, home); err == nil {
+			t.Fatalf("expected outside-project absolute path to fail")
+		}
+	})
 }
 
 func TestToolTerminalExec_CwdRules(t *testing.T) {
@@ -120,6 +136,38 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 		stdout := strings.TrimSpace(anyToString(m["stdout"]))
 		if canonicalPath(stdout) != canonicalPath(subdir) {
 			t.Fatalf("stdout=%q, want cwd=%q", stdout, subdir)
+		}
+	})
+
+	t.Run("absolute cwd outside project root is rejected", func(t *testing.T) {
+		t.Parallel()
+		home := t.TempDir()
+		project := filepath.Join(home, "workspace")
+		outside := filepath.Join(home, "other")
+		if err := os.MkdirAll(project, 0o755); err != nil {
+			t.Fatalf("MkdirAll project: %v", err)
+		}
+		if err := os.MkdirAll(outside, 0o755); err != nil {
+			t.Fatalf("MkdirAll outside: %v", err)
+		}
+		r := &run{agentHomeDir: home, workingDir: project, shell: "bash"}
+		if _, err := r.toolTerminalExec(context.Background(), "pwd", "", outside, 5000); err == nil {
+			t.Fatalf("expected outside-project cwd to fail")
+		}
+	})
+
+	t.Run("equivalent cwd and workdir values are accepted", func(t *testing.T) {
+		t.Parallel()
+		subdir := filepath.Join(workingDir, "same")
+		if err := os.MkdirAll(subdir, 0o755); err != nil {
+			t.Fatalf("mkdir subdir: %v", err)
+		}
+		cwd, err := r.normalizeTerminalExecCwd("same", subdir)
+		if err != nil {
+			t.Fatalf("normalizeTerminalExecCwd: %v", err)
+		}
+		if canonicalPath(cwd) != canonicalPath(subdir) {
+			t.Fatalf("cwd=%q, want %q", cwd, subdir)
 		}
 	})
 }

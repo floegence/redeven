@@ -24,11 +24,18 @@ func (orchestratorInvalidArgsError) InvalidArgumentsMeta() map[string]any {
 func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	t.Parallel()
 
+	home := t.TempDir()
+	workspace := filepath.Join(home, "workspace")
+	if err := os.MkdirAll(filepath.Join(workspace, "docs"), 0o755); err != nil {
+		t.Fatalf("MkdirAll docs: %v", err)
+	}
+
 	inv := Invocation{
 		ToolName:     "terminal.exec",
-		AgentHomeDir: "/tmp",
+		WorkingDir:   workspace,
+		AgentHomeDir: home,
 		Args: map[string]any{
-			"cwd": "/tmp/workspace/../workspace/docs/",
+			"cwd": filepath.Join(workspace, "..", "workspace", "docs") + string(os.PathSeparator),
 		},
 	}
 	toolErr := ClassifyError(inv, errors.New("invalid path"))
@@ -41,13 +48,12 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	if !toolErr.Retryable {
 		t.Fatalf("retryable=false, want true")
 	}
-	tmpRoot, err := filepath.EvalSymlinks(filepath.Clean(string(os.PathSeparator) + "tmp"))
+	wantDir, err := filepath.EvalSymlinks(filepath.Join(workspace, "docs"))
 	if err != nil {
-		t.Fatalf("EvalSymlinks(/tmp): %v", err)
+		t.Fatalf("EvalSymlinks(docs): %v", err)
 	}
-	want := filepath.Join(tmpRoot, "workspace", "docs")
-	if got := toolErr.NormalizedArgs["cwd"]; got != want {
-		t.Fatalf("normalized cwd=%v, want=%v", got, want)
+	if got := toolErr.NormalizedArgs["cwd"]; got != wantDir {
+		t.Fatalf("normalized cwd=%v, want=%v", got, wantDir)
 	}
 }
 
@@ -77,6 +83,36 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 	want := filepath.Join(resolvedRoot, "docs", "readme.md")
 	if got := toolErr.NormalizedArgs["workdir"]; got != want {
 		t.Fatalf("normalized workdir=%v, want=%v", got, want)
+	}
+}
+
+func TestClassifyError_InvalidPathDoesNotNormalizeOutsideProjectRoot(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	project := filepath.Join(home, "workspace")
+	other := filepath.Join(home, "other")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatalf("MkdirAll project: %v", err)
+	}
+	if err := os.MkdirAll(other, 0o755); err != nil {
+		t.Fatalf("MkdirAll other: %v", err)
+	}
+
+	inv := Invocation{
+		ToolName:     "terminal.exec",
+		WorkingDir:   project,
+		AgentHomeDir: home,
+		Args: map[string]any{
+			"cwd": filepath.Join(other, "docs"),
+		},
+	}
+	toolErr := ClassifyError(inv, errors.New("invalid cwd"))
+	if toolErr == nil {
+		t.Fatalf("expected tool error")
+	}
+	if len(toolErr.NormalizedArgs) != 0 {
+		t.Fatalf("normalized args=%v, want none for outside-project path", toolErr.NormalizedArgs)
 	}
 }
 

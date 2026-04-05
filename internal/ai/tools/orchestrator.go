@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/floegence/redeven/internal/pathutil"
@@ -92,7 +91,7 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 	case strings.Contains(lower, "must be absolute") || strings.Contains(lower, "invalid path") || strings.Contains(lower, "invalid cwd"):
 		out.Code = ErrorCodeInvalidPath
 		out.Retryable = true
-		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths are resolved against working_dir_abs; '~/' resolves to the configured runtime home directory."}
+		out.SuggestedFixes = []string{"Use a valid filesystem path.", "Relative paths are resolved against working_dir_abs; '~/' resolves to the configured runtime home directory and still must stay inside the active project boundary."}
 	case strings.Contains(lower, "not found"):
 		out.Code = ErrorCodeNotFound
 		out.Retryable = false
@@ -152,27 +151,19 @@ func normalizeArgs(inv Invocation) map[string]any {
 }
 
 func normalizePathValue(raw string, workingDir string, agentHomeDir string) (string, bool) {
-	candidate := strings.TrimSpace(raw)
-	if candidate == "" {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
 		return "", false
 	}
-	original := candidate
-	if !filepath.IsAbs(candidate) {
-		base := strings.TrimSpace(workingDir)
-		if base == "" {
-			return "", false
-		}
-		base = filepath.Clean(base)
-		if !filepath.IsAbs(base) {
-			return "", false
-		}
-		candidate = filepath.Join(base, candidate)
+	scope, err := pathutil.NewPathScope(agentHomeDir, workingDir)
+	if err != nil {
+		return "", false
 	}
-	clean, err := pathutil.ResolveTargetScopedPath(candidate, agentHomeDir)
+	clean, err := scope.ResolveTargetPath(raw)
 	if err != nil || clean == "" {
 		return "", false
 	}
-	if clean == original {
+	if clean == raw {
 		return "", false
 	}
 	return clean, true

@@ -20,8 +20,6 @@ import type {
   AISubscribeSummaryResponse,
   AISubscribeThreadRequest,
   AISubscribeThreadResponse,
-  AIThreadRewindRequest,
-  AIThreadRewindResponse,
   AIToolApprovalRequest,
   AIToolApprovalResponse,
 } from './sdk/ai';
@@ -103,7 +101,6 @@ import {
   fromWireAISubmitStructuredPromptResponseResponse,
   fromWireAISubscribeSummaryResponse,
   fromWireAISubscribeThreadResponse,
-  fromWireAIThreadRewindResponse,
   fromWireAIStopThreadResponse,
   fromWireAISetToolCollapsedResponse,
   fromWireAIToolApprovalResponse,
@@ -113,7 +110,6 @@ import {
   toWireAISendUserTurnRequest,
   toWireAISubmitStructuredPromptResponseRequest,
   toWireAISubscribeThreadRequest,
-  toWireAIThreadRewindRequest,
   toWireAIStopThreadRequest,
   toWireAISetToolCollapsedRequest,
   toWireAIToolApprovalRequest,
@@ -207,8 +203,6 @@ import type {
   wire_ai_subscribe_summary_resp,
   wire_ai_subscribe_thread_req,
   wire_ai_subscribe_thread_resp,
-  wire_ai_thread_rewind_req,
-  wire_ai_thread_rewind_resp,
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
 } from './wire/ai';
@@ -343,7 +337,6 @@ export type RedevenV1Rpc = {
     submitStructuredPromptResponse: (req: AISubmitStructuredPromptResponseRequest) => Promise<AISubmitStructuredPromptResponseResponse>;
     subscribeSummary: () => Promise<AISubscribeSummaryResponse>;
     subscribeThread: (req: AISubscribeThreadRequest) => Promise<AISubscribeThreadResponse>;
-    threadRewind: (req: AIThreadRewindRequest) => Promise<AIThreadRewindResponse>;
     stopThread: (req: AIStopThreadRequest) => Promise<AIStopThreadResponse>;
     listMessages: (req: AIListMessagesRequest) => Promise<AIListMessagesResponse>;
     getActiveRunSnapshot: (req: AIGetActiveRunSnapshotRequest) => Promise<AIGetActiveRunSnapshotResponse>;
@@ -664,11 +657,6 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireAISubscribeThreadRequest(req);
         const resp = await call<wire_ai_subscribe_thread_req, wire_ai_subscribe_thread_resp>(redevenV1TypeIds.ai.subscribeThread, payload);
         return fromWireAISubscribeThreadResponse(resp);
-      },
-      threadRewind: async (req) => {
-        const payload = toWireAIThreadRewindRequest(req);
-        const resp = await call<wire_ai_thread_rewind_req, wire_ai_thread_rewind_resp>(redevenV1TypeIds.ai.threadRewind, payload);
-        return fromWireAIThreadRewindResponse(resp);
       },
       stopThread: async (req) => {
         const payload = toWireAIStopThreadRequest(req);

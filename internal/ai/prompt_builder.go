@@ -340,7 +340,7 @@ func buildPromptMandateSection(spec promptProfileSpec) promptSection {
 	lines = append(lines, spec.IdentityLines...)
 	lines = append(lines,
 		"Operate within the available tools and permission policy for this session.",
-		"The working directory is a default context, not a hard sandbox: you may access paths outside it when needed (use absolute paths/cwd/workdir explicitly).",
+		"The working directory defines the active project boundary for file tools and terminal cwd/workdir. The runtime home is only the outer sandbox; do not assume access outside the active project.",
 	)
 	lines = append(lines, spec.StrategyLines...)
 	return newPromptSection("identity_mandate", lines...)
@@ -463,8 +463,8 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 			"- Prefer file.read for direct file inspection before falling back to shell-based file dumps.",
 			"- Prefer file.edit and file.write for normal file mutations instead of shell redirection or ad-hoc overwrite commands.",
 			"- When the task asks for verification or a verification command, use terminal.exec for that verification; file.read can supplement inspection but does not replace a real verification command.",
-			"- Keep file paths scoped to the runtime home boundary.",
-			"- Treat the current working directory or explicitly provided workspace path as the active project boundary for tool args and terminal.exec workdir unless the user clearly expands scope.",
+			"- Keep file paths inside the active project boundary; the runtime home is only the outer sandbox.",
+			"- Treat the current working directory and any terminal.exec cwd/workdir as the same active project boundary; they must resolve to the current project root rather than some sibling path.",
 			"- Use apply_patch only when the structured file tools are insufficient or you truly need patch semantics.",
 			"- If you call apply_patch, send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch` with relative paths.",
 			"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",

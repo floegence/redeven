@@ -25,8 +25,6 @@ import type {
   AISubscribeSummaryResponse,
   AISubscribeThreadRequest,
   AISubscribeThreadResponse,
-  AIThreadRewindRequest,
-  AIThreadRewindResponse,
   AIToolApprovalRequest,
   AIToolApprovalResponse,
   AITranscriptMessageItem,
@@ -54,8 +52,6 @@ import type {
   wire_ai_subscribe_summary_resp,
   wire_ai_subscribe_thread_req,
   wire_ai_subscribe_thread_resp,
-  wire_ai_thread_rewind_req,
-  wire_ai_thread_rewind_resp,
   wire_ai_transcript_message_item,
   wire_ai_tool_approval_req,
   wire_ai_tool_approval_resp,
@@ -347,21 +343,6 @@ export function toWireAISubscribeThreadRequest(req: AISubscribeThreadRequest): w
 export function fromWireAISubscribeThreadResponse(resp: wire_ai_subscribe_thread_resp): AISubscribeThreadResponse {
   const runId = String(resp?.run_id ?? '').trim();
   return { runId: runId ? runId : undefined };
-}
-
-export function toWireAIThreadRewindRequest(req: AIThreadRewindRequest): wire_ai_thread_rewind_req {
-  return {
-    thread_id: String(req.threadId ?? '').trim(),
-  };
-}
-
-export function fromWireAIThreadRewindResponse(resp: wire_ai_thread_rewind_resp): AIThreadRewindResponse {
-  const ok = Boolean(resp?.ok ?? false);
-  const checkpointId = String(resp?.checkpoint_id ?? '').trim();
-  return {
-    ok,
-    checkpointId: ok && checkpointId ? checkpointId : undefined,
-  };
 }
 
 
