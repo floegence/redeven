@@ -67,6 +67,8 @@ import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
+import { NotesOverlay } from './notes/NotesOverlay';
+import { NotesOverlayIcon } from './notes/notesAppearance';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';
@@ -480,6 +482,7 @@ export function EnvAppShell() {
   const [askFlowerComposerOpen, setAskFlowerComposerOpen] = createSignal(false);
   const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
   const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
+  const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
   const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
   let pendingMainWindowAskFlowerComposerIntent: AskFlowerIntent | null = null;
@@ -2194,6 +2197,13 @@ export function EnvAppShell() {
       topBarActions={
         <div class="flex items-center gap-1">
           <TopBarIconButton
+            label="Notes overlay"
+            tooltip={topBarTooltip('Notes overlay')}
+            onClick={() => setNotesOverlayOpen((open) => !open)}
+          >
+            <NotesOverlayIcon class="w-4 h-4" />
+          </TopBarIconButton>
+          <TopBarIconButton
             label="Command palette"
             tooltip={topBarTooltip('Command palette')}
             onClick={() => cmd.open()}
@@ -2252,7 +2262,15 @@ export function EnvAppShell() {
         </Show>
 
         <div class="flex-1 min-h-0 overflow-hidden relative">
-          <Show when={accessGateVisible()} fallback={<ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />}>
+          <Show
+            when={accessGateVisible()}
+            fallback={
+              <>
+                <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
+                <NotesOverlay open={notesOverlayOpen()} onClose={() => setNotesOverlayOpen(false)} />
+              </>
+            }
+          >
             {accessGatePanel()}
           </Show>
         </div>

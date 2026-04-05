@@ -29,6 +29,7 @@ import (
 	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -44,6 +45,7 @@ type Options struct {
 	Backend                 Backend
 	PortForward             PortForwardBackend
 	AI                      *ai.Service
+	Notes                   *notes.Service
 	Codex                   CodexBackend
 	Audit                   *auditlog.Store
 	Diagnostics             *diagnostics.Store
@@ -133,6 +135,7 @@ type Gateway struct {
 	backend Backend
 	pf      PortForwardBackend
 	ai      *ai.Service
+	notes   *notes.Service
 	codex   CodexBackend
 	audit   *auditlog.Store
 	diag    *diagnostics.Store
@@ -246,6 +249,7 @@ func New(opts Options) (*Gateway, error) {
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
 		ai:                      opts.AI,
+		notes:                   opts.Notes,
 		codex:                   opts.Codex,
 		audit:                   opts.Audit,
 		diag:                    opts.Diagnostics,
@@ -1173,6 +1177,9 @@ func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, 
 }
 
 func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
+	if g.handleNotesAPI(w, r) {
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/audit/logs":
 		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {

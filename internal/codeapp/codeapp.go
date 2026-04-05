@@ -20,6 +20,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	envui "github.com/floegence/redeven/internal/envapp/ui"
+	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
@@ -76,6 +77,7 @@ type Service struct {
 	pf      *portforward.Service
 	runner  *codeserver.Runner
 	runtime *codeserver.RuntimeManager
+	notes   *notes.Service
 	ai      *ai.Service
 	codex   *codexbridge.Manager
 	reads   *threadreadstate.Store
@@ -216,12 +218,24 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
+	notesPath := filepath.Join(stateAbs, "apps", "notes", "notes.sqlite")
+	notesSvc, err := notes.Open(notesPath)
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = aiSvc.Close()
+		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
+		return nil, err
+	}
+
 	gw, err := gateway.New(gateway.Options{
 		Logger:                  logger,
 		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:                 svc,
 		PortForward:             pfSvc,
 		AI:                      aiSvc,
+		Notes:                   notesSvc,
 		Codex:                   codexSvc,
 		Audit:                   opts.Audit,
 		Diagnostics:             opts.Diagnostics,
@@ -235,6 +249,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
+		_ = notesSvc.Close()
 		_ = aiSvc.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
@@ -243,12 +258,14 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err := gw.Start(ctx); err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
+		_ = notesSvc.Close()
 		_ = aiSvc.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 	svc.gw = gw
+	svc.notes = notesSvc
 	svc.ai = aiSvc
 	svc.codex = codexSvc
 	svc.reads = threadReadStateStore
@@ -271,6 +288,9 @@ func (s *Service) Close() error {
 	}
 	if s.pf != nil {
 		_ = s.pf.Close()
+	}
+	if s.notes != nil {
+		_ = s.notes.Close()
 	}
 	if s.ai != nil {
 		_ = s.ai.Close()

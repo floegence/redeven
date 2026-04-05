@@ -6,7 +6,7 @@ Key points:
 
 - The Env App UI is **runtime-bundled** (built + embedded into the Redeven runtime binary).
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
-- Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex).
+- Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex/Notes overlay).
 - Monitor `Top Processes` severity coloring is semantic and threshold-driven: CPU uses muted/success/warning/error tiers at `<20`, `20-49.9`, `50-99.9`, and `>=100`, while memory uses muted/success/warning tiers at `<1 GiB`, `1-9.9 GiB`, and `>=10 GiB`.
 - In Redeven Desktop, the command palette also exposes a shell-owned `Open Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
 - In Redeven Desktop, Env App also follows a shell-owned theme contract: Electron main resolves `system` / `light` / `dark`, preload exposes `window.redevenDesktopTheme`, and Env App routes only its Floe `theme` persistence key through that shell bridge while leaving other UI persistence in the normal Env App namespace.
@@ -68,6 +68,23 @@ Key points:
 - The page browser, detached file-browser scene, Ask Flower linked-directory browser, and Flower chat floating browser all reuse the same `RemoteFileBrowser` surface; chat-specific code only owns the floating-shell behavior that opens it.
 - Codex transcript now reuses that same floating browser shell as well, seeded from the resolved Codex working directory instead of introducing a Codex-specific file-browser surface.
 - Env App now keeps the reusable chat/terminal/Codex floating browser shell at the root level, so cross-surface entry points share the same detached fallback, persistence, and explicit browser-seed handling.
+
+## Notes overlay
+
+Env App now exposes a product-owned **Notes overlay** that floats above the current workspace instead of introducing a new top-level activity page.
+
+- Notes opens from the shell top bar and closes from a dedicated top-right close button inside the overlay.
+- Opening the overlay does not auto-focus an editor field; users can keep their current input focus until they explicitly create or edit a note.
+- The overlay keeps a narrow topic rail with product-owned animal icons, inline rename/delete actions, and compact counts for live notes plus trash.
+- Each topic renders on an infinite-style pan/zoom board:
+  - wheel zooms around the cursor;
+  - dragging the canvas or a note pans the board;
+  - clicking a note without dragging copies the full note body and promotes that note to the top z-layer;
+  - right-click (or long-press on touch) opens a Notes-specific context menu instead of the browser/system menu.
+- Notes persist semantic style DSL fields (`style_version`, `color_token`, `size_bucket`) in the runtime so different Env App clients render the same card size/color footprint.
+- Note preview size is derived from text length and capped to five stable size buckets; the card preview intentionally truncates large note bodies instead of expanding arbitrarily.
+- Deleting a note moves it into a runtime-managed trash area with a fixed 72-hour retention window. Trash opens as a floating panel from the bottom-right dock icon, groups deleted notes by topic, preserves original color/size/coordinates for restore, and supports clearing one topic's trash at a time.
+- Notes state is runtime-authoritative: Env App fetches a snapshot from `/_redeven_proxy/api/notes/snapshot`, subscribes to ordered SSE updates from `/_redeven_proxy/api/notes/events`, and projects the same ordered topic/note/trash stream into every connected client.
 
 ## Accessibility baseline
 
