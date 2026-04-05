@@ -3207,12 +3207,9 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
 		}
-		cwd := strings.TrimSpace(p.Cwd)
-		workdir := strings.TrimSpace(p.Workdir)
-		if cwd == "" {
-			cwd = workdir
-		} else if workdir != "" && filepath.Clean(cwd) != filepath.Clean(workdir) {
-			return nil, errors.New("invalid cwd")
+		cwd, err := r.normalizeTerminalExecCwd(p.Cwd, p.Workdir)
+		if err != nil {
+			return nil, err
 		}
 		return r.toolTerminalExec(ctx, p.Command, p.Stdin, cwd, p.TimeoutMS)
 
@@ -3384,47 +3381,39 @@ var (
 )
 
 func (r *run) workingDirAbs() (string, error) {
+	scope, err := r.pathScope()
+	if err != nil {
+		return "", err
+	}
+	return scope.ProjectRootAbs, nil
+}
+
+func (r *run) pathScope() (pathutil.PathScope, error) {
 	workingDir := strings.TrimSpace(r.workingDir)
 	if workingDir == "" {
 		workingDir = strings.TrimSpace(r.agentHomeDir)
 	}
 	if workingDir == "" {
-		return "", errEmptyWorkingDir
+		return pathutil.PathScope{}, errEmptyWorkingDir
 	}
-	resolved, err := pathutil.ResolveExistingScopedDir(workingDir, r.agentHomeDir)
+	scope, err := pathutil.NewPathScope(r.agentHomeDir, workingDir)
 	if err != nil {
-		return "", errInvalidWorkingDir
+		return pathutil.PathScope{}, errInvalidWorkingDir
 	}
-	return resolved, nil
+	return scope, nil
 }
 
 func resolveToolPath(raw string, workingDirAbs string, agentHomeDir string) (string, error) {
-	candidate := strings.TrimSpace(raw)
-	if candidate == "" {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
 		return "", errInvalidToolPath
 	}
-	if candidate == "~" || strings.HasPrefix(candidate, "~/") {
-		normalized, err := pathutil.NormalizeUserPathInput(candidate, agentHomeDir)
-		if err != nil {
-			return "", errInvalidToolPath
-		}
-		candidate = normalized
-	} else if !filepath.IsAbs(candidate) {
-		base := strings.TrimSpace(workingDirAbs)
-		if base == "" {
-			return "", errToolPathMustAbsolute
-		}
-		base = filepath.Clean(base)
-		if !filepath.IsAbs(base) {
-			return "", errInvalidWorkingDir
-		}
-		candidate = filepath.Join(base, candidate)
-	}
-	resolved, err := pathutil.ResolveTargetScopedPath(candidate, agentHomeDir)
+	scope, err := pathutil.NewPathScope(agentHomeDir, workingDirAbs)
 	if err != nil {
-		if strings.TrimSpace(err.Error()) == "path must be absolute" {
-			return "", errToolPathMustAbsolute
-		}
+		return "", errInvalidWorkingDir
+	}
+	resolved, err := scope.ResolveTargetPath(raw)
+	if err != nil {
 		return "", errInvalidToolPath
 	}
 	return resolved, nil
@@ -3470,6 +3459,33 @@ func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error)
 		"normalized_format": string(parsed.normalizedFormat),
 		"files":             files,
 	}, nil
+}
+
+func (r *run) normalizeTerminalExecCwd(cwd string, workdir string) (string, error) {
+	cwd = strings.TrimSpace(cwd)
+	workdir = strings.TrimSpace(workdir)
+	if cwd == "" {
+		return workdir, nil
+	}
+	if workdir == "" {
+		return cwd, nil
+	}
+	workingDirAbs, err := r.workingDirAbs()
+	if err != nil {
+		return "", mapToolCwdError(err)
+	}
+	resolvedCwd, err := resolveToolPath(cwd, workingDirAbs, r.agentHomeDir)
+	if err != nil {
+		return "", errors.New("invalid cwd")
+	}
+	resolvedWorkdir, err := resolveToolPath(workdir, workingDirAbs, r.agentHomeDir)
+	if err != nil {
+		return "", errors.New("invalid cwd")
+	}
+	if filepath.Clean(resolvedCwd) != filepath.Clean(resolvedWorkdir) {
+		return "", errors.New("invalid cwd")
+	}
+	return resolvedCwd, nil
 }
 
 func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additions int, deletions int) {

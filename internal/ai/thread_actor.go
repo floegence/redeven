@@ -129,18 +129,6 @@ type submitStructuredPromptResponseResult struct {
 	err  error
 }
 
-type cmdRewindThread struct {
-	ctx  context.Context
-	meta *session.Meta
-	req  RewindThreadRequest
-	resp chan rewindThreadResult
-}
-
-type rewindThreadResult struct {
-	resp RewindThreadResponse
-	err  error
-}
-
 type cmdMaybeStartQueuedTurn struct{}
 
 type threadActor struct {
@@ -274,34 +262,6 @@ func (a *threadActor) SubmitStructuredPromptResponse(ctx context.Context, meta *
 	}
 }
 
-func (a *threadActor) RewindThread(ctx context.Context, meta *session.Meta, req RewindThreadRequest) (RewindThreadResponse, error) {
-	if a == nil {
-		return RewindThreadResponse{}, errors.New("thread actor not ready")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ch := make(chan rewindThreadResult, 1)
-	cmd := cmdRewindThread{ctx: ctx, meta: meta, req: req, resp: ch}
-
-	select {
-	case <-a.stopCh:
-		return RewindThreadResponse{}, errors.New("thread actor closed")
-	case <-ctx.Done():
-		return RewindThreadResponse{}, ctx.Err()
-	case a.inbox <- cmd:
-	}
-
-	select {
-	case <-a.stopCh:
-		return RewindThreadResponse{}, errors.New("thread actor closed")
-	case <-ctx.Done():
-		return RewindThreadResponse{}, ctx.Err()
-	case res := <-ch:
-		return res.resp, res.err
-	}
-}
-
 func (a *threadActor) loop() {
 	defer close(a.doneCh)
 	defer func() {
@@ -346,9 +306,6 @@ func (a *threadActor) loop() {
 			case cmdSubmitStructuredPromptResponse:
 				resp, err := a.handleSubmitStructuredPromptResponse(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- submitStructuredPromptResponseResult{resp: resp, err: err}
-			case cmdRewindThread:
-				resp, err := a.handleRewindThread(cmd.ctx, cmd.meta, cmd.req)
-				cmd.resp <- rewindThreadResult{resp: resp, err: err}
 			case cmdStopThread:
 				resp, err := a.handleStopThread(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- stopThreadResult{resp: resp, err: err}
@@ -565,10 +522,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, err
 	}
 
-	if cpErr := a.mgr.svc.createPreRunThreadCheckpoint(ctx, endpointID, threadID, runID); cpErr != nil {
-		return SendUserTurnResponse{}, cpErr
-	}
-
 	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
 	if err != nil {
 		return SendUserTurnResponse{}, err
@@ -722,9 +675,6 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	if err != nil {
 		return SubmitStructuredPromptResponseResponse{}, err
 	}
-	if cpErr := a.mgr.svc.createPreRunThreadCheckpoint(ctx, endpointID, threadID, runID); cpErr != nil {
-		return SubmitStructuredPromptResponseResponse{}, cpErr
-	}
 	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
 	if err != nil {
 		return SubmitStructuredPromptResponseResponse{}, err
@@ -753,46 +703,4 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 		ConsumedWaitingPromptID: strings.TrimSpace(openPrompt.PromptID),
 		AppliedExecutionMode:    resolvedExecutionMode,
 	}, nil
-}
-
-func (a *threadActor) handleRewindThread(ctx context.Context, meta *session.Meta, req RewindThreadRequest) (RewindThreadResponse, error) {
-	if a == nil || a.mgr == nil || a.mgr.svc == nil {
-		return RewindThreadResponse{}, errors.New("service not ready")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if err := requireRWX(meta); err != nil {
-		return RewindThreadResponse{}, err
-	}
-
-	endpointID := strings.TrimSpace(meta.EndpointID)
-	if endpointID == "" || endpointID != strings.TrimSpace(a.endpointID) {
-		return RewindThreadResponse{}, errors.New("invalid request")
-	}
-	threadID := strings.TrimSpace(req.ThreadID)
-	if threadID == "" || threadID != strings.TrimSpace(a.threadID) {
-		return RewindThreadResponse{}, errors.New("invalid request")
-	}
-
-	// Best-effort: cancel any active run so it cannot keep mutating thread state while rewinding.
-	activeRunID, r := a.lookupActiveRun(endpointID, threadID)
-	if activeRunID != "" {
-		_ = a.mgr.svc.CancelRun(meta, activeRunID)
-		if r != nil && r.doneCh != nil {
-			timer := time.NewTimer(3 * time.Second)
-			defer timer.Stop()
-			select {
-			case <-r.doneCh:
-			case <-timer.C:
-			case <-ctx.Done():
-			}
-		}
-	}
-
-	checkpointID, err := a.mgr.svc.rewindThreadCheckpoint(ctx, meta, endpointID, threadID, "", "rewind")
-	if err != nil {
-		return RewindThreadResponse{}, err
-	}
-	return RewindThreadResponse{OK: true, CheckpointID: checkpointID}, nil
 }

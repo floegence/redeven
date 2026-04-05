@@ -120,8 +120,8 @@ Structured file-tool notes:
 
 - `file.read` is the primary file inspection path for code and text files.
 - `file.edit` performs exact string replacement with deterministic single-match or replace-all semantics.
-- `file.write` creates or replaces a full file deterministically inside the runtime home boundary.
-- Structured file tools resolve relative paths from the thread working directory, but runtime path validation still enforces the runtime-home sandbox boundary.
+- `file.write` creates or replaces a full file deterministically inside the active project root.
+- Structured file tools resolve relative paths from the thread working directory, and runtime path validation requires the final path to stay inside both the runtime-home sandbox and the active project root.
 - When a task explicitly asks for verification or a verification command, Flower should use `terminal.exec` for that verification step; `file.read` can supplement inspection, but it does not replace a real verification command.
 
 Patch execution notes:
@@ -138,7 +138,7 @@ Terminal execution notes:
 - `terminal.exec` uses a bounded execution policy by default: when `timeout_ms` is omitted, Flower applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.
 - `terminal.exec` timeout decisions are explicit and observable: the persisted terminal result records the effective timeout plus whether it came from the default policy, an explicit request, or a capped request.
 - `terminal.exec` timeout/cancel handling now terminates the full shell process tree/group rather than only the direct shell process.
-- Flower does not create new workspace-wide checkpoints during normal tool execution. Rewind durability is thread-state scoped by default, while legacy checkpoints that already carry `workspace_json` are still restored best-effort for backward compatibility.
+- Flower does not create new checkpoints during normal runs. Legacy checkpoint rows and `workspace_json` artifacts are retained only for backward-compatible cleanup and best-effort restore handling of pre-existing data.
 
 Online research notes:
 

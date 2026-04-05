@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+// PathScope captures the nested filesystem boundaries for a single Flower run.
+type PathScope struct {
+	RuntimeHomeAbs string
+	ProjectRootAbs string
+}
+
 // CanonicalizeExistingPathAbs returns a clean absolute path for an existing filesystem entry.
 func CanonicalizeExistingPathAbs(path string) (string, error) {
 	path = strings.TrimSpace(path)
@@ -65,6 +71,73 @@ func NormalizeUserPathInput(path string, agentHomeAbs string) (string, error) {
 		return "", errors.New("path must be absolute")
 	}
 	return filepath.Clean(path), nil
+}
+
+// NewPathScope canonicalizes the runtime home and project root and enforces that
+// the project root stays inside the runtime home boundary.
+func NewPathScope(runtimeHomeAbs string, projectRoot string) (PathScope, error) {
+	var out PathScope
+	runtimeHomeAbs = strings.TrimSpace(runtimeHomeAbs)
+	projectRoot = strings.TrimSpace(projectRoot)
+	if runtimeHomeAbs == "" {
+		return out, errors.New("missing runtime home directory")
+	}
+	if projectRoot == "" {
+		return out, errors.New("missing project root directory")
+	}
+	homeAbs, err := CanonicalizeExistingDirAbs(runtimeHomeAbs)
+	if err != nil {
+		return out, err
+	}
+	projectAbs, err := ResolveExistingScopedDir(projectRoot, homeAbs)
+	if err != nil {
+		return out, err
+	}
+	out.RuntimeHomeAbs = homeAbs
+	out.ProjectRootAbs = projectAbs
+	return out, nil
+}
+
+// ResolveExistingPath validates an existing path inside both the runtime home and project root.
+func (s PathScope) ResolveExistingPath(path string) (string, error) {
+	normalized, err := s.normalizeInput(path)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := CanonicalizeExistingPathAbs(normalized)
+	if err != nil {
+		return "", err
+	}
+	return s.validateResolved(resolved)
+}
+
+// ResolveExistingDir validates an existing directory inside both the runtime home and project root.
+func (s PathScope) ResolveExistingDir(path string) (string, error) {
+	resolved, err := s.ResolveExistingPath(path)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", errors.New("path must be a directory")
+	}
+	return resolved, nil
+}
+
+// ResolveTargetPath validates a destination path inside both the runtime home and project root.
+func (s PathScope) ResolveTargetPath(path string) (string, error) {
+	normalized, err := s.normalizeInput(path)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := resolvePathViaExistingAncestor(normalized)
+	if err != nil {
+		return "", err
+	}
+	return s.validateResolved(resolved)
 }
 
 // ResolveExistingScopedPath validates an existing path under agentHomeAbs.
@@ -149,6 +222,41 @@ func validateWithinScope(pathAbs string, agentHomeAbs string) (string, error) {
 		return "", errors.New("path escapes runtime home directory")
 	}
 	return filepath.Clean(pathAbs), nil
+}
+
+func (s PathScope) normalizeInput(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", errors.New("missing path")
+	}
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		return NormalizeUserPathInput(path, s.RuntimeHomeAbs)
+	}
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	projectRootAbs := strings.TrimSpace(s.ProjectRootAbs)
+	if projectRootAbs == "" {
+		return "", errors.New("missing project root directory")
+	}
+	return filepath.Join(projectRootAbs, path), nil
+}
+
+func (s PathScope) validateResolved(pathAbs string) (string, error) {
+	pathAbs = filepath.Clean(strings.TrimSpace(pathAbs))
+	if pathAbs == "" {
+		return "", errors.New("invalid path")
+	}
+	if _, err := validateWithinScope(pathAbs, s.RuntimeHomeAbs); err != nil {
+		return "", err
+	}
+	if _, err := validateWithinScope(pathAbs, s.ProjectRootAbs); err != nil {
+		if strings.TrimSpace(err.Error()) == "path escapes runtime home directory" {
+			return "", errors.New("path escapes project root directory")
+		}
+		return "", err
+	}
+	return pathAbs, nil
 }
 
 func resolvePathViaExistingAncestor(path string) (string, error) {

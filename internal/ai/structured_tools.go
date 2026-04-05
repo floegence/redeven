@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
-	"github.com/floegence/redeven/internal/pathutil"
 )
 
 const (
@@ -98,7 +97,7 @@ func mapToolFilePathError(err error) error {
 }
 
 func (r *run) resolveStructuredToolPath(filePath string, mustExist bool) (string, error) {
-	workingDirAbs, err := r.workingDirAbs()
+	scope, err := r.pathScope()
 	if err != nil {
 		return "", mapToolCwdError(err)
 	}
@@ -106,24 +105,14 @@ func (r *run) resolveStructuredToolPath(filePath string, mustExist bool) (string
 	if filePath == "" {
 		return "", errInvalidToolPath
 	}
-	candidate := filePath
-	if candidate == "~" || strings.HasPrefix(candidate, "~/") {
-		normalized, err := pathutil.NormalizeUserPathInput(candidate, r.agentHomeDir)
-		if err != nil {
-			return "", errInvalidToolPath
-		}
-		candidate = normalized
-	} else if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(workingDirAbs, candidate)
-	}
 	if mustExist {
-		resolved, err := pathutil.ResolveExistingScopedPath(candidate, r.agentHomeDir)
+		resolved, err := scope.ResolveExistingPath(filePath)
 		if err != nil {
 			return "", err
 		}
 		return resolved, nil
 	}
-	return resolveToolPath(candidate, workingDirAbs, r.agentHomeDir)
+	return resolveToolPath(filePath, scope.ProjectRootAbs, scope.RuntimeHomeAbs)
 }
 
 func splitFileReadLines(content string) []string {

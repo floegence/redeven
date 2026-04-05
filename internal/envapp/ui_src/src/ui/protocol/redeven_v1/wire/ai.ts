@@ -178,15 +178,6 @@ export type wire_ai_event_notify = {
   reset_checkpoint_id?: string;
 };
 
-export type wire_ai_thread_rewind_req = {
-  thread_id: string;
-};
-
-export type wire_ai_thread_rewind_resp = {
-  ok: boolean;
-  checkpoint_id?: string;
-};
-
 export type wire_ai_followup_attachment = {
   name: string;
   mime_type?: string;
