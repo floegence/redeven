@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
@@ -1442,6 +1443,210 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	userTwoAfterRead := readList(originUser2)
 	if !userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
 		t.Fatalf("user2 list is_unread=false after user1 mark-read, want=true")
+	}
+}
+
+func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfig(t)
+	store := openTestThreadReadStateStore(t)
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+	})
+	if err != nil {
+		t.Fatalf("ai.NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = aiSvc.Close()
+	})
+
+	metaByChannel := map[string]session.Meta{
+		"ch_test_ai_delete_cleanup_user_1": {
+			EndpointID:   "env_delete_cleanup",
+			UserPublicID: "user_1",
+			UserEmail:    "user1@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+		"ch_test_ai_delete_cleanup_user_2": {
+			EndpointID:   "env_delete_cleanup",
+			UserPublicID: "user_2",
+			UserEmail:    "user2@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+	}
+	resolveMeta := func(channelID string) (*session.Meta, bool) {
+		meta, ok := metaByChannel[strings.TrimSpace(channelID)]
+		if !ok {
+			return nil, false
+		}
+		meta.ChannelID = strings.TrimSpace(channelID)
+		return &meta, true
+	}
+
+	creatorMeta := metaByChannel["ch_test_ai_delete_cleanup_user_1"]
+	thread, err := aiSvc.CreateThread(context.Background(), &creatorMeta, "Delete cleanup", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, "user_1", map[string]threadreadstate.FlowerSnapshot{
+		thread.ThreadID: {
+			LastMessageAtUnixMs: 100,
+			WaitingPromptID:     "prompt_1",
+		},
+	}); err != nil {
+		t.Fatalf("EnsureFlower(user_1): %v", err)
+	}
+	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, "user_2", map[string]threadreadstate.FlowerSnapshot{
+		thread.ThreadID: {
+			LastMessageAtUnixMs: 110,
+			WaitingPromptID:     "prompt_2",
+		},
+	}); err != nil {
+		t.Fatalf("EnsureFlower(user_2): %v", err)
+	}
+
+	gw, err := New(Options{
+		Backend:              &stubBackend{},
+		DistFS:               dist,
+		ListenAddr:           "127.0.0.1:0",
+		AI:                   aiSvc,
+		ConfigPath:           cfgPath,
+		ThreadReadStateStore: store,
+		ResolveSessionMeta:   resolveMeta,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	originUser1 := envOriginWithChannel("ch_test_ai_delete_cleanup_user_1")
+	rr := performGatewayRequest(gw, http.MethodDelete, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("DELETE /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	remaining, err := store.DeleteThread(context.Background(), creatorMeta.EndpointID, threadreadstate.SurfaceFlower, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("DeleteThread(read_state verify): %v", err)
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("remaining read-state rows=%+v, want none", remaining)
+	}
+
+	detailRR := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
+	if detailRR.Code != http.StatusNotFound {
+		t.Fatalf("GET deleted thread status=%d, want=%d body=%s", detailRR.Code, http.StatusNotFound, detailRR.Body.String())
+	}
+}
+
+func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimaryDeleteFailure(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfig(t)
+	store := openTestThreadReadStateStore(t)
+
+	metaByChannel := map[string]session.Meta{
+		"ch_test_ai_delete_restore_user_1": {
+			EndpointID:   "env_delete_restore",
+			UserPublicID: "user_1",
+			UserEmail:    "user1@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+		"ch_test_ai_delete_restore_user_2": {
+			EndpointID:   "env_delete_restore",
+			UserPublicID: "user_2",
+			UserEmail:    "user2@example.com",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+	}
+	resolveMeta := func(channelID string) (*session.Meta, bool) {
+		meta, ok := metaByChannel[strings.TrimSpace(channelID)]
+		if !ok {
+			return nil, false
+		}
+		meta.ChannelID = strings.TrimSpace(channelID)
+		return &meta, true
+	}
+
+	threadID := "th_missing_restore"
+	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_1", map[string]threadreadstate.FlowerSnapshot{
+		threadID: {
+			LastMessageAtUnixMs: 200,
+			WaitingPromptID:     "prompt_1",
+		},
+	}); err != nil {
+		t.Fatalf("EnsureFlower(user_1): %v", err)
+	}
+	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_2", map[string]threadreadstate.FlowerSnapshot{
+		threadID: {
+			LastMessageAtUnixMs: 210,
+			WaitingPromptID:     "prompt_2",
+		},
+	}); err != nil {
+		t.Fatalf("EnsureFlower(user_2): %v", err)
+	}
+
+	gw, err := New(Options{
+		Backend:              &stubBackend{},
+		DistFS:               dist,
+		ListenAddr:           "127.0.0.1:0",
+		ConfigPath:           cfgPath,
+		ThreadReadStateStore: store,
+		ResolveSessionMeta:   resolveMeta,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	meta := metaByChannel["ch_test_ai_delete_restore_user_1"]
+	called := false
+	err = gw.deleteFlowerThreadWithReadStateCleanup(context.Background(), &meta, threadID, func() error {
+		called = true
+		midDelete, err := store.DeleteThread(context.Background(), meta.EndpointID, threadreadstate.SurfaceFlower, threadID)
+		if err != nil {
+			t.Fatalf("midDelete verify: %v", err)
+		}
+		if len(midDelete) != 0 {
+			t.Fatalf("midDelete=%+v, want empty because snapshot should already be removed", midDelete)
+		}
+		return sql.ErrNoRows
+	})
+	if !called {
+		t.Fatalf("primary delete closure was not called")
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("deleteFlowerThreadWithReadStateCleanup err=%v, want %v", err, sql.ErrNoRows)
+	}
+
+	restored, err := store.DeleteThread(context.Background(), meta.EndpointID, threadreadstate.SurfaceFlower, threadID)
+	if err != nil {
+		t.Fatalf("DeleteThread(restored verify): %v", err)
+	}
+	if len(restored) != 2 {
+		t.Fatalf("len(restored)=%d, want 2", len(restored))
+	}
+	if restored[0].UserPublicID != "user_1" || restored[1].UserPublicID != "user_2" {
+		t.Fatalf("restored users=%v, want [user_1 user_2]", []string{restored[0].UserPublicID, restored[1].UserPublicID})
 	}
 }
 
