@@ -55,6 +55,36 @@ function normalizeThreadID(threadID: string | null | undefined): string {
   return String(threadID ?? '').trim();
 }
 
+function sameItemOrder(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((itemID, index) => itemID === right[index]);
+}
+
+function itemLifecycleResolutionRank(status: string | null | undefined): number {
+  const normalized = String(status ?? '').trim();
+  if (!normalized) return 0;
+  if (isWorkingStatus(normalized)) return 1;
+  return 2;
+}
+
+function compareSessionItemLifecycleResolution(existing: CodexThreadSession, incoming: CodexThreadSession): number {
+  if (!sameItemOrder(existing.item_order, incoming.item_order)) return 0;
+  let existingBetter = false;
+  let incomingBetter = false;
+  for (const itemID of existing.item_order) {
+    const existingRank = itemLifecycleResolutionRank(existing.items_by_id[itemID]?.status);
+    const incomingRank = itemLifecycleResolutionRank(incoming.items_by_id[itemID]?.status);
+    if (existingRank > incomingRank) {
+      existingBetter = true;
+    } else if (existingRank < incomingRank) {
+      incomingBetter = true;
+    }
+    if (existingBetter && incomingBetter) return 0;
+  }
+  if (existingBetter === incomingBetter) return 0;
+  return existingBetter ? 1 : -1;
+}
+
 function defaultActivationScheduler(): CodexThreadActivationScheduler {
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
     return {
@@ -78,6 +108,8 @@ function shouldPreferExistingSession(existing: CodexThreadSession, incoming: Cod
   if (existingSeq < incomingSeq) return false;
   if (existing.item_order.length > incoming.item_order.length) return true;
   if (existing.item_order.length < incoming.item_order.length) return false;
+  const lifecycleComparison = compareSessionItemLifecycleResolution(existing, incoming);
+  if (lifecycleComparison !== 0) return lifecycleComparison > 0;
   return isWorkingStatus(existing.active_status) && !isWorkingStatus(incoming.active_status);
 }
 

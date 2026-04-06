@@ -2,6 +2,13 @@ package codexbridge
 
 import "strings"
 
+type projectedItemLifecyclePhase string
+
+const (
+	projectedItemLifecycleStarted   projectedItemLifecyclePhase = "started"
+	projectedItemLifecycleCompleted projectedItemLifecyclePhase = "completed"
+)
+
 func cloneThread(thread Thread) Thread {
 	cloned := thread
 	cloned.ActiveFlags = cloneStringList(thread.ActiveFlags)
@@ -120,6 +127,32 @@ func cloneThreadTokenUsage(usage *ThreadTokenUsage) *ThreadTokenUsage {
 		cloned.ModelContextWindow = &window
 	}
 	return &cloned
+}
+
+func normalizeProjectedItemStatus(raw string, phase projectedItemLifecyclePhase) string {
+	if normalized := strings.TrimSpace(raw); normalized != "" {
+		return normalized
+	}
+	switch phase {
+	case projectedItemLifecycleStarted:
+		return "inProgress"
+	case projectedItemLifecycleCompleted:
+		return "completed"
+	default:
+		return ""
+	}
+}
+
+func normalizeProjectedItemForLifecycle(item Item, phase projectedItemLifecyclePhase) Item {
+	item.Status = normalizeProjectedItemStatus(item.Status, phase)
+	return item
+}
+
+func markProjectedItemLifecycle(item *Item, phase projectedItemLifecyclePhase) {
+	if item == nil {
+		return
+	}
+	item.Status = normalizeProjectedItemStatus(item.Status, phase)
 }
 
 func mergeProjectedThread(state *threadState, snapshot Thread) Thread {
@@ -308,13 +341,14 @@ func ensureProjectedItem(turn *Turn, itemID string, itemType string) *Item {
 			if strings.TrimSpace(turn.Items[index].Type) == "" && strings.TrimSpace(itemType) != "" {
 				turn.Items[index].Type = strings.TrimSpace(itemType)
 			}
+			markProjectedItemLifecycle(&turn.Items[index], projectedItemLifecycleStarted)
 			return &turn.Items[index]
 		}
 	}
 	turn.Items = append(turn.Items, Item{
 		ID:     normalizedItemID,
 		Type:   strings.TrimSpace(itemType),
-		Status: "inProgress",
+		Status: normalizeProjectedItemStatus("", projectedItemLifecycleStarted),
 	})
 	return &turn.Items[len(turn.Items)-1]
 }

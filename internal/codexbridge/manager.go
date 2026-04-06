@@ -886,7 +886,7 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 		if json.Unmarshal(env.Params, &msg) == nil {
 			threadID := strings.TrimSpace(msg.ThreadID)
 			turnID := strings.TrimSpace(msg.TurnID)
-			item := normalizeItem(msg.Item)
+			item := normalizeProjectedItemForLifecycle(normalizeItem(msg.Item), projectedItemLifecycleStarted)
 			m.mu.Lock()
 			state := m.ensureThreadStateLocked(threadID)
 			thread := ensureProjectedThread(state, threadID)
@@ -908,7 +908,7 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 		if json.Unmarshal(env.Params, &msg) == nil {
 			threadID := strings.TrimSpace(msg.ThreadID)
 			turnID := strings.TrimSpace(msg.TurnID)
-			item := normalizeItem(msg.Item)
+			item := normalizeProjectedItemForLifecycle(normalizeItem(msg.Item), projectedItemLifecycleCompleted)
 			m.mu.Lock()
 			state := m.ensureThreadStateLocked(threadID)
 			thread := ensureProjectedThread(state, threadID)
@@ -1230,6 +1230,7 @@ func (m *Manager) handleRawResponseItemCompleted(raw json.RawMessage) {
 		m.mu.Unlock()
 		return
 	}
+	item = normalizeProjectedItemForLifecycle(item, projectedItemLifecycleCompleted)
 	thread := ensureProjectedThread(state, threadID)
 	turn := ensureProjectedTurn(thread, turnID)
 	upsertProjectedItem(turn, item)

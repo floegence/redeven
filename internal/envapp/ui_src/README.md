@@ -15,6 +15,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - Codex active-thread lifecycle is session-owned: foreground transcript, pending requests, token usage, and stop/send state come from thread bootstrap + SSE projection rather than from `thread/list` polling.
 - Codex sidebar selection feedback is intent-owned: `selectedThreadID` updates immediately for visual response, while `foregroundThreadID` advances on the controller-owned activation step that drives bootstrap, read-marking, and header/composer ownership.
 - Codex thread-list refresh is summary-only and identity-preserving: unchanged thread summaries reuse their previous browser objects so running sidebar indicators stay mounted and background polling does not reset their animation.
+- Codex item lifecycle projection is bridge-owned and bootstrap-stable: `item/started` / streaming deltas establish working item state, `item/completed` closes that state even when the raw payload omits an explicit item status, and reopening a working thread after switching away must not resurrect historical assistant items as streaming rows.
 - Codex composer autosizing is also controller-based and page-local: `CodexComposerShell` delegates multiline height measurement to `createCodexComposerAutosizeController`, which lazy-loads `@chenglou/pretext` only for the Codex page and preserves a DOM fallback when font/runtime conditions are unsafe.
 - Codex composer information layout is intentionally asymmetric:
   - the prompt stays primary;

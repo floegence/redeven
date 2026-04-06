@@ -17,9 +17,16 @@ function sampleDetail(args: {
   activeStatus?: string;
   activeStatusFlags?: string[];
   itemCount?: number;
+  items?: Array<{
+    type?: string;
+    text?: string;
+    status?: string;
+  }>;
+  turnStatus?: string;
   lastAppliedSeq?: number;
 }): CodexThreadDetail {
-  const itemCount = Math.max(0, args.itemCount ?? 0);
+  const itemSeeds = Array.isArray(args.items) ? args.items : null;
+  const itemCount = Math.max(0, itemSeeds?.length ?? args.itemCount ?? 0);
   return {
     thread: {
       id: args.threadID,
@@ -33,11 +40,12 @@ function sampleDetail(args: {
       cwd: args.cwd ?? '/workspace',
       turns: itemCount > 0 ? [{
         id: `${args.threadID}_turn_1`,
-        status: 'completed',
+        status: args.turnStatus ?? 'completed',
         items: Array.from({ length: itemCount }, (_, index) => ({
           id: `${args.threadID}_item_${index + 1}`,
-          type: index === 0 ? 'userMessage' : 'agentMessage',
-          text: `${args.threadID} item ${index + 1}`,
+          type: itemSeeds?.[index]?.type ?? (index === 0 ? 'userMessage' : 'agentMessage'),
+          text: itemSeeds?.[index]?.text ?? `${args.threadID} item ${index + 1}`,
+          status: itemSeeds?.[index]?.status,
         })),
       }] : [],
     },
@@ -211,6 +219,65 @@ describe('createCodexThreadController', () => {
       expect(session?.active_status).toBe('running');
       expect(session?.active_status_flags).toEqual(['finalizing']);
       expect(session?.item_order.length).toBe(2);
+    });
+  });
+
+  it('keeps richer resolved item lifecycle states when a same-seq bootstrap snapshot regresses them to working', () => {
+    withThreadController((controller) => {
+      controller.adoptThreadDetail(sampleDetail({
+        threadID: 'thread_1',
+        name: 'Working thread',
+        activeStatus: 'running',
+        turnStatus: 'running',
+        lastAppliedSeq: 8,
+        items: [
+          {
+            type: 'userMessage',
+            text: 'Review the last run.',
+          },
+          {
+            type: 'agentMessage',
+            text: 'Historical answer',
+            status: 'completed',
+          },
+          {
+            type: 'agentMessage',
+            text: 'Current live answer',
+            status: 'inProgress',
+          },
+        ],
+      }));
+
+      const token = controller.beginThreadBootstrap('thread_1');
+      expect(token).not.toBeNull();
+
+      expect(controller.resolveThreadBootstrap(token!, sampleDetail({
+        threadID: 'thread_1',
+        name: 'Working thread',
+        activeStatus: 'running',
+        turnStatus: 'running',
+        lastAppliedSeq: 8,
+        items: [
+          {
+            type: 'userMessage',
+            text: 'Review the last run.',
+          },
+          {
+            type: 'agentMessage',
+            text: 'Historical answer',
+            status: 'inProgress',
+          },
+          {
+            type: 'agentMessage',
+            text: 'Current live answer',
+            status: 'inProgress',
+          },
+        ],
+      }))).toBe(true);
+
+      const session = controller.sessionForThread('thread_1');
+      expect(session?.items_by_id.thread_1_item_2?.status).toBe('completed');
+      expect(session?.items_by_id.thread_1_item_3?.status).toBe('inProgress');
     });
   });
 

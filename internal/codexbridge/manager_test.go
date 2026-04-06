@@ -214,6 +214,100 @@ func TestHandleEnvelope_ProjectsLiveThreadState(t *testing.T) {
 	}
 }
 
+func TestReadThread_PreservesCompletedProjectedItemLifecycleWithoutExplicitUpstreamStatus(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.handleEnvelope(rpcEnvelope{
+		Method: "thread/started",
+		Params: mustMarshalParams(t, wireThreadStartedNotification{
+			Thread: wireThread{
+				ID:            "thread_1",
+				Preview:       "Switch back to this thread",
+				ModelProvider: "openai/gpt-5.4",
+				CreatedAt:     1,
+				UpdatedAt:     2,
+				Status:        wireThreadStatus{Type: "active"},
+				CWD:           "/workspace/ui",
+			},
+		}),
+	})
+	manager.handleEnvelope(rpcEnvelope{
+		Method: "item/agentMessage/delta",
+		Params: mustMarshalParams(t, wireDeltaNotification{
+			ThreadID: "thread_1",
+			TurnID:   "turn_1",
+			ItemID:   "item_agent",
+			Delta:    "Historical answer",
+		}),
+	})
+	manager.handleEnvelope(rpcEnvelope{
+		Method: "item/completed",
+		Params: mustMarshalParams(t, wireItemNotification{
+			ThreadID: "thread_1",
+			TurnID:   "turn_1",
+			Item: wireThreadItem{
+				ID:   "item_agent",
+				Type: "agentMessage",
+				Text: "Historical answer",
+			},
+		}),
+	})
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "thread/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireThreadReadParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if !params.IncludeTurns {
+					t.Fatalf("expected read with turns enabled")
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireThreadReadResponse{
+						Thread: wireThread{
+							ID:            "thread_1",
+							Preview:       "Switch back to this thread",
+							ModelProvider: "openai/gpt-5.4",
+							CreatedAt:     1,
+							UpdatedAt:     3,
+							Status:        wireThreadStatus{Type: "active"},
+							CWD:           "/workspace/ui",
+						},
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	detail, err := manager.ReadThread(context.Background(), "thread_1")
+	if err != nil {
+		t.Fatalf("ReadThread: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	if len(detail.Thread.Turns) != 1 || len(detail.Thread.Turns[0].Items) != 1 {
+		t.Fatalf("unexpected projected turns: %+v", detail.Thread.Turns)
+	}
+	if got := detail.Thread.Turns[0].Items[0].Status; got != "completed" {
+		t.Fatalf("Item.Status=%q, want completed", got)
+	}
+	if got := detail.Thread.Turns[0].Items[0].Text; got != "Historical answer" {
+		t.Fatalf("Item.Text=%q, want Historical answer", got)
+	}
+}
+
 func TestStartTurn_RetriesWhenLiveThreadNeedsResume(t *testing.T) {
 	t.Parallel()
 
