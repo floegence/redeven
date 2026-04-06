@@ -34,6 +34,7 @@ import {
   codexModelSupportsImages,
   codexSandboxModeLabel,
   codexSupportedReasoningEfforts,
+  resolveCodexWorkingDir,
 } from './viewModel';
 
 export function CodexPageShell() {
@@ -79,12 +80,13 @@ export function CodexPageShell() {
   const approvalPolicyValue = createMemo(() => resolveCodexApprovalPolicyValue(codex.approvalPolicyDraft()));
   const sandboxModeValue = createMemo(() => resolveCodexSandboxModeValue(codex.sandboxModeDraft()));
   const homePath = createMemo(() => normalizeAbsolutePath(String(codex.status()?.agent_home_dir ?? '').trim()));
-  const workingDirPath = createMemo(() => (
-    normalizeAbsolutePath(String(codex.workingDirDraft() ?? '').trim()) ||
-    normalizeAbsolutePath(String(codex.activeRuntimeConfig().cwd ?? '').trim()) ||
-    normalizeAbsolutePath(String(codex.activeThread()?.cwd ?? '').trim()) ||
-    homePath()
-  ));
+  const workingDirPath = createMemo(() => normalizeAbsolutePath(resolveCodexWorkingDir({
+    workingDirDraft: codex.workingDirDraft(),
+    runtimeConfig: codex.activeRuntimeConfig(),
+    capabilities: codex.capabilities(),
+    thread: codex.activeThread(),
+    status: codex.status(),
+  })));
   const hasWorkingDir = createMemo(() => Boolean(workingDirPath()));
   const workingDirValue = createMemo(() => toHomeDisplayPath(workingDirPath(), homePath()) || workingDirPath());
   const workingDirLocked = createMemo(() => Boolean(String(codex.activeThreadID() ?? '').trim()));

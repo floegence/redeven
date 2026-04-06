@@ -6,6 +6,7 @@ import {
   buildCodexPendingRequestViewModel,
   buildCodexSidebarSummary,
   buildCodexWorkbenchSummary,
+  resolveCodexWorkingDir,
 } from './viewModel';
 
 describe('buildCodexWorkbenchSummary', () => {
@@ -125,6 +126,57 @@ describe('buildCodexWorkbenchSummary', () => {
     expect(summary.workspaceLabel).toBe('/workspace/codex-ui');
     expect(summary.modelLabel).toBe('GPT-5.4');
     expect(summary.contextLabel).toBe('');
+  });
+});
+
+describe('resolveCodexWorkingDir', () => {
+  it('prefers capability-derived cwd over an agent-home fallback when the draft is still empty', () => {
+    expect(resolveCodexWorkingDir({
+      workingDirDraft: '',
+      runtimeConfig: {
+        cwd: '/workspace',
+      },
+      capabilities: {
+        effective_config: {
+          cwd: '/workspace/codex-ui',
+        },
+      },
+      thread: null,
+      status: {
+        available: true,
+        ready: true,
+        agent_home_dir: '/workspace',
+      },
+    })).toBe('/workspace/codex-ui');
+  });
+
+  it('keeps a persisted thread cwd ahead of capability defaults', () => {
+    expect(resolveCodexWorkingDir({
+      workingDirDraft: '',
+      runtimeConfig: {
+        cwd: '/workspace/thread-ui',
+      },
+      capabilities: {
+        effective_config: {
+          cwd: '/workspace/default-ui',
+        },
+      },
+      thread: {
+        id: 'thread_1',
+        preview: 'Persisted cwd',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 10,
+        updated_at_unix_s: 20,
+        status: 'idle',
+        cwd: '/workspace/thread-ui',
+      },
+      status: {
+        available: true,
+        ready: true,
+        agent_home_dir: '/workspace',
+      },
+    })).toBe('/workspace/thread-ui');
   });
 });
 
