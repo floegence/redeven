@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestRunCLIHelp(t *testing.T) {
@@ -38,6 +40,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"Modes:",
 			"Local UI bind rules:",
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
+			"--config-path <path>",
 			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
 			"redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000",
 		)
@@ -319,6 +322,34 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			"REDEVEN_BOOTSTRAP_TICKET=<bootstrap-ticket> redeven run --mode desktop --desktop-managed --controlplane https://region.example.invalid --env-id env_123 --bootstrap-ticket-env REDEVEN_BOOTSTRAP_TICKET",
 		)
 	})
+}
+
+func TestResolveRunStateLayoutUsesExplicitConfigPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "custom", "config.json")
+
+	layout, err := resolveRunStateLayout(configPath, "env_123", true)
+	if err != nil {
+		t.Fatalf("resolveRunStateLayout() error = %v", err)
+	}
+	if layout.ConfigPath != configPath {
+		t.Fatalf("ConfigPath = %q, want %q", layout.ConfigPath, configPath)
+	}
+	if layout.StateDir != filepath.Join(tmpDir, "custom") {
+		t.Fatalf("StateDir = %q", layout.StateDir)
+	}
+}
+
+func TestPrintRunStateLayoutGuidanceIncludesConfigPathHint(t *testing.T) {
+	var stderr bytes.Buffer
+	exitCode := (&cli{stderr: &stderr}).printRunStateLayoutGuidance(config.ErrHomeDirUnavailable)
+	if exitCode != 1 {
+		t.Fatalf("exitCode = %d, want 1", exitCode)
+	}
+	assertContainsAll(t, stderr.String(),
+		"failed to resolve runtime state layout: user home directory is unavailable",
+		"Hint: export HOME before running `redeven run`, or pass --config-path <path>.",
+	)
 }
 
 func runCLITest(t *testing.T, args ...string) (int, string, string) {

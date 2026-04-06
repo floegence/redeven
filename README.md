@@ -236,6 +236,8 @@ Multi-environment mode uses isolated state per environment:
 
 - `~/.redeven/envs/<env_public_id>/config.json`
 
+Desktop-managed launches resolve one of those config paths explicitly before spawn and derive runtime-state plus diagnostics from the same state root, so they do not depend on the current working directory.
+
 ### Public release contract
 
 - GitHub Release is the source of truth for versioned CLI tarballs, desktop installers, and checksums.

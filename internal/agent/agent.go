@@ -181,12 +181,13 @@ func New(opts Options) (*Agent, error) {
 
 	cfgPath := strings.TrimSpace(opts.ConfigPath)
 	if cfgPath == "" {
-		cfgPath = config.DefaultConfigPath()
+		layout, err := config.DefaultStateLayout()
+		if err != nil {
+			return nil, err
+		}
+		cfgPath = layout.ConfigPath
 	}
-	cfgPathAbs, err := filepath.Abs(cfgPath)
-	if err != nil {
-		return nil, err
-	}
+	cfgPathAbs := cfgPath
 	stateDir := filepath.Dir(cfgPathAbs)
 
 	a := &Agent{

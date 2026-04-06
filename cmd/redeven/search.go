@@ -47,13 +47,23 @@ func (c *cli) searchCmd(args []string) int {
 		return 2
 	}
 
-	cfgPath := strings.TrimSpace(*configPath)
-	if cfgPath == "" {
-		cfgPath = config.DefaultConfigPath()
+	stateLayout, err := resolveSearchStateLayout(*configPath)
+	if err != nil {
+		if errors.Is(err, config.ErrHomeDirUnavailable) {
+			writeErrorWithHelp(
+				c.stderr,
+				fmt.Sprintf("failed to resolve search config path: %v", err),
+				[]string{"Hint: export HOME before running `redeven search`, or pass --config-path <path>."},
+				searchHelpText(),
+			)
+			return 1
+		}
+		fmt.Fprintf(c.stderr, "failed to resolve search config path: %v\n", err)
+		return 1
 	}
 	secrets := strings.TrimSpace(*secretsPath)
 	if secrets == "" {
-		secrets = filepath.Join(filepath.Dir(filepath.Clean(cfgPath)), "secrets.json")
+		secrets = filepath.Join(stateLayout.StateDir, "secrets.json")
 	}
 
 	providerID := strings.TrimSpace(strings.ToLower(*provider))
@@ -129,4 +139,12 @@ func (c *cli) searchCmd(args []string) int {
 		)
 		return 2
 	}
+}
+
+func resolveSearchStateLayout(configPath string) (config.StateLayout, error) {
+	cleanPath := strings.TrimSpace(configPath)
+	if cleanPath == "" {
+		return config.DefaultStateLayout()
+	}
+	return config.StateLayoutForConfigPath(cleanPath)
 }

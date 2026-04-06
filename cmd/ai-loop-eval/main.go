@@ -315,7 +315,11 @@ func main() {
 		fatalf("workspace does not exist or is not a directory: %s", workspacePath)
 	}
 
-	cfgPath := config.DefaultConfigPath()
+	cfgLayout, err := config.DefaultStateLayout()
+	if err != nil {
+		fatalf("failed to resolve config path: %v", err)
+	}
+	cfgPath := cfgLayout.ConfigPath
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		fatalf("failed to load config: %v", err)
@@ -337,8 +341,7 @@ func main() {
 	timestamp := time.Now().Format("20060102-150405")
 	outDir := strings.TrimSpace(*reportDir)
 	if outDir == "" {
-		home, _ := os.UserHomeDir()
-		outDir = filepath.Join(home, ".redeven", "ai", "evals", timestamp)
+		outDir = filepath.Join(cfgLayout.StateDir, "ai", "evals", timestamp)
 	}
 	if err := os.MkdirAll(outDir, 0o700); err != nil {
 		fatalf("failed to create output dir: %v", err)

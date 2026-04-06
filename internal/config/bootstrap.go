@@ -58,10 +58,11 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	envID := strings.TrimSpace(args.EnvironmentID)
 	envToken := normalizeBearerToken(args.EnvironmentToken)
 	bootstrapTicket := normalizeBearerToken(args.BootstrapTicket)
-	cfgPath := strings.TrimSpace(args.ConfigPath)
-	if cfgPath == "" {
-		cfgPath = DefaultConfigPath()
+	layout, err := resolveBootstrapStateLayout(args.ConfigPath)
+	if err != nil {
+		return "", err
 	}
+	cfgPath := layout.ConfigPath
 
 	if baseURL == "" || envID == "" {
 		return "", errors.New("missing controlplane/env-id")
@@ -165,6 +166,14 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		return "", err
 	}
 	return filepath.Clean(cfgPath), nil
+}
+
+func resolveBootstrapStateLayout(configPath string) (StateLayout, error) {
+	cleanPath := strings.TrimSpace(configPath)
+	if cleanPath == "" {
+		return DefaultStateLayout()
+	}
+	return StateLayoutForConfigPath(cleanPath)
 }
 
 func fetchBootstrap(ctx context.Context, baseURL string, envID string, envToken string) (*directv1.DirectConnectInfo, error) {

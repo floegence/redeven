@@ -148,6 +148,7 @@ Flags:
   --password-stdin                  Read the Local UI password from stdin.
   --password-env <env_name>         Read the Local UI password from an environment variable.
   --password-file <path>            Read the Local UI password from a file.
+  --config-path <path>              Config path override.
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
   --startup-report-file <path>      Write machine-readable Local UI readiness JSON.
 
