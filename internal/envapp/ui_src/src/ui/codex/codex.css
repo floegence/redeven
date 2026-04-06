@@ -178,9 +178,11 @@
 
 .codex-page-transcript-viewport {
   position: relative;
+  display: flex;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .codex-page-status-stack {
