@@ -242,6 +242,7 @@ Installer note:
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.
 - The current shipped schema keeps semantic memory in `memory_items`. Redeven does not currently ship a separate persistent embeddings table until the runtime fully owns that lifecycle.
 - Per-user thread read watermarks are intentionally stored outside the shared Flower threadstore because unread state is a user/session concern rather than collaborative thread content.
+- Deleting a Flower thread also clears its companion Flower read-watermark rows from the separate read-state store. The gateway snapshots those rows first and restores them if the primary thread delete fails, so successful deletes do not leave stale unread metadata behind.
 
 ## Behavioral evaluation
 

@@ -115,11 +115,87 @@ func (s *Store) AdvanceCodex(
 	return record, nil
 }
 
+func (s *Store) DeleteThread(
+	ctx context.Context,
+	endpointID string,
+	surface Surface,
+	threadID string,
+) ([]Record, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("thread read state store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	scope, err := normalizeThreadScope(threadScopeKey{
+		EndpointID: endpointID,
+		Surface:    surface,
+		ThreadID:   threadID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	records, err := loadThreadScopeRecordsTx(ctx, tx, scope)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM thread_read_state
+WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
+`, scope.EndpointID, string(scope.Surface), scope.ThreadID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func (s *Store) RestoreRecords(ctx context.Context, records []Record) error {
+	if s == nil || s.db == nil {
+		return errors.New("thread read state store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, record := range records {
+		record, err = normalizeRecord(record)
+		if err != nil {
+			return err
+		}
+		if err := upsertRecordTx(ctx, tx, record); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 type recordKey struct {
 	EndpointID   string
 	UserPublicID string
 	Surface      Surface
 	ThreadID     string
+}
+
+type threadScopeKey struct {
+	EndpointID string
+	Surface    Surface
+	ThreadID   string
 }
 
 func (s *Store) ensure(
@@ -313,6 +389,35 @@ WHERE endpoint_id = ? AND user_public_id = ? AND surface = ? AND thread_id IN (`
 	return out, nil
 }
 
+func loadThreadScopeRecordsTx(ctx context.Context, tx *sql.Tx, scope threadScopeKey) ([]Record, error) {
+	rows, err := tx.QueryContext(ctx, `
+SELECT endpoint_id, user_public_id, surface, thread_id,
+       last_read_message_at_unix_ms, last_seen_waiting_prompt_id,
+       last_read_updated_at_unix_s, last_seen_activity_signature,
+       updated_at_unix_ms
+FROM thread_read_state
+WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
+ORDER BY user_public_id ASC
+`, scope.EndpointID, string(scope.Surface), scope.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]Record, 0)
+	for rows.Next() {
+		record, err := scanRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func upsertRecordTx(ctx context.Context, tx *sql.Tx, record Record) error {
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO thread_read_state (
@@ -415,6 +520,41 @@ func normalizeKey(key recordKey) (recordKey, error) {
 		return recordKey{}, errors.New("missing thread_id")
 	}
 	return key, nil
+}
+
+func normalizeThreadScope(scope threadScopeKey) (threadScopeKey, error) {
+	scope.EndpointID = strings.TrimSpace(scope.EndpointID)
+	scope.Surface = normalizeSurface(scope.Surface)
+	scope.ThreadID = normalizeThreadID(scope.ThreadID)
+	if scope.EndpointID == "" {
+		return threadScopeKey{}, errors.New("missing endpoint_id")
+	}
+	if scope.Surface == "" {
+		return threadScopeKey{}, errors.New("missing surface")
+	}
+	if scope.ThreadID == "" {
+		return threadScopeKey{}, errors.New("missing thread_id")
+	}
+	return scope, nil
+}
+
+func normalizeRecord(record Record) (Record, error) {
+	key, err := normalizeKey(recordKey{
+		EndpointID:   record.EndpointID,
+		UserPublicID: record.UserPublicID,
+		Surface:      record.Surface,
+		ThreadID:     record.ThreadID,
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	record.EndpointID = key.EndpointID
+	record.UserPublicID = key.UserPublicID
+	record.Surface = key.Surface
+	record.ThreadID = key.ThreadID
+	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
+	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
+	return record, nil
 }
 
 func normalizeSurface(surface Surface) Surface {

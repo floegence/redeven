@@ -366,6 +366,66 @@ func (g *Gateway) advanceCodexReadRecord(
 	return g.threadReadState.AdvanceCodex(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
 }
 
+func (g *Gateway) deleteFlowerThreadReadState(
+	ctx context.Context,
+	endpointID string,
+	threadID string,
+) ([]threadreadstate.Record, error) {
+	if g == nil || g.threadReadState == nil {
+		return nil, nil
+	}
+	return g.threadReadState.DeleteThread(ctx, endpointID, threadreadstate.SurfaceFlower, threadID)
+}
+
+func (g *Gateway) restoreFlowerThreadReadState(ctx context.Context, records []threadreadstate.Record) error {
+	if g == nil || g.threadReadState == nil || len(records) == 0 {
+		return nil
+	}
+	return g.threadReadState.RestoreRecords(ctx, records)
+}
+
+type flowerThreadDeleteCleanupError struct {
+	err error
+}
+
+func (e flowerThreadDeleteCleanupError) Error() string {
+	if e.err == nil {
+		return ""
+	}
+	return e.err.Error()
+}
+
+func (e flowerThreadDeleteCleanupError) Unwrap() error {
+	return e.err
+}
+
+func (g *Gateway) deleteFlowerThreadWithReadStateCleanup(
+	ctx context.Context,
+	meta *session.Meta,
+	threadID string,
+	primaryDelete func() error,
+) error {
+	if meta == nil {
+		return flowerThreadDeleteCleanupError{err: errors.New("missing session metadata")}
+	}
+	deletedReadState, err := g.deleteFlowerThreadReadState(ctx, meta.EndpointID, threadID)
+	if err != nil {
+		return flowerThreadDeleteCleanupError{err: err}
+	}
+	if err := primaryDelete(); err != nil {
+		if restoreErr := g.restoreFlowerThreadReadState(ctx, deletedReadState); restoreErr != nil && g.log != nil {
+			g.log.Warn(
+				"gateway: failed to restore deleted Flower thread read state after thread delete failure",
+				"endpoint_id", strings.TrimSpace(meta.EndpointID),
+				"thread_id", strings.TrimSpace(threadID),
+				"error", restoreErr,
+			)
+		}
+		return err
+	}
+	return nil
+}
+
 func buildAIThreadView(thread ai.ThreadView, record threadreadstate.Record) aiThreadView {
 	snapshot := flowerSnapshotFromThread(thread)
 	return aiThreadView{

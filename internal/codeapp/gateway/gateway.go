@@ -2788,9 +2788,14 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					force = true
 				}
 			}
-			if err := g.ai.DeleteThread(r.Context(), meta, threadID, force); err != nil {
+			if err := g.deleteFlowerThreadWithReadStateCleanup(r.Context(), meta, threadID, func() error {
+				return g.ai.DeleteThread(r.Context(), meta, threadID, force)
+			}); err != nil {
 				status := http.StatusBadRequest
-				if errors.Is(err, ai.ErrThreadBusy) {
+				var cleanupErr flowerThreadDeleteCleanupError
+				if errors.As(err, &cleanupErr) {
+					status = http.StatusInternalServerError
+				} else if errors.Is(err, ai.ErrThreadBusy) {
 					status = http.StatusConflict
 				} else if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
