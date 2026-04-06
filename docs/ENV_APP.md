@@ -84,8 +84,13 @@ Env App now exposes a product-owned **Notes overlay** that floats above the curr
   - right-click (or long-press on touch) opens a Notes-specific context menu instead of the browser/system menu.
 - Notes persist semantic style DSL fields (`style_version`, `color_token`, `size_bucket`) in the runtime so different Env App clients render the same card size/color footprint.
 - Note preview size is derived from text length and capped to five stable size buckets; the card preview intentionally truncates large note bodies instead of expanding arbitrarily.
-- Deleting a note moves it into a runtime-managed trash area with a fixed 72-hour retention window. Trash opens as a floating panel from the bottom-right dock icon, groups deleted notes by topic, preserves original color/size/coordinates for restore, and supports clearing one topic's trash at a time.
+- Deleting a note moves it into a runtime-managed trash area with a fixed 72-hour retention window. Trash opens as a floating panel from the bottom-right dock icon, groups deleted notes by topic, preserves original color/size/coordinates for restore, supports per-topic clear, and also supports per-note `Delete now` for items already in trash.
 - Notes state is runtime-authoritative: Env App fetches a snapshot from `/_redeven_proxy/api/notes/snapshot`, subscribes to ordered SSE updates from `/_redeven_proxy/api/notes/events`, and projects the same ordered topic/note/trash stream into every connected client.
+- Runtime trash deletion semantics stay explicit:
+  - `DELETE /_redeven_proxy/api/notes/items/:note_id` moves an active note into trash and emits `item.deleted`.
+  - `DELETE /_redeven_proxy/api/notes/trash/items/:note_id` permanently removes one trashed note and emits `item.removed`.
+  - `DELETE /_redeven_proxy/api/notes/trash/topics/:topic_id` clears all trashed notes for one topic and emits `trash.topic_cleared`.
+  - When the last trashed note of a deleted topic is permanently removed, the runtime removes that deleted topic row as part of the same ordered event flow.
 
 ## Accessibility baseline
 

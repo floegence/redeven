@@ -206,3 +206,73 @@ func TestServiceSubscribeBaselineAndLiveEvents(t *testing.T) {
 		t.Fatal("timed out waiting for live event")
 	}
 }
+
+func TestServiceDeleteTrashedItemPermanentlyRemovesDeletedTopicAndBroadcasts(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	svc := openTestService(t)
+	topic, err := svc.CreateTopic(ctx, CreateTopicRequest{Name: "Ephemeral"})
+	if err != nil {
+		t.Fatalf("CreateTopic() error = %v", err)
+	}
+	item, err := svc.CreateItem(ctx, CreateItemRequest{
+		TopicID: topic.TopicID,
+		Body:    "temporary note",
+		X:       44,
+		Y:       66,
+	})
+	if err != nil {
+		t.Fatalf("CreateItem() error = %v", err)
+	}
+	if err := svc.DeleteTopic(ctx, topic.TopicID); err != nil {
+		t.Fatalf("DeleteTopic() error = %v", err)
+	}
+
+	snap, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() before subscribe error = %v", err)
+	}
+	baseline, ch, err := svc.Subscribe(ctx, snap.Seq)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if len(baseline) != 0 {
+		t.Fatalf("baseline len = %d, want 0", len(baseline))
+	}
+
+	if err := svc.DeleteTrashedItemPermanently(ctx, item.NoteID); err != nil {
+		t.Fatalf("DeleteTrashedItemPermanently() error = %v", err)
+	}
+
+	select {
+	case event := <-ch:
+		if event.Type != "item.removed" {
+			t.Fatalf("live event type = %q, want item.removed", event.Type)
+		}
+		if event.EntityID != item.NoteID {
+			t.Fatalf("live event entity = %q, want %q", event.EntityID, item.NoteID)
+		}
+		if !strings.Contains(string(event.Payload), `"topic_removed":true`) {
+			t.Fatalf("event payload = %s, want topic_removed=true", string(event.Payload))
+		}
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for removed event")
+	}
+
+	finalSnapshot, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() after permanent delete error = %v", err)
+	}
+	if len(finalSnapshot.Topics) != 0 {
+		t.Fatalf("final topics = %#v, want empty", finalSnapshot.Topics)
+	}
+	if len(finalSnapshot.Items) != 0 {
+		t.Fatalf("final items = %#v, want empty", finalSnapshot.Items)
+	}
+	if len(finalSnapshot.TrashItems) != 0 {
+		t.Fatalf("final trash = %#v, want empty", finalSnapshot.TrashItems)
+	}
+}

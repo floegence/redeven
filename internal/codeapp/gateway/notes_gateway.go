@@ -181,6 +181,22 @@ func (g *Gateway) handleNotesAPI(w http.ResponseWriter, r *http.Request) bool {
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"topic_id": topicID}})
 		return true
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/notes/trash/items/"):
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return true
+		}
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/notes/trash/items/")
+		noteID, ok := singlePathSegment(rest)
+		if !ok {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return true
+		}
+		if err := g.notes.DeleteTrashedItemPermanently(r.Context(), noteID); err != nil {
+			writeNotesError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"note_id": noteID}})
+		return true
 	default:
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return true

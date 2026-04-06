@@ -29,6 +29,27 @@ func newTestService(t *testing.T, cfg *config.AIConfig) *Service {
 	return svc
 }
 
+func stopTestServiceMaintenance(t *testing.T, svc *Service) {
+	t.Helper()
+	if svc == nil {
+		return
+	}
+
+	svc.mu.Lock()
+	stopCh := svc.maintenanceStopCh
+	doneCh := svc.maintenanceDoneCh
+	svc.maintenanceStopCh = nil
+	svc.maintenanceDoneCh = nil
+	svc.mu.Unlock()
+
+	if stopCh != nil {
+		close(stopCh)
+	}
+	if doneCh != nil {
+		<-doneCh
+	}
+}
+
 func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)

@@ -242,6 +242,7 @@ func TestService_SweepPendingUploadsRemovesExpiredStagedUploads(t *testing.T) {
 	t.Parallel()
 
 	svc := newTestService(t, nil)
+	stopTestServiceMaintenance(t, svc)
 	meta := testUploadMeta()
 	ctx := context.Background()
 	now := time.Now().UnixMilli()

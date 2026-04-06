@@ -106,6 +106,12 @@ export async function clearNotesTrashTopic(topicID: string): Promise<void> {
   });
 }
 
+export async function deleteNotesTrashItemPermanently(noteID: string): Promise<void> {
+  await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/notes/trash/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function connectNotesEventStream(args: {
   afterSeq?: number;
   signal: AbortSignal;

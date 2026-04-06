@@ -6,6 +6,7 @@ import {
   normalizeNotesSnapshot,
   promoteLocalItem,
   removeSnapshotItem,
+  removeSnapshotTrashItem,
   replaceSnapshotItem,
   replaceSnapshotTopic,
   replaceSnapshotTrashItem,
@@ -25,6 +26,7 @@ import {
   createNotesItem,
   createNotesTopic,
   deleteNotesItem,
+  deleteNotesTrashItemPermanently,
   deleteNotesTopic,
   getNotesSnapshot,
   restoreNotesItem,
@@ -247,6 +249,15 @@ export function useRedevenNotesController(open: Accessor<boolean>): NotesControl
     clearTrashTopic: async (topicID) => {
       await clearNotesTrashTopic(topicID);
       await refreshSnapshot({ preserveActiveTopic: true });
+    },
+    deleteTrashedNotePermanently: async (noteID) => {
+      commitSnapshot(removeSnapshotTrashItem(snapshot(), noteID), { preserveActiveTopic: true });
+      try {
+        await deleteNotesTrashItemPermanently(noteID);
+      } catch (error) {
+        await refreshSnapshot({ preserveActiveTopic: true });
+        throw error;
+      }
     },
   };
 }

@@ -156,6 +156,50 @@ func TestGatewayNotesCRUDFlow(t *testing.T) {
 	}
 }
 
+func TestGatewayNotesDeleteTrashedItemPermanently(t *testing.T) {
+	t.Parallel()
+
+	svc := openGatewayNotesService(t)
+	gw := newNotesGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+
+	type topicEnvelope struct {
+		Topic notes.Topic `json:"topic"`
+	}
+
+	createTopicResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/topics", `{"name":"Archive"}`)
+	if createTopicResp.Code != http.StatusOK {
+		t.Fatalf("create topic status = %d, body = %s", createTopicResp.Code, createTopicResp.Body.String())
+	}
+	createdTopic := decodeNotesResponse[topicEnvelope](t, createTopicResp).Topic
+
+	createItemResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/items", `{"topic_id":"`+createdTopic.TopicID+`","body":"trash me","x":12,"y":18}`)
+	if createItemResp.Code != http.StatusOK {
+		t.Fatalf("create item status = %d, body = %s", createItemResp.Code, createItemResp.Body.String())
+	}
+	createdItem := decodeNotesResponse[struct {
+		Item notes.Item `json:"item"`
+	}](t, createItemResp).Item
+
+	deleteResp := performNotesRequest(t, gw, http.MethodDelete, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, "")
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete item status = %d, body = %s", deleteResp.Code, deleteResp.Body.String())
+	}
+
+	deleteTrashResp := performNotesRequest(t, gw, http.MethodDelete, "/_redeven_proxy/api/notes/trash/items/"+createdItem.NoteID, "")
+	if deleteTrashResp.Code != http.StatusOK {
+		t.Fatalf("delete trashed item status = %d, body = %s", deleteTrashResp.Code, deleteTrashResp.Body.String())
+	}
+
+	snapshotResp := performNotesRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
+	if snapshotResp.Code != http.StatusOK {
+		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
+	}
+	snapshot := decodeNotesResponse[notes.Snapshot](t, snapshotResp)
+	if len(snapshot.TrashItems) != 0 {
+		t.Fatalf("snapshot trash = %#v, want empty", snapshot.TrashItems)
+	}
+}
+
 func TestGatewayNotesWriteRequiresPermission(t *testing.T) {
 	t.Parallel()
 

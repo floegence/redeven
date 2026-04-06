@@ -209,6 +209,20 @@ func (s *Service) ClearTrashTopic(ctx context.Context, topicID string) error {
 	return nil
 }
 
+func (s *Service) DeleteTrashedItemPermanently(ctx context.Context, noteID string) error {
+	if s == nil || s.store == nil {
+		return errors.New("notes service not initialized")
+	}
+	event, err := s.store.deleteTrashedItemPermanently(ctx, noteID)
+	if err != nil {
+		return err
+	}
+	if event.Seq > 0 {
+		s.broadcast(event)
+	}
+	return nil
+}
+
 func (s *Service) removeSubscriber(id int) {
 	s.mu.Lock()
 	ch, ok := s.subscribers[id]
@@ -1030,12 +1044,85 @@ func (s *Store) clearTrashTopic(ctx context.Context, topicID string) (Event, err
 		TopicID:         topicID,
 		CreatedAtUnixMs: nowUnixMs,
 		Payload: struct {
-			TopicID     string   `json:"topic_id"`
-			DeletedIDs  []string `json:"deleted_ids"`
-			TopicRemoved bool    `json:"topic_removed"`
+			TopicID      string   `json:"topic_id"`
+			DeletedIDs   []string `json:"deleted_ids"`
+			TopicRemoved bool     `json:"topic_removed"`
 		}{
 			TopicID:      topicID,
 			DeletedIDs:   deletedIDs,
+			TopicRemoved: topicRemoved,
+		},
+	})
+	if err != nil {
+		return Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Event{}, err
+	}
+	return event, nil
+}
+
+func (s *Store) deleteTrashedItemPermanently(ctx context.Context, noteID string) (Event, error) {
+	ctx = normalizeContext(ctx)
+	noteID = strings.TrimSpace(noteID)
+	if noteID == "" {
+		return Event{}, ErrInvalidNoteID
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Event{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	item, _, snapshot, err := loadDeletedItemWithSnapshotTx(ctx, tx, noteID)
+	if err != nil {
+		return Event{}, err
+	}
+	if item == nil {
+		return Event{}, ErrNoteNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM notes_items WHERE note_id = ? AND deleted_at_unix_ms > 0`, noteID); err != nil {
+		return Event{}, err
+	}
+
+	topicID := strings.TrimSpace(snapshot.TopicID)
+	if topicID == "" {
+		topicID = strings.TrimSpace(item.TopicID)
+	}
+	topicRemoved := false
+	if topicID != "" {
+		topic, err := loadTopicTx(ctx, tx, topicID)
+		if err != nil {
+			return Event{}, err
+		}
+		if topic != nil && topic.DeletedAtUnixMs > 0 {
+			hasItems, err := topicHasAnyItemsTx(ctx, tx, topicID)
+			if err != nil {
+				return Event{}, err
+			}
+			if !hasItems {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM notes_topics WHERE topic_id = ?`, topicID); err != nil {
+					return Event{}, err
+				}
+				topicRemoved = true
+			}
+		}
+	}
+
+	nowUnixMs := time.Now().UnixMilli()
+	event, err := appendEventTx(tx, eventEnvelope{
+		Type:            "item.removed",
+		EntityKind:      "item",
+		EntityID:        noteID,
+		TopicID:         topicID,
+		CreatedAtUnixMs: nowUnixMs,
+		Payload: struct {
+			NoteID       string `json:"note_id"`
+			TopicID      string `json:"topic_id"`
+			TopicRemoved bool   `json:"topic_removed"`
+		}{
+			NoteID:       noteID,
+			TopicID:      topicID,
 			TopicRemoved: topicRemoved,
 		},
 	})

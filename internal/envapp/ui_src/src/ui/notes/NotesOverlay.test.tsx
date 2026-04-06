@@ -20,6 +20,7 @@ const notesApiState = vi.hoisted(() => ({
   bringNotesItemToFront: vi.fn(),
   deleteNotesItem: vi.fn(),
   restoreNotesItem: vi.fn(),
+  deleteNotesTrashItemPermanently: vi.fn(),
   clearNotesTrashTopic: vi.fn(),
   connectNotesEventStream: vi.fn(),
   streamArgs: null as
@@ -67,6 +68,7 @@ vi.mock('../services/notesApi', () => ({
   bringNotesItemToFront: notesApiState.bringNotesItemToFront,
   deleteNotesItem: notesApiState.deleteNotesItem,
   restoreNotesItem: notesApiState.restoreNotesItem,
+  deleteNotesTrashItemPermanently: notesApiState.deleteNotesTrashItemPermanently,
   clearNotesTrashTopic: notesApiState.clearNotesTrashTopic,
   connectNotesEventStream: notesApiState.connectNotesEventStream,
 }));
@@ -146,6 +148,7 @@ describe('Redeven NotesOverlay adapter', () => {
     notesApiState.bringNotesItemToFront.mockReset();
     notesApiState.deleteNotesItem.mockReset();
     notesApiState.restoreNotesItem.mockReset();
+    notesApiState.deleteNotesTrashItemPermanently.mockReset();
     notesApiState.clearNotesTrashTopic.mockReset();
     notesApiState.connectNotesEventStream.mockReset();
 
@@ -193,6 +196,7 @@ describe('Redeven NotesOverlay adapter', () => {
         updated_at_unix_ms: 12,
       }),
     );
+    notesApiState.deleteNotesTrashItemPermanently.mockResolvedValue(undefined);
     notesApiState.clearNotesTrashTopic.mockResolvedValue(undefined);
     notesApiState.connectNotesEventStream.mockImplementation(async (args: { afterSeq?: number; onEvent: (event: NotesEvent) => void; signal: AbortSignal }) => {
       notesApiState.streamArgs = args;
@@ -338,6 +342,11 @@ describe('Redeven NotesOverlay adapter', () => {
     const renamedTopic = await controller.updateTopic('topic-2', { name: 'Archive 2' });
     expect(renamedTopic.name).toBe('Archive 2');
     expect(controller.snapshot().topics.find((topic: NotesTopic) => topic.topic_id === 'topic-2')?.name).toBe('Archive 2');
+
+    expect(controller.deleteTrashedNotePermanently).toBeTypeOf('function');
+    await controller.deleteTrashedNotePermanently?.('note-1');
+    expect(notesApiState.deleteNotesTrashItemPermanently).toHaveBeenCalledWith('note-1');
+    expect(controller.snapshot().trash_items).toHaveLength(0);
 
     await controller.clearTrashTopic('topic-1');
     expect(notesApiState.clearNotesTrashTopic).toHaveBeenCalledWith('topic-1');
