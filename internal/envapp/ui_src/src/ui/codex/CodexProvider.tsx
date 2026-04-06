@@ -45,7 +45,11 @@ import {
   resolveCodexApprovalPolicyValue,
   resolveCodexSandboxModeValue,
 } from './runtimeDefaults';
-import { codexSupportedReasoningEfforts, codexSupportsOperation } from './viewModel';
+import {
+  codexSupportedReasoningEfforts,
+  codexSupportsOperation,
+  resolveCodexWorkingDir,
+} from './viewModel';
 import type {
   CodexCapabilitiesSnapshot,
   CodexComposerAttachmentDraft,
@@ -1396,12 +1400,13 @@ export function CodexProvider(props: ParentProps) {
     let targetOwnerID = ownerID;
     let optimisticTurnID = '';
     try {
-      const resolvedWorkingDir = String(
-        ownerDraft.runtime.cwd ||
-        capabilities()?.effective_config?.cwd ||
-        activeRuntimeConfig().cwd ||
-        status()?.agent_home_dir,
-      ).trim();
+      const resolvedWorkingDir = resolveCodexWorkingDir({
+        workingDirDraft: ownerDraft.runtime.cwd,
+        runtimeConfig: activeRuntimeConfig(),
+        capabilities: capabilities(),
+        thread: activeThread(),
+        status: status(),
+      });
       if (!targetThreadID) {
         const detail = await startCodexThread({
           cwd: resolvedWorkingDir,

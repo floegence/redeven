@@ -45,6 +45,14 @@ export type CodexPendingRequestViewModel = Readonly<{
   decisionLabel: string;
 }>;
 
+export type CodexWorkingDirResolutionArgs = Readonly<{
+  workingDirDraft?: string | null | undefined;
+  runtimeConfig?: CodexThreadRuntimeConfig | null | undefined;
+  capabilities?: CodexCapabilitiesSnapshot | null | undefined;
+  thread?: CodexThread | null | undefined;
+  status?: CodexStatus | null | undefined;
+}>;
+
 function firstNonEmpty(...candidates: unknown[]): string {
   for (const candidate of candidates) {
     const value = String(candidate ?? '').trim();
@@ -62,6 +70,21 @@ function firstDefinedList(candidates: unknown[]): string[] {
     if (values.length > 0) return values;
   }
   return [];
+}
+
+export function resolveCodexWorkingDir(args: CodexWorkingDirResolutionArgs): string {
+  const homeDir = firstNonEmpty(args.status?.agent_home_dir);
+  const threadCwd = firstNonEmpty(args.thread?.cwd);
+  const runtimeCwd = firstNonEmpty(args.runtimeConfig?.cwd);
+  const explicitRuntimeCwd = runtimeCwd && runtimeCwd !== homeDir ? runtimeCwd : '';
+  return firstNonEmpty(
+    args.workingDirDraft,
+    explicitRuntimeCwd,
+    threadCwd,
+    args.capabilities?.effective_config?.cwd,
+    runtimeCwd,
+    homeDir,
+  );
 }
 
 function compactTokenCount(value: number | null | undefined): string {
@@ -271,12 +294,7 @@ export function buildCodexWorkbenchSummary(args: {
   activeStatusFlags: readonly string[];
   pendingRequests: readonly CodexPendingRequest[];
 }): CodexWorkbenchSummary {
-  const workspaceLabel = firstNonEmpty(
-    args.workingDirDraft,
-    args.runtimeConfig?.cwd,
-    args.thread?.cwd,
-    args.status?.agent_home_dir,
-  );
+  const workspaceLabel = resolveCodexWorkingDir(args);
   const modelValue = firstNonEmpty(args.modelDraft, args.runtimeConfig?.model);
   const hostReady = Boolean(args.status?.available);
   const pendingRequestCount = args.pendingRequests.length;
