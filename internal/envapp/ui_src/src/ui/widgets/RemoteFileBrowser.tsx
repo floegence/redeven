@@ -1,7 +1,7 @@
 import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'solid-js';
 import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
-import { ArrowRightLeft, Copy, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Copy, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
   type ContextMenuCallbacks,
   type ContextMenuEvent,
@@ -89,7 +89,6 @@ import {
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
 import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
-import { LazyMountedDirectoryPicker, LazyMountedFileSavePicker } from '../primitives/LazyMountedPickers';
 import {
   buildChildPath,
   canInsertIntoTree,
@@ -510,18 +509,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [createLoading, setCreateLoading] = createSignal(false);
   const [pendingCreatedEntryReveal, setPendingCreatedEntryReveal] = createSignal<FileBrowserRevealRequest | null>(null);
 
-  const [moveToDialogOpen, setMoveToDialogOpen] = createSignal(false);
-  const [moveToDialogItem, setMoveToDialogItem] = createSignal<FileItem | null>(null);
-  const [, setMoveToLoading] = createSignal(false);
-
   const [duplicateLoading, setDuplicateLoading] = createSignal(false);
 
   const [dragMoveLoading, setDragMoveLoading] = createSignal(false);
   const [fileBrowserResetSeq, setFileBrowserResetSeq] = createSignal(0);
-
-  const [copyToDialogOpen, setCopyToDialogOpen] = createSignal(false);
-  const [copyToDialogItem, setCopyToDialogItem] = createSignal<FileItem | null>(null);
-  const [, setCopyToLoading] = createSignal(false);
 
   const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
   const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('');
@@ -781,43 +772,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     floe.persist.debouncedSave(scopedStorageKeyByEnv('files:lastPath', eid), next);
-  };
-
-  const readPersistedTargetPath = (id: string): string | null => {
-    const eid = id.trim();
-    if (!eid) return null;
-
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
-      const byEnv = (state as any).lastTargetPathByEnv;
-      if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
-        const saved = (byEnv as any)[eid];
-        if (typeof saved === 'string' && saved.trim()) return normalizePath(saved);
-      }
-      return null;
-    }
-
-    const saved = floe.persist.load<string>(scopedStorageKeyByEnv('files:lastTargetPath', eid), '');
-    return saved ? normalizePath(saved) : null;
-  };
-
-  const writePersistedTargetPath = (id: string, path: string) => {
-    const eid = id.trim();
-    if (!eid) return;
-    const next = normalizePath(path);
-
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
-      const prevRaw = (state as any).lastTargetPathByEnv;
-      const prev =
-        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
-          ? (prevRaw as Record<string, string>)
-          : {};
-      deck.updateWidgetState(props.widgetId, 'lastTargetPathByEnv', { ...prev, [eid]: next });
-      return;
-    }
-
-    floe.persist.debouncedSave(scopedStorageKeyByEnv('files:lastTargetPath', eid), next);
   };
 
   const readPersistedShowHidden = (id: string): boolean => {
@@ -3168,10 +3122,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         }
       }
 
-      if (okCount > 0) {
-        writePersistedTargetPath(envId(), destDir);
-      }
-
       if (failures.length > 0) {
         // FileBrowser drag uses optimistic UI updates; when the RPC fails we need to remount
         // the FileBrowser to clear those optimistic ops and show the real state again.
@@ -3393,84 +3343,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch (e) {
       notification.error('Duplicate failed', e instanceof Error ? e.message : String(e));
       return { ok: false };
-    }
-  };
-
-  const handleMoveTo = async (item: FileItem, destDirPath: string) => {
-    const client = protocol.client();
-    if (!client || !destDirPath.trim()) return;
-
-    const destDir = normalizePath(destDirPath.trim());
-    const finalDestPath = buildChildPath(destDir, item.name);
-
-    if (finalDestPath === item.path) {
-      setMoveToDialogOpen(false);
-      return;
-    }
-
-    setMoveToLoading(true);
-    setMoveToDialogOpen(false);
-
-    try {
-      await rpc.fs.rename({ oldPath: item.path, newPath: finalDestPath });
-      const srcDir = getParentDir(item.path);
-      const pathsToRemove = new Set([normalizePath(item.path)]);
-      setFiles((prev) => removeItemsFromTree(prev, pathsToRemove));
-      const srcCached = cache.get(srcDir);
-      if (srcCached) {
-        cache.set(srcDir, srcCached.filter((c) => normalizePath(c.path) !== normalizePath(item.path)));
-      }
-      writePersistedTargetPath(envId(), destDir);
-
-      notification.success('Moved', `"${item.name}" moved to "${finalDestPath}".`);
-    } catch (e) {
-      notification.error('Move failed', e instanceof Error ? e.message : String(e));
-    } finally {
-      setMoveToLoading(false);
-    }
-  };
-
-  const handleCopyTo = async (item: FileItem, destDirPath: string, destFileName: string) => {
-    const client = protocol.client();
-    if (!client || !destDirPath.trim() || !destFileName.trim()) return;
-
-    const destDir = normalizePath(destDirPath.trim());
-    const finalDestPath = buildChildPath(destDir, destFileName);
-
-    if (finalDestPath === item.path) {
-      setCopyToDialogOpen(false);
-      return;
-    }
-
-    setCopyToLoading(true);
-    setCopyToDialogOpen(false);
-
-    try {
-      await rpc.fs.copy({ sourcePath: item.path, destPath: finalDestPath });
-      const destDir = getParentDir(finalDestPath);
-      const scopedRootPath = normalizePath(agentHomePathAbs() || destDir);
-      const newName = finalDestPath.split('/').pop() ?? item.name;
-      const newItem: FileItem = {
-        ...item,
-        id: finalDestPath,
-        name: newName,
-        path: finalDestPath,
-        extension: item.type === 'file' ? extNoDot(newName) : undefined,
-      };
-      const destCached = cache.get(destDir);
-      if (destCached) {
-        if (!destCached.some((c) => normalizePath(c.path) === normalizePath(finalDestPath))) {
-          cache.set(destDir, sortFileItems([...destCached, newItem]));
-          setFiles((prev) => insertItemToTree(prev, destDir, newItem, scopedRootPath));
-        }
-      }
-      writePersistedTargetPath(envId(), destDir);
-
-      notification.success('Copied', `"${item.name}" copied to "${finalDestPath}".`);
-    } catch (e) {
-      notification.error('Copy failed', e instanceof Error ? e.message : String(e));
-    } finally {
-      setCopyToLoading(false);
     }
   };
 
@@ -3928,18 +3800,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         }
       })();
     },
-    onMoveTo: (items: FileItem[]) => {
-      if (items.length > 0) {
-        setMoveToDialogItem(items[0]);
-        setMoveToDialogOpen(true);
-      }
-    },
-    onCopyTo: (items: FileItem[]) => {
-      if (items.length > 0) {
-        setCopyToDialogItem(items[0]);
-        setCopyToDialogOpen(true);
-      }
-    },
     onCopyName: (items: FileItem[]) => {
       handleCopyName(items);
     },
@@ -3969,19 +3829,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       },
     },
     {
-      id: 'copy-to',
-      label: 'Copy to...',
-      type: 'copy-to',
-      icon: (props) => <Folder class={props.class} />,
-    },
-    {
-      id: 'move-to',
-      label: 'Move to...',
-      type: 'move-to',
-      icon: (props) => <ArrowRightLeft class={props.class} />,
-      separator: true,
-    },
-    {
       id: 'rename',
       label: 'Rename',
       type: 'rename',
@@ -3996,6 +3843,47 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       shortcut: 'Del',
     },
   ];
+
+  type FileBrowserContextMenuScope =
+    | 'directory-background'
+    | 'single-file'
+    | 'single-folder'
+    | 'multi-select';
+
+  const singleSelectSecondaryContextMenuItemIds = new Set([
+    'duplicate',
+    'copy-name',
+    'copy-path',
+    'rename',
+    'delete',
+  ]);
+
+  const multiSelectSecondaryContextMenuItemIds = new Set([
+    'duplicate',
+    'copy-name',
+    'copy-path',
+    'delete',
+  ]);
+
+  const filterSecondaryContextMenuItems = (allowedIds: ReadonlySet<string>): ContextMenuItem[] => (
+    secondaryOverrideContextMenuItems.filter((item) => allowedIds.has(item.id))
+  );
+
+  const resolveContextMenuScope = (event: ContextMenuEvent | null): FileBrowserContextMenuScope | null => {
+    if (!event) return null;
+
+    if (event.targetKind === 'directory-background' && resolveDirectoryContextTarget(event)) {
+      return 'directory-background';
+    }
+
+    if (event.items.length > 1) {
+      return 'multi-select';
+    }
+
+    const item = event.items[0];
+    if (!item) return null;
+    return item.type === 'folder' ? 'single-folder' : 'single-file';
+  };
 
   const buildAskFlowerMenuItem = (options?: {
     separator?: boolean;
@@ -4052,9 +3940,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   const resolveOverrideContextMenuItems = (event: ContextMenuEvent | null): ContextMenuItem[] => {
-    if (!event) return [];
+    const scope = resolveContextMenuScope(event);
+    if (!event || !scope) return [];
 
-    if (event.targetKind === 'directory-background' && resolveDirectoryContextTarget(event)) {
+    if (scope === 'directory-background') {
       const backgroundItems: ContextMenuItem[] = [
         buildAskFlowerMenuItem({
           onAction: (_items, menuEvent) => {
@@ -4069,7 +3958,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return backgroundItems;
     }
 
-    if (event.directory?.item?.type === 'folder') {
+    if (scope === 'single-folder') {
       const folderItems: ContextMenuItem[] = [
         buildAskFlowerMenuItem(),
       ];
@@ -4077,12 +3966,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         folderItems.push(buildOpenInTerminalMenuItem());
       }
       folderItems.push(buildNewContextMenuItem(true));
-      return [...folderItems, ...secondaryOverrideContextMenuItems];
+      return [...folderItems, ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds)];
     }
 
     return [
       buildAskFlowerMenuItem({ separator: true }),
-      ...secondaryOverrideContextMenuItems,
+      ...filterSecondaryContextMenuItems(
+        scope === 'multi-select'
+          ? multiSelectSecondaryContextMenuItemIds
+          : singleSelectSecondaryContextMenuItemIds,
+      ),
     ];
   };
 
@@ -4402,44 +4295,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           setRenameDialogItem(null);
         }}
       />
-
-      {/* Move To Directory Picker */}
-      <LazyMountedDirectoryPicker
-        open={moveToDialogOpen()}
-        onOpenChange={(open) => {
-          if (!open) setMoveToDialogOpen(false);
-        }}
-        files={files()}
-        initialPath={readPersistedTargetPath(envId()) ?? currentBrowserPath()}
-        homeLabel="Home"
-        homePath={agentHomePathAbs() || undefined}
-        title="Move To"
-        confirmText="Move"
-        onSelect={(dirPath) => {
-          const item = moveToDialogItem();
-          if (item) void handleMoveTo(item, dirPath);
-        }}
-      />
-
-      {/* Copy To File Save Picker */}
-      <LazyMountedFileSavePicker
-        open={copyToDialogOpen()}
-        onOpenChange={(open) => {
-          if (!open) setCopyToDialogOpen(false);
-        }}
-        files={files()}
-        initialPath={readPersistedTargetPath(envId()) ?? currentBrowserPath()}
-        homeLabel="Home"
-        homePath={agentHomePathAbs() || undefined}
-        initialFileName={copyToDialogItem()?.name ?? ''}
-        title="Copy To"
-        confirmText="Copy"
-        onSave={(dirPath, fileName) => {
-          const item = copyToDialogItem();
-          if (item) void handleCopyTo(item, dirPath, fileName);
-        }}
-      />
-
       {/* Duplicate Loading Overlay */}
       <Show when={duplicateLoading()}>
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">

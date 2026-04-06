@@ -448,6 +448,22 @@ vi.mock('./FileBrowserWorkspace', () => ({
             mock-copy-path
           </button>
         ) : null}
+        {multiSelectItems.some((item) => item.id === 'copy-path') ? (
+          <button
+            type="button"
+            onClick={() => multiSelectItems.find((item) => item.id === 'copy-path')?.onAction?.(multiSelectEvent.items, multiSelectEvent)}
+          >
+            mock-copy-path-multi
+          </button>
+        ) : null}
+        {multiSelectItems.some((item) => item.id === 'ask-flower') ? (
+          <button
+            type="button"
+            onClick={() => multiSelectItems.find((item) => item.id === 'ask-flower')?.onAction?.(multiSelectEvent.items, multiSelectEvent)}
+          >
+            mock-ask-flower-multi
+          </button>
+        ) : null}
         {folderItems.some((item) => item.id === 'open-in-terminal') ? (
           <button
             type="button"
@@ -2437,6 +2453,92 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('copies every selected absolute path from the multi-select context menu', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    clipboardStore.writeText.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const copyPathButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-copy-path-multi') as HTMLButtonElement | undefined;
+      expect(copyPathButton).toBeTruthy();
+
+      copyPathButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(clipboardStore.writeText).toHaveBeenCalledWith('/workspace/repo/src\n/workspace/repo/src/.env');
+      expect(notificationStore.success).toContainEqual({ title: 'Copied', message: '2 paths copied to clipboard.' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes multi-select Ask Flower through the entire current selection', async () => {
+    widgetStateStore.values['widget-1'] = {
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const askFlowerButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-ask-flower-multi') as HTMLButtonElement | undefined;
+      expect(askFlowerButton).toBeTruthy();
+
+      askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(envActionSpies.openAskFlowerComposer).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0]).toMatchObject({
+        source: 'file_browser',
+        mode: 'append',
+        suggestedWorkingDirAbs: '/workspace/repo/src',
+        contextItems: [
+          {
+            kind: 'file_path',
+            path: '/workspace/repo/src',
+            isDirectory: true,
+          },
+          {
+            kind: 'file_path',
+            path: '/workspace/repo/src/.env',
+            isDirectory: false,
+          },
+        ],
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows directory helper menus with New submenus and dispatches terminal requests for both folder and background contexts', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -2459,7 +2561,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,open-in-terminal,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,open-in-terminal,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-background-menu-order"]')?.textContent).toBe(
         'ask-flower,open-in-terminal,new[new-file|new-folder]',
@@ -2467,10 +2569,10 @@ describe('RemoteFileBrowser persistence', () => {
       expect(host.querySelector('[data-testid="mock-folder-new-has-icon"]')?.textContent).toBe('yes');
       expect(host.querySelector('[data-testid="mock-background-new-has-icon"]')?.textContent).toBe('yes');
       expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-multi-menu-order"]')?.textContent).toBe(
-        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,separator:ask-flower,duplicate,copy-name,copy-path,delete',
       );
 
       const folderButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-terminal-folder') as HTMLButtonElement | undefined;
@@ -2719,7 +2821,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toBe(
-        'ask-flower,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,copy-to,move-to,separator:move-to,rename,delete',
+        'ask-flower,new[new-file|new-folder],separator:new,duplicate,copy-name,copy-path,rename,delete',
       );
       expect(host.querySelector('[data-testid="mock-background-menu-order"]')?.textContent).toBe(
         'ask-flower,new[new-file|new-folder]',
