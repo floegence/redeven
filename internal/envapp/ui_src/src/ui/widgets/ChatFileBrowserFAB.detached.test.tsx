@@ -84,4 +84,49 @@ describe('ChatFileBrowserFAB', () => {
 
     expect(host.querySelector('button[title="Browse files"]')).toBeNull();
   });
+
+  it('keeps the FAB visible in persistent mode while the shared browser surface is already open', async () => {
+    (window as any).PointerEvent = window.MouseEvent;
+    fileBrowserSurfaceState.open.mockReturnValue(true);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <ChatFileBrowserFAB
+        workingDir="/workspace/project"
+        homePath="/Users/demo"
+        persistentVisible
+      />
+    ), host);
+
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+
+    clickFab(button!);
+    await flush();
+
+    expect(fileBrowserSurfaceState.openBrowser).toHaveBeenCalledWith({
+      path: '/workspace/project',
+      homePath: '/Users/demo',
+    });
+  });
+
+  it('renders a visible disabled FAB in persistent mode when no path seed exists', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <ChatFileBrowserFAB
+        workingDir=""
+        homePath=""
+        persistentVisible
+      />
+    ), host);
+
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute('aria-disabled')).toBe('true');
+  });
 });

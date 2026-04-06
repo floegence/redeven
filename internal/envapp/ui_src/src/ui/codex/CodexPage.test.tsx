@@ -705,11 +705,64 @@ describe('CodexPage', () => {
   });
 
   it('shows the transcript FAB when only the working directory is available', async () => {
+    (window as any).PointerEvent = window.MouseEvent;
     fetchCodexStatusMock.mockResolvedValue({
       available: false,
       ready: false,
       error: 'host codex binary not found on PATH',
       agent_home_dir: '/workspace',
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+
+    await flushAsync();
+    await flushAsync();
+
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+
+    clickFab(button!);
+    await flushAsync();
+
+    expect(fileBrowserSurfaceState.openBrowser).toHaveBeenCalledWith({
+      path: '/workspace',
+      homePath: '/workspace',
+    });
+  });
+
+  it('keeps the Codex transcript FAB visible while the shared browser surface is already open', async () => {
+    fileBrowserSurfaceState.open.mockReturnValue(true);
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
     });
     listCodexThreadsMock.mockResolvedValue([]);
     connectCodexEventStreamMock.mockResolvedValue(undefined);

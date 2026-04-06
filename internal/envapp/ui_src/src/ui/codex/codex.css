@@ -197,6 +197,10 @@
   --flower-chat-transcript-overlay-bottom-inset: calc(7.5rem + env(safe-area-inset-bottom, 0px));
 }
 
+.codex-page-shell .codex-page-file-browser-fab {
+  z-index: 46;
+}
+
 .codex-page-bottom-dock {
   position: relative;
   z-index: 1;

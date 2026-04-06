@@ -10,6 +10,8 @@ export interface ChatFileBrowserFABProps {
   workingDir: string;
   homePath?: string;
   enabled?: boolean;
+  persistentVisible?: boolean;
+  class?: string;
   /** Ref to the container element that bounds the FAB drag area. */
   containerRef?: HTMLElement;
 }
@@ -29,9 +31,16 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const [isDragging, setIsDragging] = createSignal(false);
   const [isSnapping, setIsSnapping] = createSignal(false);
   let dragStart: { px: number; py: number; fabLeft: number; fabTop: number } | null = null;
+  const persistVisible = createMemo(() => props.persistentVisible === true);
+  const resolvedSeedPath = createMemo(() => {
+    const workingDir = normalizeAbsolutePath(props.workingDir);
+    if (workingDir) return workingDir;
+    if (!persistVisible()) return '';
+    return normalizeAbsolutePath(props.homePath ?? '');
+  });
 
   const browserSeed = createMemo(() => {
-    const path = normalizeAbsolutePath(props.workingDir);
+    const path = resolvedSeedPath();
     if (!path) return null;
     const homePath = normalizeAbsolutePath(props.homePath ?? '');
     return {
@@ -39,6 +48,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
       homePath: homePath || undefined,
     };
   });
+  const canOpenBrowser = createMemo(() => browserSeed() !== null);
 
   function snapToEdge(left: number, top: number) {
     const ct = props.containerRef;
@@ -79,7 +89,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   }
 
   function onFabPointerDown(event: PointerEvent) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || !canOpenBrowser()) return;
     const button = event.currentTarget as HTMLElement;
     button.setPointerCapture(event.pointerId);
 
@@ -144,7 +154,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
     })();
   }
 
-  const showFab = () => (props.enabled ?? true) && !fileBrowserSurface.controller.open();
+  const showFab = () => persistVisible() || ((props.enabled ?? true) && !fileBrowserSurface.controller.open());
 
   const fabStyle = () => {
     const left = fabLeft();
@@ -163,7 +173,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
 
   return (
     <Show when={showFab()}>
-      <div class="redeven-fab-file-browser" style={fabStyle()}>
+      <div class={`redeven-fab-file-browser ${String(props.class ?? '').trim()}`.trim()} style={fabStyle()}>
         <Motion.div
           initial={{ opacity: 0, scale: 0.6 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -172,6 +182,8 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
           <button
             class="redeven-fab-file-browser-btn"
             title="Browse files"
+            disabled={!canOpenBrowser()}
+            aria-disabled={canOpenBrowser() ? undefined : 'true'}
             onPointerDown={onFabPointerDown}
             onPointerMove={onFabPointerMove}
             onPointerUp={onFabPointerUp}

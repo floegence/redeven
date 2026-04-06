@@ -145,7 +145,9 @@ describe('file preview wiring', () => {
     const chatSrc = read('./ChatFileBrowserFAB.tsx');
 
     expect(chatSrc).toContain('const fileBrowserSurface = useFileBrowserSurfaceContext();');
-    expect(chatSrc).toContain('const showFab = () => (props.enabled ?? true) && !fileBrowserSurface.controller.open();');
+    expect(chatSrc).toContain('const persistVisible = createMemo(() => props.persistentVisible === true);');
+    expect(chatSrc).toContain("const showFab = () => persistVisible() || ((props.enabled ?? true) && !fileBrowserSurface.controller.open());");
+    expect(chatSrc).toContain('disabled={!canOpenBrowser()}');
     expect(chatSrc).toContain('await fileBrowserSurface.openBrowser(browser);');
     expect(chatSrc).not.toContain('title="Browser"');
     expect(chatSrc).not.toContain('persistenceKey="chat-browser"');

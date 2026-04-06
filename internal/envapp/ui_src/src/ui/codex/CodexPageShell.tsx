@@ -87,7 +87,6 @@ export function CodexPageShell() {
     thread: codex.activeThread(),
     status: codex.status(),
   })));
-  const hasWorkingDir = createMemo(() => Boolean(workingDirPath()));
   const workingDirValue = createMemo(() => toHomeDisplayPath(workingDirPath(), homePath()) || workingDirPath());
   const workingDirLocked = createMemo(() => Boolean(String(codex.activeThreadID() ?? '').trim()));
   const workingDirDisabled = createMemo(() => !summary().hostReady || codex.submitting() || !homePath());
@@ -371,7 +370,8 @@ export function CodexPageShell() {
             <ChatFileBrowserFAB
               workingDir={workingDirPath()}
               homePath={homePath()}
-              enabled={hasWorkingDir()}
+              persistentVisible
+              class="codex-page-file-browser-fab"
               containerRef={transcriptContainerRef}
             />
           </div>

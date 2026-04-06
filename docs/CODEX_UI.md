@@ -210,8 +210,8 @@ Current Env App behavior:
 - New threads can choose working directory, model, approval policy, sandbox mode, and reasoning effort before the first turn.
 - The working-directory picker uses the shared floe-webapp async path-resolution contract plus an Env App directory data source that hydrates ancestor folders on demand, so deep initial cwd values, typed path entry, breadcrumb jumps, and tree reselection all resolve against the same lazy-loaded tree state.
 - Once a thread exists, the Codex browser UI locks the working directory to the persisted thread cwd and no longer exposes a working-directory editor or per-turn cwd override flow.
-- The transcript FAB follows the same resolved working-directory precedence as the rest of the Codex page (`workingDirDraft -> runtime_config.cwd -> thread.cwd -> agent_home_dir`), so the browser always opens at the directory Codex itself currently considers active.
-- The transcript FAB depends only on the resolved working directory. If Codex can still resolve a valid cwd seed such as `agent_home_dir`, the FAB remains visible even when host Codex itself is unavailable.
+- The transcript FAB follows the same resolved working-directory precedence as the rest of the Codex page (`workingDirDraft -> runtime_config.cwd -> thread.cwd -> capabilities.effective_config.cwd -> agent_home_dir`), so the browser always opens at the directory Codex itself currently considers active.
+- The Codex transcript FAB is persistently visible at the page level. When the working directory is temporarily empty, Codex falls back to `agent_home_dir` for browser opening before degrading to a visible disabled button, and the FAB stays visible even while the shared browser surface is already open or host Codex itself is unavailable.
 - Browser-surface ownership remains shared rather than Codex-local:
   - Codex owns only the directory seed and transcript mount point;
   - Env App shell still owns floating-window persistence, detached desktop fallback, and `RemoteFileBrowser` rendering through `FileBrowserSurfaceContext`, `FileBrowserSurfaceHost`, and `openFileBrowserSurface()`.
