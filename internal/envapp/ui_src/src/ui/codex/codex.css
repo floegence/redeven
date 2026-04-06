@@ -485,60 +485,7 @@
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.codex-chat-input-secondary-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.codex-chat-secondary-action {
-  display: inline-flex;
-  min-height: 2.5rem;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.875rem;
-  border: 1px solid color-mix(in srgb, var(--codex-border-default) 88%, transparent);
-  border-radius: 0.75rem;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--codex-surface-panel-elevated) 98%, white 2%), var(--codex-surface-panel));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 34%, transparent);
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--foreground);
-  cursor: pointer;
-  transition:
-    border-color 150ms ease,
-    background-color 150ms ease,
-    color 150ms ease,
-    opacity 150ms ease;
-}
-
-.codex-chat-secondary-action:hover:not(:disabled),
-.codex-chat-secondary-action:focus-visible:not(:disabled) {
-  border-color: color-mix(in srgb, var(--primary) 30%, var(--codex-border-default));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--codex-surface-panel-strong) 84%, white 4%), var(--codex-surface-panel-strong));
-}
-
-.codex-chat-secondary-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.56;
-}
-
-.codex-chat-secondary-action-stop {
-  color: color-mix(in srgb, var(--warning) 78%, var(--foreground));
-  border-color: color-mix(in srgb, var(--warning) 24%, var(--codex-border-default));
-}
-
-.codex-chat-secondary-action-stop:hover:not(:disabled),
-.codex-chat-secondary-action-stop:focus-visible:not(:disabled) {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--warning) 8%, var(--codex-surface-panel-elevated)), color-mix(in srgb, var(--warning) 12%, var(--codex-surface-panel)));
-  border-color: color-mix(in srgb, var(--warning) 32%, var(--codex-border-default));
+  justify-content: flex-end;
 }
 
 .codex-chat-input-send-btn {
@@ -553,13 +500,17 @@
   cursor: pointer;
 }
 
-.codex-chat-input-send-btn-expanded {
-  gap: 0.375rem;
-  padding-inline: 0.75rem;
+.codex-chat-input-send-btn-stop {
+  color: color-mix(in srgb, var(--warning) 88%, var(--foreground));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--warning) 22%, transparent);
 }
 
-.codex-chat-input-send-btn .chat-input-send-btn-label {
-  white-space: nowrap;
+.codex-chat-input-send-btn-stop.chat-input-send-btn-active:hover {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
+    0 6px 14px color-mix(in srgb, var(--warning) 16%, transparent);
 }
 
 .codex-chat-input-send-btn.chat-input-send-btn-active:hover {
@@ -1016,12 +967,12 @@
 .codex-pending-inputs-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.75rem;
   border: 1px solid color-mix(in srgb, var(--codex-border-default) 72%, transparent);
-  border-radius: 0.9375rem;
+  border-radius: 1rem;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--codex-surface-panel-elevated) 98%, white 2%), var(--codex-surface-panel));
-  padding: 0.75rem 0.875rem;
+    linear-gradient(180deg, color-mix(in srgb, var(--codex-surface-panel-elevated) 98%, white 2%), color-mix(in srgb, var(--codex-surface-panel) 96%, transparent));
+  padding: 0.8125rem 0.875rem;
   box-shadow:
     0 18px 28px -28px color-mix(in srgb, black 40%, transparent),
     inset 0 1px 0 color-mix(in srgb, white 34%, transparent);
@@ -1124,42 +1075,77 @@
 .codex-pending-inputs-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4375rem;
   max-height: min(13rem, 34vh);
   overflow-y: auto;
   padding-right: 0.125rem;
 }
 
 .codex-pending-input-card {
-  display: grid;
+  display: flex;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: stretch;
+  gap: 0.625rem;
   border: 1px solid color-mix(in srgb, var(--codex-border-default) 70%, transparent);
-  border-radius: 0.8125rem;
+  border-radius: 0.875rem;
   background: color-mix(in srgb, var(--codex-surface-panel-subtle) 94%, transparent);
-  padding: 0.625rem 0.75rem;
+  padding: 0.375rem;
+}
+
+.codex-pending-input-card-queued {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--codex-surface-panel-elevated) 88%, transparent), color-mix(in srgb, var(--codex-surface-panel-subtle) 92%, transparent));
 }
 
 .codex-pending-input-card-dispatching {
-  grid-template-columns: minmax(0, 1fr);
   border-color: color-mix(in srgb, var(--primary) 22%, var(--codex-border-default));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--codex-surface-accent-subtle) 78%, var(--codex-surface-panel-elevated)), color-mix(in srgb, var(--codex-surface-panel-subtle) 88%, transparent));
 }
 
+.codex-pending-input-card-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.375rem 0.4375rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+button.codex-pending-input-card-main {
+  cursor: pointer;
+  border-radius: 0.75rem;
+  transition:
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+button.codex-pending-input-card-main:hover,
+button.codex-pending-input-card-main:focus-visible {
+  background: color-mix(in srgb, var(--codex-surface-panel-strong) 54%, transparent);
+}
+
+button.codex-pending-input-card-main:hover .codex-pending-input-card-preview,
+button.codex-pending-input-card-main:focus-visible .codex-pending-input-card-preview {
+  color: color-mix(in srgb, var(--primary) 18%, var(--foreground));
+}
+
+.codex-pending-input-card-main-static {
+  cursor: default;
+}
+
 .codex-pending-input-card-order {
   display: inline-flex;
-  width: 1.625rem;
-  height: 1.625rem;
+  width: 1.75rem;
+  height: 1.75rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--primary) 12%, transparent);
-  font-size: 0.6875rem;
-  font-weight: 700;
   color: color-mix(in srgb, var(--primary) 74%, var(--foreground));
 }
 
@@ -1200,19 +1186,19 @@
 .codex-pending-input-card-actions {
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  align-items: center;
   gap: 0.375rem;
+  padding: 0.375rem 0.4375rem 0.375rem 0;
 }
 
 .codex-pending-input-card-action {
   display: inline-flex;
-  min-height: 1.875rem;
+  min-height: 2rem;
   align-items: center;
   justify-content: center;
-  padding: 0 0.625rem;
+  padding: 0 0.75rem;
   border: 1px solid color-mix(in srgb, var(--codex-border-default) 82%, transparent);
-  border-radius: 0.6875rem;
+  border-radius: 9999px;
   background: transparent;
   font-size: 0.6875rem;
   font-weight: 600;
@@ -1236,12 +1222,49 @@
   opacity: 0.42;
 }
 
-.codex-pending-input-card-action-danger {
+.codex-pending-input-card-action-guide {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--codex-border-default));
+  color: color-mix(in srgb, var(--primary) 84%, var(--foreground));
+}
+
+.codex-pending-input-card-icon-action {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--codex-border-default) 82%, transparent);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.codex-pending-input-card-icon-action:hover:not(:disabled),
+.codex-pending-input-card-icon-action:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--codex-border-default));
+  background: color-mix(in srgb, var(--codex-surface-panel-strong) 62%, transparent);
+  color: var(--foreground);
+}
+
+.codex-pending-input-card-icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.codex-pending-input-card-icon-action-danger {
   color: color-mix(in srgb, var(--warning) 78%, var(--foreground));
 }
 
-.codex-pending-input-card-action-danger:hover:not(:disabled),
-.codex-pending-input-card-action-danger:focus-visible:not(:disabled) {
+.codex-pending-input-card-icon-action-danger:hover:not(:disabled),
+.codex-pending-input-card-icon-action-danger:focus-visible:not(:disabled) {
   border-color: color-mix(in srgb, var(--warning) 28%, var(--codex-border-default));
   background: color-mix(in srgb, var(--warning) 10%, var(--codex-surface-panel-subtle));
 }
@@ -2224,20 +2247,6 @@
     border-radius: 0.6875rem;
   }
 
-  .codex-chat-input-secondary-actions {
-    gap: 0.3125rem;
-  }
-
-  .codex-chat-secondary-action {
-    min-height: 2.375rem;
-    padding-inline: 0.75rem;
-  }
-
-  .codex-chat-input-send-btn-expanded {
-    gap: 0.3125rem;
-    padding-inline: 0.625rem;
-  }
-
   .codex-chat-attachment-strip {
     padding: 0;
   }
@@ -2291,14 +2300,19 @@
   }
 
   .codex-pending-input-card {
-    grid-template-columns: minmax(0, 1fr);
     align-items: flex-start;
     gap: 0.625rem;
+    flex-direction: column;
   }
 
   .codex-pending-input-card-actions {
     width: 100%;
     justify-content: flex-start;
+    padding: 0 0.4375rem 0.375rem;
+  }
+
+  .codex-pending-input-card-main {
+    width: 100%;
   }
 
   .codex-pending-input-card-order {

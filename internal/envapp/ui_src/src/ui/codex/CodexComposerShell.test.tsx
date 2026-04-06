@@ -68,16 +68,9 @@ function renderComposer(options?: {
   supportsImages?: boolean;
   capabilitiesLoading?: boolean;
   submitting?: boolean;
-  primaryActionKind?: 'send' | 'queue';
+  primaryActionKind?: 'send' | 'queue' | 'stop';
   primaryActionDisabled?: boolean;
   primaryActionDisabledReason?: string;
-  showSendNowAction?: boolean;
-  sendNowDisabled?: boolean;
-  sendNowDisabledReason?: string;
-  showStopAction?: boolean;
-  stopPending?: boolean;
-  stopDisabled?: boolean;
-  stopDisabledReason?: string;
   guidanceNote?: string;
   attachments?: ReadonlyArray<{
     id: string;
@@ -214,15 +207,12 @@ function renderComposer(options?: {
         composerText={text()}
         submitting={options?.submitting ?? false}
         primaryActionKind={primaryActionKind}
-        primaryActionDisabled={options?.primaryActionDisabled ?? (!hostAvailable || !hasDraftContent || (primaryActionKind === 'send' && Boolean(options?.submitting)))}
+        primaryActionDisabled={options?.primaryActionDisabled ?? (
+          !hostAvailable ||
+          (primaryActionKind !== 'stop' && !hasDraftContent) ||
+          (primaryActionKind === 'send' && Boolean(options?.submitting))
+        )}
         primaryActionDisabledReason={options?.primaryActionDisabledReason ?? (!hostAvailable ? (options?.hostDisabledReason ?? '') : '')}
-        showSendNowAction={options?.showSendNowAction ?? false}
-        sendNowDisabled={options?.sendNowDisabled ?? (!hostAvailable || !hasDraftContent || Boolean(options?.submitting))}
-        sendNowDisabledReason={options?.sendNowDisabledReason ?? (!hostAvailable ? (options?.hostDisabledReason ?? '') : '')}
-        showStopAction={options?.showStopAction ?? false}
-        stopPending={options?.stopPending ?? false}
-        stopDisabled={options?.stopDisabled ?? false}
-        stopDisabledReason={options?.stopDisabledReason ?? ''}
         guidanceNote={options?.guidanceNote ?? ''}
         hostAvailable={hostAvailable}
         hostDisabledReason={options?.hostDisabledReason ?? ''}
@@ -612,42 +602,52 @@ describe('CodexComposerShell', () => {
     dispose();
   });
 
-  it('promotes queue next to the primary action and keeps send now as a secondary action during an active turn', () => {
+  it('keeps the composer action slot to a single queue button during an active run with draft content', () => {
     const onSend = vi.fn();
     const onQueue = vi.fn();
-    const onStop = vi.fn();
     const { host, dispose } = renderComposer({
       initialText: 'Review this diff',
       primaryActionKind: 'queue',
-      showSendNowAction: true,
-      guidanceNote: 'Queue next starts a fresh turn after this run finishes. Send now appends to the current turn.',
+      guidanceNote: 'Send adds this draft to the queue above. Use Guide on a queued item to apply it to the current turn.',
       onSend,
       onQueue,
-      showStopAction: true,
-      onStop,
     });
 
     const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
-    const sendNowButton = host.querySelector('button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
-    const stopButton = host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
     const guidance = host.querySelector('.codex-chat-input-guidance');
 
     if (!queueButton) throw new Error('queue button not found');
-    if (!sendNowButton) throw new Error('send now button not found');
-    if (!stopButton) throw new Error('stop button not found');
 
     expect(queueButton.disabled).toBe(false);
-    expect(queueButton.textContent).toContain('Queue next');
-    expect(sendNowButton.textContent).toContain('Send now');
-    expect(stopButton.textContent).toContain('Stop');
-    expect(guidance?.textContent).toContain('Queue next starts a fresh turn');
+    expect(host.querySelectorAll('.codex-chat-input-send-slot button')).toHaveLength(1);
+    expect(host.querySelector('button[aria-label="Send now to Codex"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).toBeNull();
+    expect(guidance?.textContent).toContain('Send adds this draft to the queue above');
 
     queueButton.click();
-    sendNowButton.click();
-    stopButton.click();
 
     expect(onQueue).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  it('switches the single composer action to stop when the active run has no queued draft content', () => {
+    const onStop = vi.fn();
+    const { host, dispose } = renderComposer({
+      primaryActionKind: 'stop',
+      guidanceNote: 'Type to queue another step above the composer.',
+      onStop,
+    });
+
+    const stopButton = host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
+    if (!stopButton) throw new Error('stop button not found');
+
+    expect(host.querySelectorAll('.codex-chat-input-send-slot button')).toHaveLength(1);
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+    expect(stopButton.disabled).toBe(false);
+
+    stopButton.click();
+
     expect(onStop).toHaveBeenCalledTimes(1);
     dispose();
   });

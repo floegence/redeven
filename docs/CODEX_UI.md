@@ -236,6 +236,10 @@ Current Env App behavior:
 - The pending rail separates two browser-owned states:
   - `dispatching`: accepted locally and currently being sent or waiting for transcript materialization;
   - `queued`: intentionally deferred to the next turn, persisted in browser storage, editable, removable, and reorderable.
+- Queued cards stay action-oriented rather than diagnostic:
+  - click the card body to restore/edit;
+  - use `Guide` to apply a queued prompt to the active turn when same-turn steering is available;
+  - remove and move-earlier / move-later controls stay on the card edge.
 - The composer keeps the most useful Codex controls directly below the input instead of in a noisy chip rail:
   - working directory
   - image attachments
@@ -250,11 +254,12 @@ Current Env App behavior:
   - the working directory keeps the stronger path-chip treatment.
 - Draft mentions and attachments render as a lower-priority draft-object lane beneath the control row instead of sharing the same visual weight as runtime controls.
 - Generic onboarding copy such as `@` / `/` / image hints is conditional; it only appears when the composer is still empty or when capability/state feedback is genuinely needed.
-- Composer action semantics are state-driven rather than static:
-  - idle or new thread: primary action is `Send`;
-  - active steerable run: primary action becomes `Queue next`, while `Send now` appears as a secondary action;
-  - active non-steerable or startup gap: primary action stays `Queue next`, and `Send now` is hidden until same-turn steering is truly available.
-- Idle sends still use optimistic transcript user rows, but same-turn `Send now` and queue auto-send do not; they stay in the pending rail until Codex materializes the real transcript item.
+- Composer action semantics are state-driven but stay inside one icon-only composer action slot:
+  - idle or new thread: the button sends immediately;
+  - active run with an empty draft: that same button becomes `Stop`;
+  - active run with queueable draft content: that same button queues the prompt into the rail above the composer;
+  - same-turn steering is exposed from queued items through `Guide`, not through a second composer button.
+- Idle sends still use optimistic transcript user rows, but queued `Guide` dispatches and queue auto-send do not; they stay in the pending rail until Codex materializes the real transcript item.
 - The transcript-to-composer boundary is intentionally soft: the Codex send bar should read as floating over the transcript tail rather than as a second hard-split footer panel.
 - The Codex transcript now also exposes the same floating `Browse files` FAB pattern used by Flower, seeded from the resolved Codex working directory and routed through the shared Env App file-browser surface instead of a Codex-local browser implementation.
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.

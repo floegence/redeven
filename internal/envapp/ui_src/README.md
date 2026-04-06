@@ -18,11 +18,16 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - Codex queued follow-ups are also controller-based and Codex-owned: `createCodexFollowupController` persists thread-scoped queued composer snapshots locally so follow-up ordering, restore/edit flows, and next-turn auto-send stay independent from Flower chat state.
 - Codex active-thread lifecycle is session-owned: foreground transcript, pending requests, token usage, and stop/send state come from thread bootstrap + SSE projection rather than from `thread/list` polling.
 - Codex send semantics intentionally mirror the official Codex chat contract:
-  - `Send` always stays the primary action;
-  - active regular turns may accept same-turn input immediately through `turn/steer`;
-  - `Queue next` is an explicit next-turn action instead of an implicit stop/send fallback, and should only appear when the active draft actually contains queueable content;
-  - `Stop` remains explicit and never replaces the primary send affordance.
+  - the composer action slot always renders exactly one visible icon button;
+  - idle or new-thread drafts send immediately;
+  - an active run with an empty draft flips that same button to `Stop`;
+  - an active run with draft content repurposes that same button to queue the prompt into the rail above the composer;
+  - same-turn steering moves out of the composer and onto queued-item `Guide`, so the input never shows a second text action.
 - Queued follow-up previews belong above the composer as a separate support lane, so queued state never consumes textarea action space or overlaps the prompt field.
+- Queued follow-up cards are action-oriented instead of diagnostic:
+  - click the card body to restore/edit;
+  - use `Guide` to apply a queued prompt to the current turn when same-turn steer is available;
+  - use remove and move controls without leaving the rail.
 - Codex queued follow-up auto-send is foreground-session-owned: once the current thread becomes idle and no pending request/interrupt bootstrap is blocking, the next persisted follow-up is started from the queued runtime snapshot without relying on sidebar polling.
 - Codex sidebar selection feedback is intent-owned: `selectedThreadID` updates immediately for visual response, while `foregroundThreadID` advances on the controller-owned activation step that drives bootstrap, read-marking, and header/composer ownership.
 - Codex thread-list refresh is summary-only and identity-preserving: unchanged thread summaries reuse their previous browser objects so running sidebar indicators stay mounted and background polling does not reset their animation.

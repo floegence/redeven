@@ -640,6 +640,7 @@ export type CodexContextValue = Readonly<{
   queueTurn: () => Promise<void>;
   dispatchingInputs: Accessor<CodexDispatchingInput[]>;
   queuedFollowups: Accessor<CodexQueuedFollowup[]>;
+  guideQueuedFollowup: (followupID: string) => Promise<void>;
   removeQueuedFollowup: (followupID: string) => void;
   moveQueuedFollowup: (followupID: string, delta: number) => void;
   restoreQueuedFollowup: (followupID: string) => void;
@@ -1718,6 +1719,55 @@ export function CodexProvider(props: ParentProps) {
     setBlockedAutoSendKey('');
   };
 
+  const steerDispatchingInput = async (
+    input: CodexDispatchingInput,
+    args: {
+      onRejectedSteer?: (input: CodexDispatchingInput) => void;
+      onFailure?: (input: CodexDispatchingInput, error: unknown) => void;
+    } = {},
+  ): Promise<boolean> => {
+    const threadID = String(input.thread_id ?? '').trim();
+    const turnID = String(activeInterruptTurnID() ?? '').trim();
+    const prepared = prepareCodexSubmission({
+      text: input.text,
+      attachments: input.attachments,
+      mentions: input.mentions,
+    });
+    if (!threadID || !turnID || !hasCodexSubmissionContent(prepared)) {
+      removeDispatchingInput(threadID, input.id);
+      setBlockedAutoSendKey('');
+      return false;
+    }
+    pushDispatchingInput(input);
+    setSubmitting(true);
+    requestScrollToBottom('send');
+    try {
+      await steerCodexTurn({
+        thread_id: threadID,
+        expected_turn_id: turnID,
+        inputs: prepared.optimisticInputs,
+      });
+      setBlockedAutoSendKey('');
+      void refetchThreads();
+      return true;
+    } catch (error) {
+      removeDispatchingInput(threadID, input.id);
+      if (error instanceof CodexGatewayError && error.errorCode === 'activeTurnNotSteerable') {
+        args.onRejectedSteer?.(input);
+        setBlockedAutoSendKey('');
+        void refetchThreads();
+        return false;
+      }
+      args.onFailure?.(input, error);
+      setBlockedAutoSendKey('');
+      void refetchThreads();
+      void loadThreadBootstrap(threadID);
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const submitTurnFromPayload = async (args: {
     threadID?: string | null;
     ownerID: string;
@@ -1917,42 +1967,25 @@ export function CodexProvider(props: ParentProps) {
         source: 'send_now',
       });
       draftController.resetComposer(ownerID);
-      pushDispatchingInput(dispatchingInput);
-      setSubmitting(true);
-      requestScrollToBottom('send');
-      try {
-        await steerCodexTurn({
-          thread_id: threadID,
-          expected_turn_id: turnID,
-          inputs: prepared.optimisticInputs,
-        });
-        void refetchThreads();
-        return;
-      } catch (error) {
-        removeDispatchingInput(threadID, dispatchingInput.id);
-        if (error instanceof CodexGatewayError && error.errorCode === 'activeTurnNotSteerable') {
+      await steerDispatchingInput(dispatchingInput, {
+        onRejectedSteer: (failedInput) => {
           followupController.queueFollowup(
-            queuedFollowupFromDispatching(dispatchingInput, 'rejected_steer'),
+            queuedFollowupFromDispatching(failedInput, 'rejected_steer'),
           );
-          setBlockedAutoSendKey('');
           notify.info('Queued for later', 'The current turn could not accept same-turn input, so your message was queued as the next turn.');
-          return;
-        }
-        restoreComposerSnapshot(ownerID, snapshot);
-        setBlockedAutoSendKey('');
-        void refetchThreads();
-        void loadThreadBootstrap(threadID);
-        notify.error('Send failed', error instanceof Error ? error.message : String(error));
-        return;
-      } finally {
-        setSubmitting(false);
-      }
+        },
+        onFailure: (_failedInput, error) => {
+          restoreComposerSnapshot(ownerID, snapshot);
+          notify.error('Send failed', error instanceof Error ? error.message : String(error));
+        },
+      });
+      return;
     }
 
     if (hasActiveRun) {
       const turnKind = String(activeTurnKind() ?? '').trim();
       const turnLabel = turnKind ? `${turnKind} turn` : 'current turn';
-      notify.info('Queue next', `Send now is unavailable for the ${turnLabel}. Queue a follow-up or wait for completion.`);
+      notify.info('Queue required', `The ${turnLabel} cannot accept immediate input. Queue the prompt above or wait for completion.`);
       return;
     }
 
@@ -1973,6 +2006,68 @@ export function CodexProvider(props: ParentProps) {
       restoreComposerSnapshot(restoreOwnerID, snapshot);
       notify.error('Send failed', error instanceof Error ? error.message : String(error));
     }
+  };
+
+  const guideQueuedFollowup = async (followupID: string) => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    const turnID = String(activeInterruptTurnID() ?? '').trim();
+    if (!threadID || !followupID) return;
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', hostDisabledReason());
+      return;
+    }
+    if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
+      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
+      return;
+    }
+    if (!supportsOperation('turn_steer')) {
+      notify.error('Guide unavailable', 'This Codex host does not support same-turn guidance from queued prompts.');
+      return;
+    }
+    if (activeTurnCanSteer() === false) {
+      const turnKind = String(activeTurnKind() ?? '').trim();
+      notify.info(
+        'Guide unavailable',
+        turnKind
+          ? `The current ${turnKind} turn cannot accept queued guidance right now.`
+          : 'The current turn cannot accept queued guidance right now.',
+      );
+      return;
+    }
+    if (!turnID) {
+      notify.info('Guide unavailable', 'Wait for the current turn to finish starting before guiding a queued prompt.');
+      return;
+    }
+
+    const followup = followupController.pullFollowup(threadID, followupID);
+    if (!followup) return;
+    setBlockedAutoSendKey('');
+    const dispatchingInput = buildDispatchingInput({
+      id: followup.id,
+      threadID,
+      snapshot: {
+        text: followup.text,
+        attachments: followup.attachments,
+        mentions: followup.mentions,
+      },
+      runtimeConfig: followup.runtime_config,
+      createdAtUnixMs: followup.created_at_unix_ms,
+      source: 'send_now',
+    });
+    await steerDispatchingInput(dispatchingInput, {
+      onRejectedSteer: (failedInput) => {
+        followupController.prependFollowup(
+          queuedFollowupFromDispatching(failedInput, 'rejected_steer'),
+        );
+        notify.info('Guide unavailable', 'This turn could not accept the queued prompt, so it stayed in the queue.');
+      },
+      onFailure: (failedInput, error) => {
+        followupController.prependFollowup(
+          queuedFollowupFromDispatching(failedInput, followup.source),
+        );
+        notify.error('Guide failed', error instanceof Error ? error.message : String(error));
+      },
+    });
   };
 
   const archiveThread = async (threadID: string) => {
@@ -2253,6 +2348,7 @@ export function CodexProvider(props: ParentProps) {
     queueTurn,
     dispatchingInputs,
     queuedFollowups,
+    guideQueuedFollowup,
     removeQueuedFollowup,
     moveQueuedFollowup,
     restoreQueuedFollowup,

@@ -214,23 +214,36 @@ export function CodexPageShell() {
       onChange: codex.setSandboxModeDraft,
     },
   ]));
-  const composerStopVisible = createMemo(() => hasActiveRun());
   const composerHasQueueableDraftContent = createMemo(() => (
     !!String(codex.composerText() ?? '').trim() ||
     codex.attachments().length > 0 ||
     codex.mentions().length > 0
   ));
-  const composerPrimaryActionKind = createMemo<'send' | 'queue'>(() => (hasActiveRun() ? 'queue' : 'send'));
+  const composerPrimaryActionKind = createMemo<'send' | 'queue' | 'stop'>(() => {
+    if (!hasActiveRun()) return 'send';
+    return composerHasQueueableDraftContent() ? 'queue' : 'stop';
+  });
   const composerPrimaryActionDisabledReason = createMemo(() => {
     if (!summary().hostReady) {
       return composerDisabledReason() || codex.hostDisabledReason();
     }
+    if (composerPrimaryActionKind() === 'stop') {
+      if (interruptPending()) {
+        return 'Stop request in progress.';
+      }
+      if (!activeInterruptTurnID()) {
+        return codex.submitting()
+          ? 'Waiting for the active turn to start.'
+          : 'Waiting for Codex to expose an interruptible turn.';
+      }
+      if (!codex.supportsOperation('turn_interrupt')) {
+        return 'Turn interruption is unavailable on this host.';
+      }
+      return '';
+    }
     if (composerPrimaryActionKind() === 'queue') {
       if (!String(codex.activeThreadID() ?? '').trim()) {
         return 'Queue is available after the current thread starts.';
-      }
-      if (!composerHasQueueableDraftContent()) {
-        return 'Add text, an image, or a file mention to queue the next turn.';
       }
       return '';
     }
@@ -243,76 +256,44 @@ export function CodexPageShell() {
     return '';
   });
   const composerPrimaryActionDisabled = createMemo(() => Boolean(composerPrimaryActionDisabledReason()));
-  const composerShowSendNowAction = createMemo(() => (
-    hasActiveRun() &&
-    summary().hostReady &&
-    !!String(codex.activeThreadID() ?? '').trim() &&
-    codex.supportsOperation('turn_steer') &&
-    codex.activeTurnCanSteer() !== false &&
-    !!activeInterruptTurnID()
-  ));
-  const composerSendNowDisabledReason = createMemo(() => {
-    if (!composerShowSendNowAction()) return '';
-    if (!composerHasQueueableDraftContent()) {
-      return 'Add text, an image, or a file mention to send now.';
+  const queuedGuideDisabledReason = createMemo(() => {
+    if (!summary().hostReady) {
+      return composerDisabledReason() || codex.hostDisabledReason();
+    }
+    if (!hasActiveRun()) {
+      return 'Guide is available while Codex is running a turn.';
+    }
+    if (interruptPending()) {
+      return 'Guide is unavailable while a stop request is in progress.';
+    }
+    if (!activeInterruptTurnID()) {
+      return 'Codex is still starting the current turn.';
+    }
+    if (!codex.supportsOperation('turn_steer')) {
+      return 'This Codex host does not support same-turn guidance.';
+    }
+    if (codex.activeTurnCanSteer() === false) {
+      const turnKind = String(codex.activeTurnKind() ?? '').trim();
+      return turnKind
+        ? `This ${turnKind} turn cannot accept guided input.`
+        : 'This turn cannot accept guided input.';
     }
     if (codex.submitting()) {
       return 'Sending...';
     }
     return '';
   });
-  const composerSendNowDisabled = createMemo(() => Boolean(composerSendNowDisabledReason()));
-  const composerStopDisabledReason = createMemo(() => {
-    if (!composerStopVisible()) return '';
-    if (!summary().hostReady) {
-      return composerDisabledReason() || codex.hostDisabledReason();
-    }
-    if (interruptPending()) {
-      return 'Stop request in progress.';
-    }
-    if (!activeInterruptTurnID()) {
-      return codex.submitting()
-        ? 'Waiting for the active turn to start.'
-        : 'Waiting for Codex to expose an interruptible turn.';
-    }
-    if (!codex.supportsOperation('turn_interrupt')) {
-      return 'Turn interruption is unavailable on this host.';
-    }
-    return '';
-  });
-  const composerStopDisabled = createMemo(() => {
-    if (!composerStopVisible()) return true;
-    return Boolean(composerStopDisabledReason());
-  });
+  const queuedGuideAvailable = createMemo(() => !queuedGuideDisabledReason());
   const composerGuidanceNote = createMemo(() => {
     if (!hasActiveRun()) return '';
-    if (composerShowSendNowAction()) {
-      return composerHasQueueableDraftContent()
-        ? 'Queue next starts a fresh turn after this run finishes. Send now appends to the current turn.'
-        : 'Queue next starts after this run finishes. Send now appends to the current turn once you add text, an image, or a file mention.';
+    if (composerPrimaryActionKind() === 'queue') {
+      return queuedGuideAvailable()
+        ? 'Send adds this draft to the queue above. Use Guide on a queued item to apply it to the current turn.'
+        : 'Send adds this draft to the queue above. Guide becomes available when the current turn can accept it.';
     }
-    if (!composerHasQueueableDraftContent()) {
-      if (!codex.supportsOperation('turn_steer')) {
-        return 'This Codex host does not expose same-turn send. Add text, an image, or a file mention to queue the next turn.';
-      }
-      if (codex.activeTurnCanSteer() === false) {
-        const turnKind = String(codex.activeTurnKind() ?? '').trim();
-        return turnKind
-          ? `This ${turnKind} turn cannot accept same-turn instructions. Add text, an image, or a file mention to queue the next turn.`
-          : 'This turn cannot accept same-turn instructions. Add text, an image, or a file mention to queue the next turn.';
-      }
-      if (!activeInterruptTurnID()) {
-        return 'Codex is still starting the current turn. Queue next is ready now, and Send now will appear once startup completes.';
-      }
-      return 'Queue next is ready for the next turn.';
-    }
-    if (!codex.supportsOperation('turn_steer')) {
-      return 'This Codex host does not expose same-turn send. Queue next will send after completion.';
-    }
-    const turnKind = String(codex.activeTurnKind() ?? '').trim();
-    return turnKind
-      ? `This ${turnKind} turn cannot accept same-turn instructions. Queue next will send after completion.`
-      : 'This turn cannot accept same-turn instructions. Queue next will send after completion.';
+    return queuedGuideAvailable()
+      ? 'Type to queue another step above the composer. Guide is available from queued items.'
+      : 'Type to queue another step above the composer.';
   });
   const headerActions = createMemo<CodexHeaderAction[]>(() => {
     const threadID = String(codex.activeThreadID() ?? '').trim();
@@ -491,6 +472,9 @@ export function CodexPageShell() {
                     <CodexPendingInputsPanel
                       dispatchingItems={codex.dispatchingInputs()}
                       queuedItems={codex.queuedFollowups()}
+                      canGuideQueued={queuedGuideAvailable()}
+                      guideQueuedDisabledReason={queuedGuideDisabledReason()}
+                      onGuideQueued={(followupID) => void codex.guideQueuedFollowup(followupID)}
                       onRestoreQueued={codex.restoreQueuedFollowup}
                       onRemoveQueued={codex.removeQueuedFollowup}
                       onMoveQueued={codex.moveQueuedFollowup}
@@ -519,13 +503,6 @@ export function CodexPageShell() {
                     primaryActionKind={composerPrimaryActionKind()}
                     primaryActionDisabled={composerPrimaryActionDisabled()}
                     primaryActionDisabledReason={composerPrimaryActionDisabledReason()}
-                    showSendNowAction={composerShowSendNowAction()}
-                    sendNowDisabled={composerSendNowDisabled()}
-                    sendNowDisabledReason={composerSendNowDisabledReason()}
-                    showStopAction={composerStopVisible()}
-                    stopPending={interruptPending()}
-                    stopDisabled={composerStopDisabled()}
-                    stopDisabledReason={composerStopDisabledReason()}
                     guidanceNote={composerGuidanceNote()}
                     hostAvailable={composerHostAvailable()}
                     hostDisabledReason={composerDisabledReason()}

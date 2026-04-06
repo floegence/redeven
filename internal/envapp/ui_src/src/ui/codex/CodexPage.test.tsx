@@ -59,6 +59,7 @@ const fileBrowserSurfaceState = vi.hoisted(() => ({
   open: vi.fn(() => false),
 }));
 const desktopStorageState = new Map<string, string>();
+const renderDisposers: Array<() => void> = [];
 let lastDirectoryPickerProps: any = null;
 
 if (typeof window !== 'undefined') {
@@ -483,7 +484,7 @@ function installTranscriptRowRect(
 }
 
 function renderPage(host: HTMLDivElement) {
-  render(() => (
+  renderDisposers.push(render(() => (
     <EnvContext.Provider
       value={{
         env_id: () => 'env_1',
@@ -523,7 +524,7 @@ function renderPage(host: HTMLDivElement) {
         <CodexPage />
       </CodexProvider>
     </EnvContext.Provider>
-  ), host);
+  ), host));
 }
 
 function CodexHarness(props: { onReady: (codex: ReturnType<typeof useCodexContext>) => void }) {
@@ -539,7 +540,7 @@ function renderProviderHarness(
   host: HTMLDivElement,
   onReady: (codex: ReturnType<typeof useCodexContext>) => void,
 ) {
-  render(() => (
+  renderDisposers.push(render(() => (
     <EnvContext.Provider
       value={{
         env_id: () => 'env_1',
@@ -579,14 +580,14 @@ function renderProviderHarness(
         <CodexHarness onReady={onReady} />
       </CodexProvider>
     </EnvContext.Provider>
-  ), host);
+  ), host));
 }
 
 function renderPageWithHarness(
   host: HTMLDivElement,
   onReady: (codex: ReturnType<typeof useCodexContext>) => void,
 ) {
-  render(() => (
+  renderDisposers.push(render(() => (
     <EnvContext.Provider
       value={{
         env_id: () => 'env_1',
@@ -627,10 +628,13 @@ function renderPageWithHarness(
         <CodexHarness onReady={onReady} />
       </CodexProvider>
     </EnvContext.Provider>
-  ), host);
+  ), host));
 }
 
 afterEach(() => {
+  while (renderDisposers.length > 0) {
+    renderDisposers.pop()?.();
+  }
   document.body.innerHTML = '';
   desktopStorageState.clear();
   lastDirectoryPickerProps = null;
@@ -1035,7 +1039,6 @@ describe('CodexPage', () => {
     const queryStopButton = () => host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
     const queryReviewButton = () => host.querySelector('button[aria-label="Review current workspace changes"]') as HTMLButtonElement | null;
     const queryForkButton = () => host.querySelector('button[aria-label="Fork Codex thread"]') as HTMLButtonElement | null;
-    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
 
     const stopButton = queryStopButton();
     const reviewButton = queryReviewButton();
@@ -1044,7 +1047,6 @@ describe('CodexPage', () => {
     expect(stopButton).toBeTruthy();
     expect(reviewButton).toBeTruthy();
     expect(forkButton).toBeTruthy();
-    expect(queueButton).toBeTruthy();
 
     stopButton?.click();
     await flushAsync();
@@ -1239,10 +1241,9 @@ describe('CodexPage', () => {
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
     expect(host.querySelector('.codex-chat-draft-objects')).toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).toBeNull();
-    expect(host.querySelector('button[aria-label="Send now to Codex"]')).not.toBeNull();
-    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
-    expect(host.textContent).toContain('Queue next starts after this run finishes. Send now appends to the current turn once you add text, an image, or a file mention.');
+    expect(host.querySelector('.codex-chat-input-send-slot button')).not.toBeNull();
+    expect(host.textContent).toContain('Type to queue another step above the composer.');
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
@@ -1443,9 +1444,8 @@ describe('CodexPage', () => {
       'active run controls',
     );
 
-    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
-    expect(queueButton).not.toBeNull();
-    expect(queueButton?.disabled).toBe(true);
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
 
     const errorCallCount = notification.error.mock.calls.length;
     await codex.queueTurn();
@@ -1455,7 +1455,7 @@ describe('CodexPage', () => {
     expect(codex.queuedFollowups()).toEqual([]);
   });
 
-  it('keeps queue next primary and steers the active regular turn through send now', async () => {
+  it('queues the active draft with the composer button and guides it from the queued rail', async () => {
     const startedDetail = {
       thread: {
         id: 'thread_stop_after_send',
@@ -1549,27 +1549,36 @@ describe('CodexPage', () => {
     );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
-    const queueButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
-    const sendNowButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
     const stopButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
-    if (!textarea || !queueButton || !sendNowButton || !stopButton) throw new Error('composer controls not found');
+    if (!textarea || !stopButton) throw new Error('initial composer controls not found');
 
     textarea.value = 'Need a visible stop action';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushAsync();
 
-    expect(queueButton.textContent).toContain('Queue next');
-    expect(sendNowButton.textContent).toContain('Send now');
-    expect(stopButton.textContent).toContain('Stop');
-    expect(host.textContent).toContain('Queue next starts a fresh turn after this run finishes');
+    const queueButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    if (!queueButton) throw new Error('queue button not found');
 
-    sendNowButton.click();
+    expect(host.querySelectorAll('.codex-chat-input-send-slot button')).toHaveLength(1);
+    expect(host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]')).toBeNull();
+    expect(host.textContent).toContain('Send adds this draft to the queue above.');
+
+    queueButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    const guideButton = host.querySelector('.codex-pending-input-card-action-guide') as HTMLButtonElement | null;
+    if (!guideButton) throw new Error('guide button not found');
+
+    guideButton.click();
 
     await flushAsync();
     await flushAsync();
 
     expect(textarea.value).toBe('');
-    expect(host.textContent).toContain('Ready above the composer');
-    expect(host.textContent).toContain('Appending to the current turn');
+    expect(host.textContent).toContain('Above the composer');
+    expect(host.textContent).toContain('Guiding the current turn');
     expect(host.textContent).toContain('Need a visible stop action');
     expect(steerCodexTurnMock).toHaveBeenCalledWith({
       thread_id: 'thread_stop_after_send',
@@ -1584,7 +1593,7 @@ describe('CodexPage', () => {
     expect(startCodexTurnMock).not.toHaveBeenCalled();
   });
 
-  it('keeps same-turn send in dispatching state instead of creating an optimistic transcript row', async () => {
+  it('keeps guided queued sends in dispatching state instead of creating an optimistic transcript row', async () => {
     const startedDetail = {
       thread: {
         id: 'thread_dispatch_only',
@@ -1675,17 +1684,26 @@ describe('CodexPage', () => {
       codex = value;
     });
     await waitForCondition(
-      () => Boolean(codex) && Boolean(host.querySelector('button[aria-label="Send now to Codex"]')),
-      'send now action',
+      () => Boolean(codex) && Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
+      'active run action',
     );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
-    const sendNowButton = host.querySelector('button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
-    if (!textarea || !sendNowButton) throw new Error('send now controls not found');
+    if (!textarea) throw new Error('textarea not found');
 
     textarea.value = 'Dispatch without an optimistic bubble';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    sendNowButton.click();
+    await flushAsync();
+
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    if (!queueButton) throw new Error('queue button not found');
+    queueButton.click();
+    await flushAsync();
+    await flushAsync();
+
+    const guideButton = host.querySelector('.codex-pending-input-card-action-guide') as HTMLButtonElement | null;
+    if (!guideButton) throw new Error('guide button not found');
+    guideButton.click();
 
     await flushAsync();
     await flushAsync();
@@ -1696,7 +1714,7 @@ describe('CodexPage', () => {
       'Dispatch without an optimistic bubble',
     ]);
     expect(host.querySelectorAll('[data-codex-item-type="userMessage"]').length).toBe(0);
-    expect(host.textContent).toContain('Appending to the current turn');
+    expect(host.textContent).toContain('Guiding the current turn');
   });
 
   it('queues the current draft when steer is rejected as non-steerable', async () => {
@@ -1796,26 +1814,35 @@ describe('CodexPage', () => {
     );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
-    const sendNowButton = host.querySelector('button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
-    if (!textarea || !sendNowButton) throw new Error('composer send controls not found');
+    if (!textarea) throw new Error('composer send controls not found');
 
     textarea.value = 'Queue this when steer is rejected';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    sendNowButton.click();
+    await flushAsync();
+
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    if (!queueButton) throw new Error('queue button not found');
+    queueButton.click();
+    await flushAsync();
+    await flushAsync();
+
+    const guideButton = host.querySelector('.codex-pending-input-card-action-guide') as HTMLButtonElement | null;
+    if (!guideButton) throw new Error('guide button not found');
+    guideButton.click();
 
     await waitForCondition(
-      () => steerCodexTurnMock.mock.calls.length === 1 && Boolean(host.textContent?.includes('Saved after same-turn send was rejected')),
+      () => steerCodexTurnMock.mock.calls.length === 1 && Boolean(host.textContent?.includes('Stayed queued because Guide was unavailable')),
       'queued follow-up fallback',
     );
 
     expect(steerCodexTurnMock).toHaveBeenCalledTimes(1);
     expect(textarea.value).toBe('');
-    expect(host.textContent).toContain('Ready above the composer');
-    expect(host.textContent).toContain('Queued next');
+    expect(host.textContent).toContain('Above the composer');
+    expect(host.textContent).toContain('Stayed queued because Guide was unavailable');
     expect(host.textContent).toContain('Queue this when steer is rejected');
     expect(notification.info).toHaveBeenCalledWith(
-      'Queued for later',
-      'The current turn could not accept same-turn input, so your message was queued as the next turn.',
+      'Guide unavailable',
+      'This turn could not accept the queued prompt, so it stayed in the queue.',
     );
   });
 
@@ -1901,8 +1928,10 @@ describe('CodexPage', () => {
       active_status: 'running',
       active_status_flags: [],
     });
-    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
-      streamOnEvent = args.onEvent;
+    connectCodexEventStreamMock.mockImplementation(async (args: { threadID?: string; onEvent: (event: unknown) => void }) => {
+      if (args.threadID === 'thread_1') {
+        streamOnEvent = args.onEvent;
+      }
     });
     startCodexTurnMock.mockResolvedValue(undefined);
 
@@ -1920,13 +1949,15 @@ describe('CodexPage', () => {
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     if (!textarea) throw new Error('queue controls not found');
 
-    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
-    if (!queueButton) throw new Error('queue button not found');
-    expect(queueButton.disabled).toBe(true);
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
 
     textarea.value = 'Send this after the current turn finishes';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await flushAsync();
+
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    if (!queueButton) throw new Error('queue button not found');
 
     queueButton.click();
 
@@ -1934,15 +1965,69 @@ describe('CodexPage', () => {
     await flushAsync();
 
     expect(textarea.value).toBe('');
-    expect(host.textContent).toContain('Ready above the composer');
-    expect(host.textContent).toContain('Waiting for the current turn to finish');
+    expect(host.textContent).toContain('Above the composer');
+    expect(host.textContent).toContain('Queued for the next turn');
     expect(host.textContent).toContain('Send this after the current turn finishes');
     const queuedPanel = host.querySelector('.codex-pending-inputs-panel');
     const composer = host.querySelector('.codex-chat-input.chat-input-container');
     if (!queuedPanel || !composer) throw new Error('queued follow-up layout not found');
     expect(queuedPanel.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    await waitForCondition(
+      () => Boolean(streamOnEvent),
+      'queued follow-up stream callback',
+    );
 
-    streamOnEvent?.({
+    const emitThreadEvent = streamOnEvent as ((event: unknown) => void) | undefined;
+    if (!emitThreadEvent) {
+      throw new Error('thread stream callback not captured');
+    }
+
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Queued follow-up thread',
+        preview: 'Queue next',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 3,
+        status: 'completed',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Queued follow-up thread',
+        preview: 'Queue next',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 3,
+        status: 'completed',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_1',
+            status: 'completed',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 3,
+      active_status: 'completed',
+      active_status_flags: ['idle'],
+    });
+
+    emitThreadEvent({
       seq: 2,
       type: 'turn_completed',
       thread_id: 'thread_1',
@@ -1952,16 +2037,22 @@ describe('CodexPage', () => {
         items: [],
       },
     });
-    streamOnEvent?.({
+    emitThreadEvent({
       seq: 3,
       type: 'thread_status_changed',
       thread_id: 'thread_1',
       status: 'completed',
       flags: ['idle'],
     });
-
     await waitForCondition(
-      () => startCodexTurnMock.mock.calls.length > 0,
+      () => codex.activeStatus() === 'completed',
+      'completed thread status',
+    );
+    await waitForCondition(
+      () => (
+        startCodexTurnMock.mock.calls.length > 0 &&
+        codex.dispatchingInputs().some((item) => item.text === 'Send this after the current turn finishes')
+      ),
       'queued follow-up auto send',
     );
 
@@ -1978,6 +2069,19 @@ describe('CodexPage', () => {
       sandbox_mode: 'danger-full-access',
     }));
 
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Queued follow-up thread',
+        preview: 'Queue next',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 3,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
     openCodexThreadMock.mockResolvedValue({
       thread: {
         id: 'thread_1',
@@ -2096,8 +2200,10 @@ describe('CodexPage', () => {
       active_status: 'running',
       active_status_flags: [],
     });
-    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
-      streamOnEvent = args.onEvent;
+    connectCodexEventStreamMock.mockImplementation(async (args: { threadID?: string; onEvent: (event: unknown) => void }) => {
+      if (args.threadID === 'thread_1') {
+        streamOnEvent = args.onEvent;
+      }
     });
 
     const host = document.createElement('div');
@@ -2105,13 +2211,18 @@ describe('CodexPage', () => {
 
     renderPage(host);
     await waitForCondition(
-      () => Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
-      'active stop action',
+      () => Boolean(host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]')),
+      'active composer stop action',
     );
 
-    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
+    expect(host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]')).not.toBeNull();
 
-    streamOnEvent?.({
+    const emitThreadEvent = streamOnEvent as ((event: unknown) => void) | undefined;
+    if (!emitThreadEvent) {
+      throw new Error('thread stream callback not captured');
+    }
+
+    emitThreadEvent({
       seq: 2,
       type: 'turn_completed',
       thread_id: 'thread_1',
@@ -2121,10 +2232,17 @@ describe('CodexPage', () => {
         items: [],
       },
     });
+    emitThreadEvent({
+      seq: 3,
+      type: 'thread_status_changed',
+      thread_id: 'thread_1',
+      status: 'completed',
+      flags: ['idle'],
+    });
     await flushAsync();
 
-    expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).toBeNull();
-    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]')).toBeNull();
+    expect(host.querySelector('.codex-chat-input-send-slot button[aria-label="Send to Codex"]')).not.toBeNull();
   });
 
   it('renders stream reconnect warnings with the shared highlight block styling', async () => {
@@ -3911,8 +4029,10 @@ describe('CodexPage', () => {
     startCodexThreadMock.mockResolvedValue(startedDetail);
     openCodexThreadMock.mockResolvedValue(startedDetail);
     startCodexTurnMock.mockResolvedValue(undefined);
-    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
-      streamOnEvent = args.onEvent;
+    connectCodexEventStreamMock.mockImplementation(async (args: { threadID?: string; onEvent: (event: any) => void }) => {
+      if (args.threadID === 'thread_new') {
+        streamOnEvent = args.onEvent;
+      }
     });
 
     const host = document.createElement('div');
@@ -3972,11 +4092,17 @@ describe('CodexPage', () => {
     expect(host.textContent).not.toContain('Codex is working');
     expect(host.querySelector('[data-codex-working-state="true"]')).not.toBeNull();
 
-    if (!streamOnEvent) {
-      throw new Error('stream callback not captured');
+    const emitThreadEvent = streamOnEvent as ((event: {
+      seq: number;
+      type: 'thread_name_updated';
+      thread_id: string;
+      thread_name: string;
+    }) => void) | null;
+    if (!emitThreadEvent) {
+      throw new Error('new thread stream callback not captured');
     }
-    const emitStreamEvent = streamOnEvent as (event: any) => void;
-    emitStreamEvent({
+
+    emitThreadEvent({
       seq: 1,
       type: 'thread_name_updated',
       thread_id: 'thread_new',
