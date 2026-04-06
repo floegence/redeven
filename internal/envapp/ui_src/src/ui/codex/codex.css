@@ -185,6 +185,21 @@
   flex-direction: column;
 }
 
+.codex-page-transcript-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.codex-page-transcript-overlay-track {
+  position: relative;
+  width: min(100%, var(--codex-transcript-lane-max-width));
+  height: 100%;
+  margin: 0 auto;
+  padding-inline: clamp(0.625rem, 1.8vw, 1rem);
+  box-sizing: border-box;
+}
+
 .codex-page-status-stack {
   display: flex;
   flex-direction: column;
@@ -207,6 +222,7 @@
 
 .codex-page-shell .codex-page-file-browser-fab {
   z-index: 46;
+  pointer-events: auto;
 }
 
 .codex-page-bottom-dock {

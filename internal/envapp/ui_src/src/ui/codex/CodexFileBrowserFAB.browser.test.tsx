@@ -37,6 +37,15 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+function expectInsideRect(container: HTMLElement, button: HTMLButtonElement): void {
+  const containerBox = container.getBoundingClientRect();
+  const buttonBox = button.getBoundingClientRect();
+  expect(buttonBox.x).toBeGreaterThanOrEqual(containerBox.x);
+  expect(buttonBox.y).toBeGreaterThanOrEqual(containerBox.y);
+  expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(containerBox.x + containerBox.width);
+  expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(containerBox.y + containerBox.height);
+}
+
 function dispatchPointerTap(button: HTMLButtonElement): void {
   (button as any).setPointerCapture = vi.fn();
   (button as any).releasePointerCapture = vi.fn();
@@ -65,23 +74,28 @@ describe('CodexFileBrowserFAB browser behavior', () => {
     host.style.position = 'fixed';
     host.style.inset = '0';
     document.body.appendChild(host);
-    let viewportRef: HTMLDivElement | undefined;
+    let trackRef: HTMLDivElement | undefined;
 
     render(() => (
       <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
-        <div
-          ref={(element) => {
-            viewportRef = element;
-          }}
-          class="codex-page-transcript-viewport"
-          style={{ position: 'relative', width: '480px', height: '320px' }}
-        >
+        <div class="codex-page-transcript-viewport" style={{ position: 'relative', width: '480px', height: '320px' }}>
           <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }} />
-          <CodexFileBrowserFAB
-            workingDir="/workspace/ui"
-            homePath="/workspace"
-            containerRef={() => viewportRef}
-          />
+          <div class="codex-page-transcript-overlay">
+            <div
+              ref={(element) => {
+                trackRef = element;
+              }}
+              class="codex-page-transcript-overlay-track"
+              data-codex-transcript-overlay-track="true"
+              style={{ width: '360px', height: '320px' }}
+            >
+              <CodexFileBrowserFAB
+                workingDir="/workspace/ui"
+                homePath="/workspace"
+                containerRef={() => trackRef}
+              />
+            </div>
+          </div>
         </div>
       </div>
     ), host);
@@ -108,23 +122,28 @@ describe('CodexFileBrowserFAB browser behavior', () => {
     host.style.position = 'fixed';
     host.style.inset = '0';
     document.body.appendChild(host);
-    let viewportRef: HTMLDivElement | undefined;
+    let trackRef: HTMLDivElement | undefined;
 
     render(() => (
       <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
-        <div
-          ref={(element) => {
-            viewportRef = element;
-          }}
-          class="codex-page-transcript-viewport"
-          style={{ position: 'relative', width: '480px', height: '320px' }}
-        >
+        <div class="codex-page-transcript-viewport" style={{ position: 'relative', width: '480px', height: '320px' }}>
           <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }} />
-          <CodexFileBrowserFAB
-            workingDir=""
-            homePath=""
-            containerRef={() => viewportRef}
-          />
+          <div class="codex-page-transcript-overlay">
+            <div
+              ref={(element) => {
+                trackRef = element;
+              }}
+              class="codex-page-transcript-overlay-track"
+              data-codex-transcript-overlay-track="true"
+              style={{ width: '360px', height: '320px' }}
+            >
+              <CodexFileBrowserFAB
+                workingDir=""
+                homePath=""
+                containerRef={() => trackRef}
+              />
+            </div>
+          </div>
         </div>
       </div>
     ), host);
@@ -136,23 +155,17 @@ describe('CodexFileBrowserFAB browser behavior', () => {
     expect(getComputedStyle(button!).cursor).toBe('not-allowed');
   });
 
-  it('stays inside the Codex transcript viewport after the transcript content scrolls', async () => {
+  it('stays inside the Codex transcript lane after the transcript content scrolls', async () => {
     const host = document.createElement('div');
     host.style.position = 'fixed';
     host.style.inset = '0';
     document.body.appendChild(host);
-    let viewportRef: HTMLDivElement | undefined;
+    let trackRef: HTMLDivElement | undefined;
     let scrollRef: HTMLDivElement | undefined;
 
     render(() => (
       <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
-        <div
-          ref={(element) => {
-            viewportRef = element;
-          }}
-          class="codex-page-transcript-viewport"
-          style={{ position: 'relative', width: '480px', height: '320px' }}
-        >
+        <div class="codex-page-transcript-viewport" style={{ position: 'relative', width: '480px', height: '320px' }}>
           <div
             ref={(element) => {
               scrollRef = element;
@@ -162,11 +175,22 @@ describe('CodexFileBrowserFAB browser behavior', () => {
           >
             <div style={{ height: '2400px' }} />
           </div>
-          <CodexFileBrowserFAB
-            workingDir="/workspace/ui"
-            homePath="/workspace"
-            containerRef={() => viewportRef}
-          />
+          <div class="codex-page-transcript-overlay">
+            <div
+              ref={(element) => {
+                trackRef = element;
+              }}
+              class="codex-page-transcript-overlay-track"
+              data-codex-transcript-overlay-track="true"
+              style={{ width: '360px', height: '320px' }}
+            >
+              <CodexFileBrowserFAB
+                workingDir="/workspace/ui"
+                homePath="/workspace"
+                containerRef={() => trackRef}
+              />
+            </div>
+          </div>
         </div>
       </div>
     ), host);
@@ -176,15 +200,10 @@ describe('CodexFileBrowserFAB browser behavior', () => {
     scrollRef!.dispatchEvent(new Event('scroll'));
     await settle();
 
-    const viewport = host.querySelector('.codex-page-transcript-viewport') as HTMLDivElement | null;
+    const track = host.querySelector('[data-codex-transcript-overlay-track="true"]') as HTMLDivElement | null;
     const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
-    const viewportBox = viewport?.getBoundingClientRect();
-    const buttonBox = button?.getBoundingClientRect();
-    expect(viewportBox).toBeTruthy();
-    expect(buttonBox).toBeTruthy();
-    expect(buttonBox!.x).toBeGreaterThanOrEqual(viewportBox!.x);
-    expect(buttonBox!.y).toBeGreaterThanOrEqual(viewportBox!.y);
-    expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(viewportBox!.x + viewportBox!.width);
-    expect(buttonBox!.y + buttonBox!.height).toBeLessThanOrEqual(viewportBox!.y + viewportBox!.height);
+    expect(track).toBeTruthy();
+    expect(button).toBeTruthy();
+    expectInsideRect(track!, button!);
   });
 });

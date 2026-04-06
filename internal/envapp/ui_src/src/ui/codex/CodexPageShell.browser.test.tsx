@@ -41,8 +41,8 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-function expectInsideViewport(viewport: HTMLDivElement, button: HTMLButtonElement): void {
-  const viewportBox = viewport.getBoundingClientRect();
+function expectInsideRect(container: HTMLElement, button: HTMLButtonElement): void {
+  const viewportBox = container.getBoundingClientRect();
   const buttonBox = button.getBoundingClientRect();
   expect(buttonBox.x).toBeGreaterThanOrEqual(viewportBox.x);
   expect(buttonBox.y).toBeGreaterThanOrEqual(viewportBox.y);
@@ -56,8 +56,9 @@ function TranscriptViewportHarness(props: Readonly<{
 }>) {
   const [rowCount, setRowCount] = createSignal(props.initialRows);
   const [scrollRequest, setScrollRequest] = createSignal<FollowBottomRequest | null>(null);
+  const [trackWidth, setTrackWidth] = createSignal(360);
   let requestSeq = 0;
-  let viewportRef: HTMLDivElement | undefined;
+  let trackRef: HTMLDivElement | undefined;
 
   const followBottomController = createFollowBottomController();
 
@@ -82,17 +83,16 @@ function TranscriptViewportHarness(props: Readonly<{
     });
   };
 
+  const widenLane = (): void => {
+    setTrackWidth(420);
+  };
+
   return (
     <>
       <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
         <div class="codex-page-main">
           <div class="codex-page-transcript">
-            <div
-              ref={(element) => {
-                viewportRef = element;
-              }}
-              class="codex-page-transcript-viewport"
-            >
+            <div class="codex-page-transcript-viewport">
               <div
                 ref={(element) => {
                   followBottomController.setScrollContainer(element);
@@ -117,11 +117,25 @@ function TranscriptViewportHarness(props: Readonly<{
                   ))}
                 </div>
               </div>
-              <CodexFileBrowserFAB
-                workingDir="/workspace/ui"
-                homePath="/workspace"
-                containerRef={() => viewportRef}
-              />
+              <div class="codex-page-transcript-overlay">
+                <div
+                  ref={(element) => {
+                    trackRef = element;
+                  }}
+                  class="codex-page-transcript-overlay-track"
+                  data-codex-transcript-overlay-track="true"
+                  style={{
+                    width: `${trackWidth()}px`,
+                    height: '100%',
+                  }}
+                >
+                  <CodexFileBrowserFAB
+                    workingDir="/workspace/ui"
+                    homePath="/workspace"
+                    containerRef={() => trackRef}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -129,6 +143,9 @@ function TranscriptViewportHarness(props: Readonly<{
 
       <button type="button" data-testid="switch-thread" onClick={switchThread}>
         Switch thread
+      </button>
+      <button type="button" data-testid="resize-lane" onClick={widenLane}>
+        Resize lane
       </button>
     </>
   );
@@ -142,7 +159,7 @@ afterEach(() => {
 });
 
 describe('CodexPageShell browser layout behavior', () => {
-  it('keeps the transcript as a bounded manual scroll surface while the FAB stays pinned in the viewport', async () => {
+  it('keeps the transcript as a bounded manual scroll surface while the FAB stays pinned to the transcript lane', async () => {
     const host = document.createElement('div');
     host.style.position = 'fixed';
     host.style.inset = '0';
@@ -153,11 +170,11 @@ describe('CodexPageShell browser layout behavior', () => {
     ), host);
     await settle();
 
-    const viewport = host.querySelector('.codex-page-transcript-viewport') as HTMLDivElement | null;
+    const track = host.querySelector('[data-codex-transcript-overlay-track="true"]') as HTMLDivElement | null;
     const scrollRegion = host.querySelector('[data-codex-transcript-scroll-region="true"]') as HTMLDivElement | null;
     const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
 
-    expect(viewport).toBeTruthy();
+    expect(track).toBeTruthy();
     expect(scrollRegion).toBeTruthy();
     expect(button).toBeTruthy();
     expect(scrollRegion!.scrollHeight).toBeGreaterThan(scrollRegion!.clientHeight);
@@ -167,7 +184,40 @@ describe('CodexPageShell browser layout behavior', () => {
     await settle();
 
     expect(scrollRegion!.scrollTop).toBeGreaterThan(0);
-    expectInsideViewport(viewport!, button!);
+    expectInsideRect(track!, button!);
+  });
+
+  it('realigns the FAB when the transcript lane width changes', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+
+    render(() => (
+      <TranscriptViewportHarness initialRows={12} />
+    ), host);
+    await settle();
+
+    const track = host.querySelector('[data-codex-transcript-overlay-track="true"]') as HTMLDivElement | null;
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    const resizeButton = host.querySelector('[data-testid="resize-lane"]') as HTMLButtonElement | null;
+
+    expect(track).toBeTruthy();
+    expect(button).toBeTruthy();
+    expect(resizeButton).toBeTruthy();
+
+    const beforeTrackBox = track!.getBoundingClientRect();
+    const beforeButtonBox = button!.getBoundingClientRect();
+    expect(Math.abs(beforeButtonBox.right - (beforeTrackBox.right - 12))).toBeLessThanOrEqual(1);
+
+    resizeButton!.click();
+    await settle();
+    await settle();
+
+    const afterTrackBox = track!.getBoundingClientRect();
+    const afterButtonBox = button!.getBoundingClientRect();
+    expect(afterTrackBox.width).toBeGreaterThan(beforeTrackBox.width);
+    expect(Math.abs(afterButtonBox.right - (afterTrackBox.right - 12))).toBeLessThanOrEqual(1);
   });
 
   it('lands on the latest output after a thread-switch follow-bottom request in the real browser layout', async () => {

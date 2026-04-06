@@ -1,4 +1,4 @@
-import { createMemo, createSignal, untrack, type Accessor, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, untrack, type Accessor, type JSX } from 'solid-js';
 
 import { normalizePath } from './FileBrowserShared';
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
@@ -13,6 +13,124 @@ const FAB_SIZE = 44;
 const EDGE_MARGIN = 12;
 
 export type FileBrowserFABContainerRef = HTMLElement | undefined | (() => HTMLElement | undefined);
+export type FileBrowserFABAnchorEdge = 'left' | 'right' | 'top' | 'bottom';
+export type FileBrowserFABAnchorState = Readonly<{
+  edge: FileBrowserFABAnchorEdge;
+  offsetRatio: number;
+}>;
+export type FileBrowserFABLayoutRect = Readonly<{
+  width: number;
+  height: number;
+}>;
+export type FileBrowserFABPosition = Readonly<{
+  left: number;
+  top: number;
+}>;
+
+const DEFAULT_FAB_ANCHOR: FileBrowserFABAnchorState = {
+  edge: 'right',
+  offsetRatio: 1,
+};
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function clampRatio(value: number): number {
+  if (!Number.isFinite(value)) return 0.5;
+  return clamp(value, 0, 1);
+}
+
+function layoutSpan(length: number): number {
+  return Math.max(0, length - FAB_SIZE - EDGE_MARGIN * 2);
+}
+
+function normalizeLayoutRect(layout: FileBrowserFABLayoutRect): FileBrowserFABLayoutRect {
+  return {
+    width: Math.max(0, Math.round(layout.width)),
+    height: Math.max(0, Math.round(layout.height)),
+  };
+}
+
+export function projectFileBrowserFABAnchor(
+  anchor: FileBrowserFABAnchorState,
+  layout: FileBrowserFABLayoutRect,
+): FileBrowserFABPosition {
+  const normalizedLayout = normalizeLayoutRect(layout);
+  const leftEdge = EDGE_MARGIN;
+  const topEdge = EDGE_MARGIN;
+  const rightEdge = Math.max(EDGE_MARGIN, normalizedLayout.width - FAB_SIZE - EDGE_MARGIN);
+  const bottomEdge = Math.max(EDGE_MARGIN, normalizedLayout.height - FAB_SIZE - EDGE_MARGIN);
+  const horizontalSpan = layoutSpan(normalizedLayout.width);
+  const verticalSpan = layoutSpan(normalizedLayout.height);
+  const offsetRatio = clampRatio(anchor.offsetRatio);
+
+  switch (anchor.edge) {
+    case 'left':
+      return {
+        left: leftEdge,
+        top: topEdge + verticalSpan * offsetRatio,
+      };
+    case 'top':
+      return {
+        left: leftEdge + horizontalSpan * offsetRatio,
+        top: topEdge,
+      };
+    case 'bottom':
+      return {
+        left: leftEdge + horizontalSpan * offsetRatio,
+        top: bottomEdge,
+      };
+    case 'right':
+    default:
+      return {
+        left: rightEdge,
+        top: topEdge + verticalSpan * offsetRatio,
+      };
+  }
+}
+
+export function resolveFileBrowserFABAnchorFromPosition(
+  position: FileBrowserFABPosition,
+  layout: FileBrowserFABLayoutRect,
+): FileBrowserFABAnchorState {
+  const normalizedLayout = normalizeLayoutRect(layout);
+  const leftEdge = EDGE_MARGIN;
+  const topEdge = EDGE_MARGIN;
+  const rightEdge = Math.max(EDGE_MARGIN, normalizedLayout.width - FAB_SIZE - EDGE_MARGIN);
+  const bottomEdge = Math.max(EDGE_MARGIN, normalizedLayout.height - FAB_SIZE - EDGE_MARGIN);
+  const clampedLeft = clamp(position.left, leftEdge, rightEdge);
+  const clampedTop = clamp(position.top, topEdge, bottomEdge);
+
+  const dLeft = Math.abs(clampedLeft - leftEdge);
+  const dRight = Math.abs(rightEdge - clampedLeft);
+  const dTop = Math.abs(clampedTop - topEdge);
+  const dBottom = Math.abs(bottomEdge - clampedTop);
+  const minDist = Math.min(dLeft, dRight, dTop, dBottom);
+
+  if (minDist === dLeft) {
+    return {
+      edge: 'left',
+      offsetRatio: clampRatio((clampedTop - EDGE_MARGIN) / Math.max(1, layoutSpan(normalizedLayout.height))),
+    };
+  }
+  if (minDist === dRight) {
+    return {
+      edge: 'right',
+      offsetRatio: clampRatio((clampedTop - EDGE_MARGIN) / Math.max(1, layoutSpan(normalizedLayout.height))),
+    };
+  }
+  if (minDist === dTop) {
+    return {
+      edge: 'top',
+      offsetRatio: clampRatio((clampedLeft - EDGE_MARGIN) / Math.max(1, layoutSpan(normalizedLayout.width))),
+    };
+  }
+  return {
+    edge: 'bottom',
+    offsetRatio: clampRatio((clampedLeft - EDGE_MARGIN) / Math.max(1, layoutSpan(normalizedLayout.width))),
+  };
+}
 
 export function resolveFileBrowserFABContainerRef(
   containerRef: FileBrowserFABContainerRef,
@@ -27,8 +145,9 @@ export function createFileBrowserFABModel(args: Readonly<{
   allowHomeFallback?: boolean;
 }>) {
   const fileBrowserSurface = useFileBrowserSurfaceContext();
-  const [fabLeft, setFabLeft] = createSignal<number | null>(null);
-  const [fabTop, setFabTop] = createSignal<number | null>(null);
+  const [anchorState, setAnchorState] = createSignal<FileBrowserFABAnchorState>(DEFAULT_FAB_ANCHOR);
+  const [dragPosition, setDragPosition] = createSignal<FileBrowserFABPosition | null>(null);
+  const [containerLayout, setContainerLayout] = createSignal<FileBrowserFABLayoutRect | null>(null);
   const [isDragging, setIsDragging] = createSignal(false);
   const [isSnapping, setIsSnapping] = createSignal(false);
   let dragStart: { px: number; py: number; fabLeft: number; fabTop: number } | null = null;
@@ -52,44 +171,58 @@ export function createFileBrowserFABModel(args: Readonly<{
 
   const canOpenBrowser = createMemo(() => browserSeed() !== null);
 
-  function snapToEdge(left: number, top: number) {
+  function syncContainerLayout(container: HTMLElement | undefined): FileBrowserFABLayoutRect | null {
+    if (!container) {
+      setContainerLayout(null);
+      return null;
+    }
+    const nextLayout = normalizeLayoutRect({
+      width: container.clientWidth,
+      height: container.clientHeight,
+    });
+    setContainerLayout(nextLayout);
+    return nextLayout;
+  }
+
+  function resolveActiveContainerLayout(): FileBrowserFABLayoutRect | null {
+    const existing = containerLayout();
+    if (existing) return existing;
+    return syncContainerLayout(args.containerRef());
+  }
+
+  const projectedPosition = createMemo<FileBrowserFABPosition | null>(() => {
+    const position = dragPosition();
+    if (position) return position;
+    const layout = containerLayout();
+    if (!layout) return null;
+    return projectFileBrowserFABAnchor(anchorState(), layout);
+  });
+
+  createEffect(() => {
     const container = args.containerRef();
     if (!container) {
-      setFabLeft(left);
-      setFabTop(top);
+      setContainerLayout(null);
       return;
     }
 
-    const cw = container.clientWidth;
-    const ch = container.clientHeight;
-    const clampedLeft = Math.max(EDGE_MARGIN, Math.min(left, cw - FAB_SIZE - EDGE_MARGIN));
-    const clampedTop = Math.max(EDGE_MARGIN, Math.min(top, ch - FAB_SIZE - EDGE_MARGIN));
+    const sync = () => {
+      syncContainerLayout(container);
+    };
 
-    const dLeft = clampedLeft;
-    const dRight = cw - FAB_SIZE - clampedLeft;
-    const dTop = clampedTop;
-    const dBottom = ch - FAB_SIZE - clampedTop;
-    const minDist = Math.min(dLeft, dRight, dTop, dBottom);
+    sync();
 
-    let snapLeft = clampedLeft;
-    let snapTop = clampedTop;
-    if (minDist === dLeft) {
-      snapLeft = EDGE_MARGIN;
-    } else if (minDist === dRight) {
-      snapLeft = cw - FAB_SIZE - EDGE_MARGIN;
-    } else if (minDist === dTop) {
-      snapTop = EDGE_MARGIN;
-    } else {
-      snapTop = ch - FAB_SIZE - EDGE_MARGIN;
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(() => {
+        sync();
+      });
+      observer.observe(container);
+      onCleanup(() => observer.disconnect());
+      return;
     }
 
-    setIsSnapping(true);
-    setFabLeft(snapLeft);
-    setFabTop(snapTop);
-    requestAnimationFrame(() => {
-      setTimeout(() => setIsSnapping(false), 250);
-    });
-  }
+    window.addEventListener('resize', sync);
+    onCleanup(() => window.removeEventListener('resize', sync));
+  });
 
   function onPointerDown(event: PointerEvent) {
     if (event.button !== 0 || !canOpenBrowser()) return;
@@ -97,20 +230,10 @@ export function createFileBrowserFABModel(args: Readonly<{
     const button = event.currentTarget as HTMLElement;
     button.setPointerCapture(event.pointerId);
 
-    let currentLeft = fabLeft();
-    let currentTop = fabTop();
-    if (currentLeft == null || currentTop == null) {
-      const container = args.containerRef();
-      if (container) {
-        currentLeft = container.clientWidth - FAB_SIZE - EDGE_MARGIN;
-        currentTop = container.clientHeight - FAB_SIZE - EDGE_MARGIN;
-      } else {
-        currentLeft = 0;
-        currentTop = 0;
-      }
-      setFabLeft(currentLeft);
-      setFabTop(currentTop);
-    }
+    const layout = resolveActiveContainerLayout();
+    const currentPosition = untrack(projectedPosition) ?? (layout ? projectFileBrowserFABAnchor(anchorState(), layout) : null);
+    const currentLeft = currentPosition?.left ?? 0;
+    const currentTop = currentPosition?.top ?? 0;
 
     dragStart = {
       px: event.clientX,
@@ -131,27 +254,43 @@ export function createFileBrowserFABModel(args: Readonly<{
     let newLeft = dragStart.fabLeft + dx;
     let newTop = dragStart.fabTop + dy;
 
-    const container = args.containerRef();
-    if (container) {
-      newLeft = Math.max(0, Math.min(newLeft, container.clientWidth - FAB_SIZE));
-      newTop = Math.max(0, Math.min(newTop, container.clientHeight - FAB_SIZE));
+    const layout = resolveActiveContainerLayout();
+    if (layout) {
+      newLeft = Math.max(0, Math.min(newLeft, layout.width - FAB_SIZE));
+      newTop = Math.max(0, Math.min(newTop, layout.height - FAB_SIZE));
     }
 
-    setFabLeft(newLeft);
-    setFabTop(newTop);
+    setDragPosition({
+      left: newLeft,
+      top: newTop,
+    });
   }
 
   function onPointerUp() {
     if (!dragStart) return;
 
+    const droppedPosition = dragPosition() ?? {
+      left: dragStart.fabLeft,
+      top: dragStart.fabTop,
+    };
     const wasDrag = isDragging();
     dragStart = null;
     setIsDragging(false);
 
     if (wasDrag) {
-      snapToEdge(fabLeft()!, fabTop()!);
+      const layout = resolveActiveContainerLayout();
+      if (layout) {
+        setIsSnapping(true);
+        setAnchorState(resolveFileBrowserFABAnchorFromPosition(droppedPosition, layout));
+      }
+      setDragPosition(null);
+      requestAnimationFrame(() => {
+        setTimeout(() => setIsSnapping(false), 250);
+      });
       return;
     }
+
+    setDragPosition(null);
 
     void (async () => {
       const browser = untrack(browserSeed);
@@ -161,14 +300,13 @@ export function createFileBrowserFABModel(args: Readonly<{
   }
 
   const fabStyle = createMemo<JSX.CSSProperties>(() => {
-    const left = fabLeft();
-    const top = fabTop();
-    if (left == null || top == null) {
+    const position = projectedPosition();
+    if (!position) {
       return {};
     }
     return {
-      left: `${left}px`,
-      top: `${top}px`,
+      left: `${position.left}px`,
+      top: `${position.top}px`,
       right: 'auto',
       bottom: 'auto',
       transition: isSnapping() ? 'left 0.25s ease-out, top 0.25s ease-out' : 'none',

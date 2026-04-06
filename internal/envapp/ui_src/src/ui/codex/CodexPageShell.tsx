@@ -42,7 +42,7 @@ export function CodexPageShell() {
   const rpc = useRedevenRpc();
   const followBottomController = createFollowBottomController();
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
-  const [transcriptViewportRef, setTranscriptViewportRef] = createSignal<HTMLDivElement>();
+  const [transcriptOverlayTrackRef, setTranscriptOverlayTrackRef] = createSignal<HTMLDivElement>();
 
   onCleanup(() => {
     followBottomController.dispose();
@@ -346,7 +346,6 @@ export function CodexPageShell() {
           </Show>
 
           <div
-            ref={setTranscriptViewportRef}
             class="codex-page-transcript-viewport"
           >
             <div
@@ -371,11 +370,19 @@ export function CodexPageShell() {
                 emptyBody={emptyStateBody()}
               />
             </div>
-            <CodexFileBrowserFAB
-              workingDir={workingDirPath()}
-              homePath={homePath()}
-              containerRef={transcriptViewportRef}
-            />
+            <div class="codex-page-transcript-overlay">
+              <div
+                ref={setTranscriptOverlayTrackRef}
+                class="codex-page-transcript-overlay-track"
+                data-codex-transcript-overlay-track="true"
+              >
+                <CodexFileBrowserFAB
+                  workingDir={workingDirPath()}
+                  homePath={homePath()}
+                  containerRef={transcriptOverlayTrackRef}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
