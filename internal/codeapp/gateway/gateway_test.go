@@ -1711,7 +1711,13 @@ func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) 
 				Thread:          thread,
 				PendingRequests: append([]codexbridge.PendingRequest(nil), pendingRequests...),
 				LastAppliedSeq:  7,
-				ActiveStatus:    thread.Status,
+				Stream: codexbridge.ThreadStreamState{
+					LastAppliedSeq:    7,
+					OldestRetainedSeq: 3,
+					StreamEpoch:       2,
+					LastEventAtUnixMs: 99,
+				},
+				ActiveStatus: thread.Status,
 			}, nil
 		},
 	}

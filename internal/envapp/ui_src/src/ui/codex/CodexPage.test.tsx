@@ -2127,7 +2127,7 @@ describe('CodexPage', () => {
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
   });
 
-  it('renders stream disconnect failures with the shared highlight block styling', async () => {
+  it('renders stream reconnect warnings with the shared highlight block styling', async () => {
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
       ready: true,
@@ -2200,14 +2200,18 @@ describe('CodexPage', () => {
 
     renderPage(host);
     await waitForCondition(
-      () => Boolean(host.querySelector('.highlight-block-error')),
+      () => Array.from(host.querySelectorAll('.highlight-block-warning')).some((entry) => (
+        entry.textContent?.includes('network error')
+      )),
       'stream error banner',
     );
 
-    const streamError = host.querySelector('.highlight-block-error');
+    const streamError = Array.from(host.querySelectorAll('.highlight-block-warning')).find((entry) => (
+      entry.textContent?.includes('network error')
+    )) ?? null;
     expect(streamError).not.toBeNull();
     expect(streamError?.textContent).toContain('Live event stream');
-    expect(streamError?.textContent).toContain('Live event stream disconnected: network error');
+    expect(streamError?.textContent).toContain('network error');
   });
 
   it('applies a new-chat working-dir selection to the first send', async () => {

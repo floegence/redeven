@@ -21,7 +21,6 @@ import type {
 import {
   CodexGatewayError,
   archiveCodexThread,
-  connectCodexEventStream,
   fetchCodexCapabilities,
   fetchCodexStatus,
   forkCodexThread,
@@ -41,6 +40,7 @@ import {
   createCodexDraftController,
 } from './draftController';
 import { createCodexFollowupController } from './followupController';
+import { createCodexStreamCoordinator } from './streamCoordinator';
 import { createCodexThreadController } from './threadController';
 import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
 import {
@@ -62,6 +62,7 @@ import type {
   CodexPendingRequest,
   CodexQueuedFollowup,
   CodexStatus,
+  CodexStreamTransportState,
   CodexThread,
   CodexThreadReadStatus,
   CodexThreadTokenUsage,
@@ -624,6 +625,7 @@ export type CodexContextValue = Readonly<{
   setComposerText: (value: string) => void;
   resetComposer: () => void;
   submitting: Accessor<boolean>;
+  streamTransportState: Accessor<CodexStreamTransportState>;
   streamError: Accessor<string | null>;
   archivingThreadID: Accessor<string | null>;
   forkingThreadID: Accessor<string | null>;
@@ -661,13 +663,13 @@ export function CodexProvider(props: ParentProps) {
   const threadController = createCodexThreadController();
   const draftController = createCodexDraftController();
   const followupController = createCodexFollowupController();
+  const streamCoordinator = createCodexStreamCoordinator();
 
   const [optimisticThreadsByID, setOptimisticThreadsByID] = createSignal<CodexThreadMap>({});
   const [optimisticTurnsByThreadID, setOptimisticTurnsByThreadID] = createSignal<CodexOptimisticTurnMap>({});
   const [dispatchingByThread, setDispatchingByThread] = createSignal<CodexDispatchingInputMap>({});
   const [submitting, setSubmitting] = createSignal(false);
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
-  const [streamError, setStreamError] = createSignal<string | null>(null);
   const [archivingThreadID, setArchivingThreadID] = createSignal<string | null>(null);
   const [forkingThreadID, setForkingThreadID] = createSignal<string | null>(null);
   const [interruptingTurnID, setInterruptingTurnID] = createSignal<string | null>(null);
@@ -928,6 +930,21 @@ export function CodexProvider(props: ParentProps) {
   });
 
   const displayedSession = createMemo(() => threadController.displayedSession());
+  const streamTransportState = createMemo(() => streamCoordinator.transportState());
+  const streamError = createMemo<string | null>(() => {
+    const transport = streamTransportState();
+    switch (transport.phase) {
+      case 'reconnecting':
+      case 'desynced':
+        return String(
+          transport.last_disconnect_reason ??
+          transport.desync_reason ??
+          '',
+        ).trim() || null;
+      default:
+        return null;
+    }
+  });
 
   const activeOwnerID = createMemo(() => (
     String(foregroundThreadID() ?? '').trim()
@@ -1146,7 +1163,6 @@ export function CodexProvider(props: ParentProps) {
         },
         String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
       );
-      setStreamError(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!threadController.failThreadBootstrap(token, message)) return;
@@ -1205,21 +1221,33 @@ export function CodexProvider(props: ParentProps) {
   });
 
   createEffect(() => {
-    if (!codexVisible()) return;
+    if (!codexVisible()) {
+      streamCoordinator.attach(null);
+      return;
+    }
     const binding = streamBinding();
-    if (!binding) return;
+    if (!binding) {
+      streamCoordinator.attach(null);
+      return;
+    }
     const session = untrack(() => threadController.sessionForThread(binding.threadID));
-    if (!session) return;
-
-    const controller = new AbortController();
-    const initialSession = session;
-    setStreamError(null);
-    void connectCodexEventStream({
+    if (!session) {
+      streamCoordinator.attach(null);
+      return;
+    }
+    streamCoordinator.attach({
       threadID: binding.threadID,
       afterSeq: binding.afterSeq,
-      signal: controller.signal,
+      resolveAfterSeq: () => {
+        const currentSession = untrack(() => threadController.sessionForThread(binding.threadID));
+        return Math.max(
+          0,
+          Number(currentSession?.last_applied_seq ?? currentSession?.stream.last_applied_seq ?? binding.afterSeq) || 0,
+        );
+      },
       onEvent: (event) => {
-        const nextThread = threadController.applyEventToThread(event, initialSession);
+        const fallbackSession = untrack(() => threadController.sessionForThread(binding.threadID)) ?? session;
+        const nextThread = threadController.applyEventToThread(event, fallbackSession);
         if (nextThread) {
           upsertOptimisticThread(nextThread);
         }
@@ -1227,12 +1255,10 @@ export function CodexProvider(props: ParentProps) {
           void refetchThreads();
         }
       },
-    }).catch((error) => {
-      if (controller.signal.aborted) return;
-      setStreamError(error instanceof Error ? error.message : String(error));
+      onDesynced: async () => {
+        await loadThreadBootstrap(binding.threadID);
+      },
     });
-
-    onCleanup(() => controller.abort());
   });
 
   const statusError = createMemo(() => statusErrorMessage(status));
@@ -1516,7 +1542,6 @@ export function CodexProvider(props: ParentProps) {
   const startNewThreadDraft = () => {
     if (!hasHostBinary()) return;
     threadController.startNewThreadDraft();
-    setStreamError(null);
   };
 
   const refreshSidebar = async () => {
@@ -2213,6 +2238,7 @@ export function CodexProvider(props: ParentProps) {
     setComposerText: setComposerDraftText,
     resetComposer,
     submitting,
+    streamTransportState,
     streamError,
     archivingThreadID,
     forkingThreadID,

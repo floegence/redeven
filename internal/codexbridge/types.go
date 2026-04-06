@@ -115,12 +115,27 @@ type ThreadTokenUsage struct {
 	ModelContextWindow *int64              `json:"model_context_window,omitempty"`
 }
 
+type ThreadStreamState struct {
+	LastAppliedSeq    int64 `json:"last_applied_seq"`
+	OldestRetainedSeq int64 `json:"oldest_retained_seq"`
+	StreamEpoch       int64 `json:"stream_epoch"`
+	LastEventAtUnixMs int64 `json:"last_event_at_unix_ms"`
+}
+
+type EventTransport struct {
+	State         string `json:"state,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	DroppedEvents int64  `json:"dropped_events,omitempty"`
+	ResetRequired bool   `json:"reset_required,omitempty"`
+}
+
 type ThreadDetail struct {
 	Thread            Thread              `json:"thread"`
 	RuntimeConfig     ThreadRuntimeConfig `json:"runtime_config,omitempty"`
 	PendingRequests   []PendingRequest    `json:"pending_requests,omitempty"`
 	TokenUsage        *ThreadTokenUsage   `json:"token_usage,omitempty"`
 	LastAppliedSeq    int64               `json:"last_applied_seq"`
+	Stream            ThreadStreamState   `json:"stream"`
 	ActiveStatus      string              `json:"active_status,omitempty"`
 	ActiveStatusFlags []string            `json:"active_status_flags,omitempty"`
 }
@@ -251,23 +266,25 @@ type PendingRequestResponse struct {
 }
 
 type Event struct {
-	Seq          int64             `json:"seq"`
-	Type         string            `json:"type"`
-	ThreadID     string            `json:"thread_id"`
-	TurnID       string            `json:"turn_id,omitempty"`
-	ItemID       string            `json:"item_id,omitempty"`
-	RequestID    string            `json:"request_id,omitempty"`
-	Thread       *Thread           `json:"thread,omitempty"`
-	Turn         *Turn             `json:"turn,omitempty"`
-	Item         *Item             `json:"item,omitempty"`
-	Request      *PendingRequest   `json:"request,omitempty"`
-	TokenUsage   *ThreadTokenUsage `json:"token_usage,omitempty"`
-	Delta        string            `json:"delta,omitempty"`
-	Status       string            `json:"status,omitempty"`
-	Flags        []string          `json:"flags,omitempty"`
-	ThreadName   string            `json:"thread_name,omitempty"`
-	SummaryIndex *int64            `json:"summary_index,omitempty"`
-	ContentIndex *int64            `json:"content_index,omitempty"`
-	Error        string            `json:"error,omitempty"`
-	WillRetry    bool              `json:"will_retry,omitempty"`
+	Seq          int64              `json:"seq"`
+	Type         string             `json:"type"`
+	ThreadID     string             `json:"thread_id"`
+	TurnID       string             `json:"turn_id,omitempty"`
+	ItemID       string             `json:"item_id,omitempty"`
+	RequestID    string             `json:"request_id,omitempty"`
+	Thread       *Thread            `json:"thread,omitempty"`
+	Turn         *Turn              `json:"turn,omitempty"`
+	Item         *Item              `json:"item,omitempty"`
+	Request      *PendingRequest    `json:"request,omitempty"`
+	TokenUsage   *ThreadTokenUsage  `json:"token_usage,omitempty"`
+	Stream       *ThreadStreamState `json:"stream,omitempty"`
+	Transport    *EventTransport    `json:"transport,omitempty"`
+	Delta        string             `json:"delta,omitempty"`
+	Status       string             `json:"status,omitempty"`
+	Flags        []string           `json:"flags,omitempty"`
+	ThreadName   string             `json:"thread_name,omitempty"`
+	SummaryIndex *int64             `json:"summary_index,omitempty"`
+	ContentIndex *int64             `json:"content_index,omitempty"`
+	Error        string             `json:"error,omitempty"`
+	WillRetry    bool               `json:"will_retry,omitempty"`
 }

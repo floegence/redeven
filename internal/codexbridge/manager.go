@@ -7,11 +7,14 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/floegence/redeven/internal/diagnostics"
 )
 
 var (
@@ -24,11 +27,13 @@ var (
 type Options struct {
 	Logger       *slog.Logger
 	AgentHomeDir string
+	Diagnostics  *diagnostics.Store
 }
 
 type Manager struct {
 	log          *slog.Logger
 	agentHomeDir string
+	diag         *diagnostics.Store
 
 	startMu sync.Mutex
 	mu      sync.Mutex
@@ -40,6 +45,7 @@ type Manager struct {
 
 	nextCallID       atomic.Int64
 	nextSubscriberID atomic.Int64
+	runtimeEpoch     atomic.Int64
 }
 
 type threadState struct {
@@ -49,8 +55,17 @@ type threadState struct {
 	lastAppliedSeq int64
 	liveLoaded     bool
 	events         []Event
+	stream         ThreadStreamState
 	pending        map[string]*pendingRequestRecord
-	subscribers    map[int64]chan Event
+	subscribers    map[int64]*threadSubscriber
+}
+
+type threadSubscriber struct {
+	id              int64
+	ch              chan Event
+	afterSeq        int64
+	createdAtUnixMs int64
+	lagDropped      int64
 }
 
 type pendingRequestRecord struct {
@@ -58,6 +73,62 @@ type pendingRequestRecord struct {
 	rawID           json.RawMessage
 	requestedPerms  *PermissionProfile
 	additionalPerms *PermissionProfile
+}
+
+const (
+	threadEventRetentionLimit = 400
+	threadSubscriberBuffer    = 64
+)
+
+func isBestEffortEvent(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "command_output_delta", "file_change_delta", "thread_token_usage_updated":
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Manager) runtimeEpochValue() int64 {
+	if m == nil {
+		return 1
+	}
+	if epoch := m.runtimeEpoch.Load(); epoch > 0 {
+		return epoch
+	}
+	return 1
+}
+
+func (m *Manager) ensureThreadStreamStateLocked(state *threadState) {
+	if state == nil {
+		return
+	}
+	if state.stream.StreamEpoch <= 0 {
+		state.stream.StreamEpoch = m.runtimeEpochValue()
+	}
+	state.stream.LastAppliedSeq = state.lastAppliedSeq
+	switch len(state.events) {
+	case 0:
+		if state.lastAppliedSeq <= 0 {
+			state.stream.OldestRetainedSeq = 0
+		} else {
+			state.stream.OldestRetainedSeq = state.lastAppliedSeq + 1
+		}
+	default:
+		state.stream.OldestRetainedSeq = state.events[0].Seq
+	}
+}
+
+func (m *Manager) logStreamDiagnostic(kind string, message string, detail map[string]any) {
+	if m == nil || m.diag == nil || !m.diag.Enabled() {
+		return
+	}
+	m.diag.Append(diagnostics.Event{
+		Scope:   diagnostics.ScopeCodexBridge,
+		Kind:    strings.TrimSpace(kind),
+		Message: strings.TrimSpace(message),
+		Detail:  detail,
+	})
 }
 
 func (m *Manager) invalidateLiveThreadsLocked() {
@@ -120,11 +191,13 @@ func NewManager(opts Options) (*Manager, error) {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	}
-	return &Manager{
+	manager := &Manager{
 		log:          logger,
 		agentHomeDir: agentHomeDir,
+		diag:         opts.Diagnostics,
 		threads:      make(map[string]*threadState),
-	}, nil
+	}
+	return manager, nil
 }
 
 func (m *Manager) Close() error {
@@ -646,28 +719,80 @@ func (m *Manager) SubscribeThreadEvents(ctx context.Context, threadID string, af
 	}
 	m.mu.Lock()
 	state := m.ensureThreadStateLocked(threadID)
+	m.ensureThreadStreamStateLocked(state)
+	desynced := afterSeq > 0 && state.stream.OldestRetainedSeq > 0 && afterSeq < state.stream.OldestRetainedSeq-1
+	lastAppliedSeq := state.lastAppliedSeq
+	oldestRetainedSeq := state.stream.OldestRetainedSeq
+	streamEpoch := state.stream.StreamEpoch
 	snapshot := make([]Event, 0, len(state.events))
-	for _, ev := range state.events {
-		if ev.Seq > afterSeq {
-			snapshot = append(snapshot, ev)
+	if desynced {
+		stream := cloneThreadStreamState(state.stream)
+		snapshot = append(snapshot, Event{
+			Seq:      afterSeq,
+			Type:     "stream_desynced",
+			ThreadID: threadID,
+			Stream:   &stream,
+			Transport: &EventTransport{
+				State:         "desynced",
+				Reason:        "requested sequence is older than the retained event window",
+				ResetRequired: true,
+			},
+		})
+	} else {
+		for _, ev := range state.events {
+			if ev.Seq > afterSeq {
+				snapshot = append(snapshot, ev)
+			}
 		}
 	}
+	if desynced {
+		m.mu.Unlock()
+		ch := make(chan Event)
+		close(ch)
+		m.logStreamDiagnostic("subscription_desynced", "codex thread stream continuity was lost before subscribe", map[string]any{
+			"thread_id":           threadID,
+			"after_seq":           afterSeq,
+			"last_applied_seq":    lastAppliedSeq,
+			"oldest_retained_seq": oldestRetainedSeq,
+			"stream_epoch":        streamEpoch,
+		})
+		return snapshot, ch, nil
+	}
 	subID := m.nextSubscriberID.Add(1)
-	ch := make(chan Event, 64)
-	state.subscribers[subID] = ch
+	ch := make(chan Event, threadSubscriberBuffer)
+	state.subscribers[subID] = &threadSubscriber{
+		id:              subID,
+		ch:              ch,
+		afterSeq:        afterSeq,
+		createdAtUnixMs: time.Now().UnixMilli(),
+	}
 	m.mu.Unlock()
+	m.logStreamDiagnostic("subscription_started", "codex thread subscriber attached", map[string]any{
+		"thread_id":           threadID,
+		"subscriber_id":       subID,
+		"after_seq":           afterSeq,
+		"snapshot_events":     len(snapshot),
+		"last_applied_seq":    lastAppliedSeq,
+		"oldest_retained_seq": oldestRetainedSeq,
+		"stream_epoch":        streamEpoch,
+	})
 
 	go func() {
 		<-ctx.Done()
 		m.mu.Lock()
 		state := m.threads[threadID]
 		if state != nil {
-			if existing, ok := state.subscribers[subID]; ok {
+			if existing, ok := state.subscribers[subID]; ok && existing != nil {
 				delete(state.subscribers, subID)
-				close(existing)
+				close(existing.ch)
 			}
 		}
 		m.mu.Unlock()
+		m.logStreamDiagnostic("subscription_closed", "codex thread subscriber closed", map[string]any{
+			"thread_id":     threadID,
+			"subscriber_id": subID,
+			"after_seq":     afterSeq,
+		})
 	}()
 	return snapshot, ch, nil
 }
@@ -777,6 +902,10 @@ func (m *Manager) call(ctx context.Context, method string, params any, out any) 
 			m.invalidateLiveThreadsLocked()
 		}
 		m.mu.Unlock()
+		m.logStreamDiagnostic("runtime_call_failed", "codex app-server transport call failed", map[string]any{
+			"method": method,
+			"error":  err.Error(),
+		})
 		return err
 	}
 	return nil
@@ -793,6 +922,9 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 			m.lastError = err.Error()
 			m.proc = nil
 			m.invalidateLiveThreadsLocked()
+			m.logStreamDiagnostic("runtime_disconnected", "codex app-server process exited", map[string]any{
+				"error": err.Error(),
+			})
 		default:
 			proc := m.proc
 			m.mu.Unlock()
@@ -835,10 +967,22 @@ func (m *Manager) ensureProcess(ctx context.Context) (*appServerProcess, error) 
 		return nil, err
 	}
 	m.mu.Lock()
+	nextEpoch := m.runtimeEpoch.Add(1)
 	m.proc = proc
 	m.binaryPath = binaryPath
 	m.lastError = ""
+	for _, state := range m.threads {
+		if state == nil {
+			continue
+		}
+		state.stream.StreamEpoch = nextEpoch
+		m.ensureThreadStreamStateLocked(state)
+	}
 	m.mu.Unlock()
+	m.logStreamDiagnostic("runtime_connected", "codex app-server process connected", map[string]any{
+		"binary_path":   binaryPath,
+		"runtime_epoch": nextEpoch,
+	})
 	return proc, nil
 }
 
@@ -1063,6 +1207,7 @@ func (m *Manager) handleEnvelope(env rpcEnvelope) {
 			m.mu.Lock()
 			state := m.ensureThreadStateLocked(threadID)
 			thread := ensureProjectedThread(state, threadID)
+			m.evictPendingRequestsLocked(state, threadID)
 			thread.Status = "notLoaded"
 			thread.ActiveFlags = nil
 			thread.UpdatedAtUnixS = time.Now().Unix()
@@ -1359,6 +1504,32 @@ func (m *Manager) handlePermissionsRequest(env rpcEnvelope) {
 	})
 }
 
+func (m *Manager) evictPendingRequestsLocked(state *threadState, threadID string) {
+	if state == nil || len(state.pending) == 0 {
+		return
+	}
+	requestIDs := make([]string, 0, len(state.pending))
+	for requestID := range state.pending {
+		requestIDs = append(requestIDs, requestID)
+	}
+	sort.Strings(requestIDs)
+	for _, requestID := range requestIDs {
+		delete(state.pending, requestID)
+		m.appendEventLocked(state, Event{
+			Type:      "request_evicted",
+			ThreadID:  threadID,
+			RequestID: requestID,
+		})
+	}
+	m.logStreamDiagnostic("requests_evicted", "codex thread pending requests were evicted from projected state", map[string]any{
+		"thread_id":        threadID,
+		"evicted_count":    len(requestIDs),
+		"request_ids":      requestIDs,
+		"last_applied_seq": state.lastAppliedSeq,
+		"stream_epoch":     state.stream.StreamEpoch,
+	})
+}
+
 func (m *Manager) storePendingRequest(record *pendingRequestRecord) {
 	if record == nil {
 		return
@@ -1415,12 +1586,17 @@ func (m *Manager) ensureThreadStateLocked(threadID string) *threadState {
 	threadID = strings.TrimSpace(threadID)
 	state := m.threads[threadID]
 	if state != nil {
+		m.ensureThreadStreamStateLocked(state)
 		return state
 	}
 	state = &threadState{
 		pending:     make(map[string]*pendingRequestRecord),
-		subscribers: make(map[int64]chan Event),
+		subscribers: make(map[int64]*threadSubscriber),
+		stream: ThreadStreamState{
+			StreamEpoch: m.runtimeEpochValue(),
+		},
 	}
+	m.ensureThreadStreamStateLocked(state)
 	m.threads[threadID] = state
 	return state
 }
@@ -1431,26 +1607,84 @@ func (m *Manager) appendEventLocked(state *threadState, ev Event) {
 	}
 	state.lastAppliedSeq++
 	ev.Seq = state.lastAppliedSeq
+	nowUnixMs := time.Now().UnixMilli()
+	state.stream.LastEventAtUnixMs = nowUnixMs
 	state.events = append(state.events, ev)
-	if len(state.events) > 400 {
-		state.events = append([]Event(nil), state.events[len(state.events)-400:]...)
+	if len(state.events) > threadEventRetentionLimit {
+		state.events = append([]Event(nil), state.events[len(state.events)-threadEventRetentionLimit:]...)
 	}
-	for id, ch := range state.subscribers {
-		select {
-		case ch <- ev:
-		default:
-			close(ch)
+	m.ensureThreadStreamStateLocked(state)
+	streamCopy := cloneThreadStreamState(state.stream)
+	ev.Stream = &streamCopy
+	state.events[len(state.events)-1].Stream = &streamCopy
+	// Best-effort deltas may be dropped for a backpressured subscriber, but
+	// lossless events force a detach so the browser can rebind explicitly.
+	for id, subscriber := range state.subscribers {
+		if subscriber == nil {
 			delete(state.subscribers, id)
+			continue
+		}
+		deliver := ev
+		if subscriber.lagDropped > 0 {
+			deliver.Transport = &EventTransport{
+				State:         "lagged",
+				Reason:        "best-effort stream events were dropped while the subscriber was backpressured",
+				DroppedEvents: subscriber.lagDropped,
+			}
+		}
+		select {
+		case subscriber.ch <- deliver:
+			if subscriber.lagDropped > 0 {
+				m.logStreamDiagnostic("subscriber_recovered", "codex thread subscriber recovered after backpressure", map[string]any{
+					"thread_id":        ev.ThreadID,
+					"subscriber_id":    subscriber.id,
+					"after_seq":        subscriber.afterSeq,
+					"dropped_events":   subscriber.lagDropped,
+					"last_applied_seq": state.lastAppliedSeq,
+					"stream_epoch":     state.stream.StreamEpoch,
+				})
+				subscriber.lagDropped = 0
+			}
+		default:
+			if isBestEffortEvent(ev.Type) {
+				subscriber.lagDropped++
+				if subscriber.lagDropped == 1 {
+					m.logStreamDiagnostic("subscriber_lagged", "codex thread subscriber started dropping best-effort events", map[string]any{
+						"thread_id":           ev.ThreadID,
+						"subscriber_id":       subscriber.id,
+						"after_seq":           subscriber.afterSeq,
+						"event_type":          ev.Type,
+						"last_applied_seq":    state.lastAppliedSeq,
+						"oldest_retained_seq": state.stream.OldestRetainedSeq,
+						"stream_epoch":        state.stream.StreamEpoch,
+					})
+				}
+				continue
+			}
+			close(subscriber.ch)
+			delete(state.subscribers, id)
+			m.logStreamDiagnostic("subscriber_desynced", "codex thread subscriber was detached after lossless event backpressure", map[string]any{
+				"thread_id":           ev.ThreadID,
+				"subscriber_id":       subscriber.id,
+				"after_seq":           subscriber.afterSeq,
+				"event_type":          ev.Type,
+				"lag_dropped_events":  subscriber.lagDropped,
+				"last_applied_seq":    state.lastAppliedSeq,
+				"oldest_retained_seq": state.stream.OldestRetainedSeq,
+				"stream_epoch":        state.stream.StreamEpoch,
+			})
 		}
 	}
 }
 
 func (m *Manager) buildThreadDetailLocked(state *threadState, thread Thread) ThreadDetail {
+	m.ensureThreadStreamStateLocked(state)
 	out := ThreadDetail{
 		Thread:            cloneThread(thread),
 		RuntimeConfig:     state.runtimeConfig,
 		TokenUsage:        cloneThreadTokenUsage(state.tokenUsage),
 		LastAppliedSeq:    state.lastAppliedSeq,
+		Stream:            cloneThreadStreamState(state.stream),
 		ActiveStatus:      thread.Status,
 		ActiveStatusFlags: append([]string(nil), thread.ActiveFlags...),
 	}
@@ -1459,6 +1693,9 @@ func (m *Manager) buildThreadDetailLocked(state *threadState, thread Thread) Thr
 		for _, req := range state.pending {
 			out.PendingRequests = append(out.PendingRequests, req.request)
 		}
+		sort.Slice(out.PendingRequests, func(i, j int) bool {
+			return out.PendingRequests[i].ID < out.PendingRequests[j].ID
+		})
 	}
 	return out
 }

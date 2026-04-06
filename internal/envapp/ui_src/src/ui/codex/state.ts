@@ -2,6 +2,7 @@ import type {
   CodexEvent,
   CodexItem,
   CodexPendingRequest,
+  CodexThreadStreamState,
   CodexTurn,
   CodexThreadTokenUsage,
   CodexThread,
@@ -19,6 +20,7 @@ type MutableCodexThreadSession = {
   pending_requests: Record<string, CodexPendingRequest>;
   token_usage?: CodexThreadTokenUsage | null;
   last_applied_seq: number;
+  stream: CodexThreadStreamState;
   active_status: string;
   active_status_flags: string[];
 };
@@ -41,7 +43,29 @@ function cloneSession(session: CodexThreadSession): MutableCodexThreadSession {
     item_order: [...session.item_order],
     pending_requests: { ...session.pending_requests },
     token_usage: cloneTokenUsage(session.token_usage),
+    stream: { ...session.stream },
     active_status_flags: [...session.active_status_flags],
+  };
+}
+
+function normalizeStreamState(
+  stream: CodexThreadStreamState | null | undefined,
+  fallbackLastAppliedSeq = 0,
+): CodexThreadStreamState {
+  const lastAppliedSeq = Math.max(
+    0,
+    Number(stream?.last_applied_seq ?? 0) || 0,
+    Math.max(0, Number(fallbackLastAppliedSeq ?? 0) || 0),
+  );
+  const oldestRetainedSeq = Math.max(
+    0,
+    Number(stream?.oldest_retained_seq ?? (lastAppliedSeq > 0 ? lastAppliedSeq + 1 : 0)) || 0,
+  );
+  return {
+    last_applied_seq: lastAppliedSeq,
+    oldest_retained_seq: oldestRetainedSeq,
+    stream_epoch: Math.max(0, Number(stream?.stream_epoch ?? 0) || 0),
+    last_event_at_unix_ms: Math.max(0, Number(stream?.last_event_at_unix_ms ?? 0) || 0),
   };
 }
 
@@ -281,6 +305,7 @@ export function buildCodexThreadSession(detail: CodexThreadDetail): CodexThreadS
     pending_requests,
     token_usage: cloneTokenUsage(detail.token_usage),
     last_applied_seq: Number(detail.last_applied_seq ?? 0) || 0,
+    stream: normalizeStreamState(detail.stream, detail.last_applied_seq),
     active_status: String(detail.active_status ?? detail.thread.status ?? '').trim(),
     active_status_flags: Array.isArray(detail.active_status_flags) ? [...detail.active_status_flags] : [...(detail.thread.active_flags ?? [])],
   };
@@ -300,6 +325,7 @@ export function buildEmptyCodexThreadSession(args: {
     pending_requests: {},
     token_usage: null,
     last_applied_seq: 0,
+    stream: normalizeStreamState(null, 0),
     active_status: String(args.active_status ?? args.thread.status ?? '').trim(),
     active_status_flags: [...(args.active_status_flags ?? args.thread.active_flags ?? [])],
   };
@@ -311,6 +337,9 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
 
   let next = cloneSession(session);
   next.last_applied_seq = Math.max(Number(next.last_applied_seq ?? 0), Number(event.seq ?? 0));
+  next.stream = event.stream
+    ? normalizeStreamState(event.stream, next.last_applied_seq)
+    : normalizeStreamState(next.stream, next.last_applied_seq);
 
   switch (event.type) {
     case 'thread_started':
@@ -426,6 +455,7 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       }
       return next;
     case 'request_resolved':
+    case 'request_evicted':
       if (event.request_id) {
         delete next.pending_requests[String(event.request_id)];
       }
@@ -447,6 +477,8 @@ export function applyCodexEvent(session: CodexThreadSession | null, event: Codex
       next.active_status = 'systemError';
       next.active_status_flags = [];
       next.thread = { ...next.thread, status: 'systemError', active_flags: [] };
+      return next;
+    case 'stream_desynced':
       return next;
     default:
       return next;

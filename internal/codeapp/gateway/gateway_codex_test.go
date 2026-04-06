@@ -296,7 +296,13 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 						ModelContextWindow: &contextWindow,
 					},
 					LastAppliedSeq: 2,
-					ActiveStatus:   "running",
+					Stream: codexbridge.ThreadStreamState{
+						LastAppliedSeq:    2,
+						OldestRetainedSeq: 1,
+						StreamEpoch:       3,
+						LastEventAtUnixMs: 42,
+					},
+					ActiveStatus: "running",
 				}, nil
 			},
 			startThread: func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error) {
@@ -308,6 +314,12 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 						Model:          req.Model,
 						ApprovalPolicy: req.ApprovalPolicy,
 						SandboxMode:    req.SandboxMode,
+					},
+					Stream: codexbridge.ThreadStreamState{
+						LastAppliedSeq:    0,
+						OldestRetainedSeq: 0,
+						StreamEpoch:       3,
+						LastEventAtUnixMs: 0,
 					},
 				}, nil
 			},
@@ -346,6 +358,12 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 						SandboxMode:       req.SandboxMode,
 						ApprovalsReviewer: req.ApprovalsReviewer,
 					},
+					Stream: codexbridge.ThreadStreamState{
+						LastAppliedSeq:    0,
+						OldestRetainedSeq: 0,
+						StreamEpoch:       3,
+						LastEventAtUnixMs: 0,
+					},
 				}, nil
 			},
 			interruptTurn: func(ctx context.Context, req codexbridge.InterruptTurnRequest) error {
@@ -364,14 +382,31 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 						ReasoningEffort: "medium",
 					},
 					LastAppliedSeq: 4,
-					ActiveStatus:   "running",
+					Stream: codexbridge.ThreadStreamState{
+						LastAppliedSeq:    4,
+						OldestRetainedSeq: 1,
+						StreamEpoch:       3,
+						LastEventAtUnixMs: 84,
+					},
+					ActiveStatus: "running",
 				}, nil
 			},
 			subscribeThreadEvent: func(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error) {
 				gotAfterSeq = afterSeq
 				ch := make(chan codexbridge.Event)
 				close(ch)
-				return []codexbridge.Event{{Seq: 3, Type: "thread_status_changed", ThreadID: threadID, Status: "running"}}, ch, nil
+				return []codexbridge.Event{{
+					Seq:      3,
+					Type:     "thread_status_changed",
+					ThreadID: threadID,
+					Status:   "running",
+					Stream: &codexbridge.ThreadStreamState{
+						LastAppliedSeq:    3,
+						OldestRetainedSeq: 1,
+						StreamEpoch:       3,
+						LastEventAtUnixMs: 64,
+					},
+				}}, ch, nil
 			},
 			respondToRequest: func(ctx context.Context, threadID string, requestID string, resp codexbridge.PendingRequestResponse) error {
 				gotRespondThread = threadID
@@ -465,7 +500,9 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 		}
-		if !bytes.Contains(rr.Body.Bytes(), []byte(`"last_applied_seq":2`)) || !bytes.Contains(rr.Body.Bytes(), []byte(`"token_usage"`)) {
+		if !bytes.Contains(rr.Body.Bytes(), []byte(`"last_applied_seq":2`)) ||
+			!bytes.Contains(rr.Body.Bytes(), []byte(`"token_usage"`)) ||
+			!bytes.Contains(rr.Body.Bytes(), []byte(`"stream_epoch":3`)) {
 			t.Fatalf("unexpected body: %s", rr.Body.String())
 		}
 	})

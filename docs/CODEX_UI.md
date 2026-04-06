@@ -19,7 +19,14 @@ High-level design:
 - Transport between Redeven and Codex uses stdio (`codex app-server --listen stdio://`).
 - The bridge initializes the app-server with `experimentalApi=true` so it can consume upstream raw response notifications and extended-history controls that are required for refresh-safe transcript projection.
 - The bridge keeps a per-thread projected state so browser bootstrap and SSE replay always agree on the same applied event cursor.
+- The bridge also keeps per-thread stream journal metadata (`last_applied_seq`, `oldest_retained_seq`, `stream_epoch`, `last_event_at_unix_ms`) so transport continuity can be reasoned about independently from transcript projection.
 - The gateway compacts adjacent additive Codex delta notifications (`agentMessage`, reasoning, plan, command output, file diff) into frame-sized SSE batches before flushing them to the browser, so live transcript updates do not turn one upstream token burst into dozens of browser layout passes.
+- Best-effort stream pressure is explicit instead of silent:
+  - when a subscriber falls behind on best-effort events (`command_output_delta`, `file_change_delta`, `thread_token_usage_updated`), the bridge drops those events for that subscriber only and annotates the next delivered event with `transport.state="lagged"` plus the dropped count;
+  - when continuity for a lossless event can no longer be guaranteed, the subscriber is detached and the browser is expected to rebind from the latest projected sequence.
+- Replay continuity loss is also explicit:
+  - if `after_seq` falls behind the retained journal window, the bridge does not pretend replay succeeded;
+  - instead it emits a synthetic `stream_desynced` marker with `transport.reset_required=true`, and the browser reboots the thread detail before resuming live streaming.
 - Browser-side stream rebinding now resumes from the latest live-applied session sequence rather than from the older bootstrap baseline, so reselecting a cached thread does not replay already-projected additive deltas.
 - Thread bootstrap uses `thread/read(includeTurns=true)` semantics, while live work uses `thread/resume` only when a thread must become active for `turn/start`.
 - Read/bootstrap stays recency-neutral: selecting an existing thread may cache transcript/runtime state locally, but it must not fabricate a newer `updated_at` or reorder the sidebar on its own.
@@ -45,6 +52,7 @@ The browser-side Codex UI uses an explicit controller split so thread switching,
 - `createCodexDraftController()` owns per-owner drafts for runtime fields, composer text, and attachments.
 - `createCodexFollowupController()` persists only browser-owned `queued` next-turn inputs; it does not own active transcript projection or in-flight same-turn dispatch state.
 - `CodexProvider` also keeps an ephemeral per-thread `dispatching` lane for inputs that were accepted locally but have not materialized in the transcript yet.
+- `createCodexStreamCoordinator()` owns live stream transport state, reconnect backoff, desync recovery, and the separation between transcript projection and stream health.
 - The active thread's foreground lifecycle state is session-owned:
   - detail bootstrap + SSE drive transcript, pending requests, token usage, and stop/send state;
   - thread-list polling stays a summary-only mechanism and must not become a second foreground source of truth.
@@ -100,6 +108,22 @@ The current browser-facing contract is:
 
 The event stream endpoint is SSE and is used for live transcript / approval updates.
 
+Transport semantics are part of the browser-facing contract:
+
+- `GET /_redeven_proxy/api/codex/threads/:id/events?after_seq=<n>` may return normal projected events, or a synthetic `stream_desynced` event when `<n>` is older than the retained bridge replay window.
+- Event payloads may also carry:
+  - `stream`
+    - `last_applied_seq`
+    - `oldest_retained_seq`
+    - `stream_epoch`
+    - `last_event_at_unix_ms`
+  - `transport`
+    - `state`
+    - `reason`
+    - `dropped_events`
+    - `reset_required`
+- The browser must treat `transport.state="desynced"` / `stream_desynced` as a required bootstrap refresh, not as a recoverable append-only delta.
+
 `GET /_redeven_proxy/api/codex/threads` accepts:
 
 - `limit`
@@ -114,6 +138,11 @@ The gateway keeps the `archived` filter for Codex app-server compatibility, but 
 - `pending_requests`
 - `token_usage`
 - `last_applied_seq`
+- `stream`
+  - `last_applied_seq`
+  - `oldest_retained_seq`
+  - `stream_epoch`
+  - `last_event_at_unix_ms`
 - `active_status`
 - `active_status_flags`
 
@@ -130,6 +159,8 @@ Codex thread list/detail payloads also include per-thread `read_status` on `thre
 `POST /_redeven_proxy/api/codex/threads/:id/read` accepts the browser-visible `snapshot`, validates that it does not move beyond the current backend thread state, and advances the per-user read watermark monotonically. The runtime persists that watermark by `endpoint_id + user_public_id + surface + thread_id`, so unread state survives environment switches and refreshes instead of living in browser-local storage.
 
 `last_applied_seq` means the returned bootstrap has already applied all bridge-projected events up to that sequence number. The browser must resume SSE from that exact sequence so refreshes do not lose live work state.
+
+`stream.oldest_retained_seq` means the oldest event sequence that is still available for replay through the bridge journal. If the browser attempts to resume before that window, the event stream responds with `stream_desynced` and the browser must refresh thread detail instead of trusting append-only replay.
 
 `POST /_redeven_proxy/api/codex/threads` returns the normalized thread detail bootstrap, including `runtime_config` with the resolved app-server values for:
 
@@ -190,6 +221,10 @@ Current Env App behavior:
 - Sidebar thread order changes only for real thread activity such as new-thread creation, user turn sends, or live lifecycle updates. Clicking an existing thread to read/bootstrap it must not reorder the list by itself.
 - Active-thread foreground work must not trigger list polling. Polling is reserved for background running threads whose lifecycle is not already covered by the selected thread's detail bootstrap + SSE stream.
 - Codex unread state is server-backed. Opening a thread marks the current browser-visible snapshot as read through the gateway instead of writing unread state to desktop/local browser storage.
+- Live stream transport is browser-managed instead of fire-and-forget:
+  - transient disconnects enter a reconnecting state with automatic rebind from the latest applied sequence;
+  - lagged best-effort delivery stays visible as transport state without mutating transcript state;
+  - replay-window loss enters an explicit desynced state and forces a detail bootstrap before live re-attach.
 - Starting a brand-new thread creates an optimistic sidebar row immediately, so the newly selected thread stays visible before `thread/list` catches up.
 - Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
 - Switching to an existing Codex thread explicitly re-enters follow-bottom mode, so the transcript converges to the newest output instead of staying at a stale mid-thread scroll offset.

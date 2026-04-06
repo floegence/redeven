@@ -819,12 +819,17 @@ func compactCodexEvents(events []codexbridge.Event) []codexbridge.Event {
 			continue
 		}
 		compacted[lastIndex].Seq = event.Seq
+		compacted[lastIndex].Stream = event.Stream
+		compacted[lastIndex].Transport = event.Transport
 		compacted[lastIndex].Delta += event.Delta
 	}
 	return compacted
 }
 
 func canCompactCodexEvent(left codexbridge.Event, right codexbridge.Event) bool {
+	if left.Transport != nil || right.Transport != nil {
+		return false
+	}
 	if left.Type != right.Type {
 		return false
 	}

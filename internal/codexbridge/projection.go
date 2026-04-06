@@ -133,6 +133,10 @@ func cloneThreadTokenUsage(usage *ThreadTokenUsage) *ThreadTokenUsage {
 	return &cloned
 }
 
+func cloneThreadStreamState(state ThreadStreamState) ThreadStreamState {
+	return state
+}
+
 func normalizeProjectedItemStatus(raw string, phase projectedItemLifecyclePhase) string {
 	if normalized := strings.TrimSpace(raw); normalized != "" {
 		return normalized

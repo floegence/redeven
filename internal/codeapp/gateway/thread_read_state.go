@@ -77,6 +77,7 @@ type codexThreadDetailView struct {
 	PendingRequests   []codexbridge.PendingRequest    `json:"pending_requests,omitempty"`
 	TokenUsage        *codexbridge.ThreadTokenUsage   `json:"token_usage,omitempty"`
 	LastAppliedSeq    int64                           `json:"last_applied_seq"`
+	Stream            codexbridge.ThreadStreamState   `json:"stream"`
 	ActiveStatus      string                          `json:"active_status,omitempty"`
 	ActiveStatusFlags []string                        `json:"active_status_flags,omitempty"`
 }
@@ -163,6 +164,7 @@ func (g *Gateway) buildCodexThreadDetailView(
 		PendingRequests:   append([]codexbridge.PendingRequest(nil), detail.PendingRequests...),
 		TokenUsage:        detail.TokenUsage,
 		LastAppliedSeq:    detail.LastAppliedSeq,
+		Stream:            detail.Stream,
 		ActiveStatus:      strings.TrimSpace(detail.ActiveStatus),
 		ActiveStatusFlags: append([]string(nil), detail.ActiveStatusFlags...),
 	}

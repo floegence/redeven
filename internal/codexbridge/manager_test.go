@@ -1128,3 +1128,146 @@ func TestStartReview_ProjectsInlineTurn(t *testing.T) {
 		t.Fatalf("unexpected review turns: %+v", detail.Thread.Turns)
 	}
 }
+
+func TestSubscribeThreadEvents_ReturnsDesyncMarkerWhenReplayFallsBehindRetention(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	for index := 0; index < threadEventRetentionLimit+5; index += 1 {
+		manager.appendEventLocked(state, Event{
+			Type:     "thread_status_changed",
+			ThreadID: "thread_1",
+			Status:   "running",
+		})
+	}
+	stream := cloneThreadStreamState(state.stream)
+	manager.mu.Unlock()
+
+	snapshot, ch, err := manager.SubscribeThreadEvents(context.Background(), "thread_1", 1)
+	if err != nil {
+		t.Fatalf("SubscribeThreadEvents: %v", err)
+	}
+	if len(snapshot) != 1 {
+		t.Fatalf("snapshot len=%d, want 1", len(snapshot))
+	}
+	if snapshot[0].Type != "stream_desynced" {
+		t.Fatalf("snapshot[0].Type=%q", snapshot[0].Type)
+	}
+	if snapshot[0].Transport == nil || !snapshot[0].Transport.ResetRequired {
+		t.Fatalf("unexpected transport marker: %+v", snapshot[0].Transport)
+	}
+	if snapshot[0].Stream == nil || snapshot[0].Stream.OldestRetainedSeq != stream.OldestRetainedSeq {
+		t.Fatalf("unexpected stream snapshot: %+v", snapshot[0].Stream)
+	}
+	if _, ok := <-ch; ok {
+		t.Fatalf("expected closed channel for desynced snapshot")
+	}
+}
+
+func TestAppendEventLocked_AnnotatesRecoveredSubscriberAfterBestEffortLag(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	ch := make(chan Event, 1)
+	ch <- Event{Type: "prefill", ThreadID: "thread_1"}
+	state.subscribers[1] = &threadSubscriber{
+		id:       1,
+		ch:       ch,
+		afterSeq: 0,
+	}
+	manager.appendEventLocked(state, Event{
+		Type:     "command_output_delta",
+		ThreadID: "thread_1",
+		ItemID:   "item_1",
+		Delta:    "chunk",
+	})
+	subscriber := state.subscribers[1]
+	if subscriber == nil || subscriber.lagDropped != 1 {
+		manager.mu.Unlock()
+		t.Fatalf("expected lagged subscriber, got %+v", subscriber)
+	}
+	manager.mu.Unlock()
+
+	<-ch
+
+	manager.mu.Lock()
+	manager.appendEventLocked(state, Event{
+		Type:     "thread_status_changed",
+		ThreadID: "thread_1",
+		Status:   "running",
+	})
+	manager.mu.Unlock()
+
+	recovered := <-ch
+	if recovered.Type != "thread_status_changed" {
+		t.Fatalf("recovered.Type=%q", recovered.Type)
+	}
+	if recovered.Transport == nil || recovered.Transport.State != "lagged" || recovered.Transport.DroppedEvents != 1 {
+		t.Fatalf("unexpected recovered transport marker: %+v", recovered.Transport)
+	}
+}
+
+func TestHandleEnvelope_ThreadClosedEvictsPendingRequests(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "Pending request thread",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "active",
+		CWD:           "/workspace",
+	}
+	state.pending["request_1"] = &pendingRequestRecord{
+		request: PendingRequest{
+			ID:       "request_1",
+			ThreadID: "thread_1",
+			Type:     "command_approval",
+		},
+	}
+	manager.mu.Unlock()
+
+	manager.handleEnvelope(rpcEnvelope{
+		Method: "thread/closed",
+		Params: mustMarshalParams(t, wireThreadClosedNotification{
+			ThreadID: "thread_1",
+		}),
+	})
+
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	state = manager.threads["thread_1"]
+	if state == nil {
+		t.Fatalf("expected thread state")
+	}
+	if len(state.pending) != 0 {
+		t.Fatalf("pending=%d, want 0", len(state.pending))
+	}
+	if len(state.events) < 2 {
+		t.Fatalf("expected eviction + close events, got %d", len(state.events))
+	}
+	if state.events[len(state.events)-2].Type != "request_evicted" {
+		t.Fatalf("events[-2].Type=%q", state.events[len(state.events)-2].Type)
+	}
+	if state.events[len(state.events)-1].Type != "thread_closed" {
+		t.Fatalf("events[-1].Type=%q", state.events[len(state.events)-1].Type)
+	}
+}

@@ -1,6 +1,8 @@
 import { HighlightBlock } from '@floegence/floe-webapp-core/ui';
 import { Show } from 'solid-js';
 
+import type { CodexStreamTransportState } from './types';
+
 function Banner(props: {
   title: string;
   body: string;
@@ -16,9 +18,15 @@ function Banner(props: {
 export function CodexStatusBannerStack(props: {
   statusError: string | null;
   threadError: string | null;
-  streamError: string | null;
+  streamTransportState: CodexStreamTransportState;
   hostAvailable: boolean;
 }) {
+  const streamPhase = () => String(props.streamTransportState.phase ?? '').trim();
+  const streamMessage = () => String(
+    props.streamTransportState.desync_reason ??
+    props.streamTransportState.last_disconnect_reason ??
+    '',
+  ).trim();
   return (
     <>
       <Show when={props.statusError}>
@@ -30,10 +38,24 @@ export function CodexStatusBannerStack(props: {
           body={props.threadError || ''}
         />
       </Show>
-      <Show when={props.streamError}>
+      <Show when={streamPhase() === 'reconnecting'}>
         <Banner
           title="Live event stream"
-          body={`Live event stream disconnected: ${props.streamError}`}
+          body={streamMessage() || 'Live event stream disconnected. Reconnecting...'}
+          variant="warning"
+        />
+      </Show>
+      <Show when={streamPhase() === 'lagged'}>
+        <Banner
+          title="Live event stream"
+          body={`Live event stream dropped ${Math.max(0, Number(props.streamTransportState.last_lagged_dropped_events ?? 0) || 0)} best-effort updates while catching up.`}
+          variant="warning"
+        />
+      </Show>
+      <Show when={streamPhase() === 'desynced'}>
+        <Banner
+          title="Live event stream"
+          body={streamMessage() || 'Live event stream lost continuity and is reloading the thread state.'}
         />
       </Show>
       <Show when={!props.hostAvailable}>

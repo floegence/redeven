@@ -61,9 +61,13 @@ export function CodexPageShell() {
     activeStatusFlags: codex.activeStatusFlags(),
     pendingRequests: codex.pendingRequests(),
   }));
+  const hasStreamBanner = createMemo(() => {
+    const phase = String(codex.streamTransportState().phase ?? '').trim();
+    return phase === 'reconnecting' || phase === 'lagged' || phase === 'desynced';
+  });
 
   const showBannerStack = createMemo(() =>
-    Boolean(codex.statusError() || codex.activeThreadError() || codex.streamError() || !summary().hostReady),
+    Boolean(codex.statusError() || codex.activeThreadError() || hasStreamBanner() || !summary().hostReady),
   );
 
   const emptyStateTitle = () => (
@@ -417,7 +421,7 @@ export function CodexPageShell() {
               <CodexStatusBannerStack
                 statusError={codex.statusError()}
                 threadError={codex.activeThreadError()}
-                streamError={codex.streamError()}
+                streamTransportState={codex.streamTransportState()}
                 hostAvailable={summary().hostReady}
               />
             </div>

@@ -186,6 +186,40 @@ export type CodexThreadReadStatus = Readonly<{
   read_state: CodexThreadReadState;
 }>;
 
+export type CodexThreadStreamState = Readonly<{
+  last_applied_seq: number;
+  oldest_retained_seq: number;
+  stream_epoch: number;
+  last_event_at_unix_ms: number;
+}>;
+
+export type CodexEventTransport = Readonly<{
+  state?: 'lagged' | 'desynced' | string;
+  reason?: string;
+  dropped_events?: number;
+  reset_required?: boolean;
+}>;
+
+export type CodexStreamTransportPhase =
+  | 'idle'
+  | 'connecting'
+  | 'live'
+  | 'lagged'
+  | 'reconnecting'
+  | 'desynced'
+  | 'closed';
+
+export type CodexStreamTransportState = Readonly<{
+  phase: CodexStreamTransportPhase;
+  thread_id: string | null;
+  retry_count: number;
+  last_event_at_unix_ms: number | null;
+  last_disconnect_reason: string | null;
+  last_lagged_dropped_events: number;
+  stream_epoch: number | null;
+  desync_reason: string | null;
+}>;
+
 export type CodexItem = Readonly<{
   id: string;
   type: string;
@@ -282,6 +316,7 @@ export type CodexThreadDetail = Readonly<{
   pending_requests?: CodexPendingRequest[];
   token_usage?: CodexThreadTokenUsage | null;
   last_applied_seq: number;
+  stream?: CodexThreadStreamState;
   active_status?: string;
   active_status_flags?: string[];
 }>;
@@ -320,6 +355,8 @@ export type CodexEvent = Readonly<{
   item?: CodexItem;
   request?: CodexPendingRequest;
   token_usage?: CodexThreadTokenUsage | null;
+  stream?: CodexThreadStreamState;
+  transport?: CodexEventTransport;
   delta?: string;
   status?: string;
   flags?: string[];
@@ -342,6 +379,7 @@ export type CodexThreadSession = Readonly<{
   pending_requests: Record<string, CodexPendingRequest>;
   token_usage?: CodexThreadTokenUsage | null;
   last_applied_seq: number;
+  stream: CodexThreadStreamState;
   active_status: string;
   active_status_flags: string[];
 }>;

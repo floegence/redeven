@@ -19,6 +19,7 @@ const (
 	ScopeLocalUIHTTP      = "localui_http"
 	ScopeGatewayAPI       = "gateway_api"
 	ScopeDirectSession    = "direct_session"
+	ScopeCodexBridge      = "codex_bridge"
 )
 
 type traceContextKey struct{}

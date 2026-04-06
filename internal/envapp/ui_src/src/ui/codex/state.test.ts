@@ -71,6 +71,12 @@ function sampleDetail(): CodexThreadDetail {
       model_context_window: 128000,
     },
     last_applied_seq: 4,
+    stream: {
+      last_applied_seq: 4,
+      oldest_retained_seq: 1,
+      stream_epoch: 2,
+      last_event_at_unix_ms: 10,
+    },
     active_status: 'running',
     active_status_flags: ['busy'],
   };
@@ -85,6 +91,7 @@ describe('buildCodexThreadSession', () => {
     expect(session.items_by_id.item_reasoning.summary).toEqual(['inspect files']);
     expect(session.pending_requests.request_1.reason).toBe('needs approval');
     expect(session.last_applied_seq).toBe(4);
+    expect(session.stream.stream_epoch).toBe(2);
     expect(session.token_usage?.total.total_tokens).toBe(3200);
     expect(session.active_status_flags).toEqual(['busy']);
     expect(session.runtime_config.cwd).toBe('/workspace');
@@ -127,8 +134,16 @@ describe('applyCodexEvent', () => {
     });
     expect(resolved?.pending_requests.request_1).toBeUndefined();
 
-    const finished = applyCodexEvent(resolved ?? null, {
+    const evicted = applyCodexEvent(resolved ?? null, {
       seq: 8,
+      type: 'request_evicted',
+      thread_id: 'thread_1',
+      request_id: 'request_2',
+    });
+    expect(evicted?.pending_requests.request_2).toBeUndefined();
+
+    const finished = applyCodexEvent(evicted ?? null, {
+      seq: 9,
       type: 'thread_status_changed',
       thread_id: 'thread_1',
       status: 'completed',
@@ -194,6 +209,7 @@ describe('applyCodexEvent', () => {
     });
     expect(withContent?.items_by_id.item_reasoning_live.text).toContain('Inspecting the event replay path.');
     expect(withContent?.last_applied_seq).toBe(8);
+    expect(withContent?.stream.last_applied_seq).toBe(8);
   });
 
   it('keeps working state when Codex reports a retryable error', () => {

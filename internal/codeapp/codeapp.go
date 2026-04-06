@@ -200,6 +200,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	codexSvc, err := codexbridge.NewManager(codexbridge.Options{
 		Logger:       logger,
 		AgentHomeDir: agentHomeDir,
+		Diagnostics:  opts.Diagnostics,
 	})
 	if err != nil {
 		_ = reg.Close()
