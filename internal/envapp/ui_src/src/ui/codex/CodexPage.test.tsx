@@ -692,6 +692,9 @@ describe('CodexPage', () => {
     await flushAsync();
     await flushAsync();
 
+    expect(host.querySelector('.codex-page-transcript-main .codex-page-file-browser-fab')).toBeNull();
+    expect(host.querySelector('.codex-page-transcript-viewport > .codex-page-file-browser-fab')).not.toBeNull();
+
     const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
     expect(button).not.toBeNull();
 

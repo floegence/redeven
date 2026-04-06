@@ -65,13 +65,22 @@ describe('CodexFileBrowserFAB browser behavior', () => {
     host.style.position = 'fixed';
     host.style.inset = '0';
     document.body.appendChild(host);
+    let viewportRef: HTMLDivElement | undefined;
 
     render(() => (
       <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
-        <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }}>
+        <div
+          ref={(element) => {
+            viewportRef = element;
+          }}
+          class="codex-page-transcript-viewport"
+          style={{ position: 'relative', width: '480px', height: '320px' }}
+        >
+          <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }} />
           <CodexFileBrowserFAB
             workingDir="/workspace/ui"
             homePath="/workspace"
+            containerRef={() => viewportRef}
           />
         </div>
       </div>
@@ -99,13 +108,22 @@ describe('CodexFileBrowserFAB browser behavior', () => {
     host.style.position = 'fixed';
     host.style.inset = '0';
     document.body.appendChild(host);
+    let viewportRef: HTMLDivElement | undefined;
 
     render(() => (
       <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
-        <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }}>
+        <div
+          ref={(element) => {
+            viewportRef = element;
+          }}
+          class="codex-page-transcript-viewport"
+          style={{ position: 'relative', width: '480px', height: '320px' }}
+        >
+          <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }} />
           <CodexFileBrowserFAB
             workingDir=""
             homePath=""
+            containerRef={() => viewportRef}
           />
         </div>
       </div>
@@ -116,5 +134,57 @@ describe('CodexFileBrowserFAB browser behavior', () => {
     expect(button).toBeTruthy();
     expect(button?.disabled).toBe(true);
     expect(getComputedStyle(button!).cursor).toBe('not-allowed');
+  });
+
+  it('stays inside the Codex transcript viewport after the transcript content scrolls', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+    let viewportRef: HTMLDivElement | undefined;
+    let scrollRef: HTMLDivElement | undefined;
+
+    render(() => (
+      <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
+        <div
+          ref={(element) => {
+            viewportRef = element;
+          }}
+          class="codex-page-transcript-viewport"
+          style={{ position: 'relative', width: '480px', height: '320px' }}
+        >
+          <div
+            ref={(element) => {
+              scrollRef = element;
+            }}
+            class="codex-page-transcript-main"
+            style={{ width: '480px', height: '320px', overflow: 'auto' }}
+          >
+            <div style={{ height: '2400px' }} />
+          </div>
+          <CodexFileBrowserFAB
+            workingDir="/workspace/ui"
+            homePath="/workspace"
+            containerRef={() => viewportRef}
+          />
+        </div>
+      </div>
+    ), host);
+    await settle();
+
+    scrollRef!.scrollTop = 1800;
+    scrollRef!.dispatchEvent(new Event('scroll'));
+    await settle();
+
+    const viewport = host.querySelector('.codex-page-transcript-viewport') as HTMLDivElement | null;
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    const viewportBox = viewport?.getBoundingClientRect();
+    const buttonBox = button?.getBoundingClientRect();
+    expect(viewportBox).toBeTruthy();
+    expect(buttonBox).toBeTruthy();
+    expect(buttonBox!.x).toBeGreaterThanOrEqual(viewportBox!.x);
+    expect(buttonBox!.y).toBeGreaterThanOrEqual(viewportBox!.y);
+    expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(viewportBox!.x + viewportBox!.width);
+    expect(buttonBox!.y + buttonBox!.height).toBeLessThanOrEqual(viewportBox!.y + viewportBox!.height);
   });
 });

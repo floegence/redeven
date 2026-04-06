@@ -42,7 +42,7 @@ export function CodexPageShell() {
   const rpc = useRedevenRpc();
   const followBottomController = createFollowBottomController();
   const [workingDirPickerOpen, setWorkingDirPickerOpen] = createSignal(false);
-  let transcriptContainerRef: HTMLDivElement | undefined;
+  const [transcriptViewportRef, setTranscriptViewportRef] = createSignal<HTMLDivElement>();
 
   onCleanup(() => {
     followBottomController.dispose();
@@ -346,31 +346,35 @@ export function CodexPageShell() {
           </Show>
 
           <div
-            ref={(element) => {
-              transcriptContainerRef = element;
-              followBottomController.setScrollContainer(element);
-            }}
-            class="codex-page-transcript-main"
-            data-codex-transcript-scroll-region="true"
-            onScroll={followBottomController.handleScroll}
+            ref={setTranscriptViewportRef}
+            class="codex-page-transcript-viewport"
           >
-            <CodexTranscript
-              rootRef={followBottomController.setContentRoot}
-              items={codex.transcriptItems()}
-              optimisticUserTurns={codex.activeOptimisticUserTurns()}
-              showWorkingState={shouldShowWorkingState()}
-              workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
-              workingFlags={summary().statusFlags}
-              loading={codex.threadLoading()}
-              loadingTitle={codex.threadTitle()}
-              loadingBody="Loading the selected Codex thread."
-              emptyTitle={emptyStateTitle()}
-              emptyBody={emptyStateBody()}
-            />
+            <div
+              ref={(element) => {
+                followBottomController.setScrollContainer(element);
+              }}
+              class="codex-page-transcript-main"
+              data-codex-transcript-scroll-region="true"
+              onScroll={followBottomController.handleScroll}
+            >
+              <CodexTranscript
+                rootRef={followBottomController.setContentRoot}
+                items={codex.transcriptItems()}
+                optimisticUserTurns={codex.activeOptimisticUserTurns()}
+                showWorkingState={shouldShowWorkingState()}
+                workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
+                workingFlags={summary().statusFlags}
+                loading={codex.threadLoading()}
+                loadingTitle={codex.threadTitle()}
+                loadingBody="Loading the selected Codex thread."
+                emptyTitle={emptyStateTitle()}
+                emptyBody={emptyStateBody()}
+              />
+            </div>
             <CodexFileBrowserFAB
               workingDir={workingDirPath()}
               homePath={homePath()}
-              containerRef={transcriptContainerRef}
+              containerRef={transcriptViewportRef}
             />
           </div>
         </div>

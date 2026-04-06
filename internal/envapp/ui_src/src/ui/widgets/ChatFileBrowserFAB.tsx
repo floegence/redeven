@@ -3,21 +3,25 @@
 import { Show } from 'solid-js';
 import { Motion } from 'solid-motionone';
 import { Folder } from '@floegence/floe-webapp-core/icons';
-import { createFileBrowserFABModel } from './createFileBrowserFABModel';
+import {
+  createFileBrowserFABModel,
+  resolveFileBrowserFABContainerRef,
+  type FileBrowserFABContainerRef,
+} from './createFileBrowserFABModel';
 
 export interface ChatFileBrowserFABProps {
   workingDir: string;
   homePath?: string;
   enabled?: boolean;
   /** Ref to the container element that bounds the FAB drag area. */
-  containerRef?: HTMLElement;
+  containerRef?: FileBrowserFABContainerRef;
 }
 
 export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
   const fab = createFileBrowserFABModel({
     workingDir: () => props.workingDir,
     homePath: () => props.homePath,
-    containerRef: () => props.containerRef,
+    containerRef: () => resolveFileBrowserFABContainerRef(props.containerRef),
   });
 
   return (
