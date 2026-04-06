@@ -3273,7 +3273,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			mimeType = fh.Header.Get("Content-Type")
 		}
 
-		out, err := g.ai.SaveUpload(f, name, mimeType, 10<<20)
+		out, err := g.ai.SaveUpload(r.Context(), strings.TrimSpace(meta.EndpointID), f, name, mimeType, 10<<20)
 		if err != nil {
 			g.appendAudit(meta, "ai_upload", "failure", map[string]any{
 				"name":      strings.TrimSpace(name),
@@ -3302,7 +3302,8 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/"):
-		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
 			return
 		}
 		if g.ai == nil || !g.ai.Enabled() {
@@ -3316,7 +3317,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 			return
 		}
-		info, filePath, err := g.ai.OpenUpload(uploadID)
+		info, filePath, err := g.ai.OpenUpload(r.Context(), strings.TrimSpace(meta.EndpointID), uploadID)
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: err.Error()})
 			return

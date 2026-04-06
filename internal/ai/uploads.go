@@ -2,6 +2,7 @@ package ai
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 type uploadMeta struct {
@@ -31,7 +34,7 @@ func newUploadID() (string, error) {
 	return "upl_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func (s *Service) SaveUpload(r io.Reader, name string, mimeType string, maxBytes int64) (*UploadResponse, error) {
+func (s *Service) SaveUpload(ctx context.Context, endpointID string, r io.Reader, name string, mimeType string, maxBytes int64) (*UploadResponse, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -40,6 +43,10 @@ func (s *Service) SaveUpload(r io.Reader, name string, mimeType string, maxBytes
 	}
 	if maxBytes <= 0 {
 		maxBytes = 10 << 20 // 10 MiB
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	if endpointID == "" {
+		return nil, errors.New("missing endpoint_id")
 	}
 
 	id, err := newUploadID()
@@ -52,9 +59,16 @@ func (s *Service) SaveUpload(r io.Reader, name string, mimeType string, maxBytes
 		name = "upload"
 	}
 
+	s.mu.Lock()
 	dir := strings.TrimSpace(s.uploadsDir)
-	if dir == "" {
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if dir == "" || db == nil {
 		return nil, errors.New("uploads not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
 	}
 	dataPath := filepath.Join(dir, id+".data")
 	metaPath := filepath.Join(dir, id+".json")
@@ -117,7 +131,26 @@ func (s *Service) SaveUpload(r io.Reader, name string, mimeType string, maxBytes
 		return nil, err
 	}
 	if err := os.Rename(metaPath+".tmp", metaPath); err != nil {
+		_ = os.Remove(dataPath)
 		_ = os.Remove(metaPath + ".tmp")
+		return nil, err
+	}
+	pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	err = db.InsertUpload(pctx, threadstore.UploadRecord{
+		UploadID:          meta.ID,
+		EndpointID:        endpointID,
+		StorageRelPath:    filepath.Base(dataPath),
+		Name:              meta.Name,
+		MimeType:          meta.MimeType,
+		SizeBytes:         meta.Size,
+		State:             threadstore.UploadStateStaged,
+		CreatedAtUnixMs:   meta.CreatedAt,
+		DeleteAfterUnixMs: meta.CreatedAt + uploadStagedTTL.Milliseconds(),
+	})
+	cancel()
+	if err != nil {
+		_ = os.Remove(dataPath)
+		_ = os.Remove(metaPath)
 		return nil, err
 	}
 
@@ -129,20 +162,45 @@ func (s *Service) SaveUpload(r io.Reader, name string, mimeType string, maxBytes
 	}, nil
 }
 
-func (s *Service) OpenUpload(uploadID string) (*UploadResponse, string, error) {
+func (s *Service) OpenUpload(ctx context.Context, endpointID string, uploadID string) (*UploadResponse, string, error) {
 	if s == nil {
 		return nil, "", errors.New("nil service")
 	}
-	meta, dataPath, err := readUpload(s.uploadsDir, uploadID)
+	endpointID = strings.TrimSpace(endpointID)
+	uploadID = strings.TrimSpace(uploadID)
+	if endpointID == "" || uploadID == "" {
+		return nil, "", errors.New("invalid request")
+	}
+	s.mu.Lock()
+	dir := strings.TrimSpace(s.uploadsDir)
+	s.mu.Unlock()
+	if dir == "" {
+		return nil, "", errors.New("uploads not ready")
+	}
+	rec, err := s.ensureUploadRecord(ctx, endpointID, uploadID)
 	if err != nil {
 		return nil, "", err
 	}
-	return &UploadResponse{
-		URL:      "/_redeven_proxy/api/ai/uploads/" + meta.ID,
-		Name:     meta.Name,
-		Size:     meta.Size,
-		MimeType: meta.MimeType,
-	}, dataPath, nil
+	if rec == nil {
+		return nil, "", errors.New("not found")
+	}
+
+	paths := make([]string, 0, 2)
+	if rel := filepath.Base(strings.TrimSpace(rec.StorageRelPath)); rel != "" && rel != "." {
+		paths = append(paths, filepath.Join(dir, rel))
+	}
+	paths = append(paths, filepath.Join(dir, uploadID+".data"))
+	for _, dataPath := range uniqueStrings(paths) {
+		if _, statErr := os.Stat(dataPath); statErr == nil {
+			return &UploadResponse{
+				URL:      "/_redeven_proxy/api/ai/uploads/" + rec.UploadID,
+				Name:     rec.Name,
+				Size:     rec.SizeBytes,
+				MimeType: rec.MimeType,
+			}, dataPath, nil
+		}
+	}
+	return nil, "", errors.New("not found")
 }
 
 func readUpload(uploadsDir string, uploadID string) (*uploadMeta, string, error) {

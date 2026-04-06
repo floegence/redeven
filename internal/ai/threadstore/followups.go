@@ -222,7 +222,17 @@ func (s *Store) CreateFollowup(ctx context.Context, rec QueuedTurn) (QueuedTurn,
 		return QueuedTurn{}, 0, 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	queued, position, revision, err := createFollowupTx(ctx, tx, rec)
+	if err != nil {
+		return QueuedTurn{}, 0, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return QueuedTurn{}, 0, 0, err
+	}
+	return queued, position, revision, nil
+}
 
+func createFollowupTx(ctx context.Context, tx *sql.Tx, rec QueuedTurn) (QueuedTurn, int, int64, error) {
 	if _, err := getThreadFollowupsRevisionTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
 		return QueuedTurn{}, 0, 0, err
 	}
@@ -234,7 +244,7 @@ func (s *Store) CreateFollowup(ctx context.Context, rec QueuedTurn) (QueuedTurn,
 		rec.SortIndex = nextSort
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	_, err := tx.ExecContext(ctx, `
 INSERT INTO ai_queued_turns(
   queue_id, endpoint_id, thread_id, channel_id, lane, sort_index, message_id, model_id, text_content, attachments_json, options_json,
   created_by_user_public_id, created_by_user_email, created_at_unix_ms, updated_at_unix_ms
@@ -258,9 +268,6 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		if revErr != nil {
 			return QueuedTurn{}, 0, 0, revErr
 		}
-		if err := tx.Commit(); err != nil {
-			return QueuedTurn{}, 0, 0, err
-		}
 		return existing, position, revision, nil
 	}
 
@@ -270,9 +277,6 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	}
 	revision, err := bumpThreadFollowupsRevisionTx(ctx, tx, rec.EndpointID, rec.ThreadID)
 	if err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	if err := tx.Commit(); err != nil {
 		return QueuedTurn{}, 0, 0, err
 	}
 	return rec, position, revision, nil

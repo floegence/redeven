@@ -147,7 +147,6 @@ func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, en
 
 	s.mu.Lock()
 	db := s.threadsDB
-	uploadsDir := strings.TrimSpace(s.uploadsDir)
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
 	if db == nil {
@@ -169,15 +168,19 @@ func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, en
 		messageID = id
 	}
 	input.MessageID = messageID
+	input, uploadInfoByURL, uploadIDs, err := s.normalizeInputAttachments(ctx, endpointID, input)
+	if err != nil {
+		return persistedUserMessage{}, input, err
+	}
 
 	now := time.Now().UnixMilli()
-	userJSON, userText, err := buildUserMessageJSON(messageID, input, uploadsDir, now)
+	userJSON, userText, err := buildUserMessageJSON(messageID, input, uploadInfoByURL, now)
 	if err != nil {
 		return persistedUserMessage{}, input, err
 	}
 
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
-	rowID, err := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
+	rowID, err := db.AppendMessageWithUploadRefs(pctx, endpointID, threadID, threadstore.Message{
 		ThreadID:           threadID,
 		EndpointID:         endpointID,
 		MessageID:          messageID,
@@ -189,7 +192,7 @@ func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, en
 		UpdatedAtUnixMs:    now,
 		TextContent:        userText,
 		MessageJSON:        userJSON,
-	}, meta.UserPublicID, meta.UserEmail)
+	}, meta.UserPublicID, meta.UserEmail, uploadIDs, now)
 	cancel()
 	if err != nil {
 		if !isUniqueConstraintError(err) {

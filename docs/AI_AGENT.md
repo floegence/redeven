@@ -235,6 +235,8 @@ Installer note:
 ## Threadstore Persistence Contract
 
 - Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
+- Upload blobs are persisted as first-class threadstore resources (`ai_uploads`) with explicit message/followup references (`ai_upload_refs`) instead of relying on transcript JSON scraping as the steady-state ownership source.
+- Fresh uploads start as staged runtime-local blobs. Once a message or queued followup claims them, they become thread-owned resources; deleting that thread or deleting an unconsumed followup removes the corresponding refs, deletes any newly unreferenced upload blobs/metadata, and then runs best-effort SQLite compaction so on-disk usage converges after cleanup.
 - Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
 - The `workspace_json` column is now a legacy compatibility payload only. New checkpoints are thread-state-only; old workspace checkpoint artifacts are cleaned up best-effort during retention pruning, thread deletion, and startup orphan sweeps.
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.

@@ -53,6 +53,10 @@ func Open(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := ensureIncrementalAutoVacuum(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
@@ -1341,7 +1345,18 @@ func (s *Store) AppendMessage(ctx context.Context, endpointID string, threadID s
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	rowID, err := appendMessageTx(ctx, tx, endpointID, threadID, m, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), preview)
+	if err != nil {
+		return 0, err
+	}
 
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return rowID, nil
+}
+
+func appendMessageTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, m Message, updatedByID string, updatedByEmail string, preview string) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
 INSERT INTO transcript_messages(
   thread_id, endpoint_id, message_id, role,
@@ -1366,8 +1381,6 @@ INSERT INTO transcript_messages(
 		return 0, err
 	}
 	rowID, _ := res.LastInsertId()
-
-	// Update thread metadata.
 	updateRes, err := tx.ExecContext(ctx, `
 UPDATE ai_threads
 SET updated_at_unix_ms = ?,
@@ -1390,10 +1403,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 	}
 	if n, _ := updateRes.RowsAffected(); n == 0 {
 		return 0, sql.ErrNoRows
-	}
-
-	if err := tx.Commit(); err != nil {
-		return 0, err
 	}
 	return rowID, nil
 }

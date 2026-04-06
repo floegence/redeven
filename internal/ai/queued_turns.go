@@ -168,10 +168,15 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 			return threadstore.QueuedTurn{}, 0, err
 		}
 	}
+	normalizedInput, _, uploadIDs, err := s.normalizeInputAttachments(ctx, strings.TrimSpace(meta.EndpointID), req.Input)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
 	queueID, err := NewQueuedTurnID()
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
+	createdAtUnixMs := time.Now().UnixMilli()
 
 	rec := threadstore.QueuedTurn{
 		QueueID:               queueID,
@@ -181,17 +186,17 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		Lane:                  threadstore.FollowupLaneQueued,
 		MessageID:             messageID,
 		ModelID:               strings.TrimSpace(req.Model),
-		TextContent:           strings.TrimSpace(req.Input.Text),
-		AttachmentsJSON:       marshalQueuedTurnAttachments(req.Input.Attachments),
+		TextContent:           strings.TrimSpace(normalizedInput.Text),
+		AttachmentsJSON:       marshalQueuedTurnAttachments(normalizedInput.Attachments),
 		OptionsJSON:           marshalQueuedTurnOptions(req.Options),
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
 		CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
-		CreatedAtUnixMs:       time.Now().UnixMilli(),
+		CreatedAtUnixMs:       createdAtUnixMs,
 	}
 
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
 	defer cancel()
-	queued, position, _, err := db.CreateFollowup(pctx, rec)
+	queued, position, _, err := db.CreateFollowupWithUploadRefs(pctx, rec, uploadIDs, createdAtUnixMs)
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
@@ -207,19 +212,48 @@ func (s *Service) consumeSourceFollowup(ctx context.Context, meta *session.Meta,
 	if followupID == "" {
 		return nil
 	}
-	s.mu.Lock()
-	db := s.threadsDB
-	s.mu.Unlock()
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	if _, err := db.DeleteFollowup(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), followupID); err != nil {
+	if err := s.deleteFollowupResources(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), followupID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
 		return err
 	}
-	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID))
+	return nil
+}
+
+func (s *Service) deleteFollowupResources(ctx context.Context, endpointID string, threadID string, followupID string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	followupID = strings.TrimSpace(followupID)
+	if endpointID == "" || threadID == "" || followupID == "" {
+		return errors.New("invalid request")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	pctx, cancel := context.WithTimeout(ctx, persistTO)
+	result, err := db.DeleteFollowupResources(pctx, endpointID, threadID, followupID)
+	cancel()
+	if err != nil {
+		return err
+	}
+	if _, err := s.processUploadCleanupCandidates(ctx, result.UploadsToDelete); err != nil {
+		return err
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
 	return nil
 }
 
@@ -338,11 +372,7 @@ func (s *Service) DeleteFollowup(ctx context.Context, meta *session.Meta, thread
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	if _, err := db.DeleteFollowup(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), strings.TrimSpace(followupID)); err != nil {
-		return err
-	}
-	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID))
-	return nil
+	return s.deleteFollowupResources(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), strings.TrimSpace(followupID))
 }
 
 func (s *Service) ReorderFollowups(ctx context.Context, meta *session.Meta, threadID string, req ReorderFollowupsRequest) error {

@@ -397,16 +397,17 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	}
 	meta := queuedTurnRecordToSessionMeta(rec, th.NamespacePublicID)
 	startReq := queuedTurnRecordToRunStartRequest(rec, th.ExecutionMode)
-	if err := a.mgr.svc.StartRunDetached(meta, runID, startReq); err != nil {
+	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, startReq.Input)
+	if err != nil {
 		return err
 	}
-	dctx, dcancel := context.WithTimeout(ctx, persistTO)
-	_, delErr := db.DeleteFollowup(dctx, endpointID, threadID, rec.QueueID)
-	dcancel()
-	if delErr != nil && !errors.Is(delErr, sql.ErrNoRows) {
-		return delErr
+	startReq.Input = normalizedInput
+	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
+		return err
 	}
-	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
+	if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
 	return nil
 }
 

@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 20
+	threadstoreCurrentSchemaVersion = 21
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -26,7 +26,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 		Kind:           threadstoreSchemaKind,
 		CurrentVersion: threadstoreCurrentSchemaVersion,
 		LegacyMarkers:  []string{"ai_threads", "ai_messages", "transcript_messages"},
-		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
+		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA auto_vacuum=INCREMENTAL;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateThreadstoreToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateThreadstoreToV2},
@@ -48,6 +48,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 17, ToVersion: 18, Apply: migrateThreadstoreToV18},
 			{FromVersion: 18, ToVersion: 19, Apply: migrateThreadstoreToV19},
 			{FromVersion: 19, ToVersion: 20, Apply: migrateThreadstoreToV20},
+			{FromVersion: 20, ToVersion: 21, Apply: migrateThreadstoreToV21},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -201,6 +202,10 @@ func migrateThreadstoreToV19(tx *sql.Tx) error {
 
 func migrateThreadstoreToV20(tx *sql.Tx) error {
 	return ensureAIThreadsLastContextRunIDTx(tx)
+}
+
+func migrateThreadstoreToV21(tx *sql.Tx) error {
+	return ensureUploadTablesTx(tx)
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
@@ -622,6 +627,40 @@ WHERE sort_index <= 0
 	return nil
 }
 
+func ensureUploadTablesTx(tx *sql.Tx) error {
+	if _, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS ai_uploads (
+  upload_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  storage_relpath TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  state TEXT NOT NULL DEFAULT 'staged',
+  created_at_unix_ms INTEGER NOT NULL,
+  claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  delete_after_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ai_uploads_endpoint_created ON ai_uploads(endpoint_id, created_at_unix_ms DESC, upload_id DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_uploads_state_delete_after ON ai_uploads(endpoint_id, state, delete_after_unix_ms, created_at_unix_ms);
+CREATE TABLE IF NOT EXISTS ai_upload_refs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  upload_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  ref_kind TEXT NOT NULL,
+  ref_id TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_upload_refs_unique_ref ON ai_upload_refs(endpoint_id, upload_id, ref_kind, ref_id);
+CREATE INDEX IF NOT EXISTS idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id);
+CREATE INDEX IF NOT EXISTS idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id);
+`); err != nil {
+		return err
+	}
+	return nil
+}
+
 func ensureColumnTx(tx *sql.Tx, tableName string, columnName string, stmt string) error {
 	has, err := columnExists(tx, tableName, columnName)
 	if err != nil {
@@ -653,6 +692,8 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"memory_items",
 		"context_snapshots",
 		"provider_capabilities",
+		"ai_uploads",
+		"ai_upload_refs",
 	}
 	for _, tableName := range requiredTables {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
@@ -755,6 +796,13 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"id", "endpoint_id", "thread_id", "response_message_id", "question_id",
 			"answer_index", "answer_text", "created_at_unix_ms",
 		},
+		"ai_uploads": {
+			"upload_id", "endpoint_id", "storage_relpath", "name", "mime_type",
+			"size_bytes", "state", "created_at_unix_ms", "claimed_at_unix_ms", "delete_after_unix_ms",
+		},
+		"ai_upload_refs": {
+			"id", "endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id", "created_at_unix_ms",
+		},
 	}
 	for tableName, columns := range requiredColumns {
 		for _, columnName := range columns {
@@ -791,6 +839,11 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_context_snapshots_thread_level",
 		"idx_structured_user_inputs_recent",
 		"idx_request_user_input_secret_answers_message",
+		"idx_ai_uploads_endpoint_created",
+		"idx_ai_uploads_state_delete_after",
+		"idx_ai_upload_refs_unique_ref",
+		"idx_ai_upload_refs_thread_upload",
+		"idx_ai_upload_refs_upload",
 	}
 	for _, indexName := range requiredIndexes {
 		exists, err := sqliteutil.IndexExistsTx(tx, indexName)

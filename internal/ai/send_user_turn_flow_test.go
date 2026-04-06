@@ -891,7 +891,7 @@ func TestContextRepo_ListRecentDialogueTurns_PreservesOrphanUsersAroundReference
 		userJSON, userText, jsonErr := buildUserMessageJSON(messageID, RunInput{
 			MessageID: messageID,
 			Text:      text,
-		}, svc.uploadsDir, at)
+		}, nil, at)
 		if jsonErr != nil {
 			t.Fatalf("buildUserMessageJSON: %v", jsonErr)
 		}

@@ -565,17 +565,23 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		persistTO = defaultPersistOpTimeout
 	}
 
-	listCtx, cancel := context.WithTimeout(ctx, persistTO)
-	checkpointIDs, err := db.ListThreadCheckpointIDs(listCtx, endpointID, threadID)
+	backfillCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	err := s.backfillLegacyThreadUploadRefs(backfillCtx, endpointID, threadID)
 	cancel()
 	if err != nil {
 		return err
 	}
-
-	if err := db.DeleteThread(ctx, endpointID, threadID); err != nil {
+	deleteCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	result, err := db.DeleteThreadResources(deleteCtx, endpointID, threadID)
+	cancel()
+	if err != nil {
 		return err
 	}
-	s.cleanupLegacyWorkspaceCheckpointArtifacts(checkpointIDs)
+	if _, err := s.processUploadCleanupCandidates(ctx, result.UploadsToDelete); err != nil {
+		return err
+	}
+	s.cleanupLegacyWorkspaceCheckpointArtifacts(result.CheckpointIDs)
+	s.scheduleThreadstoreCompaction("thread_delete")
 	return nil
 }
 

@@ -3,13 +3,12 @@ package ai
 import (
 	"encoding/json"
 	"errors"
-	"path"
 	"strings"
 )
 
 const uploadURLPrefix = "/_redeven_proxy/api/ai/uploads/"
 
-func buildUserMessageJSON(messageID string, input RunInput, uploadsDir string, createdAtUnixMs int64) (string, string, error) {
+func buildUserMessageJSON(messageID string, input RunInput, uploadInfoByURL map[string]resolvedUploadAttachment, createdAtUnixMs int64) (string, string, error) {
 	id := strings.TrimSpace(messageID)
 	if id == "" {
 		return "", "", errors.New("missing message_id")
@@ -30,20 +29,14 @@ func buildUserMessageJSON(messageID string, input RunInput, uploadsDir string, c
 		mimeType := strings.TrimSpace(a.MimeType)
 		var size int64
 
-		if strings.HasPrefix(url, uploadURLPrefix) {
-			uploadID := strings.TrimSpace(strings.TrimPrefix(url, uploadURLPrefix))
-			uploadID = strings.Trim(path.Clean("/"+uploadID), "/")
-			if uploadID != "" {
-				if meta, _, err := readUpload(uploadsDir, uploadID); err == nil && meta != nil {
-					if strings.TrimSpace(name) == "" {
-						name = strings.TrimSpace(meta.Name)
-					}
-					if strings.TrimSpace(mimeType) == "" {
-						mimeType = strings.TrimSpace(meta.MimeType)
-					}
-					size = meta.Size
-				}
+		if info, ok := uploadInfoByURL[url]; ok {
+			if strings.TrimSpace(name) == "" {
+				name = strings.TrimSpace(info.Name)
 			}
+			if strings.TrimSpace(mimeType) == "" {
+				mimeType = strings.TrimSpace(info.MimeType)
+			}
+			size = info.Size
 		}
 
 		if strings.HasPrefix(strings.ToLower(mimeType), "image/") {

@@ -127,6 +127,9 @@ type Service struct {
 	skillManager       *skillManager
 
 	threadTitleCoordinator *autoThreadTitleCoordinator
+	maintenanceStopCh      chan struct{}
+	maintenanceDoneCh      chan struct{}
+	compactionScheduled    bool
 }
 
 type resolvedRunModel struct {
@@ -261,6 +264,8 @@ func NewService(opts Options) (*Service, error) {
 		snapshotCompactor:            snapshotCompactor,
 		capabilityResolver:           capabilityResolver,
 		skillManager:                 newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
+		maintenanceStopCh:            make(chan struct{}),
+		maintenanceDoneCh:            make(chan struct{}),
 	}
 	if svc.skillManager != nil {
 		svc.skillManager.Discover()
@@ -271,6 +276,7 @@ func NewService(opts Options) (*Service, error) {
 		svc.threadTitleCoordinator.ScheduleRecovery()
 	}
 	svc.scheduleLegacyWorkspaceCheckpointSweep()
+	svc.startBackgroundMaintenance()
 	return svc, nil
 }
 
@@ -298,10 +304,20 @@ func (s *Service) Close() error {
 	s.realtimeSummaryEndpointBySRV = make(map[*rpc.Server]string)
 	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
+	maintenanceStopCh := s.maintenanceStopCh
+	maintenanceDoneCh := s.maintenanceDoneCh
+	s.maintenanceStopCh = nil
+	s.maintenanceDoneCh = nil
 	s.mu.Unlock()
 
 	if coordinator != nil {
 		coordinator.Close()
+	}
+	if maintenanceStopCh != nil {
+		close(maintenanceStopCh)
+	}
+	if maintenanceDoneCh != nil {
+		<-maintenanceDoneCh
 	}
 	for _, w := range writers {
 		w.Close()
@@ -1212,53 +1228,15 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		autoTitleMessageCreatedAtUnixMs = prepared.persistedUser.CreatedAtUnixMs
 	}
 	if userMsgID == "" {
-		userMsgID = strings.TrimSpace(req.Input.MessageID)
-		if userMsgID != "" && !isSafeClientMessageID(userMsgID) {
-			userMsgID = ""
+		persisted, normalizedInput, persistErr := s.persistUserMessage(context.Background(), meta, endpointID, threadID, req.Input)
+		if persistErr != nil {
+			return streamEarlyError(persistErr)
 		}
-		if userMsgID == "" {
-			var genErr error
-			userMsgID, genErr = newUserMessageID()
-			if genErr != nil {
-				return streamEarlyError(genErr)
-			}
-		}
-		now := time.Now().UnixMilli()
-		userJSON, userText, err := buildUserMessageJSON(userMsgID, req.Input, prepared.uploadsDir, now)
-		if err != nil {
-			return streamEarlyError(err)
-		}
-		pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-		userRowID, appendErr := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
-			ThreadID:           threadID,
-			EndpointID:         endpointID,
-			MessageID:          userMsgID,
-			Role:               "user",
-			AuthorUserPublicID: strings.TrimSpace(meta.UserPublicID),
-			AuthorUserEmail:    strings.TrimSpace(meta.UserEmail),
-			Status:             "complete",
-			CreatedAtUnixMs:    now,
-			UpdatedAtUnixMs:    now,
-			TextContent:        userText,
-			MessageJSON:        userJSON,
-		}, meta.UserPublicID, meta.UserEmail)
-		cancelPersist()
-		if appendErr != nil {
-			if !isUniqueConstraintError(appendErr) {
-				return streamEarlyError(appendErr)
-			}
-			pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-			existingRowID, existingJSON, getErr := db.GetTranscriptMessageRowIDAndJSONByMessageID(pctx, endpointID, threadID, userMsgID)
-			cancelPersist()
-			if getErr != nil {
-				return streamEarlyError(appendErr)
-			}
-			userRowID = existingRowID
-			userJSON = existingJSON
-		}
-		autoTitleMessageRowID = userRowID
-		autoTitleMessageCreatedAtUnixMs = now
-		s.broadcastTranscriptMessage(endpointID, threadID, runID, userRowID, userJSON, now)
+		effectiveInput = normalizedInput
+		userMsgID = strings.TrimSpace(persisted.MessageID)
+		autoTitleMessageRowID = persisted.RowID
+		autoTitleMessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
+		s.broadcastTranscriptMessage(endpointID, threadID, runID, persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 		s.broadcastThreadSummary(endpointID, threadID)
 	}
 	effectiveCurrentInput.MessageID = userMsgID

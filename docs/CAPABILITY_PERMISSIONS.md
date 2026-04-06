@@ -28,6 +28,7 @@ Notes:
 - `write` does NOT imply `execute`, and vice versa.
 - `execute=true` does NOT mean "read-only": terminal commands can still mutate files even when `write=false`. For strict read-only, require `write=false` **and** `execute=false`.
 - `admin` is a separate capability dimension from RWX.
+- Runtime-local AI uploads live under the runtime state directory rather than the workspace tree, but deleting threads/followups may reclaim those upload blobs and SQLite metadata as destructive runtime-local cleanup.
 - UIs should treat permission denials as a normal capability state (not an exceptional error): when a capability is not granted (or is locally capped by `permission_policy`), stop polling and show a permission empty state.
 
 ## Effective Permissions (Server-Issued Grant ∩ Endpoint Local Cap)
