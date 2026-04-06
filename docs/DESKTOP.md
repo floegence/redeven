@@ -47,6 +47,7 @@ The base launch shape is:
 redeven run \
   --mode desktop \
   --desktop-managed \
+  --config-path <absolute-config-path> \
   --local-ui-bind localhost:23998 \
   --startup-report-file <temp-path>
 ```
@@ -54,6 +55,7 @@ redeven run \
 Desktop may add user-configured startup flags on top of that base command:
 
 - `--local-ui-bind <host:port>`
+- `--config-path <absolute-config-path>`
 - `--password-stdin`
 - `--controlplane <url>`
 - `--env-id <env_public_id>`
@@ -64,6 +66,10 @@ Behavior:
 
 - Local UI always starts for `Local Environment`.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
+- Desktop resolves the managed config path before spawn and passes it explicitly to `redeven run`.
+- `Local Environment` uses the global managed config at `~/.redeven/config.json`.
+- Desktop startup flows that include a bootstrap target use the matching isolated config at `~/.redeven/envs/<env_public_id>/config.json`.
+- Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - The Local UI password stays out of process args and environment variables.
 - The one-time bootstrap ticket also stays out of process args and is passed only through a desktop-owned environment variable.
 - Desktop startup reports and attachable runtime state include a non-secret `password_required` boolean so launcher and attach flows can describe whether the current runtime is protected.
@@ -74,6 +80,7 @@ Behavior:
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
 - Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
+- Desktop-managed runtime state never falls back to the Electron process working directory; if no usable home directory exists and no explicit config path is available, startup fails clearly instead of writing inside an arbitrary repository or shell cwd.
 
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.

@@ -1,4 +1,5 @@
 import type { DesktopPreferences } from './desktopPreferences';
+import { defaultManagedStateLayout, envManagedStateLayout, type DesktopManagedStateLayout } from './statePaths';
 
 export const ENV_TOKEN_ENV_NAME = 'REDEVEN_DESKTOP_ENV_TOKEN';
 export const BOOTSTRAP_TICKET_ENV_NAME = 'REDEVEN_DESKTOP_BOOTSTRAP_TICKET';
@@ -23,11 +24,15 @@ export type DesktopAgentSpawnPlan = Readonly<{
   env: NodeJS.ProcessEnv;
   password_stdin: string;
   uses_pending_bootstrap: boolean;
+  state_layout: DesktopManagedStateLayout;
 }>;
+
+export type DesktopAgentLaunchPlan = DesktopAgentSpawnPlan;
 
 type BuildDesktopAgentArgsOptions = Readonly<{
   localUIBind?: string;
   bootstrap?: DesktopAgentBootstrap | null;
+  configPath?: string;
 }>;
 
 function pendingBootstrapToAgentBootstrap(preferences: DesktopPreferences): DesktopAgentBootstrap | null {
@@ -60,6 +65,10 @@ export function buildDesktopAgentArgs(preferences: DesktopPreferences, options?:
     '--local-ui-bind',
     localUIBind,
   ];
+  const configPath = String(options?.configPath ?? '').trim();
+  if (configPath !== '') {
+    args.push('--config-path', configPath);
+  }
 
   if (String(preferences.local_ui_password ?? '') !== '') {
     args.push('--password-stdin');
@@ -102,21 +111,66 @@ export function buildDesktopAgentEnvironment(
   return env;
 }
 
-export function buildDesktopAgentSpawnPlan(
-  startupReportFile: string,
+function buildDesktopAgentPlan(
   preferences: DesktopPreferences,
   baseEnv: NodeJS.ProcessEnv = process.env,
-  options?: Readonly<{ bootstrap?: DesktopAgentBootstrap | null }>,
-): DesktopAgentSpawnPlan {
-  const args = buildDesktopAgentArgs(preferences, { bootstrap: options?.bootstrap });
+  options?: Readonly<{
+    localUIBind?: string;
+    bootstrap?: DesktopAgentBootstrap | null;
+  }>,
+): DesktopAgentLaunchPlan {
+  const stateLayout = resolveDesktopManagedStateLayout(preferences, baseEnv, { bootstrap: options?.bootstrap });
   const env = buildDesktopAgentEnvironment(preferences, baseEnv, { bootstrap: options?.bootstrap });
-  const usesPendingBootstrap = preferences.pending_bootstrap !== null;
+  const args = buildDesktopAgentArgs(preferences, {
+    localUIBind: options?.localUIBind,
+    bootstrap: options?.bootstrap,
+    configPath: stateLayout.configPath,
+  });
   const passwordStdin = String(preferences.local_ui_password ?? '');
-  args.push('--startup-report-file', startupReportFile);
   return {
     args,
     env,
     password_stdin: passwordStdin,
-    uses_pending_bootstrap: usesPendingBootstrap,
+    uses_pending_bootstrap: preferences.pending_bootstrap !== null,
+    state_layout: stateLayout,
   };
+}
+
+export function buildDesktopAgentLaunchPlan(
+  preferences: DesktopPreferences,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+  options?: Readonly<{
+    localUIBind?: string;
+    bootstrap?: DesktopAgentBootstrap | null;
+  }>,
+): DesktopAgentLaunchPlan {
+  return buildDesktopAgentPlan(preferences, baseEnv, options);
+}
+
+export function buildDesktopAgentSpawnPlan(
+  startupReportFile: string,
+  preferences: DesktopPreferences,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+  options?: Readonly<{
+    localUIBind?: string;
+    bootstrap?: DesktopAgentBootstrap | null;
+  }>,
+): DesktopAgentSpawnPlan {
+  const launchPlan = buildDesktopAgentLaunchPlan(preferences, baseEnv, options);
+  return {
+    ...launchPlan,
+    args: [...launchPlan.args, '--startup-report-file', startupReportFile],
+  };
+}
+
+export function resolveDesktopManagedStateLayout(
+  preferences: DesktopPreferences,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+  options?: Readonly<{ bootstrap?: DesktopAgentBootstrap | null }>,
+): DesktopManagedStateLayout {
+  const bootstrap = resolvedAgentBootstrap(preferences, options?.bootstrap);
+  if (bootstrap) {
+    return envManagedStateLayout(bootstrap.env_id, baseEnv);
+  }
+  return defaultManagedStateLayout(baseEnv);
 }

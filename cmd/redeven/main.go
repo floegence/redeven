@@ -16,7 +16,6 @@ import (
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
-	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/lockfile"
 )
 
@@ -234,6 +233,7 @@ func (c *cli) runCmd(args []string) int {
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
+	configPath := fs.String("config-path", "", "Config path override (default: ~/.redeven/config.json)")
 
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -317,13 +317,6 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
-	// Default: use the global config path. This is the recommended single-environment setup:
-	//
-	//	redeven bootstrap ... && redeven run
-	cfgPathClean := filepath.Clean(config.DefaultConfigPath())
-
-	// Multi-environment mode: bootstrap & run using an isolated state directory per env.
-	// This avoids overwriting the global ~/.redeven/config.json.
 	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
 		strings.TrimSpace(*envID) != "" ||
 		resolvedEnvToken != "" ||
@@ -363,25 +356,28 @@ func (c *cli) runCmd(args []string) int {
 			)
 			return 2
 		}
-		cfgPathClean = filepath.Clean(config.EnvConfigPath(*envID))
+	}
+
+	stateLayout, err := resolveRunStateLayout(*configPath, *envID, bootstrapViaFlags)
+	if err != nil {
+		return c.printRunStateLayoutGuidance(err)
 	}
 
 	// Ensure the state/config directory exists before taking the lock.
 	// Local mode must work on a clean machine (no bootstrap yet).
-	cfgDir := filepath.Dir(cfgPathClean)
-	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
+	if err := os.MkdirAll(stateLayout.StateDir, 0o700); err != nil {
 		fmt.Fprintf(c.stderr, "failed to init state dir: %v\n", err)
 		return 1
 	}
 
 	// Prevent multiple runtime processes from managing the same local state directory.
 	// This avoids control-plane flapping and data-plane races when users start the runtime twice.
-	lockPath := filepath.Join(filepath.Dir(cfgPathClean), "agent.lock")
+	lockPath := filepath.Join(stateLayout.StateDir, "agent.lock")
 	lk, err := lockfile.Acquire(lockPath)
 	if err != nil {
 		if errors.Is(err, lockfile.ErrAlreadyLocked) {
 			if desktopLaunchReportEnabled(mode, *desktopManaged, *startupReportFile) {
-				handled, exitCode, reportErr := handleDesktopLockConflict(*startupReportFile, lockPath, cfgPathClean)
+				handled, exitCode, reportErr := handleDesktopLockConflict(*startupReportFile, lockPath, stateLayout.ConfigPath)
 				if reportErr != nil {
 					fmt.Fprintf(c.stderr, "failed to resolve desktop startup conflict: %v\n", reportErr)
 					return 1
@@ -399,7 +395,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 	defer func() { _ = lk.Release() }()
 
-	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, cfgPathClean, localuiruntime.RuntimeStatePath(cfgPathClean))); err != nil {
+	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, stateLayout.ConfigPath, stateLayout.RuntimeStatePath)); err != nil {
 		fmt.Fprintf(c.stderr, "failed to write runtime lock metadata: %v\n", err)
 		return 1
 	}
@@ -445,7 +441,7 @@ func (c *cli) runCmd(args []string) int {
 		defer cancel()
 
 		_, err = config.BootstrapConfig(ctx, buildRunBootstrapArgs(
-			cfgPathClean,
+			stateLayout.ConfigPath,
 			*controlplane,
 			*envID,
 			resolvedEnvToken,
@@ -460,7 +456,7 @@ func (c *cli) runCmd(args []string) int {
 		}
 	}
 
-	cfg, err := config.Load(cfgPathClean)
+	cfg, err := config.Load(stateLayout.ConfigPath)
 	if err != nil {
 		// Local mode must be able to start from a clean machine (no bootstrap yet).
 		if (mode == runModeLocal || mode == runModeDesktop) && os.IsNotExist(err) {
@@ -470,7 +466,7 @@ func (c *cli) runCmd(args []string) int {
 				LogFormat:        "json",
 				LogLevel:         "info",
 			}
-			if err := config.Save(cfgPathClean, cfg); err != nil {
+			if err := config.Save(stateLayout.ConfigPath, cfg); err != nil {
 				fmt.Fprintf(c.stderr, "failed to init default config: %v\n", err)
 				return 1
 			}
@@ -515,7 +511,7 @@ func (c *cli) runCmd(args []string) int {
 
 	a, err := agent.New(agent.Options{
 		Config:                cfg,
-		ConfigPath:            cfgPathClean,
+		ConfigPath:            stateLayout.ConfigPath,
 		LocalUIEnabled:        localUIEnabled,
 		ControlChannelEnabled: controlChannelEnabled,
 		DesktopManaged:        *desktopManaged,
@@ -550,11 +546,6 @@ func (c *cli) runCmd(args []string) int {
 	// Start the Local UI server before running the control channel loop so users can open
 	// the local page immediately.
 	if localUIEnabled {
-		cfgPathAbs, err := filepath.Abs(cfgPathClean)
-		if err != nil {
-			fmt.Fprintf(c.stderr, "failed to resolve config path: %v\n", err)
-			return 1
-		}
 		gw := a.CodeGateway()
 		if gw == nil {
 			fmt.Fprintf(c.stderr, "local ui unavailable: gateway not initialized\n")
@@ -568,7 +559,7 @@ func (c *cli) runCmd(args []string) int {
 			RemoteEnabled:    controlChannelEnabled,
 			Gateway:          gw,
 			Agent:            a,
-			ConfigPath:       cfgPathAbs,
+			ConfigPath:       stateLayout.ConfigPath,
 			Version:          Version,
 			Diagnostics:      a.DiagnosticsStore(),
 			AccessGate:       accessGate,
@@ -591,7 +582,7 @@ func (c *cli) runCmd(args []string) int {
 				EffectiveRunMode:   string(effectiveRunMode),
 				RemoteEnabled:      controlChannelEnabled,
 				DesktopManaged:     *desktopManaged,
-				StateDir:           filepath.Dir(cfgPathAbs),
+				StateDir:           stateLayout.StateDir,
 				DiagnosticsEnabled: a.DiagnosticsEnabled(),
 				PID:                os.Getpid(),
 			}, desktopLaunchStatusReady); err != nil {
@@ -613,6 +604,31 @@ func (c *cli) runCmd(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func resolveRunStateLayout(configPath string, envID string, bootstrapViaFlags bool) (config.StateLayout, error) {
+	cleanPath := strings.TrimSpace(configPath)
+	if cleanPath != "" {
+		return config.StateLayoutForConfigPath(cleanPath)
+	}
+	if bootstrapViaFlags {
+		return config.EnvStateLayout(envID)
+	}
+	return config.DefaultStateLayout()
+}
+
+func (c *cli) printRunStateLayoutGuidance(reason error) int {
+	if errors.Is(reason, config.ErrHomeDirUnavailable) {
+		writeErrorWithHelp(
+			c.stderr,
+			fmt.Sprintf("failed to resolve runtime state layout: %v", reason),
+			[]string{"Hint: export HOME before running `redeven run`, or pass --config-path <path>."},
+			runHelpText(),
+		)
+		return 1
+	}
+	fmt.Fprintf(c.stderr, "failed to resolve runtime state layout: %v\n", reason)
+	return 1
 }
 
 func buildRunBootstrapArgs(

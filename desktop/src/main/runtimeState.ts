@@ -2,11 +2,11 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import os from 'node:os';
-import path from 'node:path';
 
 import { isAllowedAppNavigation } from './navigation';
 import { parseStartupReport, type StartupReport } from './startup';
 import { normalizeLocalUIBaseURL } from './localUIURL';
+import { defaultManagedStateLayout } from './statePaths';
 
 const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 
@@ -117,11 +117,7 @@ export function defaultRuntimeStatePath(
   env: NodeJS.ProcessEnv = process.env,
   homedir: () => string = os.homedir,
 ): string {
-  const homeDir = String(env.HOME ?? '').trim() || String(homedir() ?? '').trim();
-  if (!homeDir) {
-    return path.resolve('runtime', 'local-ui.json');
-  }
-  return path.join(homeDir, '.redeven', 'runtime', 'local-ui.json');
+  return defaultManagedStateLayout(env, homedir).runtimeStateFile;
 }
 
 export async function loadAttachableRuntimeState(

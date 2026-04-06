@@ -37,8 +37,7 @@ import {
   type DesktopSessionTarget,
 } from './desktopTarget';
 import {
-  buildDesktopAgentArgs,
-  buildDesktopAgentEnvironment,
+  buildDesktopAgentLaunchPlan,
   type DesktopAgentBootstrap,
 } from './desktopLaunch';
 import { parseLocalUIBind } from './localUIBind';
@@ -981,16 +980,16 @@ async function prepareManagedTarget(
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   });
+  const launchPlan = buildDesktopAgentLaunchPlan(preferences, process.env, {
+    localUIBind: options?.localUIBind,
+    bootstrap: options?.bootstrap,
+  });
   const launch = await startManagedAgent({
     executablePath,
-    agentArgs: buildDesktopAgentArgs(preferences, {
-      localUIBind: options?.localUIBind,
-      bootstrap: options?.bootstrap,
-    }),
-    env: buildDesktopAgentEnvironment(preferences, process.env, {
-      bootstrap: options?.bootstrap,
-    }),
-    passwordStdin: preferences.local_ui_password,
+    agentArgs: launchPlan.args,
+    env: launchPlan.env,
+    runtimeStateFile: launchPlan.state_layout.runtimeStateFile,
+    passwordStdin: launchPlan.password_stdin,
     tempRoot: app.getPath('temp'),
     onLog: (stream, chunk) => {
       const text = String(chunk ?? '').trim();

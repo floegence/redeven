@@ -12,8 +12,8 @@ describe('runtimeState', () => {
     expect(defaultRuntimeStatePath({ HOME: '/Users/tester' }, () => '/ignored')).toBe('/Users/tester/.redeven/runtime/local-ui.json');
   });
 
-  it('falls back to the current working directory when no home directory is available', () => {
-    expect(defaultRuntimeStatePath({}, () => '')).toBe(path.resolve('runtime', 'local-ui.json'));
+  it('fails clearly when no home directory is available', () => {
+    expect(() => defaultRuntimeStatePath({}, () => '')).toThrow('user home directory is unavailable');
   });
 
   it('loads an attachable loopback runtime from disk', async () => {
