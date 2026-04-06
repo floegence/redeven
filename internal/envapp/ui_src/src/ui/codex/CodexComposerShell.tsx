@@ -159,10 +159,12 @@ export function CodexComposerShell(props: {
   capabilitiesLoading: boolean;
   composerText: string;
   submitting: boolean;
-  sendDisabledReason: string;
-  showQueueAction: boolean;
-  queueDisabled: boolean;
-  queueDisabledReason: string;
+  primaryActionKind: 'send' | 'queue';
+  primaryActionDisabled: boolean;
+  primaryActionDisabledReason: string;
+  showSendNowAction: boolean;
+  sendNowDisabled: boolean;
+  sendNowDisabledReason: string;
   showStopAction: boolean;
   stopPending: boolean;
   stopDisabled: boolean;
@@ -206,14 +208,11 @@ export function CodexComposerShell(props: {
   let workingDirChipRef: HTMLButtonElement | undefined;
   const autosizeController = createCodexComposerAutosizeController();
 
-  const canSend = () =>
-    props.hostAvailable &&
-    (
-      !!String(props.composerText ?? '').trim() ||
-      props.attachments.length > 0 ||
-      props.mentions.length > 0
-    ) &&
-    !props.submitting;
+  const hasDraftContent = () => (
+    !!String(props.composerText ?? '').trim() ||
+    props.attachments.length > 0 ||
+    props.mentions.length > 0
+  );
 
   const syncSelection = () => {
     setSelectionStart(textareaRef?.selectionStart ?? 0);
@@ -405,7 +404,13 @@ export function CodexComposerShell(props: {
     }
   });
 
-  const sendLabel = () => 'Send to Codex';
+  const primaryActionLabel = () => (props.primaryActionKind === 'queue' ? 'Queue next' : 'Send');
+  const primaryActionAriaLabel = () => (
+    props.primaryActionKind === 'queue'
+      ? 'Queue next Codex turn'
+      : 'Send to Codex'
+  );
+  const primaryActionExpanded = () => props.primaryActionKind === 'queue';
   const canOpenWorkingDirPicker = () => props.hostAvailable && !props.workingDirDisabled && !props.workingDirLocked;
   const workingDirChipTitle = () => {
     const absolutePath = String(props.workingDirTitle ?? '').trim() || 'Working directory';
@@ -441,16 +446,22 @@ export function CodexComposerShell(props: {
       : 'Use @ for file context or / for commands.';
     return `Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step. ${guidance}`;
   };
-  const primaryActionDisabled = () => !canSend() || !!String(props.sendDisabledReason ?? '').trim();
+  const primaryActionDisabled = () => props.primaryActionDisabled;
   const primaryActionTitle = () => (
-    String(props.sendDisabledReason ?? '').trim() || (props.submitting ? 'Sending...' : sendLabel())
+    String(props.primaryActionDisabledReason ?? '').trim() || primaryActionAriaLabel()
   );
-  const primaryActionActive = () => canSend() && !primaryActionDisabled();
+  const primaryActionActive = () => hasDraftContent() && !primaryActionDisabled();
   const handlePrimaryAction = () => {
     if (primaryActionDisabled()) return;
+    if (props.primaryActionKind === 'queue') {
+      props.onQueue();
+      return;
+    }
     props.onSend();
   };
-  const queueActionTitle = () => String(props.queueDisabledReason ?? '').trim() || 'Queue this message for the next turn';
+  const sendNowActionTitle = () => (
+    String(props.sendNowDisabledReason ?? '').trim() || 'Append this input to the current turn'
+  );
   const stopActionTitle = () => String(props.stopDisabledReason ?? '').trim() || (props.stopPending ? 'Stopping...' : 'Stop active Codex turn');
 
   const applyComposerText = (nextText: string, nextSelection?: number) => {
@@ -669,21 +680,21 @@ export function CodexComposerShell(props: {
           />
 
           <div class="codex-chat-input-send-slot">
-            <Show when={props.showQueueAction || props.showStopAction}>
+            <Show when={props.showSendNowAction || props.showStopAction}>
               <div class="codex-chat-input-secondary-actions">
-                <Show when={props.showQueueAction}>
+                <Show when={props.showSendNowAction}>
                   <button
                     type="button"
                     class="codex-chat-secondary-action"
                     onClick={() => {
-                      if (props.queueDisabled) return;
-                      props.onQueue();
+                      if (props.sendNowDisabled) return;
+                      props.onSend();
                     }}
-                    disabled={props.queueDisabled}
-                    title={queueActionTitle()}
-                    aria-label="Queue next Codex turn"
+                    disabled={props.sendNowDisabled}
+                    title={sendNowActionTitle()}
+                    aria-label="Send now to Codex"
                   >
-                    Queue next
+                    Send now
                   </button>
                 </Show>
                 <Show when={props.showStopAction}>
@@ -707,14 +718,18 @@ export function CodexComposerShell(props: {
               type="button"
               class={cn(
                 'chat-input-send-btn codex-chat-input-send-btn',
+                primaryActionExpanded() && 'codex-chat-input-send-btn-expanded',
                 primaryActionActive() && 'chat-input-send-btn-active',
               )}
               onClick={handlePrimaryAction}
               disabled={primaryActionDisabled()}
-              aria-label={sendLabel()}
+              aria-label={primaryActionAriaLabel()}
               title={primaryActionTitle()}
             >
               <Send class="h-[18px] w-[18px]" />
+              <Show when={primaryActionExpanded()}>
+                <span class="chat-input-send-btn-label">{primaryActionLabel()}</span>
+              </Show>
             </button>
           </div>
         </div>

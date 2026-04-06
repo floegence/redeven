@@ -1013,7 +1013,7 @@
   color: var(--muted-foreground);
 }
 
-.codex-queued-followups-panel {
+.codex-pending-inputs-panel {
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
@@ -1027,7 +1027,7 @@
     inset 0 1px 0 color-mix(in srgb, white 34%, transparent);
 }
 
-.codex-queued-followups-header {
+.codex-pending-inputs-header {
   display: flex;
   min-width: 0;
   align-items: flex-start;
@@ -1036,14 +1036,14 @@
   flex-wrap: wrap;
 }
 
-.codex-queued-followups-heading {
+.codex-pending-inputs-heading {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.codex-queued-followups-kicker {
+.codex-pending-inputs-kicker {
   font-size: 0.625rem;
   line-height: 1.2;
   font-weight: 700;
@@ -1052,20 +1052,20 @@
   color: color-mix(in srgb, var(--primary) 76%, var(--foreground));
 }
 
-.codex-queued-followups-title-row {
+.codex-pending-inputs-title-row {
   display: inline-flex;
   min-width: 0;
   align-items: center;
   gap: 0.5rem;
 }
 
-.codex-queued-followups-title {
+.codex-pending-inputs-title {
   font-size: 0.8125rem;
   font-weight: 700;
   color: var(--foreground);
 }
 
-.codex-queued-followups-count {
+.codex-pending-inputs-count {
   display: inline-flex;
   min-width: 1.375rem;
   height: 1.375rem;
@@ -1078,7 +1078,7 @@
   color: color-mix(in srgb, var(--primary) 82%, var(--foreground));
 }
 
-.codex-queued-followups-hint {
+.codex-pending-inputs-hint {
   max-width: 26rem;
   font-size: 0.6875rem;
   line-height: 1.45;
@@ -1086,7 +1086,42 @@
   text-wrap: pretty;
 }
 
-.codex-queued-followups-list {
+.codex-pending-inputs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.codex-pending-inputs-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-inline: 0.125rem;
+}
+
+.codex-pending-inputs-section-kicker {
+  font-size: 0.625rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground));
+}
+
+.codex-pending-inputs-section-title {
+  display: inline-flex;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--codex-surface-panel-strong) 84%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.codex-pending-inputs-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -1095,7 +1130,7 @@
   padding-right: 0.125rem;
 }
 
-.codex-queued-followup-card {
+.codex-pending-input-card {
   display: grid;
   min-width: 0;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1107,7 +1142,14 @@
   padding: 0.625rem 0.75rem;
 }
 
-.codex-queued-followup-order {
+.codex-pending-input-card-dispatching {
+  grid-template-columns: minmax(0, 1fr);
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--codex-border-default));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--codex-surface-accent-subtle) 78%, var(--codex-surface-panel-elevated)), color-mix(in srgb, var(--codex-surface-panel-subtle) 88%, transparent));
+}
+
+.codex-pending-input-card-order {
   display: inline-flex;
   width: 1.625rem;
   height: 1.625rem;
@@ -1121,7 +1163,7 @@
   color: color-mix(in srgb, var(--primary) 74%, var(--foreground));
 }
 
-.codex-queued-followup-copy {
+.codex-pending-input-card-copy {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
@@ -1129,7 +1171,15 @@
   gap: 0.1875rem;
 }
 
-.codex-queued-followup-preview {
+.codex-pending-input-card-state {
+  font-size: 0.625rem;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--primary) 74%, var(--foreground));
+}
+
+.codex-pending-input-card-preview {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -1141,13 +1191,13 @@
   color: var(--foreground);
 }
 
-.codex-queued-followup-meta {
+.codex-pending-input-card-meta {
   font-size: 0.6875rem;
   line-height: 1.4;
   color: var(--muted-foreground);
 }
 
-.codex-queued-followup-actions {
+.codex-pending-input-card-actions {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
@@ -1155,7 +1205,7 @@
   gap: 0.375rem;
 }
 
-.codex-queued-followup-action {
+.codex-pending-input-card-action {
   display: inline-flex;
   min-height: 1.875rem;
   align-items: center;
@@ -1175,23 +1225,23 @@
     opacity 150ms ease;
 }
 
-.codex-queued-followup-action:hover:not(:disabled),
-.codex-queued-followup-action:focus-visible:not(:disabled) {
+.codex-pending-input-card-action:hover:not(:disabled),
+.codex-pending-input-card-action:focus-visible:not(:disabled) {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--codex-border-default));
   background: color-mix(in srgb, var(--codex-surface-panel-strong) 62%, transparent);
 }
 
-.codex-queued-followup-action:disabled {
+.codex-pending-input-card-action:disabled {
   cursor: not-allowed;
   opacity: 0.42;
 }
 
-.codex-queued-followup-action-danger {
+.codex-pending-input-card-action-danger {
   color: color-mix(in srgb, var(--warning) 78%, var(--foreground));
 }
 
-.codex-queued-followup-action-danger:hover:not(:disabled),
-.codex-queued-followup-action-danger:focus-visible:not(:disabled) {
+.codex-pending-input-card-action-danger:hover:not(:disabled),
+.codex-pending-input-card-action-danger:focus-visible:not(:disabled) {
   border-color: color-mix(in srgb, var(--warning) 28%, var(--codex-border-default));
   background: color-mix(in srgb, var(--warning) 10%, var(--codex-surface-panel-subtle));
 }
@@ -2236,22 +2286,22 @@
     inset-inline: 0.5625rem;
   }
 
-  .codex-queued-followups-panel {
+  .codex-pending-inputs-panel {
     padding: 0.6875rem 0.75rem;
   }
 
-  .codex-queued-followup-card {
+  .codex-pending-input-card {
     grid-template-columns: minmax(0, 1fr);
     align-items: flex-start;
     gap: 0.625rem;
   }
 
-  .codex-queued-followup-actions {
+  .codex-pending-input-card-actions {
     width: 100%;
     justify-content: flex-start;
   }
 
-  .codex-queued-followup-order {
+  .codex-pending-input-card-order {
     display: none;
   }
 

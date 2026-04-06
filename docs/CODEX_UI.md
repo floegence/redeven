@@ -43,6 +43,8 @@ The browser-side Codex UI uses an explicit controller split so thread switching,
 - `CodexProvider` is orchestration glue only. It wires resources, user actions, SSE, and view-facing accessors.
 - `createCodexThreadController()` owns thread selection/display state, cached sessions, bootstrap status, stale-response guards, and event application into the correct cached thread.
 - `createCodexDraftController()` owns per-owner drafts for runtime fields, composer text, and attachments.
+- `createCodexFollowupController()` persists only browser-owned `queued` next-turn inputs; it does not own active transcript projection or in-flight same-turn dispatch state.
+- `CodexProvider` also keeps an ephemeral per-thread `dispatching` lane for inputs that were accepted locally but have not materialized in the transcript yet.
 - The active thread's foreground lifecycle state is session-owned:
   - detail bootstrap + SSE drive transcript, pending requests, token usage, and stop/send state;
   - thread-list polling stays a summary-only mechanism and must not become a second foreground source of truth.
@@ -192,6 +194,13 @@ Current Env App behavior:
 - Switching from thread A to thread B clears stale thread A transcript content if thread B is still bootstrapping; the page shows an explicit loading state for the selected thread instead.
 - Switching to an existing Codex thread explicitly re-enters follow-bottom mode, so the transcript converges to the newest output instead of staying at a stale mid-thread scroll offset.
 - Per-thread drafts are preserved independently, so composer text, attachments, and runtime overrides no longer leak between existing threads and the New Chat surface.
+- Browser-owned pending input now has one strict rendering rule:
+  - editable content lives in the composer;
+  - accepted-but-not-materialized content lives in the pending rail above the composer;
+  - transcript content appears only after Codex materializes it.
+- The pending rail separates two browser-owned states:
+  - `dispatching`: accepted locally and currently being sent or waiting for transcript materialization;
+  - `queued`: intentionally deferred to the next turn, persisted in browser storage, editable, removable, and reorderable.
 - The composer keeps the most useful Codex controls directly below the input instead of in a noisy chip rail:
   - working directory
   - image attachments
@@ -206,6 +215,11 @@ Current Env App behavior:
   - the working directory keeps the stronger path-chip treatment.
 - Draft mentions and attachments render as a lower-priority draft-object lane beneath the control row instead of sharing the same visual weight as runtime controls.
 - Generic onboarding copy such as `@` / `/` / image hints is conditional; it only appears when the composer is still empty or when capability/state feedback is genuinely needed.
+- Composer action semantics are state-driven rather than static:
+  - idle or new thread: primary action is `Send`;
+  - active steerable run: primary action becomes `Queue next`, while `Send now` appears as a secondary action;
+  - active non-steerable or startup gap: primary action stays `Queue next`, and `Send now` is hidden until same-turn steering is truly available.
+- Idle sends still use optimistic transcript user rows, but same-turn `Send now` and queue auto-send do not; they stay in the pending rail until Codex materializes the real transcript item.
 - The transcript-to-composer boundary is intentionally soft: the Codex send bar should read as floating over the transcript tail rather than as a second hard-split footer panel.
 - The Codex transcript now also exposes the same floating `Browse files` FAB pattern used by Flower, seeded from the resolved Codex working directory and routed through the shared Env App file-browser surface instead of a Codex-local browser implementation.
 - Image attachments currently use browser-side data URLs and are sent as Codex `image` user inputs; this is intentionally limited to image files only.

@@ -106,7 +106,12 @@ function normalizeQueuedFollowup(raw: unknown): CodexQueuedFollowup | null {
     mentions,
     runtime_config: normalizeQueuedFollowupRuntimeConfig(value.runtime_config),
     created_at_unix_ms: Math.max(0, Number(value.created_at_unix_ms ?? 0) || 0),
-    source: value.source === 'rejected_steer' ? 'rejected_steer' : 'queued',
+    source: (
+      value.source === 'rejected_steer' ||
+      value.source === 'auto_send'
+    )
+      ? value.source
+      : 'queued',
   };
 }
 
@@ -185,6 +190,18 @@ export function createCodexFollowupController(args?: {
     ]);
   };
 
+  const prependFollowup = (followup: CodexQueuedFollowup): void => {
+    const normalizedThreadID = normalizeThreadID(followup.thread_id);
+    if (!normalizedThreadID) return;
+    replaceThreadQueue(normalizedThreadID, [
+      cloneQueuedFollowup({
+        ...followup,
+        thread_id: normalizedThreadID,
+      }),
+      ...(queuedByThread()[normalizedThreadID] ?? []),
+    ]);
+  };
+
   const removeFollowup = (threadID: string, followupID: string): void => {
     const normalizedThreadID = normalizeThreadID(threadID);
     const normalizedFollowupID = String(followupID ?? '').trim();
@@ -241,6 +258,7 @@ export function createCodexFollowupController(args?: {
     queuedByThread: queuedByThread as Accessor<CodexQueuedFollowupMap>,
     queuedForThread,
     queueFollowup,
+    prependFollowup,
     removeFollowup,
     moveFollowup,
     pullFollowup,
@@ -249,4 +267,3 @@ export function createCodexFollowupController(args?: {
     replaceThreadQueue,
   };
 }
-
