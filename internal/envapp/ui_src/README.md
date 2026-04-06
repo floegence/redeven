@@ -17,8 +17,9 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - Codex send semantics intentionally mirror the official Codex chat contract:
   - `Send` always stays the primary action;
   - active regular turns may accept same-turn input immediately through `turn/steer`;
-  - `Queue next` is an explicit next-turn action instead of an implicit stop/send fallback;
+  - `Queue next` is an explicit next-turn action instead of an implicit stop/send fallback, and should only appear when the active draft actually contains queueable content;
   - `Stop` remains explicit and never replaces the primary send affordance.
+- Queued follow-up previews belong above the composer as a separate support lane, so queued state never consumes textarea action space or overlaps the prompt field.
 - Codex queued follow-up auto-send is foreground-session-owned: once the current thread becomes idle and no pending request/interrupt bootstrap is blocking, the next persisted follow-up is started from the queued runtime snapshot without relying on sidebar polling.
 - Codex sidebar selection feedback is intent-owned: `selectedThreadID` updates immediately for visual response, while `foregroundThreadID` advances on the controller-owned activation step that drives bootstrap, read-marking, and header/composer ownership.
 - Codex thread-list refresh is summary-only and identity-preserving: unchanged thread summaries reuse their previous browser objects so running sidebar indicators stay mounted and background polling does not reset their animation.

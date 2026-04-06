@@ -211,7 +211,17 @@ export function CodexPageShell() {
     },
   ]));
   const composerStopVisible = createMemo(() => hasActiveRun());
-  const composerQueueVisible = createMemo(() => hasActiveRun() && !!String(codex.activeThreadID() ?? '').trim());
+  const composerHasQueueableDraftContent = createMemo(() => (
+    !!String(codex.composerText() ?? '').trim() ||
+    codex.attachments().length > 0 ||
+    codex.mentions().length > 0
+  ));
+  const composerQueueVisible = createMemo(() => (
+    hasActiveRun() &&
+    summary().hostReady &&
+    !!String(codex.activeThreadID() ?? '').trim() &&
+    composerHasQueueableDraftContent()
+  ));
   const composerSendDisabledReason = createMemo(() => {
     if (!summary().hostReady) {
       return composerDisabledReason() || codex.hostDisabledReason();
@@ -268,6 +278,18 @@ export function CodexPageShell() {
   });
   const composerGuidanceNote = createMemo(() => {
     if (!hasActiveRun()) return '';
+    if (!composerHasQueueableDraftContent()) {
+      if (codex.activeTurnCanSteer() === false) {
+        const turnKind = String(codex.activeTurnKind() ?? '').trim();
+        return turnKind
+          ? `This ${turnKind} turn cannot accept same-turn instructions. Add text, an image, or a file mention to queue the next turn.`
+          : 'This turn cannot accept same-turn instructions. Add text, an image, or a file mention to queue the next turn.';
+      }
+      if (!activeInterruptTurnID()) {
+        return 'Codex is starting the current turn. Add text, an image, or a file mention to queue the next turn.';
+      }
+      return 'Send now appends to the current turn. Add text, an image, or a file mention to queue the next turn.';
+    }
     if (codex.activeTurnCanSteer() === false) {
       const turnKind = String(codex.activeTurnKind() ?? '').trim();
       return turnKind

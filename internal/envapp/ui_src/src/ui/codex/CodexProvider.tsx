@@ -1506,7 +1506,7 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
     if (!queueCurrentDraftInternal('queued', true)) {
-      notify.error('Queue unavailable', 'Add a message, image, or file mention before queuing a follow-up.');
+      return;
     }
   };
 

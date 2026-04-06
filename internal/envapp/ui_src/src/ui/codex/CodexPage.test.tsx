@@ -1239,9 +1239,9 @@ describe('CodexPage', () => {
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
     expect(host.querySelector('.codex-chat-draft-objects')).toBeNull();
     expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
-    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
-    expect(host.textContent).toContain('Queue next starts a new turn after this run finishes');
+    expect(host.textContent).toContain('Add text, an image, or a file mention to queue the next turn');
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
@@ -1347,6 +1347,111 @@ describe('CodexPage', () => {
     }));
   });
 
+  it('keeps queue hidden for an empty active draft and ignores empty queue attempts', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_queue_hidden',
+        name: 'Queue hidden',
+        preview: 'Queue hidden',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_queue_hidden',
+            kind: 'regular',
+            accepts_steer: true,
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      token_usage: null,
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        reasoning_effort: 'medium',
+      },
+      operations: [
+        'thread_archive',
+        'thread_fork',
+        'turn_steer',
+        'turn_interrupt',
+        'review_start',
+      ],
+      requirements: {
+        allowed_approval_policies: ['never'],
+        allowed_sandbox_modes: ['danger-full-access'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_queue_hidden',
+        name: 'Queue hidden',
+        preview: 'Queue hidden',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let codex!: ReturnType<typeof useCodexContext>;
+
+    renderPageWithHarness(host, (value) => {
+      codex = value;
+    });
+    await waitForCondition(
+      () => Boolean(codex) && Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
+      'active run controls',
+    );
+
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+
+    const errorCallCount = notification.error.mock.calls.length;
+    await codex.queueTurn();
+    await flushAsync();
+
+    expect(notification.error.mock.calls).toHaveLength(errorCallCount);
+    expect(codex.queuedFollowups()).toEqual([]);
+  });
+
   it('keeps send primary and steers the active regular turn while exposing queue and stop', async () => {
     const startedDetail = {
       thread: {
@@ -1436,18 +1541,26 @@ describe('CodexPage', () => {
 
     renderPage(host);
     await waitForCondition(
-      () => Boolean(host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]')),
-      'composer queue action',
+      () => Boolean(host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]')),
+      'composer stop action',
     );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     const sendButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
-    const queueButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
     const stopButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
-    if (!textarea || !sendButton || !queueButton || !stopButton) throw new Error('composer controls not found');
+    if (!textarea || !sendButton || !stopButton) throw new Error('composer controls not found');
+
+    expect(host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]')).toBeNull();
 
     textarea.value = 'Need a visible stop action';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await waitForCondition(
+      () => Boolean(host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]')),
+      'composer queue action',
+    );
+
+    const queueButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    if (!queueButton) throw new Error('queue button not found');
 
     expect(queueButton.textContent).toContain('Queue next');
     expect(stopButton.textContent).toContain('Stop');
@@ -1563,13 +1676,15 @@ describe('CodexPage', () => {
 
     renderPage(host);
     await waitForCondition(
-      () => Boolean(host.querySelector('button[aria-label="Queue next Codex turn"]')),
-      'composer queue action',
+      () => Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
+      'composer stop action',
     );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
     if (!textarea || !sendButton) throw new Error('composer send controls not found');
+
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
 
     textarea.value = 'Queue this when steer is rejected';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1680,16 +1795,26 @@ describe('CodexPage', () => {
 
     renderPage(host);
     await waitForCondition(
+      () => Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
+      'composer stop action',
+    );
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    if (!textarea) throw new Error('queue controls not found');
+
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+
+    textarea.value = 'Send this after the current turn finishes';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    await waitForCondition(
       () => Boolean(host.querySelector('button[aria-label="Queue next Codex turn"]')),
       'queue action',
     );
 
-    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
-    if (!textarea || !queueButton) throw new Error('queue controls not found');
+    if (!queueButton) throw new Error('queue button not found');
 
-    textarea.value = 'Send this after the current turn finishes';
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
     queueButton.click();
 
     await flushAsync();
@@ -1697,6 +1822,10 @@ describe('CodexPage', () => {
 
     expect(host.textContent).toContain('Queued follow-ups');
     expect(host.textContent).toContain('Send this after the current turn finishes');
+    const queuedPanel = host.querySelector('.codex-queued-followups-panel');
+    const composer = host.querySelector('.codex-chat-input.chat-input-container');
+    if (!queuedPanel || !composer) throw new Error('queued follow-up layout not found');
+    expect(queuedPanel.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
 
     streamOnEvent?.({
       seq: 2,
@@ -1813,8 +1942,10 @@ describe('CodexPage', () => {
     document.body.appendChild(host);
 
     renderPage(host);
-    await flushAsync();
-    await flushAsync();
+    await waitForCondition(
+      () => Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
+      'active stop action',
+    );
 
     expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
 

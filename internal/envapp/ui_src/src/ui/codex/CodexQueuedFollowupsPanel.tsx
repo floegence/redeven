@@ -45,19 +45,25 @@ export function CodexQueuedFollowupsPanel(props: {
   onMove: (followupID: string, delta: number) => void;
 }) {
   return (
-    <div class="codex-queued-followups-panel">
+    <div class="codex-queued-followups-panel" aria-label="Queued Codex follow-ups">
       <div class="codex-queued-followups-header">
-        <div class="codex-queued-followups-title-row">
-          <span class="codex-queued-followups-title">Queued follow-ups</span>
-          <span class="codex-queued-followups-count">{props.items.length}</span>
+        <div class="codex-queued-followups-heading">
+          <span class="codex-queued-followups-kicker">Queued next</span>
+          <div class="codex-queued-followups-title-row">
+            <span class="codex-queued-followups-title">Queued follow-ups</span>
+            <span class="codex-queued-followups-count">{props.items.length}</span>
+          </div>
         </div>
-        <div class="codex-queued-followups-hint">Queued messages start the next turn automatically when this thread becomes idle.</div>
+        <div class="codex-queued-followups-hint">
+          These drafts stay above the composer and start automatically when the current thread becomes idle.
+        </div>
       </div>
 
-      <div class="codex-queued-followups-list">
+      <div class="codex-queued-followups-list" role="list">
         <For each={props.items}>
           {(item, index) => (
-            <div class="codex-queued-followup-card">
+            <div class="codex-queued-followup-card" role="listitem">
+              <div class="codex-queued-followup-order" aria-hidden="true">{index() + 1}</div>
               <div class="codex-queued-followup-copy">
                 <div class="codex-queued-followup-preview" title={followupPreview(item)}>{followupPreview(item)}</div>
                 <Show when={followupMeta(item)}>
@@ -65,31 +71,33 @@ export function CodexQueuedFollowupsPanel(props: {
                 </Show>
               </div>
               <div class="codex-queued-followup-actions">
-                <button
-                  type="button"
-                  class="codex-queued-followup-action"
-                  onClick={() => props.onMove(item.id, -1)}
-                  disabled={index() === 0}
-                  title="Move queued follow-up earlier"
-                >
-                  Up
-                </button>
-                <button
-                  type="button"
-                  class="codex-queued-followup-action"
-                  onClick={() => props.onMove(item.id, 1)}
-                  disabled={index() === props.items.length - 1}
-                  title="Move queued follow-up later"
-                >
-                  Down
-                </button>
+                <Show when={props.items.length > 1}>
+                  <button
+                    type="button"
+                    class="codex-queued-followup-action"
+                    onClick={() => props.onMove(item.id, -1)}
+                    disabled={index() === 0}
+                    title="Move queued follow-up earlier"
+                  >
+                    Earlier
+                  </button>
+                  <button
+                    type="button"
+                    class="codex-queued-followup-action"
+                    onClick={() => props.onMove(item.id, 1)}
+                    disabled={index() === props.items.length - 1}
+                    title="Move queued follow-up later"
+                  >
+                    Later
+                  </button>
+                </Show>
                 <button
                   type="button"
                   class="codex-queued-followup-action"
                   onClick={() => props.onRestore(item.id)}
                   title="Restore queued follow-up to composer"
                 >
-                  Load
+                  Edit
                 </button>
                 <button
                   type="button"
@@ -107,4 +115,3 @@ export function CodexQueuedFollowupsPanel(props: {
     </div>
   );
 }
-
