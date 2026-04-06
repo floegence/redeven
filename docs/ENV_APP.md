@@ -76,8 +76,10 @@ Key points:
 Env App now exposes a product-owned **Notes overlay** that floats above the current workspace instead of introducing a new top-level activity page.
 
 - Notes opens from the shell top bar and closes from a dedicated top-right close button inside the overlay.
+- Notes also exposes a shell-level `Mod+.` command so users can open or dismiss the overlay without leaving the current workspace flow, even while typing in another editor/input.
 - Opening the overlay does not auto-focus an editor field; users can keep their current input focus until they explicitly create or edit a note.
 - Env App enables the shared floe-webapp Notes surface in `interactionMode="floating"`, so the overlay stays non-modal over the current workspace instead of trapping focus like a settings dialog.
+- In floating mode, `Escape` dismisses the full overlay when focus is outside the Notes surface, and clicking outside the Notes-owned surface also dismisses the overlay without swallowing the underlying click target.
 - The overlay keeps a narrow topic rail with product-owned animal icons, inline rename/delete actions, and compact counts for live notes plus trash.
 - Each topic renders on an infinite-style pan/zoom board:
   - wheel zooms around the cursor;

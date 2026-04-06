@@ -17,6 +17,16 @@ const channelInitEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
 const reloadCurrentPageMock = vi.fn();
+const commandState = vi.hoisted(() => ({
+  open: vi.fn(),
+  commands: [] as Array<Record<string, unknown>>,
+}));
+const notesOverlayState = vi.hoisted(() => ({
+  lastProps: null as null | {
+    open: boolean;
+    onClose: () => void;
+  },
+}));
 
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
@@ -51,7 +61,17 @@ const setSidebarCollapsedMock = vi.fn();
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
-  useCommand: () => ({ open: vi.fn(), registerAll: () => () => {} }),
+  useCommand: () => ({
+    open: commandState.open,
+    registerAll: (commands: Array<Record<string, unknown>>) => {
+      commandState.commands = commands;
+      return () => {
+        if (commandState.commands === commands) {
+          commandState.commands = [];
+        }
+      };
+    },
+  }),
   useLayout: () => ({
     isMobile: () => layoutIsMobile,
     sidebarActiveTab: () => sidebarActiveTabValue,
@@ -136,6 +156,13 @@ vi.mock('./TopBarBrandButton', () => ({
       {props.children}
     </button>
   ),
+}));
+
+vi.mock('./notes/NotesOverlay', () => ({
+  NotesOverlay: (props: any) => {
+    notesOverlayState.lastProps = props;
+    return <div data-testid="notes-overlay" data-open={String(props.open)} />;
+  },
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
@@ -292,6 +319,8 @@ afterEach(() => {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  commandState.commands = [];
+  notesOverlayState.lastProps = null;
   protocolStatus = 'disconnected';
   protocolClient = null;
   protocolError = null;
@@ -411,9 +440,12 @@ describe('EnvAppShell top bar affordances', () => {
     try {
       await flushAsync();
 
+      const notesButton = host.querySelector('button[aria-label="Notes overlay"]');
       const commandPaletteButton = host.querySelector('button[aria-label="Command palette"]');
       const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
 
+      expect(notesButton).toBeTruthy();
+      expect(notesButton?.getAttribute('data-tooltip')).toBe('Notes overlay (Mod+.)');
       expect(commandPaletteButton).toBeTruthy();
       expect(commandPaletteButton?.getAttribute('data-tooltip')).toBe('Command palette');
       expect(toggleThemeButton).toBeTruthy();
@@ -423,7 +455,7 @@ describe('EnvAppShell top bar affordances', () => {
     }
   });
 
-  it('disables top bar tooltips on mobile layouts to avoid sticky touch overlays', async () => {
+  it('keeps the notes entry available on mobile while disabling top bar tooltips', async () => {
     layoutIsMobile = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -437,9 +469,85 @@ describe('EnvAppShell top bar affordances', () => {
     try {
       await flushAsync();
 
+      const notesButton = host.querySelector('button[aria-label="Notes overlay"]') as HTMLButtonElement | null;
       const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
+      expect(notesButton).toBeTruthy();
+      expect(notesButton?.getAttribute('data-tooltip')).toBeNull();
+      expect(notesOverlayState.lastProps?.open).toBe(false);
+
+      notesButton?.click();
+      await flushAsync();
+      expect(notesOverlayState.lastProps?.open).toBe(true);
+
       expect(toggleThemeButton).toBeTruthy();
       expect(toggleThemeButton?.getAttribute('data-tooltip')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('toggles the notes overlay from the top bar and shared close callback', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const notesButton = host.querySelector('button[aria-label="Notes overlay"]') as HTMLButtonElement | null;
+      expect(notesButton).toBeTruthy();
+      expect(notesOverlayState.lastProps?.open).toBe(false);
+
+      notesButton?.click();
+      await flushAsync();
+      expect(notesOverlayState.lastProps?.open).toBe(true);
+
+      notesOverlayState.lastProps?.onClose();
+      await flushAsync();
+      expect(notesOverlayState.lastProps?.open).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('registers a typing-safe notes toggle command', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const notesCommand = commandState.commands.find((command) => command.id === 'redeven.env.toggleNotesOverlay') as
+        | undefined
+        | {
+            keybind?: string;
+            allowWhileTyping?: boolean;
+            execute: () => void;
+          };
+
+      expect(notesCommand).toBeTruthy();
+      expect(notesCommand?.keybind).toBe('mod+.');
+      expect(notesCommand?.allowWhileTyping).toBe(true);
+      expect(notesOverlayState.lastProps?.open).toBe(false);
+
+      notesCommand?.execute();
+      await flushAsync();
+      expect(notesOverlayState.lastProps?.open).toBe(true);
+
+      notesCommand?.execute();
+      await flushAsync();
+      expect(notesOverlayState.lastProps?.open).toBe(false);
     } finally {
       dispose();
     }

@@ -258,6 +258,19 @@ describe('Redeven NotesOverlay adapter', () => {
     expect(controller.snapshot().items[0]?.body).toBe('Updated from stream');
   });
 
+  it('forwards the shell close callback to the shared floating notes overlay', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onClose = vi.fn();
+
+    render(() => <NotesOverlay open onClose={onClose} />, host);
+    await settle();
+
+    expect(notesUIState.lastProps?.open).toBe(true);
+    notesUIState.lastProps?.onClose();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps item mutations inside the Redeven controller adapter while preserving runtime authority', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

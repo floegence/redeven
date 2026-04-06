@@ -127,11 +127,12 @@ import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme'
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 
-
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
+const NOTES_OVERLAY_KEYBIND = 'mod+.';
+const NOTES_OVERLAY_SHORTCUT_LABEL = 'Mod+.';
 type CreateThreadResponse = Readonly<{
   thread: Readonly<{
     thread_id: string;
@@ -483,6 +484,9 @@ export function EnvAppShell() {
   const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
   const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
+  const openNotesOverlay = () => setNotesOverlayOpen(true);
+  const closeNotesOverlay = () => setNotesOverlayOpen(false);
+  const toggleNotesOverlay = () => setNotesOverlayOpen((open) => !open);
   const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
   let pendingMainWindowAskFlowerComposerIntent: AskFlowerIntent | null = null;
@@ -1940,6 +1944,16 @@ export function EnvAppShell() {
         },
       },
       {
+        id: 'redeven.env.toggleNotesOverlay',
+        title: 'Toggle Notes Overlay',
+        description: 'Open or close the floating notes overlay',
+        category: 'General',
+        keybind: NOTES_OVERLAY_KEYBIND,
+        allowWhileTyping: true,
+        icon: NotesOverlayIcon,
+        execute: () => (notesOverlayOpen() ? closeNotesOverlay() : openNotesOverlay()),
+      },
+      {
         id: 'redeven.env.openCommandPalette',
         title: 'Open Command Palette',
         description: 'Open the command palette',
@@ -2198,8 +2212,8 @@ export function EnvAppShell() {
         <div class="flex items-center gap-1">
           <TopBarIconButton
             label="Notes overlay"
-            tooltip={topBarTooltip('Notes overlay')}
-            onClick={() => setNotesOverlayOpen((open) => !open)}
+            tooltip={topBarTooltip(`Notes overlay (${NOTES_OVERLAY_SHORTCUT_LABEL})`)}
+            onClick={toggleNotesOverlay}
           >
             <NotesOverlayIcon class="w-4 h-4" />
           </TopBarIconButton>
@@ -2267,7 +2281,7 @@ export function EnvAppShell() {
             fallback={
               <>
                 <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
-                <NotesOverlay open={notesOverlayOpen()} onClose={() => setNotesOverlayOpen(false)} />
+                <NotesOverlay open={notesOverlayOpen()} onClose={closeNotesOverlay} />
               </>
             }
           >
