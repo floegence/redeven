@@ -1,9 +1,10 @@
 import '../../index.css';
 
+import { page } from '@vitest/browser/context';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ChatFileBrowserFAB } from './ChatFileBrowserFAB';
+import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';
 
 const fileBrowserSurfaceState = vi.hoisted(() => ({
   openBrowser: vi.fn(async () => undefined),
@@ -20,7 +21,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Folder: (props: any) => <svg data-testid="folder-icon" class={props.class} />,
 }));
 
-vi.mock('./FileBrowserSurfaceContext', () => ({
+vi.mock('../widgets/FileBrowserSurfaceContext', () => ({
   useFileBrowserSurfaceContext: () => ({
     controller: {
       open: fileBrowserSurfaceState.open,
@@ -36,7 +37,7 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-function clickFab(button: HTMLButtonElement): void {
+function dispatchPointerTap(button: HTMLButtonElement): void {
   (button as any).setPointerCapture = vi.fn();
   (button as any).releasePointerCapture = vi.fn();
 
@@ -56,21 +57,21 @@ afterEach(() => {
   fileBrowserSurfaceState.open.mockReturnValue(false);
 });
 
-describe('ChatFileBrowserFAB browser behavior', () => {
-  it('stays visible above the Codex page while the shared browser surface is open', async () => {
+describe('CodexFileBrowserFAB browser behavior', () => {
+  it('stays visible and topmost while the shared browser surface is already open', async () => {
     fileBrowserSurfaceState.open.mockReturnValue(true);
 
     const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
     document.body.appendChild(host);
 
     render(() => (
-      <div class="codex-page-shell">
+      <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
         <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }}>
-          <ChatFileBrowserFAB
+          <CodexFileBrowserFAB
             workingDir="/workspace/ui"
             homePath="/workspace"
-            persistentVisible
-            class="codex-page-file-browser-fab"
           />
         </div>
       </div>
@@ -79,11 +80,12 @@ describe('ChatFileBrowserFAB browser behavior', () => {
 
     const wrapper = host.querySelector('.codex-page-file-browser-fab') as HTMLDivElement | null;
     const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    const buttonLocator = page.getByTitle('Browse files');
     expect(wrapper).toBeTruthy();
     expect(button).toBeTruthy();
     expect(getComputedStyle(wrapper!).zIndex).toBe('46');
-
-    clickFab(button!);
+    await expect.element(buttonLocator).toBeVisible();
+    dispatchPointerTap(button!);
     await settle();
 
     expect(fileBrowserSurfaceState.openBrowser).toHaveBeenCalledWith({
@@ -92,18 +94,18 @@ describe('ChatFileBrowserFAB browser behavior', () => {
     });
   });
 
-  it('renders a visible disabled button when persistent mode has no usable path seed', async () => {
+  it('renders a visible disabled button when no usable path seed exists', async () => {
     const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
     document.body.appendChild(host);
 
     render(() => (
-      <div class="codex-page-shell">
+      <div class="codex-page-shell" style={{ width: '480px', height: '320px' }}>
         <div class="codex-page-transcript-main" style={{ width: '480px', height: '320px' }}>
-          <ChatFileBrowserFAB
+          <CodexFileBrowserFAB
             workingDir=""
             homePath=""
-            persistentVisible
-            class="codex-page-file-browser-fab"
           />
         </div>
       </div>

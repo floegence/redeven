@@ -8,8 +8,8 @@ import {
   toPickerTreePath,
 } from '../utils/directoryPickerTree';
 import { createDirectoryPickerDataSource } from '../utils/createDirectoryPickerDataSource';
-import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';
 import { useCodexContext } from './CodexProvider';
+import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';
 import { CodexComposerShell } from './CodexComposerShell';
 import { CodexHeaderBar, type CodexHeaderAction } from './CodexHeaderBar';
 import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
@@ -367,11 +367,9 @@ export function CodexPageShell() {
               emptyTitle={emptyStateTitle()}
               emptyBody={emptyStateBody()}
             />
-            <ChatFileBrowserFAB
+            <CodexFileBrowserFAB
               workingDir={workingDirPath()}
               homePath={homePath()}
-              persistentVisible
-              class="codex-page-file-browser-fab"
               containerRef={transcriptContainerRef}
             />
           </div>
