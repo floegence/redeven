@@ -490,6 +490,7 @@ export type CodexContextValue = Readonly<{
   capabilities: Accessor<CodexCapabilitiesSnapshot | null | undefined>;
   capabilitiesLoading: Accessor<boolean>;
   supportsOperation: (operation: CodexOperationName) => boolean;
+  selectedThreadID: Accessor<string | null>;
   activeThreadID: Accessor<string | null>;
   displayedThreadID: Accessor<string | null>;
   activeThread: Accessor<CodexThread | null>;
@@ -608,6 +609,7 @@ export function CodexProvider(props: ParentProps) {
   });
 
   const selectedThreadID = createMemo(() => threadController.selectedThreadID());
+  const foregroundThreadID = createMemo(() => threadController.foregroundThreadID());
   const displayedThreadID = createMemo(() => threadController.displayedThreadID());
   const listedThreadsByID = createMemo(() => {
     const next = new Map<string, CodexThread>();
@@ -628,7 +630,7 @@ export function CodexProvider(props: ParentProps) {
       if (!threadID) continue;
       merged.set(threadID, thread);
     }
-    const selectedThread = String(selectedThreadID() ?? '').trim();
+    const foregroundThread = String(foregroundThreadID() ?? '').trim();
     const displayedThread = String(displayedThreadID() ?? '').trim();
     for (const entry of Object.values(threadController.sessionEntriesByID())) {
       const thread = entry.session.thread;
@@ -644,7 +646,7 @@ export function CodexProvider(props: ParentProps) {
         merged.set(threadID, existing);
         continue;
       }
-      const pinnedThread = threadID === selectedThread || threadID === displayedThread;
+      const pinnedThread = threadID === foregroundThread || threadID === displayedThread;
       const existingUpdatedAt = Number(existing.updated_at_unix_s ?? 0) || 0;
       const sessionUpdatedAt = Number(sessionThread.updated_at_unix_s ?? 0) || 0;
       if (pinnedThread || sessionUpdatedAt > existingUpdatedAt) {
@@ -668,7 +670,7 @@ export function CodexProvider(props: ParentProps) {
       null
     );
     const session = threadController.sessionForThread(normalizedThreadID);
-    const pinnedThread = normalizedThreadID === String(selectedThreadID() ?? '').trim()
+    const pinnedThread = normalizedThreadID === String(foregroundThreadID() ?? '').trim()
       || normalizedThreadID === String(displayedThreadID() ?? '').trim();
     const pendingRequests = pinnedThread ? Object.values(session?.pending_requests ?? {}) : [];
     const status = pinnedThread
@@ -748,7 +750,7 @@ export function CodexProvider(props: ParentProps) {
     }
   };
 
-  const selectedThread = createMemo<CodexThread | null>(() => {
+  const selectedListThread = createMemo<CodexThread | null>(() => {
     const threadID = String(selectedThreadID() ?? '').trim();
     if (!threadID) return null;
     return (
@@ -758,8 +760,18 @@ export function CodexProvider(props: ParentProps) {
     );
   });
 
-  const selectedSession = createMemo(() => {
-    const threadID = String(selectedThreadID() ?? '').trim();
+  const foregroundThread = createMemo<CodexThread | null>(() => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    if (!threadID) return null;
+    return (
+      allThreads().find((thread) => thread.id === threadID) ??
+      threadController.sessionForThread(threadID)?.thread ??
+      null
+    );
+  });
+
+  const foregroundSession = createMemo(() => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return null;
     return threadController.sessionForThread(threadID);
   });
@@ -767,14 +779,14 @@ export function CodexProvider(props: ParentProps) {
   const displayedSession = createMemo(() => threadController.displayedSession());
 
   const activeOwnerID = createMemo(() => (
-    String(selectedThreadID() ?? '').trim()
-      ? codexOwnerIDForThread(selectedThreadID())
+    String(foregroundThreadID() ?? '').trim()
+      ? codexOwnerIDForThread(foregroundThreadID())
       : CODEX_NEW_THREAD_OWNER
   ));
 
   const ownerFallbackRuntimeConfig = createMemo<CodexThreadRuntimeConfig>(() => defaultRuntimeConfig({
-    thread: selectedThread(),
-    runtimeConfig: selectedSession()?.runtime_config,
+    thread: foregroundThread(),
+    runtimeConfig: foregroundSession()?.runtime_config,
     fallbackCWD: status()?.agent_home_dir,
   }));
 
@@ -992,7 +1004,7 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(() => {
     if (!codexVisible()) return;
-    const current = selectedThread();
+    const current = selectedListThread();
     if (current && isVisibleThread(current)) return;
     const list = threads();
     if (list.length === 0) {
@@ -1009,7 +1021,7 @@ export function CodexProvider(props: ParentProps) {
   });
 
   createEffect(on(
-    () => (codexVisible() ? String(selectedThreadID() ?? '').trim() : ''),
+    () => (codexVisible() ? String(foregroundThreadID() ?? '').trim() : ''),
     (threadID) => {
       if (!threadID) return;
       void untrack(() => loadThreadBootstrap(threadID));
@@ -1017,7 +1029,7 @@ export function CodexProvider(props: ParentProps) {
   ));
 
   createEffect(() => {
-    const normalizedThreadID = String(selectedThreadID() ?? '').trim();
+    const normalizedThreadID = String(foregroundThreadID() ?? '').trim();
     if (!normalizedThreadID) return;
     const readStatus = threadReadStatusForThread(normalizedThreadID);
     void markThreadRead(normalizedThreadID, readStatus);
@@ -1088,7 +1100,7 @@ export function CodexProvider(props: ParentProps) {
       null
     );
     const session = threadController.sessionForThread(normalizedThreadID);
-    const pinnedThread = normalizedThreadID === String(selectedThreadID() ?? '').trim()
+    const pinnedThread = normalizedThreadID === String(foregroundThreadID() ?? '').trim()
       || normalizedThreadID === String(displayedThreadID() ?? '').trim();
     const pendingRequests = pinnedThread ? Object.values(session?.pending_requests ?? {}) : [];
     const status = pinnedThread
@@ -1104,7 +1116,7 @@ export function CodexProvider(props: ParentProps) {
   };
   const hasBackgroundRunningThread = createMemo(() => {
     const excludedThreadIDs = new Set(
-      [selectedThreadID(), displayedThreadID()]
+      [foregroundThreadID(), displayedThreadID()]
         .map((threadID) => String(threadID ?? '').trim())
         .filter(Boolean),
     );
@@ -1124,22 +1136,22 @@ export function CodexProvider(props: ParentProps) {
   });
 
   const activeThread = createMemo<CodexThread | null>(() => (
-    selectedSession()?.thread ??
-    selectedThread() ??
+    foregroundSession()?.thread ??
+    foregroundThread() ??
     displayedSession()?.thread ??
     null
   ));
   const activeInterruptTurnID = createMemo(() => findInterruptibleTurnID(activeThread()));
 
   const activeRuntimeConfig = createMemo<CodexThreadRuntimeConfig>(() => (
-    selectedSession()?.runtime_config ??
+    foregroundSession()?.runtime_config ??
     displayedSession()?.runtime_config ??
     ownerFallbackRuntimeConfig() ??
     {}
   ));
 
   const activeOptimisticUserTurns = createMemo<CodexOptimisticUserTurn[]>(() => {
-    const threadID = String(selectedThreadID() ?? displayedThreadID() ?? '').trim();
+    const threadID = String(foregroundThreadID() ?? displayedThreadID() ?? '').trim();
     if (!threadID) return [];
     return [...(optimisticTurnsByThreadID()[threadID] ?? [])];
   });
@@ -1349,8 +1361,8 @@ export function CodexProvider(props: ParentProps) {
         refetchStatus(),
         refetchThreads(),
         refetchCapabilities(),
-        String(selectedThreadID() ?? '').trim()
-          ? loadThreadBootstrap(String(selectedThreadID() ?? '').trim())
+        String(foregroundThreadID() ?? '').trim()
+          ? loadThreadBootstrap(String(foregroundThreadID() ?? '').trim())
           : Promise.resolve(),
       ]);
     } catch (error) {
@@ -1395,7 +1407,7 @@ export function CodexProvider(props: ParentProps) {
     }
 
     setSubmitting(true);
-    let targetThreadID = String(selectedThreadID() ?? '').trim();
+    let targetThreadID = String(foregroundThreadID() ?? '').trim();
     const creatingThread = !targetThreadID;
     let targetOwnerID = ownerID;
     let optimisticTurnID = '';
@@ -1542,11 +1554,11 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const archiveActiveThread = async () => {
-    await archiveThread(String(selectedThreadID() ?? '').trim());
+    await archiveThread(String(foregroundThreadID() ?? '').trim());
   };
 
   const forkActiveThread = async () => {
-    const threadID = String(selectedThreadID() ?? '').trim();
+    const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return;
     if (!hasHostBinary()) {
       notify.error('Host Codex not detected', hostDisabledReason());
@@ -1587,7 +1599,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const interruptActiveTurn = async () => {
-    const threadID = String(selectedThreadID() ?? '').trim();
+    const threadID = String(foregroundThreadID() ?? '').trim();
     const turnID = String(activeInterruptTurnID() ?? '').trim();
     if (!threadID || !turnID) return;
     if (!hasHostBinary()) {
@@ -1613,7 +1625,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const reviewActiveThread = async () => {
-    const threadID = String(selectedThreadID() ?? '').trim();
+    const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return;
     if (!hasHostBinary()) {
       notify.error('Host Codex not detected', hostDisabledReason());
@@ -1669,7 +1681,8 @@ export function CodexProvider(props: ParentProps) {
     capabilities,
     capabilitiesLoading: () => capabilities.loading,
     supportsOperation,
-    activeThreadID: selectedThreadID,
+    selectedThreadID,
+    activeThreadID: foregroundThreadID,
     displayedThreadID,
     activeThread,
     activeRuntimeConfig,

@@ -38,14 +38,34 @@ const rpcMocks = {
     list: vi.fn(),
   },
 };
+const fileBrowserSurfaceState = {
+  open: vi.fn(),
+  openBrowser: vi.fn(),
+};
 const notification = {
   success: vi.fn(),
   error: vi.fn(),
   info: vi.fn(),
 };
 const desktopStorageState = new Map<string, string>();
+const animationFrameCallbacks = new Map<number, FrameRequestCallback>();
+let nextAnimationFrameHandle = 1;
+const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+  const handle = nextAnimationFrameHandle;
+  nextAnimationFrameHandle += 1;
+  animationFrameCallbacks.set(handle, callback);
+  return handle;
+});
+const cancelAnimationFrameMock = vi.fn((handle: number) => {
+  animationFrameCallbacks.delete(handle);
+});
+
+vi.stubGlobal('requestAnimationFrame', requestAnimationFrameMock);
+vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrameMock);
 
 if (typeof window !== 'undefined') {
+  window.requestAnimationFrame = requestAnimationFrameMock;
+  window.cancelAnimationFrame = cancelAnimationFrameMock;
   window.redevenDesktopStateStorage = {
     getItem: (key) => desktopStorageState.get(String(key ?? '')) ?? null,
     setItem: (key, value) => {
@@ -200,10 +220,30 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => rpcMocks,
 }));
 
+vi.mock('../widgets/FileBrowserSurfaceContext', () => ({
+  useFileBrowserSurfaceContext: () => ({
+    controller: {
+      open: fileBrowserSurfaceState.open,
+    },
+    openBrowser: fileBrowserSurfaceState.openBrowser,
+    closeBrowser: vi.fn(),
+  }),
+}));
+
+function flushAnimationFrames(): void {
+  const callbacks = Array.from(animationFrameCallbacks.values());
+  animationFrameCallbacks.clear();
+  for (const callback of callbacks) {
+    callback(performance.now());
+  }
+}
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+  flushAnimationFrames();
   await new Promise((resolve) => setTimeout(resolve, 0));
+  flushAnimationFrames();
 }
 
 function deferred<T>() {
@@ -281,6 +321,8 @@ function renderSurface(host: HTMLDivElement) {
 afterEach(() => {
   document.body.innerHTML = '';
   desktopStorageState.clear();
+  animationFrameCallbacks.clear();
+  nextAnimationFrameHandle = 1;
   vi.clearAllMocks();
   vi.useRealTimers();
 });
@@ -1565,6 +1607,12 @@ describe('CodexSidebar', () => {
     }
     target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
+    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
+    expect(host.textContent).toContain('Gateway note');
+    expect(host.querySelector('[data-codex-surface="loading-state"]')).toBeNull();
+    expect(openCodexThreadMock).not.toHaveBeenCalledWith('thread_2');
+
+    flushAnimationFrames();
     await flushAsync();
 
     expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();

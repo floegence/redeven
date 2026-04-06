@@ -100,10 +100,10 @@ function ThreadCard(props: {
     <div
       data-thread-id={props.thread.id}
       data-codex-surface="thread-card"
-      class={`group relative w-full cursor-pointer rounded-lg border transition-colors duration-150 ${
+      class={`group relative w-full cursor-pointer rounded-lg border ${
         props.active
           ? 'border-border/20 bg-sidebar-accent text-sidebar-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-          : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/60 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
+          : 'border-transparent text-sidebar-foreground/80 transition-colors duration-150 hover:border-border/15 hover:bg-sidebar-accent/60 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
       }`}
     >
       <Show when={props.active}>
@@ -276,7 +276,7 @@ export function CodexSidebarShell() {
                               {(resolvedThread) => (
                                 <ThreadCard
                                   thread={resolvedThread()}
-                                  active={threadID === codex.activeThreadID()}
+                                  active={threadID === codex.selectedThreadID()}
                                   isRunning={codex.isThreadRunning(threadID)}
                                   unread={codex.isThreadUnread(threadID)}
                                   actionLabel={
