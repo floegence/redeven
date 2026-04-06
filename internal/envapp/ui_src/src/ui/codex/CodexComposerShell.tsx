@@ -159,10 +159,15 @@ export function CodexComposerShell(props: {
   capabilitiesLoading: boolean;
   composerText: string;
   submitting: boolean;
+  sendDisabledReason: string;
+  showQueueAction: boolean;
+  queueDisabled: boolean;
+  queueDisabledReason: string;
   showStopAction: boolean;
   stopPending: boolean;
   stopDisabled: boolean;
   stopDisabledReason: string;
+  guidanceNote: string;
   hostAvailable: boolean;
   hostDisabledReason: string;
   onOpenWorkingDirPicker: () => void;
@@ -178,6 +183,7 @@ export function CodexComposerShell(props: {
   onResetComposer: () => void;
   onStartNewThreadDraft: () => void;
   onSend: () => void;
+  onQueue: () => void;
   onStop: () => void;
 }) {
   const rpc = useRedevenRpc();
@@ -435,32 +441,17 @@ export function CodexComposerShell(props: {
       : 'Use @ for file context or / for commands.';
     return `Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step. ${guidance}`;
   };
-  const primaryActionKind = () => (props.showStopAction ? 'stop' : 'send');
-  const primaryActionDisabled = () => (
-    primaryActionKind() === 'stop'
-      ? props.stopDisabled
-      : !canSend()
+  const primaryActionDisabled = () => !canSend() || !!String(props.sendDisabledReason ?? '').trim();
+  const primaryActionTitle = () => (
+    String(props.sendDisabledReason ?? '').trim() || (props.submitting ? 'Sending...' : sendLabel())
   );
-  const primaryActionTitle = () => {
-    if (primaryActionKind() === 'stop') {
-      return String(props.stopDisabledReason ?? '').trim() || (props.stopPending ? 'Stopping...' : 'Stop active Codex turn');
-    }
-    return props.submitting ? 'Sending...' : sendLabel();
-  };
-  const primaryActionAriaLabel = () => (
-    primaryActionKind() === 'stop'
-      ? 'Stop active Codex turn'
-      : sendLabel()
-  );
-  const primaryActionActive = () => props.showStopAction || canSend();
+  const primaryActionActive = () => canSend() && !primaryActionDisabled();
   const handlePrimaryAction = () => {
-    if (primaryActionKind() === 'stop') {
-      if (props.stopDisabled) return;
-      props.onStop();
-      return;
-    }
+    if (primaryActionDisabled()) return;
     props.onSend();
   };
+  const queueActionTitle = () => String(props.queueDisabledReason ?? '').trim() || 'Queue this message for the next turn';
+  const stopActionTitle = () => String(props.stopDisabledReason ?? '').trim() || (props.stopPending ? 'Stopping...' : 'Stop active Codex turn');
 
   const applyComposerText = (nextText: string, nextSelection?: number) => {
     props.onComposerInput(nextText);
@@ -678,27 +669,59 @@ export function CodexComposerShell(props: {
           />
 
           <div class="codex-chat-input-send-slot">
+            <Show when={props.showQueueAction || props.showStopAction}>
+              <div class="codex-chat-input-secondary-actions">
+                <Show when={props.showQueueAction}>
+                  <button
+                    type="button"
+                    class="codex-chat-secondary-action"
+                    onClick={() => {
+                      if (props.queueDisabled) return;
+                      props.onQueue();
+                    }}
+                    disabled={props.queueDisabled}
+                    title={queueActionTitle()}
+                    aria-label="Queue next Codex turn"
+                  >
+                    Queue next
+                  </button>
+                </Show>
+                <Show when={props.showStopAction}>
+                  <button
+                    type="button"
+                    class="codex-chat-secondary-action codex-chat-secondary-action-stop"
+                    onClick={() => {
+                      if (props.stopDisabled) return;
+                      props.onStop();
+                    }}
+                    disabled={props.stopDisabled}
+                    title={stopActionTitle()}
+                    aria-label="Stop active Codex turn"
+                  >
+                    {props.stopPending ? 'Stopping…' : 'Stop'}
+                  </button>
+                </Show>
+              </div>
+            </Show>
             <button
               type="button"
               class={cn(
                 'chat-input-send-btn codex-chat-input-send-btn',
                 primaryActionActive() && 'chat-input-send-btn-active',
-                props.showStopAction && 'codex-chat-input-send-btn-stop',
               )}
               onClick={handlePrimaryAction}
               disabled={primaryActionDisabled()}
-              aria-label={primaryActionAriaLabel()}
+              aria-label={sendLabel()}
               title={primaryActionTitle()}
             >
-              <Show
-                when={props.showStopAction}
-                fallback={<Send class="h-[18px] w-[18px]" />}
-              >
-                <StopIcon />
-              </Show>
+              <Send class="h-[18px] w-[18px]" />
             </button>
           </div>
         </div>
+
+        <Show when={String(props.guidanceNote ?? '').trim()}>
+          <div class="codex-chat-input-guidance">{props.guidanceNote}</div>
+        </Show>
 
         <Show when={popupVisible()}>
           <div class="codex-chat-popup-overlay">
@@ -938,11 +961,5 @@ const LockIcon: Component = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <rect x="4" y="11" width="16" height="10" rx="2" />
     <path d="M8 11V7a4 4 0 1 1 8 0v4" />
-  </svg>
-);
-
-const StopIcon: Component = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <rect x="6.5" y="6.5" width="11" height="11" rx="2.25" />
   </svg>
 );

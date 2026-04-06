@@ -7,6 +7,7 @@ import (
 type rpcError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 type rpcEnvelope struct {
@@ -258,6 +259,16 @@ type wireTurnStartParams struct {
 
 type wireTurnStartResponse struct {
 	Turn wireTurn `json:"turn"`
+}
+
+type wireTurnSteerParams struct {
+	ThreadID       string          `json:"threadId"`
+	Input          []wireUserInput `json:"input"`
+	ExpectedTurnID string          `json:"expectedTurnId"`
+}
+
+type wireTurnSteerResponse struct {
+	TurnID string `json:"turnId"`
 }
 
 type wireThreadForkParams struct {

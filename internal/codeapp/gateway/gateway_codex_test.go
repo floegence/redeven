@@ -22,6 +22,7 @@ type stubCodexBackend struct {
 	readThread           func(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	startThread          func(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	startTurn            func(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
+	steerTurn            func(ctx context.Context, req codexbridge.SteerTurnRequest) (*codexbridge.Turn, error)
 	archiveThread        func(ctx context.Context, threadID string) error
 	unarchiveThread      func(ctx context.Context, threadID string) error
 	forkThread           func(ctx context.Context, req codexbridge.ForkThreadRequest) (*codexbridge.ThreadDetail, error)
@@ -69,6 +70,13 @@ func (s *stubCodexBackend) StartThread(ctx context.Context, req codexbridge.Star
 func (s *stubCodexBackend) StartTurn(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error) {
 	if s.startTurn != nil {
 		return s.startTurn(ctx, req)
+	}
+	return nil, nil
+}
+
+func (s *stubCodexBackend) SteerTurn(ctx context.Context, req codexbridge.SteerTurnRequest) (*codexbridge.Turn, error) {
+	if s.steerTurn != nil {
+		return s.steerTurn(ctx, req)
 	}
 	return nil, nil
 }
@@ -197,6 +205,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 	var (
 		gotStartThread     codexbridge.StartThreadRequest
 		gotStartTurn       codexbridge.StartTurnRequest
+		gotSteerTurn       codexbridge.SteerTurnRequest
 		gotListThreads     codexbridge.ListThreadsRequest
 		gotCapabilitiesCWD string
 		gotArchiveID       string
@@ -248,6 +257,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 					Operations: []codexbridge.OperationName{
 						codexbridge.OperationThreadArchive,
 						codexbridge.OperationThreadFork,
+						codexbridge.OperationTurnSteer,
 						codexbridge.OperationTurnInterrupt,
 						codexbridge.OperationReviewStart,
 					},
@@ -303,6 +313,10 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 			},
 			startTurn: func(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error) {
 				gotStartTurn = req
+				return &codexbridge.Turn{ID: "turn_1", Status: "running"}, nil
+			},
+			steerTurn: func(ctx context.Context, req codexbridge.SteerTurnRequest) (*codexbridge.Turn, error) {
+				gotSteerTurn = req
 				return &codexbridge.Turn{ID: "turn_1", Status: "running"}, nil
 			},
 			archiveThread: func(ctx context.Context, threadID string) error {
@@ -484,6 +498,26 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		}
 		if len(gotStartTurn.Inputs) != 1 || gotStartTurn.Inputs[0].Type != "image" || gotStartTurn.Inputs[0].Name != "snapshot.png" {
 			t.Fatalf("unexpected start turn inputs: %+v", gotStartTurn.Inputs)
+		}
+	})
+
+	t.Run("steer turn", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/turns/steer", bytes.NewBufferString(`{
+			"expected_turn_id":"turn_1",
+			"inputs":[{"type":"text","text":"continue with the active run"}]
+		}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if gotSteerTurn.ThreadID != "thread_1" || gotSteerTurn.ExpectedTurnID != "turn_1" {
+			t.Fatalf("unexpected steer turn request: %+v", gotSteerTurn)
+		}
+		if len(gotSteerTurn.Inputs) != 1 || gotSteerTurn.Inputs[0].Text != "continue with the active run" {
+			t.Fatalf("unexpected steer turn inputs: %+v", gotSteerTurn.Inputs)
 		}
 	})
 

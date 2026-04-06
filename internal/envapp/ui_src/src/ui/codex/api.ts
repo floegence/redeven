@@ -4,6 +4,7 @@ import type {
   CodexEvent,
   CodexForkThreadRequest,
   CodexInterruptTurnRequest,
+  CodexSteerTurnRequest,
   CodexThreadReadStatus,
   CodexReviewStartRequest,
   CodexStatus,
@@ -11,6 +12,45 @@ import type {
   CodexThreadDetail,
   CodexUserInputEntry,
 } from './types';
+
+export class CodexGatewayError extends Error {
+  errorCode: string;
+  status: number;
+
+  constructor(message: string, errorCode = '', status = 400) {
+    super(message);
+    this.name = 'CodexGatewayError';
+    this.errorCode = String(errorCode ?? '').trim();
+    this.status = Math.max(0, Number(status ?? 0) || 0);
+  }
+}
+
+function codexGatewayErrorMessage(data: any, status: number): string {
+  const nested = String(data?.error?.message ?? '').trim();
+  if (nested) return nested;
+  const flat = String(data?.error ?? '').trim();
+  if (flat && flat !== '[object Object]') return flat;
+  return `HTTP ${status}`;
+}
+
+async function fetchCodexGatewayJSON<T>(url: string, init: RequestInit): Promise<T> {
+  const resp = await fetch(url, await prepareGatewayRequestInit(init));
+  const text = await resp.text();
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // ignore
+  }
+  const errorCode = String(data?.error_code ?? '').trim();
+  if (!resp.ok) {
+    throw new CodexGatewayError(codexGatewayErrorMessage(data, resp.status), errorCode, resp.status);
+  }
+  if (data?.ok === false) {
+    throw new CodexGatewayError(codexGatewayErrorMessage(data, resp.status || 400), errorCode, resp.status || 400);
+  }
+  return (data?.data ?? data) as T;
+}
 
 export async function fetchCodexStatus(): Promise<CodexStatus> {
   return fetchGatewayJSON<CodexStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' });
@@ -115,6 +155,17 @@ export async function startCodexTurn(args: {
       approval_policy: String(args.approval_policy ?? '').trim(),
       sandbox_mode: String(args.sandbox_mode ?? '').trim(),
       approvals_reviewer: String(args.approvals_reviewer ?? '').trim(),
+    }),
+  });
+}
+
+export async function steerCodexTurn(args: CodexSteerTurnRequest): Promise<void> {
+  const threadID = encodeURIComponent(String(args.thread_id ?? '').trim());
+  await fetchCodexGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${threadID}/turns/steer`, {
+    method: 'POST',
+    body: JSON.stringify({
+      expected_turn_id: String(args.expected_turn_id ?? '').trim(),
+      inputs: Array.isArray(args.inputs) ? args.inputs : [],
     }),
   });
 }

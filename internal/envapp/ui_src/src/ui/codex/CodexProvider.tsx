@@ -19,6 +19,7 @@ import type {
   FollowBottomRequestReason,
 } from '../chat/scroll/createFollowBottomController';
 import {
+  CodexGatewayError,
   archiveCodexThread,
   connectCodexEventStream,
   fetchCodexCapabilities,
@@ -32,13 +33,14 @@ import {
   startCodexThread,
   startCodexReview,
   startCodexTurn,
+  steerCodexTurn,
 } from './api';
 import {
   CODEX_NEW_THREAD_OWNER,
   codexOwnerIDForThread,
   createCodexDraftController,
-  type CodexRuntimeDraft,
 } from './draftController';
+import { createCodexFollowupController } from './followupController';
 import { createCodexThreadController } from './threadController';
 import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
 import {
@@ -57,11 +59,13 @@ import type {
   CodexOperationName,
   CodexOptimisticUserTurn,
   CodexPendingRequest,
+  CodexQueuedFollowup,
   CodexStatus,
   CodexThread,
   CodexThreadReadStatus,
   CodexThreadTokenUsage,
   CodexThreadRuntimeConfig,
+  CodexTurn,
   CodexTranscriptItem,
   CodexUserInputEntry,
 } from './types';
@@ -332,14 +336,66 @@ function statusErrorMessage(status: Accessor<CodexStatus | null | undefined> & {
   return err instanceof Error ? err.message : String(err);
 }
 
-function runtimeConfigFromDraft(runtime: CodexRuntimeDraft): CodexThreadRuntimeConfig {
+type CodexPreparedSubmission = Readonly<{
+  text: string;
+  attachmentInputs: CodexUserInputEntry[];
+  mentionInputs: CodexUserInputEntry[];
+  optimisticInputs: CodexUserInputEntry[];
+  optimisticPreview: string;
+}>;
+
+function prepareCodexSubmission(args: {
+  text: string;
+  attachments: readonly CodexComposerAttachmentDraft[];
+  mentions: readonly CodexComposerMentionDraft[];
+}): CodexPreparedSubmission {
+  const text = String(args.text ?? '');
+  const attachmentInputs: CodexUserInputEntry[] = args.attachments.map((attachment) => ({
+    type: 'image',
+    url: attachment.data_url,
+    name: attachment.name,
+  }));
+  const mentionInputs: CodexUserInputEntry[] = args.mentions.map((mention) => ({
+    type: 'mention',
+    name: mention.name,
+    path: mention.path,
+  }));
+  const optimisticInputs: CodexUserInputEntry[] = [
+    ...(text.trim() ? [{ type: 'text', text } satisfies CodexUserInputEntry] : []),
+    ...attachmentInputs,
+    ...mentionInputs,
+  ];
   return {
-    cwd: runtime.cwd,
-    model: runtime.model,
-    reasoning_effort: runtime.effort,
-    approval_policy: runtime.approvalPolicy,
-    sandbox_mode: runtime.sandboxMode,
+    text,
+    attachmentInputs,
+    mentionInputs,
+    optimisticInputs,
+    optimisticPreview: (
+      normalizeUserTurnText(codexUserInputTextSummary(optimisticInputs)) ||
+      text.trim() ||
+      args.mentions[0]?.name ||
+      args.attachments[0]?.name ||
+      ''
+    ),
   };
+}
+
+function hasCodexSubmissionContent(prepared: CodexPreparedSubmission | null | undefined): boolean {
+  if (!prepared) return false;
+  if (String(prepared.text ?? '').trim()) return true;
+  if ((prepared.attachmentInputs?.length ?? 0) > 0) return true;
+  return (prepared.mentionInputs?.length ?? 0) > 0;
+}
+
+function findActiveTurn(thread: CodexThread | null | undefined): CodexTurn | null {
+  const turns = Array.isArray(thread?.turns) ? thread?.turns : [];
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    if (!turn) continue;
+    if (!isWorkingStatus(String(turn.status ?? '').trim())) continue;
+    return turn;
+  }
+  return null;
 }
 
 function defaultRuntimeConfig(args: {
@@ -494,6 +550,9 @@ export type CodexContextValue = Readonly<{
   activeThreadID: Accessor<string | null>;
   displayedThreadID: Accessor<string | null>;
   activeThread: Accessor<CodexThread | null>;
+  activeTurn: Accessor<CodexTurn | null>;
+  activeTurnCanSteer: Accessor<boolean | null>;
+  activeTurnKind: Accessor<string>;
   activeRuntimeConfig: Accessor<CodexThreadRuntimeConfig>;
   activeTokenUsage: Accessor<CodexThreadTokenUsage | null | undefined>;
   activeOptimisticUserTurns: Accessor<CodexOptimisticUserTurn[]>;
@@ -544,6 +603,11 @@ export type CodexContextValue = Readonly<{
   startNewThreadDraft: () => void;
   refreshSidebar: () => Promise<void>;
   sendTurn: () => Promise<void>;
+  queueTurn: () => Promise<void>;
+  queuedFollowups: Accessor<CodexQueuedFollowup[]>;
+  removeQueuedFollowup: (followupID: string) => void;
+  moveQueuedFollowup: (followupID: string, delta: number) => void;
+  restoreQueuedFollowup: (followupID: string) => void;
   archiveThread: (threadID: string) => Promise<void>;
   archiveActiveThread: () => Promise<void>;
   forkActiveThread: () => Promise<void>;
@@ -563,6 +627,7 @@ export function CodexProvider(props: ParentProps) {
 
   const threadController = createCodexThreadController();
   const draftController = createCodexDraftController();
+  const followupController = createCodexFollowupController();
 
   const [optimisticThreadsByID, setOptimisticThreadsByID] = createSignal<CodexThreadMap>({});
   const [optimisticTurnsByThreadID, setOptimisticTurnsByThreadID] = createSignal<CodexOptimisticTurnMap>({});
@@ -576,6 +641,7 @@ export function CodexProvider(props: ParentProps) {
   const [streamBinding, setStreamBinding] = createSignal<Readonly<{ threadID: string; afterSeq: number }> | null>(null);
   const [scrollToBottomRequest, setScrollToBottomRequest] = createSignal<FollowBottomRequest | null>(null);
   const [markingReadKeyByThread, setMarkingReadKeyByThread] = createSignal<Record<string, string>>({});
+  const [blockedAutoSendKey, setBlockedAutoSendKey] = createSignal('');
   let scrollToBottomRequestSeq = 0;
 
   const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
@@ -1141,6 +1207,13 @@ export function CodexProvider(props: ParentProps) {
     displayedSession()?.thread ??
     null
   ));
+  const activeTurn = createMemo<CodexTurn | null>(() => findActiveTurn(activeThread()));
+  const activeTurnCanSteer = createMemo<boolean | null>(() => {
+    const turn = activeTurn();
+    if (!turn) return null;
+    return typeof turn.accepts_steer === 'boolean' ? turn.accepts_steer : null;
+  });
+  const activeTurnKind = createMemo(() => String(activeTurn()?.kind ?? '').trim());
   const activeInterruptTurnID = createMemo(() => findInterruptibleTurnID(activeThread()));
 
   const activeRuntimeConfig = createMemo<CodexThreadRuntimeConfig>(() => (
@@ -1201,6 +1274,9 @@ export function CodexProvider(props: ParentProps) {
     if (!current) return [];
     return Object.values(current.pending_requests);
   });
+  const queuedFollowups = createMemo<CodexQueuedFollowup[]>(() => (
+    followupController.queuedForThread(foregroundThreadID())
+  ));
 
   const workingDirDraft = createMemo(() => activeOwnerDraft().runtime.cwd);
   const modelDraft = createMemo(() => activeOwnerDraft().runtime.model);
@@ -1370,33 +1446,265 @@ export function CodexProvider(props: ParentProps) {
     }
   };
 
-  const sendTurn = async () => {
-    const ownerID = activeOwnerID();
+  const currentDraftRuntimeConfig = (): CodexQueuedFollowup['runtime_config'] => {
     const ownerDraft = activeOwnerDraft();
-    const message = String(ownerDraft.composer.text ?? '');
-    const attachmentInputs: CodexUserInputEntry[] = ownerDraft.composer.attachments.map((attachment) => ({
-      type: 'image',
-      url: attachment.data_url,
-      name: attachment.name,
-    }));
-    const mentionInputs: CodexUserInputEntry[] = ownerDraft.composer.mentions.map((mention) => ({
-      type: 'mention',
-      name: mention.name,
-      path: mention.path,
-    }));
-    const optimisticInputs: CodexUserInputEntry[] = [
-      ...(message.trim() ? [{ type: 'text', text: message } satisfies CodexUserInputEntry] : []),
-      ...attachmentInputs,
-      ...mentionInputs,
-    ];
-    const optimisticPreview = (
-      normalizeUserTurnText(codexUserInputTextSummary(optimisticInputs)) ||
-      message.trim() ||
-      ownerDraft.composer.mentions[0]?.name ||
-      ownerDraft.composer.attachments[0]?.name ||
-      ''
-    );
-    if ((!message.trim() && attachmentInputs.length === 0 && mentionInputs.length === 0) || submitting()) return;
+    return {
+      cwd: resolveCodexWorkingDir({
+        workingDirDraft: ownerDraft.runtime.cwd,
+        runtimeConfig: activeRuntimeConfig(),
+        capabilities: capabilities(),
+        thread: activeThread(),
+        status: status(),
+      }),
+      model: String(ownerDraft.runtime.model ?? '').trim(),
+      effort: String(ownerDraft.runtime.effort ?? '').trim(),
+      approval_policy: String(ownerDraft.runtime.approvalPolicy ?? '').trim(),
+      sandbox_mode: String(ownerDraft.runtime.sandboxMode ?? '').trim(),
+      approvals_reviewer: String(activeRuntimeConfig().approvals_reviewer ?? '').trim(),
+    };
+  };
+
+  const queueCurrentDraftInternal = (source: CodexQueuedFollowup['source'], notifySuccess: boolean): boolean => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    if (!threadID) return false;
+    const prepared = prepareCodexSubmission({
+      text: activeOwnerDraft().composer.text,
+      attachments: activeOwnerDraft().composer.attachments,
+      mentions: activeOwnerDraft().composer.mentions,
+    });
+    if (!hasCodexSubmissionContent(prepared)) return false;
+    const followup: CodexQueuedFollowup = {
+      id: createDraftEntryID(),
+      thread_id: threadID,
+      text: prepared.text,
+      attachments: activeOwnerDraft().composer.attachments.map((attachment) => ({ ...attachment })),
+      mentions: activeOwnerDraft().composer.mentions.map((mention) => ({ ...mention })),
+      runtime_config: currentDraftRuntimeConfig(),
+      created_at_unix_ms: Date.now(),
+      source,
+    };
+    followupController.queueFollowup(followup);
+    draftController.resetComposer(activeOwnerID());
+    setBlockedAutoSendKey('');
+    if (notifySuccess) {
+      notify.success('Queued', 'Codex will send this follow-up after the current turn finishes.');
+    }
+    return true;
+  };
+
+  const queueTurn = async () => {
+    if (!hasHostBinary()) {
+      notify.error('Host Codex not detected', hostDisabledReason());
+      return;
+    }
+    if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
+      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
+      return;
+    }
+    if (!String(foregroundThreadID() ?? '').trim()) {
+      notify.error('Queue unavailable', 'Queue is available after the current thread starts.');
+      return;
+    }
+    if (!queueCurrentDraftInternal('queued', true)) {
+      notify.error('Queue unavailable', 'Add a message, image, or file mention before queuing a follow-up.');
+    }
+  };
+
+  const restoreQueuedFollowup = (followupID: string) => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    if (!threadID) return;
+    const followup = followupController.pullFollowup(threadID, followupID);
+    if (!followup) return;
+    const ownerID = codexOwnerIDForThread(threadID);
+    draftController.ensureOwner(ownerID, activeRuntimeConfig(), followup.runtime_config.cwd);
+    draftController.setRuntimeField(ownerID, 'cwd', followup.runtime_config.cwd, true, followup.runtime_config.cwd);
+    draftController.setRuntimeField(ownerID, 'model', followup.runtime_config.model, true, followup.runtime_config.cwd);
+    draftController.setRuntimeField(ownerID, 'effort', followup.runtime_config.effort, true, followup.runtime_config.cwd);
+    draftController.setRuntimeField(ownerID, 'approvalPolicy', followup.runtime_config.approval_policy, true, followup.runtime_config.cwd);
+    draftController.setRuntimeField(ownerID, 'sandboxMode', followup.runtime_config.sandbox_mode, true, followup.runtime_config.cwd);
+    draftController.setComposerText(ownerID, followup.text);
+    draftController.replaceAttachments(ownerID, followup.attachments);
+    draftController.replaceMentions(ownerID, followup.mentions);
+    setBlockedAutoSendKey('');
+    notify.info('Loaded', 'The queued follow-up was restored to the composer.');
+  };
+
+  const removeQueuedFollowup = (followupID: string) => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    if (!threadID) return;
+    followupController.removeFollowup(threadID, followupID);
+    setBlockedAutoSendKey('');
+  };
+
+  const moveQueuedFollowup = (followupID: string, delta: number) => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    if (!threadID) return;
+    followupController.moveFollowup(threadID, followupID, delta);
+    setBlockedAutoSendKey('');
+  };
+
+  const submitTurnFromPayload = async (args: {
+    threadID?: string | null;
+    ownerID: string;
+    prepared: CodexPreparedSubmission;
+    runtimeConfig: CodexQueuedFollowup['runtime_config'];
+    resetComposerOwnerID?: string | null;
+  }): Promise<string> => {
+    setSubmitting(true);
+    let targetThreadID = String(args.threadID ?? '').trim();
+    const creatingThread = !targetThreadID;
+    let targetOwnerID = args.ownerID;
+    let optimisticTurnID = '';
+    try {
+      if (!targetThreadID) {
+        const detail = await startCodexThread({
+          cwd: args.runtimeConfig.cwd,
+          model: args.runtimeConfig.model,
+          approval_policy: args.runtimeConfig.approval_policy,
+          sandbox_mode: args.runtimeConfig.sandbox_mode,
+          approvals_reviewer: args.runtimeConfig.approvals_reviewer,
+        });
+        targetThreadID = detail.thread.id;
+        targetOwnerID = codexOwnerIDForThread(targetThreadID);
+        if (args.ownerID === CODEX_NEW_THREAD_OWNER) {
+          draftController.transferOwner(CODEX_NEW_THREAD_OWNER, targetOwnerID);
+        }
+        threadController.adoptThreadDetail(detail);
+        upsertOptimisticThread(detail.thread, args.prepared.optimisticPreview, args.runtimeConfig.cwd);
+        draftController.mergeOwnerRuntimeConfig(
+          targetOwnerID,
+          {
+            ...(detail.runtime_config ?? {}),
+            cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? args.runtimeConfig.cwd).trim(),
+          },
+          args.runtimeConfig.cwd,
+        );
+        draftController.commitOwnerRuntimeField(
+          targetOwnerID,
+          'cwd',
+          String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? args.runtimeConfig.cwd).trim(),
+          args.runtimeConfig.cwd,
+        );
+      } else {
+        const existingThread = (
+          allThreads().find((thread) => thread.id === targetThreadID) ??
+          activeThread() ??
+          buildOptimisticPlaceholderThread({
+            threadID: targetThreadID,
+            preview: args.prepared.optimisticPreview,
+            modelProvider: args.runtimeConfig.model,
+            cwd: args.runtimeConfig.cwd,
+          })
+        );
+        threadController.ensureSessionForThread(existingThread, {
+          cwd: args.runtimeConfig.cwd,
+          model: args.runtimeConfig.model,
+          reasoning_effort: args.runtimeConfig.effort,
+          approval_policy: args.runtimeConfig.approval_policy,
+          sandbox_mode: args.runtimeConfig.sandbox_mode,
+          approvals_reviewer: args.runtimeConfig.approvals_reviewer,
+        });
+        threadController.selectThread(targetThreadID);
+      }
+
+      optimisticTurnID = createDraftEntryID();
+      appendOptimisticTurn({
+        id: optimisticTurnID,
+        thread_id: targetThreadID,
+        text: args.prepared.text,
+        inputs: args.prepared.optimisticInputs,
+      });
+      threadController.markSessionWorking(targetThreadID);
+      requestScrollToBottom('send');
+
+      await startCodexTurn({
+        threadID: targetThreadID,
+        inputText: args.prepared.text,
+        inputs: [...args.prepared.attachmentInputs, ...args.prepared.mentionInputs],
+        cwd: creatingThread ? args.runtimeConfig.cwd : undefined,
+        model: args.runtimeConfig.model,
+        effort: args.runtimeConfig.effort,
+        approval_policy: args.runtimeConfig.approval_policy,
+        sandbox_mode: args.runtimeConfig.sandbox_mode,
+        approvals_reviewer: args.runtimeConfig.approvals_reviewer,
+      });
+
+      const currentThread = (
+        allThreads().find((thread) => thread.id === targetThreadID) ??
+        threadController.sessionForThread(targetThreadID)?.thread ??
+        null
+      );
+      if (currentThread) {
+        upsertOptimisticThread(currentThread, args.prepared.optimisticPreview, args.runtimeConfig.cwd);
+      } else {
+        upsertOptimisticThread(
+          buildOptimisticPlaceholderThread({
+            threadID: targetThreadID,
+            preview: args.prepared.optimisticPreview,
+            modelProvider: args.runtimeConfig.model,
+            cwd: args.runtimeConfig.cwd,
+          }),
+          args.prepared.optimisticPreview,
+          args.runtimeConfig.cwd,
+        );
+      }
+
+      if (args.resetComposerOwnerID) {
+        draftController.resetComposer(args.resetComposerOwnerID);
+      }
+      void refetchThreads();
+      void loadThreadBootstrap(targetThreadID);
+      void refetchCapabilities();
+      return targetThreadID;
+    } catch (error) {
+      if (targetThreadID && optimisticTurnID) {
+        removeOptimisticTurns(targetThreadID, new Set([optimisticTurnID]));
+      }
+      void refetchThreads();
+      if (targetThreadID) {
+        void loadThreadBootstrap(targetThreadID);
+      }
+      throw error;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitQueuedFollowup = async (followup: CodexQueuedFollowup): Promise<boolean> => {
+    const prepared = prepareCodexSubmission({
+      text: followup.text,
+      attachments: followup.attachments,
+      mentions: followup.mentions,
+    });
+    if (!hasCodexSubmissionContent(prepared)) {
+      followupController.removeFollowup(followup.thread_id, followup.id);
+      setBlockedAutoSendKey('');
+      return false;
+    }
+    try {
+      await submitTurnFromPayload({
+        threadID: followup.thread_id,
+        ownerID: codexOwnerIDForThread(followup.thread_id),
+        prepared,
+        runtimeConfig: followup.runtime_config,
+        resetComposerOwnerID: null,
+      });
+      followupController.removeFollowup(followup.thread_id, followup.id);
+      setBlockedAutoSendKey('');
+      return true;
+    } catch (error) {
+      notify.error('Queued follow-up failed', error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  };
+
+  const sendTurn = async () => {
+    const prepared = prepareCodexSubmission({
+      text: activeOwnerDraft().composer.text,
+      attachments: activeOwnerDraft().composer.attachments,
+      mentions: activeOwnerDraft().composer.mentions,
+    });
+    if (!hasCodexSubmissionContent(prepared) || submitting()) return;
     if (!hasHostBinary()) {
       notify.error('Host Codex not detected', hostDisabledReason());
       return;
@@ -1406,120 +1714,65 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
 
-    setSubmitting(true);
-    let targetThreadID = String(foregroundThreadID() ?? '').trim();
-    const creatingThread = !targetThreadID;
-    let targetOwnerID = ownerID;
-    let optimisticTurnID = '';
-    try {
-      const resolvedWorkingDir = resolveCodexWorkingDir({
-        workingDirDraft: ownerDraft.runtime.cwd,
-        runtimeConfig: activeRuntimeConfig(),
-        capabilities: capabilities(),
-        thread: activeThread(),
-        status: status(),
-      });
-      if (!targetThreadID) {
-        const detail = await startCodexThread({
-          cwd: resolvedWorkingDir,
-          model: ownerDraft.runtime.model,
-          approval_policy: ownerDraft.runtime.approvalPolicy,
-          sandbox_mode: ownerDraft.runtime.sandboxMode,
-        });
-        targetThreadID = detail.thread.id;
-        targetOwnerID = codexOwnerIDForThread(targetThreadID);
-        draftController.transferOwner(CODEX_NEW_THREAD_OWNER, targetOwnerID);
-        threadController.adoptThreadDetail(detail);
-        upsertOptimisticThread(detail.thread, optimisticPreview, resolvedWorkingDir);
-        draftController.mergeOwnerRuntimeConfig(
-          targetOwnerID,
-          {
-            ...(detail.runtime_config ?? {}),
-            cwd: String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
-          },
-          resolvedWorkingDir,
-        );
-        draftController.commitOwnerRuntimeField(
-          targetOwnerID,
-          'cwd',
-          String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? resolvedWorkingDir).trim(),
-          resolvedWorkingDir,
-        );
-      } else {
-        targetOwnerID = codexOwnerIDForThread(targetThreadID);
-        const existingThread = (
-          allThreads().find((thread) => thread.id === targetThreadID) ??
-          activeThread() ??
-          buildOptimisticPlaceholderThread({
-            threadID: targetThreadID,
-            preview: optimisticPreview,
-            modelProvider: ownerDraft.runtime.model,
-            cwd: resolvedWorkingDir,
-          })
-        );
-        threadController.ensureSessionForThread(existingThread, {
-          ...runtimeConfigFromDraft(ownerDraft.runtime),
-          cwd: resolvedWorkingDir,
-        });
-        threadController.selectThread(targetThreadID);
-      }
-
-      optimisticTurnID = createDraftEntryID();
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    const turnID = String(activeInterruptTurnID() ?? '').trim();
+    const hasActiveRun = Boolean(threadID) && (
+      submitting() ||
+      isWorkingStatus(activeStatus())
+    );
+    if (hasActiveRun && supportsOperation('turn_steer') && turnID && activeTurnCanSteer() !== false) {
+      const optimisticTurnID = createDraftEntryID();
+      setSubmitting(true);
       appendOptimisticTurn({
         id: optimisticTurnID,
-        thread_id: targetThreadID,
-        text: message,
-        inputs: optimisticInputs,
+        thread_id: threadID,
+        text: prepared.text,
+        inputs: prepared.optimisticInputs,
       });
-      threadController.markSessionWorking(targetThreadID);
       requestScrollToBottom('send');
+      try {
+        await steerCodexTurn({
+          thread_id: threadID,
+          expected_turn_id: turnID,
+          inputs: prepared.optimisticInputs,
+        });
+        draftController.resetComposer(activeOwnerID());
+        void refetchThreads();
+        return;
+      } catch (error) {
+        removeOptimisticTurns(threadID, new Set([optimisticTurnID]));
+        if (error instanceof CodexGatewayError && error.errorCode === 'activeTurnNotSteerable') {
+          if (queueCurrentDraftInternal('rejected_steer', false)) {
+            notify.info('Queued for later', 'The current turn could not accept same-turn input, so your message was queued as the next turn.');
+            return;
+          }
+        }
+        void refetchThreads();
+        void loadThreadBootstrap(threadID);
+        notify.error('Send failed', error instanceof Error ? error.message : String(error));
+        return;
+      } finally {
+        setSubmitting(false);
+      }
+    }
 
-      await startCodexTurn({
-        threadID: targetThreadID,
-        inputText: message,
-        inputs: [...attachmentInputs, ...mentionInputs],
-        cwd: creatingThread ? resolvedWorkingDir : undefined,
-        model: ownerDraft.runtime.model,
-        effort: ownerDraft.runtime.effort,
-        approval_policy: ownerDraft.runtime.approvalPolicy,
-        sandbox_mode: ownerDraft.runtime.sandboxMode,
+    if (hasActiveRun) {
+      const turnKind = String(activeTurnKind() ?? '').trim();
+      const turnLabel = turnKind ? `${turnKind} turn` : 'current turn';
+      notify.info('Queue next', `Send now is unavailable for the ${turnLabel}. Queue a follow-up or wait for completion.`);
+      return;
+    }
+
+    try {
+      await submitTurnFromPayload({
+        threadID,
+        ownerID: activeOwnerID(),
+        prepared,
+        runtimeConfig: currentDraftRuntimeConfig(),
+        resetComposerOwnerID: activeOwnerID(),
       });
-
-      const currentThread = (
-        allThreads().find((thread) => thread.id === targetThreadID) ??
-        threadController.sessionForThread(targetThreadID)?.thread ??
-        null
-      );
-      if (currentThread) {
-        upsertOptimisticThread(currentThread, optimisticPreview, resolvedWorkingDir);
-      } else {
-        upsertOptimisticThread(
-          buildOptimisticPlaceholderThread({
-            threadID: targetThreadID,
-            preview: optimisticPreview,
-            modelProvider: ownerDraft.runtime.model,
-            cwd: resolvedWorkingDir,
-          }),
-          optimisticPreview,
-          resolvedWorkingDir,
-        );
-      }
-
-      draftController.resetComposer(targetOwnerID);
-      void refetchThreads();
-      void loadThreadBootstrap(targetThreadID);
-      void refetchCapabilities();
     } catch (error) {
-      if (targetThreadID && optimisticTurnID) {
-        removeOptimisticTurns(targetThreadID, new Set([optimisticTurnID]));
-      }
-      void refetchThreads();
-      if (targetThreadID) {
-        void loadThreadBootstrap(targetThreadID);
-      }
       notify.error('Send failed', error instanceof Error ? error.message : String(error));
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -1543,6 +1796,7 @@ export function CodexProvider(props: ParentProps) {
         new Set((optimisticTurnsByThreadID()[normalizedThreadID] ?? []).map((turn) => turn.id)),
       );
       draftController.removeOwner(codexOwnerIDForThread(normalizedThreadID));
+      followupController.clearThread(normalizedThreadID);
       threadController.removeThreadState(normalizedThreadID);
       notify.success('Archived', 'The Codex thread has been archived.');
       await refetchThreads();
@@ -1657,6 +1911,32 @@ export function CodexProvider(props: ParentProps) {
     }
   };
 
+  createEffect(() => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
+    const nextFollowup = queuedFollowups()[0] ?? null;
+    if (!threadID || !nextFollowup) {
+      if (blockedAutoSendKey()) {
+        setBlockedAutoSendKey('');
+      }
+      return;
+    }
+    if (
+      submitting() ||
+      !!interruptingTurnID() ||
+      threadController.threadLoading() ||
+      isWorkingStatus(activeStatus()) ||
+      pendingRequests().length > 0
+    ) {
+      return;
+    }
+    const attemptKey = `${threadID}:${nextFollowup.id}`;
+    if (blockedAutoSendKey() === attemptKey) {
+      return;
+    }
+    setBlockedAutoSendKey(attemptKey);
+    void submitQueuedFollowup(nextFollowup);
+  });
+
   const answerRequest = async (request: CodexPendingRequest, decision?: string) => {
     try {
       await respondToCodexRequest({
@@ -1685,6 +1965,9 @@ export function CodexProvider(props: ParentProps) {
     activeThreadID: foregroundThreadID,
     displayedThreadID,
     activeThread,
+    activeTurn,
+    activeTurnCanSteer,
+    activeTurnKind,
     activeRuntimeConfig,
     activeOptimisticUserTurns,
     activeTokenUsage,
@@ -1731,6 +2014,11 @@ export function CodexProvider(props: ParentProps) {
     startNewThreadDraft,
     refreshSidebar,
     sendTurn,
+    queueTurn,
+    queuedFollowups,
+    removeQueuedFollowup,
+    moveQueuedFollowup,
+    restoreQueuedFollowup,
     archiveThread,
     archiveActiveThread,
     forkActiveThread,

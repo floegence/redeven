@@ -370,27 +370,7 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 	if err := m.ensureThreadLoaded(ctx, threadID); err != nil {
 		return nil, err
 	}
-	inputs := make([]wireUserInput, 0, len(req.Inputs)+1)
-	if text := strings.TrimSpace(req.InputText); text != "" {
-		inputs = append(inputs, wireUserInput{
-			Type: "text",
-			Text: text,
-		})
-	}
-	for i := range req.Inputs {
-		inputType := strings.TrimSpace(req.Inputs[i].Type)
-		if inputType == "" {
-			continue
-		}
-		entry := wireUserInput{
-			Type: inputType,
-			Text: strings.TrimSpace(req.Inputs[i].Text),
-			URL:  strings.TrimSpace(req.Inputs[i].URL),
-			Path: strings.TrimSpace(req.Inputs[i].Path),
-			Name: strings.TrimSpace(req.Inputs[i].Name),
-		}
-		inputs = append(inputs, entry)
-	}
+	inputs := buildWireUserInputs(req.InputText, req.Inputs)
 	if len(inputs) == 0 {
 		return nil, errors.New("missing inputs")
 	}
@@ -416,7 +396,7 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 	}
 	if err := m.call(ctx, "turn/start", params, &resp); err != nil {
 		if !isThreadNotFoundError(err) {
-			return nil, err
+			return nil, wrapTurnCallError("turn/start", err)
 		}
 		m.mu.Lock()
 		if state := m.threads[threadID]; state != nil {
@@ -430,10 +410,11 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 			if isThreadNotFoundError(retryErr) {
 				return nil, ErrThreadNotFound
 			}
-			return nil, retryErr
+			return nil, wrapTurnCallError("turn/start", retryErr)
 		}
 	}
 	turn := normalizeTurn(resp.Turn)
+	applyTurnSteerability(&turn, "regular", true)
 	m.mu.Lock()
 	if state := m.threads[threadID]; state != nil {
 		thread := ensureProjectedThread(state, threadID)
@@ -461,6 +442,45 @@ func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, e
 			state.runtimeConfig.ApprovalsReviewer = approvalsReviewer
 		}
 	}
+	m.mu.Unlock()
+	return &turn, nil
+}
+
+func (m *Manager) SteerTurn(ctx context.Context, req SteerTurnRequest) (*Turn, error) {
+	threadID := strings.TrimSpace(req.ThreadID)
+	expectedTurnID := strings.TrimSpace(req.ExpectedTurnID)
+	if threadID == "" || expectedTurnID == "" {
+		return nil, ErrThreadNotFound
+	}
+	if err := m.ensureThreadLoaded(ctx, threadID); err != nil {
+		return nil, err
+	}
+	inputs := buildWireUserInputs("", req.Inputs)
+	if len(inputs) == 0 {
+		return nil, errors.New("missing inputs")
+	}
+	var resp wireTurnSteerResponse
+	params := wireTurnSteerParams{
+		ThreadID:       threadID,
+		Input:          inputs,
+		ExpectedTurnID: expectedTurnID,
+	}
+	if err := m.call(ctx, "turn/steer", params, &resp); err != nil {
+		if isThreadNotFoundError(err) {
+			return nil, ErrThreadNotFound
+		}
+		return nil, wrapTurnCallError("turn/steer", err)
+	}
+	turn := Turn{
+		ID:     strings.TrimSpace(resp.TurnID),
+		Status: "in_progress",
+	}
+	applyTurnSteerability(&turn, "regular", true)
+	m.mu.Lock()
+	state := m.ensureThreadStateLocked(threadID)
+	thread := ensureProjectedThread(state, threadID)
+	upsertProjectedTurn(thread, turn)
+	thread.UpdatedAtUnixS = time.Now().Unix()
 	m.mu.Unlock()
 	return &turn, nil
 }
@@ -601,13 +621,14 @@ func (m *Manager) StartReview(ctx context.Context, req StartReviewRequest) (*Thr
 		if isThreadNotFoundError(err) {
 			return nil, ErrThreadNotFound
 		}
-		return nil, err
+		return nil, wrapTurnCallError("review/start", err)
 	}
 	reviewThreadID := strings.TrimSpace(resp.ReviewThreadID)
 	if reviewThreadID != "" && reviewThreadID != threadID {
 		return m.ReadThread(ctx, reviewThreadID)
 	}
 	turn := normalizeTurn(resp.Turn)
+	applyTurnSteerability(&turn, "review", false)
 	m.mu.Lock()
 	state := m.ensureThreadStateLocked(threadID)
 	thread := ensureProjectedThread(state, threadID)
@@ -1522,9 +1543,45 @@ func defaultCapabilityOperations() []OperationName {
 	return []OperationName{
 		OperationThreadArchive,
 		OperationThreadFork,
+		OperationTurnSteer,
 		OperationTurnInterrupt,
 		OperationReviewStart,
 	}
+}
+
+func applyTurnSteerability(turn *Turn, kind string, acceptsSteer bool) {
+	if turn == nil {
+		return
+	}
+	if normalizedKind := strings.TrimSpace(kind); normalizedKind != "" {
+		turn.Kind = normalizedKind
+	}
+	turn.AcceptsSteer = boolPtr(acceptsSteer)
+}
+
+func buildWireUserInputs(inputText string, entries []UserInputEntry) []wireUserInput {
+	out := make([]wireUserInput, 0, len(entries)+1)
+	if text := strings.TrimSpace(inputText); text != "" {
+		out = append(out, wireUserInput{
+			Type: "text",
+			Text: text,
+		})
+	}
+	for i := range entries {
+		inputType := strings.TrimSpace(entries[i].Type)
+		if inputType == "" {
+			continue
+		}
+		entry := wireUserInput{
+			Type: inputType,
+			Text: strings.TrimSpace(entries[i].Text),
+			URL:  strings.TrimSpace(entries[i].URL),
+			Path: strings.TrimSpace(entries[i].Path),
+			Name: strings.TrimSpace(entries[i].Name),
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 func buildSandboxPolicyRequest(mode string) *wireSandboxPolicy {
@@ -1544,6 +1601,11 @@ func buildSandboxPolicyRequest(mode string) *wireSandboxPolicy {
 	default:
 		return nil
 	}
+}
+
+func boolPtr(v bool) *bool {
+	out := v
+	return &out
 }
 
 func normalizeDecision(v string) string {

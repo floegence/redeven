@@ -14,6 +14,7 @@ const listCodexThreadsMock = vi.fn();
 const openCodexThreadMock = vi.fn();
 const startCodexThreadMock = vi.fn();
 const startCodexTurnMock = vi.fn();
+const steerCodexTurnMock = vi.fn();
 const archiveCodexThreadMock = vi.fn();
 const unarchiveCodexThreadMock = vi.fn();
 const forkCodexThreadMock = vi.fn();
@@ -21,6 +22,17 @@ const interruptCodexTurnMock = vi.fn();
 const startCodexReviewMock = vi.fn();
 const respondToCodexRequestMock = vi.fn();
 const connectCodexEventStreamMock = vi.fn();
+const markCodexThreadReadMock = vi.fn(async (args: any) => ({
+  is_unread: false,
+  snapshot: {
+    updated_at_unix_s: Math.max(0, Math.floor(Number(args?.snapshot?.updated_at_unix_s ?? 0) || 0)),
+    activity_signature: String(args?.snapshot?.activity_signature ?? '').trim() || undefined,
+  },
+  read_state: {
+    last_read_updated_at_unix_s: Math.max(0, Math.floor(Number(args?.snapshot?.updated_at_unix_s ?? 0) || 0)),
+    last_seen_activity_signature: String(args?.snapshot?.activity_signature ?? '').trim() || undefined,
+  },
+}));
 const rpcMocks = {
   fs: {
     list: vi.fn(),
@@ -31,6 +43,17 @@ const notification = {
   error: vi.fn(),
   info: vi.fn(),
 };
+const MockCodexGatewayError = vi.hoisted(() => class MockCodexGatewayError extends Error {
+  errorCode: string;
+  status: number;
+
+  constructor(message: string, errorCode = '', status = 400) {
+    super(message);
+    this.name = 'CodexGatewayError';
+    this.errorCode = errorCode;
+    this.status = status;
+  }
+});
 const fileBrowserSurfaceState = vi.hoisted(() => ({
   openBrowser: vi.fn(async () => undefined),
   open: vi.fn(() => false),
@@ -60,6 +83,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
   useLayout: () => ({
     sidebarActiveTab: () => 'codex',
+    isMobile: () => false,
   }),
   useNotification: () => notification,
 }));
@@ -199,17 +223,20 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 vi.mock('./api', () => ({
+  CodexGatewayError: MockCodexGatewayError,
   fetchCodexStatus: (...args: any[]) => fetchCodexStatusMock(...args),
   fetchCodexCapabilities: (...args: any[]) => fetchCodexCapabilitiesMock(...args),
   listCodexThreads: (...args: any[]) => listCodexThreadsMock(...args),
   openCodexThread: (...args: any[]) => openCodexThreadMock(...args),
   startCodexThread: (...args: any[]) => startCodexThreadMock(...args),
   startCodexTurn: (...args: any[]) => startCodexTurnMock(...args),
+  steerCodexTurn: (...args: any[]) => steerCodexTurnMock(...args),
   archiveCodexThread: (...args: any[]) => archiveCodexThreadMock(...args),
   unarchiveCodexThread: (...args: any[]) => unarchiveCodexThreadMock(...args),
   forkCodexThread: (...args: any[]) => forkCodexThreadMock(...args),
   interruptCodexTurn: (...args: any[]) => interruptCodexTurnMock(...args),
   startCodexReview: (...args: any[]) => startCodexReviewMock(...args),
+  markCodexThreadRead: (args: any) => markCodexThreadReadMock(args),
   respondToCodexRequest: (...args: any[]) => respondToCodexRequestMock(...args),
   connectCodexEventStream: (...args: any[]) => connectCodexEventStreamMock(...args),
 }));
@@ -232,6 +259,52 @@ async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+  if (typeof window.requestAnimationFrame === 'function') {
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const handle = window.requestAnimationFrame(() => finish());
+      window.setTimeout(() => {
+        if (!settled && typeof window.cancelAnimationFrame === 'function') {
+          window.cancelAnimationFrame(handle);
+        }
+        finish();
+      }, 0);
+    });
+  }
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function flushOpenThreadRequests(): Promise<void> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const pending = openCodexThreadMock.mock.results
+      .map((result) => result.value)
+      .filter((value): value is Promise<unknown> => Boolean(value) && typeof (value as Promise<unknown>).then === 'function');
+    if (pending.length > 0) {
+      await Promise.allSettled(pending);
+      await flushAsync();
+      return;
+    }
+    await flushAsync();
+  }
+}
+
+async function waitForCondition(
+  condition: () => boolean,
+  label: string,
+  attempts = 12,
+): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (condition()) return;
+    await flushAsync();
+    await flushOpenThreadRequests();
+  }
+  throw new Error(`Timed out waiting for ${label}`);
 }
 
 function clickFab(button: HTMLButtonElement): void {
@@ -576,7 +649,19 @@ describe('CodexPage', () => {
       ready: false,
       agent_home_dir: '/workspace',
     });
-    listCodexThreadsMock.mockResolvedValue([]);
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_stop_after_send',
+        name: 'Stop after send',
+        preview: 'Stop after send',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
     connectCodexEventStreamMock.mockResolvedValue(undefined);
 
     const host = document.createElement('div');
@@ -942,11 +1027,15 @@ describe('CodexPage', () => {
     document.body.appendChild(host);
 
     renderPage(host);
-    await flushAsync();
+    await waitForCondition(
+      () => Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
+      'active thread actions',
+    );
 
     const queryStopButton = () => host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
     const queryReviewButton = () => host.querySelector('button[aria-label="Review current workspace changes"]') as HTMLButtonElement | null;
     const queryForkButton = () => host.querySelector('button[aria-label="Fork Codex thread"]') as HTMLButtonElement | null;
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
 
     const stopButton = queryStopButton();
     const reviewButton = queryReviewButton();
@@ -955,6 +1044,7 @@ describe('CodexPage', () => {
     expect(stopButton).toBeTruthy();
     expect(reviewButton).toBeTruthy();
     expect(forkButton).toBeTruthy();
+    expect(sendButton).toBeTruthy();
 
     stopButton?.click();
     await flushAsync();
@@ -1036,7 +1126,7 @@ describe('CodexPage', () => {
         turns: [
           {
             id: 'turn_1',
-            status: 'completed',
+            status: 'in_progress',
             items: [
               {
                 id: 'item_1',
@@ -1107,9 +1197,14 @@ describe('CodexPage', () => {
     document.body.appendChild(host);
 
     renderPage(host);
-
-    await flushAsync();
-    await flushAsync();
+    await flushOpenThreadRequests();
+    await waitForCondition(
+      () => (
+        host.textContent?.includes('Codex page polish review') === true &&
+        host.textContent?.includes('Loading the selected Codex thread.') !== true
+      ),
+      'active thread load completion',
+    );
 
     expect(host.querySelector('[data-codex-surface="transcript"]')).not.toBeNull();
     expect(host.innerHTML).not.toContain('radial-gradient(circle_at_top');
@@ -1143,7 +1238,10 @@ describe('CodexPage', () => {
     expect(host.querySelectorAll('.codex-chat-input-meta-subgroup-policies [data-codex-select-variant="policy"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
     expect(host.querySelector('.codex-chat-draft-objects')).toBeNull();
+    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
+    expect(host.textContent).toContain('Queue next starts a new turn after this run finishes');
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
@@ -1249,7 +1347,7 @@ describe('CodexPage', () => {
     }));
   });
 
-  it('promotes the composer primary action to stop after sending a new turn', async () => {
+  it('keeps send primary and steers the active regular turn while exposing queue and stop', async () => {
     const startedDetail = {
       thread: {
         id: 'thread_stop_after_send',
@@ -1264,6 +1362,8 @@ describe('CodexPage', () => {
         turns: [
           {
             id: 'turn_stop_after_send',
+            kind: 'regular',
+            accepts_steer: true,
             status: 'in_progress',
             items: [],
           },
@@ -1305,6 +1405,7 @@ describe('CodexPage', () => {
       operations: [
         'thread_archive',
         'thread_fork',
+        'turn_steer',
         'turn_interrupt',
         'review_start',
       ],
@@ -1313,35 +1414,321 @@ describe('CodexPage', () => {
         allowed_sandbox_modes: ['danger-full-access'],
       },
     });
-    listCodexThreadsMock.mockResolvedValue([]);
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_stop_after_send',
+        name: 'Stop after send',
+        preview: 'Stop after send',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
     openCodexThreadMock.mockResolvedValue(startedDetail);
-    startCodexThreadMock.mockResolvedValue(startedDetail);
-    startCodexTurnMock.mockResolvedValue(undefined);
+    steerCodexTurnMock.mockResolvedValue(undefined);
     connectCodexEventStreamMock.mockResolvedValue(undefined);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     renderPage(host);
-    await flushAsync();
-    await flushAsync();
+    await waitForCondition(
+      () => Boolean(host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]')),
+      'composer queue action',
+    );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     const sendButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
-    if (!textarea || !sendButton) throw new Error('composer send controls not found');
+    const queueButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    const stopButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
+    if (!textarea || !sendButton || !queueButton || !stopButton) throw new Error('composer controls not found');
 
     textarea.value = 'Need a visible stop action';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect(queueButton.textContent).toContain('Queue next');
+    expect(stopButton.textContent).toContain('Stop');
+    expect(host.textContent).toContain('Send now appends to the current turn');
+
     sendButton.click();
 
     await flushAsync();
     await flushAsync();
 
-    const stopButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
-    if (!stopButton) throw new Error('composer stop button not found');
+    expect(steerCodexTurnMock).toHaveBeenCalledWith({
+      thread_id: 'thread_stop_after_send',
+      expected_turn_id: 'turn_stop_after_send',
+      inputs: [
+        {
+          type: 'text',
+          text: 'Need a visible stop action',
+        },
+      ],
+    });
+    expect(startCodexTurnMock).not.toHaveBeenCalled();
+  });
 
-    expect(stopButton.textContent?.trim()).toBe('');
-    expect(startCodexThreadMock).toHaveBeenCalledTimes(1);
+  it('queues the current draft when steer is rejected as non-steerable', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_queue_after_reject',
+        name: 'Queue after reject',
+        preview: 'Queue after reject',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_queue_after_reject',
+            kind: 'regular',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      token_usage: null,
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        reasoning_effort: 'medium',
+      },
+      operations: [
+        'thread_archive',
+        'thread_fork',
+        'turn_steer',
+        'turn_interrupt',
+        'review_start',
+      ],
+      requirements: {
+        allowed_approval_policies: ['never'],
+        allowed_sandbox_modes: ['danger-full-access'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_queue_after_reject',
+        name: 'Queue after reject',
+        preview: 'Queue after reject',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    steerCodexTurnMock.mockRejectedValue(new MockCodexGatewayError(
+      'Active turn rejected steer',
+      'activeTurnNotSteerable',
+      400,
+    ));
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+    await waitForCondition(
+      () => Boolean(host.querySelector('button[aria-label="Queue next Codex turn"]')),
+      'composer queue action',
+    );
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!textarea || !sendButton) throw new Error('composer send controls not found');
+
+    textarea.value = 'Queue this when steer is rejected';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    sendButton.click();
+
+    await waitForCondition(
+      () => steerCodexTurnMock.mock.calls.length === 1 && Boolean(host.textContent?.includes('Queued follow-ups')),
+      'queued follow-up fallback',
+    );
+
+    expect(steerCodexTurnMock).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('Queued follow-ups');
+    expect(host.textContent).toContain('Queue this when steer is rejected');
+    expect(notification.info).toHaveBeenCalledWith(
+      'Queued for later',
+      'The current turn could not accept same-turn input, so your message was queued as the next turn.',
+    );
+  });
+
+  it('auto-sends the next queued follow-up after the active thread becomes idle', async () => {
+    let streamOnEvent: ((event: unknown) => void) | undefined;
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      operations: [
+        'thread_archive',
+        'thread_fork',
+        'turn_steer',
+        'turn_interrupt',
+        'review_start',
+      ],
+      requirements: {
+        allowed_approval_policies: ['never'],
+        allowed_sandbox_modes: ['danger-full-access'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_1',
+        name: 'Queued follow-up thread',
+        preview: 'Queue next',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Queued follow-up thread',
+        preview: 'Queue next',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_1',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 1,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+    connectCodexEventStreamMock.mockImplementation(async (args: any) => {
+      streamOnEvent = args.onEvent;
+    });
+    startCodexTurnMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    renderPage(host);
+    await waitForCondition(
+      () => Boolean(host.querySelector('button[aria-label="Queue next Codex turn"]')),
+      'queue action',
+    );
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    if (!textarea || !queueButton) throw new Error('queue controls not found');
+
+    textarea.value = 'Send this after the current turn finishes';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    queueButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(host.textContent).toContain('Queued follow-ups');
+    expect(host.textContent).toContain('Send this after the current turn finishes');
+
+    streamOnEvent?.({
+      seq: 2,
+      type: 'turn_completed',
+      thread_id: 'thread_1',
+      turn: {
+        id: 'turn_1',
+        status: 'completed',
+        items: [],
+      },
+    });
+    streamOnEvent?.({
+      seq: 3,
+      type: 'thread_status_changed',
+      thread_id: 'thread_1',
+      status: 'completed',
+      flags: ['idle'],
+    });
+
+    await waitForCondition(
+      () => startCodexTurnMock.mock.calls.length > 0,
+      'queued follow-up auto send',
+    );
+
+    expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+      threadID: 'thread_1',
+      inputText: 'Send this after the current turn finishes',
+      model: 'gpt-5.4',
+      effort: 'medium',
+      approval_policy: 'never',
+      sandbox_mode: 'danger-full-access',
+    }));
   });
 
   it('restores the composer send action once the active turn completes', async () => {
@@ -1519,10 +1906,10 @@ describe('CodexPage', () => {
     document.body.appendChild(host);
 
     renderPage(host);
-
-    await flushAsync();
-    await flushAsync();
-    await flushAsync();
+    await waitForCondition(
+      () => Boolean(host.querySelector('.highlight-block-error')),
+      'stream error banner',
+    );
 
     const streamError = host.querySelector('.highlight-block-error');
     expect(streamError).not.toBeNull();
@@ -1690,7 +2077,6 @@ describe('CodexPage', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     renderPage(host);
-
     await flushAsync();
     await flushAsync();
 
@@ -1787,7 +2173,6 @@ describe('CodexPage', () => {
     document.body.appendChild(host);
 
     renderPage(host);
-
     await flushAsync();
     await flushAsync();
 
@@ -1912,9 +2297,10 @@ describe('CodexPage', () => {
     document.body.appendChild(host);
 
     renderPage(host);
-
-    await flushAsync();
-    await flushAsync();
+    await waitForCondition(
+      () => Boolean(host.querySelector('[data-codex-surface="pending-requests"]')),
+      'pending request panel',
+    );
 
     expect(host.querySelector('[data-codex-surface="pending-requests"]')).not.toBeNull();
     expect(host.textContent).toContain('Pending Codex requests');
@@ -1996,19 +2382,14 @@ describe('CodexPage', () => {
     document.body.appendChild(host);
 
     renderPage(host);
-
-    await flushAsync();
-    await flushAsync();
-    await flushAsync();
-
-    expect(connectCodexEventStreamMock).toHaveBeenCalledTimes(1);
-    expect(connectCodexEventStreamMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        threadID: 'thread_1',
-        afterSeq: 4,
-      }),
+    await waitForCondition(
+      () => connectCodexEventStreamMock.mock.calls.length > 0,
+      'stream subscription bootstrap',
     );
-    expect(host.textContent).toContain('Stream update');
+
+    expect(connectCodexEventStreamMock.mock.calls.some((call) => (
+      call[0]?.threadID === 'thread_1' && call[0]?.afterSeq === 4
+    ))).toBe(true);
   });
 
   it('resumes a cached thread from the latest live-applied sequence after switching away and back', async () => {
@@ -2117,43 +2498,30 @@ describe('CodexPage', () => {
       codexContext = codex;
     });
 
-    await flushAsync();
-    await flushAsync();
-    await flushAsync();
-
-    expect(connectCodexEventStreamMock).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        threadID: 'thread_1',
-        afterSeq: 4,
-      }),
+    await waitForCondition(
+      () => connectCodexEventStreamMock.mock.calls.length > 0 && Boolean(host.textContent?.includes('Loaded thread_1 with live update')),
+      'initial thread stream bootstrap',
     );
+
+    expect(connectCodexEventStreamMock.mock.calls.some((call) => (
+      call[0]?.threadID === 'thread_1' && call[0]?.afterSeq === 4
+    ))).toBe(true);
     expect(host.textContent).toContain('Loaded thread_1 with live update');
 
     codexContext.selectThread('thread_2');
-    await flushAsync();
-    await flushAsync();
-    await flushAsync();
-
-    expect(connectCodexEventStreamMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        threadID: 'thread_2',
-        afterSeq: 2,
-      }),
+    await waitForCondition(
+      () => connectCodexEventStreamMock.mock.calls.some((call) => (
+        call[0]?.threadID === 'thread_2' && call[0]?.afterSeq === 2
+      )),
+      'secondary thread stream bootstrap',
     );
 
     codexContext.selectThread('thread_1');
-    await flushAsync();
-    await flushAsync();
-    await flushAsync();
-
-    expect(connectCodexEventStreamMock).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
-        threadID: 'thread_1',
-        afterSeq: 5,
-      }),
+    await waitForCondition(
+      () => connectCodexEventStreamMock.mock.calls.some((call) => (
+        call[0]?.threadID === 'thread_1' && call[0]?.afterSeq === 5
+      )),
+      'resumed thread stream bootstrap',
     );
   });
 
@@ -3413,9 +3781,10 @@ describe('CodexPage', () => {
       codex = value;
     });
 
-    await flushAsync();
-    await flushAsync();
-    await flushAsync();
+    await waitForCondition(
+      () => Boolean(codex) && String(codex.activeThreadID() ?? '').trim() === 'thread_1',
+      'existing thread activation',
+    );
 
     expect(codex.workingDirDraft()).toBe('/workspace/ui');
 

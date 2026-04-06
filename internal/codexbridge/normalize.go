@@ -39,13 +39,7 @@ func normalizeTurn(in wireTurn) Turn {
 		ID:     strings.TrimSpace(in.ID),
 		Status: strings.TrimSpace(in.Status),
 	}
-	if in.Error != nil {
-		out.Error = &TurnError{
-			Message:           strings.TrimSpace(in.Error.Message),
-			AdditionalDetails: strings.TrimSpace(stringValue(in.Error.AdditionalDetails)),
-			CodexErrorCode:    normalizeCodexErrorInfo(in.Error.CodexErrorInfo),
-		}
-	}
+	out.Error = normalizeTurnError(in.Error)
 	if len(in.Items) > 0 {
 		out.Items = make([]Item, 0, len(in.Items))
 		for i := range in.Items {
@@ -53,6 +47,17 @@ func normalizeTurn(in wireTurn) Turn {
 		}
 	}
 	return out
+}
+
+func normalizeTurnError(in *wireTurnError) *TurnError {
+	if in == nil {
+		return nil
+	}
+	return &TurnError{
+		Message:           strings.TrimSpace(in.Message),
+		AdditionalDetails: strings.TrimSpace(stringValue(in.AdditionalDetails)),
+		CodexErrorCode:    normalizeCodexErrorInfo(in.CodexErrorInfo),
+	}
 }
 
 func normalizeItem(in wireThreadItem) Item {

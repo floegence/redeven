@@ -723,6 +723,7 @@ func TestReadCapabilities_DefaultOperationsMatchActiveOnlyBrowserSurface(t *test
 	want := []OperationName{
 		OperationThreadArchive,
 		OperationThreadFork,
+		OperationTurnSteer,
 		OperationTurnInterrupt,
 		OperationReviewStart,
 	}
@@ -733,6 +734,156 @@ func TestReadCapabilities_DefaultOperationsMatchActiveOnlyBrowserSurface(t *test
 		if capabilities.Operations[index] != operation {
 			t.Fatalf("Operations[%d]=%q, want=%q", index, capabilities.Operations[index], operation)
 		}
+	}
+}
+
+func TestSteerTurn_ProjectsSteerableRegularTurn(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "Steer thread",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "active",
+		CWD:           "/workspace/ui",
+	}
+	state.liveLoaded = true
+	manager.mu.Unlock()
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "turn/steer",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireTurnSteerParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.ThreadID != "thread_1" || params.ExpectedTurnID != "turn_1" {
+					t.Fatalf("unexpected steer params: %+v", params)
+				}
+				if len(params.Input) != 1 || params.Input[0].Type != "text" || params.Input[0].Text != "continue current turn" {
+					t.Fatalf("unexpected steer inputs: %+v", params.Input)
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireTurnSteerResponse{
+						TurnID: "turn_1",
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	turn, err := manager.SteerTurn(context.Background(), SteerTurnRequest{
+		ThreadID:       "thread_1",
+		ExpectedTurnID: "turn_1",
+		Inputs: []UserInputEntry{
+			{
+				Type: "text",
+				Text: "continue current turn",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SteerTurn: %v", err)
+	}
+	if turn.ID != "turn_1" {
+		t.Fatalf("Turn.ID=%q", turn.ID)
+	}
+	if turn.Kind != "regular" {
+		t.Fatalf("Turn.Kind=%q", turn.Kind)
+	}
+	if turn.AcceptsSteer == nil || !*turn.AcceptsSteer {
+		t.Fatalf("Turn.AcceptsSteer=%v", turn.AcceptsSteer)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	projected := manager.threads["thread_1"].thread
+	if projected == nil || len(projected.Turns) != 1 {
+		t.Fatalf("unexpected projected thread: %+v", projected)
+	}
+	if projected.Turns[0].ID != "turn_1" || projected.Turns[0].Kind != "regular" {
+		t.Fatalf("unexpected projected turn: %+v", projected.Turns[0])
+	}
+	if projected.Turns[0].AcceptsSteer == nil || !*projected.Turns[0].AcceptsSteer {
+		t.Fatalf("projected turn steerability=%v", projected.Turns[0].AcceptsSteer)
+	}
+}
+
+func TestSteerTurn_WrapsCodexErrorCode(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	state := manager.ensureThreadStateLocked("thread_1")
+	state.thread = &Thread{
+		ID:            "thread_1",
+		Preview:       "Steer thread",
+		ModelProvider: "openai/gpt-5.4",
+		Status:        "active",
+		CWD:           "/workspace/ui",
+	}
+	state.liveLoaded = true
+	manager.mu.Unlock()
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "turn/steer",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Error: &rpcError{
+						Code:    -32000,
+						Message: "Active turn rejected steer",
+						Data: mustJSONRaw(wireTurnError{
+							Message:        "Active turn rejected steer",
+							CodexErrorInfo: json.RawMessage(`{"activeTurnNotSteerable":{}}`),
+						}),
+					},
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	_, err = manager.SteerTurn(context.Background(), SteerTurnRequest{
+		ThreadID:       "thread_1",
+		ExpectedTurnID: "turn_1",
+		Inputs: []UserInputEntry{
+			{
+				Type: "text",
+				Text: "continue current turn",
+			},
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected steer error")
+	}
+	if got := CodexErrorCode(err); got != "activeTurnNotSteerable" {
+		t.Fatalf("CodexErrorCode(err)=%q", got)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
 	}
 }
 

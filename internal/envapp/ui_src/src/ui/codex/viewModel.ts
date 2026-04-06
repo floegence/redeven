@@ -206,6 +206,7 @@ export function codexAllowedSandboxModes(
 const DEFAULT_CODEX_OPERATIONS: readonly CodexOperationName[] = [
   'thread_archive',
   'thread_fork',
+  'turn_steer',
   'turn_interrupt',
   'review_start',
 ];

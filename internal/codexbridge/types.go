@@ -7,6 +7,7 @@ const (
 	OperationThreadUnarchive    OperationName = "thread_unarchive"
 	OperationThreadFork         OperationName = "thread_fork"
 	OperationThreadListArchived OperationName = "thread_list_archived"
+	OperationTurnSteer          OperationName = "turn_steer"
 	OperationTurnInterrupt      OperationName = "turn_interrupt"
 	OperationReviewStart        OperationName = "review_start"
 )
@@ -84,6 +85,12 @@ type StartTurnRequest struct {
 	ApprovalsReviewer string           `json:"approvals_reviewer,omitempty"`
 }
 
+type SteerTurnRequest struct {
+	ThreadID       string           `json:"thread_id"`
+	ExpectedTurnID string           `json:"expected_turn_id"`
+	Inputs         []UserInputEntry `json:"inputs,omitempty"`
+}
+
 type InterruptTurnRequest struct {
 	ThreadID string `json:"thread_id"`
 	TurnID   string `json:"turn_id"`
@@ -138,10 +145,12 @@ type Thread struct {
 }
 
 type Turn struct {
-	ID     string     `json:"id"`
-	Status string     `json:"status"`
-	Error  *TurnError `json:"error,omitempty"`
-	Items  []Item     `json:"items,omitempty"`
+	ID           string     `json:"id"`
+	Kind         string     `json:"kind,omitempty"`
+	AcceptsSteer *bool      `json:"accepts_steer,omitempty"`
+	Status       string     `json:"status"`
+	Error        *TurnError `json:"error,omitempty"`
+	Items        []Item     `json:"items,omitempty"`
 }
 
 type TurnError struct {

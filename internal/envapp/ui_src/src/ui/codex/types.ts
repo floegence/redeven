@@ -36,6 +36,7 @@ export type CodexOperationName =
   | 'thread_unarchive'
   | 'thread_fork'
   | 'thread_list_archived'
+  | 'turn_steer'
   | 'turn_interrupt'
   | 'review_start';
 
@@ -57,6 +58,12 @@ export type CodexForkThreadRequest = Readonly<{
 export type CodexInterruptTurnRequest = Readonly<{
   thread_id: string;
   turn_id: string;
+}>;
+
+export type CodexSteerTurnRequest = Readonly<{
+  thread_id: string;
+  expected_turn_id: string;
+  inputs: CodexUserInputEntry[];
 }>;
 
 export type CodexReviewStartRequest = Readonly<{
@@ -86,6 +93,26 @@ export type CodexOptimisticUserTurn = Readonly<{
   thread_id: string;
   text: string;
   inputs: CodexUserInputEntry[];
+}>;
+
+export type CodexQueuedFollowupRuntimeConfig = Readonly<{
+  cwd: string;
+  model: string;
+  effort: string;
+  approval_policy: string;
+  sandbox_mode: string;
+  approvals_reviewer: string;
+}>;
+
+export type CodexQueuedFollowup = Readonly<{
+  id: string;
+  thread_id: string;
+  text: string;
+  attachments: CodexComposerAttachmentDraft[];
+  mentions: CodexComposerMentionDraft[];
+  runtime_config: CodexQueuedFollowupRuntimeConfig;
+  created_at_unix_ms: number;
+  source: 'queued' | 'rejected_steer';
 }>;
 
 export type CodexFileChange = Readonly<{
@@ -175,6 +202,8 @@ export type CodexTurnError = Readonly<{
 
 export type CodexTurn = Readonly<{
   id: string;
+  kind?: string;
+  accepts_steer?: boolean;
   status: string;
   error?: CodexTurnError | null;
   items?: CodexItem[];

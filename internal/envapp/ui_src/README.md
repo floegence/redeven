@@ -12,7 +12,14 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - File Browser create flows stay shell-owned at the business layer but use the shared floe-webapp controlled reveal contract so newly created files/folders scroll into view and reuse the existing selected-state affordance without product-level DOM hacks.
 - The optional Codex surface lives in `src/ui/codex/*` and intentionally follows the same high-level sidebar + transcript + bottom-dock rhythm as Flower while keeping all Codex-owned layout/state modules independent from Flower files.
 - Codex UI state is controller-based: `CodexProvider` stays as orchestration glue, `createCodexThreadController` owns selected/foreground/displayed thread reconciliation plus session cache/bootstrap guards, and `createCodexDraftController` owns per-owner drafts (`draft:new` vs `thread:<id>`).
+- Codex queued follow-ups are also controller-based and Codex-owned: `createCodexFollowupController` persists thread-scoped queued composer snapshots locally so follow-up ordering, restore/edit flows, and next-turn auto-send stay independent from Flower chat state.
 - Codex active-thread lifecycle is session-owned: foreground transcript, pending requests, token usage, and stop/send state come from thread bootstrap + SSE projection rather than from `thread/list` polling.
+- Codex send semantics intentionally mirror the official Codex chat contract:
+  - `Send` always stays the primary action;
+  - active regular turns may accept same-turn input immediately through `turn/steer`;
+  - `Queue next` is an explicit next-turn action instead of an implicit stop/send fallback;
+  - `Stop` remains explicit and never replaces the primary send affordance.
+- Codex queued follow-up auto-send is foreground-session-owned: once the current thread becomes idle and no pending request/interrupt bootstrap is blocking, the next persisted follow-up is started from the queued runtime snapshot without relying on sidebar polling.
 - Codex sidebar selection feedback is intent-owned: `selectedThreadID` updates immediately for visual response, while `foregroundThreadID` advances on the controller-owned activation step that drives bootstrap, read-marking, and header/composer ownership.
 - Codex thread-list refresh is summary-only and identity-preserving: unchanged thread summaries reuse their previous browser objects so running sidebar indicators stay mounted and background polling does not reset their animation.
 - Codex item lifecycle projection is bridge-owned and bootstrap-stable: `item/started` / streaming deltas establish working item state, `item/completed` closes that state even when the raw payload omits an explicit item status, and reopening a working thread after switching away must not resurrect historical assistant items as streaming rows.

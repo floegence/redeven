@@ -91,6 +91,7 @@ type CodexBackend interface {
 	ReadThread(ctx context.Context, threadID string) (*codexbridge.ThreadDetail, error)
 	StartThread(ctx context.Context, req codexbridge.StartThreadRequest) (*codexbridge.ThreadDetail, error)
 	StartTurn(ctx context.Context, req codexbridge.StartTurnRequest) (*codexbridge.Turn, error)
+	SteerTurn(ctx context.Context, req codexbridge.SteerTurnRequest) (*codexbridge.Turn, error)
 	ArchiveThread(ctx context.Context, threadID string) error
 	UnarchiveThread(ctx context.Context, threadID string) error
 	ForkThread(ctx context.Context, req codexbridge.ForkThreadRequest) (*codexbridge.ThreadDetail, error)
@@ -549,6 +550,7 @@ func writeAISkillError(w http.ResponseWriter, fallbackStatus int, err error) {
 
 func writeCodexError(w http.ResponseWriter, err error) {
 	var status int
+	errorCode := ""
 	switch {
 	case err == nil:
 		status = http.StatusOK
@@ -561,7 +563,8 @@ func writeCodexError(w http.ResponseWriter, err error) {
 	default:
 		status = http.StatusBadRequest
 	}
-	writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+	errorCode = codexbridge.CodexErrorCode(err)
+	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode})
 }
 
 type diagnosticsView struct {
@@ -1886,6 +1889,33 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
 				SandboxMode:       strings.TrimSpace(body.SandboxMode),
 				ApprovalsReviewer: strings.TrimSpace(body.ApprovalsReviewer),
+			})
+			if err != nil {
+				writeCodexError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"turn": turn}})
+			return
+		case len(parts) == 3 && r.Method == http.MethodPost && parts[1] == "turns" && parts[2] == "steer":
+			type reqBody struct {
+				ExpectedTurnID string                       `json:"expected_turn_id"`
+				Inputs         []codexbridge.UserInputEntry `json:"inputs"`
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body reqBody
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			turn, err := g.codex.SteerTurn(r.Context(), codexbridge.SteerTurnRequest{
+				ThreadID:       threadID,
+				ExpectedTurnID: strings.TrimSpace(body.ExpectedTurnID),
+				Inputs:         body.Inputs,
 			})
 			if err != nil {
 				writeCodexError(w, err)
