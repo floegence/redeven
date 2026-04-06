@@ -176,6 +176,13 @@
   background: var(--codex-surface-page);
 }
 
+.codex-page-transcript-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .codex-page-status-stack {
   display: flex;
   flex-direction: column;
@@ -184,7 +191,6 @@
 }
 
 .codex-page-transcript-main {
-  position: relative;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;

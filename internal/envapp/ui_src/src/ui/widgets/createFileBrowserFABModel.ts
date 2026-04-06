@@ -12,6 +12,14 @@ function normalizeAbsolutePath(path: string): string {
 const FAB_SIZE = 44;
 const EDGE_MARGIN = 12;
 
+export type FileBrowserFABContainerRef = HTMLElement | undefined | (() => HTMLElement | undefined);
+
+export function resolveFileBrowserFABContainerRef(
+  containerRef: FileBrowserFABContainerRef,
+): HTMLElement | undefined {
+  return typeof containerRef === 'function' ? containerRef() : containerRef;
+}
+
 export function createFileBrowserFABModel(args: Readonly<{
   workingDir: Accessor<string>;
   homePath: Accessor<string | undefined>;

@@ -1,19 +1,23 @@
 import { Motion } from 'solid-motionone';
 import { Folder } from '@floegence/floe-webapp-core/icons';
 
-import { createFileBrowserFABModel } from '../widgets/createFileBrowserFABModel';
+import {
+  createFileBrowserFABModel,
+  resolveFileBrowserFABContainerRef,
+  type FileBrowserFABContainerRef,
+} from '../widgets/createFileBrowserFABModel';
 
 export interface CodexFileBrowserFABProps {
   workingDir: string;
   homePath?: string;
-  containerRef?: HTMLElement;
+  containerRef?: FileBrowserFABContainerRef;
 }
 
 export function CodexFileBrowserFAB(props: CodexFileBrowserFABProps) {
   const fab = createFileBrowserFABModel({
     workingDir: () => props.workingDir,
     homePath: () => props.homePath,
-    containerRef: () => props.containerRef,
+    containerRef: () => resolveFileBrowserFABContainerRef(props.containerRef),
     allowHomeFallback: true,
   });
 
