@@ -46,12 +46,14 @@ The browser-side Codex UI uses an explicit controller split so thread switching,
 - The active thread's foreground lifecycle state is session-owned:
   - detail bootstrap + SSE drive transcript, pending requests, token usage, and stop/send state;
   - thread-list polling stays a summary-only mechanism and must not become a second foreground source of truth.
+- Sidebar click feedback is intent-owned: the selected card should paint immediately, while foreground activation is allowed to advance on the next scheduled frame so sidebar feedback does not wait on transcript/bootstrap recomputation.
 - A shared follow-bottom scroll controller owns transcript follow/pause state for Codex transcript surfaces; Codex drives it through explicit bottom-intent requests instead of ad hoc per-render `scrollTop = scrollHeight` calls.
 - Draft ownership is explicit:
   - `draft:new` for the blank New Chat surface
   - `thread:<id>` for persisted thread-scoped drafts
 - The browser distinguishes:
   - `selectedThreadID`: what the user most recently picked
+  - `foregroundThreadID`: what the page is currently activating for bootstrap, header/composer ownership, read marking, and active session state
   - `displayedThreadID`: what the transcript is currently allowed to render
 - When the user selects a thread that has no ready cached session yet, the main pane enters a loading state instead of continuing to render the previous thread's transcript.
 - Thread bootstrap is guarded by a per-selection load token so an older response cannot revive stale content after the user has already switched to another thread.

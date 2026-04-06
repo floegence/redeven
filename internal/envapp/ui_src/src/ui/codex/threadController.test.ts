@@ -3,7 +3,10 @@
 import { createRoot } from 'solid-js';
 import { describe, expect, it } from 'vitest';
 
-import { createCodexThreadController } from './threadController';
+import {
+  createCodexThreadController,
+  type CodexThreadActivationScheduler,
+} from './threadController';
 import type { CodexThreadDetail } from './types';
 
 function sampleDetail(args: {
@@ -52,11 +55,44 @@ function sampleDetail(args: {
   };
 }
 
-function withThreadController<T>(callback: (controller: ReturnType<typeof createCodexThreadController>) => T): T {
+function createActivationSchedulerHarness(): {
+  scheduler: CodexThreadActivationScheduler;
+  flushAll: () => void;
+} {
+  let nextHandle = 1;
+  const queued = new Map<number, () => void>();
+  return {
+    scheduler: {
+      request: (callback) => {
+        const handle = nextHandle;
+        nextHandle += 1;
+        queued.set(handle, callback);
+        return handle;
+      },
+      cancel: (handle) => {
+        queued.delete(handle as number);
+      },
+    },
+    flushAll: () => {
+      const callbacks = Array.from(queued.values());
+      queued.clear();
+      for (const callback of callbacks) {
+        callback();
+      }
+    },
+  };
+}
+
+function withThreadController<T>(
+  callback: (controller: ReturnType<typeof createCodexThreadController>) => T,
+  options?: {
+    activationScheduler?: CodexThreadActivationScheduler;
+  },
+): T {
   let result!: T;
   createRoot((dispose) => {
     try {
-      result = callback(createCodexThreadController());
+      result = callback(createCodexThreadController(options));
     } finally {
       dispose();
     }
@@ -65,7 +101,8 @@ function withThreadController<T>(callback: (controller: ReturnType<typeof create
 }
 
 describe('createCodexThreadController', () => {
-  it('shows a loading state instead of keeping the previous thread displayed when selecting an uncached thread', () => {
+  it('updates the sidebar selection immediately and defers foreground activation until the scheduled frame', () => {
+    const activation = createActivationSchedulerHarness();
     withThreadController((controller) => {
       controller.adoptThreadDetail(sampleDetail({
         threadID: 'thread_1',
@@ -76,16 +113,53 @@ describe('createCodexThreadController', () => {
       controller.selectThread('thread_2');
 
       expect(controller.selectedThreadID()).toBe('thread_2');
+      expect(controller.foregroundThreadID()).toBe('thread_1');
+      expect(controller.displayedThreadID()).toBe('thread_1');
+      expect(controller.threadLoading()).toBe(false);
+
+      activation.flushAll();
+
+      expect(controller.foregroundThreadID()).toBe('thread_2');
       expect(controller.displayedThreadID()).toBeNull();
       expect(controller.threadLoading()).toBe(true);
+    }, {
+      activationScheduler: activation.scheduler,
+    });
+  });
+
+  it('cancels stale scheduled foreground activations when the user switches again before the frame commits', () => {
+    const activation = createActivationSchedulerHarness();
+    withThreadController((controller) => {
+      controller.adoptThreadDetail(sampleDetail({
+        threadID: 'thread_1',
+        name: 'Loaded thread',
+        itemCount: 1,
+      }));
+
+      controller.selectThread('thread_2');
+      controller.selectThread('thread_3');
+
+      expect(controller.selectedThreadID()).toBe('thread_3');
+      expect(controller.foregroundThreadID()).toBe('thread_1');
+
+      activation.flushAll();
+
+      expect(controller.foregroundThreadID()).toBe('thread_3');
+      expect(controller.displayedThreadID()).toBeNull();
+      expect(controller.threadLoading()).toBe(true);
+    }, {
+      activationScheduler: activation.scheduler,
     });
   });
 
   it('ignores stale bootstrap results when the user switches from one thread to another', () => {
+    const activation = createActivationSchedulerHarness();
     withThreadController((controller) => {
       controller.selectThread('thread_2');
+      activation.flushAll();
       const tokenB = controller.beginThreadBootstrap('thread_2');
       controller.selectThread('thread_3');
+      activation.flushAll();
       const tokenC = controller.beginThreadBootstrap('thread_3');
 
       expect(tokenB).not.toBeNull();
@@ -105,6 +179,8 @@ describe('createCodexThreadController', () => {
       expect(controller.displayedThreadID()).toBe('thread_3');
       expect(controller.sessionForThread('thread_2')).toBeNull();
       expect(controller.sessionForThread('thread_3')?.thread.name).toBe('Thread C');
+    }, {
+      activationScheduler: activation.scheduler,
     });
   });
 

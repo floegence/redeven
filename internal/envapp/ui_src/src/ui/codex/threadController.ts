@@ -1,4 +1,9 @@
-import { createMemo, createSignal, type Accessor } from 'solid-js';
+import {
+  createMemo,
+  createSignal,
+  onCleanup,
+  type Accessor,
+} from 'solid-js';
 
 import {
   applyCodexEvent,
@@ -19,6 +24,11 @@ export type CodexThreadBootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 export type CodexThreadLoadToken = Readonly<{
   threadID: string;
   requestID: string;
+}>;
+
+export type CodexThreadActivationScheduler = Readonly<{
+  request: (callback: () => void) => number | ReturnType<typeof globalThis.setTimeout>;
+  cancel: (handle: number | ReturnType<typeof globalThis.setTimeout>) => void;
 }>;
 
 export type CodexThreadSessionEntry = Readonly<{
@@ -43,6 +53,19 @@ function touchTimestamp(): number {
 
 function normalizeThreadID(threadID: string | null | undefined): string {
   return String(threadID ?? '').trim();
+}
+
+function defaultActivationScheduler(): CodexThreadActivationScheduler {
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    return {
+      request: (callback) => window.requestAnimationFrame(() => callback()),
+      cancel: (handle) => window.cancelAnimationFrame(handle as number),
+    };
+  }
+  return {
+    request: (callback) => globalThis.setTimeout(callback, 0),
+    cancel: (handle) => globalThis.clearTimeout(handle),
+  };
 }
 
 function shouldPreferExistingSession(existing: CodexThreadSession, incoming: CodexThreadSession): boolean {
@@ -109,14 +132,20 @@ function makeSessionEntry(
   };
 }
 
-export function createCodexThreadController() {
+export function createCodexThreadController(args?: {
+  activationScheduler?: CodexThreadActivationScheduler;
+}) {
+  const activationScheduler = args?.activationScheduler ?? defaultActivationScheduler();
   const [selectedThreadID, setSelectedThreadID] = createSignal<string | null>(null);
+  const [foregroundThreadID, setForegroundThreadID] = createSignal<string | null>(null);
   const [displayedThreadID, setDisplayedThreadID] = createSignal<string | null>(null);
   const [loadingThreadID, setLoadingThreadID] = createSignal<string | null>(null);
   const [blankDraftActive, setBlankDraftActive] = createSignal(false);
   const [sessionEntriesByID, setSessionEntriesByID] = createSignal<Record<string, CodexThreadSessionEntry>>({});
   const [threadErrorsByID, setThreadErrorsByID] = createSignal<Record<string, string>>({});
   const [loadToken, setLoadToken] = createSignal<CodexThreadLoadToken | null>(null);
+  const [activationToken, setActivationToken] = createSignal<CodexThreadLoadToken | null>(null);
+  let activationFrameHandle: number | ReturnType<typeof globalThis.setTimeout> | null = null;
 
   const displayedSessionEntry = createMemo<CodexThreadSessionEntry | null>(() => {
     const threadID = normalizeThreadID(displayedThreadID());
@@ -125,15 +154,27 @@ export function createCodexThreadController() {
   });
   const displayedSession = createMemo<CodexThreadSession | null>(() => displayedSessionEntry()?.session ?? null);
   const activeThreadError = createMemo<string | null>(() => {
-    const threadID = normalizeThreadID(selectedThreadID());
+    const threadID = normalizeThreadID(foregroundThreadID());
     if (!threadID) return null;
     return threadErrorsByID()[threadID] ?? null;
   });
   const threadLoading = createMemo<boolean>(() => {
-    const threadID = normalizeThreadID(selectedThreadID());
+    const threadID = normalizeThreadID(foregroundThreadID());
     if (!threadID) return false;
     if (normalizeThreadID(loadingThreadID()) !== threadID) return false;
     return normalizeThreadID(displayedThreadID()) !== threadID;
+  });
+
+  const clearPendingForegroundActivation = () => {
+    if (activationFrameHandle !== null) {
+      activationScheduler.cancel(activationFrameHandle);
+      activationFrameHandle = null;
+    }
+    setActivationToken(null);
+  };
+
+  onCleanup(() => {
+    clearPendingForegroundActivation();
   });
 
   const sessionEntryForThread = (threadID: string | null | undefined): CodexThreadSessionEntry | null => {
@@ -227,27 +268,69 @@ export function createCodexThreadController() {
     });
   };
 
-  const selectThread = (threadID: string) => {
+  const commitForegroundSelection = (threadID: string) => {
     const normalizedThreadID = normalizeThreadID(threadID);
     if (!normalizedThreadID) return;
     const existing = sessionEntryForThread(normalizedThreadID);
-    setBlankDraftActive(false);
-    setSelectedThreadID(normalizedThreadID);
+    setForegroundThreadID(normalizedThreadID);
     setLoadingThreadID(existing?.session ? null : normalizedThreadID);
     setDisplayedThreadID(existing?.session ? normalizedThreadID : null);
   };
 
+  const scheduleForegroundSelection = (threadID: string) => {
+    const normalizedThreadID = normalizeThreadID(threadID);
+    if (!normalizedThreadID) return;
+    if (
+      normalizedThreadID === normalizeThreadID(foregroundThreadID()) &&
+      !blankDraftActive()
+    ) {
+      commitForegroundSelection(normalizedThreadID);
+      return;
+    }
+    const token = {
+      threadID: normalizedThreadID,
+      requestID: createRequestID(),
+    };
+    clearPendingForegroundActivation();
+    setActivationToken(token);
+    activationFrameHandle = activationScheduler.request(() => {
+      activationFrameHandle = null;
+      const current = activationToken();
+      if (
+        !current ||
+        normalizeThreadID(current.threadID) !== normalizedThreadID ||
+        String(current.requestID ?? '').trim() !== String(token.requestID ?? '').trim()
+      ) {
+        return;
+      }
+      setActivationToken(null);
+      commitForegroundSelection(normalizedThreadID);
+    });
+  };
+
+  const selectThread = (threadID: string) => {
+    const normalizedThreadID = normalizeThreadID(threadID);
+    if (!normalizedThreadID) return;
+    setBlankDraftActive(false);
+    setSelectedThreadID(normalizedThreadID);
+    scheduleForegroundSelection(normalizedThreadID);
+  };
+
   const startNewThreadDraft = () => {
+    clearPendingForegroundActivation();
     setBlankDraftActive(true);
     setSelectedThreadID(null);
+    setForegroundThreadID(null);
     setDisplayedThreadID(null);
     setLoadingThreadID(null);
     setLoadToken(null);
   };
 
   const clearSelection = () => {
+    clearPendingForegroundActivation();
     setBlankDraftActive(false);
     setSelectedThreadID(null);
+    setForegroundThreadID(null);
     setDisplayedThreadID(null);
     setLoadingThreadID(null);
     setLoadToken(null);
@@ -306,6 +389,7 @@ export function createCodexThreadController() {
     const nextSession = mergeBootstrapSession(existing?.session, incomingSession);
     cacheSession(nextSession, 'ready', null, detail.last_applied_seq);
     setSelectedThreadID(threadID);
+    setForegroundThreadID(threadID);
     setDisplayedThreadID(threadID);
     setLoadingThreadID(null);
     setBlankDraftActive(false);
@@ -364,9 +448,11 @@ export function createCodexThreadController() {
   };
 
   const adoptThreadDetail = (detail: CodexThreadDetail) => {
+    clearPendingForegroundActivation();
     const session = buildCodexThreadSession(detail);
     cacheSession(session, 'ready', null, detail.last_applied_seq);
     setSelectedThreadID(session.thread.id);
+    setForegroundThreadID(session.thread.id);
     setDisplayedThreadID(session.thread.id);
     setLoadingThreadID(null);
     setBlankDraftActive(false);
@@ -387,7 +473,10 @@ export function createCodexThreadController() {
       delete next[normalizedThreadID];
       return next;
     });
-    if (normalizeThreadID(selectedThreadID()) === normalizedThreadID) {
+    if (
+      normalizeThreadID(selectedThreadID()) === normalizedThreadID ||
+      normalizeThreadID(foregroundThreadID()) === normalizedThreadID
+    ) {
       startNewThreadDraft();
       return;
     }
@@ -401,6 +490,7 @@ export function createCodexThreadController() {
 
   return {
     selectedThreadID,
+    foregroundThreadID,
     displayedThreadID,
     loadingThreadID,
     blankDraftActive,
