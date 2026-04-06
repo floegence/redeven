@@ -7,6 +7,7 @@ import { MarkdownBlock } from '../chat/blocks/MarkdownBlock';
 import { ShellBlock } from '../chat/blocks/ShellBlock';
 import { StreamingCursor } from '../chat/status/StreamingCursor';
 import { CodexIcon } from '../icons/CodexIcon';
+import { CodexFileChangeDiff } from './CodexFileChangeDiff';
 import { CodexMessageRunIndicator } from './CodexMessageRunIndicator';
 import { CodexUserMessageContent } from './CodexUserMessageContent';
 import {
@@ -149,22 +150,7 @@ function FileChangeBody(props: { item: CodexTranscriptItem }) {
   return (
     <div class="space-y-3">
       <For each={props.item.changes ?? []}>
-        {(change) => (
-          <div class="chat-code-diff-block codex-chat-diff-block">
-            <div class="chat-code-diff-header">
-              <div class="chat-code-diff-info">
-                <span class="chat-code-diff-filename">{change.path}</span>
-                <span class="chat-code-diff-stats">{change.kind}</span>
-                <Show when={change.move_path}>
-                  <span class="chat-code-diff-stats" title={change.move_path}>→ {change.move_path}</span>
-                </Show>
-              </div>
-            </div>
-            <div class="chat-code-diff-content">
-              <pre class="codex-chat-diff-pre">{change.diff || 'No diff provided.'}</pre>
-            </div>
-          </div>
-        )}
+        {(change) => <CodexFileChangeDiff change={change} />}
       </For>
       <Show when={(props.item.changes?.length ?? 0) === 0}>
         <div class="text-sm text-muted-foreground">No file change details were provided yet.</div>
@@ -658,9 +644,9 @@ export function CodexTranscript(props: {
         const itemID = String(item.id ?? '').trim();
         if (!itemID) continue;
         visibleReasoningIDs.add(itemID);
-        if (!isWorkingStatus(item.status) || current[itemID] === true) continue;
+        if (Object.prototype.hasOwnProperty.call(current, itemID)) continue;
         if (next === current) next = { ...current };
-        next[itemID] = true;
+        next[itemID] = false;
         changed = true;
       }
       for (const itemID of Object.keys(current)) {

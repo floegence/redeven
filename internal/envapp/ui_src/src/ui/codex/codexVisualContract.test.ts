@@ -33,9 +33,12 @@ describe('Codex visual contract', () => {
     expect(src).toMatch(/\.codex-chat-reasoning-inline \{[\s\S]*width: min\(100%, 42rem\);/);
     expect(src).toMatch(/\.codex-chat-reasoning-toggle \{[\s\S]*gap: 0\.3125rem;[\s\S]*cursor: pointer;/);
     expect(src).toMatch(/\.codex-chat-reasoning-kicker \{[\s\S]*width: 0\.875rem;[\s\S]*height: 0\.875rem;[\s\S]*color: color-mix\(in srgb, var\(--muted-foreground\) 82%, var\(--foreground\) 18%\);/);
+    expect(src).toContain('.codex-chat-file-change {');
+    expect(src).toContain('.codex-chat-file-change-kind-added {');
     expect(src).not.toMatch(/\.codex-chat-reasoning-kicker \{[^}]*border-radius:/);
     expect(src).not.toMatch(/\.codex-chat-reasoning-kicker \{[^}]*background:/);
     expect(src).not.toContain('.codex-chat-reasoning-card {');
+    expect(src).not.toContain('.codex-chat-diff-pre {');
     expect(src).not.toContain('.codex-chat-markdown-block .chat-md-file-ref {');
     expect(src).not.toContain('linear-gradient(');
     expect(src).not.toContain('radial-gradient(');
