@@ -15,6 +15,7 @@ const listCodexThreadsMock = vi.fn();
 const openCodexThreadMock = vi.fn();
 const startCodexThreadMock = vi.fn();
 const startCodexTurnMock = vi.fn();
+const steerCodexTurnMock = vi.fn();
 const archiveCodexThreadMock = vi.fn();
 const unarchiveCodexThreadMock = vi.fn();
 const forkCodexThreadMock = vi.fn();
@@ -82,6 +83,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
   useLayout: () => ({
     sidebarActiveTab: () => 'codex',
+    isMobile: () => false,
   }),
   useNotification: () => notification,
 }));
@@ -206,6 +208,7 @@ vi.mock('./api', () => ({
   openCodexThread: (...args: any[]) => openCodexThreadMock(...args),
   startCodexThread: (...args: any[]) => startCodexThreadMock(...args),
   startCodexTurn: (...args: any[]) => startCodexTurnMock(...args),
+  steerCodexTurn: (...args: any[]) => steerCodexTurnMock(...args),
   archiveCodexThread: (...args: any[]) => archiveCodexThreadMock(...args),
   unarchiveCodexThread: (...args: any[]) => unarchiveCodexThreadMock(...args),
   forkCodexThread: (...args: any[]) => forkCodexThreadMock(...args),
@@ -244,6 +247,35 @@ async function flushAsync(): Promise<void> {
   flushAnimationFrames();
   await new Promise((resolve) => setTimeout(resolve, 0));
   flushAnimationFrames();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function flushOpenThreadRequests(): Promise<void> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const pending = openCodexThreadMock.mock.results
+      .map((result) => result.value)
+      .filter((value): value is Promise<unknown> => Boolean(value) && typeof (value as Promise<unknown>).then === 'function');
+    if (pending.length > 0) {
+      await Promise.allSettled(pending);
+      await flushAsync();
+      return;
+    }
+    await flushAsync();
+  }
+}
+
+async function waitForCondition(
+  condition: () => boolean,
+  label: string,
+  attempts = 12,
+): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (condition()) return;
+    await flushAsync();
+    await flushOpenThreadRequests();
+  }
+  throw new Error(`Timed out waiting for ${label}`);
 }
 
 function deferred<T>() {
@@ -1193,6 +1225,7 @@ describe('CodexSidebar', () => {
 
     await flushAsync();
     await flushAsync();
+    await flushOpenThreadRequests();
 
     expect(host.querySelector('[data-codex-surface="sidebar-summary"]')).not.toBeNull();
     expect(host.querySelectorAll('[data-codex-surface="thread-card"]').length).toBe(2);
@@ -1209,10 +1242,20 @@ describe('CodexSidebar', () => {
     if (!target) {
       throw new Error('UI polish thread button not found');
     }
-    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    target.click();
 
-    await flushAsync();
-    await flushAsync();
+    await waitForCondition(
+      () => openCodexThreadMock.mock.calls.some((call) => call[0] === 'thread_2'),
+      'thread bootstrap request',
+    );
+
+    await waitForCondition(
+      () => (
+        host.querySelector('[aria-current="page"]')?.textContent?.includes('UI polish') === true &&
+        host.textContent?.includes('Loading the selected Codex thread.') !== true
+      ),
+      'selected thread load completion',
+    );
 
     expect(openCodexThreadMock).toHaveBeenCalledWith('thread_2');
     expect(host.textContent).toContain('UI polish');

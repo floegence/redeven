@@ -68,10 +68,15 @@ function renderComposer(options?: {
   supportsImages?: boolean;
   capabilitiesLoading?: boolean;
   submitting?: boolean;
+  sendDisabledReason?: string;
+  showQueueAction?: boolean;
+  queueDisabled?: boolean;
+  queueDisabledReason?: string;
   showStopAction?: boolean;
   stopPending?: boolean;
   stopDisabled?: boolean;
   stopDisabledReason?: string;
+  guidanceNote?: string;
   attachments?: ReadonlyArray<{
     id: string;
     name: string;
@@ -88,6 +93,7 @@ function renderComposer(options?: {
     is_image: boolean;
   }>;
   onSend?: () => void;
+  onQueue?: () => void;
   onStop?: () => void;
   onOpenWorkingDirPicker?: () => void;
   onAddAttachments?: (files: readonly File[]) => Promise<void>;
@@ -108,6 +114,7 @@ function renderComposer(options?: {
   onSandboxModeChange?: (value: string) => void;
 }) {
   const onSend = options?.onSend ?? vi.fn();
+  const onQueue = options?.onQueue ?? vi.fn();
   const onStop = options?.onStop ?? vi.fn();
   const onOpenWorkingDirPicker = options?.onOpenWorkingDirPicker ?? vi.fn();
   const onAddAttachments = options?.onAddAttachments ?? vi.fn(async () => undefined);
@@ -197,10 +204,15 @@ function renderComposer(options?: {
         capabilitiesLoading={options?.capabilitiesLoading ?? false}
         composerText={text()}
         submitting={options?.submitting ?? false}
+        sendDisabledReason={options?.sendDisabledReason ?? ''}
+        showQueueAction={options?.showQueueAction ?? false}
+        queueDisabled={options?.queueDisabled ?? false}
+        queueDisabledReason={options?.queueDisabledReason ?? ''}
         showStopAction={options?.showStopAction ?? false}
         stopPending={options?.stopPending ?? false}
         stopDisabled={options?.stopDisabled ?? false}
         stopDisabledReason={options?.stopDisabledReason ?? ''}
+        guidanceNote={options?.guidanceNote ?? ''}
         hostAvailable={options?.hostAvailable ?? true}
         hostDisabledReason={options?.hostDisabledReason ?? ''}
         onOpenWorkingDirPicker={onOpenWorkingDirPicker}
@@ -212,6 +224,7 @@ function renderComposer(options?: {
         onResetComposer={onResetComposer}
         onStartNewThreadDraft={onStartNewThreadDraft}
         onSend={onSend}
+        onQueue={onQueue}
         onStop={onStop}
       />
     );
@@ -221,6 +234,7 @@ function renderComposer(options?: {
     host,
     dispose,
     onSend,
+    onQueue,
     onStop,
     onOpenWorkingDirPicker,
     onAddAttachments,
@@ -587,22 +601,36 @@ describe('CodexComposerShell', () => {
     dispose();
   });
 
-  it('replaces the send action with a stop action when an active turn is running', () => {
+  it('keeps send primary and exposes queue and stop as secondary actions during an active turn', () => {
+    const onQueue = vi.fn();
     const onStop = vi.fn();
     const { host, dispose } = renderComposer({
       initialText: 'Review this diff',
+      showQueueAction: true,
+      guidanceNote: 'Send now appends to the active turn. Queue next waits for completion.',
+      onQueue,
       showStopAction: true,
       onStop,
     });
 
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
     const stopButton = host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
+    const guidance = host.querySelector('.codex-chat-input-guidance');
+
+    if (!sendButton) throw new Error('send button not found');
+    if (!queueButton) throw new Error('queue button not found');
     if (!stopButton) throw new Error('stop button not found');
 
-    expect(stopButton.textContent?.trim()).toBe('');
-    expect(host.querySelector('button[aria-label="Send to Codex"]')).toBeNull();
+    expect(sendButton.disabled).toBe(false);
+    expect(queueButton.textContent).toContain('Queue next');
+    expect(stopButton.textContent).toContain('Stop');
+    expect(guidance?.textContent).toContain('Send now appends to the active turn.');
 
+    queueButton.click();
     stopButton.click();
 
+    expect(onQueue).toHaveBeenCalledTimes(1);
     expect(onStop).toHaveBeenCalledTimes(1);
     dispose();
   });

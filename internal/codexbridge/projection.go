@@ -33,6 +33,10 @@ func cloneTurn(turn Turn) Turn {
 		errCopy := *turn.Error
 		cloned.Error = &errCopy
 	}
+	if turn.AcceptsSteer != nil {
+		acceptsSteer := *turn.AcceptsSteer
+		cloned.AcceptsSteer = &acceptsSteer
+	}
 	cloned.Items = cloneItems(turn.Items)
 	return cloned
 }
@@ -234,6 +238,13 @@ func upsertProjectedTurn(thread *Thread, turn Turn) *Turn {
 		existing := &thread.Turns[index]
 		if strings.TrimSpace(turn.Status) != "" {
 			existing.Status = strings.TrimSpace(turn.Status)
+		}
+		if strings.TrimSpace(turn.Kind) != "" {
+			existing.Kind = strings.TrimSpace(turn.Kind)
+		}
+		if turn.AcceptsSteer != nil {
+			acceptsSteer := *turn.AcceptsSteer
+			existing.AcceptsSteer = &acceptsSteer
 		}
 		if turn.Error != nil {
 			errCopy := *turn.Error

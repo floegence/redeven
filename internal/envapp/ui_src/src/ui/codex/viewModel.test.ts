@@ -6,6 +6,7 @@ import {
   buildCodexPendingRequestViewModel,
   buildCodexSidebarSummary,
   buildCodexWorkbenchSummary,
+  codexSupportsOperation,
   resolveCodexWorkingDir,
 } from './viewModel';
 
@@ -224,5 +225,11 @@ describe('buildCodexPendingRequestViewModel', () => {
     expect(approvalRequest.title).toBe('Command approval required');
     expect(approvalRequest.command).toBe('pnpm lint');
     expect(approvalRequest.cwd).toBe('/workspace/ui');
+  });
+});
+
+describe('codexSupportsOperation', () => {
+  it('treats turn_steer as part of the default active browser surface operations', () => {
+    expect(codexSupportsOperation(undefined, 'turn_steer')).toBe(true);
   });
 });

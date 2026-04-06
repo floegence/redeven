@@ -33,6 +33,7 @@ type rpcMethodError struct {
 	Method  string
 	Code    int
 	Message string
+	Data    json.RawMessage
 }
 
 func (e *rpcMethodError) Error() string {
@@ -136,6 +137,7 @@ func (p *appServerProcess) call(ctx context.Context, id string, method string, p
 				Method:  method,
 				Code:    resp.Error.Code,
 				Message: strings.TrimSpace(resp.Error.Message),
+				Data:    append(json.RawMessage(nil), resp.Error.Data...),
 			}
 		}
 		if out == nil || len(resp.Result) == 0 {
