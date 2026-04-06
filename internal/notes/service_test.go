@@ -23,6 +23,161 @@ func openTestService(t *testing.T) *Service {
 	return svc
 }
 
+func requireWelcomeSeed(t *testing.T, snapshot Snapshot) (Topic, Item) {
+	t.Helper()
+
+	var topic Topic
+	foundTopic := false
+	for _, candidate := range snapshot.Topics {
+		if candidate.Name == welcomeTopicName {
+			topic = candidate
+			foundTopic = true
+			break
+		}
+	}
+	if !foundTopic {
+		t.Fatalf("welcome topic missing from snapshot: %#v", snapshot.Topics)
+	}
+
+	var item Item
+	foundItem := false
+	for _, candidate := range snapshot.Items {
+		if candidate.TopicID == topic.TopicID && strings.Contains(candidate.Body, "Welcome to Notes.") {
+			item = candidate
+			foundItem = true
+			break
+		}
+	}
+	if !foundItem {
+		t.Fatalf("welcome item missing from snapshot: %#v", snapshot.Items)
+	}
+	return topic, item
+}
+
+func TestOpenSeedsWelcomeContentOnceAndDoesNotDuplicate(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "notes.db")
+
+	svc, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	snap, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	topic, item := requireWelcomeSeed(t, snap)
+	if len(snap.Topics) != 1 {
+		t.Fatalf("initial topics = %d, want 1", len(snap.Topics))
+	}
+	if len(snap.Items) != 1 {
+		t.Fatalf("initial items = %d, want 1", len(snap.Items))
+	}
+	if topic.SortOrder != 0 {
+		t.Fatalf("welcome sort_order = %d, want 0", topic.SortOrder)
+	}
+	if item.ColorToken != welcomeNoteColor {
+		t.Fatalf("welcome color = %q, want %q", item.ColorToken, welcomeNoteColor)
+	}
+	if item.X != welcomeNoteX || item.Y != welcomeNoteY {
+		t.Fatalf("welcome coordinates = (%v, %v), want (%v, %v)", item.X, item.Y, welcomeNoteX, welcomeNoteY)
+	}
+
+	baseline, _, err := svc.Subscribe(ctx, 0)
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	if len(baseline) != 2 {
+		t.Fatalf("baseline len = %d, want 2", len(baseline))
+	}
+	if baseline[0].Type != "topic.created" || baseline[1].Type != "item.created" {
+		t.Fatalf("baseline types = [%q, %q], want topic.created/item.created", baseline[0].Type, baseline[1].Type)
+	}
+
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open() reopen error = %v", err)
+	}
+	defer func() {
+		if err := reopened.Close(); err != nil {
+			t.Fatalf("Close() reopen error = %v", err)
+		}
+	}()
+
+	reopenedSnap, err := reopened.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() reopen error = %v", err)
+	}
+	requireWelcomeSeed(t, reopenedSnap)
+	if len(reopenedSnap.Topics) != 1 {
+		t.Fatalf("reopened topics = %d, want 1", len(reopenedSnap.Topics))
+	}
+	if len(reopenedSnap.Items) != 1 {
+		t.Fatalf("reopened items = %d, want 1", len(reopenedSnap.Items))
+	}
+}
+
+func TestOpenDoesNotReseedAfterWelcomeContentIsFullyRemoved(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "notes.db")
+
+	svc, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	snap, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+	welcomeTopic, welcomeItem := requireWelcomeSeed(t, snap)
+	if err := svc.DeleteTopic(ctx, welcomeTopic.TopicID); err != nil {
+		t.Fatalf("DeleteTopic() error = %v", err)
+	}
+	if err := svc.DeleteTrashedItemPermanently(ctx, welcomeItem.NoteID); err != nil {
+		t.Fatalf("DeleteTrashedItemPermanently() error = %v", err)
+	}
+
+	emptySnap, err := svc.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() after delete error = %v", err)
+	}
+	if len(emptySnap.Topics) != 0 || len(emptySnap.Items) != 0 || len(emptySnap.TrashItems) != 0 {
+		t.Fatalf("snapshot after removing welcome = %#v, want empty", emptySnap)
+	}
+
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open() reopen error = %v", err)
+	}
+	defer func() {
+		if err := reopened.Close(); err != nil {
+			t.Fatalf("Close() reopen error = %v", err)
+		}
+	}()
+
+	reopenedSnap, err := reopened.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("Snapshot() reopen error = %v", err)
+	}
+	if len(reopenedSnap.Topics) != 0 || len(reopenedSnap.Items) != 0 || len(reopenedSnap.TrashItems) != 0 {
+		t.Fatalf("reopened snapshot = %#v, want empty", reopenedSnap)
+	}
+}
+
 func TestServiceCreateDeleteRestoreTopicFlow(t *testing.T) {
 	t.Parallel()
 
@@ -58,15 +213,16 @@ func TestServiceCreateDeleteRestoreTopicFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot() after delete error = %v", err)
 	}
-	if len(deleted.Topics) != 0 {
-		t.Fatalf("deleted snapshot topics = %d, want 0", len(deleted.Topics))
+	if len(deleted.Topics) != 1 {
+		t.Fatalf("deleted snapshot topics = %d, want 1", len(deleted.Topics))
 	}
-	if len(deleted.Items) != 0 {
-		t.Fatalf("deleted snapshot items = %d, want 0", len(deleted.Items))
+	if len(deleted.Items) != 1 {
+		t.Fatalf("deleted snapshot items = %d, want 1", len(deleted.Items))
 	}
 	if len(deleted.TrashItems) != 1 {
 		t.Fatalf("deleted snapshot trash = %d, want 1", len(deleted.TrashItems))
 	}
+	requireWelcomeSeed(t, deleted)
 
 	restored, err := svc.RestoreItem(ctx, item.NoteID)
 	if err != nil {
@@ -89,15 +245,16 @@ func TestServiceCreateDeleteRestoreTopicFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Snapshot() after restore error = %v", err)
 	}
-	if len(finalSnapshot.Topics) != 1 {
-		t.Fatalf("final topics = %d, want 1", len(finalSnapshot.Topics))
+	if len(finalSnapshot.Topics) != 2 {
+		t.Fatalf("final topics = %d, want 2", len(finalSnapshot.Topics))
 	}
-	if len(finalSnapshot.Items) != 1 {
-		t.Fatalf("final items = %d, want 1", len(finalSnapshot.Items))
+	if len(finalSnapshot.Items) != 2 {
+		t.Fatalf("final items = %d, want 2", len(finalSnapshot.Items))
 	}
 	if len(finalSnapshot.TrashItems) != 0 {
 		t.Fatalf("final trash = %d, want 0", len(finalSnapshot.TrashItems))
 	}
+	requireWelcomeSeed(t, finalSnapshot)
 }
 
 func TestServicePurgeExpiredTrashAndClearTrashTopic(t *testing.T) {
@@ -177,11 +334,14 @@ func TestServiceSubscribeBaselineAndLiveEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe() error = %v", err)
 	}
-	if len(baseline) != 1 {
-		t.Fatalf("baseline len = %d, want 1", len(baseline))
+	if len(baseline) != 3 {
+		t.Fatalf("baseline len = %d, want 3", len(baseline))
 	}
-	if baseline[0].Type != "topic.created" {
-		t.Fatalf("baseline event type = %q, want topic.created", baseline[0].Type)
+	if baseline[0].Type != "topic.created" || baseline[1].Type != "item.created" || baseline[2].Type != "topic.created" {
+		t.Fatalf("baseline types = [%q, %q, %q], want topic.created/item.created/topic.created", baseline[0].Type, baseline[1].Type, baseline[2].Type)
+	}
+	if baseline[2].EntityID != topic.TopicID {
+		t.Fatalf("realtime topic event entity = %q, want %q", baseline[2].EntityID, topic.TopicID)
 	}
 
 	item, err := svc.CreateItem(ctx, CreateItemRequest{
@@ -266,13 +426,14 @@ func TestServiceDeleteTrashedItemPermanentlyRemovesDeletedTopicAndBroadcasts(t *
 	if err != nil {
 		t.Fatalf("Snapshot() after permanent delete error = %v", err)
 	}
-	if len(finalSnapshot.Topics) != 0 {
-		t.Fatalf("final topics = %#v, want empty", finalSnapshot.Topics)
+	if len(finalSnapshot.Topics) != 1 {
+		t.Fatalf("final topics = %#v, want welcome only", finalSnapshot.Topics)
 	}
-	if len(finalSnapshot.Items) != 0 {
-		t.Fatalf("final items = %#v, want empty", finalSnapshot.Items)
+	if len(finalSnapshot.Items) != 1 {
+		t.Fatalf("final items = %#v, want welcome only", finalSnapshot.Items)
 	}
 	if len(finalSnapshot.TrashItems) != 0 {
 		t.Fatalf("final trash = %#v, want empty", finalSnapshot.TrashItems)
 	}
+	requireWelcomeSeed(t, finalSnapshot)
 }

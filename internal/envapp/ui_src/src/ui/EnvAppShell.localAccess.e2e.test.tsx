@@ -63,6 +63,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({
     open: commandState.open,
+    getKeybindDisplay: (keybind: string) => (keybind === 'mod+.' ? '⌘.' : keybind),
     registerAll: (commands: Array<Record<string, unknown>>) => {
       commandState.commands = commands;
       return () => {
@@ -445,7 +446,7 @@ describe('EnvAppShell top bar affordances', () => {
       const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
 
       expect(notesButton).toBeTruthy();
-      expect(notesButton?.getAttribute('data-tooltip')).toBe('Notes overlay (Mod+.)');
+      expect(notesButton?.getAttribute('data-tooltip')).toBe('Notes overlay (⌘.)');
       expect(commandPaletteButton).toBeTruthy();
       expect(commandPaletteButton?.getAttribute('data-tooltip')).toBe('Command palette');
       expect(toggleThemeButton).toBeTruthy();
