@@ -2,7 +2,8 @@
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatFileBrowserFAB } from './ChatFileBrowserFAB';
+
+import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';
 
 const fileBrowserSurfaceState = vi.hoisted(() => ({
   openBrowser: vi.fn(async () => undefined),
@@ -19,7 +20,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Folder: (props: any) => <svg data-testid="folder-icon" class={props.class} />,
 }));
 
-vi.mock('./FileBrowserSurfaceContext', () => ({
+vi.mock('../widgets/FileBrowserSurfaceContext', () => ({
   useFileBrowserSurfaceContext: () => ({
     controller: {
       open: fileBrowserSurfaceState.open,
@@ -55,33 +56,47 @@ function clickFab(button: HTMLButtonElement): void {
   button.dispatchEvent(pointerUp);
 }
 
-describe('ChatFileBrowserFAB', () => {
-  it('routes a click through the shared file-browser opener', async () => {
+describe('CodexFileBrowserFAB', () => {
+  it('stays visible while the shared browser surface is already open', async () => {
     (window as any).PointerEvent = window.MouseEvent;
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <ChatFileBrowserFAB workingDir="/workspace" homePath="/Users/demo" />, host);
-
-    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement;
-    clickFab(button);
-    await flush();
-
-    expect(fileBrowserSurfaceState.openBrowser).toHaveBeenCalledWith({
-      path: '/workspace',
-      homePath: '/Users/demo',
-    });
-  });
-
-  it('hides the FAB while the shared browser surface is already open', () => {
     fileBrowserSurfaceState.open.mockReturnValue(true);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <ChatFileBrowserFAB workingDir="/workspace/project" homePath="/Users/demo" />, host);
+    render(() => (
+      <CodexFileBrowserFAB
+        workingDir="/workspace/project"
+        homePath="/Users/demo"
+      />
+    ), host);
 
-    expect(host.querySelector('button[title="Browse files"]')).toBeNull();
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+
+    clickFab(button!);
+    await flush();
+
+    expect(fileBrowserSurfaceState.openBrowser).toHaveBeenCalledWith({
+      path: '/workspace/project',
+      homePath: '/Users/demo',
+    });
+  });
+
+  it('renders a visible disabled FAB when no path seed exists', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <CodexFileBrowserFAB
+        workingDir=""
+        homePath=""
+      />
+    ), host);
+
+    const button = host.querySelector('button[title="Browse files"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute('aria-disabled')).toBe('true');
   });
 });
