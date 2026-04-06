@@ -218,6 +218,51 @@ describe('createFollowBottomController', () => {
     controller.dispose();
   });
 
+  it('pauses immediately on the first small upward user scroll after a thread-switch follow request', () => {
+    const observerRecords: ObserverRecord[] = [];
+    const raf = createRafHarness();
+    const controller = createFollowBottomController({
+      createResizeObserver: createObserverFactory(observerRecords),
+      requestAnimationFrame: raf.requestAnimationFrame,
+      cancelAnimationFrame: raf.cancelAnimationFrame,
+    });
+
+    const scrollContainer = document.createElement('div');
+    const contentRoot = document.createElement('div');
+    scrollContainer.append(contentRoot);
+    document.body.append(scrollContainer);
+
+    let scrollHeight = 240;
+    defineElementSize(scrollContainer, {
+      scrollHeight: () => scrollHeight,
+      clientHeight: () => 120,
+    });
+    installContainerRect(scrollContainer, 100, 120);
+
+    controller.setScrollContainer(scrollContainer);
+    controller.setContentRoot(contentRoot);
+    controller.requestFollowBottom(followRequest(1, 'thread_switch'));
+    raf.flushOne();
+
+    expect(scrollContainer.scrollTop).toBe(expectedBottomScrollTop(scrollHeight));
+
+    scrollContainer.dispatchEvent(new Event('wheel'));
+    scrollContainer.scrollTop = 104;
+    controller.handleScroll();
+
+    expect(controller.mode()).toBe('paused');
+    expect(scrollContainer.scrollTop).toBe(104);
+
+    scrollHeight = 320;
+    const contentObserver = observerRecords.find((record) => record.target === contentRoot);
+    contentObserver?.callback([], {} as ResizeObserver);
+    raf.flushAll();
+
+    expect(controller.mode()).toBe('paused');
+    expect(scrollContainer.scrollTop).toBe(104);
+    controller.dispose();
+  });
+
   it('keeps handling resize and explicit follow intents when requestAnimationFrame is synchronous', () => {
     const observerRecords: ObserverRecord[] = [];
     const controller = createFollowBottomController({
