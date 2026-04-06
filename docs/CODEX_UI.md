@@ -227,7 +227,7 @@ Current Env App behavior:
   - stop the active turn when the current thread has an in-progress turn
 - Turn interrupt affordances derive from the same active-run model as the transcript working indicator, and the browser keeps `thread.turns` aligned with `turn_started` / `turn_completed` events so stop/send transitions do not depend on stale bootstrap metadata.
 - Transcript rows project user prompts, Codex replies, command executions, file changes, and reasoning events into chat-style message blocks rather than sharing Flower transcript widgets, and redundant role badges / prompt ideas / refresh chrome are intentionally removed.
-- File-change transcript rows stay Codex-local: the browser adapts raw Codex `changes[].diff` payloads into git-patch style evidence blocks in `src/ui/codex/*`, so newly created files render as all-added diffs without changing Flower-owned transcript components or selectors.
+- File-change transcript rows keep their payload adaptation in `src/ui/codex/*`, so raw Codex `changes[].diff` values can still be normalized into valid git-patch evidence for new files and partial diffs, but the rendered patch surface now reuses the shared Git patch viewer instead of a second Codex-local diff viewport theme.
 - The transcript root now owns an explicit full-height Codex shell that resolves one render mode before children are laid out:
   - `empty`: center the welcome or diagnostic hero against the real transcript viewport;
   - `loading`: reuse the same viewport shell for selected-thread hydration;

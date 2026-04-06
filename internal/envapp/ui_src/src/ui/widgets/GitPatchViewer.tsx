@@ -22,6 +22,10 @@ export interface GitPatchViewerProps {
   emptyMessage: string;
   unavailableMessage?: string | ((item: GitPatchRenderable) => string | undefined);
   class?: string;
+  showCopyButton?: boolean;
+  showMobileHint?: boolean;
+  desktopPatchViewportClass?: string;
+  mobilePatchViewportClass?: string;
 }
 
 export function GitPatchViewer(props: GitPatchViewerProps) {
@@ -36,6 +40,10 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
   const visiblePatchLines = createMemo(() => patchExpanded() ? renderedPatchLines() : renderedPatchLines().slice(0, GIT_PATCH_PREVIEW_LINES));
   const hasMorePatchLines = createMemo(() => renderedPatchLines().length > GIT_PATCH_PREVIEW_LINES);
   const canCopyPatch = createMemo(() => hasMeaningfulGitPatchText(patchText()));
+  const showCopyButton = createMemo(() => props.showCopyButton !== false);
+  const showMobileHint = createMemo(() => props.showMobileHint !== false);
+  const desktopPatchViewportClass = createMemo(() => props.desktopPatchViewportClass ?? 'max-h-[28rem]');
+  const mobilePatchViewportClass = createMemo(() => props.mobilePatchViewportClass ?? 'flex-1 max-h-none');
   const unavailableMessage = createMemo(() => {
     const item = props.item;
     if (!item) return '';
@@ -64,7 +72,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
   };
 
   return (
-    <div class={cn('h-full', props.class)}>
+    <div class={cn('min-h-0', props.class)}>
       <Show when={props.item} fallback={<div class={cn('rounded-md border px-3 py-2 text-xs leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{props.emptyMessage}</div>}>
         {(fileAccessor) => {
           const file = fileAccessor();
@@ -84,9 +92,11 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                   </div>
                 </div>
 
-                <Button size="xs" variant="ghost" class={cn('self-start', gitToneActionButtonClass())} onClick={() => void handleCopyPatch()} disabled={!canCopyPatch()}>
-                  {copied() ? 'Copied' : 'Copy Patch'}
-                </Button>
+                <Show when={showCopyButton()}>
+                  <Button size="xs" variant="ghost" class={cn('self-start', gitToneActionButtonClass())} onClick={() => void handleCopyPatch()} disabled={!canCopyPatch()}>
+                    {copied() ? 'Copied' : 'Copy Patch'}
+                  </Button>
+                </Show>
               </div>
 
               <Show when={file.oldPath && file.newPath && file.oldPath !== file.newPath}>
@@ -97,7 +107,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                 </div>
               </Show>
 
-              <Show when={layout.isMobile()}>
+              <Show when={layout.isMobile() && showMobileHint()}>
                 <div class="text-[11px] leading-5 text-muted-foreground">Swipe horizontally to inspect long diff lines.</div>
               </Show>
 
@@ -109,7 +119,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                   <div class={cn(
                     'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]',
                     redevenSurfaceRoleClass('control'),
-                    layout.isMobile() ? 'flex-1 max-h-none' : 'max-h-[28rem]'
+                    layout.isMobile() ? mobilePatchViewportClass() : desktopPatchViewportClass()
                   )}>
                     <div class="inline-block min-w-full bg-muted/[0.20] p-px align-top">
                       <For each={visiblePatchLines()}>

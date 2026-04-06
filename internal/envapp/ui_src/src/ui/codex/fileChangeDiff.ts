@@ -1,7 +1,5 @@
-import {
-  parseGitPatchRenderedLines,
-  type GitPatchRenderedLine,
-} from '../utils/gitPatch';
+import { parseGitPatchRenderedLines } from '../utils/gitPatch';
+import type { GitDiffFileContent } from '../protocol/redeven_v1';
 import {
   hasMeaningfulGitPatchText,
   normalizeGitPatchText,
@@ -14,14 +12,9 @@ export type CodexRenderableFileChangeKind =
   | 'deleted'
   | 'renamed';
 
-export type CodexRenderableFilePatch = Readonly<{
-  path: string;
-  movePath?: string;
+export type CodexAdaptedFileChange = Readonly<{
   changeKind: CodexRenderableFileChangeKind;
-  patchText: string;
-  renderedLines: readonly GitPatchRenderedLine[];
-  additions: number;
-  deletions: number;
+  file: GitDiffFileContent;
 }>;
 
 function normalizeCodexFileChangeKind(
@@ -50,22 +43,6 @@ function normalizeCodexFileChangeKind(
       return 'renamed';
     default:
       return 'modified';
-  }
-}
-
-export function codexFileChangeKindLabel(
-  kind: CodexRenderableFileChangeKind,
-): string {
-  switch (kind) {
-    case 'added':
-      return 'Added';
-    case 'deleted':
-      return 'Deleted';
-    case 'renamed':
-      return 'Renamed';
-    case 'modified':
-    default:
-      return 'Modified';
   }
 }
 
@@ -195,9 +172,8 @@ function buildCodexFilePatchText(
   ].join('\n');
 }
 
-function countPatchMetrics(
-  renderedLines: readonly GitPatchRenderedLine[],
-): { additions: number; deletions: number } {
+function countPatchMetrics(patchText: string): { additions: number; deletions: number } {
+  const renderedLines = parseGitPatchRenderedLines(patchText);
   let additions = 0;
   let deletions = 0;
   for (const line of renderedLines) {
@@ -210,23 +186,73 @@ function countPatchMetrics(
   return { additions, deletions };
 }
 
-export function buildCodexRenderableFilePatch(
+function buildCodexDiffFileContent(
   change: CodexFileChange,
-): CodexRenderableFilePatch {
+  changeKind: CodexRenderableFileChangeKind,
+  patchText: string,
+): GitDiffFileContent {
   const pathValue = String(change.path ?? '').trim() || 'Untitled change';
   const movePath = String(change.move_path ?? '').trim();
-  const changeKind = normalizeCodexFileChangeKind(change.kind);
-  const patchText = buildCodexFilePatchText(change, changeKind);
-  const renderedLines = parseGitPatchRenderedLines(patchText);
-  const metrics = countPatchMetrics(renderedLines);
+  const metrics = countPatchMetrics(patchText);
+  const displayPath = changeKind === 'renamed' && movePath
+    ? movePath
+    : pathValue;
+
+  if (changeKind === 'added') {
+    return {
+      changeType: changeKind,
+      path: pathValue,
+      newPath: pathValue,
+      displayPath,
+      additions: metrics.additions,
+      deletions: metrics.deletions,
+      patchText,
+    };
+  }
+
+  if (changeKind === 'deleted') {
+    return {
+      changeType: changeKind,
+      path: pathValue,
+      oldPath: pathValue,
+      displayPath,
+      additions: metrics.additions,
+      deletions: metrics.deletions,
+      patchText,
+    };
+  }
+
+  if (changeKind === 'renamed') {
+    return {
+      changeType: changeKind,
+      path: pathValue,
+      oldPath: pathValue || undefined,
+      newPath: movePath || pathValue,
+      displayPath,
+      additions: metrics.additions,
+      deletions: metrics.deletions,
+      patchText,
+    };
+  }
 
   return {
+    changeType: changeKind,
     path: pathValue,
-    movePath: movePath || undefined,
-    changeKind,
-    patchText,
-    renderedLines,
+    displayPath,
     additions: metrics.additions,
     deletions: metrics.deletions,
+    patchText,
+  };
+}
+
+export function buildCodexAdaptedFileChange(
+  change: CodexFileChange,
+): CodexAdaptedFileChange {
+  const changeKind = normalizeCodexFileChangeKind(change.kind);
+  const patchText = buildCodexFilePatchText(change, changeKind);
+
+  return {
+    changeKind,
+    file: buildCodexDiffFileContent(change, changeKind, patchText),
   };
 }

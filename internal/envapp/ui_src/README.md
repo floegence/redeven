@@ -35,7 +35,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
   - user rows render through the structured `CodexUserMessageContent` path using `item.inputs`;
   - user `text` inputs must stay raw text only, with preserved line breaks and no markdown/HTML rendering;
   - user `localImage` / `skill` inputs should reuse the shared file-preview surface instead of introducing a second preview modal.
-- Codex file-change evidence is also Codex-local: transcript `fileChange` rows adapt raw Codex change payloads into a git-patch style block inside `src/ui/codex/*`, so newly created files read as added-line diffs without patching Flower transcript widgets or selectors.
+- Codex file-change evidence keeps its data adaptation local to `src/ui/codex/*`, but the rendered patch surface now reuses the shared Git patch viewer contract so transcript diffs follow the same theme and patch-body presentation rules as Git browser previews.
 - Codex turn lifecycle projection keeps `thread.turns` aligned with `turn_started` / `turn_completed` events, so stop/send transitions and header actions do not depend on stale bootstrap snapshots.
 - Codex chat rows and the Codex send bar should align with Flower's message-lane and composer geometry through Codex-local implementation, not by patching Flower-owned selectors.
 - The Codex send bar should read as floating over the transcript tail, so transcript and composer boundaries should prefer soft shadow/inset separation over an explicit full-width hard divider.

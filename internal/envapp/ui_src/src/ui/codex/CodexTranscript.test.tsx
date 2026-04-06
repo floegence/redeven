@@ -17,6 +17,12 @@ const protocolState: {
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
+  useLayout: () => ({
+    isMobile: () => false,
+  }),
+  useNotification: () => ({
+    error: vi.fn(),
+  }),
 }));
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
@@ -36,6 +42,11 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
+  Button: (props: any) => (
+    <button class={props.class} type={props.type ?? 'button'} disabled={props.disabled} onClick={props.onClick}>
+      {props.children}
+    </button>
+  ),
 }));
 
 vi.mock('../chat/blocks/MarkdownBlock', () => ({
@@ -646,11 +657,11 @@ describe('CodexTranscript', () => {
     expect(host.querySelector('.codex-chat-diff-pre')).toBeNull();
     expect(host.textContent).toContain('src/ui/codex/CodexFileChangeDiff.tsx');
     expect(host.textContent).toContain('Added');
-    expect(host.textContent).toContain('+3');
-    expect(host.textContent).toContain('-0');
+    expect(host.textContent).toContain('+3 / −0');
     expect(host.textContent).toContain('+export function Example() {');
     expect(host.textContent).toContain('+  return <div />;');
-    expect(host.querySelectorAll('.codex-chat-file-change-line').length).toBeGreaterThan(0);
+    expect(host.textContent).not.toContain('Copy Patch');
+    expect(host.querySelectorAll('.redeven-surface-panel').length).toBeGreaterThan(0);
 
     dispose();
   });
