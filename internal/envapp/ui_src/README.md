@@ -26,7 +26,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
   - narrow composer widths restack into `context -> values -> policy pills`, and policy pills should only collapse from two columns to one when the composer itself becomes truly narrow;
   - mentions / attachments belong to a lower-priority draft-object lane instead of the strategy lane.
 - Codex transcript follow-bottom is also controller-based and page-local: `CodexProvider` emits explicit bottom intents, and `createFollowBottomController()` keeps system restore paths instant while allowing smooth user-initiated convergence on the Codex page only.
-- Codex transcript expansion state is also transcript-owned: reasoning/plan rows keep expansion keyed by logical item id so stream updates and completion snapshots do not remount the row back into a collapsed state.
+- Codex transcript expansion state is also transcript-owned: reasoning/plan rows start collapsed when first projected, then keep explicit expansion keyed by logical item id so stream updates and completion snapshots do not overwrite the user's chosen disclosure state.
 - Codex follow-bottom targets the real bottom scroll position (`scrollHeight - clientHeight`) and preserves paused anchor restoration during late transcript reflow, so streaming growth no longer relies on repeated raw `scrollTop = scrollHeight` retries.
 - Codex transcript layout is shell-based: a Codex-owned transcript shell establishes full-height viewport sizing first, then resolves `empty`, `loading`, or `feed` mode so welcome/loading heroes can center without depending on implicit parent height.
 - Codex transcript rendering is intentionally split by role semantics:
@@ -34,6 +34,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
   - user rows render through the structured `CodexUserMessageContent` path using `item.inputs`;
   - user `text` inputs must stay raw text only, with preserved line breaks and no markdown/HTML rendering;
   - user `localImage` / `skill` inputs should reuse the shared file-preview surface instead of introducing a second preview modal.
+- Codex file-change evidence is also Codex-local: transcript `fileChange` rows adapt raw Codex change payloads into a git-patch style block inside `src/ui/codex/*`, so newly created files read as added-line diffs without patching Flower transcript widgets or selectors.
 - Codex turn lifecycle projection keeps `thread.turns` aligned with `turn_started` / `turn_completed` events, so stop/send transitions and header actions do not depend on stale bootstrap snapshots.
 - Codex chat rows and the Codex send bar should align with Flower's message-lane and composer geometry through Codex-local implementation, not by patching Flower-owned selectors.
 - The Codex send bar should read as floating over the transcript tail, so transcript and composer boundaries should prefer soft shadow/inset separation over an explicit full-width hard divider.

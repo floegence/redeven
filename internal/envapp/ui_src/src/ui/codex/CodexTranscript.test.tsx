@@ -338,10 +338,17 @@ describe('CodexTranscript', () => {
       />
     ), host);
 
-    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('false');
     expect(host.textContent).not.toContain('Reasoning note');
     expect(host.querySelector('.codex-chat-reasoning-card')).toBeNull();
     expect(host.querySelector('.codex-chat-reasoning-toggle .codex-chat-reasoning-kicker')).toBeTruthy();
+    expect(host.querySelector('.codex-chat-reasoning-markdown')).toBeNull();
+
+    const toggle = host.querySelector('.codex-chat-reasoning-toggle') as HTMLButtonElement | null;
+    toggle?.click();
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
     expect(host.querySelector('.codex-chat-reasoning-markdown')).toBeTruthy();
 
     setItems([
@@ -359,7 +366,6 @@ describe('CodexTranscript', () => {
     expect(host.querySelector('[data-codex-reasoning-row="true"]')?.getAttribute('data-codex-reasoning-expanded')).toBe('true');
     expect(host.textContent).toContain('Investigating the event replay path.');
 
-    const toggle = host.querySelector('.codex-chat-reasoning-toggle') as HTMLButtonElement | null;
     toggle?.click();
     await Promise.resolve();
 
@@ -612,6 +618,39 @@ describe('CodexTranscript', () => {
       path: '/workspace/mock.png',
       type: 'file',
     });
+
+    dispose();
+  });
+
+  it('renders file changes through a git-style Codex diff block instead of a raw preformatted dump', () => {
+    const { host, dispose } = renderTranscript([
+      {
+        id: 'item_file_change',
+        type: 'fileChange',
+        changes: [
+          {
+            path: 'src/ui/codex/CodexFileChangeDiff.tsx',
+            kind: 'new',
+            diff: [
+              'export function Example() {',
+              '  return <div />;',
+              '}',
+            ].join('\n'),
+          },
+        ],
+        order: 0,
+      },
+    ]);
+
+    expect(host.querySelector('.codex-chat-file-change')).toBeTruthy();
+    expect(host.querySelector('.codex-chat-diff-pre')).toBeNull();
+    expect(host.textContent).toContain('src/ui/codex/CodexFileChangeDiff.tsx');
+    expect(host.textContent).toContain('Added');
+    expect(host.textContent).toContain('+3');
+    expect(host.textContent).toContain('-0');
+    expect(host.textContent).toContain('+export function Example() {');
+    expect(host.textContent).toContain('+  return <div />;');
+    expect(host.querySelectorAll('.codex-chat-file-change-line').length).toBeGreaterThan(0);
 
     dispose();
   });

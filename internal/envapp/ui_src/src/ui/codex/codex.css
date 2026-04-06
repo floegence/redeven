@@ -1394,20 +1394,181 @@
   margin: 0;
 }
 
-.codex-chat-diff-block {
-  margin: 0;
+.codex-chat-file-change {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--codex-border-default) 82%, transparent);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--codex-surface-panel-subtle) 72%, transparent);
+  padding: 0.75rem;
 }
 
-.codex-chat-diff-pre {
-  margin: 0;
-  padding: 0.875rem 1rem;
+.codex-chat-file-change-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.codex-chat-file-change-title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.codex-chat-file-change-path {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--foreground) 92%, transparent);
+}
+
+.codex-chat-file-change-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--codex-border-default) 88%, transparent);
+  border-radius: 9999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.codex-chat-file-change-kind-added {
+  border-color: color-mix(in srgb, var(--success) 44%, transparent);
+  color: color-mix(in srgb, var(--success) 78%, var(--foreground) 22%);
+}
+
+.codex-chat-file-change-kind-modified,
+.codex-chat-file-change-kind-renamed {
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  color: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);
+}
+
+.codex-chat-file-change-kind-deleted {
+  border-color: color-mix(in srgb, var(--error) 42%, transparent);
+  color: color-mix(in srgb, var(--error) 78%, var(--foreground) 22%);
+}
+
+.codex-chat-file-change-metrics {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
+.codex-chat-file-change-metric-added {
+  color: color-mix(in srgb, var(--success) 80%, var(--foreground) 20%);
+}
+
+.codex-chat-file-change-metric-deleted {
+  color: color-mix(in srgb, var(--error) 78%, var(--foreground) 22%);
+}
+
+.codex-chat-file-change-rename {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+  color: color-mix(in srgb, var(--muted-foreground) 86%, transparent);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
+.codex-chat-file-change-rename-label {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.codex-chat-file-change-rename-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.codex-chat-file-change-rename-arrow {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--foreground) 42%, transparent);
+}
+
+.codex-chat-file-change-viewport {
+  min-height: 0;
   overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
+  border: 1px solid color-mix(in srgb, var(--codex-border-default) 75%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--background) 84%, #0d1117 16%);
+  max-height: 22rem;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+
+.codex-chat-file-change-canvas {
+  display: inline-block;
+  min-width: 100%;
+  background: color-mix(in srgb, #0d1117 88%, var(--background) 12%);
+  padding: 1px;
+  vertical-align: top;
+}
+
+.codex-chat-file-change-line {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  grid-template-columns: 2.25rem 2.25rem minmax(max-content, 1fr);
+  align-items: stretch;
+}
+
+.codex-chat-file-change-line-number {
+  padding: 0 0.375rem;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.65625rem;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+.codex-chat-file-change-line-number-next {
+  border-right: 1px solid color-mix(in srgb, var(--codex-border-default) 72%, transparent);
+}
+
+.codex-chat-file-change-line-text {
+  display: block;
+  padding: 0 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.codex-chat-file-change-empty {
+  border: 1px solid color-mix(in srgb, var(--codex-border-default) 76%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--codex-surface-panel-subtle) 68%, transparent);
+  padding: 0.625rem 0.75rem;
   font-size: 0.6875rem;
   line-height: 1.5;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: #e6edf3;
+  color: color-mix(in srgb, var(--muted-foreground) 88%, transparent);
 }
 
 .codex-chat-thinking-block {
