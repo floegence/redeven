@@ -27,6 +27,7 @@ import {
   shortGitHash,
   workspaceEntryKey,
   workspaceSectionLabel,
+  type GitBranchDetailPresentationState,
   type GitWorkspaceViewPageState,
   workspaceViewSectionCount,
   workspaceViewSectionItems,
@@ -79,8 +80,12 @@ export interface GitBranchesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
   statusRefreshToken?: number;
   selectedBranch?: GitBranchSummary | null;
+  branchDetailState?: GitBranchDetailPresentationState;
   selectedBranchSubview?: GitBranchSubview;
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
+  onRefreshSelectedBranch?: () => void;
+  onSelectCurrentBranch?: () => void;
+  onBranchDetailLoadFailure?: () => void;
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -938,11 +943,20 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   let lastStatusDataContextKey = '';
   let lastStatusSelectionContextKey = '';
 
+  const branchDetailState = (): GitBranchDetailPresentationState => (
+    props.branchDetailState
+      ?? (props.selectedBranch ? { kind: 'ready', branch: props.selectedBranch } : { kind: 'idle', branch: null })
+  );
+  const selectedBranch = () => branchDetailState().branch ?? null;
+  const interactiveBranch = () => {
+    const state = branchDetailState();
+    return state.kind === 'ready' ? state.branch : null;
+  };
   const branchSubview = () => props.selectedBranchSubview ?? 'status';
   const activeRepoRootPath = () => String(props.repoRootPath || props.repoSummary?.repoRootPath || '').trim();
   const repoHeadDisplay = () => describeGitHead(props.repoSummary);
   const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
-  const statusRepoRootPath = () => resolveGitBranchWorktreePath(props.selectedBranch, activeRepoRootPath());
+  const statusRepoRootPath = () => resolveGitBranchWorktreePath(interactiveBranch(), activeRepoRootPath());
   const branchDirectoryRequest = (): GitDirectoryShortcutRequest | null => {
     const path = statusRepoRootPath();
     if (!path) return null;
@@ -1007,19 +1021,19 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const visibleStatusLoadingMore = () => Boolean(visibleStatusPageState().loading && visibleStatusPageState().initialized);
   const visibleStatusItems = () => workspaceViewSectionItems(visibleStatusWorkspace(), selectedStatusSection());
   const visibleStatusKey = () => workspaceEntryKey(diffDialogItem());
-  const statusEmptyState = () => branchStatusEmptyState(props.selectedBranch, statusRepoRootPath());
-  const mergeReviewBranch = () => props.mergeReviewBranch ?? props.selectedBranch ?? null;
+  const statusEmptyState = () => branchStatusEmptyState(selectedBranch(), statusRepoRootPath());
+  const mergeReviewBranch = () => props.mergeReviewBranch ?? interactiveBranch() ?? selectedBranch() ?? null;
   const mergePreview = () => props.mergePreview ?? null;
   const mergeReviewState = () => props.mergeDialogState ?? 'idle';
-  const deleteReviewBranch = () => props.deleteReviewBranch ?? props.selectedBranch ?? null;
+  const deleteReviewBranch = () => props.deleteReviewBranch ?? interactiveBranch() ?? selectedBranch() ?? null;
   const deletePreview = () => props.deletePreview ?? null;
   const deleteReviewState = () => props.deleteDialogState ?? 'idle';
-  const mergeAvailable = () => Boolean(props.onMergeBranch && (props.selectedBranch?.kind === 'local' || props.selectedBranch?.kind === 'remote'));
+  const mergeAvailable = () => Boolean(props.onMergeBranch && (interactiveBranch()?.kind === 'local' || interactiveBranch()?.kind === 'remote'));
   const mergeDisabled = () => Boolean(
     !mergeAvailable()
     || props.mergeBusy
     || props.repoSummary?.detached
-    || props.selectedBranch?.current
+    || interactiveBranch()?.current
   );
   const mergeLabel = () => (props.mergeBusy ? 'Merging...' : 'Merge');
   const linkedWorktreeDeleteDialog = () => {
@@ -1030,33 +1044,37 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
   const plainDeleteDialog = () => Boolean(props.deleteReviewOpen && deleteReviewBranch() && !linkedWorktreeDeleteDialog());
   const checkoutDisabled = () => Boolean(
-    !props.selectedBranch
+    !interactiveBranch()
     || props.checkoutBusy
-    || props.selectedBranch.current
-    || (props.selectedBranch.kind === 'local' && props.selectedBranch.worktreePath)
+    || interactiveBranch()?.current
+    || (interactiveBranch()?.kind === 'local' && interactiveBranch()?.worktreePath)
   );
   const checkoutLabel = () => (props.checkoutBusy ? 'Checking Out...' : 'Checkout');
-  const deleteAvailable = () => Boolean(props.onDeleteBranch && props.selectedBranch?.kind === 'local');
+  const deleteAvailable = () => Boolean(props.onDeleteBranch && interactiveBranch()?.kind === 'local');
   const deleteDisabled = () => Boolean(
     !deleteAvailable()
     || props.deleteBusy
-    || props.selectedBranch?.current
+    || interactiveBranch()?.current
   );
   const deleteLabel = () => (props.deleteBusy ? 'Deleting...' : 'Delete');
-  const canAskFlowerStatus = () => Boolean(props.onAskFlower && props.selectedBranch && statusRepoRootPath() && visibleStatusItems().length > 0);
+  const canAskFlowerStatus = () => Boolean(props.onAskFlower && interactiveBranch() && statusRepoRootPath() && visibleStatusItems().length > 0);
   const canOpenStash = () => Boolean(props.onOpenStash && statusRepoRootPath());
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && branchDirectoryRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && branchDirectoryRequest());
   const branchWorkspaceDisabledReason = () => {
-    const branch = props.selectedBranch;
+    const branch = selectedBranch();
+    const detailState = branchDetailState();
     if (!branch) return 'Select a branch first.';
+    if (detailState.kind === 'verifying') return 'Checking whether this branch still exists.';
+    if (detailState.kind === 'missing') return detailState.detail;
+    if (detailState.kind === 'error') return detailState.message || 'Branch verification failed.';
     if (branch.kind === 'remote') return 'Check out this branch locally first.';
     if (branch.current) return activeRepoRootPath() ? '' : 'Repository path is unavailable.';
     return 'Open this branch in a worktree first.';
   };
   const askFlowerStatusDisabledReason = () => {
     if (canAskFlowerStatus()) return '';
-    if (!props.selectedBranch) return 'Select a branch first.';
+    if (!selectedBranch()) return 'Select a branch first.';
     if (visibleStatusLoading()) return 'Branch status is still loading.';
     if (visibleStatusError()) return 'Branch status is unavailable right now.';
     const workspaceReason = branchWorkspaceDisabledReason();
@@ -1069,10 +1087,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     return branchWorkspaceDisabledReason() || 'Repository path is unavailable.';
   };
   const branchSummary = createMemo<BranchSummaryPresentation>(() => {
-    const text = branchContextSummary(props.selectedBranch);
+    const text = branchContextSummary(selectedBranch());
     return {
       text,
-      title: branchStatusSummary(props.selectedBranch),
+      title: branchStatusSummary(selectedBranch()),
       visible: text !== EMPTY_BRANCH_CONTEXT_SUMMARY,
     };
   });
@@ -1080,36 +1098,36 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const primaryActions: BranchPrimaryActionPresentation[] = [];
     const secondaryShortcuts: BranchShortcutPresentation[] = [];
 
-    if (props.onCheckoutBranch && props.selectedBranch) {
-      const branch = props.selectedBranch;
+    if (props.onCheckoutBranch && interactiveBranch()) {
+      const branch = interactiveBranch();
       primaryActions.push({
         key: 'checkout',
         label: checkoutLabel(),
         emphasis: 'neutral',
         disabled: checkoutDisabled(),
-        onPress: () => props.onCheckoutBranch?.(branch),
+        onPress: () => branch && props.onCheckoutBranch?.(branch),
       });
     }
 
-    if (mergeAvailable() && props.selectedBranch) {
-      const branch = props.selectedBranch;
+    if (mergeAvailable() && interactiveBranch()) {
+      const branch = interactiveBranch();
       primaryActions.push({
         key: 'merge',
         label: mergeLabel(),
         emphasis: mergeDisabled() ? 'neutral' : 'accent',
         disabled: mergeDisabled(),
-        onPress: () => props.onMergeBranch?.(branch),
+        onPress: () => branch && props.onMergeBranch?.(branch),
       });
     }
 
-    if (deleteAvailable() && props.selectedBranch) {
-      const branch = props.selectedBranch;
+    if (deleteAvailable() && interactiveBranch()) {
+      const branch = interactiveBranch();
       primaryActions.push({
         key: 'delete',
         label: deleteLabel(),
         emphasis: 'danger',
         disabled: deleteDisabled(),
-        onPress: () => props.onDeleteBranch?.(branch),
+        onPress: () => branch && props.onDeleteBranch?.(branch),
       });
     }
 
@@ -1152,7 +1170,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       key: 'compare',
       label: 'Compare',
       emphasis: 'neutral',
-      disabled: false,
+      disabled: !interactiveBranch(),
       onPress: () => setCompareDialogOpen(true),
     }];
 
@@ -1186,12 +1204,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       disabled: !canAskFlowerStatus(),
       disabledReason: askFlowerStatusDisabledReason(),
       onPress: () => {
-        if (!props.selectedBranch || !canAskFlowerStatus()) return;
+        if (!interactiveBranch() || !canAskFlowerStatus()) return;
         props.onAskFlower?.({
           kind: 'branch_status',
           repoRootPath: activeRepoRootPath(),
           worktreePath: statusRepoRootPath(),
-          branch: props.selectedBranch,
+          branch: interactiveBranch() as GitBranchSummary,
           section: selectedStatusSection(),
           items: visibleStatusItems(),
         });
@@ -1271,6 +1289,61 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     queueMicrotask(() => branchSubviewTabRefs.get(nextView)?.focus());
   };
 
+  const renderBranchDetailStatePane = (active: boolean, view: GitBranchSubview) => {
+    const state = branchDetailState();
+    if (state.kind === 'idle' || state.kind === 'ready') return null;
+
+    const title = state.kind === 'missing'
+      ? state.title
+      : state.kind === 'error'
+        ? 'Unable to verify branch'
+        : 'Checking branch';
+    const detail = state.kind === 'missing'
+      ? state.detail
+      : state.kind === 'error'
+        ? state.message
+        : 'Refreshing branches to confirm that this selection still exists.';
+
+    return (
+      <div
+        class={cn('flex h-full min-h-0 flex-col overflow-hidden', !active && 'hidden')}
+        role="tabpanel"
+        id={gitBranchSubviewPanelId(view)}
+        aria-labelledby={gitBranchSubviewTabId(view)}
+        aria-hidden={!active}
+        hidden={!active}
+        tabIndex={active ? 0 : -1}
+      >
+        <div class="flex flex-1 items-center justify-center px-4 py-6">
+          <div class={cn('w-full max-w-xl rounded-xl px-4 py-4 shadow-sm', redevenSurfaceRoleClass('panelStrong'))}>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-semibold text-foreground">{title}</div>
+                <div class="mt-1 text-[12px] leading-relaxed text-muted-foreground">{detail}</div>
+              </div>
+              <GitMetaPill tone={state.kind === 'missing' ? 'warning' : state.kind === 'error' ? 'danger' : 'neutral'}>
+                {state.kind === 'missing' ? 'Missing' : state.kind === 'error' ? 'Retry needed' : 'Verifying'}
+              </GitMetaPill>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <Show when={state.kind !== 'verifying' && props.onRefreshSelectedBranch}>
+                <Button size="sm" variant="outline" class={secondaryActionButtonClass} onClick={() => props.onRefreshSelectedBranch?.()}>
+                  Refresh branches
+                </Button>
+              </Show>
+              <Show when={state.kind === 'missing' && props.onSelectCurrentBranch && (props.branches?.local ?? []).some((branch) => branch.current)}>
+                <Button size="sm" variant="default" class={primaryActionButtonClass} onClick={() => props.onSelectCurrentBranch?.()}>
+                  View current branch
+                </Button>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const loadStatusSection = async (
     section: GitWorkspaceViewSection,
     options: { append?: boolean; force?: boolean } = {},
@@ -1328,6 +1401,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           setStatusWorkspace(null);
         }
         setStatusError(message);
+        props.onBranchDetailLoadFailure?.();
       }
     } finally {
       if (seq === statusReqSeqBySection[section]) {
@@ -1349,7 +1423,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
 
   createEffect(() => {
-    const branch = props.selectedBranch;
+    const branch = selectedBranch();
     const element = branchHeaderTopRowElement();
     if (!branch || !element) {
       setBranchHeaderWidth(0);
@@ -1373,7 +1447,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
 
   createEffect(() => {
-    const branch = props.selectedBranch;
+    const branch = interactiveBranch();
     const repoRootPath = statusRepoRootPath();
     const contextKey = branch && repoRootPath
       ? `${branchIdentity(branch)}|${repoRootPath}`
@@ -1385,7 +1459,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
 
   createEffect(() => {
-    const branch = props.selectedBranch;
+    const branch = interactiveBranch();
     const subview = branchSubview();
     const repoRootPath = statusRepoRootPath();
     const refreshToken = Number(props.statusRefreshToken ?? 0);
@@ -1398,7 +1472,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
 
   createEffect(() => {
-    const branch = props.selectedBranch;
+    const branch = interactiveBranch();
     const subview = branchSubview();
     const repoRootPath = statusRepoRootPath();
     const section = selectedStatusSection();
@@ -1429,7 +1503,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   });
 
   const renderStatus = (active: boolean) => {
-    const branch = props.selectedBranch;
+    const branch = selectedBranch();
     if (!branch) {
       return (
         <div
@@ -1445,6 +1519,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         </div>
       );
     }
+
+    const unavailablePane = renderBranchDetailStatePane(active, 'status');
+    if (unavailablePane) return unavailablePane;
 
     return (
       <div
@@ -1586,7 +1663,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <Show when={!props.branchesLoading} fallback={<GitStatePane loading message="Loading branches..." class="px-3 py-4" />}>
         <Show when={!props.branchesError} fallback={<GitStatePane tone="error" message={props.branchesError} class="px-3 py-4" />}>
-          <Show when={props.selectedBranch} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to inspect its status or history.</div>}>
+          <Show when={selectedBranch()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a branch from the sidebar to inspect its status or history.</div>}>
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 px-3 py-3 sm:px-4 sm:py-4">
                 <GitPanelFrame>
@@ -1596,19 +1673,19 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         <GitLabelBlock
                           class="min-w-0 flex-1"
                           label="Branch"
-                          tone={gitBranchTone(props.selectedBranch)}
+                          tone={gitBranchTone(selectedBranch())}
                           meta={
                             <div class="flex min-h-5 items-center gap-1.5">
-                              <Show when={props.selectedBranch?.current}>
+                              <Show when={selectedBranch()?.current}>
                                 <GitMetaPill tone="success">Current</GitMetaPill>
                               </Show>
-                              <Show when={props.selectedBranch?.kind === 'remote'}>
+                              <Show when={selectedBranch()?.kind === 'remote'}>
                                 <GitMetaPill tone="violet">Remote</GitMetaPill>
                               </Show>
                             </div>
                           }
                         >
-                          <GitPrimaryTitle class={branchHeaderTitleClass()}>{branchDisplayName(props.selectedBranch)}</GitPrimaryTitle>
+                          <GitPrimaryTitle class={branchHeaderTitleClass()}>{branchDisplayName(selectedBranch())}</GitPrimaryTitle>
                           <Show when={branchSummary().visible}>
                             <div class={branchHeaderSummaryClass()} title={branchSummary().title}>
                               {branchSummary().text}
@@ -1742,23 +1819,25 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 tabIndex={branchSubview() === 'history' ? 0 : -1}
                 class={cn('flex min-h-0 flex-1 flex-col overflow-hidden', branchSubview() !== 'history' && 'hidden')}
               >
-                <HistoryList
-                  repoRootPath={activeRepoRootPath()}
-                  repoSummary={props.repoSummary}
-                  selectedBranch={props.selectedBranch}
-                  commits={props.commits}
-                  listLoading={props.listLoading}
-                  listRefreshing={props.listRefreshing}
-                  listLoadingMore={props.listLoadingMore}
-                  listError={props.listError}
-                  hasMore={props.hasMore}
-                  selectedCommitHash={props.selectedCommitHash}
-                  switchDetachedBusy={props.switchDetachedBusy}
-                  onSelectCommit={props.onSelectCommit}
-                  onLoadMore={props.onLoadMore}
-                  onSwitchDetached={props.onSwitchDetached}
-                  onAskFlower={props.onAskFlower}
-                />
+                <Show when={branchDetailState().kind === 'ready'} fallback={renderBranchDetailStatePane(branchSubview() === 'history', 'history')}>
+                  <HistoryList
+                    repoRootPath={activeRepoRootPath()}
+                    repoSummary={props.repoSummary}
+                    selectedBranch={interactiveBranch()}
+                    commits={props.commits}
+                    listLoading={props.listLoading}
+                    listRefreshing={props.listRefreshing}
+                    listLoadingMore={props.listLoadingMore}
+                    listError={props.listError}
+                    hasMore={props.hasMore}
+                    selectedCommitHash={props.selectedCommitHash}
+                    switchDetachedBusy={props.switchDetachedBusy}
+                    onSelectCommit={props.onSelectCommit}
+                    onLoadMore={props.onLoadMore}
+                    onSwitchDetached={props.onSwitchDetached}
+                    onAskFlower={props.onAskFlower}
+                  />
+                </Show>
               </div>
             </div>
           </Show>
@@ -1769,7 +1848,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         open={compareDialogOpen()}
         repoRootPath={activeRepoRootPath()}
         branches={props.branches}
-        selectedBranch={props.selectedBranch}
+        selectedBranch={interactiveBranch()}
         onClose={() => setCompareDialogOpen(false)}
       />
 

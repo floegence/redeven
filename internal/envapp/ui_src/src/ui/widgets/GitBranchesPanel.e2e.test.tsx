@@ -26,7 +26,7 @@ vi.mock('../protocol/redeven_v1', async () => {
   };
 });
 
-import { redevenV1Contract } from '../protocol/redeven_v1';
+import { redevenV1Contract, type GitBranchSummary } from '../protocol/redeven_v1';
 import { GitBranchesPanel } from './GitBranchesPanel';
 
 const resizeObserverState = {
@@ -2376,6 +2376,181 @@ describe('GitBranchesPanel interactions', () => {
         kind: 'local',
         headCommit: 'aaaaaaaa',
       });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows a missing branch state with recovery actions instead of loading branch status', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onRefreshSelectedBranch = vi.fn();
+    const onSelectCurrentBranch = vi.fn();
+    const missingBranch: GitBranchSummary = {
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: '1111111111111111',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                selectedBranch={missingBranch}
+                branchDetailState={{
+                  kind: 'missing',
+                  branch: missingBranch,
+                  title: 'Branch no longer exists',
+                  detail: 'feature/demo was deleted outside Redeven. Refresh branches or switch to another branch to continue.',
+                }}
+                branches={{
+                  repoRootPath: '/workspace/repo',
+                  currentRef: 'main',
+                  local: [
+                    { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+                  ],
+                  remote: [],
+                }}
+                onRefreshSelectedBranch={onRefreshSelectedBranch}
+                onSelectCurrentBranch={onSelectCurrentBranch}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.textContent).toContain('Branch no longer exists');
+      expect(host.textContent).toContain('feature/demo was deleted outside Redeven.');
+      expect(host.textContent).toContain('Refresh branches');
+      expect(host.textContent).toContain('View current branch');
+      expect(mockListWorkspacePage).not.toHaveBeenCalled();
+
+      const refreshButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Refresh branches') as HTMLButtonElement | undefined;
+      const currentBranchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'View current branch') as HTMLButtonElement | undefined;
+      expect(refreshButton).toBeTruthy();
+      expect(currentBranchButton).toBeTruthy();
+
+      refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      currentBranchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onRefreshSelectedBranch).toHaveBeenCalledTimes(1);
+      expect(onSelectCurrentBranch).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('holds branch detail in a verifying state without fetching status payloads', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const verifyingBranch: GitBranchSummary = {
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: '1111111111111111',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                selectedBranch={verifyingBranch}
+                branchDetailState={{
+                  kind: 'verifying',
+                  branch: verifyingBranch,
+                }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.textContent).toContain('Checking branch');
+      expect(host.textContent).toContain('Refreshing branches to confirm that this selection still exists.');
+      expect(host.textContent).not.toContain('Refresh branches');
+      expect(mockListWorkspacePage).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows branch verification errors in history view and offers a retry action', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onRefreshSelectedBranch = vi.fn();
+    const errorBranch: GitBranchSummary = {
+      name: 'feature/demo',
+      fullName: 'refs/heads/feature/demo',
+      kind: 'local',
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: '1111111111111111',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                selectedBranch={errorBranch}
+                branchDetailState={{
+                  kind: 'error',
+                  branch: errorBranch,
+                  message: 'Branch verification timed out.',
+                }}
+                selectedBranchSubview="history"
+                commits={[
+                  { hash: '2222222222222222', shortHash: '22222222', parents: ['1111111111111111'], subject: 'Merge feature', authorName: 'Bob', authorTimeMs: 1706003600000 },
+                ]}
+                onRefreshSelectedBranch={onRefreshSelectedBranch}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(host.textContent).toContain('Unable to verify branch');
+      expect(host.textContent).toContain('Branch verification timed out.');
+      expect(host.textContent).toContain('Refresh branches');
+      expect(host.textContent).not.toContain('Merge feature');
+
+      const refreshButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Refresh branches') as HTMLButtonElement | undefined;
+      expect(refreshButton).toBeTruthy();
+
+      refreshButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onRefreshSelectedBranch).toHaveBeenCalledTimes(1);
     } finally {
       dispose();
     }

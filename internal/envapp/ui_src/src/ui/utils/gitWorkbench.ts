@@ -22,6 +22,26 @@ export type GitWorkspaceViewSection = GitWorkspacePageSection;
 export type GitDetachedSwitchSource = 'graph' | 'branch_history';
 export type GitStashWindowTab = 'save' | 'stashes';
 export type GitStashWindowSource = 'header' | 'changes' | 'branch_status' | 'merge_blocker';
+export type GitBranchDetailPresentationState =
+  | {
+      kind: 'idle';
+      branch: null;
+    }
+  | {
+      kind: 'verifying' | 'ready';
+      branch: GitBranchSummary;
+    }
+  | {
+      kind: 'missing';
+      branch: GitBranchSummary;
+      title: string;
+      detail: string;
+    }
+  | {
+      kind: 'error';
+      branch: GitBranchSummary;
+      message: string;
+    };
 
 export type GitStashWindowRequest = {
   tab?: GitStashWindowTab;

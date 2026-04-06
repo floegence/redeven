@@ -125,6 +125,9 @@ Git browse mode distinguishes between the active repository workspace and per-br
   `Changes` pages over `unstaged + untracked`, `Staged` pages over the index snapshot, and `Conflicted` pages over merge-conflict entries.
 - Repository summary remains the lightweight source of truth for workspace counts, while each visible section loads only its current page window and can append more rows on demand.
 - Manual `Changes` refresh now reloads the visible section in place while invalidating the hidden section caches, so the current table does not fall into a duplicate reload race and later section switches still fetch fresh data.
+- `Branches` intentionally keeps its sidebar list as a cached snapshot for responsiveness, but branch detail is now target-truthful: selecting a branch revalidates the requested ref against a fresh `git.listBranches` snapshot before `Status` or `History` is allowed to load.
+- If another process deletes the selected branch, Redeven keeps the user anchored on the requested branch identity and renders an explicit stale-selection state with recovery actions (`Refresh branches`, `View current branch`) instead of hanging on a generic loading state or silently jumping selection.
+- If branch status/history detail fails after selection because the ref or linked worktree vanished mid-flight, the browser re-runs the same branch reconciliation path so both pre-load and mid-load disappearance collapse into one consistent UX contract.
 - For the current branch, branch status uses the active repository root.
 - For a linked local branch, branch status uses the branch `worktreePath`.
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.

@@ -9,7 +9,7 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { buildGitWorkbenchSubviewItems, type GitBranchSubview, type GitDetachedSwitchTarget, type GitStashWindowRequest, type GitWorkbenchSubview, type GitWorkspaceViewPageState, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { buildGitWorkbenchSubviewItems, type GitBranchDetailPresentationState, type GitBranchSubview, type GitDetachedSwitchTarget, type GitStashWindowRequest, type GitWorkbenchSubview, type GitWorkspaceViewPageState, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { GitViewNav } from './GitViewNav';
@@ -62,10 +62,14 @@ export interface GitWorkspaceProps {
   branchesError?: string;
   statusRefreshToken?: number;
   selectedBranch?: GitBranchSummary | null;
+  branchDetailState?: GitBranchDetailPresentationState;
   selectedBranchKey?: string;
   onSelectBranch?: (branch: GitBranchSummary) => void;
   selectedBranchSubview?: GitBranchSubview;
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
+  onRefreshSelectedBranch?: () => void;
+  onSelectCurrentBranch?: () => void;
+  onBranchDetailLoadFailure?: () => void;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
   listRefreshing?: boolean;
@@ -209,10 +213,14 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               branches={props.branches}
               branchesLoading={props.branchesLoading}
               branchesError={props.branchesError}
+              branchDetailState={props.branchDetailState}
               statusRefreshToken={props.statusRefreshToken}
               selectedBranch={props.selectedBranch}
               selectedBranchSubview={props.selectedBranchSubview}
               onSelectBranchSubview={props.onSelectBranchSubview}
+              onRefreshSelectedBranch={props.onRefreshSelectedBranch}
+              onSelectCurrentBranch={props.onSelectCurrentBranch}
+              onBranchDetailLoadFailure={props.onBranchDetailLoadFailure}
               selectedCommitHash={props.selectedCommitHash}
               commits={props.commits}
               listLoading={props.listLoading}

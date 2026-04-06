@@ -68,6 +68,7 @@ import {
   isGitWorkspaceSection,
   shortGitHash,
   summarizeWorkspaceCount,
+  type GitBranchDetailPresentationState,
   type GitBranchSubview,
   type GitDetachedSwitchTarget,
   type GitStashWindowRequest,
@@ -216,6 +217,12 @@ type GitLoadOptions = {
   repoRootPath?: string;
 };
 
+type GitBranchSelectionMode = 'preserve' | 'default_if_empty' | 'default_if_missing';
+
+type GitBranchLoadOptions = GitLoadOptions & {
+  selectionMode?: GitBranchSelectionMode;
+};
+
 type GitWorkspaceLoadOptions = GitLoadOptions & {
   append?: boolean;
   offset?: number;
@@ -243,6 +250,13 @@ type GitCommitListCacheEntry = {
   resolved: boolean;
   selectedCommitHash: string;
 };
+
+type GitBranchDetailState =
+  | { kind: 'idle' }
+  | { kind: 'verifying'; requestedKey: string }
+  | { kind: 'ready'; requestedKey: string }
+  | { kind: 'missing'; requestedKey: string; title: string; detail: string }
+  | { kind: 'error'; requestedKey: string; message: string };
 
 function normalizePageSidebarWidth(width: unknown): number {
   const raw = typeof width === 'number' && Number.isFinite(width) ? width : PAGE_SIDEBAR_DEFAULT_WIDTH;
@@ -387,6 +401,40 @@ function createGitCommitContext(params: {
   return null;
 }
 
+function inferGitBranchSummaryFromKey(
+  key: string,
+  fallback?: GitBranchSummary | null,
+): GitBranchSummary | null {
+  if (fallback) return fallback;
+  const trimmed = String(key ?? '').trim();
+  if (!trimmed) return null;
+  const remote = trimmed.startsWith('refs/remotes/');
+  const local = trimmed.startsWith('refs/heads/');
+  let name = trimmed;
+  if (remote) {
+    name = trimmed.slice('refs/remotes/'.length);
+  } else if (local) {
+    name = trimmed.slice('refs/heads/'.length);
+  }
+  return {
+    name,
+    fullName: trimmed,
+    kind: remote ? 'remote' : 'local',
+  };
+}
+
+function createMissingGitBranchMessage(branch: GitBranchSummary | null | undefined, requestedKey: string): {
+  title: string;
+  detail: string;
+} {
+  const summary = inferGitBranchSummaryFromKey(requestedKey, branch);
+  const name = String(summary?.name ?? summary?.fullName ?? requestedKey).trim() || 'This branch';
+  return {
+    title: 'Branch no longer exists',
+    detail: `${name} was deleted outside Redeven. Refresh branches or switch to another branch to continue.`,
+  };
+}
+
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -514,6 +562,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [gitBranchesLoading, setGitBranchesLoading] = createSignal(false);
   const [gitBranchesError, setGitBranchesError] = createSignal('');
   const [selectedGitBranchName, setSelectedGitBranchName] = createSignal('');
+  const [selectedGitBranchSnapshot, setSelectedGitBranchSnapshot] = createSignal<GitBranchSummary | null>(null);
+  const [gitBranchDetailState, setGitBranchDetailState] = createSignal<GitBranchDetailState>({ kind: 'idle' });
   const [selectedGitBranchSubview, setSelectedGitBranchSubview] = createSignal<GitBranchSubview>('status');
   const [gitCommitMessage, setGitCommitMessage] = createSignal('');
   const [gitMutationScope, setGitMutationScope] = createSignal<GitMutationScope>('');
@@ -559,6 +609,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let gitRepoSummaryReqSeq = 0;
   let gitWorkspaceReqSeqBySection: Record<GitWorkspaceViewSection, number> = { changes: 0, conflicted: 0, staged: 0 };
   let gitBranchesReqSeq = 0;
+  let gitBranchDetailReqSeq = 0;
   let gitMergeReviewReqSeq = 0;
   let gitDeleteReviewReqSeq = 0;
   let stashContextReqSeq = 0;
@@ -600,11 +651,62 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return Boolean(entry?.resolved);
   };
 
+  const rememberSelectedGitBranchSnapshot = (branch: GitBranchSummary | null | undefined, requestedKey = '') => {
+    setSelectedGitBranchSnapshot(inferGitBranchSummaryFromKey(requestedKey, branch));
+  };
+
+  const setGitBranchDetailIdle = () => {
+    setGitBranchDetailState({ kind: 'idle' });
+  };
+
+  const setGitBranchDetailVerifying = (requestedKey: string, branch: GitBranchSummary | null | undefined) => {
+    rememberSelectedGitBranchSnapshot(branch, requestedKey);
+    setGitBranchDetailState({ kind: 'verifying', requestedKey });
+  };
+
+  const setGitBranchDetailReady = (requestedKey: string, branch: GitBranchSummary | null | undefined) => {
+    const resolvedBranch = inferGitBranchSummaryFromKey(requestedKey, branch);
+    rememberSelectedGitBranchSnapshot(resolvedBranch, requestedKey);
+    if (!resolvedBranch) {
+      setGitBranchDetailIdle();
+      return;
+    }
+    setGitBranchDetailState({ kind: 'ready', requestedKey });
+  };
+
+  const setGitBranchDetailMissing = (requestedKey: string, branch: GitBranchSummary | null | undefined) => {
+    const message = createMissingGitBranchMessage(branch, requestedKey);
+    rememberSelectedGitBranchSnapshot(branch, requestedKey);
+    setGitBranchDetailState({
+      kind: 'missing',
+      requestedKey,
+      title: message.title,
+      detail: message.detail,
+    });
+  };
+
+  const setGitBranchDetailError = (requestedKey: string, branch: GitBranchSummary | null | undefined, message: string) => {
+    rememberSelectedGitBranchSnapshot(branch, requestedKey);
+    setGitBranchDetailState({
+      kind: 'error',
+      requestedKey,
+      message,
+    });
+  };
+
+  const selectedGitBranch = () => findGitBranchByKey(gitBranches(), selectedGitBranchName());
+  const selectedGitBranchDisplay = () => selectedGitBranch() ?? selectedGitBranchSnapshot();
+  const selectedGitReadyBranch = () => {
+    const state = gitBranchDetailState();
+    if (state.kind !== 'ready') return null;
+    return selectedGitBranch() ?? selectedGitBranchSnapshot();
+  };
+
   const currentGitCommitContext = (): GitCommitContext | null => createGitCommitContext({
     repoRootPath: repoInfo()?.repoRootPath,
     subview: gitSubview(),
     branchSubview: selectedGitBranchSubview(),
-    branch: selectedGitBranch(),
+    branch: selectedGitReadyBranch(),
   });
 
   const prefersBackgroundGitCommitReload = (context: GitCommitContext | null): boolean => {
@@ -1098,6 +1200,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setGitBranchesLoading(false);
     setGitBranchesError('');
     setSelectedGitBranchName('');
+    setSelectedGitBranchSnapshot(null);
+    setGitBranchDetailIdle();
     setSelectedGitBranchSubview('status');
     setGitCommitMessage('');
     setGitMutationScope('');
@@ -1119,8 +1223,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const selectedGitWorkspaceItem = () => findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey());
-
-  const selectedGitBranch = () => findGitBranchByKey(gitBranches(), selectedGitBranchName());
   const activeStashRepoRootPath = () => String(stashWindowContext()?.repoRootPath ?? '').trim();
   const activeStashSource = () => stashWindowContext()?.source ?? 'header';
 
@@ -1149,8 +1251,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const selectGitBranch = (branch: GitBranchSummary | null | undefined) => {
-    setSelectedGitBranchName(branchIdentity(branch));
+    const requestedKey = branchIdentity(branch);
+    setSelectedGitBranchName(requestedKey);
+    rememberSelectedGitBranchSnapshot(branch, requestedKey);
     setSelectedGitBranchSubview('status');
+    if (requestedKey) {
+      void reconcileSelectedGitBranch({
+        requestedKey,
+        requestedBranch: branch ?? null,
+        showVerifying: true,
+      });
+    } else {
+      setGitBranchDetailIdle();
+    }
     if (layout.isMobile()) {
       closePageSidebar();
     }
@@ -1161,6 +1274,48 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (layout.isMobile()) {
       closePageSidebar();
     }
+  };
+
+  const gitCurrentBranch = () => (
+    (gitBranches()?.local ?? []).find((branch) => branch.current)
+      ?? null
+  );
+
+  const gitBranchPresentationState = createMemo<GitBranchDetailPresentationState>(() => {
+    const displayBranch = selectedGitBranchDisplay();
+    const state = gitBranchDetailState();
+    switch (state.kind) {
+      case 'verifying':
+        return displayBranch ? { kind: 'verifying', branch: displayBranch } : { kind: 'idle', branch: null };
+      case 'ready':
+        return displayBranch ? { kind: 'ready', branch: displayBranch } : { kind: 'idle', branch: null };
+      case 'missing':
+        return displayBranch
+          ? { kind: 'missing', branch: displayBranch, title: state.title, detail: state.detail }
+          : { kind: 'idle', branch: null };
+      case 'error':
+        return displayBranch
+          ? { kind: 'error', branch: displayBranch, message: state.message }
+          : { kind: 'idle', branch: null };
+      case 'idle':
+      default:
+        return displayBranch ? { kind: 'ready', branch: displayBranch } : { kind: 'idle', branch: null };
+    }
+  });
+
+  const refreshSelectedGitBranch = () => {
+    void reconcileSelectedGitBranch({ showVerifying: true });
+  };
+
+  const selectCurrentGitBranch = () => {
+    const nextBranch = gitCurrentBranch() ?? pickDefaultGitBranch(gitBranches());
+    if (!nextBranch) return;
+    selectGitBranch(nextBranch);
+  };
+
+  const reconcileSelectedGitBranchAfterDetailFailure = () => {
+    if (gitBranchDetailState().kind !== 'ready') return;
+    void reconcileSelectedGitBranch({ showVerifying: false });
   };
 
   const selectGitCommit = (hash: string) => {
@@ -2009,30 +2164,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = String(resp.repoRootPath ?? '').trim() || resolveActiveRepoRootPath();
     if (!repoRootPath) return;
 
-    const branchesResp = await loadGitBranches({ silent: true, repoRootPath });
-    if (gitSubview() !== 'branches' || selectedGitBranchSubview() !== 'history') {
-      return;
-    }
-
-    const nextBranches = branchesResp ?? gitBranches();
-    const nextBranch = findGitBranchByKey(nextBranches, selectedGitBranchName()) ?? pickDefaultGitBranch(nextBranches);
-    const nextContext = createGitCommitContext({
+    await loadGitBranches({
+      silent: true,
       repoRootPath,
-      subview: 'branches',
-      branchSubview: 'history',
-      branch: nextBranch,
-    });
-    lastGitCommitContextKey = '';
-    if (!nextContext) {
-      applyGitCommitContextEntry(null, null);
-      return;
-    }
-    const hasCachedContext = restoreGitCommitContextFromCache(nextContext);
-    await loadGitCommits(true, nextContext.ref, {
-      context: nextContext,
-      mode: hasCachedContext ? 'background' : 'blocking',
-      repoRootPath,
-      silent: hasCachedContext,
+      selectionMode: 'default_if_missing',
     });
   };
 
@@ -2259,7 +2394,98 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     loadGitWorkspaceSection(selectedGitWorkspaceSection(), options)
   );
 
-  const loadGitBranches = async (options: GitLoadOptions = {}) => {
+  const requestGitBranchesSnapshot = async (repoRootPath: string): Promise<GitListBranchesResponse> => (
+    rpc.git.listBranches({ repoRootPath })
+  );
+
+  const applyGitBranchesSnapshot = (
+    resp: GitListBranchesResponse,
+    options: { selectionMode?: GitBranchSelectionMode; requestedKey?: string } = {},
+  ): GitBranchSummary | null => {
+    const selectionMode = options.selectionMode ?? 'preserve';
+    const requestedKey = String(options.requestedKey ?? selectedGitBranchName()).trim();
+    const currentBranch = findGitBranchByKey(resp, requestedKey);
+    const defaultBranch = pickDefaultGitBranch(resp);
+
+    setGitBranches(resp);
+
+    if (selectionMode === 'default_if_missing') {
+      const nextBranch = currentBranch ?? defaultBranch ?? null;
+      setSelectedGitBranchName(branchIdentity(nextBranch));
+      setSelectedGitBranchSnapshot(nextBranch);
+      if (nextBranch) {
+        setGitBranchDetailReady(branchIdentity(nextBranch), nextBranch);
+      } else {
+        setGitBranchDetailIdle();
+      }
+      return nextBranch;
+    }
+
+    if (selectionMode === 'default_if_empty' && !requestedKey) {
+      const nextBranch = defaultBranch ?? null;
+      setSelectedGitBranchName(branchIdentity(nextBranch));
+      setSelectedGitBranchSnapshot(nextBranch);
+      if (nextBranch) {
+        setGitBranchDetailReady(branchIdentity(nextBranch), nextBranch);
+      } else {
+        setGitBranchDetailIdle();
+      }
+      return nextBranch;
+    }
+
+    if (currentBranch) {
+      rememberSelectedGitBranchSnapshot(currentBranch, requestedKey);
+      const state = gitBranchDetailState();
+      if (state.kind !== 'idle' && state.requestedKey === requestedKey) {
+        setGitBranchDetailReady(requestedKey, currentBranch);
+      }
+    }
+
+    return currentBranch;
+  };
+
+  const reconcileSelectedGitBranch = async (options: {
+    repoRootPath?: string;
+    requestedKey?: string;
+    requestedBranch?: GitBranchSummary | null;
+    showVerifying?: boolean;
+  } = {}): Promise<boolean> => {
+    const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
+    const requestedKey = String(options.requestedKey ?? selectedGitBranchName()).trim();
+    const requestedBranch = options.requestedBranch ?? selectedGitBranchDisplay();
+    if (!repoRootPath || !protocol.client()) return false;
+    if (!requestedKey) {
+      setGitBranchDetailIdle();
+      return false;
+    }
+
+    const seq = ++gitBranchDetailReqSeq;
+    if (options.showVerifying !== false) {
+      setGitBranchDetailVerifying(requestedKey, requestedBranch);
+    }
+
+    try {
+      const resp = await requestGitBranchesSnapshot(repoRootPath);
+      if (seq !== gitBranchDetailReqSeq) return false;
+      const resolvedBranch = applyGitBranchesSnapshot(resp, {
+        selectionMode: 'preserve',
+        requestedKey,
+      });
+      if (!resolvedBranch) {
+        setGitBranchDetailMissing(requestedKey, requestedBranch);
+        return false;
+      }
+      setGitBranchDetailReady(requestedKey, resolvedBranch);
+      return true;
+    } catch (err) {
+      if (seq !== gitBranchDetailReqSeq) return false;
+      const message = err instanceof Error ? err.message : String(err ?? 'Failed to verify branch');
+      setGitBranchDetailError(requestedKey, requestedBranch, message);
+      return false;
+    }
+  };
+
+  const loadGitBranches = async (options: GitBranchLoadOptions = {}) => {
     const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.client()) return;
     const seq = ++gitBranchesReqSeq;
@@ -2268,12 +2494,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setGitBranchesError('');
     }
     try {
-      const resp = await rpc.git.listBranches({ repoRootPath });
+      const resp = await requestGitBranchesSnapshot(repoRootPath);
       if (seq !== gitBranchesReqSeq) return;
-      setGitBranches(resp);
-      const currentKey = selectedGitBranchName();
-      const nextBranch = findGitBranchByKey(resp, currentKey) ?? pickDefaultGitBranch(resp);
-      setSelectedGitBranchName(branchIdentity(nextBranch));
+      applyGitBranchesSnapshot(resp, {
+        selectionMode: options.selectionMode ?? 'preserve',
+      });
       setSelectedGitBranchSubview((prev) => (prev === 'history' ? 'history' : 'status'));
       return resp;
     } catch (err) {
@@ -2281,7 +2506,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to load branches');
       if (!options.silent) {
         setGitBranches(null);
-        setSelectedGitBranchName('');
         setGitBranchesError(message);
       } else {
         notification.warning('Git refresh incomplete', message);
@@ -2309,7 +2533,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
     }
     if (gitSubview() === 'branches') {
-      void loadGitBranches({ silent: Boolean(gitBranches()) });
+      const repoRootPath = String(nextInfo.repoRootPath ?? '').trim() || undefined;
+      if (selectedGitBranchName().trim()) {
+        void reconcileSelectedGitBranch({ repoRootPath, showVerifying: true });
+      } else {
+        void loadGitBranches({ silent: Boolean(gitBranches()), repoRootPath, selectionMode: 'default_if_empty' });
+      }
     }
     const commitContext = currentGitCommitContext();
     if (commitContext) {
@@ -2407,6 +2636,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch (err) {
       if (seq !== gitListReqSeq) return;
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to load commits');
+      if (context?.scope === 'branch' && gitSubview() === 'branches' && selectedGitBranchSubview() === 'history') {
+        void reconcileSelectedGitBranch({
+          requestedKey: selectedGitBranchName(),
+          requestedBranch: selectedGitBranchDisplay(),
+          showVerifying: false,
+        });
+      }
       if (!options.silent && !backgroundRefresh) {
         setGitListError(message);
       } else if (!backgroundRefresh) {
@@ -3364,6 +3600,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const mode = pageMode();
     const info = repoInfo();
     const repoKey = info?.available ? `${info.repoRootPath ?? ''}|${info.headCommit ?? ''}` : '';
+    const nextRepoRootPath = String(info?.repoRootPath ?? '').trim();
+    const previousRepoRootPath = lastGitRepoKey ? String(lastGitRepoKey.split('|')[0] ?? '').trim() : '';
     if (mode !== 'git') {
       return;
     }
@@ -3375,6 +3613,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (repoKey === lastGitRepoKey) {
       return;
     }
+    if (previousRepoRootPath && nextRepoRootPath && previousRepoRootPath !== nextRepoRootPath) {
+      setSelectedGitBranchName('');
+      setSelectedGitBranchSnapshot(null);
+      setGitBranchDetailIdle();
+      setSelectedGitBranchSubview('status');
+    }
     lastGitRepoKey = repoKey;
     lastGitCommitContextKey = '';
     void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
@@ -3383,7 +3627,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       void loadCurrentGitWorkspaceSection({ silent: Boolean(gitWorkspace()), force: true });
     }
     if (gitSubview() === 'branches') {
-      void loadGitBranches({ silent: Boolean(gitBranches()) });
+      void loadGitBranches({ silent: Boolean(gitBranches()), selectionMode: 'default_if_empty' });
     }
   });
 
@@ -3404,7 +3648,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
     }
     if (subview === 'branches' && !gitBranches() && !gitBranchesLoading()) {
-      void loadGitBranches();
+      void loadGitBranches({ selectionMode: 'default_if_empty' });
     }
   });
 
@@ -3975,11 +4219,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       branchesLoading={gitBranchesLoading()}
                       branchesError={gitBranchesError()}
                       statusRefreshToken={gitBranchStatusRefreshToken()}
-                      selectedBranch={selectedGitBranch()}
+                      selectedBranch={selectedGitBranchDisplay()}
+                      branchDetailState={gitBranchPresentationState()}
                       selectedBranchKey={selectedGitBranchName()}
                       onSelectBranch={selectGitBranch}
                       selectedBranchSubview={selectedGitBranchSubview()}
                       onSelectBranchSubview={selectGitBranchSubview}
+                      onRefreshSelectedBranch={refreshSelectedGitBranch}
+                      onSelectCurrentBranch={selectCurrentGitBranch}
+                      onBranchDetailLoadFailure={reconcileSelectedGitBranchAfterDetailFailure}
                       commits={gitCommits()}
                       listLoading={gitListLoading()}
                       listRefreshing={gitListRefreshing()}

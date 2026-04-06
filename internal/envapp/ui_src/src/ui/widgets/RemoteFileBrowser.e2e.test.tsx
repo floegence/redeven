@@ -46,6 +46,8 @@ const gitWorkspaceRenderStore = vi.hoisted(() => ({
   snapshots: [] as Array<{
     subview: string;
     selectedBranchSubview?: string;
+    selectedBranchName?: string;
+    branchDetailKind?: string;
     selectedWorkspaceSection?: string;
     repoInfoLoading: boolean;
     repoSummaryLoading: boolean;
@@ -539,6 +541,8 @@ vi.mock('./GitWorkspace', () => ({
     currentPath: string;
     subview: string;
     selectedBranchSubview?: string;
+    selectedBranch?: { name?: string; fullName?: string; kind?: string } | null;
+    branchDetailState?: { kind?: string; branch?: { name?: string; fullName?: string } | null } | null;
     width?: number;
     selectedWorkspaceSection?: string;
     listRefreshing?: boolean;
@@ -567,11 +571,14 @@ vi.mock('./GitWorkspace', () => ({
     onFetch?: () => void;
     onPull?: () => void;
     onPush?: () => void;
+    onSelectBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onCheckoutBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onSwitchDetached?: (target: { commitHash: string; shortHash?: string; source: 'graph' | 'branch_history'; branchName?: string }) => void;
     onMergeBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onDeleteBranch?: (branch: { name?: string; fullName?: string; kind?: string }) => void;
     onRefresh?: () => void;
+    onRefreshSelectedBranch?: () => void;
+    onSelectCurrentBranch?: () => void;
     onAskFlower?: (request: {
       kind: 'workspace_section';
       repoRootPath: string;
@@ -603,6 +610,8 @@ vi.mock('./GitWorkspace', () => ({
       gitWorkspaceRenderStore.snapshots.push({
         subview: props.subview,
         selectedBranchSubview: props.selectedBranchSubview,
+        selectedBranchName: props.selectedBranch?.fullName ?? props.selectedBranch?.name,
+        branchDetailKind: props.branchDetailState?.kind,
         selectedWorkspaceSection: props.selectedWorkspaceSection,
         repoInfoLoading: Boolean(props.repoInfoLoading),
         repoSummaryLoading: Boolean(props.repoSummaryLoading),
@@ -625,12 +634,17 @@ vi.mock('./GitWorkspace', () => ({
       <div data-testid="git-workspace">
         <div>git:{props.mode}:{props.subview}:{props.currentPath}:{props.width ?? 0}</div>
         <div>branch-subview:{props.selectedBranchSubview ?? 'status'}</div>
+        <div>selected-branch:{props.selectedBranch?.fullName ?? props.selectedBranch?.name ?? ''}</div>
+        <div>branch-detail:{props.branchDetailState?.kind ?? ''}</div>
         <div>shell-loading:{props.shellLoadingMessage ?? ''}</div>
         <button type="button" onClick={() => props.onModeChange?.('files')}>mock-to-files</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onRefresh?.()}>mock-refresh</button>
         <button type="button" onClick={() => props.onSelectBranchSubview?.('status')}>mock-branch-status</button>
         <button type="button" onClick={() => props.onSelectBranchSubview?.('history')}>mock-branch-history</button>
+        <button type="button" onClick={() => props.onSelectBranch?.({ name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' })}>mock-select-feature-branch</button>
+        <button type="button" onClick={() => props.onRefreshSelectedBranch?.()}>mock-refresh-selected-branch</button>
+        <button type="button" onClick={() => props.onSelectCurrentBranch?.()}>mock-select-current-branch</button>
         <button type="button" onClick={() => props.onFetch?.()}>mock-fetch</button>
         <button type="button" onClick={() => props.onPull?.()}>mock-pull</button>
         <button type="button" onClick={() => props.onPush?.()}>mock-push</button>
@@ -3193,6 +3207,72 @@ describe('RemoteFileBrowser persistence', () => {
       expect(notificationStore.success).toContainEqual({ title: 'Deleted', message: 'feature/demo was removed.' });
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.deleteBusy)).toBe(true);
       expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.repoInfoLoading && !item.repoSummaryLoading && !item.workspaceLoading && !item.branchesLoading && !item.listLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the selected stale branch visible and surfaces a missing detail state after revalidation', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'branches' },
+    };
+
+    const initialBranches = {
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      local: [
+        { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+        { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' },
+      ],
+      remote: [],
+    };
+    const branchesAfterDeletion = {
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      local: [
+        { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+      ],
+      remote: [],
+    };
+
+    mockRpc.git.listBranches.mockReset();
+    mockRpc.git.listBranches.mockResolvedValue(initialBranches);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.git.listBranches.mockReset();
+      mockRpc.git.listBranches.mockResolvedValueOnce(branchesAfterDeletion);
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const selectBranchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-select-feature-branch') as HTMLButtonElement | undefined;
+      expect(selectBranchButton).toBeTruthy();
+
+      selectBranchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(mockRpc.git.listBranches).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.listBranches).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
+      expect(host.textContent).toContain('selected-branch:refs/heads/feature/demo');
+      expect(host.textContent).toContain('branch-detail:missing');
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => (
+        item.subview === 'branches'
+        && item.selectedBranchName === 'refs/heads/feature/demo'
+        && item.branchDetailKind === 'missing'
+      ))).toBe(true);
     } finally {
       dispose();
     }

@@ -21,6 +21,7 @@ import {
   reattachBranchFromRepoSummary,
   repoDisplayName,
   syncStatusLabel,
+  type GitBranchDetailPresentationState,
   type GitStashWindowRequest,
   type GitBranchSubview,
   type GitDetachedSwitchTarget,
@@ -62,8 +63,12 @@ export interface GitWorkbenchProps {
   branchesError?: string;
   statusRefreshToken?: number;
   selectedBranch?: GitBranchSummary | null;
+  branchDetailState?: GitBranchDetailPresentationState;
   selectedBranchSubview?: GitBranchSubview;
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
+  onRefreshSelectedBranch?: () => void;
+  onSelectCurrentBranch?: () => void;
+  onBranchDetailLoadFailure?: () => void;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
   listRefreshing?: boolean;
@@ -351,8 +356,12 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               repoSummary={props.repoSummary}
               statusRefreshToken={props.statusRefreshToken}
               selectedBranch={props.selectedBranch}
+              branchDetailState={props.branchDetailState}
               selectedBranchSubview={props.selectedBranchSubview}
               onSelectBranchSubview={props.onSelectBranchSubview}
+              onRefreshSelectedBranch={props.onRefreshSelectedBranch}
+              onSelectCurrentBranch={props.onSelectCurrentBranch}
+              onBranchDetailLoadFailure={props.onBranchDetailLoadFailure}
               branches={props.branches}
               branchesLoading={props.branchesLoading}
               branchesError={props.branchesError}
