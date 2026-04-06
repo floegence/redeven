@@ -68,10 +68,12 @@ function renderComposer(options?: {
   supportsImages?: boolean;
   capabilitiesLoading?: boolean;
   submitting?: boolean;
-  sendDisabledReason?: string;
-  showQueueAction?: boolean;
-  queueDisabled?: boolean;
-  queueDisabledReason?: string;
+  primaryActionKind?: 'send' | 'queue';
+  primaryActionDisabled?: boolean;
+  primaryActionDisabledReason?: string;
+  showSendNowAction?: boolean;
+  sendNowDisabled?: boolean;
+  sendNowDisabledReason?: string;
   showStopAction?: boolean;
   stopPending?: boolean;
   stopDisabled?: boolean;
@@ -125,6 +127,13 @@ function renderComposer(options?: {
   const onEffortChange = options?.onEffortChange ?? vi.fn();
   const onApprovalPolicyChange = options?.onApprovalPolicyChange ?? vi.fn();
   const onSandboxModeChange = options?.onSandboxModeChange ?? vi.fn();
+  const hostAvailable = options?.hostAvailable ?? true;
+  const primaryActionKind = options?.primaryActionKind ?? 'send';
+  const hasDraftContent = (
+    !!String(options?.initialText ?? '').trim() ||
+    (options?.attachments?.length ?? 0) > 0 ||
+    (options?.mentions?.length ?? 0) > 0
+  );
 
   const host = document.createElement('div');
   document.body.append(host);
@@ -204,16 +213,18 @@ function renderComposer(options?: {
         capabilitiesLoading={options?.capabilitiesLoading ?? false}
         composerText={text()}
         submitting={options?.submitting ?? false}
-        sendDisabledReason={options?.sendDisabledReason ?? ''}
-        showQueueAction={options?.showQueueAction ?? false}
-        queueDisabled={options?.queueDisabled ?? false}
-        queueDisabledReason={options?.queueDisabledReason ?? ''}
+        primaryActionKind={primaryActionKind}
+        primaryActionDisabled={options?.primaryActionDisabled ?? (!hostAvailable || !hasDraftContent || (primaryActionKind === 'send' && Boolean(options?.submitting)))}
+        primaryActionDisabledReason={options?.primaryActionDisabledReason ?? (!hostAvailable ? (options?.hostDisabledReason ?? '') : '')}
+        showSendNowAction={options?.showSendNowAction ?? false}
+        sendNowDisabled={options?.sendNowDisabled ?? (!hostAvailable || !hasDraftContent || Boolean(options?.submitting))}
+        sendNowDisabledReason={options?.sendNowDisabledReason ?? (!hostAvailable ? (options?.hostDisabledReason ?? '') : '')}
         showStopAction={options?.showStopAction ?? false}
         stopPending={options?.stopPending ?? false}
         stopDisabled={options?.stopDisabled ?? false}
         stopDisabledReason={options?.stopDisabledReason ?? ''}
         guidanceNote={options?.guidanceNote ?? ''}
-        hostAvailable={options?.hostAvailable ?? true}
+        hostAvailable={hostAvailable}
         hostDisabledReason={options?.hostDisabledReason ?? ''}
         onOpenWorkingDirPicker={onOpenWorkingDirPicker}
         onAddAttachments={onAddAttachments}
@@ -601,36 +612,42 @@ describe('CodexComposerShell', () => {
     dispose();
   });
 
-  it('keeps send primary and exposes queue and stop as secondary actions during an active turn', () => {
+  it('promotes queue next to the primary action and keeps send now as a secondary action during an active turn', () => {
+    const onSend = vi.fn();
     const onQueue = vi.fn();
     const onStop = vi.fn();
     const { host, dispose } = renderComposer({
       initialText: 'Review this diff',
-      showQueueAction: true,
-      guidanceNote: 'Send now appends to the active turn. Queue next waits for completion.',
+      primaryActionKind: 'queue',
+      showSendNowAction: true,
+      guidanceNote: 'Queue next starts a fresh turn after this run finishes. Send now appends to the current turn.',
+      onSend,
       onQueue,
       showStopAction: true,
       onStop,
     });
 
-    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
     const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    const sendNowButton = host.querySelector('button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
     const stopButton = host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
     const guidance = host.querySelector('.codex-chat-input-guidance');
 
-    if (!sendButton) throw new Error('send button not found');
     if (!queueButton) throw new Error('queue button not found');
+    if (!sendNowButton) throw new Error('send now button not found');
     if (!stopButton) throw new Error('stop button not found');
 
-    expect(sendButton.disabled).toBe(false);
+    expect(queueButton.disabled).toBe(false);
     expect(queueButton.textContent).toContain('Queue next');
+    expect(sendNowButton.textContent).toContain('Send now');
     expect(stopButton.textContent).toContain('Stop');
-    expect(guidance?.textContent).toContain('Send now appends to the active turn.');
+    expect(guidance?.textContent).toContain('Queue next starts a fresh turn');
 
     queueButton.click();
+    sendNowButton.click();
     stopButton.click();
 
     expect(onQueue).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledTimes(1);
     expect(onStop).toHaveBeenCalledTimes(1);
     dispose();
   });

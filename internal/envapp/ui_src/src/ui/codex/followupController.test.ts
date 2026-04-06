@@ -90,6 +90,9 @@ describe('createCodexFollowupController', () => {
       expect(shifted?.id).toBe('followup_1');
       expect(controller.queuedForThread('thread_1').map((item) => item.id)).toEqual(['followup_2']);
 
+      controller.prependFollowup(createFollowup({ id: 'followup_0', source: 'auto_send' }));
+      expect(controller.queuedForThread('thread_1').map((item) => item.id)).toEqual(['followup_0', 'followup_2']);
+
       dispose();
     });
   });
@@ -104,9 +107,30 @@ describe('createCodexFollowupController', () => {
       await flushAsync();
 
       expect(controller.queuedForThread('thread_1').map((item) => item.id)).toEqual(['persisted_1']);
+      expect(controller.queuedForThread('thread_1')[0]?.source).toBe('queued');
+
+      dispose();
+    });
+  });
+
+  it('preserves queued source metadata for rejected steer and auto-send recovery items', async () => {
+    desktopStorageState.set('redeven:codex:queued-followups:v1', JSON.stringify({
+      thread_1: [
+        createFollowup({ id: 'rejected_1', source: 'rejected_steer' }),
+        createFollowup({ id: 'auto_send_1', source: 'auto_send' }),
+      ],
+    }));
+
+    await createRoot(async (dispose) => {
+      const controller = createCodexFollowupController();
+      await flushAsync();
+
+      expect(controller.queuedForThread('thread_1').map((item) => item.source)).toEqual([
+        'rejected_steer',
+        'auto_send',
+      ]);
 
       dispose();
     });
   });
 });
-

@@ -104,6 +104,17 @@ export type CodexQueuedFollowupRuntimeConfig = Readonly<{
   approvals_reviewer: string;
 }>;
 
+export type CodexDispatchingInput = Readonly<{
+  id: string;
+  thread_id: string;
+  text: string;
+  attachments: CodexComposerAttachmentDraft[];
+  mentions: CodexComposerMentionDraft[];
+  runtime_config: CodexQueuedFollowupRuntimeConfig;
+  created_at_unix_ms: number;
+  source: 'send_now' | 'auto_send';
+}>;
+
 export type CodexQueuedFollowup = Readonly<{
   id: string;
   thread_id: string;
@@ -112,7 +123,7 @@ export type CodexQueuedFollowup = Readonly<{
   mentions: CodexComposerMentionDraft[];
   runtime_config: CodexQueuedFollowupRuntimeConfig;
   created_at_unix_ms: number;
-  source: 'queued' | 'rejected_steer';
+  source: 'queued' | 'rejected_steer' | 'auto_send';
 }>;
 
 export type CodexFileChange = Readonly<{

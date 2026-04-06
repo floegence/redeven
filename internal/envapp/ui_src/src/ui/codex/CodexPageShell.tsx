@@ -13,7 +13,7 @@ import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';
 import { CodexComposerShell } from './CodexComposerShell';
 import { CodexHeaderBar, type CodexHeaderAction } from './CodexHeaderBar';
 import { CodexPendingRequestsPanel } from './CodexPendingRequestsPanel';
-import { CodexQueuedFollowupsPanel } from './CodexQueuedFollowupsPanel';
+import { CodexPendingInputsPanel } from './CodexPendingInputsPanel';
 import { CodexStatusBannerStack } from './CodexStatusBannerStack';
 import { CodexTranscript } from './CodexTranscript';
 import { CodexWorkingDirPickerDialog } from './CodexWorkingDirPickerDialog';
@@ -216,44 +216,48 @@ export function CodexPageShell() {
     codex.attachments().length > 0 ||
     codex.mentions().length > 0
   ));
-  const composerQueueVisible = createMemo(() => (
+  const composerPrimaryActionKind = createMemo<'send' | 'queue'>(() => (hasActiveRun() ? 'queue' : 'send'));
+  const composerPrimaryActionDisabledReason = createMemo(() => {
+    if (!summary().hostReady) {
+      return composerDisabledReason() || codex.hostDisabledReason();
+    }
+    if (composerPrimaryActionKind() === 'queue') {
+      if (!String(codex.activeThreadID() ?? '').trim()) {
+        return 'Queue is available after the current thread starts.';
+      }
+      if (!composerHasQueueableDraftContent()) {
+        return 'Add text, an image, or a file mention to queue the next turn.';
+      }
+      return '';
+    }
+    if (!composerHasQueueableDraftContent()) {
+      return 'Add a prompt, image, or file mention to send.';
+    }
+    if (codex.submitting()) {
+      return 'Sending...';
+    }
+    return '';
+  });
+  const composerPrimaryActionDisabled = createMemo(() => Boolean(composerPrimaryActionDisabledReason()));
+  const composerShowSendNowAction = createMemo(() => (
     hasActiveRun() &&
     summary().hostReady &&
     !!String(codex.activeThreadID() ?? '').trim() &&
-    composerHasQueueableDraftContent()
+    codex.supportsOperation('turn_steer') &&
+    codex.activeTurnCanSteer() !== false &&
+    !!activeInterruptTurnID()
   ));
-  const composerSendDisabledReason = createMemo(() => {
-    if (!summary().hostReady) {
-      return composerDisabledReason() || codex.hostDisabledReason();
+  const composerSendNowDisabledReason = createMemo(() => {
+    if (!composerShowSendNowAction()) return '';
+    if (!composerHasQueueableDraftContent()) {
+      return 'Add text, an image, or a file mention to send now.';
     }
-    if (!hasActiveRun()) return '';
-    if (!codex.supportsOperation('turn_steer')) {
-      return 'Send now is unavailable while this thread is running. Queue a follow-up instead.';
-    }
-    if (codex.activeTurnCanSteer() === false) {
-      const turnKind = String(codex.activeTurnKind() ?? '').trim();
-      return turnKind
-        ? `The current ${turnKind} turn cannot accept same-turn instructions. Queue a follow-up or wait for completion.`
-        : 'The current turn cannot accept same-turn instructions. Queue a follow-up or wait for completion.';
-    }
-    if (!activeInterruptTurnID()) {
-      return codex.submitting()
-        ? 'The current turn is still starting. Queue a follow-up or wait for Codex to expose the active turn.'
-        : 'Waiting for Codex to expose the active turn.';
+    if (codex.submitting()) {
+      return 'Sending...';
     }
     return '';
   });
-  const composerQueueDisabledReason = createMemo(() => {
-    if (!composerQueueVisible()) return '';
-    if (!summary().hostReady) {
-      return composerDisabledReason() || codex.hostDisabledReason();
-    }
-    if (!String(codex.activeThreadID() ?? '').trim()) {
-      return 'Queue is available after the current thread starts.';
-    }
-    return '';
-  });
-  const composerQueueDisabled = createMemo(() => Boolean(composerQueueDisabledReason()));
+  const composerSendNowDisabled = createMemo(() => Boolean(composerSendNowDisabledReason()));
   const composerStopDisabledReason = createMemo(() => {
     if (!composerStopVisible()) return '';
     if (!summary().hostReady) {
@@ -278,7 +282,15 @@ export function CodexPageShell() {
   });
   const composerGuidanceNote = createMemo(() => {
     if (!hasActiveRun()) return '';
+    if (composerShowSendNowAction()) {
+      return composerHasQueueableDraftContent()
+        ? 'Queue next starts a fresh turn after this run finishes. Send now appends to the current turn.'
+        : 'Queue next starts after this run finishes. Send now appends to the current turn once you add text, an image, or a file mention.';
+    }
     if (!composerHasQueueableDraftContent()) {
+      if (!codex.supportsOperation('turn_steer')) {
+        return 'This Codex host does not expose same-turn send. Add text, an image, or a file mention to queue the next turn.';
+      }
       if (codex.activeTurnCanSteer() === false) {
         const turnKind = String(codex.activeTurnKind() ?? '').trim();
         return turnKind
@@ -286,20 +298,17 @@ export function CodexPageShell() {
           : 'This turn cannot accept same-turn instructions. Add text, an image, or a file mention to queue the next turn.';
       }
       if (!activeInterruptTurnID()) {
-        return 'Codex is starting the current turn. Add text, an image, or a file mention to queue the next turn.';
+        return 'Codex is still starting the current turn. Queue next is ready now, and Send now will appear once startup completes.';
       }
-      return 'Send now appends to the current turn. Add text, an image, or a file mention to queue the next turn.';
+      return 'Queue next is ready for the next turn.';
     }
-    if (codex.activeTurnCanSteer() === false) {
-      const turnKind = String(codex.activeTurnKind() ?? '').trim();
-      return turnKind
-        ? `This ${turnKind} turn cannot accept same-turn instructions. Queue next to send after completion.`
-        : 'This turn cannot accept same-turn instructions. Queue next to send after completion.';
+    if (!codex.supportsOperation('turn_steer')) {
+      return 'This Codex host does not expose same-turn send. Queue next will send after completion.';
     }
-    if (!activeInterruptTurnID()) {
-      return 'Codex is starting the current turn. Queue next saves a follow-up for after startup completes.';
-    }
-    return 'Send now appends to the current turn. Queue next starts a new turn after this run finishes.';
+    const turnKind = String(codex.activeTurnKind() ?? '').trim();
+    return turnKind
+      ? `This ${turnKind} turn cannot accept same-turn instructions. Queue next will send after completion.`
+      : 'This turn cannot accept same-turn instructions. Queue next will send after completion.';
   });
   const headerActions = createMemo<CodexHeaderAction[]>(() => {
     const threadID = String(codex.activeThreadID() ?? '').trim();
@@ -454,33 +463,33 @@ export function CodexPageShell() {
             </div>
           </div>
         </div>
-
-          <div class="codex-page-bottom-dock">
-            <div class="codex-page-bottom-support">
-              <Show when={codex.queuedFollowups().length > 0}>
-                <div class="codex-page-bottom-support-lane">
-                  <div class="codex-page-bottom-support-track codex-page-bottom-support-track-page">
-                    <div class="codex-page-bottom-support-content codex-page-bottom-support-content-page">
-                      <CodexQueuedFollowupsPanel
-                        items={codex.queuedFollowups()}
-                        onRestore={codex.restoreQueuedFollowup}
-                        onRemove={codex.removeQueuedFollowup}
-                        onMove={codex.moveQueuedFollowup}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </Show>
-
-              <Show when={codex.pendingRequests().length > 0}>
-                <div class="codex-page-bottom-support-lane">
-                  <div class="codex-page-bottom-support-track codex-page-bottom-support-track-thread">
+        <div class="codex-page-bottom-dock">
+          <div class="codex-page-bottom-support">
+            <Show when={codex.pendingRequests().length > 0}>
+              <div class="codex-page-bottom-support-lane">
+                <div class="codex-page-bottom-support-track codex-page-bottom-support-track-thread">
                   <div class="codex-page-bottom-support-content codex-page-bottom-support-content-thread">
                     <CodexPendingRequestsPanel
                       requests={codex.pendingRequests()}
                       requestDraftValue={codex.requestDraftValue}
                       setRequestDraftValue={codex.setRequestDraftValue}
                       onAnswer={(request, decision) => void codex.answerRequest(request, decision)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </Show>
+
+            <Show when={codex.dispatchingInputs().length > 0 || codex.queuedFollowups().length > 0}>
+              <div class="codex-page-bottom-support-lane">
+                <div class="codex-page-bottom-support-track codex-page-bottom-support-track-page">
+                  <div class="codex-page-bottom-support-content codex-page-bottom-support-content-page">
+                    <CodexPendingInputsPanel
+                      dispatchingItems={codex.dispatchingInputs()}
+                      queuedItems={codex.queuedFollowups()}
+                      onRestoreQueued={codex.restoreQueuedFollowup}
+                      onRemoveQueued={codex.removeQueuedFollowup}
+                      onMoveQueued={codex.moveQueuedFollowup}
                     />
                   </div>
                 </div>
@@ -503,10 +512,12 @@ export function CodexPageShell() {
                     capabilitiesLoading={codex.capabilitiesLoading()}
                     composerText={codex.composerText()}
                     submitting={codex.submitting()}
-                    sendDisabledReason={composerSendDisabledReason()}
-                    showQueueAction={composerQueueVisible()}
-                    queueDisabled={composerQueueDisabled()}
-                    queueDisabledReason={composerQueueDisabledReason()}
+                    primaryActionKind={composerPrimaryActionKind()}
+                    primaryActionDisabled={composerPrimaryActionDisabled()}
+                    primaryActionDisabledReason={composerPrimaryActionDisabledReason()}
+                    showSendNowAction={composerShowSendNowAction()}
+                    sendNowDisabled={composerSendNowDisabled()}
+                    sendNowDisabledReason={composerSendNowDisabledReason()}
                     showStopAction={composerStopVisible()}
                     stopPending={interruptPending()}
                     stopDisabled={composerStopDisabled()}
@@ -531,9 +542,9 @@ export function CodexPageShell() {
                   />
                 </div>
               </div>
-            </div>
           </div>
         </div>
+      </div>
       </div>
 
       <CodexWorkingDirPickerDialog

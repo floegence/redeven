@@ -1035,7 +1035,7 @@ describe('CodexPage', () => {
     const queryStopButton = () => host.querySelector('button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
     const queryReviewButton = () => host.querySelector('button[aria-label="Review current workspace changes"]') as HTMLButtonElement | null;
     const queryForkButton = () => host.querySelector('button[aria-label="Fork Codex thread"]') as HTMLButtonElement | null;
-    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
 
     const stopButton = queryStopButton();
     const reviewButton = queryReviewButton();
@@ -1044,7 +1044,7 @@ describe('CodexPage', () => {
     expect(stopButton).toBeTruthy();
     expect(reviewButton).toBeTruthy();
     expect(forkButton).toBeTruthy();
-    expect(sendButton).toBeTruthy();
+    expect(queueButton).toBeTruthy();
 
     stopButton?.click();
     await flushAsync();
@@ -1238,10 +1238,11 @@ describe('CodexPage', () => {
     expect(host.querySelectorAll('.codex-chat-input-meta-subgroup-policies [data-codex-select-variant="policy"]').length).toBe(2);
     expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
     expect(host.querySelector('.codex-chat-draft-objects')).toBeNull();
-    expect(host.querySelector('button[aria-label="Send to Codex"]')).not.toBeNull();
-    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Send to Codex"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="Send now to Codex"]')).not.toBeNull();
+    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).not.toBeNull();
     expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
-    expect(host.textContent).toContain('Add text, an image, or a file mention to queue the next turn');
+    expect(host.textContent).toContain('Queue next starts after this run finishes. Send now appends to the current turn once you add text, an image, or a file mention.');
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
@@ -1442,7 +1443,9 @@ describe('CodexPage', () => {
       'active run controls',
     );
 
-    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    expect(queueButton).not.toBeNull();
+    expect(queueButton?.disabled).toBe(true);
 
     const errorCallCount = notification.error.mock.calls.length;
     await codex.queueTurn();
@@ -1452,7 +1455,7 @@ describe('CodexPage', () => {
     expect(codex.queuedFollowups()).toEqual([]);
   });
 
-  it('keeps send primary and steers the active regular turn while exposing queue and stop', async () => {
+  it('keeps queue next primary and steers the active regular turn through send now', async () => {
     const startedDetail = {
       thread: {
         id: 'thread_stop_after_send',
@@ -1546,31 +1549,28 @@ describe('CodexPage', () => {
     );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
-    const sendButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    const queueButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    const sendNowButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
     const stopButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]') as HTMLButtonElement | null;
-    if (!textarea || !sendButton || !stopButton) throw new Error('composer controls not found');
-
-    expect(host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]')).toBeNull();
+    if (!textarea || !queueButton || !sendNowButton || !stopButton) throw new Error('composer controls not found');
 
     textarea.value = 'Need a visible stop action';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    await waitForCondition(
-      () => Boolean(host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]')),
-      'composer queue action',
-    );
-
-    const queueButton = host.querySelector('.codex-chat-input-send-slot button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
-    if (!queueButton) throw new Error('queue button not found');
 
     expect(queueButton.textContent).toContain('Queue next');
+    expect(sendNowButton.textContent).toContain('Send now');
     expect(stopButton.textContent).toContain('Stop');
-    expect(host.textContent).toContain('Send now appends to the current turn');
+    expect(host.textContent).toContain('Queue next starts a fresh turn after this run finishes');
 
-    sendButton.click();
+    sendNowButton.click();
 
     await flushAsync();
     await flushAsync();
 
+    expect(textarea.value).toBe('');
+    expect(host.textContent).toContain('Ready above the composer');
+    expect(host.textContent).toContain('Appending to the current turn');
+    expect(host.textContent).toContain('Need a visible stop action');
     expect(steerCodexTurnMock).toHaveBeenCalledWith({
       thread_id: 'thread_stop_after_send',
       expected_turn_id: 'turn_stop_after_send',
@@ -1582,6 +1582,121 @@ describe('CodexPage', () => {
       ],
     });
     expect(startCodexTurnMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps same-turn send in dispatching state instead of creating an optimistic transcript row', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_dispatch_only',
+        name: 'Dispatch only',
+        preview: 'Dispatch only',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_dispatch_only',
+            kind: 'regular',
+            status: 'in_progress',
+            items: [],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      token_usage: null,
+      pending_requests: [],
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        reasoning_effort: 'medium',
+      },
+      operations: [
+        'thread_archive',
+        'thread_fork',
+        'turn_steer',
+        'turn_interrupt',
+        'review_start',
+      ],
+      requirements: {
+        allowed_approval_policies: ['never'],
+        allowed_sandbox_modes: ['danger-full-access'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([
+      {
+        id: 'thread_dispatch_only',
+        name: 'Dispatch only',
+        preview: 'Dispatch only',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+      },
+    ]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    steerCodexTurnMock.mockResolvedValue(undefined);
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let codex!: ReturnType<typeof useCodexContext>;
+
+    renderPageWithHarness(host, (value) => {
+      codex = value;
+    });
+    await waitForCondition(
+      () => Boolean(codex) && Boolean(host.querySelector('button[aria-label="Send now to Codex"]')),
+      'send now action',
+    );
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const sendNowButton = host.querySelector('button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
+    if (!textarea || !sendNowButton) throw new Error('send now controls not found');
+
+    textarea.value = 'Dispatch without an optimistic bubble';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    sendNowButton.click();
+
+    await flushAsync();
+    await flushAsync();
+
+    expect(textarea.value).toBe('');
+    expect(codex.activeOptimisticUserTurns()).toEqual([]);
+    expect(codex.dispatchingInputs().map((item) => item.text)).toEqual([
+      'Dispatch without an optimistic bubble',
+    ]);
+    expect(host.querySelectorAll('[data-codex-item-type="userMessage"]').length).toBe(0);
+    expect(host.textContent).toContain('Appending to the current turn');
   });
 
   it('queues the current draft when steer is rejected as non-steerable', async () => {
@@ -1681,22 +1796,22 @@ describe('CodexPage', () => {
     );
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
-    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
-    if (!textarea || !sendButton) throw new Error('composer send controls not found');
-
-    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+    const sendNowButton = host.querySelector('button[aria-label="Send now to Codex"]') as HTMLButtonElement | null;
+    if (!textarea || !sendNowButton) throw new Error('composer send controls not found');
 
     textarea.value = 'Queue this when steer is rejected';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    sendButton.click();
+    sendNowButton.click();
 
     await waitForCondition(
-      () => steerCodexTurnMock.mock.calls.length === 1 && Boolean(host.textContent?.includes('Queued follow-ups')),
+      () => steerCodexTurnMock.mock.calls.length === 1 && Boolean(host.textContent?.includes('Saved after same-turn send was rejected')),
       'queued follow-up fallback',
     );
 
     expect(steerCodexTurnMock).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain('Queued follow-ups');
+    expect(textarea.value).toBe('');
+    expect(host.textContent).toContain('Ready above the composer');
+    expect(host.textContent).toContain('Queued next');
     expect(host.textContent).toContain('Queue this when steer is rejected');
     expect(notification.info).toHaveBeenCalledWith(
       'Queued for later',
@@ -1706,6 +1821,7 @@ describe('CodexPage', () => {
 
   it('auto-sends the next queued follow-up after the active thread becomes idle', async () => {
     let streamOnEvent: ((event: unknown) => void) | undefined;
+    let codex!: ReturnType<typeof useCodexContext>;
 
     fetchCodexStatusMock.mockResolvedValue({
       available: true,
@@ -1793,7 +1909,9 @@ describe('CodexPage', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    renderPage(host);
+    renderPageWithHarness(host, (value) => {
+      codex = value;
+    });
     await waitForCondition(
       () => Boolean(host.querySelector('button[aria-label="Stop active Codex turn"]')),
       'composer stop action',
@@ -1802,27 +1920,24 @@ describe('CodexPage', () => {
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     if (!textarea) throw new Error('queue controls not found');
 
-    expect(host.querySelector('button[aria-label="Queue next Codex turn"]')).toBeNull();
+    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
+    if (!queueButton) throw new Error('queue button not found');
+    expect(queueButton.disabled).toBe(true);
 
     textarea.value = 'Send this after the current turn finishes';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
-
-    await waitForCondition(
-      () => Boolean(host.querySelector('button[aria-label="Queue next Codex turn"]')),
-      'queue action',
-    );
-
-    const queueButton = host.querySelector('button[aria-label="Queue next Codex turn"]') as HTMLButtonElement | null;
-    if (!queueButton) throw new Error('queue button not found');
+    await flushAsync();
 
     queueButton.click();
 
     await flushAsync();
     await flushAsync();
 
-    expect(host.textContent).toContain('Queued follow-ups');
+    expect(textarea.value).toBe('');
+    expect(host.textContent).toContain('Ready above the composer');
+    expect(host.textContent).toContain('Waiting for the current turn to finish');
     expect(host.textContent).toContain('Send this after the current turn finishes');
-    const queuedPanel = host.querySelector('.codex-queued-followups-panel');
+    const queuedPanel = host.querySelector('.codex-pending-inputs-panel');
     const composer = host.querySelector('.codex-chat-input.chat-input-container');
     if (!queuedPanel || !composer) throw new Error('queued follow-up layout not found');
     expect(queuedPanel.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
@@ -1850,6 +1965,10 @@ describe('CodexPage', () => {
       'queued follow-up auto send',
     );
 
+    expect(codex.dispatchingInputs().map((item) => item.text)).toEqual([
+      'Send this after the current turn finishes',
+    ]);
+    expect(host.textContent).toContain('Starting the next turn');
     expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
       threadID: 'thread_1',
       inputText: 'Send this after the current turn finishes',
@@ -1858,6 +1977,49 @@ describe('CodexPage', () => {
       approval_policy: 'never',
       sandbox_mode: 'danger-full-access',
     }));
+
+    openCodexThreadMock.mockResolvedValue({
+      thread: {
+        id: 'thread_1',
+        name: 'Queued follow-up thread',
+        preview: 'Queue next',
+        ephemeral: false,
+        model_provider: 'gpt-5.4',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 3,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [
+          {
+            id: 'turn_2',
+            status: 'in_progress',
+            items: [
+              {
+                id: 'item_user_2',
+                type: 'userMessage',
+                text: 'Send this after the current turn finishes',
+              },
+            ],
+          },
+        ],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'never',
+        sandbox_mode: 'danger-full-access',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      last_applied_seq: 4,
+      active_status: 'running',
+      active_status_flags: [],
+    });
+
+    await codex.refreshSidebar();
+    await flushAsync();
+
+    expect(codex.dispatchingInputs()).toEqual([]);
   });
 
   it('restores the composer send action once the active turn completes', async () => {
@@ -2168,6 +2330,96 @@ describe('CodexPage', () => {
       inputText: 'Review this folder',
       cwd: '/workspace/ui',
     }));
+  });
+
+  it('clears the composer immediately for a new thread send and restores it when turn start fails', async () => {
+    const startedDetail = {
+      thread: {
+        id: 'thread_new',
+        name: 'New chat',
+        preview: 'Retry send',
+        ephemeral: false,
+        model_provider: 'openai',
+        created_at_unix_s: 1,
+        updated_at_unix_s: 2,
+        status: 'running',
+        cwd: '/workspace/ui',
+        turns: [],
+      },
+      runtime_config: {
+        cwd: '/workspace/ui',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      pending_requests: [],
+      token_usage: null,
+      last_applied_seq: 0,
+      active_status: 'running',
+      active_status_flags: [],
+    };
+    let rejectStartTurn!: (error: unknown) => void;
+
+    fetchCodexStatusMock.mockResolvedValue({
+      available: true,
+      ready: true,
+      binary_path: '/usr/local/bin/codex',
+      agent_home_dir: '/workspace',
+    });
+    fetchCodexCapabilitiesMock.mockResolvedValue({
+      models: [
+        {
+          id: 'gpt-5.4',
+          display_name: 'GPT-5.4',
+          supports_image_input: true,
+          supported_reasoning_efforts: ['medium', 'high'],
+        },
+      ],
+      effective_config: {
+        cwd: '/workspace',
+        model: 'gpt-5.4',
+        approval_policy: 'on-request',
+        sandbox_mode: 'workspace-write',
+        reasoning_effort: 'medium',
+      },
+      requirements: {
+        allowed_approval_policies: ['on-request'],
+        allowed_sandbox_modes: ['workspace-write'],
+      },
+    });
+    listCodexThreadsMock.mockResolvedValue([]);
+    openCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexThreadMock.mockResolvedValue(startedDetail);
+    startCodexTurnMock.mockImplementation(() => new Promise((_, reject) => {
+      rejectStartTurn = reject;
+    }));
+    connectCodexEventStreamMock.mockResolvedValue(undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    renderPage(host);
+    await flushAsync();
+    await flushAsync();
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const sendButton = host.querySelector('button[aria-label="Send to Codex"]') as HTMLButtonElement | null;
+    if (!textarea || !sendButton) throw new Error('new thread controls not found');
+
+    textarea.value = 'Restore me after failure';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    sendButton.click();
+
+    await flushAsync();
+
+    expect(textarea.value).toBe('');
+
+    rejectStartTurn(new Error('Turn start failed'));
+    await flushAsync();
+    await flushAsync();
+
+    expect(textarea.value).toBe('Restore me after failure');
+    expect(notification.error).toHaveBeenCalledWith('Send failed', 'Turn start failed');
   });
 
   it('wires the working-directory picker through the shared async path loader', async () => {

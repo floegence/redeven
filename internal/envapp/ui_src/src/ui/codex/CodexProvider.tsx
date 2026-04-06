@@ -56,6 +56,7 @@ import type {
   CodexCapabilitiesSnapshot,
   CodexComposerAttachmentDraft,
   CodexComposerMentionDraft,
+  CodexDispatchingInput,
   CodexOperationName,
   CodexOptimisticUserTurn,
   CodexPendingRequest,
@@ -73,8 +74,14 @@ import type {
 type CodexRequestDrafts = Record<string, Record<string, string>>;
 type CodexThreadMap = Record<string, CodexThread>;
 type CodexOptimisticTurnMap = Record<string, CodexOptimisticUserTurn[]>;
+type CodexDispatchingInputMap = Record<string, CodexDispatchingInput[]>;
 type CodexScrollToBottomReason = FollowBottomRequestReason;
 type CodexScrollIntentPolicy = Omit<FollowBottomRequest, 'seq'>;
+type CodexComposerSnapshot = Readonly<{
+  text: string;
+  attachments: CodexComposerAttachmentDraft[];
+  mentions: CodexComposerMentionDraft[];
+}>;
 
 function codexScrollIntentPolicy(reason: CodexScrollToBottomReason): CodexScrollIntentPolicy {
   switch (reason) {
@@ -122,6 +129,31 @@ function fileToDataURL(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function cloneAttachmentDraft(attachment: CodexComposerAttachmentDraft): CodexComposerAttachmentDraft {
+  return { ...attachment };
+}
+
+function cloneMentionDraft(mention: CodexComposerMentionDraft): CodexComposerMentionDraft {
+  return { ...mention };
+}
+
+function cloneComposerSnapshot(snapshot: CodexComposerSnapshot): CodexComposerSnapshot {
+  return {
+    text: snapshot.text,
+    attachments: snapshot.attachments.map(cloneAttachmentDraft),
+    mentions: snapshot.mentions.map(cloneMentionDraft),
+  };
+}
+
+function cloneDispatchingInput(input: CodexDispatchingInput): CodexDispatchingInput {
+  return {
+    ...input,
+    attachments: input.attachments.map(cloneAttachmentDraft),
+    mentions: input.mentions.map(cloneMentionDraft),
+    runtime_config: { ...input.runtime_config },
+  };
 }
 
 function threadSortTime(thread: CodexThread): number {
@@ -604,6 +636,7 @@ export type CodexContextValue = Readonly<{
   refreshSidebar: () => Promise<void>;
   sendTurn: () => Promise<void>;
   queueTurn: () => Promise<void>;
+  dispatchingInputs: Accessor<CodexDispatchingInput[]>;
   queuedFollowups: Accessor<CodexQueuedFollowup[]>;
   removeQueuedFollowup: (followupID: string) => void;
   moveQueuedFollowup: (followupID: string, delta: number) => void;
@@ -631,6 +664,7 @@ export function CodexProvider(props: ParentProps) {
 
   const [optimisticThreadsByID, setOptimisticThreadsByID] = createSignal<CodexThreadMap>({});
   const [optimisticTurnsByThreadID, setOptimisticTurnsByThreadID] = createSignal<CodexOptimisticTurnMap>({});
+  const [dispatchingByThread, setDispatchingByThread] = createSignal<CodexDispatchingInputMap>({});
   const [submitting, setSubmitting] = createSignal(false);
   const [requestDrafts, setRequestDrafts] = createSignal<CodexRequestDrafts>({});
   const [streamError, setStreamError] = createSignal<string | null>(null);
@@ -643,6 +677,57 @@ export function CodexProvider(props: ParentProps) {
   const [markingReadKeyByThread, setMarkingReadKeyByThread] = createSignal<Record<string, string>>({});
   const [blockedAutoSendKey, setBlockedAutoSendKey] = createSignal('');
   let scrollToBottomRequestSeq = 0;
+
+  const replaceThreadDispatching = (threadID: string, nextItems: readonly CodexDispatchingInput[]) => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return;
+    setDispatchingByThread((current) => {
+      const clonedItems = nextItems.map(cloneDispatchingInput);
+      if (clonedItems.length === 0) {
+        if (!(normalizedThreadID in current)) return current;
+        const next = { ...current };
+        delete next[normalizedThreadID];
+        return next;
+      }
+      return {
+        ...current,
+        [normalizedThreadID]: clonedItems,
+      };
+    });
+  };
+
+  const dispatchingForThread = (threadID: string | null | undefined): CodexDispatchingInput[] => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID) return [];
+    return (dispatchingByThread()[normalizedThreadID] ?? []).map(cloneDispatchingInput);
+  };
+
+  const pushDispatchingInput = (input: CodexDispatchingInput): void => {
+    const normalizedThreadID = String(input.thread_id ?? '').trim();
+    if (!normalizedThreadID) return;
+    replaceThreadDispatching(normalizedThreadID, [
+      ...(dispatchingByThread()[normalizedThreadID] ?? []),
+      cloneDispatchingInput({
+        ...input,
+        thread_id: normalizedThreadID,
+      }),
+    ]);
+  };
+
+  const removeDispatchingInputs = (threadID: string, inputIDs: ReadonlySet<string>): void => {
+    const normalizedThreadID = String(threadID ?? '').trim();
+    if (!normalizedThreadID || inputIDs.size === 0) return;
+    replaceThreadDispatching(
+      normalizedThreadID,
+      (dispatchingByThread()[normalizedThreadID] ?? []).filter((item) => !inputIDs.has(item.id)),
+    );
+  };
+
+  const removeDispatchingInput = (threadID: string, inputID: string): void => {
+    const normalizedInputID = String(inputID ?? '').trim();
+    if (!normalizedInputID) return;
+    removeDispatchingInputs(threadID, new Set([normalizedInputID]));
+  };
 
   const codexVisible = createMemo(() => layout.sidebarActiveTab() === 'codex');
 
@@ -1274,6 +1359,9 @@ export function CodexProvider(props: ParentProps) {
     if (!current) return [];
     return Object.values(current.pending_requests);
   });
+  const dispatchingInputs = createMemo<CodexDispatchingInput[]>(() => (
+    dispatchingForThread(foregroundThreadID())
+  ));
   const queuedFollowups = createMemo<CodexQueuedFollowup[]>(() => (
     followupController.queuedForThread(foregroundThreadID())
   ));
@@ -1464,6 +1552,68 @@ export function CodexProvider(props: ParentProps) {
     };
   };
 
+  const captureComposerSnapshot = (): CodexComposerSnapshot => {
+    const ownerDraft = activeOwnerDraft();
+    return cloneComposerSnapshot({
+      text: ownerDraft.composer.text,
+      attachments: ownerDraft.composer.attachments,
+      mentions: ownerDraft.composer.mentions,
+    });
+  };
+
+  const restoreComposerSnapshot = (ownerID: string, snapshot: CodexComposerSnapshot): void => {
+    const clonedSnapshot = cloneComposerSnapshot(snapshot);
+    draftController.setComposerText(ownerID, clonedSnapshot.text);
+    draftController.replaceAttachments(ownerID, clonedSnapshot.attachments);
+    draftController.replaceMentions(ownerID, clonedSnapshot.mentions);
+  };
+
+  const buildDispatchingInput = (args: {
+    id?: string;
+    threadID: string;
+    snapshot: CodexComposerSnapshot;
+    runtimeConfig: CodexQueuedFollowup['runtime_config'];
+    createdAtUnixMs?: number;
+    source: CodexDispatchingInput['source'];
+  }): CodexDispatchingInput => ({
+    id: String(args.id ?? '').trim() || createDraftEntryID(),
+    thread_id: String(args.threadID ?? '').trim(),
+    text: args.snapshot.text,
+    attachments: args.snapshot.attachments.map(cloneAttachmentDraft),
+    mentions: args.snapshot.mentions.map(cloneMentionDraft),
+    runtime_config: { ...args.runtimeConfig },
+    created_at_unix_ms: Math.max(0, Number(args.createdAtUnixMs ?? Date.now()) || Date.now()),
+    source: args.source,
+  });
+
+  const queuedFollowupFromDispatching = (
+    input: CodexDispatchingInput,
+    source: CodexQueuedFollowup['source'],
+  ): CodexQueuedFollowup => ({
+    id: input.id,
+    thread_id: input.thread_id,
+    text: input.text,
+    attachments: input.attachments.map(cloneAttachmentDraft),
+    mentions: input.mentions.map(cloneMentionDraft),
+    runtime_config: { ...input.runtime_config },
+    created_at_unix_ms: input.created_at_unix_ms,
+    source,
+  });
+
+  const dispatchingInputToOptimisticTurn = (input: CodexDispatchingInput): CodexOptimisticUserTurn => {
+    const prepared = prepareCodexSubmission({
+      text: input.text,
+      attachments: input.attachments,
+      mentions: input.mentions,
+    });
+    return {
+      id: input.id,
+      thread_id: input.thread_id,
+      text: input.text,
+      inputs: prepared.optimisticInputs,
+    };
+  };
+
   const queueCurrentDraftInternal = (source: CodexQueuedFollowup['source'], notifySuccess: boolean): boolean => {
     const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return false;
@@ -1548,7 +1698,7 @@ export function CodexProvider(props: ParentProps) {
     ownerID: string;
     prepared: CodexPreparedSubmission;
     runtimeConfig: CodexQueuedFollowup['runtime_config'];
-    resetComposerOwnerID?: string | null;
+    appendOptimisticUserTurn?: boolean;
   }): Promise<string> => {
     setSubmitting(true);
     let targetThreadID = String(args.threadID ?? '').trim();
@@ -1607,13 +1757,15 @@ export function CodexProvider(props: ParentProps) {
         threadController.selectThread(targetThreadID);
       }
 
-      optimisticTurnID = createDraftEntryID();
-      appendOptimisticTurn({
-        id: optimisticTurnID,
-        thread_id: targetThreadID,
-        text: args.prepared.text,
-        inputs: args.prepared.optimisticInputs,
-      });
+      if (args.appendOptimisticUserTurn !== false) {
+        optimisticTurnID = createDraftEntryID();
+        appendOptimisticTurn({
+          id: optimisticTurnID,
+          thread_id: targetThreadID,
+          text: args.prepared.text,
+          inputs: args.prepared.optimisticInputs,
+        });
+      }
       threadController.markSessionWorking(targetThreadID);
       requestScrollToBottom('send');
 
@@ -1649,9 +1801,6 @@ export function CodexProvider(props: ParentProps) {
         );
       }
 
-      if (args.resetComposerOwnerID) {
-        draftController.resetComposer(args.resetComposerOwnerID);
-      }
       void refetchThreads();
       void loadThreadBootstrap(targetThreadID);
       void refetchCapabilities();
@@ -1670,40 +1819,54 @@ export function CodexProvider(props: ParentProps) {
     }
   };
 
-  const submitQueuedFollowup = async (followup: CodexQueuedFollowup): Promise<boolean> => {
+  const submitDispatchingInput = async (
+    input: CodexDispatchingInput,
+    args?: {
+      failureMessage?: string;
+      onFailureRequeueSource?: CodexQueuedFollowup['source'];
+    },
+  ): Promise<boolean> => {
     const prepared = prepareCodexSubmission({
-      text: followup.text,
-      attachments: followup.attachments,
-      mentions: followup.mentions,
+      text: input.text,
+      attachments: input.attachments,
+      mentions: input.mentions,
     });
     if (!hasCodexSubmissionContent(prepared)) {
-      followupController.removeFollowup(followup.thread_id, followup.id);
+      removeDispatchingInput(input.thread_id, input.id);
       setBlockedAutoSendKey('');
       return false;
     }
     try {
       await submitTurnFromPayload({
-        threadID: followup.thread_id,
-        ownerID: codexOwnerIDForThread(followup.thread_id),
+        threadID: input.thread_id,
+        ownerID: codexOwnerIDForThread(input.thread_id),
         prepared,
-        runtimeConfig: followup.runtime_config,
-        resetComposerOwnerID: null,
+        runtimeConfig: input.runtime_config,
+        appendOptimisticUserTurn: false,
       });
-      followupController.removeFollowup(followup.thread_id, followup.id);
       setBlockedAutoSendKey('');
       return true;
     } catch (error) {
-      notify.error('Queued follow-up failed', error instanceof Error ? error.message : String(error));
+      removeDispatchingInput(input.thread_id, input.id);
+      if (args?.onFailureRequeueSource) {
+        followupController.prependFollowup(
+          queuedFollowupFromDispatching(input, args.onFailureRequeueSource),
+        );
+      } else {
+        setBlockedAutoSendKey('');
+      }
+      notify.error(
+        args?.failureMessage ?? 'Queued follow-up failed',
+        error instanceof Error ? error.message : String(error),
+      );
       return false;
     }
   };
 
   const sendTurn = async () => {
-    const prepared = prepareCodexSubmission({
-      text: activeOwnerDraft().composer.text,
-      attachments: activeOwnerDraft().composer.attachments,
-      mentions: activeOwnerDraft().composer.mentions,
-    });
+    const ownerID = activeOwnerID();
+    const snapshot = captureComposerSnapshot();
+    const prepared = prepareCodexSubmission(snapshot);
     if (!hasCodexSubmissionContent(prepared) || submitting()) return;
     if (!hasHostBinary()) {
       notify.error('Host Codex not detected', hostDisabledReason());
@@ -1716,19 +1879,21 @@ export function CodexProvider(props: ParentProps) {
 
     const threadID = String(foregroundThreadID() ?? '').trim();
     const turnID = String(activeInterruptTurnID() ?? '').trim();
+    const runtimeConfig = currentDraftRuntimeConfig();
     const hasActiveRun = Boolean(threadID) && (
       submitting() ||
       isWorkingStatus(activeStatus())
     );
     if (hasActiveRun && supportsOperation('turn_steer') && turnID && activeTurnCanSteer() !== false) {
-      const optimisticTurnID = createDraftEntryID();
-      setSubmitting(true);
-      appendOptimisticTurn({
-        id: optimisticTurnID,
-        thread_id: threadID,
-        text: prepared.text,
-        inputs: prepared.optimisticInputs,
+      const dispatchingInput = buildDispatchingInput({
+        threadID,
+        snapshot,
+        runtimeConfig,
+        source: 'send_now',
       });
+      draftController.resetComposer(ownerID);
+      pushDispatchingInput(dispatchingInput);
+      setSubmitting(true);
       requestScrollToBottom('send');
       try {
         await steerCodexTurn({
@@ -1736,17 +1901,20 @@ export function CodexProvider(props: ParentProps) {
           expected_turn_id: turnID,
           inputs: prepared.optimisticInputs,
         });
-        draftController.resetComposer(activeOwnerID());
         void refetchThreads();
         return;
       } catch (error) {
-        removeOptimisticTurns(threadID, new Set([optimisticTurnID]));
+        removeDispatchingInput(threadID, dispatchingInput.id);
         if (error instanceof CodexGatewayError && error.errorCode === 'activeTurnNotSteerable') {
-          if (queueCurrentDraftInternal('rejected_steer', false)) {
-            notify.info('Queued for later', 'The current turn could not accept same-turn input, so your message was queued as the next turn.');
-            return;
-          }
+          followupController.queueFollowup(
+            queuedFollowupFromDispatching(dispatchingInput, 'rejected_steer'),
+          );
+          setBlockedAutoSendKey('');
+          notify.info('Queued for later', 'The current turn could not accept same-turn input, so your message was queued as the next turn.');
+          return;
         }
+        restoreComposerSnapshot(ownerID, snapshot);
+        setBlockedAutoSendKey('');
         void refetchThreads();
         void loadThreadBootstrap(threadID);
         notify.error('Send failed', error instanceof Error ? error.message : String(error));
@@ -1764,14 +1932,20 @@ export function CodexProvider(props: ParentProps) {
     }
 
     try {
+      draftController.resetComposer(ownerID);
       await submitTurnFromPayload({
         threadID,
-        ownerID: activeOwnerID(),
+        ownerID,
         prepared,
-        runtimeConfig: currentDraftRuntimeConfig(),
-        resetComposerOwnerID: activeOwnerID(),
+        runtimeConfig,
       });
     } catch (error) {
+      const restoreOwnerID = (
+        !threadID && activeOwnerID() !== ownerID
+          ? activeOwnerID()
+          : ownerID
+      );
+      restoreComposerSnapshot(restoreOwnerID, snapshot);
       notify.error('Send failed', error instanceof Error ? error.message : String(error));
     }
   };
@@ -1796,6 +1970,7 @@ export function CodexProvider(props: ParentProps) {
         new Set((optimisticTurnsByThreadID()[normalizedThreadID] ?? []).map((turn) => turn.id)),
       );
       draftController.removeOwner(codexOwnerIDForThread(normalizedThreadID));
+      replaceThreadDispatching(normalizedThreadID, []);
       followupController.clearThread(normalizedThreadID);
       threadController.removeThreadState(normalizedThreadID);
       notify.success('Archived', 'The Codex thread has been archived.');
@@ -1913,6 +2088,19 @@ export function CodexProvider(props: ParentProps) {
 
   createEffect(() => {
     const threadID = String(foregroundThreadID() ?? '').trim();
+    const currentDispatching = dispatchingInputs();
+    if (!threadID || currentDispatching.length === 0) return;
+    const session = threadController.sessionForThread(threadID);
+    if (!session) return;
+    const resolvedInputIDs = currentDispatching
+      .filter((item) => sessionContainsOptimisticTurn(session, dispatchingInputToOptimisticTurn(item)))
+      .map((item) => item.id);
+    if (resolvedInputIDs.length === 0) return;
+    removeDispatchingInputs(threadID, new Set(resolvedInputIDs));
+  });
+
+  createEffect(() => {
+    const threadID = String(foregroundThreadID() ?? '').trim();
     const nextFollowup = queuedFollowups()[0] ?? null;
     if (!threadID || !nextFollowup) {
       if (blockedAutoSendKey()) {
@@ -1921,6 +2109,7 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
     if (
+      dispatchingInputs().length > 0 ||
       submitting() ||
       !!interruptingTurnID() ||
       threadController.threadLoading() ||
@@ -1934,7 +2123,28 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
     setBlockedAutoSendKey(attemptKey);
-    void submitQueuedFollowup(nextFollowup);
+    const followup = followupController.shiftNextFollowup(threadID);
+    if (!followup) {
+      setBlockedAutoSendKey('');
+      return;
+    }
+    const dispatchingInput = buildDispatchingInput({
+      id: followup.id,
+      threadID,
+      snapshot: {
+        text: followup.text,
+        attachments: followup.attachments,
+        mentions: followup.mentions,
+      },
+      runtimeConfig: followup.runtime_config,
+      createdAtUnixMs: followup.created_at_unix_ms,
+      source: 'auto_send',
+    });
+    pushDispatchingInput(dispatchingInput);
+    void submitDispatchingInput(dispatchingInput, {
+      failureMessage: 'Queued follow-up failed',
+      onFailureRequeueSource: 'auto_send',
+    });
   });
 
   const answerRequest = async (request: CodexPendingRequest, decision?: string) => {
@@ -2015,6 +2225,7 @@ export function CodexProvider(props: ParentProps) {
     refreshSidebar,
     sendTurn,
     queueTurn,
+    dispatchingInputs,
     queuedFollowups,
     removeQueuedFollowup,
     moveQueuedFollowup,
