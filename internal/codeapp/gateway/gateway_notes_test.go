@@ -72,6 +72,24 @@ func decodeNotesResponse[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
 	return out
 }
 
+func hasTopic(topics []notes.Topic, predicate func(notes.Topic) bool) bool {
+	for _, topic := range topics {
+		if predicate(topic) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasItem(items []notes.Item, predicate func(notes.Item) bool) bool {
+	for _, item := range items {
+		if predicate(item) {
+			return true
+		}
+	}
+	return false
+}
+
 func readNotesSSEEvent(t *testing.T, reader *bufio.Reader) notes.Event {
 	t.Helper()
 
@@ -134,10 +152,14 @@ func TestGatewayNotesCRUDFlow(t *testing.T) {
 		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
 	}
 	snapshot := decodeNotesResponse[notes.Snapshot](t, snapshotResp)
-	if len(snapshot.Topics) != 1 || snapshot.Topics[0].Name != "Research Alpha" {
+	if !hasTopic(snapshot.Topics, func(topic notes.Topic) bool {
+		return topic.TopicID == createdTopic.TopicID && topic.Name == "Research Alpha"
+	}) {
 		t.Fatalf("snapshot topics = %#v, want renamed topic", snapshot.Topics)
 	}
-	if len(snapshot.Items) != 1 || snapshot.Items[0].NoteID != createdItem.NoteID {
+	if !hasItem(snapshot.Items, func(item notes.Item) bool {
+		return item.NoteID == createdItem.NoteID
+	}) {
 		t.Fatalf("snapshot items = %#v, want created item", snapshot.Items)
 	}
 
@@ -200,6 +222,26 @@ func TestGatewayNotesDeleteTrashedItemPermanently(t *testing.T) {
 	}
 }
 
+func TestGatewayNotesFreshSnapshotIncludesWelcomeSeed(t *testing.T) {
+	t.Parallel()
+
+	svc := openGatewayNotesService(t)
+	gw := newNotesGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+
+	snapshotResp := performNotesRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
+	if snapshotResp.Code != http.StatusOK {
+		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
+	}
+
+	snapshot := decodeNotesResponse[notes.Snapshot](t, snapshotResp)
+	if !hasTopic(snapshot.Topics, func(topic notes.Topic) bool { return topic.Name == "Welcome" }) {
+		t.Fatalf("snapshot topics = %#v, want Welcome seed", snapshot.Topics)
+	}
+	if !hasItem(snapshot.Items, func(item notes.Item) bool { return strings.Contains(item.Body, "Welcome to Notes.") }) {
+		t.Fatalf("snapshot items = %#v, want welcome note", snapshot.Items)
+	}
+}
+
 func TestGatewayNotesWriteRequiresPermission(t *testing.T) {
 	t.Parallel()
 
@@ -244,9 +286,20 @@ func TestGatewayNotesEventStreamBaselineAndIncremental(t *testing.T) {
 	}
 
 	reader := bufio.NewReader(resp.Body)
-	baseline := readNotesSSEEvent(t, reader)
-	if baseline.Type != "topic.created" {
-		t.Fatalf("baseline type = %q, want topic.created", baseline.Type)
+	baselineWelcomeTopic := readNotesSSEEvent(t, reader)
+	baselineWelcomeItem := readNotesSSEEvent(t, reader)
+	baselineRealtimeTopic := readNotesSSEEvent(t, reader)
+	if baselineWelcomeTopic.Type != "topic.created" {
+		t.Fatalf("welcome baseline type = %q, want topic.created", baselineWelcomeTopic.Type)
+	}
+	if baselineWelcomeItem.Type != "item.created" {
+		t.Fatalf("welcome item baseline type = %q, want item.created", baselineWelcomeItem.Type)
+	}
+	if baselineRealtimeTopic.Type != "topic.created" {
+		t.Fatalf("realtime baseline type = %q, want topic.created", baselineRealtimeTopic.Type)
+	}
+	if baselineRealtimeTopic.EntityID != topic.TopicID {
+		t.Fatalf("realtime baseline entity = %q, want %q", baselineRealtimeTopic.EntityID, topic.TopicID)
 	}
 
 	if _, err := svc.CreateItem(ctx, notes.CreateItemRequest{

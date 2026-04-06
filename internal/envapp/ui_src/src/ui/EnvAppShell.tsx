@@ -132,7 +132,6 @@ const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
-const NOTES_OVERLAY_SHORTCUT_LABEL = 'Mod+.';
 type CreateThreadResponse = Readonly<{
   thread: Readonly<{
     thread_id: string;
@@ -276,6 +275,7 @@ export function EnvAppShell() {
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
   const topBarTooltip = (label: string): string | false => (layout.isMobile() ? false : label);
+  const notesOverlayShortcutLabel = createMemo(() => cmd.getKeybindDisplay(NOTES_OVERLAY_KEYBIND));
   const headerLogoSrc = createMemo(() =>
     `${import.meta.env.BASE_URL}${theme.resolvedTheme() === 'dark' ? 'logo-dark.svg' : 'logo.svg'}`,
   );
@@ -2212,7 +2212,7 @@ export function EnvAppShell() {
         <div class="flex items-center gap-1">
           <TopBarIconButton
             label="Notes overlay"
-            tooltip={topBarTooltip(`Notes overlay (${NOTES_OVERLAY_SHORTCUT_LABEL})`)}
+            tooltip={topBarTooltip(`Notes overlay (${notesOverlayShortcutLabel()})`)}
             onClick={toggleNotesOverlay}
           >
             <NotesOverlayIcon class="w-4 h-4" />

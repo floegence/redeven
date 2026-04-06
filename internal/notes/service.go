@@ -19,6 +19,11 @@ import (
 const (
 	maxTopicNameRunes = 48
 	maxNoteBodyRunes  = 20_000
+	welcomeTopicName  = "Welcome"
+	welcomeNoteBody   = "Welcome to Notes.\n\nRight-click anywhere to create or paste a note.\nClick a note to copy it, drag the canvas to navigate, and use Trash to restore deleted notes for 72 hours.\n\nPress Cmd/Ctrl + . any time to reopen Notes."
+	welcomeNoteColor  = "sage"
+	welcomeNoteX      = 180
+	welcomeNoteY      = 120
 )
 
 type Store struct {
@@ -38,10 +43,15 @@ func Open(path string) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Service{
+	svc := &Service{
 		store:       &Store{db: db},
 		subscribers: make(map[int]chan Event),
-	}, nil
+	}
+	if err := svc.store.ensureWelcomeSeed(context.Background()); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return svc, nil
 }
 
 func (s *Service) Close() error {
@@ -291,6 +301,44 @@ func (s *Store) snapshot(ctx context.Context, nowUnixMs int64) (Snapshot, error)
 		Items:          items,
 		TrashItems:     trashItems,
 	}, nil
+}
+
+func (s *Store) ensureWelcomeSeed(ctx context.Context) error {
+	ctx = normalizeContext(ctx)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	nowUnixMs := time.Now().UnixMilli()
+	if err := purgeExpiredTrashTx(tx, nowUnixMs); err != nil {
+		return err
+	}
+	if err := cleanupDeletedTopicsWithoutItemsTx(tx); err != nil {
+		return err
+	}
+
+	seq, err := currentSeqTx(tx)
+	if err != nil {
+		return err
+	}
+	if seq > 0 {
+		return tx.Commit()
+	}
+
+	hasRows, err := notesStateExistsTx(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if hasRows {
+		return tx.Commit()
+	}
+
+	if err := insertWelcomeSeedTx(ctx, tx, nowUnixMs); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) eventsAfter(ctx context.Context, afterSeq int64) ([]Event, error) {
@@ -1171,6 +1219,95 @@ VALUES(?, ?, ?, ?, ?, ?)
 	}, nil
 }
 
+func insertWelcomeSeedTx(ctx context.Context, tx *sql.Tx, nowUnixMs int64) error {
+	sortOrder, err := nextTopicSortOrderTx(tx)
+	if err != nil {
+		return err
+	}
+	iconKey, iconAccent, err := assignedTopicDecorationTx(tx)
+	if err != nil {
+		return err
+	}
+
+	topic := Topic{
+		TopicID:         randomScopedID("topic"),
+		Name:            welcomeTopicName,
+		IconKey:         iconKey,
+		IconAccent:      iconAccent,
+		SortOrder:       sortOrder,
+		CreatedAtUnixMs: nowUnixMs,
+		UpdatedAtUnixMs: nowUnixMs,
+		DeletedAtUnixMs: 0,
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO notes_topics(
+  topic_id, name, icon_key, icon_accent, sort_order,
+  created_at_unix_ms, updated_at_unix_ms, deleted_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, 0)
+`, topic.TopicID, topic.Name, topic.IconKey, topic.IconAccent, topic.SortOrder, topic.CreatedAtUnixMs, topic.UpdatedAtUnixMs); err != nil {
+		return err
+	}
+	if _, err := appendEventTx(tx, eventEnvelope{
+		Type:            "topic.created",
+		EntityKind:      "topic",
+		EntityID:        topic.TopicID,
+		TopicID:         topic.TopicID,
+		CreatedAtUnixMs: nowUnixMs,
+		Payload: struct {
+			Topic Topic `json:"topic"`
+		}{Topic: topic},
+	}); err != nil {
+		return err
+	}
+
+	body, err := normalizeBody(welcomeNoteBody)
+	if err != nil {
+		return err
+	}
+	previewText, characterCount, sizeBucket := projectionFromBody(body)
+	zIndex, err := nextActiveZIndexTx(tx)
+	if err != nil {
+		return err
+	}
+	item := Item{
+		NoteID:          randomScopedID("note"),
+		TopicID:         topic.TopicID,
+		Body:            body,
+		PreviewText:     previewText,
+		CharacterCount:  characterCount,
+		SizeBucket:      sizeBucket,
+		StyleVersion:    DefaultStyleVersion,
+		ColorToken:      welcomeNoteColor,
+		X:               welcomeNoteX,
+		Y:               welcomeNoteY,
+		ZIndex:          zIndex,
+		CreatedAtUnixMs: nowUnixMs,
+		UpdatedAtUnixMs: nowUnixMs,
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO notes_items(
+  note_id, topic_id, body, preview_text, character_count, size_bucket,
+  style_version, color_token, x, y, z_index,
+  created_at_unix_ms, updated_at_unix_ms, deleted_at_unix_ms, deleted_snapshot_json
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')
+`, item.NoteID, item.TopicID, item.Body, item.PreviewText, item.CharacterCount, item.SizeBucket, item.StyleVersion, item.ColorToken, item.X, item.Y, item.ZIndex, item.CreatedAtUnixMs, item.UpdatedAtUnixMs); err != nil {
+		return err
+	}
+	if _, err := appendEventTx(tx, eventEnvelope{
+		Type:            "item.created",
+		EntityKind:      "item",
+		EntityID:        item.NoteID,
+		TopicID:         item.TopicID,
+		CreatedAtUnixMs: nowUnixMs,
+		Payload: struct {
+			Item Item `json:"item"`
+		}{Item: item},
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 func currentSeqTx(tx *sql.Tx) (int64, error) {
 	var seq sql.NullInt64
 	if err := tx.QueryRow(`SELECT MAX(seq) FROM notes_events`).Scan(&seq); err != nil {
@@ -1180,6 +1317,22 @@ func currentSeqTx(tx *sql.Tx) (int64, error) {
 		return 0, nil
 	}
 	return seq.Int64, nil
+}
+
+func notesStateExistsTx(ctx context.Context, tx *sql.Tx) (bool, error) {
+	var topicCount sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notes_topics`).Scan(&topicCount); err != nil {
+		return false, err
+	}
+	if topicCount.Int64 > 0 {
+		return true, nil
+	}
+
+	var itemCount sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM notes_items`).Scan(&itemCount); err != nil {
+		return false, err
+	}
+	return itemCount.Int64 > 0, nil
 }
 
 func listTopicsTx(ctx context.Context, tx *sql.Tx) ([]Topic, error) {
