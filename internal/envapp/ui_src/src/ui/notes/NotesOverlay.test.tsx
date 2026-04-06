@@ -39,6 +39,7 @@ const notesUIState = vi.hoisted(() => ({
         open: boolean;
         controller: any;
         onClose: () => void;
+        interactionMode?: string;
       },
 }));
 
@@ -221,12 +222,14 @@ describe('Redeven NotesOverlay adapter', () => {
 
     expect(notesApiState.getNotesSnapshot).not.toHaveBeenCalled();
     expect(notesUIState.lastProps?.open).toBe(false);
+    expect(notesUIState.lastProps?.interactionMode).toBe('floating');
 
     setOpen(true);
     await settle();
 
     expect(notesApiState.getNotesSnapshot).toHaveBeenCalledTimes(1);
     expect(notesUIState.lastProps?.open).toBe(true);
+    expect(notesUIState.lastProps?.interactionMode).toBe('floating');
     expect(notesApiState.streamArgs?.afterSeq).toBe(1);
 
     const controller = notesUIState.lastProps?.controller;

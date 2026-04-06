@@ -17,6 +17,7 @@ export function NotesOverlay(props: NotesOverlayProps) {
       open={props.open}
       controller={controller}
       onClose={props.onClose}
+      interactionMode="floating"
     />
   );
 }
