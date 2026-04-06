@@ -6,6 +6,7 @@ export const DETACHED_SURFACE_PATH_QUERY_KEY = 'path';
 export const DETACHED_SURFACE_HOME_PATH_QUERY_KEY = 'home_path';
 
 export type DetachedSurfaceKind = 'file_preview' | 'file_browser';
+export type DesktopSurfacePresentation = 'floating' | 'detached';
 
 export type DetachedSurface =
   | Readonly<{
@@ -17,6 +18,11 @@ export type DetachedSurface =
       path: string;
       homePath?: string;
     }>;
+
+const DESKTOP_SURFACE_PRESENTATION_POLICY: Readonly<Record<DetachedSurfaceKind, DesktopSurfacePresentation>> = {
+  file_preview: 'detached',
+  file_browser: 'floating',
+};
 
 function normalizeAbsolutePath(value: unknown): string {
   const raw = String(value ?? '').trim();
@@ -80,6 +86,17 @@ export function buildDetachedFileBrowserSurface(params: Readonly<{ path: string;
   if (!path) return null;
   const homePath = normalizeAbsolutePath(params.homePath);
   return homePath ? { kind: 'file_browser', path, homePath } : { kind: 'file_browser', path };
+}
+
+export function resolveDesktopSurfacePresentation(kind: DetachedSurfaceKind): DesktopSurfacePresentation {
+  return DESKTOP_SURFACE_PRESENTATION_POLICY[kind];
+}
+
+export function shouldOpenDetachedSurface(args: Readonly<{
+  runtime: LocalRuntimeInfo | null | undefined;
+  kind: DetachedSurfaceKind;
+}>): boolean {
+  return isDesktopManagedRuntime(args.runtime) && resolveDesktopSurfacePresentation(args.kind) === 'detached';
 }
 
 export function openDetachedSurfaceWindow(surface: DetachedSurface, win: Window = window): Window | null {

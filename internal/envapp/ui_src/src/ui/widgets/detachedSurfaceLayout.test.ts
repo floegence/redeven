@@ -15,11 +15,18 @@ describe('detached surface desktop wiring', () => {
     const sceneSrc = read('./DetachedSurfaceScene.tsx');
     const browserSrc = read('./RemoteFileBrowser.tsx');
     const frameSrc = read('./DesktopDetachedWindowFrame.tsx');
+    const detachedSurfaceSrc = read('../services/detachedSurface.ts');
 
     expect(shellSrc).toContain("parseDetachedSurfaceFromURL(window.location)");
+    expect(shellSrc).toContain("shouldOpenDetachedSurface({ runtime, kind: 'file_preview' })");
     expect(shellSrc).toContain("const surface = buildDetachedFilePreviewSurface(item);");
     expect(shellSrc).toContain('openDetachedSurfaceWindow(surface);');
     expect(shellSrc).toContain('<DetachedSurfaceScene');
+
+    expect(detachedSurfaceSrc).toContain("file_preview: 'detached'");
+    expect(detachedSurfaceSrc).toContain("file_browser: 'floating'");
+    expect(detachedSurfaceSrc).toContain("resolveDesktopSurfacePresentation(kind: DetachedSurfaceKind)");
+    expect(detachedSurfaceSrc).toContain("shouldOpenDetachedSurface(args: Readonly<{");
 
     expect(frameSrc).toContain("data-redeven-desktop-window-titlebar=\"true\"");
     expect(frameSrc).toContain("data-redeven-desktop-window-titlebar-content=\"true\"");

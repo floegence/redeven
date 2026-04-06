@@ -265,7 +265,7 @@ Current Env App behavior:
 - The Codex transcript FAB is persistently visible through a Codex-local wrapper in `src/ui/codex/*` rather than by changing Flower's shared FAB behavior. Its floating geometry is owned by a Codex-local transcript overlay track that shares the transcript lane width contract, so resizing the window or changing adjacent shell widths keeps the FAB aligned to the visible Codex message lane instead of to the full viewport edge. When the working directory is temporarily empty, Codex falls back to `agent_home_dir` for browser opening before degrading to a visible disabled button, and the FAB stays visible even while the shared browser surface is already open or host Codex itself is unavailable.
 - Browser-surface ownership remains shared rather than Codex-local:
   - Codex owns only the directory seed and transcript mount point;
-  - Env App shell still owns floating-window persistence, detached desktop fallback, and `RemoteFileBrowser` rendering through `FileBrowserSurfaceContext`, `FileBrowserSurfaceHost`, and `openFileBrowserSurface()`.
+  - Env App shell still owns floating-window persistence, desktop browser presentation policy, and `RemoteFileBrowser` rendering through `FileBrowserSurfaceContext`, `FileBrowserSurfaceHost`, and `openFileBrowserSurface()`.
 - Archiving a thread hides it from the browser conversation list after the active-thread list refreshes.
 - Later turns may still adjust model, reasoning effort, approval policy, and sandbox mode through the Codex composer controls.
 - Pending approvals and user-input prompts are rendered inside the Codex page and are answered through the Codex gateway contract.

@@ -122,6 +122,7 @@ import {
   isDesktopManagedRuntime,
   openDetachedSurfaceWindow,
   parseDetachedSurfaceFromURL,
+  shouldOpenDetachedSurface,
 } from './services/detachedSurface';
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
@@ -2131,7 +2132,7 @@ export function EnvAppShell() {
     openPreview: async (item: FileItem) => {
       try {
         const runtime = localRuntime() ?? await getLocalRuntime();
-        if (isDesktopManagedRuntime(runtime)) {
+        if (shouldOpenDetachedSurface({ runtime, kind: 'file_preview' })) {
           const surface = buildDetachedFilePreviewSurface(item);
           if (surface) {
             openDetachedSurfaceWindow(surface);

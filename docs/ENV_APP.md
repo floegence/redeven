@@ -66,10 +66,10 @@ Key points:
 - Large Git file tables use shared virtualization in the Env App (`Changes`, `Branches -> Compare`, `Branches -> Status`, `Graph` commit files, and stash changed-file review), while stash review stays summary-first and opens single-file diffs through the shared dialog flow on demand.
 - CSS, HTML, SCSS, Less, TOML, Makefile-family files, Vue/Svelte-class files, and other text formats now stay on the same Monaco-backed preview/edit path instead of splitting by language support tables.
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
-- Desktop-managed runs can promote serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `file_browser` today).
-- The page browser, detached file-browser scene, Ask Flower linked-directory browser, and Flower chat floating browser all reuse the same `RemoteFileBrowser` surface; chat-specific code only owns the floating-shell behavior that opens it.
+- Desktop-managed runs can still promote selected serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` today); shared file-browser entry points stay on the in-page floating browser surface instead of opening a second desktop window.
+- The page browser, Ask Flower linked-directory browser, Flower chat floating browser, Codex transcript browser, and explicit detached file-browser scene all reuse the same `RemoteFileBrowser` surface; product-specific code only owns the shell behavior that opens it.
 - Codex transcript now reuses that same floating browser shell as well, seeded from the resolved Codex working directory instead of introducing a Codex-specific file-browser surface.
-- Env App now keeps the reusable chat/terminal/Codex floating browser shell at the root level, so cross-surface entry points share the same detached fallback, persistence, and explicit browser-seed handling.
+- Env App now keeps the reusable chat/terminal/Codex floating browser shell at the root level, so cross-surface entry points share the same floating-window persistence, explicit browser-seed handling, and `RemoteFileBrowser` rendering path; file preview keeps detached desktop promotion separately.
 
 ## Notes overlay
 
@@ -104,7 +104,7 @@ Env App targets a WCAG 2.2 AA baseline. The implementation follows an upstream-f
 - Shared shell landmarks, skip-link behavior, main-region targeting, dropdown semantics, and generic tab behavior come from released `@floegence/floe-webapp-*` packages.
 - Redeven-specific code only handles product-owned surfaces such as the local access gate, AI sidebar, custom tool blocks, git widgets, terminal integration, and file-browser composition.
 - Product-owned file-browser composition is also responsible for cross-surface handoffs such as `Open in Terminal` for a selected directory; shared file-browser primitives still only provide generic menu/rendering behavior.
-- The shared floating browser host is also product-owned because it coordinates terminal/chat entry points, detached desktop promotion, and browser-path seeding on top of the generic `RemoteFileBrowser` surface.
+- The shared floating browser host is also product-owned because it coordinates terminal/chat entry points, desktop browser presentation policy, and browser-path seeding on top of the generic `RemoteFileBrowser` surface.
 
 Contributor rules for this surface:
 

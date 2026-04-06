@@ -1,8 +1,9 @@
 import type { LocalRuntimeInfo } from '../services/controlplaneApi';
 import {
   buildDetachedFileBrowserSurface,
-  isDesktopManagedRuntime,
   openDetachedSurfaceWindow,
+  resolveDesktopSurfacePresentation,
+  shouldOpenDetachedSurface,
 } from '../services/detachedSurface';
 import type { FileBrowserSurfaceController, FileBrowserSurfaceOpenParams } from './createFileBrowserSurfaceController';
 
@@ -41,9 +42,13 @@ export async function openFileBrowserSurface(params: Readonly<{
     homePath: homePath || undefined,
   };
 
+  if (resolveDesktopSurfacePresentation('file_browser') !== 'detached') {
+    return params.controller.openSurface(normalizedInput) !== null;
+  }
+
   try {
     const runtime = params.localRuntime() ?? await params.resolveLocalRuntime();
-    if (isDesktopManagedRuntime(runtime)) {
+    if (shouldOpenDetachedSurface({ runtime, kind: 'file_browser' })) {
       const openDetachedWindow = params.openDetachedWindow ?? openDetachedFileBrowser;
       if (openDetachedWindow({ path, homePath: homePath || undefined })) {
         return true;

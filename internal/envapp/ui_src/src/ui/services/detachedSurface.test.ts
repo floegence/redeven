@@ -6,6 +6,8 @@ import {
   isDesktopManagedRuntime,
   openDetachedSurfaceWindow,
   parseDetachedSurfaceFromURL,
+  resolveDesktopSurfacePresentation,
+  shouldOpenDetachedSurface,
 } from './detachedSurface';
 
 describe('detachedSurface', () => {
@@ -63,5 +65,17 @@ describe('detachedSurface', () => {
     expect(isDesktopManagedRuntime({ mode: 'local', env_public_id: 'env_demo', desktop_managed: true })).toBe(true);
     expect(isDesktopManagedRuntime({ mode: 'local', env_public_id: 'env_demo', desktop_managed: false })).toBe(false);
     expect(isDesktopManagedRuntime(null)).toBe(false);
+  });
+
+  it('resolves desktop surface presentation by kind', () => {
+    expect(resolveDesktopSurfacePresentation('file_preview')).toBe('detached');
+    expect(resolveDesktopSurfacePresentation('file_browser')).toBe('floating');
+  });
+
+  it('opens detached surfaces only for desktop-managed kinds configured as detached', () => {
+    const runtime = { mode: 'local', env_public_id: 'env_demo', desktop_managed: true } as const;
+    expect(shouldOpenDetachedSurface({ runtime, kind: 'file_preview' })).toBe(true);
+    expect(shouldOpenDetachedSurface({ runtime, kind: 'file_browser' })).toBe(false);
+    expect(shouldOpenDetachedSurface({ runtime: null, kind: 'file_preview' })).toBe(false);
   });
 });
