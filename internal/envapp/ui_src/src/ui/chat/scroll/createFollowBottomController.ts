@@ -50,7 +50,7 @@ export type CreateFollowBottomControllerArgs = Readonly<{
   getPrefersReducedMotion?: () => boolean;
 }>;
 
-const DEFAULT_FOLLOW_THRESHOLD_PX = 72;
+const DEFAULT_FOLLOW_THRESHOLD_PX = 24;
 const DEFAULT_EXPLICIT_SYNC_PASSES = 2;
 const DEFAULT_RECENT_USER_SCROLL_INTENT_MS = 640;
 const DEFAULT_ANCHOR_ATTRIBUTE = 'data-follow-bottom-anchor-id';
@@ -438,10 +438,16 @@ export function createFollowBottomController(
   const handleScroll = (): void => {
     if (!scrollContainerEl) return;
     const nextScrollTop = scrollContainerEl.scrollTop;
+    const scrollDeltaPx = nextScrollTop - prevScrollTop;
+    const didScrollMeaningfully = Math.abs(scrollDeltaPx) > 0.5;
+    const userScrollingUp = scrollDeltaPx < -0.5 && hasRecentUserScrollIntent();
     updateDistanceToBottom(scrollContainerEl);
-    if (currentDistanceToBottomPx <= followThresholdPx) {
+    if (userScrollingUp) {
+      applyPausedMode();
+      viewportAnchor = captureViewportAnchor();
+    } else if (currentDistanceToBottomPx <= followThresholdPx) {
       applyFollowingMode();
-    } else if (Math.abs(nextScrollTop - prevScrollTop) > 0.5) {
+    } else if (didScrollMeaningfully) {
       if (hasRecentUserScrollIntent()) {
         applyPausedMode();
         viewportAnchor = captureViewportAnchor();

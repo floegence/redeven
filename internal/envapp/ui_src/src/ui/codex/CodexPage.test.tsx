@@ -2292,6 +2292,151 @@ describe('CodexPage', () => {
     }
   });
 
+  it('pauses bottom follow immediately when the user first scrolls upward in a working thread', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const resizeObserverHarness = installResizeObserverHarness();
+
+    let transcriptScrollHeight = 240;
+    const restoreScrollMetrics = installTranscriptScrollMetrics({
+      getScrollHeight: () => transcriptScrollHeight,
+    });
+
+    try {
+      fetchCodexStatusMock.mockResolvedValue({
+        available: true,
+        ready: true,
+        binary_path: '/usr/local/bin/codex',
+        agent_home_dir: '/workspace',
+      });
+      fetchCodexCapabilitiesMock.mockResolvedValue({
+        models: [
+          {
+            id: 'gpt-5.4',
+            display_name: 'GPT-5.4',
+            supports_image_input: true,
+            supported_reasoning_efforts: ['medium'],
+          },
+        ],
+        effective_config: {
+          cwd: '/workspace/ui',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        requirements: {
+          allowed_approval_policies: ['on-request'],
+          allowed_sandbox_modes: ['workspace-write'],
+        },
+      });
+      listCodexThreadsMock.mockResolvedValue([
+        {
+          id: 'thread_1',
+          name: 'Working thread',
+          preview: 'Do not snap back after the first upward scroll',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 1,
+          updated_at_unix_s: 10,
+          status: 'running',
+          cwd: '/workspace/ui',
+        },
+      ]);
+      openCodexThreadMock.mockResolvedValue({
+        thread: {
+          id: 'thread_1',
+          name: 'Working thread',
+          preview: 'Do not snap back after the first upward scroll',
+          ephemeral: false,
+          model_provider: 'gpt-5.4',
+          created_at_unix_s: 1,
+          updated_at_unix_s: 10,
+          status: 'running',
+          cwd: '/workspace/ui',
+          turns: [
+            {
+              id: 'turn_1',
+              status: 'running',
+              items: [
+                {
+                  id: 'item_live',
+                  type: 'agentMessage',
+                  text: 'Streaming output',
+                  status: 'inProgress',
+                },
+              ],
+            },
+          ],
+        },
+        runtime_config: {
+          cwd: '/workspace/ui',
+          model: 'gpt-5.4',
+          approval_policy: 'on-request',
+          sandbox_mode: 'workspace-write',
+          reasoning_effort: 'medium',
+        },
+        pending_requests: [],
+        last_applied_seq: 4,
+        active_status: 'running',
+        active_status_flags: ['planning'],
+      });
+
+      let streamOnEvent: (event: unknown) => void = () => {
+        throw new Error('expected event stream subscription to be registered');
+      };
+      connectCodexEventStreamMock.mockImplementation(async (args: { onEvent: (event: unknown) => void }) => {
+        streamOnEvent = args.onEvent;
+      });
+
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      renderPage(host);
+
+      await flushAsync();
+      await flushAsync();
+
+      const scrollRegion = host.querySelector('[data-codex-transcript-scroll-region="true"]') as HTMLDivElement | null;
+      const transcriptRoot = host.querySelector('[data-codex-surface="transcript"]') as HTMLDivElement | null;
+      expect(scrollRegion).not.toBeNull();
+      expect(transcriptRoot).not.toBeNull();
+      expect(scrollRegion?.scrollTop).toBe(expectedTranscriptBottomScrollTop(transcriptScrollHeight));
+
+      if (!scrollRegion) {
+        throw new Error('scroll region not found');
+      }
+
+      scrollRegion.dispatchEvent(new Event('wheel'));
+      scrollRegion.scrollTop = 104;
+      scrollRegion.dispatchEvent(new Event('scroll'));
+      await flushAsync();
+
+      expect(scrollRegion.scrollTop).toBe(104);
+
+      transcriptScrollHeight = 320;
+      streamOnEvent({
+        seq: 5,
+        type: 'agent_message_delta',
+        thread_id: 'thread_1',
+        item_id: 'item_live',
+        delta: ' continues',
+      });
+
+      await flushAsync();
+      await flushAsync();
+      resizeObserverHarness.notify(transcriptRoot!);
+      await flushAsync();
+
+      expect(scrollRegion.scrollTop).toBe(104);
+    } finally {
+      restoreScrollMetrics();
+    }
+  });
+
   it('switches to an existing thread bottom and stays pinned through late transcript growth', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
