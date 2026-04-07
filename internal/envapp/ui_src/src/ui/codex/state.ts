@@ -234,8 +234,7 @@ function inferItemStatus(itemStatus: string | null | undefined, turnStatus: stri
   const normalizedTurnStatus = String(turnStatus ?? '').trim();
   if (!normalizedTurnStatus) return '';
   if (isWorkingStatus(normalizedTurnStatus)) return 'inProgress';
-  if (normalizedTurnStatus === 'notLoaded') return '';
-  return normalizedTurnStatus;
+  return '';
 }
 
 function itemTextOrContent(item: CodexItem | null | undefined): string {
