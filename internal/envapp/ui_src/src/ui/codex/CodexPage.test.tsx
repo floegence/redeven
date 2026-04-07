@@ -1243,7 +1243,7 @@ describe('CodexPage', () => {
     expect(host.querySelector('button[aria-label="Send to Codex"]')).toBeNull();
     expect(host.querySelector('button[aria-label="Stop active Codex turn"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-input-send-slot button')).not.toBeNull();
-    expect(host.textContent).toContain('Type to queue another step above the composer.');
+    expect(host.querySelector('.codex-chat-input-guidance')).toBeNull();
     expect(host.querySelector('button[title="Add attachments"]')).not.toBeNull();
     expect(host.querySelector('.codex-chat-markdown-block')).not.toBeNull();
     expect(host.querySelector('.codex-page-toolbar')).toBeNull();
@@ -1561,7 +1561,7 @@ describe('CodexPage', () => {
 
     expect(host.querySelectorAll('.codex-chat-input-send-slot button')).toHaveLength(1);
     expect(host.querySelector('.codex-chat-input-send-slot button[aria-label="Stop active Codex turn"]')).toBeNull();
-    expect(host.textContent).toContain('Send adds this draft to the queue above.');
+    expect(host.querySelector('.codex-chat-input-guidance')).toBeNull();
 
     queueButton.click();
 

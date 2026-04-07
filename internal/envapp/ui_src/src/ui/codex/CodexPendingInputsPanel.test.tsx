@@ -100,6 +100,8 @@ describe('CodexPendingInputsPanel', () => {
     expect(host.querySelector('.codex-pending-inputs-header')).toBeNull();
     expect(host.textContent).not.toContain('Queued prompts');
     expect(host.textContent).not.toContain('Above the composer');
+    expect(host.querySelector('.codex-pending-input-card-meta')).toBeNull();
+    expect(host.textContent).not.toContain('gpt-5.4');
     expect(onRestoreQueued).toHaveBeenCalledWith('followup_1');
     expect(onGuideQueued).toHaveBeenCalledWith('followup_1');
     expect(onRemoveQueued).toHaveBeenCalledWith('followup_1');

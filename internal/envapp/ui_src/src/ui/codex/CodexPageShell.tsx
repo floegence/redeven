@@ -284,17 +284,7 @@ export function CodexPageShell() {
     return '';
   });
   const queuedGuideAvailable = createMemo(() => !queuedGuideDisabledReason());
-  const composerGuidanceNote = createMemo(() => {
-    if (!hasActiveRun()) return '';
-    if (composerPrimaryActionKind() === 'queue') {
-      return queuedGuideAvailable()
-        ? 'Send adds this draft to the queue above. Use Guide on a queued item to apply it to the current turn.'
-        : 'Send adds this draft to the queue above. Guide becomes available when the current turn can accept it.';
-    }
-    return queuedGuideAvailable()
-      ? 'Type to queue another step above the composer. Guide is available from queued items.'
-      : 'Type to queue another step above the composer.';
-  });
+  const composerGuidanceNote = createMemo(() => '');
   const headerActions = createMemo<CodexHeaderAction[]>(() => {
     const threadID = String(codex.activeThreadID() ?? '').trim();
     if (!threadID) return [];

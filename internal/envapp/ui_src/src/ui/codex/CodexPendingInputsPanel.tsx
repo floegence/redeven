@@ -2,11 +2,6 @@ import { For, Show, type Component } from 'solid-js';
 
 import type { CodexDispatchingInput, CodexQueuedFollowup } from './types';
 
-const queuedTimeFormatter = new Intl.DateTimeFormat('en-US', {
-  hour: 'numeric',
-  minute: '2-digit',
-});
-
 function pendingInputPreview(item: {
   text: string;
   attachments: readonly unknown[];
@@ -24,27 +19,6 @@ function pendingInputPreview(item: {
     return 'File context';
   }
   return 'Pending input';
-}
-
-function pendingInputMeta(item: {
-  runtime_config: { model?: string };
-  attachments: readonly unknown[];
-  mentions: readonly unknown[];
-  created_at_unix_ms: number;
-}): string {
-  const parts: string[] = [];
-  const model = String(item.runtime_config.model ?? '').trim();
-  if (model) parts.push(model);
-  if (item.attachments.length > 0) {
-    parts.push(item.attachments.length === 1 ? '1 image' : `${item.attachments.length} images`);
-  }
-  if (item.mentions.length > 0) {
-    parts.push(item.mentions.length === 1 ? '1 file' : `${item.mentions.length} files`);
-  }
-  if (item.created_at_unix_ms > 0) {
-    parts.push(queuedTimeFormatter.format(new Date(item.created_at_unix_ms)));
-  }
-  return parts.join(' · ');
 }
 
 function dispatchingLabel(item: CodexDispatchingInput): string {
@@ -81,7 +55,6 @@ export function CodexPendingInputsPanel(props: {
         <For each={props.dispatchingItems}>
           {(item) => {
             const preview = pendingInputPreview(item);
-            const meta = pendingInputMeta(item);
             return (
               <div class="codex-pending-input-card codex-pending-input-card-dispatching" role="listitem">
                 <div class="codex-pending-input-card-main codex-pending-input-card-main-static">
@@ -97,9 +70,6 @@ export function CodexPendingInputsPanel(props: {
                         {preview}
                       </span>
                     </span>
-                    <Show when={meta}>
-                      <span class="codex-pending-input-card-meta">{meta}</span>
-                    </Show>
                   </span>
                 </div>
               </div>
@@ -110,7 +80,6 @@ export function CodexPendingInputsPanel(props: {
         <For each={props.queuedItems}>
           {(item, index) => {
             const preview = pendingInputPreview(item);
-            const meta = pendingInputMeta(item);
             const tone = item.source === 'rejected_steer' ? 'blocked' : 'queued';
             return (
               <div class="codex-pending-input-card codex-pending-input-card-queued" role="listitem">
@@ -132,9 +101,6 @@ export function CodexPendingInputsPanel(props: {
                         {preview}
                       </span>
                     </span>
-                    <Show when={meta}>
-                      <span class="codex-pending-input-card-meta">{meta}</span>
-                    </Show>
                   </span>
                 </button>
                 <div class="codex-pending-input-card-actions">

@@ -1051,8 +1051,7 @@ button.codex-pending-input-card-main:focus-visible .codex-pending-input-card-pre
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
-  flex-direction: column;
-  gap: 0.125rem;
+  align-items: center;
 }
 
 .codex-pending-input-card-headline {
@@ -1097,15 +1096,6 @@ button.codex-pending-input-card-main:focus-visible .codex-pending-input-card-pre
   font-weight: 600;
   line-height: 1.25;
   color: var(--foreground);
-}
-
-.codex-pending-input-card-meta {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 0.625rem;
-  line-height: 1.2;
-  color: var(--muted-foreground);
 }
 
 .codex-pending-input-card-actions {
