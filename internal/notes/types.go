@@ -8,19 +8,20 @@ import (
 )
 
 const (
-	RetentionHours        = 72
-	DefaultStyleVersion   = "note/v1"
+	RetentionHours         = 72
+	DefaultStyleVersion    = "note/v1"
 	DefaultPreviewMaxRunes = 120
 )
 
 var (
-	ErrTopicNotFound   = errors.New("topic not found")
-	ErrNoteNotFound    = errors.New("note not found")
+	ErrTopicNotFound    = errors.New("topic not found")
+	ErrNoteNotFound     = errors.New("note not found")
 	ErrInvalidTopicName = errors.New("invalid topic name")
-	ErrInvalidNoteBody = errors.New("invalid note body")
-	ErrInvalidColor    = errors.New("invalid note color")
-	ErrInvalidNoteID   = errors.New("invalid note id")
-	ErrInvalidTopicID  = errors.New("invalid topic id")
+	ErrInvalidNoteTitle = errors.New("invalid note title")
+	ErrInvalidNoteBody  = errors.New("invalid note body")
+	ErrInvalidColor     = errors.New("invalid note color")
+	ErrInvalidNoteID    = errors.New("invalid note id")
+	ErrInvalidTopicID   = errors.New("invalid topic id")
 )
 
 type Topic struct {
@@ -37,6 +38,8 @@ type Topic struct {
 type Item struct {
 	NoteID          string  `json:"note_id"`
 	TopicID         string  `json:"topic_id"`
+	Title           string  `json:"title"`
+	Headline        string  `json:"headline,omitempty"`
 	Body            string  `json:"body"`
 	PreviewText     string  `json:"preview_text"`
 	CharacterCount  int     `json:"character_count"`
@@ -52,11 +55,11 @@ type Item struct {
 
 type TrashItem struct {
 	Item
-	TopicName        string `json:"topic_name"`
-	TopicIconKey     string `json:"topic_icon_key"`
-	TopicIconAccent  string `json:"topic_icon_accent"`
-	TopicSortOrder   int    `json:"topic_sort_order"`
-	DeletedAtUnixMs  int64  `json:"deleted_at_unix_ms"`
+	TopicName       string `json:"topic_name"`
+	TopicIconKey    string `json:"topic_icon_key"`
+	TopicIconAccent string `json:"topic_icon_accent"`
+	TopicSortOrder  int    `json:"topic_sort_order"`
+	DeletedAtUnixMs int64  `json:"deleted_at_unix_ms"`
 }
 
 type Snapshot struct {
@@ -101,19 +104,23 @@ type UpdateTopicRequest struct {
 }
 
 type CreateItemRequest struct {
-	TopicID    string   `json:"topic_id"`
-	Body       string   `json:"body"`
-	ColorToken *string  `json:"color_token,omitempty"`
-	X          float64  `json:"x"`
-	Y          float64  `json:"y"`
+	TopicID    string  `json:"topic_id"`
+	Headline   *string `json:"headline,omitempty"`
+	Title      *string `json:"title,omitempty"`
+	Body       string  `json:"body"`
+	ColorToken *string `json:"color_token,omitempty"`
+	X          float64 `json:"x"`
+	Y          float64 `json:"y"`
 }
 
 type UpdateItemRequest struct {
-	NoteID      string   `json:"-"`
-	Body        *string  `json:"body,omitempty"`
-	ColorToken  *string  `json:"color_token,omitempty"`
-	X           *float64 `json:"x,omitempty"`
-	Y           *float64 `json:"y,omitempty"`
+	NoteID     string   `json:"-"`
+	Headline   *string  `json:"headline,omitempty"`
+	Title      *string  `json:"title,omitempty"`
+	Body       *string  `json:"body,omitempty"`
+	ColorToken *string  `json:"color_token,omitempty"`
+	X          *float64 `json:"x,omitempty"`
+	Y          *float64 `json:"y,omitempty"`
 }
 
 var noteColorPalette = []string{

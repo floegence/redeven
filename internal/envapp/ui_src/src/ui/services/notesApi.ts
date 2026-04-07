@@ -11,6 +11,8 @@ export type UpdateTopicInput = Readonly<{
 
 export type CreateNoteInput = Readonly<{
   topic_id: string;
+  headline?: string;
+  title?: string;
   body: string;
   color_token?: NoteColorToken;
   x: number;
@@ -18,6 +20,8 @@ export type CreateNoteInput = Readonly<{
 }>;
 
 export type UpdateNoteInput = Readonly<{
+  headline?: string;
+  title?: string;
   body?: string;
   color_token?: NoteColorToken;
   x?: number;
@@ -63,6 +67,8 @@ export async function createNotesItem(input: CreateNoteInput): Promise<NotesItem
     method: 'POST',
     body: JSON.stringify({
       topic_id: String(input.topic_id ?? '').trim(),
+      headline: input.headline,
+      title: input.title,
       body: String(input.body ?? ''),
       color_token: input.color_token,
       x: input.x,
@@ -75,7 +81,14 @@ export async function createNotesItem(input: CreateNoteInput): Promise<NotesItem
 export async function updateNotesItem(noteID: string, input: UpdateNoteInput): Promise<NotesItem> {
   const out = await fetchGatewayJSON<ItemResponse>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
     method: 'PATCH',
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      headline: input.headline,
+      title: input.title,
+      body: input.body,
+      color_token: input.color_token,
+      x: input.x,
+      y: input.y,
+    }),
   });
   return out.item;
 }

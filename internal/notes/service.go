@@ -18,8 +18,10 @@ import (
 
 const (
 	maxTopicNameRunes = 48
+	maxNoteTitleRunes = 120
 	maxNoteBodyRunes  = 20_000
 	welcomeTopicName  = "Welcome"
+	welcomeNoteTitle  = "Welcome"
 	welcomeNoteBody   = "Welcome to Notes.\n\nRight-click anywhere to create or paste a note.\nClick a note to copy it, drag the canvas to navigate, and use Trash to restore deleted notes for 72 hours.\n\nPress Cmd/Ctrl + . any time to reopen Notes."
 	welcomeNoteColor  = "sage"
 	welcomeNoteX      = 180
@@ -579,6 +581,8 @@ WHERE note_id = ? AND deleted_at_unix_ms = 0
 			Item: Item{
 				NoteID:          item.NoteID,
 				TopicID:         item.TopicID,
+				Title:           item.Title,
+				Headline:        item.Title,
 				Body:            item.Body,
 				PreviewText:     item.PreviewText,
 				CharacterCount:  item.CharacterCount,
@@ -637,6 +641,10 @@ func (s *Store) createItem(ctx context.Context, req CreateItemRequest) (Item, Ev
 	if topicID == "" {
 		return Item{}, Event{}, ErrInvalidTopicID
 	}
+	title, _, err := resolveTitleInput(req.Headline, req.Title)
+	if err != nil {
+		return Item{}, Event{}, err
+	}
 	body, err := normalizeBody(req.Body)
 	if err != nil {
 		return Item{}, Event{}, err
@@ -670,7 +678,7 @@ func (s *Store) createItem(ctx context.Context, req CreateItemRequest) (Item, Ev
 	if !hasColor {
 		colorToken = randomPaletteValue(noteColorPalette)
 	}
-	previewText, characterCount, sizeBucket := projectionFromBody(body)
+	previewText, characterCount, sizeBucket := projectionFromContent(title, body)
 	zIndex, err := nextActiveZIndexTx(tx)
 	if err != nil {
 		return Item{}, Event{}, err
@@ -678,6 +686,8 @@ func (s *Store) createItem(ctx context.Context, req CreateItemRequest) (Item, Ev
 	item := Item{
 		NoteID:          randomScopedID("note"),
 		TopicID:         topic.TopicID,
+		Title:           title,
+		Headline:        title,
 		Body:            body,
 		PreviewText:     previewText,
 		CharacterCount:  characterCount,
@@ -692,11 +702,11 @@ func (s *Store) createItem(ctx context.Context, req CreateItemRequest) (Item, Ev
 	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO notes_items(
-  note_id, topic_id, body, preview_text, character_count, size_bucket,
+  note_id, topic_id, title, body, preview_text, character_count, size_bucket,
   style_version, color_token, x, y, z_index,
   created_at_unix_ms, updated_at_unix_ms, deleted_at_unix_ms, deleted_snapshot_json
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')
-`, item.NoteID, item.TopicID, item.Body, item.PreviewText, item.CharacterCount, item.SizeBucket, item.StyleVersion, item.ColorToken, item.X, item.Y, item.ZIndex, item.CreatedAtUnixMs, item.UpdatedAtUnixMs); err != nil {
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')
+`, item.NoteID, item.TopicID, item.Title, item.Body, item.PreviewText, item.CharacterCount, item.SizeBucket, item.StyleVersion, item.ColorToken, item.X, item.Y, item.ZIndex, item.CreatedAtUnixMs, item.UpdatedAtUnixMs); err != nil {
 		return Item{}, Event{}, err
 	}
 
@@ -725,6 +735,10 @@ func (s *Store) updateItem(ctx context.Context, req UpdateItemRequest) (Item, Ev
 	if noteID == "" {
 		return Item{}, Event{}, ErrInvalidNoteID
 	}
+	title, hasTitle, err := resolveTitleInput(req.Headline, req.Title)
+	if err != nil {
+		return Item{}, Event{}, err
+	}
 	colorToken, hasColor, err := normalizeOptionalColor(req.ColorToken)
 	if err != nil {
 		return Item{}, Event{}, err
@@ -742,18 +756,22 @@ func (s *Store) updateItem(ctx context.Context, req UpdateItemRequest) (Item, Ev
 	if item == nil {
 		return Item{}, Event{}, ErrNoteNotFound
 	}
-	if req.Body == nil && !hasColor && req.X == nil && req.Y == nil {
+	if req.Body == nil && !hasTitle && !hasColor && req.X == nil && req.Y == nil {
 		return Item{}, Event{}, fmt.Errorf("%w: missing fields", ErrInvalidNoteBody)
 	}
 
+	if hasTitle {
+		item.Title = title
+		item.Headline = title
+	}
 	if req.Body != nil {
 		body, err := normalizeBody(*req.Body)
 		if err != nil {
 			return Item{}, Event{}, err
 		}
 		item.Body = body
-		item.PreviewText, item.CharacterCount, item.SizeBucket = projectionFromBody(item.Body)
 	}
+	item.PreviewText, item.CharacterCount, item.SizeBucket = projectionFromContent(item.Title, item.Body)
 	if hasColor {
 		item.ColorToken = colorToken
 	}
@@ -773,10 +791,10 @@ func (s *Store) updateItem(ctx context.Context, req UpdateItemRequest) (Item, Ev
 
 	if _, err := tx.ExecContext(ctx, `
 UPDATE notes_items
-SET body = ?, preview_text = ?, character_count = ?, size_bucket = ?,
+SET title = ?, body = ?, preview_text = ?, character_count = ?, size_bucket = ?,
     color_token = ?, x = ?, y = ?, updated_at_unix_ms = ?
 WHERE note_id = ? AND deleted_at_unix_ms = 0
-`, item.Body, item.PreviewText, item.CharacterCount, item.SizeBucket, item.ColorToken, item.X, item.Y, item.UpdatedAtUnixMs, item.NoteID); err != nil {
+`, item.Title, item.Body, item.PreviewText, item.CharacterCount, item.SizeBucket, item.ColorToken, item.X, item.Y, item.UpdatedAtUnixMs, item.NoteID); err != nil {
 		return Item{}, Event{}, err
 	}
 
@@ -908,6 +926,8 @@ WHERE note_id = ? AND deleted_at_unix_ms = 0
 		Item: Item{
 			NoteID:          item.NoteID,
 			TopicID:         item.TopicID,
+			Title:           item.Title,
+			Headline:        item.Title,
 			Body:            item.Body,
 			PreviewText:     item.PreviewText,
 			CharacterCount:  item.CharacterCount,
@@ -998,14 +1018,15 @@ WHERE topic_id = ?
 	item.StyleVersion = snapshot.StyleVersion
 	item.ColorToken = snapshot.ColorToken
 	item.SizeBucket = snapshot.SizeBucket
+	item.Headline = item.Title
 	item.UpdatedAtUnixMs = nowUnixMs
-	item.PreviewText, item.CharacterCount, _ = projectionFromBody(item.Body)
+	item.PreviewText, item.CharacterCount, item.SizeBucket = projectionFromContent(item.Title, item.Body)
 	if _, err := tx.ExecContext(ctx, `
 UPDATE notes_items
-SET topic_id = ?, x = ?, y = ?, z_index = ?, style_version = ?, color_token = ?, size_bucket = ?,
+SET topic_id = ?, title = ?, x = ?, y = ?, z_index = ?, style_version = ?, color_token = ?, size_bucket = ?,
     preview_text = ?, character_count = ?, updated_at_unix_ms = ?, deleted_at_unix_ms = 0, deleted_snapshot_json = ''
 WHERE note_id = ? AND deleted_at_unix_ms = ?
-`, item.TopicID, item.X, item.Y, item.ZIndex, item.StyleVersion, item.ColorToken, item.SizeBucket, item.PreviewText, item.CharacterCount, item.UpdatedAtUnixMs, item.NoteID, deletedAtUnixMs); err != nil {
+`, item.TopicID, item.Title, item.X, item.Y, item.ZIndex, item.StyleVersion, item.ColorToken, item.SizeBucket, item.PreviewText, item.CharacterCount, item.UpdatedAtUnixMs, item.NoteID, deletedAtUnixMs); err != nil {
 		return Item{}, nil, err
 	}
 
@@ -1264,7 +1285,7 @@ INSERT INTO notes_topics(
 	if err != nil {
 		return err
 	}
-	previewText, characterCount, sizeBucket := projectionFromBody(body)
+	previewText, characterCount, sizeBucket := projectionFromContent(welcomeNoteTitle, body)
 	zIndex, err := nextActiveZIndexTx(tx)
 	if err != nil {
 		return err
@@ -1272,6 +1293,8 @@ INSERT INTO notes_topics(
 	item := Item{
 		NoteID:          randomScopedID("note"),
 		TopicID:         topic.TopicID,
+		Title:           welcomeNoteTitle,
+		Headline:        welcomeNoteTitle,
 		Body:            body,
 		PreviewText:     previewText,
 		CharacterCount:  characterCount,
@@ -1286,11 +1309,11 @@ INSERT INTO notes_topics(
 	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO notes_items(
-  note_id, topic_id, body, preview_text, character_count, size_bucket,
+  note_id, topic_id, title, body, preview_text, character_count, size_bucket,
   style_version, color_token, x, y, z_index,
   created_at_unix_ms, updated_at_unix_ms, deleted_at_unix_ms, deleted_snapshot_json
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')
-`, item.NoteID, item.TopicID, item.Body, item.PreviewText, item.CharacterCount, item.SizeBucket, item.StyleVersion, item.ColorToken, item.X, item.Y, item.ZIndex, item.CreatedAtUnixMs, item.UpdatedAtUnixMs); err != nil {
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '')
+`, item.NoteID, item.TopicID, item.Title, item.Body, item.PreviewText, item.CharacterCount, item.SizeBucket, item.StyleVersion, item.ColorToken, item.X, item.Y, item.ZIndex, item.CreatedAtUnixMs, item.UpdatedAtUnixMs); err != nil {
 		return err
 	}
 	if _, err := appendEventTx(tx, eventEnvelope{
@@ -1360,7 +1383,7 @@ ORDER BY sort_order ASC, topic_id ASC
 
 func listActiveItemsTx(ctx context.Context, tx *sql.Tx) ([]Item, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT note_id, topic_id, body, preview_text, character_count, size_bucket, style_version, color_token, x, y, z_index, created_at_unix_ms, updated_at_unix_ms
+SELECT note_id, topic_id, title, body, preview_text, character_count, size_bucket, style_version, color_token, x, y, z_index, created_at_unix_ms, updated_at_unix_ms
 FROM notes_items
 WHERE deleted_at_unix_ms = 0
 ORDER BY z_index ASC, note_id ASC
@@ -1373,9 +1396,10 @@ ORDER BY z_index ASC, note_id ASC
 	out := make([]Item, 0)
 	for rows.Next() {
 		var item Item
-		if err := rows.Scan(&item.NoteID, &item.TopicID, &item.Body, &item.PreviewText, &item.CharacterCount, &item.SizeBucket, &item.StyleVersion, &item.ColorToken, &item.X, &item.Y, &item.ZIndex, &item.CreatedAtUnixMs, &item.UpdatedAtUnixMs); err != nil {
+		if err := rows.Scan(&item.NoteID, &item.TopicID, &item.Title, &item.Body, &item.PreviewText, &item.CharacterCount, &item.SizeBucket, &item.StyleVersion, &item.ColorToken, &item.X, &item.Y, &item.ZIndex, &item.CreatedAtUnixMs, &item.UpdatedAtUnixMs); err != nil {
 			return nil, err
 		}
+		applyItemTitleAliases(&item)
 		out = append(out, item)
 	}
 	return out, rows.Err()
@@ -1383,7 +1407,7 @@ ORDER BY z_index ASC, note_id ASC
 
 func listTrashItemsTx(ctx context.Context, tx *sql.Tx) ([]TrashItem, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT n.note_id, n.topic_id, n.body, n.preview_text, n.character_count, n.size_bucket, n.style_version, n.color_token,
+SELECT n.note_id, n.topic_id, n.title, n.body, n.preview_text, n.character_count, n.size_bucket, n.style_version, n.color_token,
        n.x, n.y, n.z_index, n.created_at_unix_ms, n.updated_at_unix_ms, n.deleted_at_unix_ms,
        t.name, t.icon_key, t.icon_accent, t.sort_order
 FROM notes_items n
@@ -1402,6 +1426,7 @@ ORDER BY n.deleted_at_unix_ms DESC, n.note_id DESC
 		if err := rows.Scan(
 			&item.NoteID,
 			&item.TopicID,
+			&item.Title,
 			&item.Body,
 			&item.PreviewText,
 			&item.CharacterCount,
@@ -1421,6 +1446,7 @@ ORDER BY n.deleted_at_unix_ms DESC, n.note_id DESC
 		); err != nil {
 			return nil, err
 		}
+		applyTrashItemTitleAliases(&item)
 		out = append(out, item)
 	}
 	return out, rows.Err()
@@ -1428,7 +1454,7 @@ ORDER BY n.deleted_at_unix_ms DESC, n.note_id DESC
 
 func listTopicActiveItemsTx(ctx context.Context, tx *sql.Tx, topicID string) ([]Item, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT note_id, topic_id, body, preview_text, character_count, size_bucket, style_version, color_token, x, y, z_index, created_at_unix_ms, updated_at_unix_ms
+SELECT note_id, topic_id, title, body, preview_text, character_count, size_bucket, style_version, color_token, x, y, z_index, created_at_unix_ms, updated_at_unix_ms
 FROM notes_items
 WHERE topic_id = ? AND deleted_at_unix_ms = 0
 ORDER BY z_index ASC, note_id ASC
@@ -1440,9 +1466,10 @@ ORDER BY z_index ASC, note_id ASC
 	out := make([]Item, 0)
 	for rows.Next() {
 		var item Item
-		if err := rows.Scan(&item.NoteID, &item.TopicID, &item.Body, &item.PreviewText, &item.CharacterCount, &item.SizeBucket, &item.StyleVersion, &item.ColorToken, &item.X, &item.Y, &item.ZIndex, &item.CreatedAtUnixMs, &item.UpdatedAtUnixMs); err != nil {
+		if err := rows.Scan(&item.NoteID, &item.TopicID, &item.Title, &item.Body, &item.PreviewText, &item.CharacterCount, &item.SizeBucket, &item.StyleVersion, &item.ColorToken, &item.X, &item.Y, &item.ZIndex, &item.CreatedAtUnixMs, &item.UpdatedAtUnixMs); err != nil {
 			return nil, err
 		}
+		applyItemTitleAliases(&item)
 		out = append(out, item)
 	}
 	return out, rows.Err()
@@ -1479,13 +1506,14 @@ func loadActiveItemTx(ctx context.Context, tx *sql.Tx, noteID string) (*Item, er
 	var item Item
 	var deletedAt int64
 	err := tx.QueryRowContext(ctx, `
-SELECT note_id, topic_id, body, preview_text, character_count, size_bucket, style_version, color_token,
+SELECT note_id, topic_id, title, body, preview_text, character_count, size_bucket, style_version, color_token,
        x, y, z_index, created_at_unix_ms, updated_at_unix_ms, deleted_at_unix_ms
 FROM notes_items
 WHERE note_id = ?
 `, noteID).Scan(
 		&item.NoteID,
 		&item.TopicID,
+		&item.Title,
 		&item.Body,
 		&item.PreviewText,
 		&item.CharacterCount,
@@ -1508,6 +1536,7 @@ WHERE note_id = ?
 	if deletedAt > 0 {
 		return nil, nil
 	}
+	applyItemTitleAliases(&item)
 	return &item, nil
 }
 
@@ -1516,13 +1545,14 @@ func loadDeletedItemWithSnapshotTx(ctx context.Context, tx *sql.Tx, noteID strin
 	var deletedAt int64
 	var snapshotJSON string
 	err := tx.QueryRowContext(ctx, `
-SELECT note_id, topic_id, body, preview_text, character_count, size_bucket, style_version, color_token,
+SELECT note_id, topic_id, title, body, preview_text, character_count, size_bucket, style_version, color_token,
        x, y, z_index, created_at_unix_ms, updated_at_unix_ms, deleted_at_unix_ms, deleted_snapshot_json
 FROM notes_items
 WHERE note_id = ? AND deleted_at_unix_ms > 0
 `, noteID).Scan(
 		&item.NoteID,
 		&item.TopicID,
+		&item.Title,
 		&item.Body,
 		&item.PreviewText,
 		&item.CharacterCount,
@@ -1547,6 +1577,7 @@ WHERE note_id = ? AND deleted_at_unix_ms > 0
 	if err := json.Unmarshal([]byte(snapshotJSON), &snapshot); err != nil {
 		return nil, 0, deletedSnapshot{}, err
 	}
+	applyItemTitleAliases(&item)
 	return &item, deletedAt, snapshot, nil
 }
 
@@ -1659,25 +1690,66 @@ func normalizeBody(value string) (string, error) {
 	return value, nil
 }
 
-func projectionFromBody(body string) (string, int, int) {
-	count := utf8.RuneCountInString(strings.TrimSpace(body))
-	previewSource := strings.TrimSpace(body)
-	if previewSource == "" {
-		return "", count, 1
+func normalizeTitle(value string) (string, error) {
+	value = strings.Join(strings.Fields(value), " ")
+	if utf8.RuneCountInString(value) > maxNoteTitleRunes {
+		return "", fmt.Errorf("%w: note title is too long", ErrInvalidNoteTitle)
 	}
-	preview := truncateRunes(previewSource, DefaultPreviewMaxRunes)
-	return preview, count, sizeBucketForCount(count)
+	return value, nil
 }
 
-func sizeBucketForCount(count int) int {
+func resolveTitleInput(headline *string, title *string) (string, bool, error) {
+	if headline == nil && title == nil {
+		return "", false, nil
+	}
+	if headline != nil {
+		normalized, err := normalizeTitle(*headline)
+		return normalized, true, err
+	}
+	normalized, err := normalizeTitle(*title)
+	return normalized, true, err
+}
+
+func applyItemTitleAliases(item *Item) {
+	if item == nil {
+		return
+	}
+	item.Headline = item.Title
+}
+
+func applyTrashItemTitleAliases(item *TrashItem) {
+	if item == nil {
+		return
+	}
+	applyItemTitleAliases(&item.Item)
+}
+
+func projectionFromContent(title string, body string) (string, int, int) {
+	normalizedTitle := strings.TrimSpace(title)
+	bodyCount := utf8.RuneCountInString(strings.TrimSpace(body))
+	titleCount := utf8.RuneCountInString(normalizedTitle)
+	count := bodyCount + titleCount
+	previewSource := strings.TrimSpace(body)
+	if previewSource == "" {
+		return "", count, sizeBucketForContent(bodyCount, titleCount)
+	}
+	preview := truncateRunes(previewSource, DefaultPreviewMaxRunes)
+	return preview, count, sizeBucketForContent(bodyCount, titleCount)
+}
+
+func sizeBucketForContent(bodyCount int, titleCount int) int {
+	weight := bodyCount
+	if titleCount > 0 {
+		weight += int(math.Round(float64(titleCount)*1.45)) + 20
+	}
 	switch {
-	case count <= 24:
+	case weight <= 28:
 		return 1
-	case count <= 80:
+	case weight <= 86:
 		return 2
-	case count <= 180:
+	case weight <= 168:
 		return 3
-	case count <= 360:
+	case weight <= 300:
 		return 4
 	default:
 		return 5

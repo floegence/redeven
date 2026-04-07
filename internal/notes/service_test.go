@@ -82,6 +82,9 @@ func TestOpenSeedsWelcomeContentOnceAndDoesNotDuplicate(t *testing.T) {
 	if item.ColorToken != welcomeNoteColor {
 		t.Fatalf("welcome color = %q, want %q", item.ColorToken, welcomeNoteColor)
 	}
+	if item.Title != welcomeNoteTitle || item.Headline != welcomeNoteTitle {
+		t.Fatalf("welcome title/headline = %q/%q, want %q", item.Title, item.Headline, welcomeNoteTitle)
+	}
 	if item.X != welcomeNoteX || item.Y != welcomeNoteY {
 		t.Fatalf("welcome coordinates = (%v, %v), want (%v, %v)", item.X, item.Y, welcomeNoteX, welcomeNoteY)
 	}
@@ -255,6 +258,60 @@ func TestServiceCreateDeleteRestoreTopicFlow(t *testing.T) {
 		t.Fatalf("final trash = %d, want 0", len(finalSnapshot.TrashItems))
 	}
 	requireWelcomeSeed(t, finalSnapshot)
+}
+
+func TestServicePersistsNoteTitleAliasesAcrossCreateUpdateAndRestore(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := openTestService(t)
+
+	topic, err := svc.CreateTopic(ctx, CreateTopicRequest{Name: "Headline tests"})
+	if err != nil {
+		t.Fatalf("CreateTopic() error = %v", err)
+	}
+
+	headline := "Launch checklist"
+	item, err := svc.CreateItem(ctx, CreateItemRequest{
+		TopicID:  topic.TopicID,
+		Headline: &headline,
+		Body:     "Confirm release order",
+		X:        80,
+		Y:        120,
+	})
+	if err != nil {
+		t.Fatalf("CreateItem() error = %v", err)
+	}
+	if item.Title != headline || item.Headline != headline {
+		t.Fatalf("created title/headline = %q/%q, want %q", item.Title, item.Headline, headline)
+	}
+	if item.CharacterCount != len([]rune(headline))+len([]rune("Confirm release order")) {
+		t.Fatalf("created character_count = %d, want title+body count", item.CharacterCount)
+	}
+
+	retitle := "Release checklist"
+	updated, err := svc.UpdateItem(ctx, UpdateItemRequest{
+		NoteID: item.NoteID,
+		Title:  &retitle,
+	})
+	if err != nil {
+		t.Fatalf("UpdateItem() error = %v", err)
+	}
+	if updated.Title != retitle || updated.Headline != retitle {
+		t.Fatalf("updated title/headline = %q/%q, want %q", updated.Title, updated.Headline, retitle)
+	}
+
+	if err := svc.DeleteItem(ctx, item.NoteID); err != nil {
+		t.Fatalf("DeleteItem() error = %v", err)
+	}
+
+	restored, err := svc.RestoreItem(ctx, item.NoteID)
+	if err != nil {
+		t.Fatalf("RestoreItem() error = %v", err)
+	}
+	if restored.Title != retitle || restored.Headline != retitle {
+		t.Fatalf("restored title/headline = %q/%q, want %q", restored.Title, restored.Headline, retitle)
+	}
 }
 
 func TestServicePurgeExpiredTrashAndClearTrashTopic(t *testing.T) {

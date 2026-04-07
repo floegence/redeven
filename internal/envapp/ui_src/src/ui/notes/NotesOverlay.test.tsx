@@ -96,6 +96,7 @@ function baseItem(overrides: Partial<NotesItem> = {}): NotesItem {
   return {
     note_id: 'note-1',
     topic_id: 'topic-1',
+    title: '',
     body: 'Primary note body',
     preview_text: 'Primary note body',
     character_count: 17,
@@ -165,24 +166,31 @@ describe('Redeven NotesOverlay adapter', () => {
       baseTopic({ topic_id: topicID, name: input.name }),
     );
     notesApiState.deleteNotesTopic.mockResolvedValue(undefined);
-    notesApiState.createNotesItem.mockImplementation(async (input: { topic_id: string; body: string; x: number; y: number }) =>
+    notesApiState.createNotesItem.mockImplementation(
+      async (input: { topic_id: string; headline?: string; title?: string; body: string; x: number; y: number }) =>
       baseItem({
         note_id: 'note-2',
         topic_id: input.topic_id,
+        title: input.headline ?? input.title ?? '',
+        headline: input.headline ?? input.title ?? '',
         body: input.body,
         preview_text: input.body,
-        character_count: input.body.length,
+        character_count: (input.headline ?? input.title ?? '').length + input.body.length,
         x: input.x,
         y: input.y,
         z_index: 2,
       }),
     );
-    notesApiState.updateNotesItem.mockImplementation(async (noteID: string, input: { body?: string }) =>
+    notesApiState.updateNotesItem.mockImplementation(
+      async (noteID: string, input: { headline?: string; title?: string; body?: string }) =>
       baseItem({
         note_id: noteID,
+        title: input.headline ?? input.title ?? '',
+        headline: input.headline ?? input.title ?? '',
         body: input.body ?? 'Primary note body',
         preview_text: input.body ?? 'Primary note body',
-        character_count: (input.body ?? 'Primary note body').length,
+        character_count:
+          (input.headline ?? input.title ?? '').length + (input.body ?? 'Primary note body').length,
       }),
     );
     notesApiState.bringNotesItemToFront.mockImplementation(async (noteID: string) =>
@@ -372,6 +380,7 @@ describe('Redeven NotesOverlay adapter', () => {
 
     const created = await controller.createNote({
       topic_id: 'topic-1',
+      headline: 'Launch checklist',
       body: 'Fresh note',
       x: 420,
       y: 260,
@@ -379,11 +388,25 @@ describe('Redeven NotesOverlay adapter', () => {
     expect(created.note_id).toBe('note-2');
     expect(notesApiState.createNotesItem).toHaveBeenCalledWith({
       topic_id: 'topic-1',
+      headline: 'Launch checklist',
       body: 'Fresh note',
       x: 420,
       y: 260,
     });
+    expect(created.title).toBe('Launch checklist');
+    expect(created.headline).toBe('Launch checklist');
     expect(controller.snapshot().items.map((item: NotesItem) => item.note_id)).toEqual(['note-1', 'note-2']);
+
+    const updated = await controller.updateNote('note-2', {
+      headline: 'Renamed checklist',
+      body: 'Fresh note updated',
+    });
+    expect(notesApiState.updateNotesItem).toHaveBeenCalledWith('note-2', {
+      headline: 'Renamed checklist',
+      body: 'Fresh note updated',
+    });
+    expect(updated.title).toBe('Renamed checklist');
+    expect(updated.headline).toBe('Renamed checklist');
 
     const beforeFront = controller.snapshot().items.find((item: NotesItem) => item.note_id === 'note-1')?.z_index;
     const frontPromise = controller.bringNoteToFront('note-1');

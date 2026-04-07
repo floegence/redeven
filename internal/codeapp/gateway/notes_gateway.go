@@ -210,7 +210,7 @@ func writeNotesError(w http.ResponseWriter, err error) {
 		status = http.StatusOK
 	case errors.Is(err, notes.ErrTopicNotFound), errors.Is(err, notes.ErrNoteNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, notes.ErrInvalidTopicID), errors.Is(err, notes.ErrInvalidNoteID), errors.Is(err, notes.ErrInvalidTopicName), errors.Is(err, notes.ErrInvalidNoteBody), errors.Is(err, notes.ErrInvalidColor):
+	case errors.Is(err, notes.ErrInvalidTopicID), errors.Is(err, notes.ErrInvalidNoteID), errors.Is(err, notes.ErrInvalidTopicName), errors.Is(err, notes.ErrInvalidNoteTitle), errors.Is(err, notes.ErrInvalidNoteBody), errors.Is(err, notes.ErrInvalidColor):
 		status = http.StatusBadRequest
 	default:
 		status = http.StatusBadRequest

@@ -46,6 +46,7 @@ function snapshot(): NotesSnapshot {
       {
         note_id: 'note-2',
         topic_id: 'topic-1',
+        title: 'Second note',
         body: 'second',
         preview_text: 'second',
         character_count: 6,
@@ -61,6 +62,7 @@ function snapshot(): NotesSnapshot {
       {
         note_id: 'note-1',
         topic_id: 'topic-1',
+        title: 'First note',
         body: 'first',
         preview_text: 'first',
         character_count: 5,
@@ -82,6 +84,7 @@ function trashItem(overrides?: Partial<NotesTrashItem>): NotesTrashItem {
   return {
     note_id: 'trash-1',
     topic_id: 'topic-1',
+    title: 'Deleted note',
     body: 'deleted',
     preview_text: 'deleted',
     character_count: 7,

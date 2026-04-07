@@ -141,11 +141,23 @@ func TestGatewayNotesCRUDFlow(t *testing.T) {
 		t.Fatalf("rename topic status = %d, body = %s", renameResp.Code, renameResp.Body.String())
 	}
 
-	createItemResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/items", `{"topic_id":"`+createdTopic.TopicID+`","body":"gateway body","color_token":"sage","x":320,"y":240}`)
+	createItemResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/items", `{"topic_id":"`+createdTopic.TopicID+`","headline":"Gateway headline","body":"gateway body","color_token":"sage","x":320,"y":240}`)
 	if createItemResp.Code != http.StatusOK {
 		t.Fatalf("create item status = %d, body = %s", createItemResp.Code, createItemResp.Body.String())
 	}
 	createdItem := decodeNotesResponse[itemEnvelope](t, createItemResp).Item
+	if createdItem.Title != "Gateway headline" || createdItem.Headline != "Gateway headline" {
+		t.Fatalf("created item title/headline = %q/%q, want Gateway headline", createdItem.Title, createdItem.Headline)
+	}
+
+	updateItemResp := performNotesRequest(t, gw, http.MethodPatch, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, `{"title":"Gateway retitle","body":"gateway body updated"}`)
+	if updateItemResp.Code != http.StatusOK {
+		t.Fatalf("update item status = %d, body = %s", updateItemResp.Code, updateItemResp.Body.String())
+	}
+	updatedItem := decodeNotesResponse[itemEnvelope](t, updateItemResp).Item
+	if updatedItem.Title != "Gateway retitle" || updatedItem.Headline != "Gateway retitle" {
+		t.Fatalf("updated item title/headline = %q/%q, want Gateway retitle", updatedItem.Title, updatedItem.Headline)
+	}
 
 	snapshotResp := performNotesRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
 	if snapshotResp.Code != http.StatusOK {
@@ -158,7 +170,7 @@ func TestGatewayNotesCRUDFlow(t *testing.T) {
 		t.Fatalf("snapshot topics = %#v, want renamed topic", snapshot.Topics)
 	}
 	if !hasItem(snapshot.Items, func(item notes.Item) bool {
-		return item.NoteID == createdItem.NoteID
+		return item.NoteID == createdItem.NoteID && item.Title == "Gateway retitle" && item.Headline == "Gateway retitle"
 	}) {
 		t.Fatalf("snapshot items = %#v, want created item", snapshot.Items)
 	}

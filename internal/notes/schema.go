@@ -9,7 +9,7 @@ import (
 
 const (
 	schemaKind           = "notes_runtime"
-	currentSchemaVersion = 1
+	currentSchemaVersion = 2
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -20,6 +20,7 @@ func schemaSpec() sqliteutil.Spec {
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 		},
 		Verify: verifySchema,
 	}
@@ -43,6 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_notes_topics_sort
 CREATE TABLE IF NOT EXISTS notes_items (
   note_id TEXT PRIMARY KEY,
   topic_id TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
   body TEXT NOT NULL,
   preview_text TEXT NOT NULL,
   character_count INTEGER NOT NULL,
@@ -78,10 +80,22 @@ CREATE INDEX IF NOT EXISTS idx_notes_events_seq
 	return err
 }
 
+func migrateToV2(tx *sql.Tx) error {
+	has, err := sqliteutil.ColumnExistsTx(tx, "notes_items", "title")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	_, err = tx.Exec(`ALTER TABLE notes_items ADD COLUMN title TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
 func verifySchema(tx *sql.Tx) error {
 	requiredTables := map[string][]string{
 		"notes_topics": {"topic_id", "name", "icon_key", "icon_accent", "sort_order", "created_at_unix_ms", "updated_at_unix_ms", "deleted_at_unix_ms"},
-		"notes_items":  {"note_id", "topic_id", "body", "preview_text", "character_count", "size_bucket", "style_version", "color_token", "x", "y", "z_index", "created_at_unix_ms", "updated_at_unix_ms", "deleted_at_unix_ms", "deleted_snapshot_json"},
+		"notes_items":  {"note_id", "topic_id", "title", "body", "preview_text", "character_count", "size_bucket", "style_version", "color_token", "x", "y", "z_index", "created_at_unix_ms", "updated_at_unix_ms", "deleted_at_unix_ms", "deleted_snapshot_json"},
 		"notes_events": {"seq", "event_type", "entity_kind", "entity_id", "topic_id", "payload_json", "created_at_unix_ms"},
 	}
 	for tableName, columns := range requiredTables {
