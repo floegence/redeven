@@ -8,6 +8,7 @@ Key points:
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex/Notes overlay).
 - Notes overlay now consumes the released shared floe-webapp Notes surface (`@floegence/floe-webapp-core/notes`); Redeven keeps snapshot fetch, API mutations, SSE projection, and controller glue as the product-owned runtime layer.
+- Notes overlay shell integration is also product-owned: Env App measures the shell-safe content viewport and publishes a small body-level CSS geometry contract so the shared Notes overlay plus its body-portal flyouts/backdrops stay inside the actual content area instead of the raw desktop window viewport.
 - Monitor `Top Processes` severity coloring is semantic and threshold-driven: CPU uses muted/success/warning/error tiers at `<20`, `20-49.9`, `50-99.9`, and `>=100`, while memory uses muted/success/warning tiers at `<1 GiB`, `1-9.9 GiB`, and `>=10 GiB`.
 - In Redeven Desktop, the command palette also exposes a shell-owned `Open Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
 - In Redeven Desktop, Env App also follows a shell-owned theme contract: Electron main resolves `system` / `light` / `dark`, preload exposes `window.redevenDesktopTheme`, and Env App routes only its Floe `theme` persistence key through that shell bridge while leaving other UI persistence in the normal Env App namespace.

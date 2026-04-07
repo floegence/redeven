@@ -485,6 +485,7 @@ export function EnvAppShell() {
   const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
   const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
+  const [notesViewportHost, setNotesViewportHost] = createSignal<HTMLElement | null>(null);
   const openNotesOverlay = () => setNotesOverlayOpen(true);
   const closeNotesOverlay = () => setNotesOverlayOpen(false);
   const toggleNotesOverlay = () => setNotesOverlayOpen((open) => !open);
@@ -2269,13 +2270,13 @@ export function EnvAppShell() {
           </Panel>
         </Show>
 
-        <div class="flex-1 min-h-0 overflow-hidden relative">
+        <div ref={setNotesViewportHost} class="flex-1 min-h-0 overflow-hidden relative">
           <Show
             when={accessGateVisible()}
             fallback={
               <>
                 <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
-                <NotesOverlay open={notesOverlayOpen()} onClose={closeNotesOverlay} />
+                <NotesOverlay open={notesOverlayOpen()} onClose={closeNotesOverlay} viewportHost={notesViewportHost()} />
               </>
             }
           >
