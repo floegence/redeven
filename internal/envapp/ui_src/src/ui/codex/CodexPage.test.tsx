@@ -1071,6 +1071,8 @@ describe('CodexPage', () => {
       sandbox_mode: 'workspace-write',
       approvals_reviewer: '',
     });
+    expect(notification.success).not.toHaveBeenCalled();
+    expect(notification.info).not.toHaveBeenCalled();
   });
 
   it('renders the conversation shell, transcript rows, and runtime flags for the active Codex thread', async () => {
@@ -1590,6 +1592,8 @@ describe('CodexPage', () => {
       ],
     });
     expect(startCodexTurnMock).not.toHaveBeenCalled();
+    expect(notification.success).not.toHaveBeenCalled();
+    expect(notification.info).not.toHaveBeenCalled();
   });
 
   it('keeps guided queued sends in dispatching state instead of creating an optimistic transcript row', async () => {
@@ -1838,10 +1842,8 @@ describe('CodexPage', () => {
     expect(textarea.value).toBe('');
     expect(host.textContent).toContain('Guide unavailable');
     expect(host.textContent).toContain('Queue this when steer is rejected');
-    expect(notification.info).toHaveBeenCalledWith(
-      'Guide unavailable',
-      'This turn could not accept the queued prompt, so it stayed in the queue.',
-    );
+    expect(notification.info).not.toHaveBeenCalled();
+    expect(notification.success).not.toHaveBeenCalled();
   });
 
   it('auto-sends the next queued follow-up after the active thread becomes idle', async () => {
