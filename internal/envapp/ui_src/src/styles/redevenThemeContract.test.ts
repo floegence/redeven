@@ -110,4 +110,27 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-divider {');
     expect(src).toContain('.redeven-divider--strong {');
   });
+
+  it('defines the Notes shell viewport contract so shared fixed and portal surfaces stay inside the Env App content host', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain("--redeven-notes-overlay-viewport-top: 0px;");
+    expect(src).toContain("--redeven-notes-overlay-viewport-left: 0px;");
+    expect(src).toContain("--redeven-notes-overlay-viewport-right: 0px;");
+    expect(src).toContain("--redeven-notes-overlay-viewport-bottom: 0px;");
+    expect(src).toContain("--redeven-notes-overlay-viewport-width: 100vw;");
+    expect(src).toContain("--redeven-notes-overlay-viewport-height: 100vh;");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-overlay {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-trash-backdrop,");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-trash__panel {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-overview-backdrop,");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-menu-backdrop {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-trash__flyout {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-overview-flyout {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-overview--mobile {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-menu,");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-context-menu {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-flyout {");
+    expect(src).toContain("body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {");
+  });
 });

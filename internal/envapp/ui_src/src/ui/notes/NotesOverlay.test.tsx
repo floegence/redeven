@@ -4,6 +4,10 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NotesOverlay } from './NotesOverlay';
+import {
+  NOTES_OVERLAY_VIEWPORT_ATTR,
+  NOTES_OVERLAY_VIEWPORT_CSS_VARS,
+} from './notesOverlayViewport';
 import type { NotesEvent, NotesItem, NotesSnapshot, NotesTopic, NotesTrashItem } from './notesModel';
 
 const notificationState = vi.hoisted(() => ({
@@ -208,6 +212,10 @@ describe('Redeven NotesOverlay adapter', () => {
   });
 
   afterEach(() => {
+    document.body.removeAttribute(NOTES_OVERLAY_VIEWPORT_ATTR);
+    for (const cssVarName of Object.values(NOTES_OVERLAY_VIEWPORT_CSS_VARS)) {
+      document.body.style.removeProperty(cssVarName);
+    }
     document.body.innerHTML = '';
     vi.clearAllMocks();
   });
@@ -256,6 +264,71 @@ describe('Redeven NotesOverlay adapter', () => {
 
     expect(controller.snapshot().seq).toBe(2);
     expect(controller.snapshot().items[0]?.body).toBe('Updated from stream');
+  });
+
+  it('publishes and clears the shell viewport contract on document.body while the overlay is open', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const viewportHost = document.createElement('div');
+    const initialInnerWidth = window.innerWidth;
+    const initialInnerHeight = window.innerHeight;
+    Object.defineProperty(viewportHost, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        top: 40,
+        left: 64,
+        right: 1216,
+        bottom: 768,
+        width: 1152,
+        height: 728,
+        x: 64,
+        y: 40,
+        toJSON: () => ({}),
+      }),
+    });
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1280,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 800,
+    });
+
+    try {
+      const [open, setOpen] = createSignal(false);
+      const dispose = render(() => <NotesOverlay open={open()} onClose={() => undefined} viewportHost={viewportHost} />, host);
+      await settle();
+
+      expect(document.body.getAttribute(NOTES_OVERLAY_VIEWPORT_ATTR)).toBeNull();
+
+      setOpen(true);
+      await settle();
+
+      expect(document.body.getAttribute(NOTES_OVERLAY_VIEWPORT_ATTR)).toBe('active');
+      expect(document.body.style.getPropertyValue(NOTES_OVERLAY_VIEWPORT_CSS_VARS.top)).toBe('40px');
+      expect(document.body.style.getPropertyValue(NOTES_OVERLAY_VIEWPORT_CSS_VARS.left)).toBe('64px');
+      expect(document.body.style.getPropertyValue(NOTES_OVERLAY_VIEWPORT_CSS_VARS.width)).toBe('1152px');
+      expect(document.body.style.getPropertyValue(NOTES_OVERLAY_VIEWPORT_CSS_VARS.height)).toBe('728px');
+
+      setOpen(false);
+      await settle();
+
+      expect(document.body.getAttribute(NOTES_OVERLAY_VIEWPORT_ATTR)).toBeNull();
+      expect(document.body.style.getPropertyValue(NOTES_OVERLAY_VIEWPORT_CSS_VARS.width)).toBe('');
+
+      dispose();
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: initialInnerWidth,
+      });
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        value: initialInnerHeight,
+      });
+    }
   });
 
   it('forwards the shell close callback to the shared floating notes overlay', async () => {
