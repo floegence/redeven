@@ -8,8 +8,8 @@ github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkp
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/ebitengine/purego v0.9.1 h1:a/k2f2HQU3Pi399RPW1MOaZyhKJL9w/xFpKAg4q1s0A=
 github.com/ebitengine/purego v0.9.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
-github.com/floegence/floeterm/terminal-go v0.4.9 h1:kwiVlSx43tPhLQfZWhSzPmE1HeEHa68eX+DEncWKVlQ=
-github.com/floegence/floeterm/terminal-go v0.4.9/go.mod h1:X8JGpLGQ51WRQsGXFo29z40jajJyqUpeAIIv1ulYmeE=
+github.com/floegence/floeterm/terminal-go v0.4.12 h1:AxvEl1nGHe/LEOmzKn5sk8xTSvYCqgT1LQ0KWHmOTJ0=
+github.com/floegence/floeterm/terminal-go v0.4.12/go.mod h1:X8JGpLGQ51WRQsGXFo29z40jajJyqUpeAIIv1ulYmeE=
 github.com/floegence/flowersec/flowersec-go v0.17.2 h1:S5kaAwjfYBPO9bigUMpBb4Y377cPJiKsGiV+4hVGAcE=
 github.com/floegence/flowersec/flowersec-go v0.17.2/go.mod h1:29rjASyUeudTTbx9pB2G6f3jRSiMQV9f4bUUb9u8zaE=
 github.com/go-ole/go-ole v1.2.6 h1:/Fpf6oFPoeFik9ty7siob0G6Ke8QvQEuVcuChpwXzpY=
