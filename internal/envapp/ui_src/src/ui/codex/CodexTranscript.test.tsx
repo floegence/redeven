@@ -431,6 +431,7 @@ describe('CodexTranscript', () => {
     expect(host.querySelector('[data-codex-item-type="webSearch"] .chat-message-avatar')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-markdown-block')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-primary')).toBeTruthy();
+    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-copy')).toBeTruthy();
 
     dispose();
   });

@@ -428,27 +428,29 @@ function WebSearchBody(props: { item: CodexTranscriptItem }) {
     <div class="codex-chat-web-search">
       <div class="codex-chat-web-search-summary">
         <span class="codex-chat-web-search-action-chip">{card().actionLabel}</span>
-        <code class="codex-chat-web-search-primary" title={card().primaryTitle}>
-          {card().primary}
-        </code>
-      </div>
-      <Show when={card().details.length > 0}>
-        <div class="codex-chat-web-search-details">
-          <For each={card().details}>
-            {(detail) => (
-              <span
-                class={cn(
-                  'codex-chat-web-search-detail-chip',
-                  detail.tone === 'accent' && 'codex-chat-web-search-detail-chip-accent',
+        <div class="codex-chat-web-search-copy">
+          <code class="codex-chat-web-search-primary" title={card().primaryTitle}>
+            {card().primary}
+          </code>
+          <Show when={card().details.length > 0}>
+            <div class="codex-chat-web-search-details">
+              <For each={card().details}>
+                {(detail) => (
+                  <span
+                    class={cn(
+                      'codex-chat-web-search-detail-chip',
+                      detail.tone === 'accent' && 'codex-chat-web-search-detail-chip-accent',
+                    )}
+                    title={detail.title}
+                  >
+                    {detail.text}
+                  </span>
                 )}
-                title={detail.title}
-              >
-                {detail.text}
-              </span>
-            )}
-          </For>
+              </For>
+            </div>
+          </Show>
         </div>
-      </Show>
+      </div>
     </div>
   );
 }
