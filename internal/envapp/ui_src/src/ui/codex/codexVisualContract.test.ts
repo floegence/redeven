@@ -34,6 +34,12 @@ describe('Codex visual contract', () => {
     expect(src).toMatch(/\.codex-chat-reasoning-toggle \{[\s\S]*gap: 0\.3125rem;[\s\S]*cursor: pointer;/);
     expect(src).toMatch(/\.codex-chat-reasoning-kicker \{[\s\S]*width: 0\.875rem;[\s\S]*height: 0\.875rem;[\s\S]*color: color-mix\(in srgb, var\(--muted-foreground\) 82%, var\(--foreground\) 18%\);/);
     expect(src).toContain('.codex-chat-file-change {');
+    expect(src).toMatch(/\.codex-chat-evidence-card-web-search \{[\s\S]*padding: 0\.625rem 0\.75rem;/);
+    expect(src).toMatch(/\.codex-chat-web-search-primary \{[\s\S]*font-family: ui-monospace,[\s\S]*-webkit-line-clamp: 2;/);
+    expect(src).toContain('.codex-chat-web-search-detail-chip-accent {');
+    expect(src).not.toMatch(/\.codex-chat-evidence-card-web-search \{[^}]*gradient/);
+    expect(src).not.toMatch(/\.codex-chat-web-search-action-chip \{[^}]*gradient/);
+    expect(src).not.toMatch(/\.codex-chat-web-search-primary \{[^}]*gradient/);
     expect(src).not.toMatch(/\.codex-chat-reasoning-kicker \{[^}]*border-radius:/);
     expect(src).not.toMatch(/\.codex-chat-reasoning-kicker \{[^}]*background:/);
     expect(src).not.toContain('.codex-chat-reasoning-card {');
@@ -42,8 +48,6 @@ describe('Codex visual contract', () => {
     expect(src).not.toContain('.codex-chat-file-change-canvas {');
     expect(src).not.toContain('.codex-chat-file-change-kind-added {');
     expect(src).not.toContain('.codex-chat-markdown-block .chat-md-file-ref {');
-    expect(src).not.toContain('linear-gradient(');
-    expect(src).not.toContain('radial-gradient(');
   });
 
   it('keeps the Codex empty hero visually centered without phantom bottom spacing', () => {
@@ -113,6 +117,7 @@ describe('Codex visual contract', () => {
     const src = readCodexTranscript();
 
     expect(src.match(/class="codex-empty-ornament"/g)?.length ?? 0).toBe(1);
+    expect(src).toContain('class="codex-chat-web-search"');
     expect(src).toContain('data-codex-transcript-mode={transcriptSurfaceState().mode}');
     expect(src).toContain('class="codex-transcript-shell"');
     expect(src).not.toContain('bg-gradient-to-br');

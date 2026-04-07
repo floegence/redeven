@@ -311,17 +311,143 @@ function ReasoningRow(props: {
   );
 }
 
+type CodexWebSearchDetailChip = Readonly<{
+  text: string;
+  title?: string;
+  tone?: 'default' | 'accent';
+}>;
+
+function compactWebSearchURL(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return '';
+  try {
+    const parsed = new URL(normalized);
+    const host = parsed.hostname.replace(/^www\./, '');
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    if (segments.length === 0) return host;
+    if (segments.length === 1) return `${host}/${segments[0]}`;
+    return `${host}/.../${segments[segments.length - 1]}`;
+  } catch {
+    if (normalized.length <= 48) return normalized;
+    return `${normalized.slice(0, 22)}...${normalized.slice(-18)}`;
+  }
+}
+
+function buildWebSearchCard(item: CodexTranscriptItem): Readonly<{
+  actionLabel: string;
+  primary: string;
+  primaryTitle: string;
+  details: CodexWebSearchDetailChip[];
+}> {
+  const actionType = String(item.action?.type ?? '').trim();
+  const query = String(item.query ?? item.action?.query ?? '').trim();
+  const queries = Array.isArray(item.action?.queries)
+    ? item.action?.queries.map((entry) => String(entry ?? '').trim()).filter(Boolean)
+    : [];
+  const pattern = String(item.action?.pattern ?? '').trim();
+  const url = String(item.action?.url ?? '').trim();
+  const compactURL = compactWebSearchURL(url);
+  const details: CodexWebSearchDetailChip[] = [];
+  const pushDetail = (text: string, title?: string, tone: CodexWebSearchDetailChip['tone'] = 'default') => {
+    const normalized = String(text ?? '').trim();
+    if (!normalized) return;
+    if (details.some((entry) => entry.text === normalized)) return;
+    details.push({
+      text: normalized,
+      title: String(title ?? normalized).trim() || undefined,
+      tone,
+    });
+  };
+
+  if (actionType === 'search') {
+    if (queries.length > 1) {
+      pushDetail(`${queries.length} queries`, undefined, 'accent');
+    }
+    return {
+      actionLabel: 'Search',
+      primary: query || queries[0] || 'Search requested',
+      primaryTitle: query || queries[0] || 'Search requested',
+      details,
+    };
+  }
+
+  if (actionType === 'openPage') {
+    return {
+      actionLabel: 'Open page',
+      primary: compactURL || url || query || 'Page opened',
+      primaryTitle: url || compactURL || query || 'Page opened',
+      details,
+    };
+  }
+
+  if (actionType === 'findInPage') {
+    if (compactURL) {
+      pushDetail(compactURL, url);
+    }
+    return {
+      actionLabel: 'Find in page',
+      primary: pattern || query || compactURL || 'Pattern lookup',
+      primaryTitle: pattern || query || url || compactURL || 'Pattern lookup',
+      details,
+    };
+  }
+
+  if (compactURL) {
+    pushDetail(compactURL, url);
+  }
+  return {
+    actionLabel: 'Web search',
+    primary: query || pattern || compactURL || 'Search requested',
+    primaryTitle: query || pattern || url || compactURL || 'Search requested',
+    details,
+  };
+}
+
 function EvidenceHeader(props: { item: CodexTranscriptItem }) {
+  const compact = () => props.item.type === 'webSearch';
   return (
-    <div class="codex-chat-evidence-header">
-      <span class="codex-chat-evidence-kicker">{itemGlyph(props.item)}</span>
-      <div class="min-w-0 flex-1">
-        <div class="truncate text-sm font-medium text-foreground">{itemTitle(props.item)}</div>
+    <div class={cn('codex-chat-evidence-header', compact() && 'codex-chat-evidence-header-web-search')}>
+      <span class={cn('codex-chat-evidence-kicker', compact() && 'codex-chat-evidence-kicker-web-search')}>{itemGlyph(props.item)}</span>
+      <div class="codex-chat-evidence-copy">
+        <div class={cn('codex-chat-evidence-title', compact() && 'codex-chat-evidence-title-web-search')}>{itemTitle(props.item)}</div>
       </div>
       <Show when={props.item.status}>
-        <Tag variant={statusTagVariant(props.item.status)} tone="soft" size="sm">
-          {displayStatus(props.item.status)}
-        </Tag>
+        <span class="codex-chat-evidence-status">
+          <Tag variant={statusTagVariant(props.item.status)} tone="soft" size="sm">
+            {displayStatus(props.item.status)}
+          </Tag>
+        </span>
+      </Show>
+    </div>
+  );
+}
+
+function WebSearchBody(props: { item: CodexTranscriptItem }) {
+  const card = createMemo(() => buildWebSearchCard(props.item));
+  return (
+    <div class="codex-chat-web-search">
+      <div class="codex-chat-web-search-summary">
+        <span class="codex-chat-web-search-action-chip">{card().actionLabel}</span>
+        <code class="codex-chat-web-search-primary" title={card().primaryTitle}>
+          {card().primary}
+        </code>
+      </div>
+      <Show when={card().details.length > 0}>
+        <div class="codex-chat-web-search-details">
+          <For each={card().details}>
+            {(detail) => (
+              <span
+                class={cn(
+                  'codex-chat-web-search-detail-chip',
+                  detail.tone === 'accent' && 'codex-chat-web-search-detail-chip-accent',
+                )}
+                title={detail.title}
+              >
+                {detail.text}
+              </span>
+            )}
+          </For>
+        </div>
       </Show>
     </div>
   );
@@ -329,18 +455,23 @@ function EvidenceHeader(props: { item: CodexTranscriptItem }) {
 
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
   const fallbackText = () => itemText(props.item);
+  const isWebSearch = () => props.item.type === 'webSearch';
   return (
     <CodexMessageLane role="assistant">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
-        <div class="codex-chat-evidence-card">
+        <div class={cn('codex-chat-evidence-card', isWebSearch() && 'codex-chat-evidence-card-web-search')}>
           <EvidenceHeader item={props.item} />
-          <div class="codex-chat-evidence-body">
+          <div class={cn('codex-chat-evidence-body', isWebSearch() && 'codex-chat-evidence-body-web-search')}>
             <Show when={props.item.type === 'fileChange'}>
               <FileChangeBody item={props.item} />
+            </Show>
+            <Show when={isWebSearch()}>
+              <WebSearchBody item={props.item} />
             </Show>
             <Show
               when={
                 props.item.type !== 'fileChange' &&
+                props.item.type !== 'webSearch' &&
                 props.item.type !== 'reasoning' &&
                 props.item.type !== 'plan' &&
                 Boolean(fallbackText().trim())

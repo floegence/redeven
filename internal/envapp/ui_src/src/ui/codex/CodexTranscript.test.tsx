@@ -422,10 +422,15 @@ describe('CodexTranscript', () => {
 
     expect(host.textContent).not.toContain('Reasoning note');
     expect(host.textContent).toContain('Web search');
+    expect(host.textContent).toContain('Search');
     expect(host.textContent).toContain('site:nmc.cn changsha weather');
-    expect(host.textContent).toContain('Opened page: https://nmc.cn/publish/forecast/AHN/changsha.html');
+    expect(host.textContent).toContain('2 queries');
+    expect(host.textContent).toContain('Open page');
+    expect(host.textContent).toContain('nmc.cn/.../changsha.html');
     expect(host.textContent).not.toContain('No content.');
     expect(host.querySelector('[data-codex-item-type="webSearch"] .chat-message-avatar')).toBeNull();
+    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-markdown-block')).toBeNull();
+    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-primary')).toBeTruthy();
 
     dispose();
   });
