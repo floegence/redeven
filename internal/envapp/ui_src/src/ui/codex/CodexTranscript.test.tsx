@@ -416,22 +416,38 @@ describe('CodexTranscript', () => {
         },
         order: 2,
       },
+      {
+        id: 'item_web_search_find',
+        type: 'webSearch',
+        action: {
+          type: 'findInPage',
+          pattern: 'Rainfall warning',
+          url: 'https://www.weather.com.cn/weather/101250101.shtml',
+        },
+        order: 3,
+      },
     ];
 
     const { host, dispose } = renderTranscript(items);
 
     expect(host.textContent).not.toContain('Reasoning note');
-    expect(host.textContent).toContain('Web search');
+    expect(host.textContent).not.toContain('Web search');
     expect(host.textContent).toContain('Search');
     expect(host.textContent).toContain('site:nmc.cn changsha weather');
     expect(host.textContent).toContain('2 queries');
     expect(host.textContent).toContain('Open page');
     expect(host.textContent).toContain('nmc.cn/.../changsha.html');
+    expect(host.textContent).toContain('Find in page');
+    expect(host.textContent).toContain('Rainfall warning');
+    expect(host.textContent).toContain('Page');
+    expect(host.textContent).toContain('weather.com.cn/.../101250101.shtml');
     expect(host.textContent).not.toContain('No content.');
     expect(host.querySelector('[data-codex-item-type="webSearch"] .chat-message-avatar')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-markdown-block')).toBeNull();
+    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-evidence-header')).toBeNull();
     expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-primary')).toBeTruthy();
-    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-copy')).toBeTruthy();
+    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-meta')).toBeTruthy();
+    expect(host.querySelector('[data-codex-item-type="webSearch"] .codex-chat-web-search-meta-label')?.textContent).toBe('Across');
 
     dispose();
   });
@@ -465,8 +481,8 @@ describe('CodexTranscript', () => {
     const rows = host.querySelectorAll('[data-codex-item-type="webSearch"]');
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.querySelector('.codex-chat-evidence-status')).toBeNull();
-    expect(rows[1]?.querySelector('.codex-chat-evidence-status')).toBeTruthy();
+    expect(rows[0]?.querySelector('.codex-chat-web-search-status')).toBeNull();
+    expect(rows[1]?.querySelector('.codex-chat-web-search-status')).toBeTruthy();
     expect(rows[1]?.textContent?.toLowerCase()).toContain('completed');
 
     dispose();
