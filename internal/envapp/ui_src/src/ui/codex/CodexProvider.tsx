@@ -1640,7 +1640,7 @@ export function CodexProvider(props: ParentProps) {
     };
   };
 
-  const queueCurrentDraftInternal = (source: CodexQueuedFollowup['source'], notifySuccess: boolean): boolean => {
+  const queueCurrentDraftInternal = (source: CodexQueuedFollowup['source']): boolean => {
     const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return false;
     const prepared = prepareCodexSubmission({
@@ -1662,9 +1662,6 @@ export function CodexProvider(props: ParentProps) {
     followupController.queueFollowup(followup);
     draftController.resetComposer(activeOwnerID());
     setBlockedAutoSendKey('');
-    if (notifySuccess) {
-      notify.success('Queued', 'Codex will send this follow-up after the current turn finishes.');
-    }
     return true;
   };
 
@@ -1681,7 +1678,7 @@ export function CodexProvider(props: ParentProps) {
       notify.error('Queue unavailable', 'Queue is available after the current thread starts.');
       return;
     }
-    if (!queueCurrentDraftInternal('queued', true)) {
+    if (!queueCurrentDraftInternal('queued')) {
       return;
     }
   };
@@ -1702,7 +1699,6 @@ export function CodexProvider(props: ParentProps) {
     draftController.replaceAttachments(ownerID, followup.attachments);
     draftController.replaceMentions(ownerID, followup.mentions);
     setBlockedAutoSendKey('');
-    notify.info('Loaded', 'The queued follow-up was restored to the composer.');
   };
 
   const removeQueuedFollowup = (followupID: string) => {
@@ -1972,7 +1968,6 @@ export function CodexProvider(props: ParentProps) {
           followupController.queueFollowup(
             queuedFollowupFromDispatching(failedInput, 'rejected_steer'),
           );
-          notify.info('Queued for later', 'The current turn could not accept same-turn input, so your message was queued as the next turn.');
         },
         onFailure: (_failedInput, error) => {
           restoreComposerSnapshot(ownerID, snapshot);
@@ -1983,9 +1978,7 @@ export function CodexProvider(props: ParentProps) {
     }
 
     if (hasActiveRun) {
-      const turnKind = String(activeTurnKind() ?? '').trim();
-      const turnLabel = turnKind ? `${turnKind} turn` : 'current turn';
-      notify.info('Queue required', `The ${turnLabel} cannot accept immediate input. Queue the prompt above or wait for completion.`);
+      queueCurrentDraftInternal('queued');
       return;
     }
 
@@ -2025,17 +2018,9 @@ export function CodexProvider(props: ParentProps) {
       return;
     }
     if (activeTurnCanSteer() === false) {
-      const turnKind = String(activeTurnKind() ?? '').trim();
-      notify.info(
-        'Guide unavailable',
-        turnKind
-          ? `The current ${turnKind} turn cannot accept queued guidance right now.`
-          : 'The current turn cannot accept queued guidance right now.',
-      );
       return;
     }
     if (!turnID) {
-      notify.info('Guide unavailable', 'Wait for the current turn to finish starting before guiding a queued prompt.');
       return;
     }
 
@@ -2059,7 +2044,6 @@ export function CodexProvider(props: ParentProps) {
         followupController.prependFollowup(
           queuedFollowupFromDispatching(failedInput, 'rejected_steer'),
         );
-        notify.info('Guide unavailable', 'This turn could not accept the queued prompt, so it stayed in the queue.');
       },
       onFailure: (failedInput, error) => {
         followupController.prependFollowup(
@@ -2093,7 +2077,6 @@ export function CodexProvider(props: ParentProps) {
       replaceThreadDispatching(normalizedThreadID, []);
       followupController.clearThread(normalizedThreadID);
       threadController.removeThreadState(normalizedThreadID);
-      notify.success('Archived', 'The Codex thread has been archived.');
       await refetchThreads();
     } catch (error) {
       notify.error('Archive failed', error instanceof Error ? error.message : String(error));
@@ -2138,7 +2121,6 @@ export function CodexProvider(props: ParentProps) {
         String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
       );
       requestScrollToBottom('bootstrap');
-      notify.success('Forked', 'Started a new Codex thread from the current conversation.');
       await refetchThreads();
     } catch (error) {
       notify.error('Fork failed', error instanceof Error ? error.message : String(error));
@@ -2165,7 +2147,6 @@ export function CodexProvider(props: ParentProps) {
         thread_id: threadID,
         turn_id: turnID,
       });
-      notify.success('Interrupted', 'Requested Codex to stop the active turn.');
     } catch (error) {
       notify.error('Interrupt failed', error instanceof Error ? error.message : String(error));
     } finally {
@@ -2197,7 +2178,6 @@ export function CodexProvider(props: ParentProps) {
       threadController.adoptThreadDetail(detail);
       upsertOptimisticThread(detail.thread);
       requestScrollToBottom('send');
-      notify.success('Review started', 'Codex is reviewing the current workspace changes.');
       await refetchThreads();
     } catch (error) {
       notify.error('Review failed', error instanceof Error ? error.message : String(error));
@@ -2276,7 +2256,6 @@ export function CodexProvider(props: ParentProps) {
         decision,
         answers: request.type === 'user_input' ? requestDrafts()[request.id] ?? {} : undefined,
       });
-      notify.success('Submitted', 'Codex request response sent.');
     } catch (error) {
       notify.error('Request failed', error instanceof Error ? error.message : String(error));
     }
