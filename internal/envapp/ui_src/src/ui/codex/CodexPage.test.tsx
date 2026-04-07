@@ -1577,8 +1577,7 @@ describe('CodexPage', () => {
     await flushAsync();
 
     expect(textarea.value).toBe('');
-    expect(host.textContent).toContain('Above the composer');
-    expect(host.textContent).toContain('Guiding the current turn');
+    expect(host.textContent).toContain('Guiding');
     expect(host.textContent).toContain('Need a visible stop action');
     expect(steerCodexTurnMock).toHaveBeenCalledWith({
       thread_id: 'thread_stop_after_send',
@@ -1714,7 +1713,7 @@ describe('CodexPage', () => {
       'Dispatch without an optimistic bubble',
     ]);
     expect(host.querySelectorAll('[data-codex-item-type="userMessage"]').length).toBe(0);
-    expect(host.textContent).toContain('Guiding the current turn');
+    expect(host.textContent).toContain('Guiding');
   });
 
   it('queues the current draft when steer is rejected as non-steerable', async () => {
@@ -1831,14 +1830,13 @@ describe('CodexPage', () => {
     guideButton.click();
 
     await waitForCondition(
-      () => steerCodexTurnMock.mock.calls.length === 1 && Boolean(host.textContent?.includes('Stayed queued because Guide was unavailable')),
+      () => steerCodexTurnMock.mock.calls.length === 1 && Boolean(host.textContent?.includes('Guide unavailable')),
       'queued follow-up fallback',
     );
 
     expect(steerCodexTurnMock).toHaveBeenCalledTimes(1);
     expect(textarea.value).toBe('');
-    expect(host.textContent).toContain('Above the composer');
-    expect(host.textContent).toContain('Stayed queued because Guide was unavailable');
+    expect(host.textContent).toContain('Guide unavailable');
     expect(host.textContent).toContain('Queue this when steer is rejected');
     expect(notification.info).toHaveBeenCalledWith(
       'Guide unavailable',
@@ -1965,8 +1963,7 @@ describe('CodexPage', () => {
     await flushAsync();
 
     expect(textarea.value).toBe('');
-    expect(host.textContent).toContain('Above the composer');
-    expect(host.textContent).toContain('Queued for the next turn');
+    expect(host.textContent).toContain('Queued');
     expect(host.textContent).toContain('Send this after the current turn finishes');
     const queuedPanel = host.querySelector('.codex-pending-inputs-panel');
     const composer = host.querySelector('.codex-chat-input.chat-input-container');
@@ -2059,7 +2056,7 @@ describe('CodexPage', () => {
     expect(codex.dispatchingInputs().map((item) => item.text)).toEqual([
       'Send this after the current turn finishes',
     ]);
-    expect(host.textContent).toContain('Starting the next turn');
+    expect(host.textContent).toContain('Sending');
     expect(startCodexTurnMock).toHaveBeenCalledWith(expect.objectContaining({
       threadID: 'thread_1',
       inputText: 'Send this after the current turn finishes',

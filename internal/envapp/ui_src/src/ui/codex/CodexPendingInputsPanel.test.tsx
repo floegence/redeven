@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 describe('CodexPendingInputsPanel', () => {
-  it('lets the user restore, guide, and remove queued items from the rail', () => {
+  it('keeps the rail compact while still letting the user restore, guide, and remove queued items', () => {
     const {
       host,
       dispose,
@@ -97,10 +97,13 @@ describe('CodexPendingInputsPanel', () => {
     guideButton.click();
     removeButton.click();
 
+    expect(host.querySelector('.codex-pending-inputs-header')).toBeNull();
+    expect(host.textContent).not.toContain('Queued prompts');
+    expect(host.textContent).not.toContain('Above the composer');
     expect(onRestoreQueued).toHaveBeenCalledWith('followup_1');
     expect(onGuideQueued).toHaveBeenCalledWith('followup_1');
     expect(onRemoveQueued).toHaveBeenCalledWith('followup_1');
-    expect(host.textContent).toContain('Guiding the current turn');
+    expect(host.textContent).toContain('Guiding');
     dispose();
   });
 
