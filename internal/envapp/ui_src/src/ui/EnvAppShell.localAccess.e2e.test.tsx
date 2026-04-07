@@ -428,7 +428,7 @@ describe('EnvAppShell top bar affordances', () => {
     }
   });
 
-  it('keeps desktop top bar tooltips enabled for the shared icon actions', async () => {
+  it('keeps desktop top bar tooltips enabled for the remaining shared icon actions', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
@@ -442,13 +442,11 @@ describe('EnvAppShell top bar affordances', () => {
       await flushAsync();
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]');
-      const commandPaletteButton = host.querySelector('button[aria-label="Command palette"]');
       const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
 
       expect(notesButton).toBeTruthy();
       expect(notesButton?.getAttribute('data-tooltip')).toBe('Notes overlay (⌘.)');
-      expect(commandPaletteButton).toBeTruthy();
-      expect(commandPaletteButton?.getAttribute('data-tooltip')).toBe('Command palette');
+      expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
       expect(toggleThemeButton).toBeTruthy();
       expect(toggleThemeButton?.getAttribute('data-tooltip')).toBe('Toggle theme');
     } finally {
@@ -472,6 +470,7 @@ describe('EnvAppShell top bar affordances', () => {
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]') as HTMLButtonElement | null;
       const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
+      expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
       expect(notesButton).toBeTruthy();
       expect(notesButton?.getAttribute('data-tooltip')).toBeNull();
       expect(notesOverlayState.lastProps?.open).toBe(false);

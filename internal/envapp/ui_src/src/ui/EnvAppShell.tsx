@@ -2219,13 +2219,6 @@ export function EnvAppShell() {
             <NotesOverlayIcon class="w-4 h-4" />
           </TopBarIconButton>
           <TopBarIconButton
-            label="Command palette"
-            tooltip={topBarTooltip('Command palette')}
-            onClick={() => cmd.open()}
-          >
-            <Search class="w-4 h-4" />
-          </TopBarIconButton>
-          <TopBarIconButton
             label="Toggle theme"
             tooltip={topBarTooltip('Toggle theme')}
             onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
