@@ -6,7 +6,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.4.9
-	github.com/floegence/flowersec/flowersec-go v0.17.1
+	github.com/floegence/flowersec/flowersec-go v0.17.2
 	github.com/openai/openai-go v1.12.0
 	github.com/shirou/gopsutil/v4 v4.25.12
 	golang.org/x/sys v0.38.0
