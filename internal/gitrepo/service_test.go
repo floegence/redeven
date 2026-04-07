@@ -263,12 +263,15 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	detail, files, err := svc.getCommitDetail(context.Background(), repo, fixture.RenameCommit)
+	detail, presentation, files, err := svc.getCommitDetail(context.Background(), repo, fixture.RenameCommit)
 	if err != nil {
 		t.Fatalf("getCommitDetail(rename): %v", err)
 	}
 	if detail.Hash != fixture.RenameCommit {
 		t.Fatalf("detail.Hash=%q, want %q", detail.Hash, fixture.RenameCommit)
+	}
+	if presentation.Mode != gitCommitDiffModePlain || presentation.MergeCommit {
+		t.Fatalf("rename presentation=%+v, want plain non-merge", presentation)
 	}
 	if len(files) != 1 {
 		t.Fatalf("rename files=%d, want 1", len(files))
@@ -295,9 +298,12 @@ func TestGetCommitDetail_RenameAndBinary(t *testing.T) {
 		t.Fatalf("rename patch content mismatch: %+v", renameDiff.File)
 	}
 
-	_, binaryFiles, err := svc.getCommitDetail(context.Background(), repo, fixture.BinaryCommit)
+	_, binaryPresentation, binaryFiles, err := svc.getCommitDetail(context.Background(), repo, fixture.BinaryCommit)
 	if err != nil {
 		t.Fatalf("getCommitDetail(binary): %v", err)
+	}
+	if binaryPresentation.Mode != gitCommitDiffModePlain || binaryPresentation.MergeCommit {
+		t.Fatalf("binary presentation=%+v, want plain non-merge", binaryPresentation)
 	}
 	if len(binaryFiles) < 2 {
 		t.Fatalf("binary cleanup should include at least 2 file changes, got %d", len(binaryFiles))
@@ -376,6 +382,64 @@ func TestGetDiffContent_CommitRenamePreservesRenameMetadata(t *testing.T) {
 	}
 	if strings.Contains(resp.File.PatchText, "new file mode") {
 		t.Fatalf("rename diff should not degrade into an added file view: %+v", resp.File)
+	}
+	if resp.Presentation.Mode != gitCommitDiffModePlain || resp.Presentation.MergeCommit {
+		t.Fatalf("rename diff presentation=%+v, want plain non-merge", resp.Presentation)
+	}
+}
+
+func TestGetCommitDetail_MergeCommitUsesFirstParentPresentation(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	mergeFixture := createMergeCommitBranchFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	preview := mustPreviewMergeBranch(t, svc, repo, mergeFixture.Branch, "refs/heads/"+mergeFixture.Branch, "local")
+	if preview.Outcome != mergeBranchOutcomeMergeCommit {
+		t.Fatalf("Outcome=%q, want %q", preview.Outcome, mergeBranchOutcomeMergeCommit)
+	}
+	resp, err := svc.mergeBranch(context.Background(), repo, mergeFixture.Branch, "refs/heads/"+mergeFixture.Branch, "local", preview.PlanFingerprint)
+	if err != nil {
+		t.Fatalf("mergeBranch(merge_commit): %v", err)
+	}
+
+	detail, presentation, files, err := svc.getCommitDetail(context.Background(), repo, resp.HeadCommit)
+	if err != nil {
+		t.Fatalf("getCommitDetail(merge): %v", err)
+	}
+	if detail.Hash != strings.TrimSpace(resp.HeadCommit) {
+		t.Fatalf("detail.Hash=%q, want %q", detail.Hash, resp.HeadCommit)
+	}
+	if !presentation.MergeCommit || presentation.Mode != gitCommitDiffModeFirstParent || presentation.ParentCount != 2 {
+		t.Fatalf("merge presentation=%+v, want first-parent merge with 2 parents", presentation)
+	}
+	if len(files) != 1 {
+		t.Fatalf("merge files=%d, want 1 first-parent entry", len(files))
+	}
+	if files[0].Path != "src/feature-merge.txt" || files[0].ChangeType != "added" {
+		t.Fatalf("unexpected first-parent merge file summary: %+v", files[0])
+	}
+	mergeDiff := mustGetDiffContent(t, svc, repo, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "commit",
+		Commit:       resp.HeadCommit,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: files[0].ChangeType,
+			Path:       files[0].Path,
+			OldPath:    files[0].OldPath,
+			NewPath:    files[0].NewPath,
+		},
+	})
+	if mergeDiff.Presentation.Mode != gitCommitDiffModeFirstParent || !mergeDiff.Presentation.MergeCommit {
+		t.Fatalf("merge diff presentation=%+v, want first-parent merge", mergeDiff.Presentation)
+	}
+	if !strings.Contains(mergeDiff.File.PatchText, "diff --git") || !strings.Contains(mergeDiff.File.PatchText, "src/feature-merge.txt") {
+		t.Fatalf("merge diff patch mismatch: %+v", mergeDiff.File)
 	}
 }
 

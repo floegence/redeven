@@ -9,6 +9,14 @@ import (
 )
 
 func (s *Service) readGitDiffMetadata(ctx context.Context, repoRoot string, nameStatusArgs []string, numstatArgs []string) ([]gitCommitFileSummary, error) {
+	return s.readGitDiffMetadataWithStatOnlyEntries(ctx, repoRoot, nameStatusArgs, numstatArgs, true)
+}
+
+func (s *Service) readGitDiffMetadataOnListedEntries(ctx context.Context, repoRoot string, nameStatusArgs []string, numstatArgs []string) ([]gitCommitFileSummary, error) {
+	return s.readGitDiffMetadataWithStatOnlyEntries(ctx, repoRoot, nameStatusArgs, numstatArgs, false)
+}
+
+func (s *Service) readGitDiffMetadataWithStatOnlyEntries(ctx context.Context, repoRoot string, nameStatusArgs []string, numstatArgs []string, includeStatOnlyEntries bool) ([]gitCommitFileSummary, error) {
 	nameEntries, err := s.readGitDiffNameStatusMetadata(ctx, repoRoot, nameStatusArgs...)
 	if err != nil {
 		return nil, err
@@ -17,7 +25,10 @@ func (s *Service) readGitDiffMetadata(ctx context.Context, repoRoot string, name
 	if err != nil {
 		return nil, err
 	}
+	return mergeGitDiffMetadataEntries(nameEntries, statEntries, includeStatOnlyEntries), nil
+}
 
+func mergeGitDiffMetadataEntries(nameEntries []gitDiffFileSummary, statEntries []gitDiffFileSummary, includeStatOnlyEntries bool) []gitCommitFileSummary {
 	statByKey := make(map[string]gitDiffFileSummary, len(statEntries)*4)
 	for _, entry := range statEntries {
 		for _, key := range diffSummaryMatchKeys(entry) {
@@ -59,6 +70,10 @@ func (s *Service) readGitDiffMetadata(ctx context.Context, repoRoot string, name
 		merged = append(merged, gitCommitFileSummary(mergedEntry))
 	}
 
+	if !includeStatOnlyEntries {
+		return merged
+	}
+
 	for _, entry := range statEntries {
 		alreadyMerged := false
 		for _, key := range diffSummaryMatchKeys(entry) {
@@ -81,7 +96,7 @@ func (s *Service) readGitDiffMetadata(ctx context.Context, repoRoot string, name
 		}
 		merged = append(merged, gitCommitFileSummary(entry))
 	}
-	return merged, nil
+	return merged
 }
 
 func (s *Service) readGitDiffNameStatusMetadata(ctx context.Context, repoRoot string, args ...string) ([]gitDiffFileSummary, error) {

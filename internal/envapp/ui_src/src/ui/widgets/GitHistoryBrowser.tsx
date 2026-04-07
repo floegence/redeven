@@ -1,14 +1,29 @@
-import { Show, createEffect, createMemo, createSignal } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
-import { Button } from '@floegence/floe-webapp-core/ui';
-import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc, type GitCommitDetail, type GitCommitFileSummary, type GitRepoSummaryResponse, type GitResolveRepoResponse } from '../protocol/redeven_v1';
-import { FlowerIcon } from '../icons/FlowerIcon';
-import { changeSecondaryPath, describeGitHead, gitDiffEntryIdentity, shortGitHash, type GitDetachedSwitchTarget } from '../utils/gitWorkbench';
-import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
-import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
-import { gitChangePathClass } from './GitChrome';
-import { GitDiffDialog } from './GitDiffDialog';
+import { Show, createEffect, createMemo, createSignal } from "solid-js";
+import { cn } from "@floegence/floe-webapp-core";
+import { Button } from "@floegence/floe-webapp-core/ui";
+import { useProtocol } from "@floegence/floe-webapp-protocol";
+import {
+  useRedevenRpc,
+  type GitCommitDetail,
+  type GitCommitDiffPresentation,
+  type GitCommitFileSummary,
+  type GitRepoSummaryResponse,
+  type GitResolveRepoResponse,
+} from "../protocol/redeven_v1";
+import { FlowerIcon } from "../icons/FlowerIcon";
+import {
+  changeSecondaryPath,
+  describeGitHead,
+  gitCommitDiffPresentationBadge,
+  gitCommitDiffPresentationDetail,
+  gitDiffEntryIdentity,
+  shortGitHash,
+  type GitDetachedSwitchTarget,
+} from "../utils/gitWorkbench";
+import type { GitAskFlowerRequest } from "../utils/gitBrowserShortcuts";
+import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
+import { gitChangePathClass } from "./GitChrome";
+import { GitDiffDialog } from "./GitDiffDialog";
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
@@ -29,8 +44,8 @@ import {
   GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
-} from './GitWorkbenchPrimitives';
-import { GitVirtualTable } from './GitVirtualTable';
+} from "./GitWorkbenchPrimitives";
+import { GitVirtualTable } from "./GitVirtualTable";
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -43,63 +58,100 @@ export interface GitHistoryBrowserProps {
   selectedCommitHash?: string;
   switchDetachedBusy?: boolean;
   onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
-  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'commit' }>) => void;
+  onAskFlower?: (
+    request: Extract<GitAskFlowerRequest, { kind: "commit" }>,
+  ) => void;
   class?: string;
 }
 
 function formatDetailTime(ms?: number): string {
-  if (!ms || !Number.isFinite(ms)) return '-';
+  if (!ms || !Number.isFinite(ms)) return "-";
   return new Date(ms).toLocaleString();
 }
 
-function selectedFileIdentity(file: GitCommitFileSummary | null | undefined): string {
+function selectedFileIdentity(
+  file: GitCommitFileSummary | null | undefined,
+): string {
   return gitDiffEntryIdentity(file);
 }
 
-function normalizeCommitBody(detail: GitCommitDetail | null | undefined): string {
-  const body = String(detail?.body ?? '').trim();
-  if (!body) return '';
-  const subject = String(detail?.subject ?? '').trim();
+function normalizeCommitBody(
+  detail: GitCommitDetail | null | undefined,
+): string {
+  const body = String(detail?.body ?? "").trim();
+  if (!body) return "";
+  const subject = String(detail?.subject ?? "").trim();
   if (!subject) return body;
   const lines = body.split(/\r?\n/);
   if (lines[0]?.trim() !== subject) return body;
-  return lines.slice(1).join('\n').trim();
+  return lines.slice(1).join("\n").trim();
 }
 
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
-  const outlineControlClass = redevenSurfaceRoleClass('control');
+  const outlineControlClass = redevenSurfaceRoleClass("control");
 
-  const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(null);
-  const [commitFiles, setCommitFiles] = createSignal<GitCommitFileSummary[]>([]);
+  const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(
+    null,
+  );
+  const [commitPresentation, setCommitPresentation] =
+    createSignal<GitCommitDiffPresentation | null>(null);
+  const [commitFiles, setCommitFiles] = createSignal<GitCommitFileSummary[]>(
+    [],
+  );
   const [detailLoading, setDetailLoading] = createSignal(false);
-  const [detailError, setDetailError] = createSignal('');
+  const [detailError, setDetailError] = createSignal("");
   const [commitBodyExpanded, setCommitBodyExpanded] = createSignal(false);
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
-  const [diffDialogItem, setDiffDialogItem] = createSignal<GitCommitFileSummary | null>(null);
-  const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal('');
+  const [diffDialogItem, setDiffDialogItem] =
+    createSignal<GitCommitFileSummary | null>(null);
+  const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal("");
 
   let detailReqSeq = 0;
 
-  const repoAvailable = createMemo(() => Boolean(props.repoInfo?.available && props.repoInfo?.repoRootPath));
-  const repoUnavailableReason = createMemo(() => String(props.repoInfo?.unavailableReason ?? '').trim());
-  const repoRootPath = createMemo(() => String(props.repoInfo?.repoRootPath ?? '').trim());
-  const commitHash = createMemo(() => String(props.selectedCommitHash ?? '').trim());
-  const headDisplay = createMemo(() => describeGitHead(props.repoSummary, props.repoInfo));
-  const currentHeadCommit = createMemo(() => String(props.repoSummary?.headCommit ?? props.repoInfo?.headCommit ?? '').trim());
+  const repoAvailable = createMemo(() =>
+    Boolean(props.repoInfo?.available && props.repoInfo?.repoRootPath),
+  );
+  const repoUnavailableReason = createMemo(() =>
+    String(props.repoInfo?.unavailableReason ?? "").trim(),
+  );
+  const repoRootPath = createMemo(() =>
+    String(props.repoInfo?.repoRootPath ?? "").trim(),
+  );
+  const commitHash = createMemo(() =>
+    String(props.selectedCommitHash ?? "").trim(),
+  );
+  const headDisplay = createMemo(() =>
+    describeGitHead(props.repoSummary, props.repoInfo),
+  );
+  const currentHeadCommit = createMemo(() =>
+    String(
+      props.repoSummary?.headCommit ?? props.repoInfo?.headCommit ?? "",
+    ).trim(),
+  );
   const commitBodyText = createMemo(() => normalizeCommitBody(commitDetail()));
   const hasExpandableCommitBody = createMemo(() => {
     const body = commitBodyText();
     if (!body) return false;
     const logicalLines = body.split(/\r?\n/);
-    return logicalLines.length > COMMIT_BODY_PREVIEW_LINES || body.length > COMMIT_BODY_PREVIEW_CHARS;
+    return (
+      logicalLines.length > COMMIT_BODY_PREVIEW_LINES ||
+      body.length > COMMIT_BODY_PREVIEW_CHARS
+    );
   });
+  const commitPresentationBadge = createMemo(() =>
+    gitCommitDiffPresentationBadge(commitPresentation()),
+  );
+  const commitPresentationDetail = createMemo(() =>
+    gitCommitDiffPresentationDetail(commitPresentation()),
+  );
 
   const resetDetailState = () => {
     setCommitDetail(null);
+    setCommitPresentation(null);
     setCommitFiles([]);
-    setDetailError('');
+    setDetailError("");
     setDetailLoading(false);
   };
 
@@ -108,17 +160,26 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     if (!repo || !hash || !protocol.client()) return;
     const seq = ++detailReqSeq;
     setDetailLoading(true);
-    setDetailError('');
+    setDetailError("");
     try {
-      const resp = await rpc.git.getCommitDetail({ repoRootPath: repo, commit: hash });
+      const resp = await rpc.git.getCommitDetail({
+        repoRootPath: repo,
+        commit: hash,
+      });
       if (seq !== detailReqSeq) return;
       const files = Array.isArray(resp?.files) ? resp.files : [];
       setCommitDetail(resp?.commit ?? null);
+      setCommitPresentation(resp?.presentation ?? null);
       setCommitFiles(files);
     } catch (err) {
       if (seq !== detailReqSeq) return;
-      setDetailError(err instanceof Error ? err.message : String(err ?? 'Failed to load commit detail'));
+      setDetailError(
+        err instanceof Error
+          ? err.message
+          : String(err ?? "Failed to load commit detail"),
+      );
       setCommitDetail(null);
+      setCommitPresentation(null);
       setCommitFiles([]);
     } finally {
       if (seq === detailReqSeq) setDetailLoading(false);
@@ -141,7 +202,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   createEffect(() => {
     repoRootPath();
     setDiffDialogItem(null);
-    setDiffDialogCommitHash('');
+    setDiffDialogCommitHash("");
     setDiffDialogOpen(false);
   });
 
@@ -157,36 +218,70 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   });
 
   return (
-    <div class={cn('relative flex h-full min-h-0 flex-col', props.class)}>
+    <div class={cn("relative flex h-full min-h-0 flex-col", props.class)}>
       <Show
         when={repoAvailable()}
         fallback={
           <div class="flex h-full items-center justify-center rounded-lg bg-muted/[0.18] px-6 text-center">
             <div class="max-w-md space-y-2">
-              <div class="text-sm font-medium text-foreground">Git history is unavailable</div>
+              <div class="text-sm font-medium text-foreground">
+                Git history is unavailable
+              </div>
               <div class="text-xs text-muted-foreground">
                 {props.repoInfoLoading
-                  ? 'Checking repository context for the current path...'
-                  : repoUnavailableReason() || `Current path ${props.currentPath || '/'} is outside a Git repository.`}
+                  ? "Checking repository context for the current path..."
+                  : repoUnavailableReason() ||
+                    `Current path ${props.currentPath || "/"} is outside a Git repository.`}
               </div>
             </div>
           </div>
         }
       >
-        <Show when={commitHash()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Choose a commit from the left rail to load its details.</div>}>
+        <Show
+          when={commitHash()}
+          fallback={
+            <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">
+              Choose a commit from the left rail to load its details.
+            </div>
+          }
+        >
           <Show
             when={!detailLoading()}
-            fallback={<GitStatePane loading message="Loading commit details..." class="px-4" />}
+            fallback={
+              <GitStatePane
+                loading
+                message="Loading commit details..."
+                class="px-4"
+              />
+            }
           >
-            <Show when={!detailError()} fallback={<GitStatePane tone="error" message={detailError()} class="px-3 py-4" />}>
-              <Show when={commitDetail()} fallback={<div class="flex-1 px-3 py-4 text-xs text-muted-foreground">Commit details are unavailable.</div>}>
+            <Show
+              when={!detailError()}
+              fallback={
+                <GitStatePane
+                  tone="error"
+                  message={detailError()}
+                  class="px-3 py-4"
+                />
+              }
+            >
+              <Show
+                when={commitDetail()}
+                fallback={
+                  <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">
+                    Commit details are unavailable.
+                  </div>
+                }
+              >
                 {(detailAccessor) => {
                   const detail = detailAccessor();
-                  const alreadyDetachedHere = () => headDisplay().detached && currentHeadCommit() === detail.hash;
+                  const alreadyDetachedHere = () =>
+                    headDisplay().detached &&
+                    currentHeadCommit() === detail.hash;
                   const switchDetachedLabel = () => {
-                    if (props.switchDetachedBusy) return 'Switching...';
-                    if (alreadyDetachedHere()) return 'Already detached here';
-                    return 'Switch --detach here';
+                    if (props.switchDetachedBusy) return "Switching...";
+                    if (alreadyDetachedHere()) return "Already detached here";
+                    return "Switch --detach here";
                   };
                   return (
                     <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
@@ -197,30 +292,54 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                               class="min-w-0 flex-1"
                               label="Commit Overview"
                               tone="brand"
-                              meta={<GitMetaPill tone="neutral">{detail.shortHash}</GitMetaPill>}
+                              meta={
+                                <GitMetaPill tone="neutral">
+                                  {detail.shortHash}
+                                </GitMetaPill>
+                              }
                             >
                               <GitPrimaryTitle class="max-w-3xl">
-                                {detail.subject || '(no subject)'}
+                                {detail.subject || "(no subject)"}
                               </GitPrimaryTitle>
                               <div class="flex flex-wrap items-center gap-1 pt-0.5">
-                                <GitMetaPill tone="info">{detail.authorName || 'Unknown author'}</GitMetaPill>
-                                <GitMetaPill tone="neutral">{formatDetailTime(detail.authorTimeMs)}</GitMetaPill>
-                                <GitMetaPill tone="neutral">{commitFiles().length} file{commitFiles().length === 1 ? '' : 's'}</GitMetaPill>
-                                <GitMetaPill tone="neutral">{detail.parents.length > 0 ? `${detail.parents.length} parent${detail.parents.length === 1 ? '' : 's'}` : 'Root commit'}</GitMetaPill>
+                                <GitMetaPill tone="info">
+                                  {detail.authorName || "Unknown author"}
+                                </GitMetaPill>
+                                <GitMetaPill tone="neutral">
+                                  {formatDetailTime(detail.authorTimeMs)}
+                                </GitMetaPill>
+                                <GitMetaPill tone="neutral">
+                                  {commitFiles().length} file
+                                  {commitFiles().length === 1 ? "" : "s"}
+                                </GitMetaPill>
+                                <GitMetaPill tone="neutral">
+                                  {detail.parents.length > 0
+                                    ? `${detail.parents.length} parent${detail.parents.length === 1 ? "" : "s"}`
+                                    : "Root commit"}
+                                </GitMetaPill>
+                                <Show when={commitPresentationBadge()}>
+                                  <GitMetaPill tone="violet">
+                                    {commitPresentationBadge()}
+                                  </GitMetaPill>
+                                </Show>
                               </div>
                               <Show when={commitBodyText()}>
                                 <div class="space-y-1 pt-0.5">
                                   <GitSubtleNote>
                                     <div
                                       class="whitespace-pre-wrap break-words text-foreground"
-                                      style={commitBodyExpanded()
-                                        ? undefined
-                                        : {
-                                            display: '-webkit-box',
-                                            '-webkit-box-orient': 'vertical',
-                                            '-webkit-line-clamp': String(COMMIT_BODY_PREVIEW_LINES),
-                                            overflow: 'hidden',
-                                          }}
+                                      style={
+                                        commitBodyExpanded()
+                                          ? undefined
+                                          : {
+                                              display: "-webkit-box",
+                                              "-webkit-box-orient": "vertical",
+                                              "-webkit-line-clamp": String(
+                                                COMMIT_BODY_PREVIEW_LINES,
+                                              ),
+                                              overflow: "hidden",
+                                            }
+                                      }
                                     >
                                       {commitBodyText()}
                                     </div>
@@ -231,9 +350,15 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                         type="button"
                                         aria-expanded={commitBodyExpanded()}
                                         class="cursor-pointer text-[11px] text-muted-foreground transition-colors duration-150 hover:text-foreground"
-                                        onClick={() => setCommitBodyExpanded((value) => !value)}
+                                        onClick={() =>
+                                          setCommitBodyExpanded(
+                                            (value) => !value,
+                                          )
+                                        }
                                       >
-                                        {commitBodyExpanded() ? 'Show less' : 'Show more'}
+                                        {commitBodyExpanded()
+                                          ? "Show less"
+                                          : "Show more"}
                                       </button>
                                     </div>
                                   </Show>
@@ -245,13 +370,23 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  class={cn('w-full rounded-md sm:w-auto', outlineControlClass)}
-                                  disabled={Boolean(props.switchDetachedBusy) || alreadyDetachedHere()}
-                                  onClick={() => props.onSwitchDetached?.({
-                                    commitHash: detail.hash,
-                                    shortHash: detail.shortHash || shortGitHash(detail.hash),
-                                    source: 'graph',
-                                  })}
+                                  class={cn(
+                                    "w-full rounded-md sm:w-auto",
+                                    outlineControlClass,
+                                  )}
+                                  disabled={
+                                    Boolean(props.switchDetachedBusy) ||
+                                    alreadyDetachedHere()
+                                  }
+                                  onClick={() =>
+                                    props.onSwitchDetached?.({
+                                      commitHash: detail.hash,
+                                      shortHash:
+                                        detail.shortHash ||
+                                        shortGitHash(detail.hash),
+                                      source: "graph",
+                                    })
+                                  }
                                 >
                                   {switchDetachedLabel()}
                                 </Button>
@@ -262,42 +397,104 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                     label="Ask Flower"
                                     tone="flower"
                                     icon={FlowerIcon}
-                                    onClick={() => props.onAskFlower?.({
-                                      kind: 'commit',
-                                      repoRootPath: String(props.repoInfo?.repoRootPath ?? '').trim(),
-                                      location: 'graph',
-                                      commit: detail,
-                                      files: commitFiles(),
-                                    })}
+                                    onClick={() =>
+                                      props.onAskFlower?.({
+                                        kind: "commit",
+                                        repoRootPath: String(
+                                          props.repoInfo?.repoRootPath ?? "",
+                                        ).trim(),
+                                        location: "graph",
+                                        commit: detail,
+                                        files: commitFiles(),
+                                      })
+                                    }
                                   />
                                 </GitShortcutOrbDock>
                               </Show>
                             </div>
                           </div>
-                          <Show when={props.onSwitchDetached && alreadyDetachedHere()}>
-                            <GitSubtleNote>Repository is already detached at this commit.</GitSubtleNote>
+                          <Show
+                            when={
+                              props.onSwitchDetached && alreadyDetachedHere()
+                            }
+                          >
+                            <GitSubtleNote>
+                              Repository is already detached at this commit.
+                            </GitSubtleNote>
                           </Show>
                         </GitPanelFrame>
 
                         <GitPanelFrame as="section">
-                          <GitLabelBlock class="min-w-0" label="Files in Commit" tone="info" meta={<GitMetaPill tone="neutral">{String(commitFiles().length)}</GitMetaPill>}>
-                            <div class="text-xs leading-relaxed text-muted-foreground">Click a file to inspect its diff in a dialog.</div>
+                          <GitLabelBlock
+                            class="min-w-0"
+                            label="Files in Commit"
+                            tone="info"
+                            meta={
+                              <GitMetaPill tone="neutral">
+                                {String(commitFiles().length)}
+                              </GitMetaPill>
+                            }
+                          >
+                            <div class="text-xs leading-relaxed text-muted-foreground">
+                              Click a file to inspect its diff in a dialog.
+                            </div>
                           </GitLabelBlock>
-                          <Show when={commitFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this commit.</GitSubtleNote>}>
+                          <Show when={commitPresentationDetail()}>
+                            <GitSubtleNote class="mt-2">
+                              {commitPresentationDetail()}
+                            </GitSubtleNote>
+                          </Show>
+                          <Show
+                            when={commitFiles().length > 0}
+                            fallback={
+                              <GitSubtleNote>
+                                No changed files are available for this commit.
+                              </GitSubtleNote>
+                            }
+                          >
                             <GitTableFrame class="mt-2.5">
                               <GitVirtualTable
                                 items={commitFiles()}
                                 tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
-                                header={(
-                                  <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                                header={
+                                  <tr
+                                    class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}
+                                  >
+                                    <th
+                                      class={
+                                        GIT_CHANGED_FILES_HEADER_CELL_CLASS
+                                      }
+                                    >
+                                      Path
+                                    </th>
+                                    <th
+                                      class={
+                                        GIT_CHANGED_FILES_HEADER_CELL_CLASS
+                                      }
+                                    >
+                                      Status
+                                    </th>
+                                    <th
+                                      class={
+                                        GIT_CHANGED_FILES_HEADER_CELL_CLASS
+                                      }
+                                    >
+                                      Changes
+                                    </th>
+                                    <th
+                                      class={
+                                        GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
+                                      }
+                                    >
+                                      Action
+                                    </th>
                                   </tr>
-                                )}
+                                }
                                 renderRow={(file) => {
-                                  const active = () => selectedFileIdentity(diffDialogItem()) === selectedFileIdentity(file) && diffDialogOpen();
+                                  const active = () =>
+                                    selectedFileIdentity(diffDialogItem()) ===
+                                      selectedFileIdentity(file) &&
+                                    diffDialogOpen();
                                   return (
                                     <tr
                                       aria-selected={active()}
@@ -310,7 +507,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                             class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
                                             title={changeSecondaryPath(file)}
                                             onClick={() => {
-                                              setDiffDialogCommitHash(commitHash());
+                                              setDiffDialogCommitHash(
+                                                commitHash(),
+                                              );
                                               setDiffDialogItem(file);
                                               setDiffDialogOpen(true);
                                             }}
@@ -319,12 +518,27 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                           </button>
                                         </div>
                                       </td>
-                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
-                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
-                                      <td class={gitChangedFilesStickyCellClass(active())}>
+                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                        <GitChangeStatusPill
+                                          change={file.changeType}
+                                        />
+                                      </td>
+                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                        <GitChangeMetrics
+                                          additions={file.additions}
+                                          deletions={file.deletions}
+                                        />
+                                      </td>
+                                      <td
+                                        class={gitChangedFilesStickyCellClass(
+                                          active(),
+                                        )}
+                                      >
                                         <GitChangedFilesActionButton
                                           onClick={() => {
-                                            setDiffDialogCommitHash(commitHash());
+                                            setDiffDialogCommitHash(
+                                              commitHash(),
+                                            );
                                             setDiffDialogItem(file);
                                             setDiffDialogOpen(true);
                                           }}
@@ -355,19 +569,32 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           setDiffDialogOpen(open);
           if (!open) {
             setDiffDialogItem(null);
-            setDiffDialogCommitHash('');
+            setDiffDialogCommitHash("");
           }
         }}
         item={diffDialogItem()}
-        source={diffDialogItem() ? {
-          kind: 'commit',
-          repoRootPath: repoRootPath(),
-          commit: diffDialogCommitHash(),
-        } : null}
+        source={
+          diffDialogItem()
+            ? {
+                kind: "commit",
+                repoRootPath: repoRootPath(),
+                commit: diffDialogCommitHash(),
+                presentation: commitPresentation() ?? undefined,
+              }
+            : null
+        }
         title="Commit Diff"
-        description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected file diff.'}
+        description={
+          diffDialogItem()
+            ? changeSecondaryPath(diffDialogItem())
+            : "Review the selected file diff."
+        }
         emptyMessage="Select a changed file to inspect its diff."
-        unavailableMessage={(file) => (file.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
+        unavailableMessage={(file) =>
+          file.isBinary
+            ? "Binary file changed. Inline text diff is not available."
+            : undefined
+        }
       />
     </div>
   );

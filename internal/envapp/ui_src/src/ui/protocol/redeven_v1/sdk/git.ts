@@ -66,6 +66,12 @@ export type GitDiffFileContent = GitDiffFileSummary & {
   patchTruncated?: boolean;
 };
 
+export type GitCommitDiffPresentation = {
+  mode?: 'plain' | 'first_parent' | string;
+  mergeCommit?: boolean;
+  parentCount?: number;
+};
+
 export type GitWorkspaceChange = GitDiffFileSummary & {
   section?: GitWorkspaceSection | string;
 };
@@ -478,6 +484,7 @@ export type GitGetCommitDetailRequest = {
 export type GitGetCommitDetailResponse = {
   repoRootPath: string;
   commit: GitCommitDetail;
+  presentation?: GitCommitDiffPresentation;
   files: GitCommitFileSummary[];
 };
 
@@ -518,5 +525,6 @@ export type GitGetDiffContentRequest = {
 export type GitGetDiffContentResponse = {
   repoRootPath: string;
   mode?: GitDiffContentMode | string;
+  presentation?: GitCommitDiffPresentation;
   file: GitDiffFileContent;
 };

@@ -63,6 +63,12 @@ export type wire_git_diff_file_content = wire_git_diff_file_summary & {
   patch_truncated?: boolean;
 };
 
+export type wire_git_commit_diff_presentation = {
+  mode?: string;
+  merge_commit?: boolean;
+  parent_count?: number;
+};
+
 export type wire_git_workspace_change = wire_git_diff_file_summary & {
   section?: string;
 };
@@ -474,6 +480,7 @@ export type wire_git_get_commit_detail_req = {
 export type wire_git_get_commit_detail_resp = {
   repo_root_path: string;
   commit: wire_git_commit_detail;
+  presentation?: wire_git_commit_diff_presentation;
   files: wire_git_commit_file_summary[];
 };
 
@@ -511,5 +518,6 @@ export type wire_git_get_diff_content_req = {
 export type wire_git_get_diff_content_resp = {
   repo_root_path: string;
   mode?: string;
+  presentation?: wire_git_commit_diff_presentation;
   file: wire_git_diff_file_content;
 };

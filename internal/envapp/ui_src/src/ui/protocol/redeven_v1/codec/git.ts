@@ -28,6 +28,7 @@ import type {
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
   GitCommitDetail,
+  GitCommitDiffPresentation,
   GitCommitFileSummary,
   GitCommitSummary,
   GitFetchRepoRequest,
@@ -101,6 +102,7 @@ import type {
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
   wire_git_commit_detail,
+  wire_git_commit_diff_presentation,
   wire_git_commit_file_summary,
   wire_git_commit_summary,
   wire_git_fetch_repo_req,
@@ -183,6 +185,15 @@ function fromWireGitDiffFileContent(resp: wire_git_diff_file_content | undefined
     ...fromWireGitDiffFileSummary(resp),
     patchText: typeof resp?.patch_text === 'string' ? resp.patch_text : undefined,
     patchTruncated: typeof resp?.patch_truncated === 'boolean' ? resp.patch_truncated : undefined,
+  };
+}
+
+function fromWireGitCommitDiffPresentation(resp: wire_git_commit_diff_presentation | undefined): GitCommitDiffPresentation | undefined {
+  if (!resp) return undefined;
+  return {
+    mode: typeof resp?.mode === 'string' ? resp.mode : undefined,
+    mergeCommit: typeof resp?.merge_commit === 'boolean' ? resp.merge_commit : undefined,
+    parentCount: typeof resp?.parent_count === 'number' ? resp.parent_count : undefined,
   };
 }
 
@@ -576,6 +587,7 @@ export function fromWireGitGetCommitDetailResponse(resp: wire_git_get_commit_det
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
     commit: fromWireGitCommitDetail(resp?.commit ?? {}),
+    presentation: fromWireGitCommitDiffPresentation(resp?.presentation),
     files: Array.isArray(resp?.files) ? resp.files.map(fromWireGitCommitFileSummary) : [],
   };
 }
@@ -598,6 +610,7 @@ export function fromWireGitGetDiffContentResponse(resp: wire_git_get_diff_conten
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
     mode: typeof resp?.mode === 'string' ? resp.mode : undefined,
+    presentation: fromWireGitCommitDiffPresentation(resp?.presentation),
     file: fromWireGitDiffFileContent(resp?.file ?? {}),
   };
 }

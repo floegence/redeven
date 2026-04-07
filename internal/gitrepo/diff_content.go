@@ -23,7 +23,7 @@ func (s *Service) getDiffContent(ctx context.Context, repo repoContext, req getD
 		return nil, err
 	}
 
-	args, allowedExitCodes, err := s.buildDiffContentArgs(ctx, repo, req, pathspecs, mode)
+	args, allowedExitCodes, presentation, err := s.buildDiffContentArgs(ctx, repo, req, pathspecs, mode)
 	if err != nil {
 		return nil, err
 	}
@@ -39,6 +39,7 @@ func (s *Service) getDiffContent(ctx context.Context, repo repoContext, req getD
 	return &getDiffContentResp{
 		RepoRootPath: repo.repoRootReal,
 		Mode:         mode,
+		Presentation: presentation,
 		File:         entry.toDiffFileContent(),
 	}, nil
 }
@@ -54,7 +55,7 @@ func normalizeGitDiffContentMode(raw string) (string, int, error) {
 	}
 }
 
-func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, req getDiffContentReq, pathspecs []string, mode string) ([]string, []int, error) {
+func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, req getDiffContentReq, pathspecs []string, mode string) ([]string, []int, gitCommitDiffPresentation, error) {
 	unifiedArg := ""
 	if mode == "full" {
 		unifiedArg = "--unified=" + strconv.Itoa(fullContextGitUnifiedLines)
@@ -62,39 +63,26 @@ func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, re
 
 	switch strings.TrimSpace(req.SourceKind) {
 	case "workspace":
-		return buildWorkspaceDiffContentArgs(req.WorkspaceSection, pathspecs, unifiedArg)
+		args, allowedExitCodes, err := buildWorkspaceDiffContentArgs(req.WorkspaceSection, pathspecs, unifiedArg)
+		return args, allowedExitCodes, gitCommitDiffPresentation{}, err
 	case "commit":
 		commit := strings.TrimSpace(req.Commit)
 		if commit == "" {
-			return nil, nil, errors.New("missing commit")
+			return nil, nil, gitCommitDiffPresentation{}, errors.New("missing commit")
 		}
-		args := []string{
-			"show",
-			"--format=",
-			"--patch",
-			"--find-renames",
-			"--find-copies",
-			"--no-ext-diff",
-			"--binary",
-			"--root",
+		presentation, err := s.readCommitDiffPresentation(ctx, repo.repoRootReal, commit)
+		if err != nil {
+			return nil, nil, gitCommitDiffPresentation{}, err
 		}
-		if unifiedArg != "" {
-			args = append(args, unifiedArg)
-		}
-		args = append(args, commit)
-		if len(pathspecs) > 0 {
-			args = append(args, "--")
-			args = append(args, pathspecs...)
-		}
-		return args, nil, nil
+		return buildCommitDiffPatchArgs(commit, pathspecs, unifiedArg, presentation), nil, presentation, nil
 	case "compare":
 		baseRef, err := normalizeGitRef(req.BaseRef)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, gitCommitDiffPresentation{}, err
 		}
 		targetRef, err := normalizeGitRef(req.TargetRef)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, gitCommitDiffPresentation{}, err
 		}
 		args := []string{
 			"diff",
@@ -112,11 +100,11 @@ func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, re
 			args = append(args, "--")
 			args = append(args, pathspecs...)
 		}
-		return args, nil, nil
+		return args, nil, gitCommitDiffPresentation{}, nil
 	case "stash":
 		stashID := strings.TrimSpace(req.StashID)
 		if stashID == "" {
-			return nil, nil, errors.New("missing stash id")
+			return nil, nil, gitCommitDiffPresentation{}, errors.New("missing stash id")
 		}
 		args := []string{
 			"stash",
@@ -135,9 +123,9 @@ func (s *Service) buildDiffContentArgs(ctx context.Context, repo repoContext, re
 		// `git stash show <stash> -- <path>` is not a valid file-scoped preview form.
 		// Load the stash patch once and reuse existing diff-entry matching to select
 		// the requested file, including tracked and untracked stash entries.
-		return args, nil, nil
+		return args, nil, gitCommitDiffPresentation{}, nil
 	default:
-		return nil, nil, errors.New("invalid source kind")
+		return nil, nil, gitCommitDiffPresentation{}, errors.New("invalid source kind")
 	}
 }
 

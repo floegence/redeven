@@ -419,9 +419,10 @@ type getDiffContentReq struct {
 }
 
 type getDiffContentResp struct {
-	RepoRootPath string             `json:"repo_root_path"`
-	Mode         string             `json:"mode,omitempty"`
-	File         gitDiffFileContent `json:"file"`
+	RepoRootPath string                    `json:"repo_root_path"`
+	Mode         string                    `json:"mode,omitempty"`
+	Presentation gitCommitDiffPresentation `json:"presentation,omitempty"`
+	File         gitDiffFileContent        `json:"file"`
 }
 
 type gitCommitFileSummary = gitDiffFileSummary

@@ -59,6 +59,7 @@ This folder contains the **source code** for the runtime-bundled Env App UI:
 - The Codex send bar should read as floating over the transcript tail, so transcript and composer boundaries should prefer soft shadow/inset separation over an explicit full-width hard divider.
 - Codex-specific visual adjustments belong in the namespaced `src/ui/codex/codex.css` layer instead of patching Flower selectors in `src/styles/redeven.css`.
 - Git Browser branch detail tabs treat `Status` and `History` as a local mode switch: same-branch history toggles should preserve mounted UI state, reuse cached commit data when available, and keep loading indicators local to the history surface instead of replacing the whole browser shell.
+- Git Browser commit diff review uses one explicit first-parent merge contract end to end: merge commit file lists and single-file commit diffs are derived under the same Git mode, and the UI labels that context instead of inheriting whatever merge-diff default a repository happens to use.
 - Git Browser helper shortcuts such as `Ask Flower`, `Terminal`, and `Files` are intentionally styled as elevated orb actions inside a glass dock so they read as optional cross-surface capabilities rather than primary Git mutations.
 - Git Browser selected cards intentionally rely on one shared selection surface plus shared nested-content helpers (`git-browser-selection-secondary`, `git-browser-selection-chip`) so stash/branch/sidebar selections stay readable without per-view hardcoded text colors.
 - Git stash review intentionally reuses the shared compact changed-files table language plus `GitDiffDialog`, so mobile stays summary-first and single-file stash diffs never force a second inline split pane inside the stash window.
@@ -112,11 +113,13 @@ Notes:
 The Flower chat UI now follows five explicit constraints:
 
 1. `EnvAIPage` owns transport/page wiring, while dedicated controllers own render-state reconciliation.
+
    - `createAIThreadRenderController` owns transcript rows, active-run snapshot recovery, live assistant stream overlays, optimistic local user carry-forward, and transcript-derived subagent state before the chat store is updated.
    - `createAIContextTelemetryController` owns run-scoped context usage, compaction, and replay cursor binding.
    - `EnvAIPage` may consume controller accessors and invoke controller methods, but feature code must not re-implement those reducers inline, add new direct `chat.setMessages()` write paths for individual recovery flows, or introduce projection feedback loops where derived render output becomes the source of truth for controller state.
 
 2. A live run owns exactly one assistant surface in the transcript tail.
+
    - Settled transcript rows stay transcript-only `MessageItem` rows.
    - In-flight assistant output renders through a dedicated non-virtualized live surface mounted at the transcript tail, not through synthetic transcript messages.
    - Pending lifecycle states, empty streaming placeholders, hidden-only `thinking`, streamed answer content, finalization status, and transcript catch-up are all inner states of that one mounted live surface.
@@ -124,15 +127,18 @@ The Flower chat UI now follows five explicit constraints:
    - Synthetic pending assistant messages, display-slot adoption, and frontend-only message-id remapping are forbidden.
 
 3. `VirtualMessageList` owns scroll anchoring.
+
    - `following` mode is bottom-pinned.
    - `paused` mode is anchored to the first visible message plus its in-item offset, so late message reflow does not pull the viewport upward.
    - The live assistant tail is the only non-virtualized appendage inside the scroll container. Live-run status changes must stay inside that tail surface instead of competing with transcript row ownership.
    - Follow-mode resize handling must preserve the current bottom anchor by applying measured height deltas from transcript rows, the live tail, and the scroll viewport itself. Streaming line wraps must not be implemented as repeated full `scrollToBottom()` retries.
 
 4. Transcript overlays consume a shared bottom inset contract.
+
    - The transcript scroll area, file-browser FAB, and scroll-to-bottom affordance must use the shared transcript overlay inset variables instead of ad-hoc message margins.
 
 5. Streaming assistant visibility is monotonic while a run is live.
+
    - Hidden `thinking` blocks are sideband data and must never reuse or replace an already-visible answer slot.
    - Thinking-only or otherwise hidden live frames must keep the live assistant surface mounted instead of toggling ownership between transcript rows, placeholders, or footer containers.
    - Backend stream reconciliation should publish the next visible answer state before clearing obsolete answer slots whenever possible.
@@ -140,6 +146,7 @@ The Flower chat UI now follows five explicit constraints:
    - Bubble and block renderers must preserve stable mounted slots when streaming frames replace block objects; switching block type guards must not implicitly remount the visible answer subtree.
 
 6. Context telemetry is run-scoped and monotonic.
+
    - Context usage, compaction events, and replay cursors belong to `run_id`-scoped UI state instead of one resettable page-level slot.
    - Thread-scoped runtime metadata must expose the latest context-bearing run (`last_context_run_id`) so completed threads can recover their latest summary without relying on ephemeral page memory.
    - The page runtime must distinguish the active live run from the latest stable context-bearing run. If a new live run has not produced telemetry yet, the UI should continue showing the latest stable summary instead of flickering back to an empty chip.

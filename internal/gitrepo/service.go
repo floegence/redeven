@@ -157,13 +157,14 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if commit == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing commit"}
 		}
-		detail, files, err := s.getCommitDetail(ctx, repo, commit)
+		detail, presentation, files, err := s.getCommitDetail(ctx, repo, commit)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
 		}
 		return &getCommitDetailResp{
 			RepoRootPath: repo.repoRootReal,
 			Commit:       detail,
+			Presentation: presentation,
 			Files:        files,
 		}, nil
 	})
@@ -826,44 +827,23 @@ func (s *Service) listCommits(ctx context.Context, repo repoContext, ref string,
 	return commits, nextOffset, hasMore, nil
 }
 
-func (s *Service) getCommitDetail(ctx context.Context, repo repoContext, commit string) (gitCommitDetail, []gitCommitFileSummary, error) {
+func (s *Service) getCommitDetail(ctx context.Context, repo repoContext, commit string) (gitCommitDetail, gitCommitDiffPresentation, []gitCommitFileSummary, error) {
 	format := "%H%x00%h%x00%P%x00%an%x00%ae%x00%at%x00%s%x00%B%x1e"
 	metaOut, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, "show", "-s", "--format="+format, commit)
 	if err != nil {
-		return gitCommitDetail{}, nil, err
+		return gitCommitDetail{}, gitCommitDiffPresentation{}, nil, err
 	}
 	details := parseCommitDetailOutput(metaOut)
 	if len(details) == 0 {
-		return gitCommitDetail{}, nil, errors.New("commit not found")
+		return gitCommitDetail{}, gitCommitDiffPresentation{}, nil, errors.New("commit not found")
 	}
-	files, err := s.readGitDiffMetadata(ctx, repo.repoRootReal,
-		[]string{
-			"show",
-			"--format=",
-			"--name-status",
-			"-z",
-			"--find-renames",
-			"--find-copies",
-			"--no-ext-diff",
-			"--root",
-			commit,
-		},
-		[]string{
-			"show",
-			"--format=",
-			"--numstat",
-			"-z",
-			"--find-renames",
-			"--find-copies",
-			"--no-ext-diff",
-			"--root",
-			commit,
-		},
-	)
+	presentation := buildCommitDiffPresentation(details[0])
+	nameStatusArgs, numstatArgs := buildCommitDiffMetadataArgs(commit, presentation)
+	files, err := s.readGitDiffMetadataOnListedEntries(ctx, repo.repoRootReal, nameStatusArgs, numstatArgs)
 	if err != nil {
-		return gitCommitDetail{}, nil, err
+		return gitCommitDetail{}, gitCommitDiffPresentation{}, nil, err
 	}
-	return details[0], files, nil
+	return details[0], presentation, files, nil
 }
 
 func parseCommitLogOutput(out []byte) []gitCommitSummary {
@@ -1166,9 +1146,10 @@ type commitWorkspaceResp struct {
 }
 
 type getCommitDetailResp struct {
-	RepoRootPath string                 `json:"repo_root_path"`
-	Commit       gitCommitDetail        `json:"commit"`
-	Files        []gitCommitFileSummary `json:"files"`
+	RepoRootPath string                    `json:"repo_root_path"`
+	Commit       gitCommitDetail           `json:"commit"`
+	Presentation gitCommitDiffPresentation `json:"presentation,omitempty"`
+	Files        []gitCommitFileSummary    `json:"files"`
 }
 
 type gitCommitSummary struct {

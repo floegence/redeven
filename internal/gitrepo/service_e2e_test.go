@@ -106,6 +106,9 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	if detailResp.Commit.Hash != fixture.RenameCommit {
 		t.Fatalf("detail hash=%q, want %q", detailResp.Commit.Hash, fixture.RenameCommit)
 	}
+	if detailResp.Presentation.Mode != gitCommitDiffModePlain || detailResp.Presentation.MergeCommit {
+		t.Fatalf("detail presentation=%+v, want plain non-merge", detailResp.Presentation)
+	}
 	if len(detailResp.Files) != 1 || detailResp.Files[0].ChangeType != "renamed" {
 		t.Fatalf("unexpected detail files: %+v", detailResp.Files)
 	}
@@ -138,6 +141,9 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	if fullContextResp.File.ChangeType != "renamed" || fullContextResp.File.OldPath != "src/app.txt" || fullContextResp.File.NewPath != "src/main.txt" {
 		t.Fatalf("unexpected full-context diff file: %+v", fullContextResp.File)
 	}
+	if fullContextResp.Presentation.Mode != gitCommitDiffModePlain || fullContextResp.Presentation.MergeCommit {
+		t.Fatalf("full-context presentation=%+v, want plain non-merge", fullContextResp.Presentation)
+	}
 	if !strings.Contains(fullContextResp.File.PatchText, "rename from src/app.txt") || strings.Contains(fullContextResp.File.PatchText, "new file mode") {
 		t.Fatalf("full-context rename diff should preserve rename metadata: %+v", fullContextResp.File)
 	}
@@ -148,6 +154,71 @@ func TestE2E_GitRepoRPC_ResolveListDetail(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatalf("rpc server did not stop")
+	}
+}
+
+func TestE2E_GitRepoRPC_MergeCommitDetailUsesFirstParentPresentation(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	mergeFixture := createMergeCommitBranchFixture(t, fixture.Root)
+	runGitFixture(t, fixture.Root, "merge", "--no-ff", mergeFixture.Branch, "-m", "merge feature branch")
+	mergeCommit := runGitFixture(t, fixture.Root, "rev-parse", "HEAD")
+
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	detailPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_GET_COMMIT_DETAIL, mustMarshalJSON(t, getCommitDetailReq{
+		RepoRootPath: fixture.Root,
+		Commit:       mergeCommit,
+	}))
+	if err != nil {
+		t.Fatalf("get merge detail call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get merge detail rpc error: %+v", rpcErr)
+	}
+	var detailResp getCommitDetailResp
+	if err := json.Unmarshal(detailPayload, &detailResp); err != nil {
+		t.Fatalf("unmarshal merge detail: %v", err)
+	}
+	if detailResp.Commit.Hash != mergeCommit {
+		t.Fatalf("merge detail hash=%q, want %q", detailResp.Commit.Hash, mergeCommit)
+	}
+	if !detailResp.Presentation.MergeCommit || detailResp.Presentation.Mode != gitCommitDiffModeFirstParent || detailResp.Presentation.ParentCount != 2 {
+		t.Fatalf("merge detail presentation=%+v, want first-parent merge with 2 parents", detailResp.Presentation)
+	}
+	if len(detailResp.Files) != 1 || detailResp.Files[0].Path != "src/feature-merge.txt" || detailResp.Files[0].ChangeType != "added" {
+		t.Fatalf("unexpected merge detail files: %+v", detailResp.Files)
+	}
+
+	diffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{
+		RepoRootPath: fixture.Root,
+		SourceKind:   "commit",
+		Commit:       mergeCommit,
+		Mode:         "preview",
+		File: gitDiffFileRef{
+			ChangeType: detailResp.Files[0].ChangeType,
+			Path:       detailResp.Files[0].Path,
+			OldPath:    detailResp.Files[0].OldPath,
+			NewPath:    detailResp.Files[0].NewPath,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("get merge diff call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("get merge diff rpc error: %+v", rpcErr)
+	}
+	var diffResp getDiffContentResp
+	if err := json.Unmarshal(diffPayload, &diffResp); err != nil {
+		t.Fatalf("unmarshal merge diff: %v", err)
+	}
+	if !diffResp.Presentation.MergeCommit || diffResp.Presentation.Mode != gitCommitDiffModeFirstParent {
+		t.Fatalf("merge diff presentation=%+v, want first-parent merge", diffResp.Presentation)
+	}
+	if !strings.Contains(diffResp.File.PatchText, "diff --git") || !strings.Contains(diffResp.File.PatchText, "src/feature-merge.txt") {
+		t.Fatalf("merge diff patch mismatch: %+v", diffResp.File)
 	}
 }
 

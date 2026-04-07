@@ -145,6 +145,7 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - Git browse `Ask Flower` entry points use Git-authored snapshot context instead of pretending commit or workspace summaries are file-browser selections, so Flower receives a clean summary of the selected workspace section or commit metadata/file list.
 - Workspace, compare, and commit detail collection RPCs return metadata-only file summaries. Inline diff text is retrieved only when the user opens a specific file dialog, using `getDiffContent` for preview or full-context mode.
 - Git diff dialogs keep the embedded `Patch` preview as the default fast path, and now also expose an on-demand `Full Context` mode that re-fetches a single selected file diff with unchanged lines included for broader review context.
+- Merge commit browsing now uses an explicit first-parent contract for both commit changed-file listings and single-file commit diffs, so every file shown in `Files in Commit` stays openable in `Commit Diff` without relying on repository-local Git merge diff defaults.
 - Large Git file tables render through a shared fixed-row virtual table, and the browser no longer downloads metadata for every workspace row up front, so repositories with very large change sets stay responsive.
 - Git branch deletion keeps `safe delete` as the default path, but when an unmerged local branch cannot be safely deleted the review dialog can escalate into an exact branch-name-confirmed `force delete`; linked worktrees are force-removed together with their pending changes, while inaccessible linked worktrees remain blocked.
 
@@ -268,10 +269,12 @@ Security baseline:
 Env App reconnect recovery is intentionally split into two layers:
 
 1. **Transport fast retries**
+
    - Flowersec transport reconnect keeps a small bounded retry budget for short websocket/tunnel blips in both remote tunnel mode and local direct mode.
    - This path is optimized for brief network hiccups and quick runtime restarts.
 
 2. **App-level waiting loop**
+
    - If fast retries are exhausted, Env App switches into an explicit waiting state instead of hammering full reconnect attempts.
    - `EnvAppShell` owns the only waiting coordinator; maintenance and page-level widgets do not start their own reconnect loops.
    - The shell polls runtime availability with a single-flight backoff timer and only launches controlled reconnect probes.
@@ -307,11 +310,12 @@ Design goals:
 
 There are **two** audit log sources:
 
-1) Redeven service-side session audit log.
+1. Redeven service-side session audit log.
+
    - This is **not** shown in the Env App.
    - It is surfaced in the Redeven web app for environment admins.
 
-2) Runtime-local audit log (user operations): recorded and persisted by the runtime.
+2. Runtime-local audit log (user operations): recorded and persisted by the runtime.
    - Env App reads it via the local gateway API (env admin only):
      - `GET /_redeven_proxy/api/audit/logs?limit=<n>`
    - Storage (JSONL + rotation):
