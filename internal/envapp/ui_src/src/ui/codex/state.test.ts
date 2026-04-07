@@ -100,46 +100,54 @@ describe('buildCodexThreadSession', () => {
 
   it('does not inherit terminal turn failure onto items without explicit status', () => {
     const detail = sampleDetail();
-    detail.thread.turns = [
-      {
-        id: 'turn_failed',
-        status: 'failed',
-        items: [
+    const session = buildCodexThreadSession({
+      ...detail,
+      thread: {
+        ...detail.thread,
+        turns: [
           {
-            id: 'item_web_search',
-            type: 'webSearch',
-            query: 'site:spaceship.com .com domain registration price official',
-            action: {
-              type: 'search',
-              queries: ['site:spaceship.com .com domain registration price official'],
-            },
+            id: 'turn_failed',
+            status: 'failed',
+            items: [
+              {
+                id: 'item_web_search',
+                type: 'webSearch',
+                query: 'site:spaceship.com .com domain registration price official',
+                action: {
+                  type: 'search',
+                  queries: ['site:spaceship.com .com domain registration price official'],
+                },
+              },
+            ],
           },
         ],
       },
-    ];
-
-    const session = buildCodexThreadSession(detail);
+    });
 
     expect(session.items_by_id.item_web_search.status).toBe('');
   });
 
   it('keeps in-progress fallback for items inside active turns without explicit status', () => {
     const detail = sampleDetail();
-    detail.thread.turns = [
-      {
-        id: 'turn_active',
-        status: 'in_progress',
-        items: [
+    const session = buildCodexThreadSession({
+      ...detail,
+      thread: {
+        ...detail.thread,
+        turns: [
           {
-            id: 'item_reasoning_live',
-            type: 'reasoning',
-            summary: ['scan codebase'],
+            id: 'turn_active',
+            status: 'in_progress',
+            items: [
+              {
+                id: 'item_reasoning_live',
+                type: 'reasoning',
+                summary: ['scan codebase'],
+              },
+            ],
           },
         ],
       },
-    ];
-
-    const session = buildCodexThreadSession(detail);
+    });
 
     expect(session.items_by_id.item_reasoning_live.status).toBe('inProgress');
   });
