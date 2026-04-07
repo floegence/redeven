@@ -151,6 +151,35 @@ describe('buildCodexThreadSession', () => {
 
     expect(session.items_by_id.item_reasoning_live.status).toBe('inProgress');
   });
+
+  it('does not inherit completed turn status onto items without explicit status', () => {
+    const detail = sampleDetail();
+    const session = buildCodexThreadSession({
+      ...detail,
+      thread: {
+        ...detail.thread,
+        turns: [
+          {
+            id: 'turn_completed',
+            status: 'completed',
+            items: [
+              {
+                id: 'item_web_search_completed_turn',
+                type: 'webSearch',
+                query: 'site:example.com official pricing',
+                action: {
+                  type: 'search',
+                  queries: ['site:example.com official pricing'],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(session.items_by_id.item_web_search_completed_turn.status).toBe('');
+  });
 });
 
 describe('applyCodexEvent', () => {

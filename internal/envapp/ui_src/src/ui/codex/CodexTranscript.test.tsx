@@ -436,6 +436,42 @@ describe('CodexTranscript', () => {
     dispose();
   });
 
+  it('renders web search status only when the item has an explicit status', () => {
+    const items: CodexTranscriptItem[] = [
+      {
+        id: 'item_web_search_no_status',
+        type: 'webSearch',
+        query: 'site:spaceship.com .com domain registration price official',
+        action: {
+          type: 'search',
+          queries: ['site:spaceship.com .com domain registration price official'],
+        },
+        order: 0,
+      },
+      {
+        id: 'item_web_search_completed',
+        type: 'webSearch',
+        query: 'https://www.spaceship.com/domains/gtld/com/',
+        action: {
+          type: 'openPage',
+          url: 'https://www.spaceship.com/domains/gtld/com/',
+        },
+        status: 'completed',
+        order: 1,
+      },
+    ];
+
+    const { host, dispose } = renderTranscript(items);
+    const rows = host.querySelectorAll('[data-codex-item-type="webSearch"]');
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelector('.codex-chat-evidence-status')).toBeNull();
+    expect(rows[1]?.querySelector('.codex-chat-evidence-status')).toBeTruthy();
+    expect(rows[1]?.textContent?.toLowerCase()).toContain('completed');
+
+    dispose();
+  });
+
   it('renders command execution rows as direct shell blocks without the extra evidence header wrapper', () => {
     const { host, dispose } = renderTranscript([
       {
