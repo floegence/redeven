@@ -38,9 +38,11 @@ func newNDJSONStream(w http.ResponseWriter, writeTimeout time.Duration) *ndjsonS
 	}
 	if w != nil {
 		s.ctrl = http.NewResponseController(w)
-		s.ch = make(chan []byte, 256)
-		s.done = make(chan struct{})
-		go s.writerLoop()
+		ch := make(chan []byte, 256)
+		done := make(chan struct{})
+		s.ch = ch
+		s.done = done
+		go s.writerLoop(ch, done)
 	}
 	return s
 }
@@ -70,14 +72,14 @@ func (s *ndjsonStream) wait() {
 	<-s.done
 }
 
-func (s *ndjsonStream) writerLoop() {
+func (s *ndjsonStream) writerLoop(ch <-chan []byte, done chan struct{}) {
 	if s == nil {
 		return
 	}
-	if s.done != nil {
-		defer close(s.done)
+	if done != nil {
+		defer close(done)
 	}
-	for frame := range s.ch {
+	for frame := range ch {
 		if s.writeTO > 0 && s.ctrl != nil {
 			_ = s.ctrl.SetWriteDeadline(time.Now().Add(s.writeTO))
 		}
