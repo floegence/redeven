@@ -201,6 +201,9 @@ describe("GitHistoryBrowser interactions", () => {
   });
 
   it("loads patch previews on demand when commit detail only returns file summaries", async () => {
+    let resolvePreview:
+      | ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void)
+      | undefined;
     mockGetCommitDetail.mockResolvedValueOnce({
       repoRootPath: "/workspace/repo",
       commit: {
@@ -222,6 +225,12 @@ describe("GitHistoryBrowser interactions", () => {
         },
       ],
     });
+    mockGetDiffContent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePreview = resolve;
+        }),
+    );
 
     const host = document.createElement("div");
     document.body.appendChild(host);
@@ -259,6 +268,32 @@ describe("GitHistoryBrowser interactions", () => {
       await flush();
 
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain("Loading patch preview...");
+      expect(document.body.textContent).not.toContain(
+        "Select a file to inspect its diff.",
+      );
+
+      resolvePreview?.({
+        repoRootPath: "/workspace/repo",
+        mode: "preview",
+        file: {
+          changeType: "modified",
+          path: "src/app.ts",
+          displayPath: "src/app.ts",
+          additions: 1,
+          deletions: 1,
+          patchText: [
+            "diff --git a/src/app.ts b/src/app.ts",
+            "--- a/src/app.ts",
+            "+++ b/src/app.ts",
+            "@@ -1 +1 @@",
+            "-oldValue",
+            "+newValue",
+          ].join("\n"),
+        },
+      });
+      await flush();
+
       expect(mockGetDiffContent.mock.calls[0]?.[0]).toMatchObject({
         repoRootPath: "/workspace/repo",
         sourceKind: "commit",
@@ -349,6 +384,9 @@ describe("GitHistoryBrowser interactions", () => {
 
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
       expect(document.body.textContent).toContain("Loading patch preview...");
+      expect(document.body.textContent).not.toContain(
+        "Select a file to inspect its diff.",
+      );
 
       const clearButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("Clear Selection"),
