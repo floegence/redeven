@@ -536,6 +536,102 @@ describe("GitDiffDialog", () => {
     }
   });
 
+  it("keeps preview ownership stable across equivalent parent rerenders", async () => {
+    let resolvePreview:
+      | ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void)
+      | undefined;
+    mockGetDiffContent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePreview = resolve;
+        }),
+    );
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const dispose = render(() => {
+      const [open, setOpen] = createSignal(false);
+      const [revision, setRevision] = createSignal(0);
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <button type="button" onClick={() => setOpen(true)}>
+              Open Diff
+            </button>
+            <button type="button" onClick={() => setRevision((value) => value + 1)}>
+              Rerender Parent
+            </button>
+            <GitDiffDialog
+              open={open()}
+              onOpenChange={() => {}}
+              item={{
+                changeType: "modified",
+                path: "src/app.ts",
+                displayPath: "src/app.ts",
+                additions: 1,
+                deletions: 1,
+              }}
+              source={{
+                kind: "commit",
+                repoRootPath: "/workspace/repo",
+                commit: "abc123",
+              }}
+              title={`Commit Diff ${revision()}`}
+              emptyMessage="Select a file to inspect its diff."
+            />
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      const openButton = Array.from(document.querySelectorAll("button")).find(
+        (node) => node.textContent?.trim() === "Open Diff",
+      );
+      expect(openButton).toBeTruthy();
+      openButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain("Loading patch preview...");
+
+      const rerenderButton = Array.from(document.querySelectorAll("button")).find(
+        (node) => node.textContent?.trim() === "Rerender Parent",
+      );
+      expect(rerenderButton).toBeTruthy();
+      rerenderButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+
+      resolvePreview?.({
+        repoRootPath: "/workspace/repo",
+        mode: "preview",
+        file: {
+          changeType: "modified",
+          path: "src/app.ts",
+          displayPath: "src/app.ts",
+          additions: 1,
+          deletions: 1,
+          patchText: [
+            "diff --git a/src/app.ts b/src/app.ts",
+            "--- a/src/app.ts",
+            "+++ b/src/app.ts",
+            "@@ -1 +1 @@",
+            "-oldValue",
+            "+newValue",
+          ].join("\n"),
+        },
+      });
+      await flush();
+
+      expect(document.body.textContent).toContain("+newValue");
+    } finally {
+      dispose();
+    }
+  });
+
   it("keeps unavailable full-context mode visibly disabled with a non-clickable cursor affordance", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
