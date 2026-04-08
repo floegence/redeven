@@ -66,13 +66,30 @@ type GitDiffDialogErrorState = {
   detail?: string;
 };
 type GitDiffDialogLoadPhase = "idle" | "loading" | "ready" | "error";
+type GitDiffDialogModeState = {
+  token: string;
+  value: GitDiffDialogMode;
+};
 
 type GitDiffDialogLoadSlot = {
+  selectionKey: string;
   requestKey: string;
   phase: GitDiffDialogLoadPhase;
   item: GitDiffFileContent | null;
   error: GitDiffDialogErrorState | null;
   presentation: GitCommitDiffPresentation | null;
+};
+
+type GitDiffDialogSelectionSession = {
+  selectionKey: string;
+  previewRequestKey: string;
+  fullRequestKey: string;
+  previewRequest: GitGetDiffContentRequest | null;
+  fullRequest: GitGetDiffContentRequest | null;
+  seededPreviewItem: GitDiffFileContent | null;
+  unavailableItem: GitDiffFileContent | null;
+  directoryUnavailableItem: GitDiffFileContent | null;
+  commitPresentation: GitCommitDiffPresentation | null;
 };
 
 type GitDiffDialogBodyState =
@@ -261,7 +278,47 @@ function diffRequestKey(req: GitGetDiffContentRequest | null): string {
   return JSON.stringify(req);
 }
 
+function buildGitDiffDialogSelectionKey(
+  source: GitDiffDialogSource | null | undefined,
+  item: GitDiffDialogItem | null | undefined,
+): string {
+  if (!source || !item) return "";
+  return JSON.stringify({
+    sourceKind: source.kind,
+    repoRootPath: normalizeDiffPathCandidate(source.repoRootPath),
+    workspaceSection:
+      source.kind === "workspace"
+        ? normalizeDiffPathCandidate(source.workspaceSection)
+        : undefined,
+    commit:
+      source.kind === "commit"
+        ? normalizeDiffPathCandidate(source.commit)
+        : undefined,
+    baseRef:
+      source.kind === "compare"
+        ? normalizeDiffPathCandidate(source.baseRef)
+        : undefined,
+    targetRef:
+      source.kind === "compare"
+        ? normalizeDiffPathCandidate(source.targetRef)
+        : undefined,
+    stashId:
+      source.kind === "stash"
+        ? normalizeDiffPathCandidate(source.stashId)
+        : undefined,
+    file: {
+      changeType:
+        typeof item.changeType === "string" ? item.changeType : undefined,
+      path: normalizeDiffPathCandidate(item.path),
+      oldPath: normalizeDiffPathCandidate(item.oldPath),
+      newPath: normalizeDiffPathCandidate(item.newPath),
+      displayPath: normalizeDiffPathCandidate(item.displayPath),
+    },
+  });
+}
+
 function createGitDiffDialogLoadSlot(
+  selectionKey = "",
   requestKey = "",
   phase: GitDiffDialogLoadPhase = "idle",
   item: GitDiffFileContent | null = null,
@@ -269,6 +326,7 @@ function createGitDiffDialogLoadSlot(
   presentation: GitCommitDiffPresentation | null = null,
 ): GitDiffDialogLoadSlot {
   return {
+    selectionKey,
     requestKey,
     phase,
     item,
@@ -278,17 +336,43 @@ function createGitDiffDialogLoadSlot(
 }
 
 function createLoadingGitDiffDialogLoadSlot(
+  selectionKey: string,
   requestKey: string,
+  presentation?: GitCommitDiffPresentation | null,
 ): GitDiffDialogLoadSlot {
-  return createGitDiffDialogLoadSlot(requestKey, "loading");
+  return createGitDiffDialogLoadSlot(
+    selectionKey,
+    requestKey,
+    "loading",
+    null,
+    null,
+    presentation ?? null,
+  );
+}
+
+function createIdleGitDiffDialogLoadSlot(
+  selectionKey: string,
+  requestKey: string,
+  presentation?: GitCommitDiffPresentation | null,
+): GitDiffDialogLoadSlot {
+  return createGitDiffDialogLoadSlot(
+    selectionKey,
+    requestKey,
+    "idle",
+    null,
+    null,
+    presentation ?? null,
+  );
 }
 
 function createReadyGitDiffDialogLoadSlot(
+  selectionKey: string,
   requestKey: string,
   item: GitDiffFileContent | null,
   presentation?: GitCommitDiffPresentation | null,
 ): GitDiffDialogLoadSlot {
   return createGitDiffDialogLoadSlot(
+    selectionKey,
     requestKey,
     item ? "ready" : "idle",
     item,
@@ -298,16 +382,29 @@ function createReadyGitDiffDialogLoadSlot(
 }
 
 function createErrorGitDiffDialogLoadSlot(
+  selectionKey: string,
   requestKey: string,
   error: GitDiffDialogErrorState,
+  presentation?: GitCommitDiffPresentation | null,
 ): GitDiffDialogLoadSlot {
-  return createGitDiffDialogLoadSlot(requestKey, "error", null, error);
+  return createGitDiffDialogLoadSlot(
+    selectionKey,
+    requestKey,
+    "error",
+    null,
+    error,
+    presentation ?? null,
+  );
 }
 
 export function GitDiffDialog(props: GitDiffDialogProps) {
   const layout = useLayout();
   const rpc = useRedevenRpc();
-  const [mode, setMode] = createSignal<GitDiffDialogMode>("patch");
+  const [modeState, setModeState] = createSignal<GitDiffDialogModeState>({
+    token: "",
+    value: "patch",
+  });
+  const [dialogCycle, setDialogCycle] = createSignal(0);
   const [previewSlot, setPreviewSlot] = createSignal<GitDiffDialogLoadSlot>(
     createGitDiffDialogLoadSlot(),
   );
@@ -318,64 +415,84 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
   let previewReqSeq = 0;
   let fullReqSeq = 0;
 
-  const directoryUnavailableItem = createMemo(() =>
-    isDirectoryDiffPlaceholder(props.item)
+  const selectionSession = createMemo<GitDiffDialogSelectionSession>(() => {
+    const selectionKey = buildGitDiffDialogSelectionKey(props.source, props.item);
+    const directoryUnavailableItem = isDirectoryDiffPlaceholder(props.item)
       ? createUnavailableDiffItem(props.item)
-      : null,
-  );
-  const selectedUnavailableItem = createMemo(() =>
-    createUnavailableDiffItem(props.item),
-  );
-  const previewRequest = createMemo(() =>
-    directoryUnavailableItem()
+      : null;
+    const previewRequest = directoryUnavailableItem
       ? null
-      : buildDiffContentRequest(props.source, props.item, "preview"),
-  );
-  const fullRequest = createMemo(() =>
-    directoryUnavailableItem()
+      : buildDiffContentRequest(props.source, props.item, "preview");
+    const fullRequest = directoryUnavailableItem
       ? null
-      : buildDiffContentRequest(props.source, props.item, "full"),
-  );
-  const previewRequestKey = createMemo(() => diffRequestKey(previewRequest()));
-  const fullRequestKey = createMemo(() => diffRequestKey(fullRequest()));
+      : buildDiffContentRequest(props.source, props.item, "full");
+    return {
+      selectionKey,
+      previewRequestKey: diffRequestKey(previewRequest),
+      fullRequestKey: diffRequestKey(fullRequest),
+      previewRequest,
+      fullRequest,
+      seededPreviewItem: seedGitDiffContent(props.item),
+      unavailableItem: createUnavailableDiffItem(props.item),
+      directoryUnavailableItem,
+      commitPresentation:
+        props.source?.kind === "commit"
+          ? (props.source.presentation ?? null)
+          : null,
+    };
+  });
   const canLoadFullContext = createMemo(
-    () => !directoryUnavailableItem() && fullRequestKey() !== "",
+    () =>
+      !selectionSession().directoryUnavailableItem &&
+      selectionSession().fullRequestKey !== "",
   );
-  const seededPreviewItem = createMemo(() => seedGitDiffContent(props.item));
-  const commitSourcePresentation = createMemo(() =>
-    props.source?.kind === "commit"
-      ? (props.source.presentation ?? null)
-      : null,
+  const activeModeToken = createMemo(() => {
+    if (!props.open) return "";
+    const selectionKey = selectionSession().selectionKey;
+    if (!selectionKey) return "";
+    return `${dialogCycle()}:${selectionKey}`;
+  });
+  const activeMode = createMemo<GitDiffDialogMode>(() => {
+    const currentToken = activeModeToken();
+    if (!currentToken) return "patch";
+    const state = modeState();
+    return state.token === currentToken ? state.value : "patch";
+  });
+  const previewSlotMatchesSelection = createMemo(
+    () => previewSlot().selectionKey === selectionSession().selectionKey,
+  );
+  const fullSlotMatchesSelection = createMemo(
+    () => fullSlot().selectionKey === selectionSession().selectionKey,
   );
   const activeCommitPresentation = createMemo(() => {
+    const session = selectionSession();
+    const previewPresentation = previewSlotMatchesSelection()
+      ? previewSlot().presentation
+      : null;
+    const fullPresentation = fullSlotMatchesSelection()
+      ? fullSlot().presentation
+      : null;
     if (props.source?.kind !== "commit") return null;
-    if (mode() === "full-context") {
-      return (
-        fullSlot().presentation ??
-        previewSlot().presentation ??
-        commitSourcePresentation()
-      );
+    if (activeMode() === "full-context") {
+      return fullPresentation ?? previewPresentation ?? session.commitPresentation;
     }
-    return (
-      previewSlot().presentation ??
-      commitSourcePresentation() ??
-      fullSlot().presentation
-    );
+    return previewPresentation ?? session.commitPresentation ?? fullPresentation;
   });
   const previewBodyState = createMemo<GitDiffDialogBodyState>(() => {
+    const session = selectionSession();
     if (!props.item) return { kind: "empty" };
-    const placeholder = directoryUnavailableItem();
     const preview = previewSlot();
-    const fallbackItem = selectedUnavailableItem();
-    if (placeholder) {
+    if (session.directoryUnavailableItem) {
       return {
         kind: "unavailable",
         mode: "preview",
-        item: placeholder,
+        item: session.directoryUnavailableItem,
         message: "Diff preview is unavailable for directory entries.",
       };
     }
-    const readyItem = preview.item ?? seededPreviewItem();
+    const readyItem = previewSlotMatchesSelection()
+      ? preview.item ?? session.seededPreviewItem
+      : session.seededPreviewItem;
     if (readyItem) {
       return {
         kind: "ready",
@@ -383,24 +500,24 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         item: readyItem,
       };
     }
-    if (preview.phase === "error" && preview.error) {
+    if (previewSlotMatchesSelection() && preview.phase === "error" && preview.error) {
       return {
         kind: "error",
         mode: "preview",
         error: preview.error,
       };
     }
-    if (previewRequestKey()) {
+    if (session.previewRequestKey) {
       return {
         kind: "loading",
         mode: "preview",
       };
     }
-    if (fallbackItem) {
+    if (session.unavailableItem) {
       return {
         kind: "unavailable",
         mode: "preview",
-        item: fallbackItem,
+        item: session.unavailableItem,
         message: "Patch preview is unavailable for this file.",
       };
     }
@@ -411,27 +528,26 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     return state.kind === "ready" ? state.item : null;
   });
   const fullBodyState = createMemo<GitDiffDialogBodyState>(() => {
+    const session = selectionSession();
     if (!props.item) return { kind: "empty" };
-    const placeholder = directoryUnavailableItem();
     const full = fullSlot();
     const previewItem = effectivePreviewItem();
-    const fallbackItem = selectedUnavailableItem();
-    if (placeholder) {
+    if (session.directoryUnavailableItem) {
       return {
         kind: "unavailable",
         mode: "full",
-        item: placeholder,
+        item: session.directoryUnavailableItem,
         message: "Diff preview is unavailable for directory entries.",
       };
     }
-    if (full.item) {
+    if (fullSlotMatchesSelection() && full.item) {
       return {
         kind: "ready",
         mode: "full",
         item: full.item,
       };
     }
-    if (full.phase === "error" && full.error) {
+    if (fullSlotMatchesSelection() && full.phase === "error" && full.error) {
       return {
         kind: "error",
         mode: "full",
@@ -445,24 +561,24 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         item: previewItem,
       };
     }
-    if (fullRequestKey()) {
+    if (session.fullRequestKey) {
       return {
         kind: "loading",
         mode: "full",
       };
     }
-    if (fallbackItem) {
+    if (session.unavailableItem) {
       return {
         kind: "unavailable",
         mode: "full",
-        item: fallbackItem,
+        item: session.unavailableItem,
         message: "Full-context diff is unavailable for this file.",
       };
     }
     return { kind: "empty" };
   });
   const activeBodyState = createMemo(() =>
-    mode() === "full-context" ? fullBodyState() : previewBodyState(),
+    activeMode() === "full-context" ? fullBodyState() : previewBodyState(),
   );
   const commitPresentationBadge = createMemo(() =>
     gitCommitDiffPresentationBadge(activeCommitPresentation()),
@@ -478,11 +594,15 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
       !layout.isMobile(),
   );
   const fullContextLoading = createMemo(
-    () =>
-      mode() === "full-context" &&
-      fullRequestKey() !== "" &&
-      fullSlot().phase !== "ready" &&
-      fullSlot().phase !== "error",
+    () => {
+      const session = selectionSession();
+      return (
+        activeMode() === "full-context" &&
+        session.fullRequestKey !== "" &&
+        (!fullSlotMatchesSelection() ||
+          (fullSlot().phase !== "ready" && fullSlot().phase !== "error"))
+      );
+    },
   );
   const fullContextOverlayLoading = createMemo(() => {
     const state = fullBodyState();
@@ -493,15 +613,15 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     );
   });
   const activeBodyLoadingMessage = createMemo(() =>
-    mode() === "full-context"
+    activeMode() === "full-context"
       ? "Loading full-context diff..."
       : "Loading patch preview...",
   );
   const headerHintMessage = createMemo(() => {
-    if (directoryUnavailableItem()) {
+    if (selectionSession().directoryUnavailableItem) {
       return "Directory entries do not expose a single-file diff preview.";
     }
-    if (mode() === "full-context") {
+    if (activeMode() === "full-context") {
       return fullContextLoading()
         ? "Loading full context..."
         : "Includes unchanged lines for broader review context.";
@@ -511,7 +631,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
       : "Loads a single-file patch on demand.";
   });
   const activeBodyEmptyMessage = createMemo(() =>
-    mode() === "patch"
+    activeMode() === "patch"
       ? props.emptyMessage
       : "Full-context diff is unavailable for this file.",
   );
@@ -537,62 +657,101 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
 
   createEffect(
     on(
-      () => [props.open, previewRequestKey(), fullRequestKey()] as const,
-      () => {
-        previewReqSeq += 1;
-        fullReqSeq += 1;
-        setMode("patch");
-        setPreviewSlot(() => {
-          const requestKey = previewRequestKey();
-          const seededItem = seededPreviewItem();
-          if (seededItem) {
-            return createReadyGitDiffDialogLoadSlot(requestKey, seededItem);
-          }
-          if (requestKey) {
-            return createLoadingGitDiffDialogLoadSlot(requestKey);
-          }
-          return createGitDiffDialogLoadSlot();
-        });
-        setFullSlot(createGitDiffDialogLoadSlot(fullRequestKey()));
+      () => props.open,
+      (open, wasOpen) => {
+        if (!open && wasOpen) {
+          setDialogCycle((value) => value + 1);
+        }
       },
       { defer: true },
     ),
   );
 
+  const setModeForCurrentSelection = (nextMode: GitDiffDialogMode) => {
+    setModeState({
+      token: activeModeToken(),
+      value: nextMode,
+    });
+  };
+
   createEffect(
     on(
-      () => [props.open, previewRequest(), previewRequestKey()] as const,
-      ([open, nextRequest, nextRequestKey]) => {
-        if (!open || !nextRequest || !nextRequestKey) return;
-        if (seededPreviewItem()) return;
-        if (
-          previewSlot().requestKey === nextRequestKey &&
-          previewSlot().phase === "ready"
-        )
-          return;
+      () => {
+        const session = selectionSession();
+        return [props.open, session.selectionKey, session.previewRequestKey] as const;
+      },
+      ([open, selectionKey, previewRequestKey]) => {
+        const session = selectionSession();
+        previewReqSeq += 1;
 
-        const seq = ++previewReqSeq;
-        setPreviewSlot(createLoadingGitDiffDialogLoadSlot(nextRequestKey));
+        if (!open || !selectionKey) {
+          setPreviewSlot(createGitDiffDialogLoadSlot());
+          return;
+        }
+        if (session.seededPreviewItem) {
+          setPreviewSlot(
+            createReadyGitDiffDialogLoadSlot(
+              selectionKey,
+              previewRequestKey,
+              session.seededPreviewItem,
+              session.commitPresentation,
+            ),
+          );
+          return;
+        }
+        if (!session.previewRequest || !previewRequestKey) {
+          setPreviewSlot(
+            createIdleGitDiffDialogLoadSlot(
+              selectionKey,
+              previewRequestKey,
+              session.commitPresentation,
+            ),
+          );
+          return;
+        }
+
+        const seq = previewReqSeq;
+        setPreviewSlot(
+          createLoadingGitDiffDialogLoadSlot(
+            selectionKey,
+            previewRequestKey,
+            session.commitPresentation,
+          ),
+        );
 
         void rpc.git
-          .getDiffContent(nextRequest)
+          .getDiffContent(session.previewRequest)
           .then((resp) => {
-            if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey)
+            const currentSession = selectionSession();
+            if (
+              seq !== previewReqSeq ||
+              !props.open ||
+              currentSession.selectionKey !== selectionKey ||
+              currentSession.previewRequestKey !== previewRequestKey
+            )
               return;
             setPreviewSlot(
               createReadyGitDiffDialogLoadSlot(
-                nextRequestKey,
+                selectionKey,
+                previewRequestKey,
                 resp.file ?? null,
-                resp?.presentation ?? null,
+                resp?.presentation ?? currentSession.commitPresentation,
               ),
             );
           })
           .catch((err) => {
-            if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey)
+            const currentSession = selectionSession();
+            if (
+              seq !== previewReqSeq ||
+              !props.open ||
+              currentSession.selectionKey !== selectionKey ||
+              currentSession.previewRequestKey !== previewRequestKey
+            )
               return;
             setPreviewSlot(
               createErrorGitDiffDialogLoadSlot(
-                nextRequestKey,
+                selectionKey,
+                previewRequestKey,
                 resolveDiffErrorState(
                   err,
                   "Failed to load patch preview.",
@@ -603,6 +762,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
                   },
                   props.errorFormatter,
                 ),
+                currentSession.commitPresentation,
               ),
             );
           });
@@ -613,43 +773,98 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
 
   createEffect(
     on(
-      () => [props.open, mode(), fullRequest(), fullRequestKey()] as const,
-      ([open, nextMode, nextRequest, nextRequestKey]) => {
-        if (
-          !open ||
-          nextMode !== "full-context" ||
-          !nextRequest ||
-          !nextRequestKey
-        )
-          return;
-        if (
-          fullSlot().requestKey === nextRequestKey &&
-          fullSlot().phase === "ready"
-        )
-          return;
+      () => {
+        const session = selectionSession();
+        return [
+          props.open,
+          activeMode(),
+          session.selectionKey,
+          session.fullRequestKey,
+        ] as const;
+      },
+      ([open, nextMode, selectionKey, fullRequestKey]) => {
+        const session = selectionSession();
+        const slot = fullSlot();
+        const slotMatchesRequest =
+          slot.selectionKey === selectionKey &&
+          slot.requestKey === fullRequestKey;
 
-        const seq = ++fullReqSeq;
-        setFullSlot(createLoadingGitDiffDialogLoadSlot(nextRequestKey));
+        if (!open || !selectionKey) {
+          fullReqSeq += 1;
+          setFullSlot(createGitDiffDialogLoadSlot());
+          return;
+        }
+        if (!session.fullRequest || !fullRequestKey) {
+          fullReqSeq += 1;
+          setFullSlot(
+            createIdleGitDiffDialogLoadSlot(
+              selectionKey,
+              fullRequestKey,
+              session.commitPresentation,
+            ),
+          );
+          return;
+        }
+        if (nextMode !== "full-context") {
+          if (!slotMatchesRequest) {
+            fullReqSeq += 1;
+            setFullSlot(
+              createIdleGitDiffDialogLoadSlot(
+                selectionKey,
+                fullRequestKey,
+                session.commitPresentation,
+              ),
+            );
+          }
+          return;
+        }
+        if (slotMatchesRequest && (slot.phase === "ready" || slot.phase === "loading")) {
+          return;
+        }
+
+        fullReqSeq += 1;
+        const seq = fullReqSeq;
+        setFullSlot(
+          createLoadingGitDiffDialogLoadSlot(
+            selectionKey,
+            fullRequestKey,
+            session.commitPresentation,
+          ),
+        );
 
         void rpc.git
-          .getDiffContent(nextRequest)
+          .getDiffContent(session.fullRequest)
           .then((resp) => {
-            if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey)
+            const currentSession = selectionSession();
+            if (
+              seq !== fullReqSeq ||
+              !props.open ||
+              currentSession.selectionKey !== selectionKey ||
+              currentSession.fullRequestKey !== fullRequestKey
+            )
               return;
             setFullSlot(
               createReadyGitDiffDialogLoadSlot(
-                nextRequestKey,
+                selectionKey,
+                fullRequestKey,
                 resp.file ?? null,
-                resp?.presentation ?? null,
+                resp?.presentation ?? currentSession.commitPresentation,
               ),
             );
           })
           .catch((err) => {
-            if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey)
+            const currentSession = selectionSession();
+            if (
+              seq !== fullReqSeq ||
+              !props.open ||
+              currentSession.selectionKey !== selectionKey ||
+              currentSession.fullRequestKey !== fullRequestKey
+            )
               return;
             setFullSlot(
               createErrorGitDiffDialogLoadSlot(
-                nextRequestKey,
+                selectionKey,
+                fullRequestKey,
                 resolveDiffErrorState(
                   err,
                   "Failed to load full-context diff.",
@@ -660,6 +875,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
                   },
                   props.errorFormatter,
                 ),
+                currentSession.commitPresentation,
               ),
             );
           });
@@ -687,13 +903,13 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
             type="button"
             class={cn(
               gitDiffModeButtonClass,
-              redevenSegmentedItemClass(mode() === "patch"),
-              mode() === "patch"
+              redevenSegmentedItemClass(activeMode() === "patch"),
+              activeMode() === "patch"
                 ? "text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            aria-pressed={mode() === "patch"}
-            onClick={() => setMode("patch")}
+            aria-pressed={activeMode() === "patch"}
+            onClick={() => setModeForCurrentSelection("patch")}
           >
             Patch
           </button>
@@ -701,14 +917,14 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
             type="button"
             class={cn(
               gitDiffModeButtonClass,
-              redevenSegmentedItemClass(mode() === "full-context"),
-              mode() === "full-context"
+              redevenSegmentedItemClass(activeMode() === "full-context"),
+              activeMode() === "full-context"
                 ? "text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            aria-pressed={mode() === "full-context"}
+            aria-pressed={activeMode() === "full-context"}
             disabled={!canLoadFullContext()}
-            onClick={() => setMode("full-context")}
+            onClick={() => setModeForCurrentSelection("full-context")}
           >
             Full Context
           </button>
