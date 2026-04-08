@@ -102,7 +102,7 @@ import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import { CODE_SPACE_ID_ENV_UI, FLOE_APP_AGENT, FLOE_APP_CODE, FLOE_APP_PORT_FORWARD, type LauncherFloeApp } from './services/floeproxyContract';
 import {
-  channelInitEntry,
+  connectArtifactEntry,
   getEnvPublicIDFromSession,
   getLocalAccessStatus,
   getLocalRuntime,
@@ -832,7 +832,7 @@ export function EnvAppShell() {
     }
   };
 
-  const createGetGrant = () => async () => {
+  const createGetArtifact = () => async () => {
     const id = envId();
     if (!id) throw new Error('Missing env context. Please reopen from the Redeven Portal.');
 
@@ -857,7 +857,7 @@ export function EnvAppShell() {
       codeSpaceId: CODE_SPACE_ID_ENV_UI,
     });
 
-    return channelInitEntry({ endpointId: id, floeApp: FLOE_APP_AGENT, entryTicket });
+    return connectArtifactEntry({ endpointId: id, floeApp: FLOE_APP_AGENT, entryTicket });
   };
 
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
@@ -899,7 +899,7 @@ export function EnvAppShell() {
       } else {
         await fn({
           mode: 'tunnel',
-          getGrant: createGetGrant(),
+          getArtifact: createGetArtifact(),
           observer,
           autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
         });

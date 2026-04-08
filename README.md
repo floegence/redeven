@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.25.8-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.25.9-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
   <a href="#security-at-a-glance"><img alt="Architecture" src="https://img.shields.io/badge/Architecture-E2EE%20Endpoint-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/flowersec"><img alt="Flowersec" src="https://img.shields.io/badge/Tunnel-Flowersec-F27A1A?style=flat-square"></a>
@@ -189,7 +189,7 @@ Build, lint, and verify from source. 🛠️
 
 ### Prerequisites
 
-- Go `1.25.8`
+- Go `1.25.9`
 - Node.js `24`
 - npm
 - pnpm (or Node.js `corepack`)

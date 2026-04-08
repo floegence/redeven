@@ -13,7 +13,7 @@ const unlockGatewayAccessMock = vi.fn();
 const mintLocalDirectConnectInfoMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
-const channelInitEntryMock = vi.fn();
+const connectArtifactEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
 const reloadCurrentPageMock = vi.fn();
@@ -214,7 +214,7 @@ vi.mock('./protocol/redeven_v1', () => ({
 }));
 
 vi.mock('./services/controlplaneApi', () => ({
-  channelInitEntry: channelInitEntryMock,
+  connectArtifactEntry: connectArtifactEntryMock,
   getEnvPublicIDFromSession: getEnvPublicIDFromSessionMock,
   getLocalAccessStatus: getLocalAccessStatusMock,
   getLocalRuntime: getLocalRuntimeMock,
@@ -360,7 +360,10 @@ beforeEach(() => {
     channel_init_expire_at_unix_s: 1,
     default_suite: 1,
   });
-  channelInitEntryMock.mockReturnValue({ endpointId: 'env_local' });
+  connectArtifactEntryMock.mockReturnValue({
+    transport: 'tunnel',
+    tunnel_grant: { channel_id: 'ch_local' },
+  });
 });
 
 describe('EnvAppShell top bar affordances', () => {
@@ -1111,7 +1114,7 @@ describe('EnvAppShell remote access gate', () => {
       expect(remoteConnectConfig).toMatchObject({
         mode: 'tunnel',
         observer: expect.any(Object),
-        getGrant: expect.any(Function),
+        getArtifact: expect.any(Function),
         autoReconnect: {
           enabled: true,
           maxAttempts: 3,
@@ -1122,6 +1125,120 @@ describe('EnvAppShell remote access gate', () => {
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(host.textContent).toContain('activity main');
       expect(host.textContent).not.toContain('Unlock runtime');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('mints a fresh connect artifact when the remote runtime requests a new session', async () => {
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+    getEnvironmentMock.mockResolvedValue({
+      public_id: 'env_demo',
+      name: 'Remote runtime',
+      namespace_public_id: 'ns_remote',
+      status: 'online',
+      lifecycle_status: 'running',
+      permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
+    });
+    mintEnvProxyEntryTicketMock.mockResolvedValue('ticket-1');
+    connectArtifactEntryMock.mockResolvedValue({
+      transport: 'tunnel',
+      tunnel_grant: { channel_id: 'ch_remote' },
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      input!.value = 'secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as { getArtifact: () => Promise<unknown> };
+      expect(remoteConnectConfig?.getArtifact).toEqual(expect.any(Function));
+
+      getEnvironmentMock.mockClear();
+      mintEnvProxyEntryTicketMock.mockClear();
+      connectArtifactEntryMock.mockClear();
+
+      const artifact = await remoteConnectConfig.getArtifact();
+
+      expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
+      expect(getEnvironmentMock).toHaveBeenCalledWith('env_demo');
+      expect(mintEnvProxyEntryTicketMock).toHaveBeenCalledTimes(1);
+      expect(mintEnvProxyEntryTicketMock).toHaveBeenCalledWith({
+        endpointId: 'env_demo',
+        floeApp: 'com.floegence.redeven.agent',
+        codeSpaceId: 'env-ui',
+      });
+      expect(connectArtifactEntryMock).toHaveBeenCalledTimes(1);
+      expect(connectArtifactEntryMock).toHaveBeenCalledWith({
+        endpointId: 'env_demo',
+        floeApp: 'com.floegence.redeven.agent',
+        entryTicket: 'ticket-1',
+      });
+      expect(artifact).toEqual({
+        transport: 'tunnel',
+        tunnel_grant: { channel_id: 'ch_remote' },
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('refuses to mint a remote connect artifact while the runtime is offline', async () => {
+    getLocalRuntimeMock.mockResolvedValue(null);
+    getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
+    getEnvironmentMock.mockResolvedValue({
+      public_id: 'env_demo',
+      name: 'Remote runtime',
+      namespace_public_id: 'ns_remote',
+      status: 'offline',
+      lifecycle_status: 'running',
+      permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      input!.value = 'secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as { getArtifact: () => Promise<unknown> };
+      expect(remoteConnectConfig?.getArtifact).toEqual(expect.any(Function));
+
+      getEnvironmentMock.mockClear();
+      mintEnvProxyEntryTicketMock.mockClear();
+      connectArtifactEntryMock.mockClear();
+
+      await expect(remoteConnectConfig.getArtifact()).rejects.toThrow('Runtime is offline.');
+      expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
+      expect(getEnvironmentMock).toHaveBeenCalledWith('env_demo');
+      expect(mintEnvProxyEntryTicketMock).not.toHaveBeenCalled();
+      expect(connectArtifactEntryMock).not.toHaveBeenCalled();
     } finally {
       dispose();
     }

@@ -14,7 +14,7 @@ const unlockGatewayAccessMock = vi.fn();
 const mintLocalDirectConnectInfoMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
-const channelInitEntryMock = vi.fn();
+const connectArtifactEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => 'env_remote');
 
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
@@ -135,7 +135,7 @@ vi.mock('./protocol/redeven_v1', () => ({
 }));
 
 vi.mock('./services/controlplaneApi', () => ({
-  channelInitEntry: channelInitEntryMock,
+  connectArtifactEntry: connectArtifactEntryMock,
   getAgentLatestVersion: getAgentLatestVersionMock,
   getEnvPublicIDFromSession: getEnvPublicIDFromSessionMock,
   getLocalAccessStatus: getLocalAccessStatusMock,
@@ -242,7 +242,10 @@ beforeEach(() => {
     channel_init_expire_at_unix_s: 1,
     default_suite: 1,
   });
-  channelInitEntryMock.mockReturnValue({ endpointId: 'env_remote' });
+  connectArtifactEntryMock.mockReturnValue({
+    transport: 'tunnel',
+    tunnel_grant: { channel_id: 'ch_remote' },
+  });
 });
 
 describe('EnvAppShell update prompt orchestration', () => {

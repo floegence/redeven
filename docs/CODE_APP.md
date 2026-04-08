@@ -15,7 +15,7 @@ This document describes the **Code App** implementation in the Redeven runtime:
 ## What runs where
 
 - Browser side:
-  - A trusted launcher origin (`cs-*` or `pf-*`) exchanges the one-time `entry_ticket` for `grant_client`.
+  - A trusted launcher origin (`cs-*` or `pf-*`) exchanges the one-time `entry_ticket` for a canonical `connect_artifact`, and Flowersec uses the embedded tunnel grant to establish the runtime session.
   - The browser then navigates to a controller origin (`rt-*`) that owns the real Flowersec proxy runtime.
   - The controller origin loads the actual app in an `app-*` iframe, so the untrusted app is not same-origin with the runtime/controller window.
   - An app-origin Service Worker forwards `fetch()` through a cross-origin bridge to the controller runtime.

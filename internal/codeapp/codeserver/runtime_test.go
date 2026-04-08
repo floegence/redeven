@@ -22,10 +22,7 @@ func TestRuntimeManagerStatusDetectsSupportedOverride(t *testing.T) {
 		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
 	})
 
-	status := mgr.Status(context.Background())
-	if status.ActiveRuntime.DetectionState != RuntimeDetectionReady {
-		t.Fatalf("active detection_state=%q, want %q", status.ActiveRuntime.DetectionState, RuntimeDetectionReady)
-	}
+	status := waitForActiveRuntimeDetection(t, mgr, RuntimeDetectionReady)
 	if status.ActiveRuntime.Source != "env_override" {
 		t.Fatalf("source=%q, want %q", status.ActiveRuntime.Source, "env_override")
 	}
@@ -69,7 +66,7 @@ func TestRuntimeManagerStatusKeepsManagedRuntimeVisibleWhenOverrideIsActive(t *t
 		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
 	})
 
-	status := mgr.Status(context.Background())
+	status := waitForActiveRuntimeDetection(t, mgr, RuntimeDetectionReady)
 	if status.ActiveRuntime.Source != "env_override" {
 		t.Fatalf("active source=%q, want env_override", status.ActiveRuntime.Source)
 	}
@@ -216,6 +213,28 @@ func waitForOperationState(t *testing.T, mgr *RuntimeManager, want RuntimeOperat
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("operation.state never reached %q (last=%+v)", want, last)
+	return RuntimeStatus{}
+}
+
+func waitForActiveRuntimeDetection(t *testing.T, mgr *RuntimeManager, want RuntimeDetectionState) RuntimeStatus {
+	t.Helper()
+	deadline := time.Now().Add(6 * time.Second)
+	last := RuntimeStatus{}
+	for time.Now().Before(deadline) {
+		status := mgr.Status(context.Background())
+		last = status
+		if status.ActiveRuntime.DetectionState == want {
+			return status
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf(
+		"active detection_state=%q, want %q (error_code=%q error=%q)",
+		last.ActiveRuntime.DetectionState,
+		want,
+		last.ActiveRuntime.ErrorCode,
+		last.ActiveRuntime.ErrorMessage,
+	)
 	return RuntimeStatus{}
 }
 

@@ -17,7 +17,7 @@ const getLocalAccessStatusMock = vi.fn();
 const unlockLocalAccessMock = vi.fn();
 const getEnvironmentMock = vi.fn();
 const mintLocalDirectConnectInfoMock = vi.fn();
-const channelInitEntryMock = vi.fn();
+const connectArtifactEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
 
@@ -143,7 +143,7 @@ vi.mock('./protocol/redeven_v1', () => ({
 }));
 
 vi.mock('./services/controlplaneApi', () => ({
-  channelInitEntry: channelInitEntryMock,
+  connectArtifactEntry: connectArtifactEntryMock,
   getEnvPublicIDFromSession: getEnvPublicIDFromSessionMock,
   getLocalAccessStatus: getLocalAccessStatusMock,
   getLocalRuntime: getLocalRuntimeMock,

@@ -1,5 +1,5 @@
-import type { ChannelInitGrant, DirectConnectInfo } from '@floegence/flowersec-core';
-import { requestEntryChannelGrant } from '@floegence/flowersec-core/browser';
+import type { ConnectArtifact, DirectConnectInfo } from '@floegence/flowersec-core';
+import { requestEntryConnectArtifact } from '@floegence/flowersec-core/browser';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
@@ -494,13 +494,13 @@ export async function mintEnvEntryTicketForApp(args: { envId: string; floeApp: L
   return t;
 }
 
-export async function channelInitEntry(args: { endpointId: string; floeApp: string; entryTicket: string }): Promise<ChannelInitGrant> {
+export async function connectArtifactEntry(args: { endpointId: string; floeApp: string; entryTicket: string }): Promise<ConnectArtifact> {
   const endpointId = args.endpointId.trim();
   const floeApp = args.floeApp.trim();
   const entryTicket = args.entryTicket.trim();
   if (!endpointId || !floeApp || !entryTicket) throw new Error('Invalid request');
 
-  return requestEntryChannelGrant({
+  return requestEntryConnectArtifact({
     endpointId,
     entryTicket,
     credentials: 'omit',
