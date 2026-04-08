@@ -65,6 +65,40 @@ type GitDiffDialogErrorState = {
   message: string;
   detail?: string;
 };
+type GitDiffDialogLoadPhase = "idle" | "loading" | "ready" | "error";
+
+type GitDiffDialogLoadSlot = {
+  requestKey: string;
+  phase: GitDiffDialogLoadPhase;
+  item: GitDiffFileContent | null;
+  error: GitDiffDialogErrorState | null;
+  presentation: GitCommitDiffPresentation | null;
+};
+
+type GitDiffDialogBodyState =
+  | {
+      kind: "empty";
+    }
+  | {
+      kind: "loading";
+      mode: GitDiffContentMode;
+    }
+  | {
+      kind: "error";
+      mode: GitDiffContentMode;
+      error: GitDiffDialogErrorState;
+    }
+  | {
+      kind: "ready";
+      mode: GitDiffContentMode;
+      item: GitDiffFileContent;
+    }
+  | {
+      kind: "unavailable";
+      mode: GitDiffContentMode;
+      item: GitDiffFileContent;
+      message: string;
+    };
 
 export type GitDiffDialogErrorFormatterContext = {
   mode: GitDiffContentMode;
@@ -227,26 +261,59 @@ function diffRequestKey(req: GitGetDiffContentRequest | null): string {
   return JSON.stringify(req);
 }
 
+function createGitDiffDialogLoadSlot(
+  requestKey = "",
+  phase: GitDiffDialogLoadPhase = "idle",
+  item: GitDiffFileContent | null = null,
+  error: GitDiffDialogErrorState | null = null,
+  presentation: GitCommitDiffPresentation | null = null,
+): GitDiffDialogLoadSlot {
+  return {
+    requestKey,
+    phase,
+    item,
+    error,
+    presentation,
+  };
+}
+
+function createLoadingGitDiffDialogLoadSlot(
+  requestKey: string,
+): GitDiffDialogLoadSlot {
+  return createGitDiffDialogLoadSlot(requestKey, "loading");
+}
+
+function createReadyGitDiffDialogLoadSlot(
+  requestKey: string,
+  item: GitDiffFileContent | null,
+  presentation?: GitCommitDiffPresentation | null,
+): GitDiffDialogLoadSlot {
+  return createGitDiffDialogLoadSlot(
+    requestKey,
+    item ? "ready" : "idle",
+    item,
+    null,
+    presentation ?? null,
+  );
+}
+
+function createErrorGitDiffDialogLoadSlot(
+  requestKey: string,
+  error: GitDiffDialogErrorState,
+): GitDiffDialogLoadSlot {
+  return createGitDiffDialogLoadSlot(requestKey, "error", null, error);
+}
+
 export function GitDiffDialog(props: GitDiffDialogProps) {
   const layout = useLayout();
   const rpc = useRedevenRpc();
   const [mode, setMode] = createSignal<GitDiffDialogMode>("patch");
-  const [previewItem, setPreviewItem] = createSignal<GitDiffFileContent | null>(
-    null,
+  const [previewSlot, setPreviewSlot] = createSignal<GitDiffDialogLoadSlot>(
+    createGitDiffDialogLoadSlot(),
   );
-  const [previewLoading, setPreviewLoading] = createSignal(false);
-  const [previewError, setPreviewError] =
-    createSignal<GitDiffDialogErrorState | null>(null);
-  const [previewLoadedKey, setPreviewLoadedKey] = createSignal("");
-  const [previewPresentation, setPreviewPresentation] =
-    createSignal<GitCommitDiffPresentation | null>(null);
-  const [fullItem, setFullItem] = createSignal<GitDiffFileContent | null>(null);
-  const [fullLoading, setFullLoading] = createSignal(false);
-  const [fullError, setFullError] =
-    createSignal<GitDiffDialogErrorState | null>(null);
-  const [fullLoadedKey, setFullLoadedKey] = createSignal("");
-  const [fullPresentation, setFullPresentation] =
-    createSignal<GitCommitDiffPresentation | null>(null);
+  const [fullSlot, setFullSlot] = createSignal<GitDiffDialogLoadSlot>(
+    createGitDiffDialogLoadSlot(),
+  );
 
   let previewReqSeq = 0;
   let fullReqSeq = 0;
@@ -255,6 +322,9 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     isDirectoryDiffPlaceholder(props.item)
       ? createUnavailableDiffItem(props.item)
       : null,
+  );
+  const selectedUnavailableItem = createMemo(() =>
+    createUnavailableDiffItem(props.item),
   );
   const previewRequest = createMemo(() =>
     directoryUnavailableItem()
@@ -272,12 +342,6 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     () => !directoryUnavailableItem() && fullRequestKey() !== "",
   );
   const seededPreviewItem = createMemo(() => seedGitDiffContent(props.item));
-  const effectivePreviewItem = createMemo(
-    () => directoryUnavailableItem() ?? previewItem() ?? seededPreviewItem(),
-  );
-  const activeItem = createMemo(() =>
-    mode() === "full-context" ? fullItem() : effectivePreviewItem(),
-  );
   const commitSourcePresentation = createMemo(() =>
     props.source?.kind === "commit"
       ? (props.source.presentation ?? null)
@@ -287,15 +351,119 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     if (props.source?.kind !== "commit") return null;
     if (mode() === "full-context") {
       return (
-        fullPresentation() ??
-        previewPresentation() ??
+        fullSlot().presentation ??
+        previewSlot().presentation ??
         commitSourcePresentation()
       );
     }
     return (
-      previewPresentation() ?? commitSourcePresentation() ?? fullPresentation()
+      previewSlot().presentation ??
+      commitSourcePresentation() ??
+      fullSlot().presentation
     );
   });
+  const previewBodyState = createMemo<GitDiffDialogBodyState>(() => {
+    if (!props.item) return { kind: "empty" };
+    const placeholder = directoryUnavailableItem();
+    const preview = previewSlot();
+    const fallbackItem = selectedUnavailableItem();
+    if (placeholder) {
+      return {
+        kind: "unavailable",
+        mode: "preview",
+        item: placeholder,
+        message: "Diff preview is unavailable for directory entries.",
+      };
+    }
+    const readyItem = preview.item ?? seededPreviewItem();
+    if (readyItem) {
+      return {
+        kind: "ready",
+        mode: "preview",
+        item: readyItem,
+      };
+    }
+    if (preview.phase === "error" && preview.error) {
+      return {
+        kind: "error",
+        mode: "preview",
+        error: preview.error,
+      };
+    }
+    if (previewRequestKey()) {
+      return {
+        kind: "loading",
+        mode: "preview",
+      };
+    }
+    if (fallbackItem) {
+      return {
+        kind: "unavailable",
+        mode: "preview",
+        item: fallbackItem,
+        message: "Patch preview is unavailable for this file.",
+      };
+    }
+    return { kind: "empty" };
+  });
+  const effectivePreviewItem = createMemo(() => {
+    const state = previewBodyState();
+    return state.kind === "ready" ? state.item : null;
+  });
+  const fullBodyState = createMemo<GitDiffDialogBodyState>(() => {
+    if (!props.item) return { kind: "empty" };
+    const placeholder = directoryUnavailableItem();
+    const full = fullSlot();
+    const previewItem = effectivePreviewItem();
+    const fallbackItem = selectedUnavailableItem();
+    if (placeholder) {
+      return {
+        kind: "unavailable",
+        mode: "full",
+        item: placeholder,
+        message: "Diff preview is unavailable for directory entries.",
+      };
+    }
+    if (full.item) {
+      return {
+        kind: "ready",
+        mode: "full",
+        item: full.item,
+      };
+    }
+    if (full.phase === "error" && full.error) {
+      return {
+        kind: "error",
+        mode: "full",
+        error: full.error,
+      };
+    }
+    if (previewItem) {
+      return {
+        kind: "ready",
+        mode: "preview",
+        item: previewItem,
+      };
+    }
+    if (fullRequestKey()) {
+      return {
+        kind: "loading",
+        mode: "full",
+      };
+    }
+    if (fallbackItem) {
+      return {
+        kind: "unavailable",
+        mode: "full",
+        item: fallbackItem,
+        message: "Full-context diff is unavailable for this file.",
+      };
+    }
+    return { kind: "empty" };
+  });
+  const activeBodyState = createMemo(() =>
+    mode() === "full-context" ? fullBodyState() : previewBodyState(),
+  );
   const commitPresentationBadge = createMemo(() =>
     gitCommitDiffPresentationBadge(activeCommitPresentation()),
   );
@@ -309,6 +477,56 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
       Number.isFinite(props.desktopWindowZIndex) &&
       !layout.isMobile(),
   );
+  const fullContextLoading = createMemo(
+    () =>
+      mode() === "full-context" &&
+      fullRequestKey() !== "" &&
+      fullSlot().phase !== "ready" &&
+      fullSlot().phase !== "error",
+  );
+  const fullContextOverlayLoading = createMemo(() => {
+    const state = fullBodyState();
+    return (
+      fullContextLoading() &&
+      state.kind === "ready" &&
+      state.mode === "preview"
+    );
+  });
+  const activeBodyLoadingMessage = createMemo(() =>
+    mode() === "full-context"
+      ? "Loading full-context diff..."
+      : "Loading patch preview...",
+  );
+  const headerHintMessage = createMemo(() => {
+    if (directoryUnavailableItem()) {
+      return "Directory entries do not expose a single-file diff preview.";
+    }
+    if (mode() === "full-context") {
+      return fullContextLoading()
+        ? "Loading full context..."
+        : "Includes unchanged lines for broader review context.";
+    }
+    return previewBodyState().kind === "loading"
+      ? "Loading patch preview..."
+      : "Loads a single-file patch on demand.";
+  });
+  const activeBodyEmptyMessage = createMemo(() =>
+    mode() === "patch"
+      ? props.emptyMessage
+      : "Full-context diff is unavailable for this file.",
+  );
+  const activeErrorState = createMemo(() => {
+    const state = activeBodyState();
+    return state.kind === "error" ? state.error : null;
+  });
+  const activeReadyItem = createMemo(() => {
+    const state = activeBodyState();
+    return state.kind === "ready" ? state.item : null;
+  });
+  const activeUnavailableState = createMemo(() => {
+    const state = activeBodyState();
+    return state.kind === "unavailable" ? state : null;
+  });
   const unavailableMessage = (item: GitDiffFileContent): string | undefined => {
     if (isDirectoryDiffPlaceholder(item))
       return "Diff preview is unavailable for directory entries.";
@@ -324,18 +542,18 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         previewReqSeq += 1;
         fullReqSeq += 1;
         setMode("patch");
-        setPreviewItem(seededPreviewItem());
-        setPreviewLoading(false);
-        setPreviewError(null);
-        setPreviewLoadedKey(
-          seededPreviewItem() && previewRequestKey() ? previewRequestKey() : "",
-        );
-        setPreviewPresentation(null);
-        setFullItem(null);
-        setFullLoading(false);
-        setFullError(null);
-        setFullLoadedKey("");
-        setFullPresentation(null);
+        setPreviewSlot(() => {
+          const requestKey = previewRequestKey();
+          const seededItem = seededPreviewItem();
+          if (seededItem) {
+            return createReadyGitDiffDialogLoadSlot(requestKey, seededItem);
+          }
+          if (requestKey) {
+            return createLoadingGitDiffDialogLoadSlot(requestKey);
+          }
+          return createGitDiffDialogLoadSlot();
+        });
+        setFullSlot(createGitDiffDialogLoadSlot(fullRequestKey()));
       },
       { defer: true },
     ),
@@ -347,41 +565,46 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
       ([open, nextRequest, nextRequestKey]) => {
         if (!open || !nextRequest || !nextRequestKey) return;
         if (seededPreviewItem()) return;
-        if (previewLoadedKey() === nextRequestKey || previewLoading()) return;
+        if (
+          previewSlot().requestKey === nextRequestKey &&
+          previewSlot().phase === "ready"
+        )
+          return;
 
         const seq = ++previewReqSeq;
-        setPreviewLoading(true);
-        setPreviewError(null);
+        setPreviewSlot(createLoadingGitDiffDialogLoadSlot(nextRequestKey));
 
         void rpc.git
           .getDiffContent(nextRequest)
           .then((resp) => {
             if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey)
               return;
-            setPreviewItem(resp.file ?? null);
-            setPreviewLoadedKey(nextRequestKey);
-            setPreviewPresentation(resp?.presentation ?? null);
+            setPreviewSlot(
+              createReadyGitDiffDialogLoadSlot(
+                nextRequestKey,
+                resp.file ?? null,
+                resp?.presentation ?? null,
+              ),
+            );
           })
           .catch((err) => {
             if (seq !== previewReqSeq || previewRequestKey() !== nextRequestKey)
               return;
-            setPreviewItem(null);
-            setPreviewPresentation(null);
-            setPreviewError(
-              resolveDiffErrorState(
-                err,
-                "Failed to load patch preview.",
-                {
-                  mode: "preview",
-                  source: props.source,
-                  item: props.item,
-                },
-                props.errorFormatter,
+            setPreviewSlot(
+              createErrorGitDiffDialogLoadSlot(
+                nextRequestKey,
+                resolveDiffErrorState(
+                  err,
+                  "Failed to load patch preview.",
+                  {
+                    mode: "preview",
+                    source: props.source,
+                    item: props.item,
+                  },
+                  props.errorFormatter,
+                ),
               ),
             );
-          })
-          .finally(() => {
-            if (seq === previewReqSeq) setPreviewLoading(false);
           });
       },
       { defer: true },
@@ -399,41 +622,46 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
           !nextRequestKey
         )
           return;
-        if (fullLoadedKey() === nextRequestKey || fullLoading()) return;
+        if (
+          fullSlot().requestKey === nextRequestKey &&
+          fullSlot().phase === "ready"
+        )
+          return;
 
         const seq = ++fullReqSeq;
-        setFullLoading(true);
-        setFullError(null);
+        setFullSlot(createLoadingGitDiffDialogLoadSlot(nextRequestKey));
 
         void rpc.git
           .getDiffContent(nextRequest)
           .then((resp) => {
             if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey)
               return;
-            setFullItem(resp.file ?? null);
-            setFullLoadedKey(nextRequestKey);
-            setFullPresentation(resp?.presentation ?? null);
+            setFullSlot(
+              createReadyGitDiffDialogLoadSlot(
+                nextRequestKey,
+                resp.file ?? null,
+                resp?.presentation ?? null,
+              ),
+            );
           })
           .catch((err) => {
             if (seq !== fullReqSeq || fullRequestKey() !== nextRequestKey)
               return;
-            setFullItem(null);
-            setFullPresentation(null);
-            setFullError(
-              resolveDiffErrorState(
-                err,
-                "Failed to load full-context diff.",
-                {
-                  mode: "full",
-                  source: props.source,
-                  item: props.item,
-                },
-                props.errorFormatter,
+            setFullSlot(
+              createErrorGitDiffDialogLoadSlot(
+                nextRequestKey,
+                resolveDiffErrorState(
+                  err,
+                  "Failed to load full-context diff.",
+                  {
+                    mode: "full",
+                    source: props.source,
+                    item: props.item,
+                  },
+                  props.errorFormatter,
+                ),
               ),
             );
-          })
-          .finally(() => {
-            if (seq === fullReqSeq) setFullLoading(false);
           });
       },
       { defer: true },
@@ -500,86 +728,45 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
             </div>
           </Show>
           <div class="text-[11px] text-muted-foreground">
-            <Switch>
-              <Match when={Boolean(directoryUnavailableItem())}>
-                Directory entries do not expose a single-file diff preview.
-              </Match>
-              <Match when={mode() === "full-context" && fullLoading()}>
-                Loading full context...
-              </Match>
-              <Match when={mode() === "full-context" && !fullLoading()}>
-                Includes unchanged lines for broader review context.
-              </Match>
-              <Match when={mode() === "patch" && previewLoading()}>
-                Loading patch preview...
-              </Match>
-              <Match when={true}>Loads a single-file patch on demand.</Match>
-            </Switch>
+            {headerHintMessage()}
           </div>
         </div>
       </div>
 
       <div class="relative min-h-0 flex-1">
         <Switch>
-          <Match when={mode() === "patch" && previewError()}>
+          <Match when={activeErrorState()}>
             <GitStatePane
               tone="error"
-              message={
-                previewError()?.message || "Failed to load patch preview."
-              }
-              detail={previewError()?.detail}
+              message={activeErrorState()?.message}
+              detail={activeErrorState()?.detail}
               surface
               class="min-h-0 flex-1"
             />
           </Match>
 
-          <Match when={mode() === "full-context" && fullError()}>
-            <GitStatePane
-              tone="error"
-              message={
-                fullError()?.message || "Failed to load full-context diff."
-              }
-              detail={fullError()?.detail}
-              surface
-              class="min-h-0 flex-1"
-            />
-          </Match>
-
-          <Match when={activeItem()}>
+          <Match when={activeUnavailableState()}>
             <GitPatchViewer
               class="min-h-0 flex-1"
-              item={activeItem()}
-              emptyMessage={
-                mode() === "patch"
-                  ? props.emptyMessage
-                  : "Full-context diff is unavailable for this file."
-              }
+              item={activeUnavailableState()?.item}
+              emptyMessage={activeBodyEmptyMessage()}
+              unavailableMessage={activeUnavailableState()?.message}
+            />
+          </Match>
+
+          <Match when={activeReadyItem()}>
+            <GitPatchViewer
+              class="min-h-0 flex-1"
+              item={activeReadyItem()}
+              emptyMessage={activeBodyEmptyMessage()}
               unavailableMessage={unavailableMessage}
             />
           </Match>
 
-          <Match when={mode() === "patch" && previewLoading()}>
+          <Match when={activeBodyState().kind === "loading"}>
             <GitStatePane
               loading
-              message="Loading patch preview..."
-              surface
-              class="min-h-0 flex-1"
-            />
-          </Match>
-
-          <Match when={mode() === "full-context" && effectivePreviewItem()}>
-            <GitPatchViewer
-              class="min-h-0 flex-1"
-              item={effectivePreviewItem()}
-              emptyMessage={props.emptyMessage}
-              unavailableMessage={unavailableMessage}
-            />
-          </Match>
-
-          <Match when={mode() === "full-context" && fullLoading()}>
-            <GitStatePane
-              loading
-              message="Loading full-context diff..."
+              message={activeBodyLoadingMessage()}
               surface
               class="min-h-0 flex-1"
             />
@@ -587,11 +774,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
 
           <Match when={true}>
             <GitStatePane
-              message={
-                mode() === "patch"
-                  ? props.emptyMessage
-                  : "Full-context diff is unavailable for this file."
-              }
+              message={activeBodyEmptyMessage()}
               surface
               class="min-h-0 flex-1"
             />
@@ -599,13 +782,11 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         </Switch>
 
         <Show
-          when={
-            mode() === "full-context" && fullLoading() && effectivePreviewItem()
-          }
+          when={fullContextOverlayLoading()}
         >
           <GitStatePane
             loading
-            message="Loading full-context diff..."
+            message={activeBodyLoadingMessage()}
             class="absolute inset-0 z-10 h-full rounded-md bg-background/44 backdrop-blur-[1px]"
             contentClass={cn(
               "rounded-md border px-4 py-3 shadow-sm",

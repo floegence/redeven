@@ -2823,6 +2823,111 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
+  it("shows a loading state instead of the empty selection message for branch-history commit previews", async () => {
+    let resolvePreview:
+      | ((value: Awaited<ReturnType<typeof mockGetDiffContent>>) => void)
+      | undefined;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo",
+      commit: {
+        hash: "2222222222222222",
+        shortHash: "22222222",
+        parents: ["1111111111111111"],
+        subject: "Refine history loading",
+      },
+      files: [
+        {
+          changeType: "modified",
+          path: "src/history.ts",
+          displayPath: "src/history.ts",
+          additions: 8,
+          deletions: 3,
+        },
+      ],
+    });
+    mockGetDiffContent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolvePreview = resolve;
+        }),
+    );
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={{
+                    name: "feature/demo",
+                    fullName: "refs/heads/feature/demo",
+                    kind: "local",
+                    current: true,
+                    aheadCount: 1,
+                    behindCount: 0,
+                  }}
+                  selectedBranchSubview="history"
+                  commits={[
+                    {
+                      hash: "2222222222222222",
+                      shortHash: "22222222",
+                      parents: ["1111111111111111"],
+                      subject: "Refine history loading",
+                      authorName: "Bob",
+                      authorTimeMs: 1706003600000,
+                    },
+                  ]}
+                  selectedCommitHash="2222222222222222"
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+
+      const diffButton = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.includes("View Diff"),
+      ) as HTMLButtonElement | undefined;
+      expect(diffButton).toBeTruthy();
+
+      diffButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flush();
+
+      expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
+      expect(document.body.textContent).toContain("Loading patch preview...");
+      expect(document.body.textContent).not.toContain(
+        "Select a file to inspect its diff.",
+      );
+
+      expect(resolvePreview).toBeTruthy();
+      resolvePreview?.({
+        repoRootPath: "/workspace/repo",
+        mode: "preview",
+        file: {
+          changeType: "modified",
+          path: "src/history.ts",
+          displayPath: "src/history.ts",
+          additions: 8,
+          deletions: 3,
+          patchText: "@@ -1 +1 @@\n-history\n+history updated",
+        },
+      });
+      await flush();
+    } finally {
+      dispose();
+    }
+  });
+
   it("keeps compare dialog scrolling inside the changed files table region", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
