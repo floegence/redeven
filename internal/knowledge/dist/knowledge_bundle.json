@@ -15,7 +15,7 @@
     "flowersec": "92e438b6c438c8e694b0cdd9fcac3bb8a378e58b",
     "redeven": "5747429801be3e0ccb04f0c72d18682daa6c80cd"
   },
-  "source_sha256": "a118d81e9098bb9b0fa555815a5dfe2fdce9facc08bd4dca51fbd84e24aaf419",
+  "source_sha256": "f9e1de4e85fd34567d598c3209d1a7f1abc3a7bfc033dd2826e59cd915a26e73",
   "cards": [
     {
       "id": "K-AGENT-001",
@@ -364,8 +364,8 @@
     },
     {
       "id": "K-WEB-001",
-      "version": 2,
-      "title": "Env App composes floe-webapp runtime and protocol with Floeterm terminal-web and Flowersec browser helpers",
+      "version": 3,
+      "title": "Env App composes floe-webapp runtime and protocol with Floeterm terminal-web and Flowersec controlplane helpers",
       "status": "stable",
       "owners": [
         "frontend"
@@ -376,10 +376,10 @@
         "protocol",
         "ui"
       ],
-      "summary": "Env App is built as a Redeven-specific shell on top of floe-webapp UI and runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec browser grant helpers.",
-      "mechanism": "The UI package pins released versions of all four upstream packages. `EnvAppShell` imports floe-webapp providers, layout primitives, icons, and protocol hooks; terminal surfaces use Floeterm `TerminalCore` and session coordination; controlplane services call Flowersec browser helpers to exchange entry tickets for channel grants; and the upstream sibling packages define the exported interfaces these Redeven surfaces consume.",
-      "boundaries": "This card only holds while Env App continues to consume published upstream packages instead of local ad-hoc replacements for protocol, terminal, and grant handling.",
-      "invalid_conditions": "This card becomes invalid if Env App stops using these upstream package interfaces or replaces controlplane, terminal, and UI semantics with unrelated local implementations.",
+      "summary": "Env App is built as a Redeven-specific shell on top of floe-webapp UI and runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.",
+      "mechanism": "The UI package pins released versions of all four upstream packages. `EnvAppShell` imports floe-webapp providers, layout primitives, icons, and protocol hooks; terminal surfaces use Floeterm `TerminalCore` and session coordination; controlplane services call Flowersec controlplane helpers to exchange entry tickets for connect artifacts; and the upstream sibling packages define the exported interfaces these Redeven surfaces consume.",
+      "boundaries": "This card only holds while Env App continues to consume published upstream packages instead of local ad-hoc replacements for protocol, terminal, and controlplane artifact handling.",
+      "invalid_conditions": "This card becomes invalid if Env App stops using these upstream package interfaces or replaces controlplane artifact, terminal, and UI semantics with unrelated local implementations.",
       "evidence": [
         {
           "repo": "redeven",
@@ -433,7 +433,7 @@
           "repo": "redeven",
           "path": "internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
           "line": 2,
-          "note": "Controlplane services request entry channel grants through flowersec-core/browser."
+          "note": "Controlplane services request entry connect artifacts through flowersec-core/controlplane."
         },
         {
           "repo": "floe-webapp",
@@ -467,9 +467,9 @@
         },
         {
           "repo": "flowersec",
-          "path": "flowersec-ts/src/browser/controlplane.ts",
-          "line": 127,
-          "note": "Flowersec browser helpers exchange entry tickets for channel grants."
+          "path": "flowersec-ts/src/controlplane/request.ts",
+          "line": 171,
+          "note": "Flowersec controlplane helpers exchange entry tickets for connect artifacts."
         }
       ],
       "source_card_id": "K-WEB-001"
