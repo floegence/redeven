@@ -1,5 +1,5 @@
 import type { ConnectArtifact, DirectConnectInfo } from '@floegence/flowersec-core';
-import { requestEntryConnectArtifact } from '@floegence/flowersec-core/browser';
+import { requestEntryConnectArtifact } from '@floegence/flowersec-core/controlplane';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
