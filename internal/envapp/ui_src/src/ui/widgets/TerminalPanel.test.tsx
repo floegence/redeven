@@ -822,6 +822,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(terminalConfigState.values.length).toBeGreaterThan(0);
+    expect(terminalConfigState.values[0]?.cursorBlink).toBe(false);
     expect(terminalConfigState.values[0]?.clipboard).toEqual({
       copyOnSelect: false,
     });

@@ -490,6 +490,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     const core = new TerminalCore(
       target,
       getDefaultTerminalConfig('dark', {
+        cursorBlink: false,
         fontSize: fontSize(),
         allowTransparency: false,
         theme: colors(),
