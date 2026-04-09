@@ -90,8 +90,8 @@ function fallbackDesktopThemeSnapshot(): DesktopThemeSnapshot {
     source: 'system',
     resolvedTheme: 'light',
     window: {
-      backgroundColor: '#f3e5de',
-      symbolColor: '#181311',
+      backgroundColor: '#f0eeea',
+      symbolColor: '#141f2e',
     },
   };
 }
@@ -109,6 +109,25 @@ function applyDesktopThemeToDocument(snapshot: DesktopThemeSnapshot): void {
   root.classList.remove('light', 'dark');
   root.classList.add(snapshot.resolvedTheme);
   root.style.colorScheme = snapshot.resolvedTheme;
+}
+
+function applyDesktopDocumentFallbackColors(snapshot: DesktopThemeSnapshot): void {
+  const root = document.documentElement;
+  if (!root) {
+    return;
+  }
+
+  const background = `var(--background, ${snapshot.window.backgroundColor})`;
+  const foreground = `var(--foreground, ${snapshot.window.symbolColor})`;
+  root.style.setProperty('--redeven-desktop-native-window-background', snapshot.window.backgroundColor);
+  root.style.setProperty('--redeven-desktop-native-window-symbol-color', snapshot.window.symbolColor);
+  root.style.backgroundColor = background;
+  root.style.color = foreground;
+
+  if (document.body) {
+    document.body.style.backgroundColor = background;
+    document.body.style.color = foreground;
+  }
 }
 
 function applyDesktopWindowChromeToDocument(): void {
@@ -132,6 +151,7 @@ function ensureWindowChromeStyle(): void {
 
 function syncCurrentDocument(snapshot: DesktopThemeSnapshot): void {
   applyDesktopThemeToDocument(snapshot);
+  applyDesktopDocumentFallbackColors(snapshot);
   applyDesktopWindowChromeToDocument();
   ensureWindowChromeStyle();
 }

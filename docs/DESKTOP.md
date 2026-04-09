@@ -346,6 +346,15 @@ Authoritative state:
   - `window.backgroundColor`
   - `window.symbolColor`
 
+Native window contract:
+
+- `window.backgroundColor` and `window.symbolColor` are native-window colors, not generic CSS theme strings.
+- The desktop shell treats those fields as hex-only values so they remain safe for:
+  - `BrowserWindow.backgroundColor`
+  - `BrowserWindow.setBackgroundColor()`
+  - `titleBarOverlay.color`
+- Renderer page tokens still come from the broader desktop palette, but Electron-native APIs must not depend on CSS-only color syntax or DOM sampling.
+
 Behavior:
 
 - Every `BrowserWindow` is created from the latest shell snapshot, so the native window background is correct before the first renderer paint.
@@ -357,6 +366,7 @@ Behavior:
 - Linux and Windows title bar overlay colors still come from the desktop shell, but that overlay behavior is no longer coupled to renderer-side color reporting.
 - Preload exposes `window.redevenDesktopTheme` with synchronous `getSnapshot()`, `setSource(...)`, and `subscribe(...)`.
 - Preload applies `html.light` / `html.dark` and `color-scheme` as soon as the document is available, then keeps the current document synchronized when theme updates arrive from Electron main.
+- Preload also applies an early document-level background and foreground fallback using the shell snapshot so close animations, blocked paints, and live resize reveal the same dark/light base color instead of the Electron default white surface.
 - Preload also publishes the desktop chrome contract through CSS custom properties:
   - `--redeven-desktop-titlebar-height`
   - `--redeven-desktop-titlebar-start-inset`
@@ -367,12 +377,14 @@ Behavior:
 - Floe shell top bars and desktop-owned launcher chrome both receive drag / no-drag semantics from preload so BrowserWindow movement keeps working after the app takes over the title bar area.
 - Detached desktop child windows render through a shared chrome-safe frame in Env App, so title, subtitle, banner, footer, and scene body can evolve independently while native control reservations still come only from the shell contract.
 - Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
+- Welcome and Env App each keep an explicit entry-document background fallback (`html` / `body` / `#root`) so the first renderer frame matches the shell-owned native window background even before business UI mounts.
 - Theme toggles from either welcome or Env App update native chrome and all registered renderer windows together, including detached desktop child windows.
 - When the stored source is `system`, Electron main rebroadcasts a fresh snapshot whenever the OS theme changes.
 
 Non-goals:
 
 - Native window colors must not depend on DOM color sampling from the current page.
+- Native window colors must not use renderer-only CSS syntaxes that are not part of the desktop shell’s native hex-color contract.
 - Desktop should not maintain one-off per-surface theme patches for welcome, Env App, or detached child windows.
 
 ## User Entry Points
