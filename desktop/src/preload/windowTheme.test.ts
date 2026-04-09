@@ -38,8 +38,8 @@ function lightSnapshot() {
     source: 'light',
     resolvedTheme: 'light',
     window: {
-      backgroundColor: '#f3e5de',
-      symbolColor: '#181311',
+      backgroundColor: '#f0eeea',
+      symbolColor: '#141f2e',
     },
   };
 }
@@ -79,6 +79,10 @@ describe('bootstrapDesktopThemeBridge', () => {
 
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('dark');
+    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#0e121b');
+    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-symbol-color')).toBe('#f9fafb');
+    expect(document.documentElement.style.getPropertyValue('background-color')).toBe('var(--background, #0e121b)');
+    expect(document.body.style.getPropertyValue('background-color')).toBe('var(--background, #0e121b)');
     expect(document.documentElement.dataset.redevenDesktopWindowChromeMode).toBe(windowChromeConfig.mode);
     expect(document.documentElement.dataset.redevenDesktopWindowControlsSide).toBe(windowChromeConfig.controlsSide);
 
@@ -117,6 +121,8 @@ describe('bootstrapDesktopThemeBridge', () => {
 
     expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('light');
+    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#f0eeea');
+    expect(document.body.style.getPropertyValue('background-color')).toBe('var(--background, #f0eeea)');
     expect(listener).toHaveBeenLastCalledWith(lightSnapshot());
 
     unsubscribe();
@@ -135,5 +141,6 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(ipcRendererSendSync).toHaveBeenCalledWith('redeven-desktop:theme-set-source', 'light');
     expect(snapshot).toEqual(lightSnapshot());
     expect(document.documentElement.classList.contains('light')).toBe(true);
+    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#f0eeea');
   });
 });

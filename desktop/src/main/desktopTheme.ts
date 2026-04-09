@@ -1,5 +1,7 @@
+import type { DesktopResolvedTheme, DesktopWindowThemeSnapshot } from '../shared/desktopTheme';
+
 export type DesktopThemePalette = Readonly<{
-  windowBackground: string;
+  nativeWindow: DesktopWindowThemeSnapshot;
   pageBackground: string;
   surface: string;
   surfaceMuted: string;
@@ -15,19 +17,20 @@ export type DesktopThemePalette = Readonly<{
   info: string;
 }>;
 
-import type { DesktopResolvedTheme, DesktopWindowThemeSnapshot } from '../shared/desktopTheme';
-
 export const desktopLightTheme = {
-  windowBackground: 'hsl(36 15% 93%)',
-  pageBackground: 'hsl(36 15% 93%)',
-  surface: 'hsl(36 12% 96%)',
-  surfaceMuted: 'hsl(36 10% 88%)',
-  border: 'hsl(36 10% 82%)',
-  text: 'hsl(215 40% 13%)',
-  muted: 'hsl(215 20% 42%)',
-  accent: 'hsl(215 40% 13%)',
-  accentText: 'hsl(0 0% 98%)',
-  accentSoft: 'hsl(36 12% 91%)',
+  nativeWindow: {
+    backgroundColor: '#f0eeea',
+    symbolColor: '#141f2e',
+  },
+  pageBackground: '#f0eeea',
+  surface: '#f6f5f4',
+  surfaceMuted: '#e3e1dd',
+  border: '#d6d2cd',
+  text: '#141f2e',
+  muted: '#566881',
+  accent: '#141f2e',
+  accentText: '#fafafa',
+  accentSoft: '#e3e1dd',
   success: 'oklch(0.68 0.16 150)',
   warning: 'oklch(0.78 0.14 80)',
   danger: 'oklch(0.65 0.2 25)',
@@ -35,16 +38,19 @@ export const desktopLightTheme = {
 } as const satisfies DesktopThemePalette;
 
 export const desktopDarkTheme = {
-  windowBackground: 'hsl(222 30% 8%)',
-  pageBackground: 'hsl(222 30% 8%)',
-  surface: 'hsl(222 28% 10%)',
-  surfaceMuted: 'hsl(220 25% 14%)',
-  border: 'hsl(220 20% 18%)',
-  text: 'hsl(210 20% 98%)',
-  muted: 'hsl(215 20% 60%)',
-  accent: 'hsl(210 20% 98%)',
-  accentText: 'hsl(222 30% 10%)',
-  accentSoft: 'hsl(220 25% 16%)',
+  nativeWindow: {
+    backgroundColor: '#0e121b',
+    symbolColor: '#f9fafb',
+  },
+  pageBackground: '#0e121b',
+  surface: '#121721',
+  surfaceMuted: '#1b212d',
+  border: '#252b37',
+  text: '#f9fafb',
+  muted: '#8596ad',
+  accent: '#1f2533',
+  accentText: '#f9fafb',
+  accentSoft: '#1b212d',
   success: 'oklch(0.72 0.19 150)',
   warning: 'oklch(0.82 0.16 80)',
   danger: 'oklch(0.7 0.22 25)',
@@ -61,8 +67,5 @@ export function desktopWindowThemeSnapshotForResolvedTheme(
   resolvedTheme: DesktopResolvedTheme,
 ): DesktopWindowThemeSnapshot {
   const palette = desktopPaletteForResolvedTheme(resolvedTheme);
-  return {
-    backgroundColor: palette.windowBackground,
-    symbolColor: palette.text,
-  };
+  return palette.nativeWindow;
 }

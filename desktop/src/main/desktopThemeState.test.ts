@@ -52,8 +52,8 @@ describe('DesktopThemeState', () => {
       source: 'dark',
       resolvedTheme: 'dark',
       window: {
-        backgroundColor: 'hsl(222 30% 8%)',
-        symbolColor: 'hsl(210 20% 98%)',
+        backgroundColor: '#0e121b',
+        symbolColor: '#f9fafb',
       },
     });
   });
@@ -74,7 +74,7 @@ describe('DesktopThemeState', () => {
     expect(store.rendererStorage.get(DESKTOP_THEME_SOURCE_STATE_KEY)).toBe('dark');
     expect(nativeTheme.themeSource).toBe('dark');
     expect(snapshot.source).toBe('dark');
-    expect(win.setBackgroundColor).toHaveBeenCalledWith('hsl(222 30% 8%)');
+    expect(win.setBackgroundColor).toHaveBeenCalledWith('#0e121b');
     expect(win.setTitleBarOverlay).toHaveBeenCalledTimes(1);
     expect(win.webContents.send).toHaveBeenCalledWith(DESKTOP_THEME_UPDATED_CHANNEL, snapshot);
   });
@@ -92,13 +92,13 @@ describe('DesktopThemeState', () => {
     nativeTheme.shouldUseDarkColors = true;
     nativeTheme.emit('updated');
 
-    expect(win.setBackgroundColor).toHaveBeenCalledWith('hsl(222 30% 8%)');
+    expect(win.setBackgroundColor).toHaveBeenCalledWith('#0e121b');
     expect(win.webContents.send).toHaveBeenCalledWith(DESKTOP_THEME_UPDATED_CHANNEL, {
       source: 'system',
       resolvedTheme: 'dark',
       window: {
-        backgroundColor: 'hsl(222 30% 8%)',
-        symbolColor: 'hsl(210 20% 98%)',
+        backgroundColor: '#0e121b',
+        symbolColor: '#f9fafb',
       },
     });
   });

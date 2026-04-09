@@ -165,12 +165,14 @@ Contract:
   - `removeItem(theme-key)` resets the shell source to `system`
 - All non-theme UI persistence such as layout and deck state remains owned by the existing Env App storage namespace.
 - A small runtime subscription keeps `useTheme()` synchronized when Electron main rebroadcasts a new snapshot, including OS theme changes while the user preference is `system`.
+- Env App keeps an explicit entry-document fallback on `html`, `body`, and `#root` so the shell-owned native window background and the first renderer frame stay aligned before feature surfaces mount.
 
 Implications:
 
 - Env App theme toggles behave like shell-wide toggles, not page-local overrides.
 - Detached desktop child windows inherit the same theme snapshot and document-class synchronization path as the main Env App window.
 - Eliminating independent page authority for native window colors avoids light flashes during dark-mode open, close, and aggressive resize transitions.
+- Renderer CSS may still use richer theme tokens, but native window colors remain a shell-owned hex contract instead of flowing arbitrary CSS color syntax back into Electron.
 
 ## Detached Desktop Window Frame
 

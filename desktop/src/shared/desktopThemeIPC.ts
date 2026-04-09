@@ -1,4 +1,5 @@
 import {
+  normalizeDesktopHexColor,
   type DesktopThemeSnapshot,
 } from './desktopTheme';
 
@@ -20,8 +21,8 @@ export function normalizeDesktopThemeSnapshot(value: unknown): DesktopThemeSnaps
   };
   const source = compact(candidate.source);
   const resolvedTheme = compact(candidate.resolvedTheme);
-  const backgroundColor = compact(candidate.window?.backgroundColor);
-  const symbolColor = compact(candidate.window?.symbolColor);
+  const backgroundColor = normalizeDesktopHexColor(candidate.window?.backgroundColor);
+  const symbolColor = normalizeDesktopHexColor(candidate.window?.symbolColor);
   if (
     (source !== 'system' && source !== 'light' && source !== 'dark')
     || (resolvedTheme !== 'light' && resolvedTheme !== 'dark')

@@ -9,8 +9,8 @@ import {
 
 export function defaultDesktopWindowThemeSnapshot(): DesktopWindowThemeSnapshot {
   return {
-    backgroundColor: desktopTheme.windowBackground,
-    symbolColor: desktopTheme.text,
+    backgroundColor: desktopTheme.nativeWindow.backgroundColor,
+    symbolColor: desktopTheme.nativeWindow.symbolColor,
   };
 }
 
