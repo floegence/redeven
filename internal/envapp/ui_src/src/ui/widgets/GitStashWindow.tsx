@@ -25,6 +25,7 @@ import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
+import { GitStashDeleteConfirmDialog } from './GitStashDeleteConfirmDialog';
 import { GitVirtualTable } from './GitVirtualTable';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
@@ -208,6 +209,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
     if (review.kind !== 'apply') return '';
     return String(review.preview.blockingReason ?? review.preview.blocking?.reason ?? '').trim();
   });
+  const applyReview = createMemo(() => (
+    reviewMatchesSelection() && props.review?.kind === 'apply'
+      ? props.review
+      : null
+  ));
+  const deleteReviewOpen = createMemo(() => Boolean(props.open && reviewMatchesSelection() && props.review?.kind === 'drop'));
   const canConfirmReview = createMemo(() => {
     const review = props.review;
     if (!reviewMatchesSelection() || !review || props.reviewLoading) return false;
@@ -257,17 +264,18 @@ export function GitStashWindow(props: GitStashWindowProps) {
   });
 
   return (
-    <PreviewWindow
-      open={props.open}
-      onOpenChange={props.onOpenChange}
-      title={`Stashes · ${repoName()}`}
-      persistenceKey="git-stash-window"
-      defaultSize={{ width: 1040, height: 760 }}
-      minSize={{ width: 720, height: 520 }}
-      floatingClass="bg-background"
-      mobileClass="bg-background"
-    >
-      <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+    <>
+      <PreviewWindow
+        open={props.open}
+        onOpenChange={props.onOpenChange}
+        title={`Stashes · ${repoName()}`}
+        persistenceKey="git-stash-window"
+        defaultSize={{ width: 1040, height: 760 }}
+        minSize={{ width: 720, height: 520 }}
+        floatingClass="bg-background"
+        mobileClass="bg-background"
+      >
+        <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
         <div class={cn('shrink-0 border-b px-4 pt-3 pb-3', redevenDividerRoleClass('strong'))}>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <GitLabelBlock
@@ -480,14 +488,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   </StashActionButton>
                                 </div>
 
-                                <Show when={reviewMatchesSelection()}>
+                                <Show when={applyReview()}>
                                   <GitChecklistItem
-                                    title={props.review?.kind === 'drop' ? 'Delete this stash entry' : (props.review?.removeAfterApply ? 'Apply and remove this stash' : 'Apply this stash')}
+                                    title={applyReview()?.removeAfterApply ? 'Apply and remove this stash' : 'Apply this stash'}
                                     detail={reviewBlockingReason()
                                       ? reviewBlockingReason()
-                                      : props.review?.kind === 'drop'
-                                        ? 'Confirm deletion to remove this stash from the shared stack.'
-                                        : 'Confirm the reviewed apply plan before mutating the current worktree.'}
+                                      : 'Confirm the reviewed apply plan before mutating the current worktree.'}
                                     tone={reviewBlockingReason() ? 'warning' : 'violet'}
                                     complete={!reviewBlockingReason()}
                                     required
@@ -500,7 +506,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                         Cancel
                                       </Button>
                                       <Button size="sm" variant="default" class="rounded-md" disabled={!canConfirmReview()} loading={Boolean(props.reviewLoading || props.applyBusy || props.dropBusy)} onClick={() => props.onConfirmReview?.()}>
-                                        {props.review?.kind === 'drop' ? 'Confirm Delete' : (props.review?.removeAfterApply ? 'Confirm Apply & Remove' : 'Confirm Apply')}
+                                        {applyReview()?.removeAfterApply ? 'Confirm Apply & Remove' : 'Confirm Apply'}
                                       </Button>
                                     </div>
                                   </GitChecklistItem>
@@ -603,28 +609,38 @@ export function GitStashWindow(props: GitStashWindowProps) {
         </div>
       </div>
 
-      <GitDiffDialog
-        open={diffDialogOpen()}
-        onOpenChange={(open) => {
-          if (open) {
-            setDiffDialogOpen(true);
-            return;
-          }
-          closeDiffDialog();
-        }}
-        item={diffDialogItem()}
-        source={diffDialogItem() && diffDialogStashId() ? {
-          kind: 'stash',
-          repoRootPath: repoPath(),
-          stashId: diffDialogStashId(),
-        } : null}
-        title="Stash Diff"
-        description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected stash file diff.'}
-        emptyMessage="Select a changed stash file to inspect its diff."
-        unavailableMessage={(item) => (item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
-        errorFormatter={(error) => buildStashPatchErrorState(error)}
-        desktopWindowZIndex={STASH_DIFF_DIALOG_Z_INDEX}
+        <GitDiffDialog
+          open={diffDialogOpen()}
+          onOpenChange={(open) => {
+            if (open) {
+              setDiffDialogOpen(true);
+              return;
+            }
+            closeDiffDialog();
+          }}
+          item={diffDialogItem()}
+          source={diffDialogItem() && diffDialogStashId() ? {
+            kind: 'stash',
+            repoRootPath: repoPath(),
+            stashId: diffDialogStashId(),
+          } : null}
+          title="Stash Diff"
+          description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected stash file diff.'}
+          emptyMessage="Select a changed stash file to inspect its diff."
+          unavailableMessage={(item) => (item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
+          errorFormatter={(error) => buildStashPatchErrorState(error)}
+          desktopWindowZIndex={STASH_DIFF_DIALOG_Z_INDEX}
+        />
+      </PreviewWindow>
+
+      <GitStashDeleteConfirmDialog
+        open={deleteReviewOpen()}
+        stash={selectedStash()}
+        reviewError={deleteReviewOpen() ? props.reviewError : ''}
+        loading={Boolean(props.reviewLoading || props.dropBusy)}
+        onClose={() => props.onCancelReview?.()}
+        onConfirm={() => props.onConfirmReview?.()}
       />
-    </PreviewWindow>
+    </>
   );
 }
