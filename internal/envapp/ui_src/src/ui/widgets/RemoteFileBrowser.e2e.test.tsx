@@ -74,8 +74,12 @@ const gitStashWindowRenderStore = vi.hoisted(() => ({
     selectedStashId?: string;
     stashDetailId?: string;
     stashDetailLoading: boolean;
+    reviewKind?: string;
+    reviewError?: string;
   }>,
   onRefreshStashes: undefined as (() => void) | undefined,
+  onRequestDrop: undefined as (() => void) | undefined,
+  onConfirmReview: undefined as (() => void) | undefined,
 }));
 
 const workspaceLifecycleStore = vi.hoisted(() => ({
@@ -805,9 +809,14 @@ vi.mock('./GitStashWindow', () => ({
     selectedStashId?: string;
     stashDetail?: { id?: string } | null;
     stashDetailLoading?: boolean;
+    review?: { kind?: 'apply' | 'drop'; preview?: { stash?: { id?: string } | null } | null } | null;
+    reviewError?: string;
+    reviewLoading?: boolean;
     onRefreshStashes?: () => void;
     onSelectStash?: (id: string) => void;
     onOpenChange?: (open: boolean) => void;
+    onRequestDrop?: () => void;
+    onConfirmReview?: () => void;
   }) => {
     createEffect(() => {
       gitStashWindowRenderStore.snapshots.push({
@@ -817,8 +826,12 @@ vi.mock('./GitStashWindow', () => ({
         selectedStashId: props.selectedStashId,
         stashDetailId: props.stashDetail?.id,
         stashDetailLoading: Boolean(props.stashDetailLoading),
+        reviewKind: props.review?.kind,
+        reviewError: props.reviewError,
       });
       gitStashWindowRenderStore.onRefreshStashes = props.onRefreshStashes;
+      gitStashWindowRenderStore.onRequestDrop = props.onRequestDrop;
+      gitStashWindowRenderStore.onConfirmReview = props.onConfirmReview;
     });
 
     return props.open ? (
@@ -828,8 +841,14 @@ vi.mock('./GitStashWindow', () => ({
         <div>stash-selected:{props.selectedStashId ?? ''}</div>
         <div>stash-detail:{props.stashDetail?.id ?? ''}</div>
         <div>stash-detail-loading:{props.stashDetailLoading ? 'yes' : 'no'}</div>
+        <div>stash-review-kind:{props.review?.kind ?? ''}</div>
+        <div>stash-review-stash:{props.review?.preview?.stash?.id ?? ''}</div>
+        <div>stash-review-loading:{props.reviewLoading ? 'yes' : 'no'}</div>
+        <div>stash-review-error:{props.reviewError ?? ''}</div>
         <button type="button" onClick={() => props.onRefreshStashes?.()}>mock-stash-refresh</button>
         <button type="button" onClick={() => props.onSelectStash?.(props.stashes[0]?.id ?? '')}>mock-stash-select-first</button>
+        <button type="button" onClick={() => props.onRequestDrop?.()}>mock-stash-delete</button>
+        <button type="button" onClick={() => props.onConfirmReview?.()}>mock-stash-confirm-review</button>
         <button type="button" onClick={() => props.onOpenChange?.(false)}>mock-stash-close</button>
       </div>
     ) : null;
@@ -937,6 +956,8 @@ beforeEach(() => {
   gitWorkspaceRenderStore.snapshots = [];
   gitStashWindowRenderStore.snapshots = [];
   gitStashWindowRenderStore.onRefreshStashes = undefined;
+  gitStashWindowRenderStore.onRequestDrop = undefined;
+  gitStashWindowRenderStore.onConfirmReview = undefined;
   workspaceLifecycleStore.filesMounts = 0;
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
@@ -2229,6 +2250,166 @@ describe('RemoteFileBrowser persistence', () => {
         id: 'stash-1',
       });
       expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.tab === 'stashes' && item.stashDetailLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('rebuilds the delete confirmation after a stale stash drop plan', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.git.previewDropStash.mockReset();
+    mockRpc.git.previewDropStash
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo',
+        headRef: 'main',
+        headCommit: 'abc1234',
+        planFingerprint: 'stash-drop-plan-1',
+        stash: {
+          id: 'stash-1',
+          ref: 'stash@{0}',
+          message: 'WIP demo stash',
+        },
+      })
+      .mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo',
+        headRef: 'main',
+        headCommit: 'def5678',
+        planFingerprint: 'stash-drop-plan-2',
+        stash: {
+          id: 'stash-1',
+          ref: 'stash@{0}',
+          message: 'WIP demo stash',
+        },
+      });
+    mockRpc.git.dropStash.mockRejectedValueOnce(new RpcError({
+      typeId: 1127,
+      code: 409,
+      message: 'stash drop plan is stale; review the stash again',
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const openStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-stash') as HTMLButtonElement | undefined;
+      expect(openStashButton).toBeTruthy();
+      openStashButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+      await flush();
+
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.tab === 'stashes')).toBe(true);
+      expect(gitStashWindowRenderStore.onRequestDrop).toBeTruthy();
+      gitStashWindowRenderStore.onRequestDrop?.();
+      await flush();
+      await flush();
+
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.reviewKind === 'drop')).toBe(true);
+      mockRpc.git.getRepoSummary.mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo',
+        headRef: 'main',
+        headCommit: 'def5678',
+        workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+      });
+
+      expect(gitStashWindowRenderStore.onConfirmReview).toBeTruthy();
+      gitStashWindowRenderStore.onConfirmReview?.();
+      await flush();
+      await flush();
+
+      expect(mockRpc.git.dropStash).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.previewDropStash).toHaveBeenCalledTimes(2);
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.reviewKind === 'drop')).toBe(true);
+      expect(notificationStore.info).toContainEqual({
+        title: 'Delete confirmation refreshed',
+        message: 'Repository state changed. Confirm deletion again.',
+      });
+      expect(notificationStore.error.some((item) => item.title === 'Delete stash failed')).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('refreshes the stash list and clears the delete confirmation when the stash is already gone', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.git.previewDropStash.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo',
+      headRef: 'main',
+      headCommit: 'abc1234',
+      planFingerprint: 'stash-drop-plan-1',
+      stash: {
+        id: 'stash-1',
+        ref: 'stash@{0}',
+        message: 'WIP demo stash',
+      },
+    });
+    mockRpc.git.dropStash.mockRejectedValueOnce(new RpcError({
+      typeId: 1127,
+      code: 404,
+      message: 'stash not found',
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const openStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-stash') as HTMLButtonElement | undefined;
+      expect(openStashButton).toBeTruthy();
+      openStashButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+      await flush();
+
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.tab === 'stashes')).toBe(true);
+      expect(gitStashWindowRenderStore.onRequestDrop).toBeTruthy();
+      gitStashWindowRenderStore.onRequestDrop?.();
+      await flush();
+      await flush();
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.reviewKind === 'drop')).toBe(true);
+      mockRpc.git.listStashes.mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo',
+        stashes: [],
+      });
+
+      expect(gitStashWindowRenderStore.onConfirmReview).toBeTruthy();
+      gitStashWindowRenderStore.onConfirmReview?.();
+      await flush();
+      await flush();
+
+      expect(notificationStore.info).toContainEqual({
+        title: 'Stash no longer available',
+        message: 'The selected stash no longer exists. The stash list was refreshed.',
+      });
+      expect(notificationStore.error.some((item) => item.title === 'Delete stash failed')).toBe(false);
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.stashCount === 0 && item.selectedStashId === '')).toBe(true);
     } finally {
       dispose();
     }

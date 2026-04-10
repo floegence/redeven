@@ -3,8 +3,6 @@ import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Refresh } from '@floegence/floe-webapp-core/icons';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
 import type {
-  GitPreviewApplyStashResponse,
-  GitPreviewDropStashResponse,
   GitRepoSummaryResponse,
   GitStashSummary,
   GitWorkspaceSummary,
@@ -22,6 +20,7 @@ import {
   type GitStashWindowSource,
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
+import { stashReviewMatchesTarget, type GitStashReviewState } from '../utils/gitStashReview';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
@@ -49,16 +48,7 @@ import {
 } from './GitWorkbenchPrimitives';
 import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
 
-export type GitStashReviewState =
-  | {
-    kind: 'apply';
-    removeAfterApply: boolean;
-    preview: GitPreviewApplyStashResponse;
-  }
-  | {
-    kind: 'drop';
-    preview: GitPreviewDropStashResponse;
-  };
+export type { GitStashReviewState } from '../utils/gitStashReview';
 
 type StashPatchErrorState = {
   message: string;
@@ -206,10 +196,11 @@ export function GitStashWindow(props: GitStashWindowProps) {
   });
   const detailFiles = createMemo(() => props.stashDetail?.files ?? []);
   const reviewMatchesSelection = createMemo(() => {
-    const review = props.review;
-    const stashId = selectedStash()?.id;
-    if (!review || !stashId) return false;
-    return review.preview.stash?.id === stashId;
+    return stashReviewMatchesTarget(props.review, {
+      repoRootPath: repoPath(),
+      repoSummary: props.repoSummary ?? null,
+      stash: selectedStash(),
+    });
   });
   const reviewBlockingReason = createMemo(() => {
     const review = props.review;

@@ -261,6 +261,10 @@ describe('GitStashWindow', () => {
             review={{
               kind: 'apply',
               removeAfterApply: false,
+              reviewContext: {
+                repoRootPath: '/workspace/repo',
+                stashId: 'stash-1',
+              },
               preview: {
                 repoRootPath: '/workspace/repo',
                 stash: {
@@ -287,6 +291,84 @@ describe('GitStashWindow', () => {
       const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Confirm Apply') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.disabled).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('hides a drop confirmation when the reviewed repository head is stale', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <GitStashWindow
+            open
+            onOpenChange={() => {}}
+            tab="stashes"
+            onTabChange={() => {}}
+            repoRootPath="/workspace/repo"
+            source="changes"
+            repoSummary={{
+              repoRootPath: '/workspace/repo',
+              headRef: 'main',
+              headCommit: 'def5678',
+              stashCount: 1,
+              workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+            }}
+            workspaceSummary={{ stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 }}
+            stashes={[{
+              id: 'stash-1',
+              ref: 'stash@{0}',
+              message: 'WIP linked worktree',
+              headCommit: 'stash-head-1',
+              createdAtUnixMs: 1,
+            }]}
+            selectedStashId="stash-1"
+            onSelectStash={() => {}}
+            stashDetail={{
+              id: 'stash-1',
+              ref: 'stash@{0}',
+              message: 'WIP linked worktree',
+              headCommit: 'stash-head-1',
+              files: [{
+                changeType: 'modified',
+                path: 'src/app.ts',
+                displayPath: 'src/app.ts',
+              }],
+            }}
+            review={{
+              kind: 'drop',
+              reviewContext: {
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                headCommit: 'abc1234',
+                stashId: 'stash-1',
+                stashHeadCommit: 'stash-head-1',
+              },
+              preview: {
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                headCommit: 'abc1234',
+                stash: {
+                  id: 'stash-1',
+                  ref: 'stash@{0}',
+                  message: 'WIP linked worktree',
+                  headCommit: 'stash-head-1',
+                },
+                planFingerprint: 'stash-drop-plan-1',
+              },
+            }}
+          />
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('Delete');
+      expect(host.textContent).not.toContain('Confirm Delete');
+      expect(host.textContent).not.toContain('Delete this stash entry');
     } finally {
       dispose();
     }

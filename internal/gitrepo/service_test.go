@@ -767,6 +767,45 @@ func TestGetDiffContent_WorkspaceUnstagedIncludesFullFileContext(t *testing.T) {
 	}
 }
 
+func TestClassifyGitMutationRPCError_StashDropSignals(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		err         error
+		wantCode    uint32
+		wantMessage string
+	}{
+		{
+			name:        "drop stash stale plan",
+			err:         errors.New("stash drop plan is stale; review the stash again"),
+			wantCode:    409,
+			wantMessage: "stash drop plan is stale; review the stash again",
+		},
+		{
+			name:        "drop stash missing target",
+			err:         errors.New("stash not found"),
+			wantCode:    404,
+			wantMessage: "stash not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifyGitMutationRPCError(tt.err)
+			if got == nil {
+				t.Fatalf("classifyGitMutationRPCError(%q)=nil", tt.err)
+			}
+			if got.Code != tt.wantCode {
+				t.Fatalf("classifyGitMutationRPCError(%q) code=%d, want %d", tt.err, got.Code, tt.wantCode)
+			}
+			if got.Message != tt.wantMessage {
+				t.Fatalf("classifyGitMutationRPCError(%q) message=%q, want %q", tt.err, got.Message, tt.wantMessage)
+			}
+		})
+	}
+}
+
 func TestListWorkspaceChanges_ProvidesMetadataOnlySummariesAndLazyDiffContent(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

@@ -54,7 +54,7 @@ import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
-import { GitStashWindow, type GitStashReviewState } from './GitStashWindow';
+import { GitStashWindow } from './GitStashWindow';
 import { GitWorkspace } from './GitWorkspace';
 import {
   WORKSPACE_VIEW_SECTIONS,
@@ -88,6 +88,12 @@ import {
   workspaceMutationPaths,
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
+import {
+  buildGitStashReviewContextFromApplyPreview,
+  buildGitStashReviewContextFromDropPreview,
+  stashReviewMatchesTarget,
+  type GitStashReviewState,
+} from '../utils/gitStashReview';
 import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
 import {
   buildChildPath,
@@ -182,6 +188,8 @@ const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:
 const SHOW_HIDDEN_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:show-hidden:';
 const GO_TO_PATH_DROPDOWN_ITEM_ID = 'go-to-path';
 const SHOW_HIDDEN_DROPDOWN_ITEM_ID = 'show-hidden-files';
+const STASH_DROP_PLAN_STALE_ERROR_FRAGMENT = 'stash drop plan is stale';
+const STASH_NOT_FOUND_ERROR_FRAGMENT = 'stash not found';
 
 type GitMutationScope =
   | 'stage'
@@ -369,6 +377,24 @@ function classifyPathLoadError(err: unknown): PathLoadResult {
 
   const text = String(err ?? '').trim();
   return text ? { status: 'transport_error', message: text } : { status: 'transport_error' };
+}
+
+function normalizeRpcErrorMessage(err: unknown): string {
+  if (err instanceof RpcError) return String(err.message ?? '').trim().toLowerCase();
+  if (err instanceof Error) return String(err.message ?? '').trim().toLowerCase();
+  return String(err ?? '').trim().toLowerCase();
+}
+
+function isRpcErrorWithMessage(err: unknown, code: number, fragment: string): boolean {
+  return err instanceof RpcError && err.code === code && normalizeRpcErrorMessage(err).includes(fragment);
+}
+
+function isStashDropPlanStaleError(err: unknown): boolean {
+  return isRpcErrorWithMessage(err, 409, STASH_DROP_PLAN_STALE_ERROR_FRAGMENT);
+}
+
+function isStashNotFoundError(err: unknown): boolean {
+  return isRpcErrorWithMessage(err, 404, STASH_NOT_FOUND_ERROR_FRAGMENT);
 }
 
 function createGitCommitContext(params: {
@@ -1179,6 +1205,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const selectedGitWorkspaceItem = () => findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey());
   const activeStashRepoRootPath = () => String(stashWindowContext()?.repoRootPath ?? '').trim();
   const activeStashSource = () => stashWindowContext()?.source ?? 'header';
+  const selectedStashSummary = createMemo<GitStashSummary | GitStashDetail | null>(() => {
+    const stashId = String(selectedStashId() ?? '').trim();
+    if (!stashId) return stashList()[0] ?? null;
+    if (stashDetail()?.id === stashId) return stashDetail();
+    return stashList().find((item) => item.id === stashId) ?? null;
+  });
 
   const selectGitWorkspaceItem = (item: GitWorkspaceChange | null | undefined) => {
     setSelectedGitWorkspaceSection(workspaceViewSectionForItem(item));
@@ -1809,6 +1841,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         kind: 'apply',
         removeAfterApply,
         preview,
+        reviewContext: buildGitStashReviewContextFromApplyPreview(preview),
       });
     } catch (err) {
       if (seq !== stashReviewReqSeq) return;
@@ -1823,9 +1856,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const handleRequestDropStash = async () => {
-    const repoRootPath = activeStashRepoRootPath();
-    const stashId = String(selectedStashId() ?? '').trim();
+  const handleRequestDropStash = async (options: { id?: string; repoRootPath?: string; notifyOnError?: boolean } = {}) => {
+    const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
+    const stashId = String(options.id ?? selectedStashId() ?? '').trim();
     if (!repoRootPath || !stashId || !protocol.client()) return;
     const seq = ++stashReviewReqSeq;
     setStashReviewLoading(true);
@@ -1839,18 +1872,67 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setStashReview({
         kind: 'drop',
         preview,
+        reviewContext: buildGitStashReviewContextFromDropPreview(preview),
       });
     } catch (err) {
       if (seq !== stashReviewReqSeq) return;
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to review stash deletion');
       setStashReview(null);
       setStashReviewError(message);
-      notification.error('Stash review failed', message);
+      if (options.notifyOnError !== false) {
+        notification.error('Stash review failed', message);
+      }
     } finally {
       if (seq === stashReviewReqSeq) {
         setStashReviewLoading(false);
       }
     }
+  };
+
+  const recoverDropStashError = async (err: unknown, options: { repoRootPath: string; stashId: string }): Promise<boolean> => {
+    const { repoRootPath, stashId } = options;
+    if (isStashDropPlanStaleError(err)) {
+      clearStashReview({ cancelInFlight: true });
+      await refreshStashWindowData({
+        repoRootPath,
+        preferredSelectedId: stashId,
+        silent: true,
+        reloadDetail: true,
+      });
+      const stashStillExists = stashList().some((item) => item.id === stashId);
+      if (!stashStillExists) {
+        notification.info('Stash no longer available', 'The selected stash no longer exists. The stash list was refreshed.');
+        return true;
+      }
+      await handleRequestDropStash({
+        id: stashId,
+        repoRootPath,
+        notifyOnError: false,
+      });
+      if (stashReviewMatchesTarget(stashReview(), {
+        repoRootPath,
+        repoSummary: stashRepoSummary(),
+        stash: selectedStashSummary(),
+      })) {
+        notification.info('Delete confirmation refreshed', 'Repository state changed. Confirm deletion again.');
+        return true;
+      }
+      const refreshMessage = String(stashReviewError() ?? '').trim();
+      notification.warning('Delete confirmation unavailable', refreshMessage || 'Failed to refresh the delete confirmation. Try Delete again.');
+      return true;
+    }
+    if (isStashNotFoundError(err)) {
+      clearStashReview({ cancelInFlight: true });
+      await refreshStashWindowData({
+        repoRootPath,
+        preferredSelectedId: stashId,
+        silent: true,
+        reloadDetail: true,
+      });
+      notification.info('Stash no longer available', 'The selected stash no longer exists. The stash list was refreshed.');
+      return true;
+    }
+    return false;
   };
 
   const handleConfirmStashReview = async () => {
@@ -1904,6 +1986,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         notification.success('Deleted stash', 'Removed the selected stash from the stack.');
       }
     } catch (err) {
+      if (review.kind === 'drop' && await recoverDropStashError(err, { repoRootPath, stashId })) {
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
       setStashReviewError(message);
       if (err instanceof RpcError && (err.code === 404 || err.code === 409)) {
@@ -3570,6 +3655,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       id: stashId,
       silent: Boolean(stashDetail()),
     });
+  });
+
+  createEffect(() => {
+    const review = stashReview();
+    if (!review) return;
+    if (stashReviewMatchesTarget(review, {
+      repoRootPath: activeStashRepoRootPath(),
+      repoSummary: stashRepoSummary(),
+      stash: selectedStashSummary(),
+    })) {
+      return;
+    }
+    clearStashReview({ cancelInFlight: true });
   });
 
   const dispatchAskFlowerIntent = (intent: AskFlowerIntent) => {

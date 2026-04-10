@@ -210,7 +210,7 @@ The stash surface itself is split into two tabs:
 Safety and refresh behavior:
 
 - Stash entries use the stash commit OID as their stable identity, so selection survives index shifts like `stash@{0}` changing after new saves or deletions.
-- `Apply` and `Delete` both require preview fingerprints before mutation; stale plans are rejected and must be reviewed again.
+- `Apply` and `Delete` both require preview fingerprints before mutation; stale plans are rejected. `Delete` refreshes the stash context and, when the target stash still exists, rebuilds the confirmation state so the user can confirm once more without manually reopening the stash window.
 - Stash apply preview simulates the operation in a temporary detached worktree before enabling confirmation, so clean-apply checks do not depend on string heuristics in the visible worktree.
 - After stash mutations, the stash window refreshes its own target worktree context, while the main Git browser refreshes repository summary plus the currently active paged workspace section instead of forcing a full workspace reload or switching to the wrong worktree root.
 
