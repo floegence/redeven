@@ -24,6 +24,7 @@ import { CodexNavigationIcon } from './icons/CodexIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
+import { assertProxyRuntimeScopeV1 } from '@floegence/flowersec-core/proxy';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import {
@@ -150,6 +151,19 @@ const ACCESS_GATE_IDS = {
   error: 'redeven-access-error',
   notice: 'redeven-access-notice',
 } as const;
+
+const PROXY_RUNTIME_SCOPE_NAME = 'proxy.runtime';
+
+function validateProxyRuntimeScope(entry: Readonly<{ scope_version: number; payload: unknown }>): void {
+  if (entry.scope_version !== 1) {
+    throw new Error(`unsupported ${PROXY_RUNTIME_SCOPE_NAME} scope_version: ${entry.scope_version}`);
+  }
+  assertProxyRuntimeScopeV1(entry.payload as Record<string, unknown>);
+}
+
+const FLOWERSEC_SCOPE_RESOLVERS = Object.freeze({
+  [PROXY_RUNTIME_SCOPE_NAME]: validateProxyRuntimeScope,
+});
 
 class AccessResumeTimeoutError extends Error {
   constructor(message: string) {
@@ -901,6 +915,9 @@ export function EnvAppShell() {
           mode: 'tunnel',
           getArtifact: createGetArtifact(),
           observer,
+          connect: {
+            scopeResolvers: FLOWERSEC_SCOPE_RESOLVERS,
+          },
           autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
         });
         if (accessRecoverySeq !== attemptKey) return;
