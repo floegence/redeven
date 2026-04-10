@@ -65,9 +65,15 @@ describe('file preview wiring', () => {
 
     expect(surfaceSrc).toContain("import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';");
     expect(surfaceSrc).toContain("import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';");
+    expect(surfaceSrc).toContain("import { WindowModal } from './WindowModal';");
     expect(surfaceSrc).toContain('layout.isMobile()');
     expect(surfaceSrc).toContain('<PreviewWindow');
+    expect(surfaceSrc).toContain('surfaceRef={setFloatingSurfaceEl}');
     expect(surfaceSrc).toContain('<ConfirmDialog');
+    expect(surfaceSrc).toContain('<WindowModal');
+    expect(surfaceSrc).toContain('<Show when={isMobile()}>');
+    expect(surfaceSrc).toContain('<Show when={!isMobile()}>');
+    expect(surfaceSrc).toContain('host={floatingSurfaceEl()}');
     expect(surfaceSrc).toContain('Ask Flower');
     expect(surfaceSrc).toContain('Download');
     expect(surfaceSrc).toContain('Unsaved changes');
@@ -78,10 +84,11 @@ describe('file preview wiring', () => {
     expect(surfaceSrc).not.toContain('[&>div>div:last-child]:!w-full');
 
     expect(previewWindowSrc).toContain("import { Dialog } from '@floegence/floe-webapp-core/ui';");
-    expect(previewWindowSrc).toContain("import { PersistentFloatingWindow } from './PersistentFloatingWindow';");
+    expect(previewWindowSrc).toContain("from './PersistentFloatingWindow';");
     expect(previewWindowSrc).toContain('layout.isMobile()');
     expect(previewWindowSrc).toContain('<Dialog');
     expect(previewWindowSrc).toContain('<PersistentFloatingWindow');
+    expect(previewWindowSrc).toContain('surfaceRef={props.surfaceRef}');
     expect(previewWindowSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(previewWindowSrc).toContain('file-preview-floating-window');
     expect(previewWindowSrc).toContain('PREVIEW_WINDOW_Z_INDEX = 150');
@@ -135,7 +142,8 @@ describe('file preview wiring', () => {
     expect(remoteSrc).not.toContain("import { FilePreviewDialog } from './FilePreviewDialog';");
     expect(remoteSrc).not.toContain('<FilePreviewDialog');
 
-    expect(chatSrc).toContain("import { createFileBrowserFABModel } from './createFileBrowserFABModel';");
+    expect(chatSrc).toContain("from './createFileBrowserFABModel';");
+    expect(chatSrc).toContain('createFileBrowserFABModel,');
     expect(chatSrc).not.toContain("import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';");
     expect(chatSrc).not.toContain('await fileBrowserSurface.openBrowser(browser);');
     expect(chatSrc).not.toContain("import { RemoteFileBrowser } from './RemoteFileBrowser';");
@@ -147,7 +155,8 @@ describe('file preview wiring', () => {
     const codexShellSrc = read('../codex/CodexPageShell.tsx');
     const codexFabSrc = read('../codex/CodexFileBrowserFAB.tsx');
 
-    expect(chatSrc).toContain("import { createFileBrowserFABModel } from './createFileBrowserFABModel';");
+    expect(chatSrc).toContain("from './createFileBrowserFABModel';");
+    expect(chatSrc).toContain('createFileBrowserFABModel,');
     expect(chatSrc).toContain('const fab = createFileBrowserFABModel({');
     expect(chatSrc).toContain('<Show when={(props.enabled ?? true) && !fab.fileBrowserSurface.controller.open()}>');
     expect(chatSrc).not.toContain('title="Browser"');
@@ -157,7 +166,8 @@ describe('file preview wiring', () => {
 
     expect(codexShellSrc).toContain("import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';");
     expect(codexShellSrc).not.toContain("import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';");
-    expect(codexFabSrc).toContain("import { createFileBrowserFABModel } from '../widgets/createFileBrowserFABModel';");
+    expect(codexFabSrc).toContain("from '../widgets/createFileBrowserFABModel';");
+    expect(codexFabSrc).toContain('createFileBrowserFABModel,');
     expect(codexFabSrc).toContain('const fab = createFileBrowserFABModel({');
     expect(codexFabSrc).toContain('allowHomeFallback: true,');
     expect(codexFabSrc).toContain('class="redeven-fab-file-browser codex-page-file-browser-fab"');

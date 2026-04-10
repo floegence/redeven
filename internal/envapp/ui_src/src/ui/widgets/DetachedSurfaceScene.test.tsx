@@ -17,6 +17,78 @@ const updateSelection = vi.fn();
 const saveCurrent = vi.fn(async () => true);
 const revertCurrent = vi.fn();
 const writeTextToClipboard = vi.hoisted(() => vi.fn(async () => undefined));
+const createDebugConsoleControllerMock = vi.hoisted(() => vi.fn(() => ({
+  enabled: () => true,
+  minimized: () => false,
+  open: () => true,
+  show: vi.fn(),
+  restore: vi.fn(),
+  minimize: vi.fn(),
+  loading: () => false,
+  refreshing: () => false,
+  runtimeEnabled: () => true,
+  collectUIMetrics: () => true,
+  uiMetricsCollecting: () => true,
+  snapshotError: () => null,
+  streamConnected: () => true,
+  streamError: () => null,
+  stateDir: () => '/tmp/redeven',
+  lastSnapshotAt: () => '2026-03-27T10:00:03Z',
+  lastEventAt: () => '',
+  captureCutoffAt: () => '',
+  serverEvents: () => [],
+  stats: () => ({ total_events: 0, agent_events: 0, desktop_events: 0, slow_events: 0, trace_count: 0 }),
+  slowSummary: () => [],
+  traces: () => [],
+  performanceSnapshot: () => ({
+    collecting: true,
+    supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false, mutation_observer: true, interaction_latency: true },
+    fps: { current: 60, average: 60, low: 60, samples: 1 },
+    frame_timing: { long_frame_count: 0, max_frame_ms: 0, last_frame_ms: 0 },
+    interactions: { count: 0, max_paint_delay_ms: 0 },
+    dom_activity: { mutation_batches: 0, mutation_records: 0, nodes_added: 0, nodes_removed: 0, attributes_changed: 0, text_changed: 0, max_batch_records: 0 },
+    long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
+    layout_shift: { count: 0, total_score: 0, max_score: 0 },
+    paints: {},
+    navigation: {},
+    recent_events: [],
+  }),
+  exporting: () => false,
+  lastExportAt: () => '',
+  refresh: vi.fn(async () => undefined),
+  clear: vi.fn(async () => undefined),
+  closeConsole: vi.fn(async () => undefined),
+  resetRuntimeState: vi.fn(),
+  exportBundle: vi.fn(async () => ({
+    exported_at: '2026-03-27T10:00:05Z',
+    ui_state: { visible: true, minimized: false },
+    runtime: { diagnostics_enabled: true, ui_metrics_enabled: true, stream_connected: true },
+    diagnostics: {
+      enabled: true,
+      exported_at: '2026-03-27T10:00:05Z',
+      snapshot: {
+        recent_events: [],
+        slow_summary: [],
+        stats: { total_events: 0, agent_events: 0, desktop_events: 0, slow_events: 0, trace_count: 0 },
+      },
+      agent_events: [],
+      desktop_events: [],
+    },
+    ui_performance: {
+      collecting: true,
+      supported: { longtask: true, layout_shift: true, paint: true, navigation: true, memory: false, mutation_observer: true, interaction_latency: true },
+      fps: { current: 60, average: 60, low: 60, samples: 1 },
+      frame_timing: { long_frame_count: 0, max_frame_ms: 0, last_frame_ms: 0 },
+      interactions: { count: 0, max_paint_delay_ms: 0 },
+      dom_activity: { mutation_batches: 0, mutation_records: 0, nodes_added: 0, nodes_removed: 0, attributes_changed: 0, text_changed: 0, max_batch_records: 0 },
+      long_tasks: { count: 0, total_duration_ms: 0, max_duration_ms: 0 },
+      layout_shift: { count: 0, total_score: 0, max_score: 0 },
+      paints: {},
+      navigation: {},
+      recent_events: [],
+    },
+  })),
+})));
 const protocolState: {
   status: () => string;
   client: () => Record<string, never> | null;
@@ -78,6 +150,19 @@ vi.mock('./DesktopDetachedWindowFrame', () => ({
       <div data-testid="detached-frame-footer">{props.footer}</div>
     </div>
   ),
+}));
+
+vi.mock('../debugConsole/createDebugConsoleController', () => ({
+  createDebugConsoleController: createDebugConsoleControllerMock,
+}));
+
+vi.mock('../debugConsole/DebugConsoleWindow', () => ({
+  DebugConsolePanel: (props: any) => (
+    <div data-testid="detached-debug-console-panel" data-close-label={props.closeLabel ?? ''}>
+      debug console panel
+    </div>
+  ),
+  DebugConsoleFooter: () => <div data-testid="detached-debug-console-footer">debug console footer</div>,
 }));
 
 vi.mock('./FilePreviewContext', () => ({
@@ -161,6 +246,7 @@ afterEach(() => {
   revertCurrent.mockClear();
   writeTextToClipboard.mockReset();
   writeTextToClipboard.mockResolvedValue(undefined);
+  createDebugConsoleControllerMock.mockClear();
   protocolState.status = () => 'connected';
   protocolState.client = () => ({});
   vi.restoreAllMocks();
@@ -352,5 +438,25 @@ describe('DetachedSurfaceScene', () => {
     expect(host.querySelector('[data-testid="preview-content"]')).toBeNull();
     expect(host.querySelector('[data-testid="detached-frame-actions"]')?.textContent).toBe('');
     expect(host.querySelector('[data-testid="detached-frame-footer"]')?.textContent).toBe('');
+  });
+
+  it('renders Debug Console as a detached desktop scene', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <DetachedSurfaceScene
+        surface={{ kind: 'debug_console' }}
+        accessGateVisible={false}
+        accessGatePanel={<div>gate</div>}
+      />
+    ), host);
+
+    expect(createDebugConsoleControllerMock).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-testid="desktop-detached-window-frame"]')?.getAttribute('data-title')).toBe('Debug Console');
+    expect(host.querySelector('[data-testid="desktop-detached-window-frame"]')?.getAttribute('data-subtitle')).toBe('Detached desktop diagnostics window');
+    expect(host.querySelector('[data-testid="detached-debug-console-panel"]')?.getAttribute('data-close-label')).toBe('Close Window');
+    expect(host.querySelector('[data-testid="detached-debug-console-footer"]')).toBeTruthy();
+    expect(document.title).toBe('Debug Console');
   });
 });

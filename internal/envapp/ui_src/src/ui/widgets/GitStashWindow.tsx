@@ -179,6 +179,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededCommitFileSummary | null>(null);
   const [diffDialogStashId, setDiffDialogStashId] = createSignal('');
+  const [floatingSurfaceEl, setFloatingSurfaceEl] = createSignal<HTMLElement | null>(null);
 
   const repoPath = () => String(props.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
   const repoName = () => repoDisplayName(repoPath());
@@ -274,6 +275,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
         minSize={{ width: 720, height: 520 }}
         floatingClass="bg-background"
         mobileClass="bg-background"
+        surfaceRef={setFloatingSurfaceEl}
       >
         <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
         <div class={cn('shrink-0 border-b px-4 pt-3 pb-3', redevenDividerRoleClass('strong'))}>
@@ -635,6 +637,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
 
       <GitStashDeleteConfirmDialog
         open={deleteReviewOpen()}
+        host={floatingSurfaceEl()}
         stash={selectedStash()}
         reviewError={deleteReviewOpen() ? props.reviewError : ''}
         loading={Boolean(props.reviewLoading || props.dropBusy)}

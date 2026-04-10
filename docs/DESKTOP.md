@@ -19,6 +19,7 @@ This document describes the public Electron desktop shell that ships with each `
   - `Connect Environment` launcher
 - `Local Environment Settings` renders as a launcher-owned modal dialog instead of a second native window.
 - Each opened Environment owns its own top-level session window, plus any detached child windows it spawns.
+- Detached child windows are session-scoped tools rather than global shell utilities. File preview and Debug Console are current examples.
 - Session deduplication happens in Electron main through a canonical session key:
   - `managed_local` for the desktop-managed Local Environment
   - `url:<normalized-local-ui-origin>` for remote Local UI targets
@@ -200,6 +201,22 @@ Interaction rules:
 - The launcher close action means:
   - `Quit` when no environment is open yet
   - `Close Launcher` when one or more Environment windows are already open
+
+## Detached Session Windows
+
+Desktop-managed Env App sessions can promote selected tools into detached native child windows when the interaction should stay independent from page dialogs and floating overlays.
+
+Current detached session windows:
+
+- `File Preview`
+- `Debug Console`
+
+Rules:
+
+- Detached tools stay owned by the current Environment session instead of becoming shell-global utility windows.
+- Focusing or reopening a detached tool reuses the same session child window identity instead of spawning duplicates.
+- Ordinary page dialogs in the main Env App window do not cover detached tools, because Electron manages them as separate native windows.
+- Debug Console therefore remains available while the main Env App shows ordinary page-level dialogs or floating-window-local confirmation flows.
 
 ## Local Environment Settings
 

@@ -134,4 +134,30 @@ describe('PersistentFloatingWindow', () => {
     expect(content?.className).toContain('!p-0');
     expect(footer?.className).toContain('!px-2.5');
   });
+
+  it('exposes the floating surface root through surfaceRef while open', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const surfaceRef = vi.fn();
+
+    render(() => (
+      <PersistentFloatingWindow
+        open
+        onOpenChange={() => undefined}
+        title="Demo"
+        persistenceKey="demo"
+        surfaceRef={surfaceRef}
+      >
+        <div>content</div>
+      </PersistentFloatingWindow>
+    ), host);
+
+    await Promise.resolve();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+
+    const root = host.querySelector('[data-testid="floating-root"]') as HTMLDivElement | null;
+    expect(root).toBeTruthy();
+    expect(surfaceRef).toHaveBeenCalledWith(root);
+  });
 });

@@ -34,6 +34,17 @@ describe('windowSpec', () => {
     });
   });
 
+  it('assigns a dedicated utility size for detached debug console windows', () => {
+    expect(resolveDesktopWindowSpec('http://127.0.0.1:23998/_redeven_proxy/env/?redeven_detached_surface=debug_console', true)).toEqual({
+      width: 1240,
+      height: 860,
+      minWidth: 820,
+      minHeight: 560,
+      title: 'Debug Console',
+      attachToParent: false,
+    });
+  });
+
   it('falls back to default sizing for ordinary child windows', () => {
     expect(resolveDesktopWindowSpec('http://127.0.0.1:23998/_redeven_proxy/env/?tab=ai', true)).toEqual({
       width: 1440,

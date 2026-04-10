@@ -31,8 +31,8 @@ vi.mock('../protocol/redeven_v1', async () => {
 
 vi.mock('./PreviewWindow', () => ({
   PREVIEW_WINDOW_Z_INDEX: 150,
-  PreviewWindow: (props: { open?: boolean; children?: JSX.Element }) => (
-    props.open ? <div data-testid="preview-window">{props.children}</div> : null
+  PreviewWindow: (props: { open?: boolean; children?: JSX.Element; surfaceRef?: (element: HTMLElement | null) => void }) => (
+    props.open ? <div ref={(element) => props.surfaceRef?.(element)} data-testid="preview-window">{props.children}</div> : null
   ),
 }));
 
@@ -373,10 +373,11 @@ describe('GitStashWindow', () => {
     try {
       await flush();
       expect(host.textContent).not.toContain('Delete this stash entry');
-      expect(document.body.textContent).toContain('Delete Stash');
-      expect(document.body.textContent).toContain('Remove this stash entry from the shared stack without applying its changes.');
-      expect(document.body.textContent).toContain('Deleting a stash removes it from the shared stack.');
-      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Confirm Delete') as HTMLButtonElement | undefined;
+      const previewWindow = host.querySelector('[data-testid="preview-window"]') as HTMLDivElement | null;
+      expect(previewWindow?.textContent).toContain('Delete Stash');
+      expect(previewWindow?.textContent).toContain('Remove this stash entry from the shared stack without applying its changes.');
+      expect(previewWindow?.textContent).toContain('Deleting a stash removes it from the shared stack.');
+      const confirmButton = Array.from(previewWindow?.querySelectorAll('button') ?? []).find((node) => node.textContent?.trim() === 'Confirm Delete') as HTMLButtonElement | undefined;
       expect(confirmButton).toBeTruthy();
       expect(confirmButton?.className).toContain('w-full');
     } finally {

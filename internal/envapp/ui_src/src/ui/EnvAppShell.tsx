@@ -119,6 +119,7 @@ import {
 } from './services/controlplaneApi';
 import {
   basenameFromAbsolutePath,
+  buildDetachedDebugConsoleSurface,
   buildDetachedFilePreviewSurface,
   isDesktopManagedRuntime,
   openDetachedSurfaceWindow,
@@ -509,8 +510,10 @@ export function EnvAppShell() {
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
+  const debugConsoleDetached = createMemo(() => shouldOpenDetachedSurface({ runtime: localRuntime(), kind: 'debug_console' }));
   const debugConsole = createDebugConsoleController({
     protocolStatus: () => protocol.status(),
+    uiEnabled: () => !debugConsoleDetached(),
   });
 
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
@@ -530,12 +533,24 @@ export function EnvAppShell() {
   };
 
   const openDebugConsole = () => {
-    debugConsole.show();
+    void (async () => {
+      try {
+        const runtime = localRuntime() ?? await getLocalRuntime();
+        if (shouldOpenDetachedSurface({ runtime, kind: 'debug_console' })) {
+          openDetachedSurfaceWindow(buildDetachedDebugConsoleSurface());
+          return;
+        }
+      } catch {
+        // Fall back to the in-app console when runtime inspection fails.
+      }
+
+      debugConsole.show();
+    })();
   };
 
   const setDebugConsoleEnabled = (enabled: boolean) => {
     if (enabled) {
-      debugConsole.show();
+      openDebugConsole();
       return;
     }
     void debugConsole.closeConsole();

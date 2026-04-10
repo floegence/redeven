@@ -67,7 +67,7 @@ Key points:
 - Large Git file tables use shared virtualization in the Env App (`Changes`, `Branches -> Compare`, `Branches -> Status`, `Graph` commit files, and stash changed-file review), while stash review stays summary-first and opens single-file diffs through the shared dialog flow on demand.
 - CSS, HTML, SCSS, Less, TOML, Makefile-family files, Vue/Svelte-class files, and other text formats now stay on the same Monaco-backed preview/edit path instead of splitting by language support tables.
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
-- Desktop-managed runs can still promote selected serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` today); shared file-browser entry points stay on the in-page floating browser surface instead of opening a second desktop window.
+- Desktop-managed runs can still promote selected serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `debug_console` today); shared file-browser entry points stay on the in-page floating browser surface instead of opening a second desktop window.
 - The page browser, Ask Flower linked-directory browser, Flower chat floating browser, Codex transcript browser, and explicit detached file-browser scene all reuse the same `RemoteFileBrowser` surface; product-specific code only owns the shell behavior that opens it.
 - Codex transcript now reuses that same floating browser shell as well, seeded from the resolved Codex working directory instead of introducing a Codex-specific file-browser surface.
 - Env App now keeps the reusable chat/terminal/Codex floating browser shell at the root level, so cross-surface entry points share the same floating-window persistence, explicit browser-seed handling, and `RemoteFileBrowser` rendering path; file preview keeps detached desktop promotion separately.
@@ -183,6 +183,7 @@ Contract:
 - `DetachedSurfaceScene` maps each detached surface into a shared frame model with `title`, `subtitle`, `headerActions`, `body`, and optional `footer`.
 - `DesktopDetachedWindowFrame` owns the chrome-safe titlebar reservation and consumes the shell-published titlebar hooks instead of re-deriving per-platform spacing inside scene components.
 - File preview uses that shared frame header for file identity plus copy/edit/save/discard actions, while `FilePreviewContent` switches into a content-only mode for detached native windows.
+- Debug Console also plugs into that shared frame, but keeps its request/trace/UI-performance content inside the detached child window so page dialogs and floating windows never cover it in desktop-managed sessions.
 - Detached file browser keeps its existing workspace behavior, but now starts below the shared frame instead of assuming the page can render at the top edge of the document.
 
 Implications:
@@ -211,6 +212,7 @@ Safety and refresh behavior:
 
 - Stash entries use the stash commit OID as their stable identity, so selection survives index shifts like `stash@{0}` changing after new saves or deletions.
 - `Apply` and `Delete` both require preview fingerprints before mutation; stale plans are rejected. `Delete` uses a dedicated confirmation dialog so the second step stays visible even when the stash detail panel is scrolled, and it refreshes the stash context when the plan goes stale so the user can confirm again without manually reopening the stash window.
+- Desktop floating-window-owned confirmations such as stash delete and file-preview discard now use a window-scoped modal layer. The backdrop and confirmation content stay inside the owning floating window instead of dropping into the global page dialog stack.
 - Stash apply preview simulates the operation in a temporary detached worktree before enabling confirmation, so clean-apply checks do not depend on string heuristics in the visible worktree.
 - After stash mutations, the stash window refreshes its own target worktree context, while the main Git browser refreshes repository summary plus the currently active paged workspace section instead of forcing a full workspace reload or switching to the wrong worktree root.
 

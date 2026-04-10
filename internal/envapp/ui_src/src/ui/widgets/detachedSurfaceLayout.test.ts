@@ -21,10 +21,12 @@ describe('detached surface desktop wiring', () => {
     expect(shellSrc).toContain("shouldOpenDetachedSurface({ runtime, kind: 'file_preview' })");
     expect(shellSrc).toContain("const surface = buildDetachedFilePreviewSurface(item);");
     expect(shellSrc).toContain('openDetachedSurfaceWindow(surface);');
+    expect(shellSrc).toContain("buildDetachedDebugConsoleSurface()");
     expect(shellSrc).toContain('<DetachedSurfaceScene');
 
     expect(detachedSurfaceSrc).toContain("file_preview: 'detached'");
     expect(detachedSurfaceSrc).toContain("file_browser: 'floating'");
+    expect(detachedSurfaceSrc).toContain("debug_console: 'detached'");
     expect(detachedSurfaceSrc).toContain("resolveDesktopSurfacePresentation(kind: DetachedSurfaceKind)");
     expect(detachedSurfaceSrc).toContain("shouldOpenDetachedSurface(args: Readonly<{");
 
@@ -36,6 +38,8 @@ describe('detached surface desktop wiring', () => {
     expect(sceneSrc).toContain('<DesktopDetachedWindowFrame');
     expect(sceneSrc).toContain('showHeader={false}');
     expect(sceneSrc).toContain('<RemoteFileBrowser');
+    expect(sceneSrc).toContain("<DebugConsolePanel");
+    expect(sceneSrc).toContain("<DebugConsoleFooter");
     expect(sceneSrc).toContain('document.title = detachedSceneTitle(props.surface);');
     expect(sceneSrc).toContain('<FilePreviewControllerContent');
     expect(sceneSrc).toContain('const sceneModel = createMemo<DetachedSurfaceFrameModel>');

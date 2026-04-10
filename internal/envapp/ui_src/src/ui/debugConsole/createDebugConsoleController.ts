@@ -67,6 +67,10 @@ type UIPerformanceTrackerHandle = Readonly<{
 
 type CreateDebugConsoleControllerArgs = Readonly<{
   protocolStatus: Accessor<string>;
+  uiEnabled?: Accessor<boolean>;
+  initialVisible?: boolean;
+  persistUIState?: boolean;
+  allowMinimize?: boolean;
   fetchSnapshot?: (limit?: number) => Promise<Awaited<ReturnType<typeof getDiagnostics>>>;
   exportSnapshot?: (limit?: number) => Promise<DiagnosticsExportView>;
   connectStream?: typeof connectDiagnosticsStream;
@@ -299,8 +303,11 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const installClientCapture = args.installClientCapture ?? installDebugConsoleBrowserCapture;
   const setClientCaptureEnabled = args.setClientCaptureEnabled ?? setDebugConsoleCaptureEnabled;
   const subscribeClientEvents = args.subscribeClientEvents ?? subscribeDebugConsoleClientEvents;
+  const uiEnabled = args.uiEnabled ?? (() => true);
+  const persistUIState = args.persistUIState !== false;
+  const allowMinimize = args.allowMinimize !== false;
 
-  const [visible, setVisible] = createSignal(readStoredVisible());
+  const [visible, setVisible] = createSignal(args.initialVisible ?? readStoredVisible());
   const [loading, setLoading] = createSignal(false);
   const [refreshing, setRefreshing] = createSignal(false);
   const [runtimeEnabled, setRuntimeEnabled] = createSignal(false);
@@ -312,12 +319,12 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const [streamError, setStreamError] = createSignal<string | null>(null);
   const [exporting, setExporting] = createSignal(false);
   const [lastExportAt, setLastExportAt] = createSignal('');
-  const [minimized, setMinimized] = createSignal(readStoredMinimized());
+  const [minimized, setMinimized] = createSignal(allowMinimize ? readStoredMinimized() : false);
   const [captureCutoffMs, setCaptureCutoffMs] = createSignal(0);
   const [captureCutoffAt, setCaptureCutoffAt] = createSignal('');
 
-  const enabled = createMemo(() => visible());
-  const open = createMemo(() => enabled() && !minimized());
+  const enabled = createMemo(() => visible() && uiEnabled());
+  const open = createMemo(() => enabled() && (!allowMinimize || !minimized()));
   const collectUIMetrics = createMemo(() => open());
   const uiMetricsCollecting = createMemo(() => open());
   const stats = createMemo(() => buildStats(serverEvents()));
@@ -356,25 +363,35 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   });
 
   createEffect(() => {
-    writeUIStorageItem(DEBUG_CONSOLE_VISIBLE_STORAGE_KEY, enabled() ? 'true' : 'false');
+    if (!persistUIState) {
+      return;
+    }
+    writeUIStorageItem(DEBUG_CONSOLE_VISIBLE_STORAGE_KEY, visible() ? 'true' : 'false');
   });
 
   createEffect(() => {
+    if (!persistUIState || !allowMinimize) {
+      return;
+    }
     writeUIStorageItem(DEBUG_CONSOLE_MINIMIZED_STORAGE_KEY, minimized() ? 'true' : 'false');
   });
 
   const show = () => {
     setVisible(true);
-    setMinimized(false);
+    if (allowMinimize) {
+      setMinimized(false);
+    }
   };
 
   const restore = () => {
     setVisible(true);
-    setMinimized(false);
+    if (allowMinimize) {
+      setMinimized(false);
+    }
   };
 
   const minimize = () => {
-    if (!enabled()) {
+    if (!allowMinimize || !enabled()) {
       return;
     }
     setMinimized(true);
@@ -534,11 +551,13 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   };
 
   const closeConsole = async (): Promise<void> => {
-    if (!enabled()) {
+    if (!visible()) {
       return;
     }
     setVisible(false);
-    setMinimized(false);
+    if (allowMinimize) {
+      setMinimized(false);
+    }
     setLoading(false);
     setRefreshing(false);
     setStreamConnected(false);

@@ -16,13 +16,13 @@ const DEFAULT_WINDOW_SPEC: DesktopWindowSpec = {
 
 const DETACHED_SURFACE_QUERY_KEY = 'redeven_detached_surface';
 
-type DetachedSurfaceKind = 'file_preview' | 'file_browser';
+type DetachedSurfaceKind = 'file_preview' | 'file_browser' | 'debug_console';
 
 function parseDetachedSurfaceKind(targetURL: string): DetachedSurfaceKind | '' {
   try {
     const url = new URL(targetURL);
     const value = String(url.searchParams.get(DETACHED_SURFACE_QUERY_KEY) ?? '').trim();
-    if (value === 'file_preview' || value === 'file_browser') return value;
+    if (value === 'file_preview' || value === 'file_browser' || value === 'debug_console') return value;
     return '';
   } catch {
     return '';
@@ -52,6 +52,16 @@ export function resolveDesktopWindowSpec(targetURL: string, parented: boolean): 
       minWidth: 900,
       minHeight: 640,
       title: 'File Browser',
+      attachToParent: false,
+    };
+  }
+  if (kind === 'debug_console') {
+    return {
+      width: 1240,
+      height: 860,
+      minWidth: 820,
+      minHeight: 560,
+      title: 'Debug Console',
       attachToParent: false,
     };
   }

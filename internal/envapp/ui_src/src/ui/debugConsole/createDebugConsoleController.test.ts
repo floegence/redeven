@@ -682,4 +682,40 @@ describe('createDebugConsoleController', () => {
 
     dispose();
   });
+
+  it('can stay forced-open for detached windows without minimize persistence', async () => {
+    const store = installStorageBridge();
+    setConsoleVisible(false, true);
+
+    const [protocolStatus] = createSignal('connected');
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        protocolStatus,
+        initialVisible: true,
+        persistUIState: false,
+        allowMinimize: false,
+        fetchSnapshot: vi.fn(async () => buildSnapshot([])),
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
+        createPerformanceTracker: () => ({
+          snapshot: () => buildPerformanceSnapshot(),
+          clear: vi.fn(),
+        }),
+      });
+      return disposeRoot;
+    });
+
+    await tick();
+
+    expect(controller.enabled()).toBe(true);
+    expect(controller.open()).toBe(true);
+    controller.minimize();
+    expect(controller.minimized()).toBe(false);
+    expect(store.get(VISIBLE_KEY)).toBe('false');
+    expect(store.get(MINIMIZED_KEY)).toBe('true');
+
+    dispose();
+  });
 });

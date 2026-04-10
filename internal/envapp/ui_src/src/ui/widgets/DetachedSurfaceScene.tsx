@@ -14,6 +14,8 @@ import {
   requestDesktopAskFlowerMainWindowHandoff,
   shouldRequireDesktopAskFlowerMainWindowHandoff,
 } from '../services/desktopAskFlowerBridge';
+import { createDebugConsoleController } from '../debugConsole/createDebugConsoleController';
+import { DebugConsoleFooter, DebugConsolePanel } from '../debugConsole/DebugConsoleWindow';
 import { DesktopDetachedWindowFrame } from './DesktopDetachedWindowFrame';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewControllerContent } from './FilePreviewControllerContent';
@@ -48,6 +50,9 @@ function detachedSceneTitle(surface: DetachedSurface): string {
   if (surface.kind === 'file_preview') {
     return `${basenameFromAbsolutePath(surface.path)} - File Preview`;
   }
+  if (surface.kind === 'debug_console') {
+    return 'Debug Console';
+  }
   return `${surface.path} - File Browser`;
 }
 
@@ -56,10 +61,20 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
   const protocol = useProtocol();
   const notification = useNotification();
   const filePreview = useFilePreviewContext();
+  const previewSurface = createMemo(() => props.surface.kind === 'file_preview' ? props.surface : null);
+  const fileBrowserSurface = createMemo(() => props.surface.kind === 'file_browser' ? props.surface : null);
   const [pathCopied, setPathCopied] = createSignal(false);
   let previewContentEl: HTMLDivElement | undefined;
   let openedPreviewPath = '';
   let pathCopiedResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const debugConsole = props.surface.kind === 'debug_console'
+    ? createDebugConsoleController({
+        protocolStatus: () => protocol.status(),
+        initialVisible: true,
+        persistUIState: false,
+        allowMinimize: false,
+      })
+    : null;
 
   createEffect(() => {
     const previousTitle = document.title;
@@ -70,19 +85,20 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
   });
 
   createEffect(() => {
-    if (props.surface.kind !== 'file_preview') return;
+    const surface = previewSurface();
+    if (!surface) return;
     if (props.accessGateVisible) return;
     if (protocol.status() !== 'connected' || !protocol.client()) return;
-    if (openedPreviewPath === props.surface.path) return;
+    if (openedPreviewPath === surface.path) return;
 
-    openedPreviewPath = props.surface.path;
-    const item = buildDetachedPreviewItem(props.surface.path);
+    openedPreviewPath = surface.path;
+    const item = buildDetachedPreviewItem(surface.path);
     void filePreview.controller.openPreview(item);
   });
 
-  const resolvedPreviewPath = () => String(filePreview.controller.item()?.path ?? props.surface.path ?? '').trim();
+  const resolvedPreviewPath = () => String(filePreview.controller.item()?.path ?? previewSurface()?.path ?? '').trim();
   const previewCanShowEditorActions = () => (
-    props.surface.kind === 'file_preview'
+    Boolean(previewSurface())
     && filePreview.controller.descriptor().mode === 'text'
     && Boolean(filePreview.controller.canEdit())
   );
@@ -274,15 +290,25 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     <div class="h-full min-h-0 overflow-hidden bg-background">
       <RemoteFileBrowser
         stateScope="detached-surface"
-        initialPathOverride={props.surface.path}
-        homePathOverride={props.surface.kind === 'file_browser' ? props.surface.homePath : undefined}
+        initialPathOverride={fileBrowserSurface()?.path}
+        homePathOverride={fileBrowserSurface()?.homePath}
+      />
+    </div>
+  );
+  const debugConsoleScene = () => (
+    <div class="h-full min-h-0 overflow-hidden bg-background">
+      <DebugConsolePanel
+        controller={debugConsole!}
+        onClose={() => window.close()}
+        closeLabel="Close Window"
+        showMinimize={false}
       />
     </div>
   );
 
   const sceneModel = createMemo<DetachedSurfaceFrameModel>(() => {
     if (props.surface.kind === 'file_preview') {
-      const path = resolvedPreviewPath() || props.surface.path;
+      const path = resolvedPreviewPath() || previewSurface()?.path || '';
       return {
         title: basenameFromAbsolutePath(path),
         subtitle: path,
@@ -292,9 +318,18 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
       };
     }
 
+    if (props.surface.kind === 'debug_console') {
+      return {
+        title: 'Debug Console',
+        subtitle: 'Detached desktop diagnostics window',
+        footer: props.accessGateVisible ? undefined : <DebugConsoleFooter controller={debugConsole!} />,
+        body: props.accessGateVisible ? props.accessGatePanel : debugConsoleScene(),
+      };
+    }
+
     return {
       title: 'File Browser',
-      subtitle: props.surface.path,
+      subtitle: fileBrowserSurface()?.path,
       body: props.accessGateVisible ? props.accessGatePanel : fileBrowserScene(),
     };
   });
