@@ -119,27 +119,27 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 		t.Fatalf("unlocked runtime status = %d, want %d", runtimeResp.StatusCode, http.StatusOK)
 	}
 
-	connectInfoResp, err := client.Post(srv.URL+"/api/local/direct/connect_info", "application/json", bytes.NewBufferString(`{}`))
+	connectInfoResp, err := client.Post(srv.URL+"/api/local/direct/connect_artifact", "application/json", bytes.NewBufferString(`{}`))
 	if err != nil {
-		t.Fatalf("POST connect_info error = %v", err)
+		t.Fatalf("POST connect_artifact error = %v", err)
 	}
 	defer connectInfoResp.Body.Close()
 	if connectInfoResp.StatusCode != http.StatusOK {
-		t.Fatalf("connect_info status = %d, want %d", connectInfoResp.StatusCode, http.StatusOK)
+		t.Fatalf("connect_artifact status = %d, want %d", connectInfoResp.StatusCode, http.StatusOK)
 	}
 
-	headerConnectReq, err := http.NewRequest(http.MethodPost, srv.URL+"/api/local/direct/connect_info", bytes.NewBufferString(`{}`))
+	headerConnectReq, err := http.NewRequest(http.MethodPost, srv.URL+"/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	if err != nil {
-		t.Fatalf("NewRequest header connect_info error = %v", err)
+		t.Fatalf("NewRequest header connect_artifact error = %v", err)
 	}
 	headerConnectReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
 	headerConnectResp, err := http.DefaultClient.Do(headerConnectReq)
 	if err != nil {
-		t.Fatalf("POST header connect_info error = %v", err)
+		t.Fatalf("POST header connect_artifact error = %v", err)
 	}
 	defer headerConnectResp.Body.Close()
 	if headerConnectResp.StatusCode != http.StatusOK {
-		t.Fatalf("header connect_info status = %d, want %d", headerConnectResp.StatusCode, http.StatusOK)
+		t.Fatalf("header connect_artifact status = %d, want %d", headerConnectResp.StatusCode, http.StatusOK)
 	}
 }
 

@@ -23,9 +23,7 @@ import (
 	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
 	"github.com/floegence/flowersec/flowersec-go/origin"
 	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
-	fsproxyprofile "github.com/floegence/flowersec/flowersec-go/proxy/profile"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
@@ -39,6 +37,8 @@ import (
 	"github.com/floegence/redeven/internal/monitor"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
+	"github.com/floegence/redeven/internal/rpcutil"
+	"github.com/floegence/redeven/internal/runtimeproxy"
 	"github.com/floegence/redeven/internal/session"
 	syssvc "github.com/floegence/redeven/internal/sys"
 	"github.com/floegence/redeven/internal/terminal"
@@ -400,7 +400,7 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 	defer unsub()
 
 	// Register (best-effort; required for server-side online state).
-	_, err = rpctyped.Call[registerReq, registerResp](ctx, rpcC, controlRPCTypeRegister, &registerReq{
+	_, err = rpcutil.CallJSON[registerReq, registerResp](ctx, rpcC, controlRPCTypeRegister, &registerReq{
 		EnvPublicID:      a.cfg.EnvironmentID,
 		AgentInstanceID:  a.cfg.AgentInstanceID,
 		Version:          a.version,
@@ -430,7 +430,7 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
-			_, err := rpctyped.Call[heartbeatReq, heartbeatResp](ctx, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
+			_, err := rpcutil.CallJSON[heartbeatReq, heartbeatResp](ctx, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
 				NowUnixMs: time.Now().UnixMilli(),
 			})
 			if err != nil {
@@ -792,10 +792,10 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 		return err
 	}
 
-	proxyOpts := fsproxyprofile.Apply(fsproxy.Options{
+	proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
 		Upstream:       up,
 		UpstreamOrigin: origin,
-	}, fsproxyprofile.ProfileCodeServer)
+	})
 	if err := fsproxy.Register(srv, proxyOpts); err != nil {
 		return err
 	}
@@ -850,10 +850,10 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 		return err
 	}
 
-	proxyOpts := fsproxyprofile.Apply(fsproxy.Options{
+	proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
 		Upstream:       up,
 		UpstreamOrigin: origin,
-	}, fsproxyprofile.ProfileCodeServer)
+	})
 	if err := fsproxy.Register(srv, proxyOpts); err != nil {
 		return err
 	}
@@ -921,10 +921,10 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		if err != nil {
 			return err
 		}
-		proxyOpts := fsproxyprofile.Apply(fsproxy.Options{
+		proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
 			Upstream:       up,
 			UpstreamOrigin: origin,
-		}, fsproxyprofile.ProfileCodeServer)
+		})
 		if err := fsproxy.Register(srv, proxyOpts); err != nil {
 			return err
 		}

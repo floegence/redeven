@@ -16,7 +16,7 @@ const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
 const unlockLocalAccessMock = vi.fn();
 const getEnvironmentMock = vi.fn();
-const mintLocalDirectConnectInfoMock = vi.fn();
+const mintLocalDirectConnectArtifactMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
@@ -149,7 +149,7 @@ vi.mock('./services/controlplaneApi', () => ({
   getLocalRuntime: getLocalRuntimeMock,
   getEnvironment: getEnvironmentMock,
   mintEnvProxyEntryTicket: vi.fn(),
-  mintLocalDirectConnectInfo: mintLocalDirectConnectInfoMock,
+  mintLocalDirectConnectArtifact: mintLocalDirectConnectArtifactMock,
   mintEnvEntryTicketForApp: vi.fn(),
   refreshLocalRuntime: refreshLocalRuntimeMock,
   unlockLocalAccess: unlockLocalAccessMock,
@@ -309,12 +309,15 @@ beforeEach(() => {
   });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
   unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
-  mintLocalDirectConnectInfoMock.mockResolvedValue({
-    ws_url: 'ws://localhost/_redeven_direct/ws',
-    channel_id: 'ch_local',
-    e2ee_psk_b64u: 'secret',
-    channel_init_expire_at_unix_s: 1,
-    default_suite: 1,
+  mintLocalDirectConnectArtifactMock.mockResolvedValue({
+    transport: 'direct',
+    direct_info: {
+      ws_url: 'ws://localhost/_redeven_direct/ws',
+      channel_id: 'ch_local',
+      e2ee_psk_b64u: 'secret',
+      channel_init_expire_at_unix_s: 1,
+      default_suite: 1,
+    },
   });
 });
 

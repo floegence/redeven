@@ -30,9 +30,9 @@ func sanitizeAuditError(err error) string {
 //
 // The session metadata MUST be treated as authoritative and is used to enforce permission caps.
 type LocalDirectSessionOptions struct {
-	AccessUnlocked        bool
-	TraceID               string
-	ConnectInfoIssuedAtMs int64
+	AccessUnlocked            bool
+	TraceID                   string
+	ConnectArtifactIssuedAtMs int64
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
@@ -178,8 +178,8 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess endpoint.Sessi
 			"floe_app":      strings.TrimSpace(meta.FloeApp),
 			"code_space_id": strings.TrimSpace(meta.CodeSpaceID),
 		}
-		if opts.ConnectInfoIssuedAtMs > 0 {
-			detail["connect_info_age_ms"] = time.Now().UnixMilli() - opts.ConnectInfoIssuedAtMs
+		if opts.ConnectArtifactIssuedAtMs > 0 {
+			detail["connect_artifact_age_ms"] = time.Now().UnixMilli() - opts.ConnectArtifactIssuedAtMs
 		}
 		a.diag.Append(diagnostics.Event{
 			Scope:      diagnostics.ScopeDirectSession,

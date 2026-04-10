@@ -22,7 +22,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
 	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
-	"github.com/floegence/flowersec/flowersec-go/realtime/ws"
+	"github.com/floegence/flowersec/flowersec-go/protocolio"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/codeapp/gateway"
@@ -30,6 +30,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -101,11 +102,11 @@ type Server struct {
 }
 
 type pendingDirect struct {
-	psk                   [32]byte
-	initExpireAtUnixS     int64
-	meta                  session.Meta
-	traceID               string
-	connectInfoIssuedAtMs int64
+	psk                       [32]byte
+	initExpireAtUnixS         int64
+	meta                      session.Meta
+	traceID                   string
+	connectArtifactIssuedAtMs int64
 }
 
 func (s *Server) handler() http.Handler {
@@ -120,7 +121,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/access/unlock", s.handleAccessUnlock)
 	mux.HandleFunc("/api/local/access/logout", s.handleAccessLogout)
 	mux.HandleFunc("/api/local/runtime", s.handleRuntime)
-	mux.HandleFunc("/api/local/direct/connect_info", s.handleConnectInfo)
+	mux.HandleFunc("/api/local/direct/connect_artifact", s.handleConnectArtifact)
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
@@ -768,7 +769,11 @@ func randomB64u(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*directv1.DirectConnectInfo, error) {
+type connectArtifactEnvelope struct {
+	ConnectArtifact *protocolio.ConnectArtifact `json:"connect_artifact"`
+}
+
+func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*protocolio.ConnectArtifact, error) {
 	if s == nil {
 		return nil, errors.New("server not ready")
 	}
@@ -781,7 +786,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*
 		return nil, err
 	}
 
-	// Keep the init window reasonably short; the UI can always mint a fresh connect_info.
+	// Keep the init window reasonably short; the UI can always mint a fresh connect artifact.
 	now := time.Now()
 	initExp := now.Add(10 * time.Minute).Unix()
 
@@ -789,24 +794,48 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID string) (*
 
 	s.pendingMu.Lock()
 	s.pending[channelID] = pendingDirect{
-		psk:                   psk,
-		initExpireAtUnixS:     initExp,
-		meta:                  meta,
-		traceID:               strings.TrimSpace(traceID),
-		connectInfoIssuedAtMs: now.UnixMilli(),
+		psk:                       psk,
+		initExpireAtUnixS:         initExp,
+		meta:                      meta,
+		traceID:                   strings.TrimSpace(traceID),
+		connectArtifactIssuedAtMs: now.UnixMilli(),
 	}
 	s.pendingMu.Unlock()
 
-	return &directv1.DirectConnectInfo{
+	directInfo := &directv1.DirectConnectInfo{
 		WsUrl:                    strings.TrimSpace(wsURL),
 		ChannelId:                channelID,
 		E2eePskB64u:              base64.RawURLEncoding.EncodeToString(psk[:]),
 		ChannelInitExpireAtUnixS: initExp,
 		DefaultSuite:             directv1.Suite_X25519_HKDF_SHA256_AES_256_GCM,
+	}
+
+	var correlation *protocolio.CorrelationContext
+	traceID = strings.TrimSpace(traceID)
+	if traceID != "" || channelID != "" {
+		correlation = &protocolio.CorrelationContext{
+			V:    1,
+			Tags: []protocolio.CorrelationKV{},
+		}
+		if traceID != "" {
+			traceCopy := traceID
+			correlation.TraceID = &traceCopy
+		}
+		if channelID != "" {
+			channelCopy := channelID
+			correlation.SessionID = &channelCopy
+		}
+	}
+
+	return &protocolio.ConnectArtifact{
+		V:           1,
+		Transport:   protocolio.ConnectArtifactTransportDirect,
+		DirectInfo:  directInfo,
+		Correlation: correlation,
 	}, nil
 }
 
-func (s *Server) handleConnectInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
@@ -841,27 +870,31 @@ func (s *Server) handleConnectInfo(w http.ResponseWriter, r *http.Request) {
 	meta.CreatedAtUnixMs = time.Now().UnixMilli()
 
 	traceID := localUITraceID(r)
-	info, err := s.mintPending(meta, wsURL, traceID)
+	artifact, err := s.mintPending(meta, wsURL, traceID)
 	if err != nil {
-		http.Error(w, "failed to mint connect info", http.StatusInternalServerError)
+		http.Error(w, "failed to mint connect artifact", http.StatusInternalServerError)
+		return
+	}
+	if artifact == nil || artifact.DirectInfo == nil {
+		http.Error(w, "failed to mint connect artifact", http.StatusInternalServerError)
 		return
 	}
 
 	if s.diag != nil {
 		s.diag.Append(diagnostics.Event{
 			Scope:   diagnostics.ScopeDirectSession,
-			Kind:    "connect_info_issued",
+			Kind:    "connect_artifact_issued",
 			TraceID: traceID,
-			Message: "issued direct connect info",
+			Message: "issued direct connect artifact",
 			Detail: map[string]any{
-				"channel_id":    info.ChannelId,
+				"channel_id":    artifact.DirectInfo.ChannelId,
 				"floe_app":      meta.FloeApp,
 				"code_space_id": meta.CodeSpaceID,
 			},
 		})
 	}
 
-	writeJSON(w, http.StatusOK, info)
+	writeJSON(w, http.StatusOK, connectArtifactEnvelope{ConnectArtifact: artifact})
 }
 
 type environmentResp struct {
@@ -1068,7 +1101,8 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	startedAt := time.Now()
-	c, err := ws.Upgrade(w, r, ws.UpgraderOptions{CheckOrigin: sameOriginWSRequest})
+	upgrader := websocket.Upgrader{CheckOrigin: sameOriginWSRequest}
+	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.log.Warn("local direct ws upgrade failed", "error", err)
 		if s.diag != nil {
@@ -1081,7 +1115,7 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	var resolved pendingDirect
 	var resolvedOK bool
 	var ch string
-	sess, err := endpoint.AcceptDirectWSResolved(r.Context(), c.Underlying(), endpoint.AcceptDirectResolverOptions{
+	sess, err := endpoint.AcceptDirectWSResolved(r.Context(), c, endpoint.AcceptDirectResolverOptions{
 		ClockSkew: 60 * time.Second,
 		Resolve: func(_ctx context.Context, init endpoint.DirectHandshakeInit) (endpoint.DirectHandshakeSecrets, error) {
 			ch = strings.TrimSpace(init.ChannelID)
@@ -1132,9 +1166,9 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	if err := s.a.ServeLocalDirectSession(r.Context(), sess, &metaCopy, agent.LocalDirectSessionOptions{
 		// The Local UI already enforced access-gate authorization for this HTTP request,
 		// so the direct channel can start in the unlocked state.
-		AccessUnlocked:        s.accessEnabled(),
-		TraceID:               firstNonEmptyString([]string{resolved.traceID, traceID}),
-		ConnectInfoIssuedAtMs: resolved.connectInfoIssuedAtMs,
+		AccessUnlocked:            s.accessEnabled(),
+		TraceID:                   firstNonEmptyString([]string{resolved.traceID, traceID}),
+		ConnectArtifactIssuedAtMs: resolved.connectArtifactIssuedAtMs,
 	}); err != nil && r.Context().Err() == nil {
 		s.log.Warn("local direct session exited", "channel_id", metaCopy.ChannelID, "error", err)
 	}

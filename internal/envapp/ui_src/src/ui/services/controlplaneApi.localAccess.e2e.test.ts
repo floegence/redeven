@@ -106,29 +106,39 @@ describe('controlplaneApi local access flow', () => {
     expect(out).toEqual({ unlocked: true, resume_token: 'resume123' });
   });
 
-  it('uses same-origin credentials when minting local direct connect info', async () => {
+  it('uses same-origin credentials when minting local direct connect artifacts', async () => {
     const auth = await import('./localAccessAuth');
     auth.writeLocalAccessResumeToken('resume123');
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toBe('/api/local/direct/connect_info');
+      expect(String(input)).toBe('/api/local/direct/connect_artifact');
       expect(init?.method).toBe('POST');
       expect(init?.credentials).toBe('same-origin');
       expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume123');
       return jsonResponse({
-        ws_url: 'ws://localhost/_redeven_direct/ws',
-        channel_id: 'ch_local',
-        e2ee_psk_b64u: 'secret',
-        channel_init_expire_at_unix_s: 1,
-        default_suite: 1,
+        connect_artifact: {
+          v: 1,
+          transport: 'direct',
+          direct_info: {
+            ws_url: 'ws://localhost/_redeven_direct/ws',
+            channel_id: 'ch_local',
+            e2ee_psk_b64u: 'secret',
+            channel_init_expire_at_unix_s: 1,
+            default_suite: 1,
+          },
+        },
       });
     });
     vi.stubGlobal('fetch', fetchMock);
 
     const mod = await import('./controlplaneApi');
-    const out = await mod.mintLocalDirectConnectInfo();
+    const out = await mod.mintLocalDirectConnectArtifact();
 
-    expect(out.channel_id).toBe('ch_local');
-    expect(String(out.ws_url)).toBe('ws://localhost/_redeven_direct/ws?redeven_access_resume=resume123');
+    expect(out.transport).toBe('direct');
+    if (out.transport !== 'direct') {
+      throw new Error('Expected direct connect artifact');
+    }
+    expect(out.direct_info.channel_id).toBe('ch_local');
+    expect(String(out.direct_info.ws_url)).toBe('ws://localhost/_redeven_direct/ws?redeven_access_resume=resume123');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

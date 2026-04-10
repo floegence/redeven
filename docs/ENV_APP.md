@@ -258,6 +258,7 @@ The Env App UI runs on sandbox origins and uses the Redeven session-bootstrap fl
 - Sandbox bootstrap exchanges `boot_ticket` for an HttpOnly `env_session` cookie.
 - Env App uses `env_session` to mint one-time `entry_ticket` values on demand.
 - `entry_ticket` is then redeemed for a canonical `connect_artifact`, and Flowersec uses the embedded tunnel grant to establish the runtime session.
+- In Local UI mode, the browser still uses the same canonical shape: Local UI mints a direct-transport `connect_artifact`, and the Env App reconnect contract stays artifact-first even though the underlying transport is direct instead of tunnel.
 
 Security baseline:
 

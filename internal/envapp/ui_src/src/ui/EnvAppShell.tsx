@@ -110,7 +110,7 @@ import {
   refreshLocalRuntime,
   getEnvironment,
   mintEnvProxyEntryTicket,
-  mintLocalDirectConnectInfo,
+  mintLocalDirectConnectArtifact,
   mintEnvEntryTicketForApp,
   unlockLocalAccess,
   type EnvironmentDetail,
@@ -898,7 +898,7 @@ export function EnvAppShell() {
         setLocalAccessChannelReady(false);
         await fn({
           mode: 'direct',
-          getDirectInfo: mintLocalDirectConnectInfo,
+          getArtifact: mintLocalDirectConnectArtifact,
           observer,
           connect: {
             keepaliveIntervalMs: 15_000,

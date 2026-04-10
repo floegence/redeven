@@ -10,7 +10,7 @@ const unlockLocalAccessMock = vi.fn();
 const getEnvironmentMock = vi.fn();
 const getGatewayAccessStatusMock = vi.fn();
 const unlockGatewayAccessMock = vi.fn();
-const mintLocalDirectConnectInfoMock = vi.fn();
+const mintLocalDirectConnectArtifactMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
@@ -220,7 +220,7 @@ vi.mock('./services/controlplaneApi', () => ({
   getLocalRuntime: getLocalRuntimeMock,
   getEnvironment: getEnvironmentMock,
   mintEnvProxyEntryTicket: mintEnvProxyEntryTicketMock,
-  mintLocalDirectConnectInfo: mintLocalDirectConnectInfoMock,
+  mintLocalDirectConnectArtifact: mintLocalDirectConnectArtifactMock,
   mintEnvEntryTicketForApp: mintEnvEntryTicketForAppMock,
   refreshLocalRuntime: refreshLocalRuntimeMock,
   unlockLocalAccess: unlockLocalAccessMock,
@@ -353,12 +353,15 @@ beforeEach(() => {
     lifecycle_status: 'running',
     permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
   });
-  mintLocalDirectConnectInfoMock.mockResolvedValue({
-    ws_url: 'ws://localhost/_redeven_direct/ws',
-    channel_id: 'ch_local',
-    e2ee_psk_b64u: 'secret',
-    channel_init_expire_at_unix_s: 1,
-    default_suite: 1,
+  mintLocalDirectConnectArtifactMock.mockResolvedValue({
+    transport: 'direct',
+    direct_info: {
+      ws_url: 'ws://localhost/_redeven_direct/ws',
+      channel_id: 'ch_local',
+      e2ee_psk_b64u: 'secret',
+      channel_init_expire_at_unix_s: 1,
+      default_suite: 1,
+    },
   });
   connectArtifactEntryMock.mockReturnValue({
     transport: 'tunnel',
@@ -632,7 +635,7 @@ describe('EnvAppShell local access gate', () => {
 
       expect(host.textContent).toContain('Unlock local runtime');
       expect(connectMock).not.toHaveBeenCalled();
-      expect(mintLocalDirectConnectInfoMock).not.toHaveBeenCalled();
+      expect(mintLocalDirectConnectArtifactMock).not.toHaveBeenCalled();
 
       const input = host.querySelector('input[type="password"]') as HTMLInputElement | null;
       expect(input).toBeTruthy();
@@ -654,7 +657,7 @@ describe('EnvAppShell local access gate', () => {
         mode: 'direct',
         observer: expect.any(Object),
         connect: { keepaliveIntervalMs: 15_000 },
-        getDirectInfo: expect.any(Function),
+        getArtifact: expect.any(Function),
         autoReconnect: {
           enabled: true,
           maxAttempts: 3,
@@ -663,7 +666,7 @@ describe('EnvAppShell local access gate', () => {
         },
       });
       expect(localConnectConfig).not.toHaveProperty('directInfo');
-      expect(mintLocalDirectConnectInfoMock).not.toHaveBeenCalled();
+      expect(mintLocalDirectConnectArtifactMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();
       expect(resumeCalls).toEqual([]);
       expect(host.textContent).not.toContain('Unlock local runtime');

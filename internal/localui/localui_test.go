@@ -253,12 +253,12 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 		t.Fatalf("resume-token runtime status = %d, want %d", resumeRuntimeRes.Result().StatusCode, http.StatusOK)
 	}
 
-	resumeConnectReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_info", bytes.NewBufferString(`{}`))
+	resumeConnectReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	resumeConnectReq.Header.Set(localAccessResumeHeader, unlockBody.Data.ResumeToken)
 	resumeConnectRes := httptest.NewRecorder()
-	s.handleConnectInfo(resumeConnectRes, resumeConnectReq)
+	s.handleConnectArtifact(resumeConnectRes, resumeConnectReq)
 	if resumeConnectRes.Result().StatusCode != http.StatusOK {
-		t.Fatalf("resume-token connect_info status = %d, want %d", resumeConnectRes.Result().StatusCode, http.StatusOK)
+		t.Fatalf("resume-token connect_artifact status = %d, want %d", resumeConnectRes.Result().StatusCode, http.StatusOK)
 	}
 
 	cookies := unlockRes.Result().Cookies()
@@ -274,12 +274,12 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 		t.Fatalf("runtime status = %d, want %d", runtimeRes.Result().StatusCode, http.StatusOK)
 	}
 
-	connectReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_info", bytes.NewBufferString(`{}`))
+	connectReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	connectReq.AddCookie(cookies[0])
 	connectRes := httptest.NewRecorder()
-	s.handleConnectInfo(connectRes, connectReq)
+	s.handleConnectArtifact(connectRes, connectReq)
 	if connectRes.Result().StatusCode != http.StatusOK {
-		t.Fatalf("connect_info status = %d, want %d", connectRes.Result().StatusCode, http.StatusOK)
+		t.Fatalf("connect_artifact status = %d, want %d", connectRes.Result().StatusCode, http.StatusOK)
 	}
 
 	logoutReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/access/logout", nil)
@@ -539,7 +539,7 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 		pending:    make(map[string]pendingDirect),
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_info", bytes.NewBufferString(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/direct/connect_artifact", bytes.NewBufferString(`{}`))
 	res := httptest.NewRecorder()
 	s.handler().ServeHTTP(res, req)
 
@@ -555,25 +555,25 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("diagStore.List() error = %v", err)
 	}
-	var connectInfoEvent *diagnostics.Event
+	var connectArtifactEvent *diagnostics.Event
 	var httpEvent *diagnostics.Event
 	for i := range events {
 		event := events[i]
-		if event.Scope == diagnostics.ScopeDirectSession && event.Kind == "connect_info_issued" {
-			connectInfoEvent = &event
+		if event.Scope == diagnostics.ScopeDirectSession && event.Kind == "connect_artifact_issued" {
+			connectArtifactEvent = &event
 		}
-		if event.Scope == diagnostics.ScopeLocalUIHTTP && event.Path == "/api/local/direct/connect_info" {
+		if event.Scope == diagnostics.ScopeLocalUIHTTP && event.Path == "/api/local/direct/connect_artifact" {
 			httpEvent = &event
 		}
 	}
-	if connectInfoEvent == nil {
-		t.Fatalf("expected connect_info_issued diagnostics event, got %#v", events)
+	if connectArtifactEvent == nil {
+		t.Fatalf("expected connect_artifact_issued diagnostics event, got %#v", events)
 	}
 	if httpEvent == nil {
 		t.Fatalf("expected localui_http diagnostics event, got %#v", events)
 	}
-	if connectInfoEvent.TraceID != traceID || httpEvent.TraceID != traceID {
-		t.Fatalf("unexpected trace IDs connect=%q http=%q want=%q", connectInfoEvent.TraceID, httpEvent.TraceID, traceID)
+	if connectArtifactEvent.TraceID != traceID || httpEvent.TraceID != traceID {
+		t.Fatalf("unexpected trace IDs connect=%q http=%q want=%q", connectArtifactEvent.TraceID, httpEvent.TraceID, traceID)
 	}
 }
 

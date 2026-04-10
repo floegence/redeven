@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/fs"
+	"github.com/floegence/redeven/internal/rpcutil"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -56,7 +56,7 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 
 	client := rpc.NewClient(clientConn)
 
-	status, err := rpctyped.Call[struct{}, StatusResponse](ctx, client, TypeIDAccessStatus, &struct{}{})
+	status, err := rpcutil.CallJSON[struct{}, StatusResponse](ctx, client, TypeIDAccessStatus, &struct{}{})
 	if err != nil {
 		t.Fatalf("access.status error = %v", err)
 	}
@@ -64,7 +64,7 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 		t.Fatalf("unexpected initial status: %#v", status)
 	}
 
-	if _, err := rpctyped.Call[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{}); err == nil {
+	if _, err := rpcutil.CallJSON[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{}); err == nil {
 		t.Fatalf("expected protected RPC to fail before resume")
 	} else {
 		var callErr *rpc.CallError
@@ -76,11 +76,11 @@ func TestService_ResumeUnlocksProtectedRPC(t *testing.T) {
 		}
 	}
 
-	if _, err := rpctyped.Call[ResumeRequest, ResumeResponse](ctx, client, TypeIDAccessResume, &ResumeRequest{Token: unlockResult.ResumeToken}); err != nil {
+	if _, err := rpcutil.CallJSON[ResumeRequest, ResumeResponse](ctx, client, TypeIDAccessResume, &ResumeRequest{Token: unlockResult.ResumeToken}); err != nil {
 		t.Fatalf("access.resume error = %v", err)
 	}
 
-	pathContext, err := rpctyped.Call[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
+	pathContext, err := rpcutil.CallJSON[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
 	if err != nil {
 		t.Fatalf("fs.get_path_context after resume error = %v", err)
 	}
@@ -120,7 +120,7 @@ func TestService_InitiallyUnlockedChannelSkipsResume(t *testing.T) {
 
 	client := rpc.NewClient(clientConn)
 
-	status, err := rpctyped.Call[struct{}, StatusResponse](ctx, client, TypeIDAccessStatus, &struct{}{})
+	status, err := rpcutil.CallJSON[struct{}, StatusResponse](ctx, client, TypeIDAccessStatus, &struct{}{})
 	if err != nil {
 		t.Fatalf("access.status error = %v", err)
 	}
@@ -128,7 +128,7 @@ func TestService_InitiallyUnlockedChannelSkipsResume(t *testing.T) {
 		t.Fatalf("unexpected initial status: %#v", status)
 	}
 
-	pathContext, err := rpctyped.Call[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
+	pathContext, err := rpcutil.CallJSON[struct{}, map[string]string](ctx, client, fs.TypeID_FS_GET_PATH_CONTEXT, &struct{}{})
 	if err != nil {
 		t.Fatalf("fs.get_path_context without resume error = %v", err)
 	}

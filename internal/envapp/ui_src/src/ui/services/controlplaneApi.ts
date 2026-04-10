@@ -1,4 +1,4 @@
-import type { ConnectArtifact, DirectConnectInfo } from '@floegence/flowersec-core';
+import { assertConnectArtifact, type ConnectArtifact } from '@floegence/flowersec-core';
 import { requestEntryConnectArtifact } from '@floegence/flowersec-core/controlplane';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
@@ -368,14 +368,23 @@ export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   return cachedLocalRuntime;
 }
 
-export async function mintLocalDirectConnectInfo(): Promise<DirectConnectInfo> {
-  const out = await fetchLocalJSON<DirectConnectInfo>('/api/local/direct/connect_info', { method: 'POST' });
-  const wsURL = String((out as any)?.ws_url ?? '').trim();
-  const channelID = String((out as any)?.channel_id ?? '').trim();
-  if (!wsURL || !channelID) throw new Error('Invalid direct connect info');
+export async function mintLocalDirectConnectArtifact(): Promise<ConnectArtifact> {
+  const out = await fetchLocalJSON<{ connect_artifact?: unknown }>('/api/local/direct/connect_artifact', { method: 'POST' });
+  const artifact = assertConnectArtifact(out?.connect_artifact);
+  if (artifact.transport !== 'direct') {
+    throw new Error('Invalid local direct connect artifact');
+  }
+  const wsURL = asString(artifact.direct_info?.ws_url);
+  const channelID = asString(artifact.direct_info?.channel_id);
+  if (!wsURL || !channelID) {
+    throw new Error('Invalid local direct connect artifact');
+  }
   return {
-    ...out,
-    ws_url: appendLocalAccessResumeQuery(wsURL),
+    ...artifact,
+    direct_info: {
+      ...artifact.direct_info,
+      ws_url: appendLocalAccessResumeQuery(wsURL),
+    },
   };
 }
 

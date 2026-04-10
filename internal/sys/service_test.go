@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
-	rpctyped "github.com/floegence/flowersec/flowersec-go/rpc/typed"
+	"github.com/floegence/redeven/internal/rpcutil"
 )
 
 type staticMaintenanceProvider struct {
@@ -43,7 +43,7 @@ func TestServicePingReportsProcessStartedAt(t *testing.T) {
 	}()
 
 	client := rpc.NewClient(clientConn)
-	resp, err := rpctyped.Call[pingReq, pingResp](ctx, client, TypeID_SYS_PING, &pingReq{})
+	resp, err := rpcutil.CallJSON[pingReq, pingResp](ctx, client, TypeID_SYS_PING, &pingReq{})
 	if err != nil {
 		t.Fatalf("sys.ping error = %v", err)
 	}
@@ -90,7 +90,7 @@ func TestServicePingReportsMaintenanceSnapshot(t *testing.T) {
 	}()
 
 	client := rpc.NewClient(clientConn)
-	resp, err := rpctyped.Call[pingReq, pingResp](ctx, client, TypeID_SYS_PING, &pingReq{})
+	resp, err := rpcutil.CallJSON[pingReq, pingResp](ctx, client, TypeID_SYS_PING, &pingReq{})
 	if err != nil {
 		t.Fatalf("sys.ping error = %v", err)
 	}
