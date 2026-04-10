@@ -1,7 +1,7 @@
 import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
-import { PersistentFloatingWindow } from './PersistentFloatingWindow';
+import { PersistentFloatingWindow, type PersistentFloatingWindowSurfaceRef } from './PersistentFloatingWindow';
 
 const PREVIEW_WINDOW_MARGIN_DESKTOP = 16;
 const PREVIEW_WINDOW_DEFAULT_WIDTH = 1040;
@@ -80,6 +80,7 @@ export interface PreviewWindowProps {
   zIndex?: number;
   floatingClass?: string;
   mobileClass?: string;
+  surfaceRef?: PersistentFloatingWindowSurfaceRef;
 }
 
 export function PreviewWindow(props: PreviewWindowProps) {
@@ -118,6 +119,7 @@ export function PreviewWindow(props: PreviewWindowProps) {
           minSize={desktopSizing().minSize}
           maxSize={desktopSizing().maxSize}
           zIndex={props.zIndex ?? PREVIEW_WINDOW_Z_INDEX}
+          surfaceRef={props.surfaceRef}
           class={cn('file-preview-floating-window overflow-hidden rounded-md', props.floatingClass)}
           contentClass="min-h-0 flex flex-1 flex-col !overflow-hidden !p-0"
         >

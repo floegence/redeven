@@ -1,4 +1,4 @@
-import { Show, createMemo } from 'solid-js';
+import { Show, createMemo, createSignal } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
@@ -6,6 +6,7 @@ import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { readSelectionTextFromPreview } from '../utils/filePreviewSelection';
 import { FilePreviewContent } from './FilePreviewContent';
 import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
+import { WindowModal } from './WindowModal';
 
 export interface FilePreviewSurfaceProps {
   open: boolean;
@@ -46,6 +47,7 @@ export interface FilePreviewSurfaceProps {
 export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
   const layout = useLayout();
   const isMobile = createMemo(() => layout.isMobile());
+  const [floatingSurfaceEl, setFloatingSurfaceEl] = createSignal<HTMLElement | null>(null);
   let previewContentEl: HTMLDivElement | undefined;
   const title = () => props.item?.name ?? 'File preview';
   const footerStatus = createMemo(() => {
@@ -175,6 +177,18 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
       </div>
     </div>
   );
+  const closeConfirmFooter = (
+    <div class="border-t border-border/70 px-4 pt-3 pb-4">
+      <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+        <Button size="sm" variant="outline" class="w-full sm:w-auto" onClick={() => props.onCloseConfirmChange?.(false)}>
+          Cancel
+        </Button>
+        <Button size="sm" variant="destructive" class="w-full sm:w-auto" onClick={() => void props.onConfirmDiscardClose?.()}>
+          Discard changes
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -185,19 +199,34 @@ export function FilePreviewSurface(props: FilePreviewSurfaceProps) {
         footer={footer}
         persistenceKey="file-preview"
         zIndex={PREVIEW_WINDOW_Z_INDEX}
+        surfaceRef={setFloatingSurfaceEl}
       >
         {previewBody()}
       </PreviewWindow>
 
-      <ConfirmDialog
-        open={!!props.closeConfirmOpen}
-        onOpenChange={(open) => props.onCloseConfirmChange?.(open)}
-        title="Discard unsaved changes?"
-        description={props.closeConfirmMessage || 'Discard the current edits before continuing.'}
-        confirmText="Discard changes"
-        variant="destructive"
-        onConfirm={() => void props.onConfirmDiscardClose?.()}
-      />
+      <Show when={isMobile()}>
+        <ConfirmDialog
+          open={!!props.closeConfirmOpen}
+          onOpenChange={(open) => props.onCloseConfirmChange?.(open)}
+          title="Discard unsaved changes?"
+          description={props.closeConfirmMessage || 'Discard the current edits before continuing.'}
+          confirmText="Discard changes"
+          variant="destructive"
+          onConfirm={() => void props.onConfirmDiscardClose?.()}
+        />
+      </Show>
+
+      <Show when={!isMobile()}>
+        <WindowModal
+          open={!!props.closeConfirmOpen}
+          host={floatingSurfaceEl()}
+          title="Discard unsaved changes?"
+          description={props.closeConfirmMessage || 'Discard the current edits before continuing.'}
+          footer={closeConfirmFooter}
+          class="w-[min(30rem,calc(100%-1rem))]"
+          onOpenChange={(open) => props.onCloseConfirmChange?.(open)}
+        />
+      </Show>
     </>
   );
 }

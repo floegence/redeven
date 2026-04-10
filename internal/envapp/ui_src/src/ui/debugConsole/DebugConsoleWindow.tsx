@@ -562,7 +562,42 @@ function traceTone(trace: DebugConsoleTrace): SemanticTone {
   return 'primary';
 }
 
-export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleController }>) {
+export interface DebugConsoleFooterProps {
+  controller: DebugConsoleController;
+}
+
+export function DebugConsoleFooter(props: DebugConsoleFooterProps) {
+  return (
+    <div class="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+      <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-[9px] text-muted-foreground">
+        <span class="inline-flex items-center gap-1.5">
+          <StatusDot tone={props.controller.runtimeEnabled() ? 'success' : 'warning'} />
+          {props.controller.runtimeEnabled() ? 'Diagnostics active' : 'Diagnostics unavailable'}
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <StatusDot tone={props.controller.streamConnected() ? 'success' : 'default'} />
+          {props.controller.streamConnected() ? 'Streaming updates' : 'Snapshot only'}
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <StatusDot tone={props.controller.uiMetricsCollecting() ? 'success' : 'default'} />
+          {props.controller.uiMetricsCollecting() ? 'UI probes active' : 'UI probes paused'}
+        </span>
+        <span>Last snapshot: {formatTimestamp(props.controller.lastSnapshotAt())}</span>
+      </div>
+      <div class="text-[9px] text-muted-foreground">Focused on Redeven API/RPC traffic. Static assets are excluded. Clear resets the current local capture window.</div>
+    </div>
+  );
+}
+
+export interface DebugConsolePanelProps {
+  controller: DebugConsoleController;
+  onClose: () => void;
+  closeLabel?: string;
+  onMinimize?: () => void;
+  showMinimize?: boolean;
+}
+
+export function DebugConsolePanel(props: DebugConsolePanelProps) {
   const [tab, setTab] = createSignal<DebugConsoleTab>('requests');
   const [query, setQuery] = createSignal('');
   const [selectedEventKey, setSelectedEventKey] = createSignal('');
@@ -642,60 +677,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
   };
 
   return (
-    <>
-      <Show when={props.controller.enabled() && props.controller.minimized()}>
-        <button
-          type="button"
-          class="fixed bottom-4 right-4 z-[145] inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25"
-          onClick={props.controller.restore}
-          style={semanticInteractiveStyle(props.controller.streamConnected() ? 'success' : 'warning', 'strong')}
-        >
-          <StatusDot tone={props.controller.streamConnected() ? 'success' : 'warning'} />
-          <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground">Debug Console</span>
-          <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'warning'}>
-            {props.controller.streamConnected() ? 'Live' : 'Idle'}
-          </SettingsPill>
-        </button>
-      </Show>
-
-      <Show when={props.controller.enabled() && props.controller.open()}>
-        <PersistentFloatingWindow
-          open
-          onOpenChange={(next) => {
-            if (!next) {
-              props.controller.minimize();
-            }
-          }}
-          title="Debug Console"
-          persistenceKey="debug-console-window"
-          defaultPosition={{ x: 48, y: 76 }}
-          defaultSize={{ width: 1120, height: 720 }}
-          minSize={{ width: 760, height: 520 }}
-          class="debug-console-window border-border/80 shadow-[0_38px_92px_-56px_rgba(15,23,42,0.56)]"
-          contentClass="!p-0"
-          zIndex={145}
-          footer={(
-            <div class="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-              <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-[9px] text-muted-foreground">
-                <span class="inline-flex items-center gap-1.5">
-                  <StatusDot tone={props.controller.runtimeEnabled() ? 'success' : 'warning'} />
-                  {props.controller.runtimeEnabled() ? 'Diagnostics active' : 'Diagnostics unavailable'}
-                </span>
-                <span class="inline-flex items-center gap-1.5">
-                  <StatusDot tone={props.controller.streamConnected() ? 'success' : 'default'} />
-                  {props.controller.streamConnected() ? 'Streaming updates' : 'Snapshot only'}
-                </span>
-                <span class="inline-flex items-center gap-1.5">
-                  <StatusDot tone={props.controller.uiMetricsCollecting() ? 'success' : 'default'} />
-                  {props.controller.uiMetricsCollecting() ? 'UI probes active' : 'UI probes paused'}
-                </span>
-                <span>Last snapshot: {formatTimestamp(props.controller.lastSnapshotAt())}</span>
-              </div>
-              <div class="text-[9px] text-muted-foreground">Focused on Redeven API/RPC traffic. Static assets are excluded. Clear resets the current local capture window.</div>
-            </div>
-          )}
-        >
-          <div class="flex h-full min-h-0 flex-col bg-background text-[10px]">
+    <div class="flex h-full min-h-0 flex-col bg-background text-[10px]">
             <div class="border-b border-border/70 bg-muted/[0.08] px-4 py-3">
               <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                 <div class="min-w-0">
@@ -712,9 +694,9 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                   </div>
                 </div>
 
-                <div class="flex w-full flex-col gap-2 xl:w-[24rem]">
-                  <div>
-                    <label class="mb-1 block text-[8px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Search</label>
+                  <div class="flex w-full flex-col gap-2 xl:w-[24rem]">
+                    <div>
+                      <label class="mb-1 block text-[8px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Search</label>
                     <input
                       value={query()}
                       onInput={(event) => setQuery(event.currentTarget.value)}
@@ -730,12 +712,14 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                     <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => void exportBundle()} disabled={props.controller.exporting()}>
                       {props.controller.exporting() ? 'Exporting...' : 'Export'}
                     </Button>
-                    <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => void props.controller.closeConsole()}>
-                      Close Console
+                    <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => props.onClose()}>
+                      {props.closeLabel ?? 'Close Console'}
                     </Button>
-                    <Button size="sm" variant="ghost" class="cursor-pointer text-[10px]" onClick={props.controller.minimize}>
-                      Minimize
-                    </Button>
+                    <Show when={props.showMinimize !== false && props.onMinimize}>
+                      <Button size="sm" variant="ghost" class="cursor-pointer text-[10px]" onClick={() => props.onMinimize?.()}>
+                        Minimize
+                      </Button>
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -1277,7 +1261,52 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
                   </Show>
                 </Show>
               </main>
-          </div>
+    </div>
+  );
+}
+
+export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleController }>) {
+  return (
+    <>
+      <Show when={props.controller.enabled() && props.controller.minimized()}>
+        <button
+          type="button"
+          class="fixed bottom-4 right-4 z-[145] inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25"
+          onClick={props.controller.restore}
+          style={semanticInteractiveStyle(props.controller.streamConnected() ? 'success' : 'warning', 'strong')}
+        >
+          <StatusDot tone={props.controller.streamConnected() ? 'success' : 'warning'} />
+          <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground">Debug Console</span>
+          <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'warning'}>
+            {props.controller.streamConnected() ? 'Live' : 'Idle'}
+          </SettingsPill>
+        </button>
+      </Show>
+
+      <Show when={props.controller.enabled() && props.controller.open()}>
+        <PersistentFloatingWindow
+          open
+          onOpenChange={(next) => {
+            if (!next) {
+              props.controller.minimize();
+            }
+          }}
+          title="Debug Console"
+          persistenceKey="debug-console-window"
+          defaultPosition={{ x: 48, y: 76 }}
+          defaultSize={{ width: 1120, height: 720 }}
+          minSize={{ width: 760, height: 520 }}
+          class="debug-console-window border-border/80 shadow-[0_38px_92px_-56px_rgba(15,23,42,0.56)]"
+          contentClass="!p-0"
+          zIndex={145}
+          footer={<DebugConsoleFooter controller={props.controller} />}
+        >
+          <DebugConsolePanel
+            controller={props.controller}
+            onClose={() => void props.controller.closeConsole()}
+            onMinimize={props.controller.minimize}
+            showMinimize
+          />
         </PersistentFloatingWindow>
       </Show>
     </>

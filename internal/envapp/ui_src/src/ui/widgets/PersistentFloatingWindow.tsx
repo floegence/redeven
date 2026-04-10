@@ -90,10 +90,24 @@ function applyClassTokens(element: HTMLElement | null, value: string): void {
   }
 }
 
+function findGeometryRootForMarker(markerClass: string): HTMLElement | null {
+  const marker = document.querySelector(`.${markerClass}`) as HTMLElement | null;
+  if (!marker) {
+    return null;
+  }
+  if (marker.matches('[data-floe-geometry-surface="floating-window"]')) {
+    return marker;
+  }
+  return marker.closest('[data-floe-geometry-surface="floating-window"]') as HTMLElement | null ?? marker;
+}
+
+export type PersistentFloatingWindowSurfaceRef = (element: HTMLElement | null) => void;
+
 export interface PersistentFloatingWindowProps extends FloatingWindowProps {
   persistenceKey?: string;
   contentClass?: string;
   footerClass?: string;
+  surfaceRef?: PersistentFloatingWindowSurfaceRef;
 }
 
 export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): JSX.Element {
@@ -125,19 +139,8 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       }
     };
 
-    const findGeometryRoot = (): HTMLElement | null => {
-      const marker = document.querySelector(`.${markerClass}`) as HTMLElement | null;
-      if (!marker) {
-        return null;
-      }
-      if (marker.matches('[data-floe-geometry-surface="floating-window"]')) {
-        return marker;
-      }
-      return marker.closest('[data-floe-geometry-surface="floating-window"]') as HTMLElement | null ?? marker;
-    };
-
     const persistNow = () => {
-      const rect = readRectFromElement(findGeometryRoot());
+      const rect = readRectFromElement(findGeometryRootForMarker(markerClass));
       if (!rect) {
         return;
       }
@@ -156,7 +159,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       if (disposed) {
         return;
       }
-      const root = findGeometryRoot();
+      const root = findGeometryRootForMarker(markerClass);
       if (!root) {
         cancelBind = scheduleAfterFrame(bindObserver);
         return;
@@ -188,6 +191,37 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       observer?.disconnect();
       window.removeEventListener('pagehide', handlePageHide);
       persistNow();
+    });
+  });
+
+  createEffect(() => {
+    const surfaceRef = props.surfaceRef;
+    if (!surfaceRef || !props.open || typeof document === 'undefined') {
+      surfaceRef?.(null);
+      return;
+    }
+
+    let disposed = false;
+    let cancelBind: (() => void) | null = null;
+
+    const bindSurface = () => {
+      if (disposed) {
+        return;
+      }
+      const root = findGeometryRootForMarker(markerClass);
+      if (!root) {
+        cancelBind = scheduleAfterFrame(bindSurface);
+        return;
+      }
+      surfaceRef(root);
+    };
+
+    bindSurface();
+
+    onCleanup(() => {
+      disposed = true;
+      cancelBind?.();
+      surfaceRef(null);
     });
   });
 
@@ -228,7 +262,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       applyClassTokens(footerEl, footerClass);
     };
 
-    cancelBind = scheduleAfterFrame(bindSlotClasses);
+    bindSlotClasses();
 
     onCleanup(() => {
       disposed = true;

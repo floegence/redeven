@@ -152,4 +152,33 @@ describe('FilePreviewSurface', () => {
     expect(host.textContent).toContain('This file is too large to preview.');
     expect(host.querySelector('[data-testid="confirm-dialog"]')).toBeTruthy();
   });
+
+  it('renders discard confirmation inside the desktop floating host instead of a global confirm dialog', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FilePreviewSurface
+        open
+        onOpenChange={() => undefined}
+        item={{ id: '/workspace/demo.txt', name: 'demo.txt', path: '/workspace/demo.txt', type: 'file' }}
+        descriptor={{ mode: 'text', textPresentation: 'plain', wrapText: true }}
+        text="draft"
+        editing
+        dirty
+        closeConfirmOpen
+        closeConfirmMessage="Discard local edits in demo.txt and close the preview?"
+        onCloseConfirmChange={() => undefined}
+        onConfirmDiscardClose={() => undefined}
+      />
+    ), host);
+
+    await Promise.resolve();
+
+    expect(host.querySelector('[data-testid="confirm-dialog"]')).toBeNull();
+    const floatingWindow = host.querySelector('[data-testid="floating-window"]') as HTMLDivElement | null;
+    expect(floatingWindow).toBeTruthy();
+    expect(floatingWindow?.querySelector('[role="dialog"]')?.textContent).toContain('Discard unsaved changes?');
+    expect(floatingWindow?.textContent).toContain('Discard local edits in demo.txt and close the preview?');
+  });
 });
