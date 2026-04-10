@@ -12,6 +12,12 @@ import type { NotesEvent, NotesItem, NotesSnapshot, NotesTopic, NotesTrashItem }
 
 const notificationState = vi.hoisted(() => ({
   error: vi.fn(),
+  info: vi.fn(),
+  success: vi.fn(),
+}));
+
+const clipboardState = vi.hoisted(() => ({
+  writeTextToClipboard: vi.fn(),
 }));
 
 const notesApiState = vi.hoisted(() => ({
@@ -44,7 +50,12 @@ const notesUIState = vi.hoisted(() => ({
         controller: any;
         onClose: () => void;
         interactionMode?: string;
+        allowGlobalHotkeys?: readonly string[];
       },
+  editorOpen: false,
+  manualPasteOpen: false,
+  contextMenuOpen: false,
+  topicRenameOpen: false,
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -57,11 +68,65 @@ vi.mock('@floegence/floe-webapp-core/notes', async (importOriginal) => {
     ...actual,
     NotesOverlay: (props: any) => {
       notesUIState.lastProps = props;
-      return <div data-testid="shared-notes-overlay" data-open={String(props.open)} />;
+      return props.open ? (
+        <div
+          class="notes-overlay"
+          aria-label="Notes overlay"
+          data-notes-interaction-mode={String(props.interactionMode ?? '')}
+        >
+          <div class="notes-overlay__frame" data-floe-notes-boundary="true">
+            <aside class="notes-overlay__rail" data-floe-canvas-interactive="true">
+              <form class="notes-topic-composer notes-overlay__topic-composer">
+                <input data-testid="notes-topic-input" placeholder="Add topic" />
+              </form>
+              {notesUIState.topicRenameOpen ? (
+                <form class="notes-topic-row__editor">
+                  <button type="button">Save topic name</button>
+                </form>
+              ) : null}
+            </aside>
+            <div class="notes-page__canvas">
+              <div class="notes-canvas__field">
+                {props.controller
+                  .snapshot()
+                  .items.filter((item: NotesItem) => item.topic_id === props.controller.activeTopicID())
+                  .map((item: NotesItem) => (
+                    <article class="notes-note" data-floe-notes-note-id={item.note_id}>
+                      <div class="notes-note__surface">
+                        <button type="button" class="notes-note__body" data-testid={`note-${item.note_id}`}>
+                          {item.body}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+              </div>
+            </div>
+            {notesUIState.contextMenuOpen ? (
+              <div class="notes-context-menu" data-floe-notes-boundary="true" />
+            ) : null}
+            {notesUIState.editorOpen ? (
+              <div class="notes-flyout notes-flyout--editor" data-floe-notes-boundary="true">
+                <button type="button">Close editor</button>
+              </div>
+            ) : null}
+            {notesUIState.manualPasteOpen ? (
+              <div class="notes-flyout notes-flyout--paste" data-floe-notes-boundary="true">
+                <button type="button">Close paste</button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div data-testid="shared-notes-overlay" data-open={String(props.open)} />
+      );
     },
     NotesOverlayIcon: (props: any) => <svg {...props} />,
   };
 });
+
+vi.mock('../utils/clipboard', () => ({
+  writeTextToClipboard: clipboardState.writeTextToClipboard,
+}));
 
 vi.mock('../services/notesApi', () => ({
   getNotesSnapshot: notesApiState.getNotesSnapshot,
@@ -135,6 +200,36 @@ function baseSnapshot(overrides: Partial<NotesSnapshot> = {}): NotesSnapshot {
   };
 }
 
+function buildTopicItems(count: number, overrides?: {
+  topicID?: string;
+  startCreatedAt?: number;
+}): NotesItem[] {
+  const topicID = overrides?.topicID ?? 'topic-1';
+  const startCreatedAt = overrides?.startCreatedAt ?? 1;
+  return Array.from({ length: count }, (_, index) =>
+    baseItem({
+      note_id: `note-${index + 1}`,
+      topic_id: topicID,
+      body: `Body ${index + 1}`,
+      preview_text: `Body ${index + 1}`,
+      character_count: `Body ${index + 1}`.length,
+      created_at_unix_ms: startCreatedAt + index,
+      updated_at_unix_ms: startCreatedAt + index,
+      z_index: index + 1,
+      x: 120 + index * 24,
+      y: 90 + index * 16,
+    }),
+  );
+}
+
+let renderDisposers: Array<() => void> = [];
+
+function mountIntoHost(renderer: () => any, host: HTMLElement): () => void {
+  const dispose = render(renderer, host);
+  renderDisposers.push(dispose);
+  return dispose;
+}
+
 async function settle(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -143,8 +238,14 @@ async function settle(): Promise<void> {
 
 describe('Redeven NotesOverlay adapter', () => {
   beforeEach(() => {
+    renderDisposers = [];
     notesUIState.lastProps = null;
+    notesUIState.editorOpen = false;
+    notesUIState.manualPasteOpen = false;
+    notesUIState.contextMenuOpen = false;
+    notesUIState.topicRenameOpen = false;
     notesApiState.streamArgs = null;
+    clipboardState.writeTextToClipboard.mockReset();
     notesApiState.getNotesSnapshot.mockReset();
     notesApiState.createNotesTopic.mockReset();
     notesApiState.updateNotesTopic.mockReset();
@@ -211,6 +312,7 @@ describe('Redeven NotesOverlay adapter', () => {
     );
     notesApiState.deleteNotesTrashItemPermanently.mockResolvedValue(undefined);
     notesApiState.clearNotesTrashTopic.mockResolvedValue(undefined);
+    clipboardState.writeTextToClipboard.mockResolvedValue(undefined);
     notesApiState.connectNotesEventStream.mockImplementation(async (args: { afterSeq?: number; onEvent: (event: NotesEvent) => void; signal: AbortSignal }) => {
       notesApiState.streamArgs = args;
       await new Promise<void>((resolve) => {
@@ -220,6 +322,9 @@ describe('Redeven NotesOverlay adapter', () => {
   });
 
   afterEach(() => {
+    for (const dispose of renderDisposers.splice(0)) {
+      dispose();
+    }
     document.body.removeAttribute(NOTES_OVERLAY_VIEWPORT_ATTR);
     for (const cssVarName of Object.values(NOTES_OVERLAY_VIEWPORT_CSS_VARS)) {
       document.body.style.removeProperty(cssVarName);
@@ -233,7 +338,7 @@ describe('Redeven NotesOverlay adapter', () => {
     document.body.appendChild(host);
 
     const [open, setOpen] = createSignal(false);
-    render(() => <NotesOverlay open={open()} onClose={() => undefined} />, host);
+    mountIntoHost(() => <NotesOverlay open={open()} onClose={() => undefined} />, host);
     await settle();
 
     expect(notesApiState.getNotesSnapshot).not.toHaveBeenCalled();
@@ -306,7 +411,10 @@ describe('Redeven NotesOverlay adapter', () => {
 
     try {
       const [open, setOpen] = createSignal(false);
-      const dispose = render(() => <NotesOverlay open={open()} onClose={() => undefined} viewportHost={viewportHost} />, host);
+      const dispose = mountIntoHost(
+        () => <NotesOverlay open={open()} onClose={() => undefined} viewportHost={viewportHost} />,
+        host,
+      );
       await settle();
 
       expect(document.body.getAttribute(NOTES_OVERLAY_VIEWPORT_ATTR)).toBeNull();
@@ -327,6 +435,7 @@ describe('Redeven NotesOverlay adapter', () => {
       expect(document.body.style.getPropertyValue(NOTES_OVERLAY_VIEWPORT_CSS_VARS.width)).toBe('');
 
       dispose();
+      renderDisposers = renderDisposers.filter((entry) => entry !== dispose);
     } finally {
       Object.defineProperty(window, 'innerWidth', {
         configurable: true,
@@ -344,12 +453,56 @@ describe('Redeven NotesOverlay adapter', () => {
     document.body.appendChild(host);
     const onClose = vi.fn();
 
-    render(() => <NotesOverlay open onClose={onClose} />, host);
+    mountIntoHost(() => <NotesOverlay open onClose={onClose} />, host);
     await settle();
 
     expect(notesUIState.lastProps?.open).toBe(true);
     notesUIState.lastProps?.onClose();
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards the shell toggle keybind into the shared floating notes hotkey allowlist', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} toggleKeybind="mod+." />, host);
+    await settle();
+
+    expect(notesUIState.lastProps?.interactionMode).toBe('floating');
+    expect(notesUIState.lastProps?.allowGlobalHotkeys).toEqual(['mod+.']);
+  });
+
+  it('does not let Redeven digit shortcuts swallow the shell toggle keybind after board interaction', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} toggleKeybind="mod+." />, host);
+    await settle();
+
+    const bubbleSpy = vi.fn();
+    const bubbleHandler = (event: KeyboardEvent) => bubbleSpy(event.key);
+    window.addEventListener('keydown', bubbleHandler);
+
+    const overlay = document.querySelector('.notes-overlay') as HTMLElement | null;
+    const noteBody = document.querySelector('[data-testid="note-note-1"]') as HTMLButtonElement | null;
+    expect(overlay).toBeTruthy();
+    expect(noteBody).toBeTruthy();
+
+    overlay?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    noteBody?.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: '.',
+        ctrlKey: true,
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(bubbleSpy.mock.calls.map(([key]) => key)).toEqual(['.']);
+    expect(clipboardState.writeTextToClipboard).not.toHaveBeenCalled();
+
+    window.removeEventListener('keydown', bubbleHandler);
   });
 
   it('keeps item mutations inside the Redeven controller adapter while preserving runtime authority', async () => {
@@ -372,7 +525,7 @@ describe('Redeven NotesOverlay adapter', () => {
         }),
       );
 
-    render(() => <NotesOverlay open onClose={() => undefined} />, host);
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
     await settle();
 
     const controller = notesUIState.lastProps?.controller;
@@ -440,7 +593,7 @@ describe('Redeven NotesOverlay adapter', () => {
       )
       .mockResolvedValueOnce(baseSnapshot());
 
-    render(() => <NotesOverlay open onClose={() => undefined} />, host);
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
     await settle();
 
     const controller = notesUIState.lastProps?.controller;
@@ -463,5 +616,151 @@ describe('Redeven NotesOverlay adapter', () => {
     await controller.clearTrashTopic('topic-1');
     expect(notesApiState.clearNotesTrashTopic).toHaveBeenCalledWith('topic-1');
     expect(controller.snapshot().trash_items).toHaveLength(0);
+  });
+
+  it('decorates active-topic notes with continuous numbers and renumbers after deletes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    notesApiState.getNotesSnapshot.mockResolvedValueOnce(
+      baseSnapshot({
+        topics: [
+          baseTopic(),
+          baseTopic({ topic_id: 'topic-2', name: 'Archive', sort_order: 2 }),
+        ],
+        items: [
+          baseItem({ note_id: 'note-2', body: 'Later note', created_at_unix_ms: 6, updated_at_unix_ms: 6, z_index: 2 }),
+          baseItem({ note_id: 'note-1', body: 'Earlier note', created_at_unix_ms: 3, updated_at_unix_ms: 3, z_index: 1 }),
+          baseItem({
+            note_id: 'note-3',
+            topic_id: 'topic-2',
+            body: 'Other topic note',
+            created_at_unix_ms: 1,
+            updated_at_unix_ms: 1,
+            z_index: 1,
+          }),
+        ],
+      }),
+    );
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+    await settle();
+
+    const firstNote = document.querySelector<HTMLElement>('[data-floe-notes-note-id="note-1"]');
+    const secondNote = document.querySelector<HTMLElement>('[data-floe-notes-note-id="note-2"]');
+    expect(firstNote?.dataset.redevenNoteIndex).toBe('1');
+    expect(secondNote?.dataset.redevenNoteIndex).toBe('2');
+    expect(document.querySelector('[data-floe-notes-note-id="note-3"]')).toBeNull();
+
+    const controller = notesUIState.lastProps?.controller;
+    await controller.deleteNote('note-1');
+    await settle();
+
+    const renumberedSecondNote = document.querySelector<HTMLElement>('[data-floe-notes-note-id="note-2"]');
+    expect(renumberedSecondNote?.dataset.redevenNoteIndex).toBe('1');
+  });
+
+  it('copies the matching note when a number shortcut is pressed in board browse mode', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    notesApiState.getNotesSnapshot.mockResolvedValueOnce(
+      baseSnapshot({
+        items: [
+          baseItem({ note_id: 'note-1', body: 'First body', created_at_unix_ms: 1, updated_at_unix_ms: 1, z_index: 1 }),
+          baseItem({ note_id: 'note-2', body: 'Second body', created_at_unix_ms: 2, updated_at_unix_ms: 2, z_index: 2 }),
+        ],
+      }),
+    );
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+    await settle();
+
+    const overlay = document.querySelector('.notes-overlay') as HTMLElement | null;
+    expect(overlay).toBeTruthy();
+    overlay?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(clipboardState.writeTextToClipboard).toHaveBeenCalledWith('Second body');
+    expect(notificationState.success).toHaveBeenCalledWith('Copied', 'Note #2 copied to clipboard.');
+    expect(document.querySelector('[data-floe-notes-note-id="note-2"]')?.classList.contains('is-redeven-copied')).toBe(true);
+  });
+
+  it('waits for an additional digit when the first shortcut digit is ambiguous', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    notesApiState.getNotesSnapshot.mockResolvedValueOnce(
+      baseSnapshot({
+        items: buildTopicItems(12),
+      }),
+    );
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+    await settle();
+
+    const overlay = document.querySelector('.notes-overlay') as HTMLElement | null;
+    overlay?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(clipboardState.writeTextToClipboard).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-floe-notes-note-id="note-1"]')?.classList.contains('is-redeven-shortcut-pending')).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(clipboardState.writeTextToClipboard).toHaveBeenCalledWith('Body 12');
+    expect(notificationState.success).toHaveBeenCalledWith('Copied', 'Note #12 copied to clipboard.');
+  });
+
+  it('disables number shortcuts while the user is typing in notes inputs', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    notesApiState.getNotesSnapshot.mockResolvedValueOnce(
+      baseSnapshot({
+        items: buildTopicItems(2),
+      }),
+    );
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+    await settle();
+
+    const topicInput = document.querySelector('[data-testid="notes-topic-input"]') as HTMLInputElement | null;
+    expect(topicInput).toBeTruthy();
+    topicInput?.focus();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(clipboardState.writeTextToClipboard).not.toHaveBeenCalled();
+    expect(notificationState.success).not.toHaveBeenCalled();
+  });
+
+  it('disables number shortcuts while note editor surfaces are open', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    notesUIState.editorOpen = true;
+
+    notesApiState.getNotesSnapshot.mockResolvedValueOnce(
+      baseSnapshot({
+        items: buildTopicItems(2),
+      }),
+    );
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+    await settle();
+
+    const overlay = document.querySelector('.notes-overlay') as HTMLElement | null;
+    overlay?.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true }));
+    await settle();
+
+    expect(clipboardState.writeTextToClipboard).not.toHaveBeenCalled();
+    expect(notificationState.success).not.toHaveBeenCalled();
   });
 });

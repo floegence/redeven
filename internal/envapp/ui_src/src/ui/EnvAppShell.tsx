@@ -2308,7 +2308,12 @@ export function EnvAppShell() {
             fallback={
               <>
                 <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
-                <NotesOverlay open={notesOverlayOpen()} onClose={closeNotesOverlay} viewportHost={notesViewportHost()} />
+                <NotesOverlay
+                  open={notesOverlayOpen()}
+                  onClose={closeNotesOverlay}
+                  viewportHost={notesViewportHost()}
+                  toggleKeybind={NOTES_OVERLAY_KEYBIND}
+                />
               </>
             }
           >

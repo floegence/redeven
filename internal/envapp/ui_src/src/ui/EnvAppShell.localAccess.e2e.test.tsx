@@ -25,6 +25,7 @@ const notesOverlayState = vi.hoisted(() => ({
   lastProps: null as null | {
     open: boolean;
     onClose: () => void;
+    toggleKeybind?: string;
   },
 }));
 
@@ -546,6 +547,7 @@ describe('EnvAppShell top bar affordances', () => {
       expect(notesCommand?.keybind).toBe('mod+.');
       expect(notesCommand?.allowWhileTyping).toBe(true);
       expect(notesOverlayState.lastProps?.open).toBe(false);
+      expect(notesOverlayState.lastProps?.toggleKeybind).toBe('mod+.');
 
       notesCommand?.execute();
       await flushAsync();
