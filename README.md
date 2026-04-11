@@ -80,7 +80,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 | --- | --- | --- |
 | Secure remote environment access 🔐 | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
 | Browser-based development ⚙️ | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the local runtime gateway and Flowersec E2EE proxy |
-| Desktop operations 🖥️ | Start Redeven Desktop, open the Local Environment, direct Local UI URLs, SSH targets that Desktop bootstraps on demand, or compatible Control Plane environments, and move between them without duplicate windows | Use the startup launcher, Environment Center tabs, SSH bootstrap flow, offline-friendly desktop upload strategy, launcher-owned Local Environment Settings workbench, diagnostics, and shell-owned connection management around the same runtime contract |
+| Desktop operations 🖥️ | Start Redeven Desktop, open the Local Environment, direct Local UI URLs, SSH targets that Desktop bootstraps on demand, or compatible Control Plane environments, and move between them without duplicate windows | Use the startup launcher, compact environment card grids, SSH bootstrap flow, offline-friendly desktop upload strategy, launcher-owned Local Environment Settings workbench, diagnostics, and shell-owned connection management around the same runtime contract |
 
 ## Quick start
 

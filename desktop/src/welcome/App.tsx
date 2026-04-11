@@ -20,6 +20,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
   Checkbox,
@@ -198,8 +199,6 @@ const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
 const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
 const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
-const PANEL_HEADER_BADGES_CLASS = 'flex min-h-8 flex-wrap items-center gap-2 md:justify-end';
-const PANEL_HEADER_ACTIONS_CLASS = 'flex min-h-8 flex-wrap items-center gap-2 md:justify-end';
 
 function buildDesktopFloeConfig() {
   const themeBridge = desktopThemeBridge();
@@ -1316,7 +1315,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openRemoteEnvironment={openRemoteEnvironment}
           openSSHEnvironment={openSSHEnvironment}
           openEnvironment={openEnvironment}
-          focusEnvironmentWindow={focusEnvironmentWindow}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
           editEnvironment={startEditingEnvironment}
           deleteEnvironment={setDeleteTarget}
@@ -1456,7 +1454,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
     environment?: DesktopEnvironmentEntry,
   ) => Promise<boolean>;
   openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
-  focusEnvironmentWindow: (sessionKey: string, errorTarget?: 'connect' | 'settings' | 'dialog') => Promise<boolean>;
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1480,60 +1477,76 @@ function ConnectEnvironmentSurface(props: Readonly<{
       label: `${libraryFilterLabel(filter)} (${environmentLibraryCount(props.snapshot, filter)})`,
     }))
   ));
+  const controlPlaneEnvironmentCount = createMemo(() => (
+    props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
+  ));
 
   return (
     <div class="redeven-welcome-surface h-full min-h-0 overflow-auto bg-background">
-      <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <section class="redeven-launcher-hero rounded-[1.75rem] border border-border/70 bg-card/80 px-5 py-5 shadow-[0_24px_90px_-50px_rgba(15,23,42,0.45)] backdrop-blur sm:px-6">
-          <div class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-            <div class="min-w-0 space-y-3">
-              <div class="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/75 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-                Environment Center
+      <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
+        <section class="redeven-launcher-toolbar rounded-[1.35rem] border border-border/70 bg-card/85 px-4 py-4 shadow-sm backdrop-blur sm:px-5">
+          <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div class="min-w-0">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Connect Environment</div>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                  {props.activeTab === 'environments' ? 'Environment Cards' : 'Provider-backed Environments'}
+                </h1>
+                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                  {props.snapshot.open_windows.length === 1 ? '1 open window' : `${props.snapshot.open_windows.length} open windows`}
+                </Tag>
+                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                  {props.activeTab === 'environments'
+                    ? `${environmentLibraryCount(props.snapshot, 'all') + 1} environment cards`
+                    : `${controlPlaneEnvironmentCount()} control plane environments`}
+                </Tag>
               </div>
-              <div class="space-y-2">
-                <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-[2rem]">Switch Environment</h1>
-                <p class="max-w-3xl text-sm leading-6 text-muted-foreground">
-                  Open the Local Environment, jump back into recent connections, or step into a compatible Control Plane from the same desktop shell.
-                </p>
+              <div class="mt-2 text-xs leading-5 text-muted-foreground">
+                {props.activeTab === 'environments'
+                  ? 'Local, Redeven URL, and SSH targets now share the same compact card list.'
+                  : 'Each environment stays a card. Provider actions move into a slim shelf above each group.'}
               </div>
             </div>
-            <div class="w-full max-w-[24rem]">
-              <SegmentedControl
-                value={props.activeTab}
-                onChange={(value) => props.setActiveTab(value as EnvironmentCenterTab)}
-                options={ENVIRONMENT_CENTER_TABS.map((tab) => ({
-                  value: tab.value,
-                  label: tab.label,
-                }))}
-                size="sm"
-              />
+            <div class="flex w-full flex-col gap-3 xl:w-auto xl:items-end">
+              <div class="w-full max-w-[24rem] xl:w-[23rem]">
+                <SegmentedControl
+                  value={props.activeTab}
+                  onChange={(value) => props.setActiveTab(value as EnvironmentCenterTab)}
+                  options={ENVIRONMENT_CENTER_TABS.map((tab) => ({
+                    value: tab.value,
+                    label: tab.label,
+                  }))}
+                  size="sm"
+                />
+              </div>
+              <div class="flex flex-wrap gap-2 xl:justify-end">
+                <Show
+                  when={props.activeTab === 'environments'}
+                  fallback={(
+                    <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
+                      <Plus class="mr-1 h-3.5 w-3.5" />
+                      Add Control Plane
+                    </Button>
+                  )}
+                >
+                  <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    {compactAddConnectionLabel()}
+                  </Button>
+                </Show>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label={props.snapshot.close_action_label}
+                  title={props.snapshot.close_action_label}
+                  onClick={() => { void props.closeLauncherOrQuit(); }}
+                >
+                  {compactCloseActionLabel(props.snapshot.close_action_label)}
+                </Button>
+              </div>
             </div>
-          </div>
-          <div class="mt-5 grid gap-3 md:grid-cols-3">
-            <LauncherStatTile
-              label="Open sessions"
-              value={props.snapshot.open_windows.length === 0 ? 'No windows' : `${props.snapshot.open_windows.length}`}
-              detail={props.snapshot.open_windows.length === 1 ? '1 active environment window' : `${props.snapshot.open_windows.length} active environment windows`}
-            />
-            <LauncherStatTile
-              label="Saved and recent"
-              value={`${environmentLibraryCount(props.snapshot, 'all')}`}
-              detail="Remote URL and SSH environments remembered by Desktop"
-            />
-            <LauncherStatTile
-              label="Control planes"
-              value={props.controlPlanes.length === 0 ? 'None' : `${props.controlPlanes.length}`}
-              detail="Compatible providers connected to this desktop shell"
-            />
           </div>
         </section>
-
-        <SessionRail
-          snapshot={props.snapshot}
-          busyAction={props.busyAction}
-          focusEnvironmentWindow={props.focusEnvironmentWindow}
-          closeLauncherOrQuit={props.closeLauncherOrQuit}
-        />
 
         <Show when={props.feedback}>
           <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
@@ -1545,6 +1558,73 @@ function ConnectEnvironmentSurface(props: Readonly<{
           <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {props.error}
           </div>
+        </Show>
+
+        <Show when={localEnvironmentIssue()}>
+          {(issue) => (
+            <IssueCard
+              issue={issue()}
+              issueRef={props.issueRef}
+              primaryAction={(
+                <Button
+                  size="sm"
+                  variant="default"
+                  aria-label="Open Local Environment"
+                  title="Open Local Environment"
+                  onClick={() => { void props.openLocalEnvironment(); }}
+                >
+                  Open
+                </Button>
+              )}
+              secondaryAction={(
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-label="Open Local Environment Settings"
+                  title="Open Local Environment Settings"
+                  onClick={props.openSettingsSurface}
+                >
+                  {compactSettingsActionLabel()}
+                </Button>
+              )}
+              tertiaryAction={(
+                <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
+                  <Copy class="mr-1 h-3.5 w-3.5" />
+                  Copy Diagnostics
+                </Button>
+              )}
+            />
+          )}
+        </Show>
+
+        <Show when={remoteEnvironmentIssue()}>
+          {(issue) => (
+            <IssueCard
+              issue={issue()}
+              issueRef={props.issueRef}
+              primaryAction={(
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => {
+                    if (issue().ssh_details) {
+                      void props.openSSHEnvironment(issue().ssh_details!, 'connect');
+                      return;
+                    }
+                    void props.openRemoteEnvironment(issue().target_url);
+                  }}
+                >
+                  Retry
+                </Button>
+              )}
+              tertiaryAction={(
+                <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
+                  <Copy class="mr-1 h-3.5 w-3.5" />
+                  Copy Diagnostics
+                </Button>
+              )}
+            />
+          )}
         </Show>
 
         <Show
@@ -1562,228 +1642,125 @@ function ConnectEnvironmentSurface(props: Readonly<{
             />
           )}
         >
-          <div class="space-y-5">
-            <div class="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.78fr)]">
-              <LocalEnvironmentFeaturedCard
-                environment={props.localEnvironment}
-                settingsSurface={props.settingsSurface}
-                busyAction={props.busyAction}
-                openLocalEnvironment={props.openLocalEnvironment}
-                openSettingsSurface={props.openSettingsSurface}
-              />
-              <AddEnvironmentShortcutCard
-                controlPlaneCount={props.controlPlanes.length}
-                openCreateConnectionDialog={props.openCreateConnectionDialog}
-                showControlPlanes={() => props.setActiveTab('control_planes')}
-              />
-            </div>
-
-            <Show when={localEnvironmentIssue()}>
-              {(issue) => (
-                <IssueCard
-                  issue={issue()}
-                  issueRef={props.issueRef}
-                  primaryAction={(
-                    <Button
-                      size="sm"
-                      variant="default"
-                      aria-label="Open Local Environment"
-                      title="Open Local Environment"
-                      onClick={() => { void props.openLocalEnvironment(); }}
-                    >
-                      Open
-                    </Button>
-                  )}
-                  secondaryAction={(
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      aria-label="Open Local Environment Settings"
-                      title="Open Local Environment Settings"
-                      onClick={props.openSettingsSurface}
-                    >
-                      {compactSettingsActionLabel()}
-                    </Button>
-                  )}
-                  tertiaryAction={(
-                    <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
-                      <Copy class="mr-1 h-3.5 w-3.5" />
-                      Copy Diagnostics
-                    </Button>
-                  )}
-                />
-              )}
-            </Show>
-
-            <Show when={remoteEnvironmentIssue()}>
-              {(issue) => (
-                <IssueCard
-                  issue={issue()}
-                  issueRef={props.issueRef}
-                  primaryAction={(
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => {
-                        if (issue().ssh_details) {
-                          void props.openSSHEnvironment(issue().ssh_details!, 'connect');
-                          return;
-                        }
-                        void props.openRemoteEnvironment(issue().target_url);
-                      }}
-                    >
-                      Retry
-                    </Button>
-                  )}
-                  tertiaryAction={(
-                    <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
-                      <Copy class="mr-1 h-3.5 w-3.5" />
-                      Copy Diagnostics
-                    </Button>
-                  )}
-                />
-              )}
-            </Show>
-
-            <EnvironmentLibraryPanel
-              snapshot={props.snapshot}
-              filter={props.libraryFilter}
-              query={props.libraryQuery}
-              entries={props.libraryEntries}
-              filterOptions={libraryFilterOptions()}
-              busyAction={props.busyAction}
-              setFilter={props.setLibraryFilter}
-              setQuery={props.setLibraryQuery}
-              openCreateConnectionDialog={props.openCreateConnectionDialog}
-              openEnvironment={props.openEnvironment}
-              saveEnvironment={props.saveEnvironmentFromLibrary}
-              editEnvironment={props.editEnvironment}
-              deleteEnvironment={props.deleteEnvironment}
-            />
-          </div>
+          <EnvironmentCardsPanel
+            snapshot={props.snapshot}
+            localEnvironment={props.localEnvironment}
+            settingsSurface={props.settingsSurface}
+            filter={props.libraryFilter}
+            query={props.libraryQuery}
+            entries={props.libraryEntries}
+            filterOptions={libraryFilterOptions()}
+            busyAction={props.busyAction}
+            setFilter={props.setLibraryFilter}
+            setQuery={props.setLibraryQuery}
+            openLocalEnvironment={props.openLocalEnvironment}
+            openSettingsSurface={props.openSettingsSurface}
+            openEnvironment={props.openEnvironment}
+            saveEnvironment={props.saveEnvironmentFromLibrary}
+            editEnvironment={props.editEnvironment}
+            deleteEnvironment={props.deleteEnvironment}
+          />
         </Show>
       </main>
     </div>
   );
 }
 
-function LauncherStatTile(props: Readonly<{
-  label: string;
-  value: string;
-  detail: string;
-}>) {
-  return (
-    <div class="rounded-2xl border border-border/60 bg-background/70 px-4 py-3 shadow-sm backdrop-blur">
-      <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">{props.label}</div>
-      <div class="mt-2 text-lg font-semibold tracking-tight text-foreground">{props.value}</div>
-      <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.detail}</div>
-    </div>
-  );
-}
-
-function SessionRail(props: Readonly<{
+function EnvironmentCardsPanel(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
+  localEnvironment: DesktopEnvironmentEntry | null;
+  settingsSurface: DesktopSettingsSurfaceSnapshot;
+  filter: EnvironmentLibraryFilter;
+  query: string;
+  entries: readonly DesktopEnvironmentEntry[];
+  filterOptions: readonly Readonly<{ value: string; label: string }>[];
   busyAction: BusyAction;
-  focusEnvironmentWindow: (sessionKey: string, errorTarget?: 'connect' | 'settings' | 'dialog') => Promise<boolean>;
-  closeLauncherOrQuit: () => Promise<void>;
+  setFilter: (value: EnvironmentLibraryFilter) => void;
+  setQuery: (value: string) => void;
+  openLocalEnvironment: () => Promise<void>;
+  openSettingsSurface: () => void;
+  openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
+  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
+  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
   return (
-    <Card class="overflow-hidden border-border/80 bg-card/80 shadow-sm backdrop-blur">
-      <CardHeader class="gap-2 border-b border-border/70 px-4 py-4 sm:px-5">
-        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div class="min-w-0">
-            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Active sessions</div>
-            <CardTitle class="mt-1 text-base">Environment Windows</CardTitle>
-            <CardDescription class="mt-1 text-sm">
-              {props.snapshot.open_windows.length > 0
-                ? 'Jump back into any environment without opening duplicates.'
-                : 'No environment windows are open yet.'}
-            </CardDescription>
-          </div>
-          <div class="flex shrink-0 flex-col items-start gap-2 self-start md:items-end">
-            <div class={PANEL_HEADER_BADGES_CLASS}>
+    <div class="space-y-4">
+      <Card class="overflow-hidden border-border/70 bg-card/85 shadow-sm">
+        <CardContent class="flex flex-col gap-3 px-4 py-4 sm:px-5">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-wrap items-center gap-2">
+              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                Local Environment pinned
+              </Tag>
               <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.snapshot.open_windows.length === 1 ? '1 window' : `${props.snapshot.open_windows.length} windows`}
+                {environmentLibraryCount(props.snapshot, 'all')} remote entries
+              </Tag>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {props.snapshot.open_windows.length === 1 ? '1 active session' : `${props.snapshot.open_windows.length} active sessions`}
               </Tag>
             </div>
-            <div class={PANEL_HEADER_ACTIONS_CLASS}>
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label={props.snapshot.close_action_label}
-                title={props.snapshot.close_action_label}
-                onClick={() => { void props.closeLauncherOrQuit(); }}
-              >
-                {compactCloseActionLabel(props.snapshot.close_action_label)}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent class="px-4 py-4 sm:px-5">
-        <Show
-          when={props.snapshot.open_windows.length > 0}
-          fallback={(
-            <div class="rounded-2xl border border-dashed border-border/70 bg-background/60 px-4 py-6 text-sm text-muted-foreground">
-              Open the Local Environment or connect another environment to start a session window.
-            </div>
-          )}
-        >
-          <div class="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-            <For each={props.snapshot.open_windows}>
-              {(openWindow) => (
-                <SessionRailCard
-                  window={openWindow}
-                  busyAction={props.busyAction}
-                  focusEnvironmentWindow={props.focusEnvironmentWindow}
+            <div class="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center">
+              <div class="relative w-full lg:w-[20rem]">
+                <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={props.query}
+                  onInput={(event) => props.setQuery(event.currentTarget.value)}
+                  placeholder="Search label, Redeven URL, or SSH target"
+                  size="sm"
+                  class="w-full pl-9"
                 />
-              )}
-            </For>
+              </div>
+              <div class="overflow-x-auto">
+                <SegmentedControl
+                  value={props.filter}
+                  onChange={(value) => props.setFilter(value as EnvironmentLibraryFilter)}
+                  options={props.filterOptions.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
+                  size="sm"
+                />
+              </div>
+            </div>
           </div>
-        </Show>
-      </CardContent>
-    </Card>
-  );
-}
+        </CardContent>
+      </Card>
 
-function SessionRailCard(props: Readonly<{
-  window: DesktopOpenEnvironmentWindow;
-  busyAction: BusyAction;
-  focusEnvironmentWindow: (sessionKey: string, errorTarget?: 'connect' | 'settings' | 'dialog') => Promise<boolean>;
-}>) {
-  return (
-    <div class="rounded-2xl border border-border/70 bg-background/80 px-4 py-4 shadow-sm">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <div class="truncate text-sm font-medium text-foreground">{props.window.label}</div>
-            <Tag
-              variant={props.window.target_kind === 'managed_local' ? 'primary' : 'success'}
-              tone="soft"
-              size="sm"
-              class="cursor-default whitespace-nowrap"
-            >
-              {props.window.target_kind === 'managed_local' ? 'Local' : 'Open'}
-            </Tag>
-          </div>
-          <div class="mt-2 break-all font-mono text-xs text-muted-foreground">{props.window.local_ui_url}</div>
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          loading={props.busyAction === 'focus_environment_window'}
-          onClick={() => {
-            void props.focusEnvironmentWindow(props.window.session_key);
-          }}
-        >
-          Focus
-        </Button>
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <LocalEnvironmentCard
+          environment={props.localEnvironment}
+          settingsSurface={props.settingsSurface}
+          busyAction={props.busyAction}
+          openLocalEnvironment={props.openLocalEnvironment}
+          openSettingsSurface={props.openSettingsSurface}
+        />
+
+        <For each={props.entries}>
+          {(environment) => (
+            <EnvironmentConnectionCard
+              environment={environment}
+              busyAction={props.busyAction}
+              openEnvironment={props.openEnvironment}
+              saveEnvironment={props.saveEnvironment}
+              editEnvironment={props.editEnvironment}
+              deleteEnvironment={props.deleteEnvironment}
+            />
+          )}
+        </For>
       </div>
+
+      <Show when={props.entries.length === 0}>
+        <div class="rounded-2xl border border-dashed border-border/70 bg-card/75 px-5 py-8 text-center shadow-sm">
+          <div class="text-sm font-medium text-foreground">No remote environment cards match this view.</div>
+          <div class="mt-1 text-xs leading-5 text-muted-foreground">Try another filter, clear the search, or add a new connection.</div>
+        </div>
+      </Show>
     </div>
   );
 }
 
-function LocalEnvironmentFeaturedCard(props: Readonly<{
+function LocalEnvironmentCard(props: Readonly<{
   environment: DesktopEnvironmentEntry | null;
   settingsSurface: DesktopSettingsSurfaceSnapshot;
   busyAction: BusyAction;
@@ -1791,163 +1768,520 @@ function LocalEnvironmentFeaturedCard(props: Readonly<{
   openSettingsSurface: () => void;
 }>) {
   const isOpen = createMemo(() => props.environment?.is_open === true);
-  const spotlightLabel = createMemo(() => props.environment?.local_ui_url ? 'Current runtime' : 'Next start');
-  const spotlightValue = createMemo(() => (
-    props.environment?.local_ui_url || props.settingsSurface.next_start_address_display
-  ));
-  const spotlightDetail = createMemo(() => (
-    props.environment?.local_ui_url
-      ? 'Desktop already has a live managed runtime for this machine.'
-      : 'Desktop will use this address the next time it starts the managed runtime.'
-  ));
+  const runtimeAddress = createMemo(() => props.environment?.local_ui_url || props.settingsSurface.next_start_address_display);
+  const runtimeLabel = createMemo(() => props.environment?.local_ui_url ? 'Current runtime' : 'Next start');
+  const summaryByID = createMemo(() => new Map(props.settingsSurface.summary_items.map((item) => [item.id, item])));
+  const localFacts = createMemo(() => [
+    {
+      label: 'Visibility',
+      value: summaryByID().get('visibility')?.value ?? 'Local only',
+    },
+    {
+      label: 'Password',
+      value: summaryByID().get('password_state')?.value ?? props.settingsSurface.password_state_label,
+    },
+    {
+      label: 'Bootstrap',
+      value: summaryByID().get('next_start')?.value ?? props.settingsSurface.bootstrap_status_label,
+    },
+  ]);
 
   return (
-    <Card class="redeven-feature-card overflow-hidden shadow-lg">
-      <CardHeader class="gap-4 border-b border-border/70 px-5 py-5 sm:px-6">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div class="min-w-0">
-            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Local environment</div>
-            <CardTitle class="mt-1 text-[1.75rem] tracking-tight">Local Environment</CardTitle>
-            <CardDescription class="mt-2 max-w-2xl text-sm leading-6">
-              Always available on this device. Desktop manages startup, reuse, recovery, and local access settings for this environment.
+    <Card class={cn(
+      'redeven-environment-card redeven-environment-card--local h-full overflow-hidden border shadow-sm',
+      isOpen()
+        ? 'border-emerald-500/30 bg-emerald-500/[0.035]'
+        : 'border-primary/25 bg-primary/[0.04]',
+    )}>
+      <CardHeader class="pb-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <CardTitle class="truncate text-sm sm:text-base">Local Environment</CardTitle>
+              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                Local
+              </Tag>
+              <Tag variant={isOpen() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {isOpen() ? 'Open' : 'Ready'}
+              </Tag>
+            </div>
+            <CardDescription class="mt-1 text-xs">
+              Desktop-managed on this device.
             </CardDescription>
           </div>
-          <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:items-end">
-            <div class={PANEL_HEADER_BADGES_CLASS}>
-              <span title={isOpen() ? 'Local Environment already has an open session window.' : 'Local Environment is ready to open.'}>
-                <Tag variant={isOpen() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                  {isOpen() ? 'Open' : 'Ready'}
-                </Tag>
-              </span>
-              <span title={props.settingsSurface.password_state_label}>
-                <Tag
-                  variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
-                  tone="soft"
-                  size="sm"
-                  class="cursor-default whitespace-nowrap"
-                >
-                  {compactPasswordStateTagLabel(props.settingsSurface.password_state_label)}
-                </Tag>
-              </span>
-              <span title={props.settingsSurface.bootstrap_status_label}>
-                <Tag
-                  variant={props.settingsSurface.bootstrap_pending ? 'primary' : 'neutral'}
-                  tone="soft"
-                  size="sm"
-                  class="cursor-default whitespace-nowrap"
-                >
-                  {compactBootstrapStatusTagLabel(props.settingsSurface.bootstrap_status_label)}
-                </Tag>
-              </span>
-            </div>
+          <div class="flex flex-wrap justify-end gap-2">
+            <Tag
+              variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
+              tone="soft"
+              size="sm"
+              class="cursor-default whitespace-nowrap"
+            >
+              {compactPasswordStateTagLabel(props.settingsSurface.password_state_label)}
+            </Tag>
+            <Show when={props.settingsSurface.bootstrap_pending}>
+              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {compactBootstrapStatusTagLabel(props.settingsSurface.bootstrap_status_label)}
+              </Tag>
+            </Show>
           </div>
         </div>
       </CardHeader>
-      <CardContent class="space-y-5 px-5 py-5 sm:px-6">
-        <div class="grid gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
-          <div class="space-y-4">
-            <div class="rounded-[1.35rem] border border-border/70 bg-background/80 px-4 py-4 shadow-sm">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">{spotlightLabel()}</div>
-              <div class={cn(
-                'mt-3 text-sm font-medium text-foreground',
-                (props.environment?.local_ui_url || props.settingsSurface.next_start_address_display) !== '' && 'break-all font-mono text-xs sm:text-sm',
-              )}>
-                {spotlightValue()}
-              </div>
-              <div class="mt-3 text-xs leading-5 text-muted-foreground">{spotlightDetail()}</div>
-            </div>
-
-            <div class="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="default"
-                loading={props.busyAction === 'open_local_environment' || props.busyAction === 'focus_environment_window'}
-                aria-label={isOpen() ? 'Focus Local Environment' : 'Open Local Environment'}
-                title={isOpen() ? 'Focus Local Environment' : 'Open Local Environment'}
-                onClick={() => {
-                  void props.openLocalEnvironment();
-                }}
-              >
-                {compactOpenLocalEnvironmentLabel(isOpen())}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label="Open Local Environment Settings"
-                title="Open Local Environment Settings"
-                onClick={props.openSettingsSurface}
-              >
-                <Settings class="mr-1 h-3.5 w-3.5" />
-                {compactSettingsActionLabel()}
-              </Button>
-            </div>
-          </div>
-
-          <div class="grid gap-3 sm:grid-cols-2">
-            <For each={props.settingsSurface.summary_items}>
-              {(item) => <SummaryItemTile item={item} />}
-            </For>
+      <CardContent class="space-y-3 pb-3">
+        <div class="rounded-xl border border-border/70 bg-background/80 px-3 py-3">
+          <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{runtimeLabel()}</div>
+          <div class={cn(
+            'mt-2 text-sm font-medium text-foreground',
+            runtimeAddress() !== '' && 'break-all font-mono text-xs leading-6',
+          )}>
+            {runtimeAddress()}
           </div>
         </div>
+        <CardFactGrid items={localFacts()} />
       </CardContent>
+      <CardFooter class="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+        <Button
+          size="sm"
+          variant="default"
+          loading={props.busyAction === 'open_local_environment' || props.busyAction === 'focus_environment_window'}
+          onClick={() => {
+            void props.openLocalEnvironment();
+          }}
+        >
+          {compactOpenLocalEnvironmentLabel(isOpen())}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label="Open Local Environment Settings"
+          title="Open Local Environment Settings"
+          onClick={props.openSettingsSurface}
+        >
+          <Settings class="mr-1 h-3.5 w-3.5" />
+          {compactSettingsActionLabel()}
+        </Button>
+      </CardFooter>
     </Card>
   );
 }
 
-function AddEnvironmentShortcutCard(props: Readonly<{
-  controlPlaneCount: number;
-  openCreateConnectionDialog: (message?: string) => void;
-  showControlPlanes: () => void;
+function CardFactGrid(props: Readonly<{
+  items: readonly Readonly<{
+    label: string;
+    value: string;
+    detail?: string;
+    monospace?: boolean;
+  }>[];
 }>) {
   return (
-    <Card class="overflow-hidden border-dashed border-border/80 bg-card/80 shadow-sm backdrop-blur">
-      <CardHeader class="gap-3 border-b border-border/70 px-5 py-5">
-        <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Grow the library</div>
-        <CardTitle class="text-xl tracking-tight">Add Another Environment</CardTitle>
-        <CardDescription class="text-sm leading-6">
-          Save a Redeven Local UI origin or bootstrap a matching remote runtime over SSH. Control Plane management lives in its own tab.
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="flex h-full flex-col justify-between gap-5 px-5 py-5">
-        <div class="space-y-4">
-          <div class="grid gap-3 sm:grid-cols-2">
-            <div class="rounded-2xl border border-border/70 bg-background/75 px-4 py-4 shadow-sm">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Redeven URL</div>
-              <div class="mt-2 text-sm font-medium text-foreground">Attach to an existing Local UI origin</div>
-              <div class="mt-2 text-xs leading-5 text-muted-foreground">Best for another reachable machine that already runs Redeven.</div>
+    <div class="grid gap-2 sm:grid-cols-2">
+      <For each={props.items}>
+        {(item) => (
+          <div class="rounded-xl border border-border/70 bg-background/80 px-3 py-3">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{item.label}</div>
+            <div class={cn('mt-2 text-sm font-medium text-foreground', item.monospace && 'break-all font-mono text-xs leading-5')}>
+              {item.value}
             </div>
-            <div class="rounded-2xl border border-border/70 bg-background/75 px-4 py-4 shadow-sm">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">SSH bootstrap</div>
-              <div class="mt-2 text-sm font-medium text-foreground">Install and tunnel the matching release over SSH</div>
-              <div class="mt-2 text-xs leading-5 text-muted-foreground">Best for remote hosts that do not already have the right Redeven runtime installed.</div>
-            </div>
+            <Show when={trimString(item.detail)}>
+              <div class="mt-2 text-xs leading-5 text-muted-foreground">{item.detail}</div>
+            </Show>
           </div>
-          <div class="rounded-2xl border border-border/70 bg-muted/20 px-4 py-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.controlPlaneCount === 0 ? 'No providers yet' : `${props.controlPlaneCount} provider${props.controlPlaneCount === 1 ? '' : 's'}`}
-              </Tag>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                Control Planes tab
-              </Tag>
-            </div>
-            <div class="mt-3 text-xs leading-5 text-muted-foreground">
-              Keep environment switching focused here, then authorize and browse provider-backed environments separately when needed.
-            </div>
-          </div>
-        </div>
+        )}
+      </For>
+    </div>
+  );
+}
 
-        <div class="flex flex-wrap gap-2">
-          <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
-            <Plus class="mr-1 h-3.5 w-3.5" />
-            {compactAddConnectionLabel()}
-          </Button>
-          <Button size="sm" variant="outline" onClick={props.showControlPlanes}>
-            Browse Control Planes
-          </Button>
+function ControlPlaneInfoTile(props: Readonly<{
+  label: string;
+  value: string;
+  detail?: string;
+  monospace?: boolean;
+}>) {
+  return (
+    <div class="rounded-xl border border-border/70 bg-background px-3 py-3">
+      <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{props.label}</div>
+      <div class={cn('mt-2 text-sm font-medium text-foreground', props.monospace && 'break-all font-mono text-xs')}>
+        {props.value}
+      </div>
+      <Show when={props.detail}>
+        <div class="mt-2 text-xs leading-5 text-muted-foreground">{props.detail}</div>
+      </Show>
+    </div>
+  );
+}
+
+function EnvironmentConnectionCard(props: Readonly<{
+  environment: DesktopEnvironmentEntry;
+  busyAction: BusyAction;
+  openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
+  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
+  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
+  deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
+}>) {
+  const card = createMemo(() => buildEnvironmentCardModel(props.environment));
+  const metaFacts = createMemo(() => [
+    {
+      label: card().kind_label === 'SSH' ? 'Target' : 'Endpoint',
+      value: card().target_primary,
+      detail: card().target_secondary,
+      monospace: card().target_primary_monospace,
+    },
+    ...card().meta,
+  ]);
+
+  return (
+    <Card class={cn(
+      'redeven-environment-card h-full overflow-hidden border shadow-sm',
+      props.environment.is_open
+        ? 'border-emerald-500/30 bg-emerald-500/[0.03]'
+        : 'border-border/70 bg-background/85',
+    )}>
+      <CardHeader class="pb-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <CardTitle class="max-w-[14rem] truncate text-sm sm:text-base" title={props.environment.label}>
+                {props.environment.label}
+              </CardTitle>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {card().kind_label}
+              </Tag>
+              <Tag variant={environmentCardTagVariant(card().status_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {card().status_label}
+              </Tag>
+            </div>
+            <CardDescription class="mt-1 text-xs">
+              {card().source_label}
+            </CardDescription>
+          </div>
+          <Show
+            when={props.environment.last_used_at_ms > 0}
+            fallback={(
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                Never used
+              </Tag>
+            )}
+          >
+            <span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
+              <Clock class="h-3.5 w-3.5" />
+              Used
+            </span>
+          </Show>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-3 pb-3">
+        <CardFactGrid items={metaFacts()} />
+        <div class="text-xs text-muted-foreground">
+          {props.environment.last_used_at_ms > 0
+            ? `Last used ${formatTimestamp(props.environment.last_used_at_ms)}`
+            : 'This connection has not been opened from Desktop yet.'}
         </div>
       </CardContent>
+      <CardFooter class="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+        <Button
+          size="sm"
+          variant="default"
+          loading={
+            props.busyAction === 'open_remote_environment'
+            || props.busyAction === 'open_ssh_environment'
+            || props.busyAction === 'focus_environment_window'
+          }
+          onClick={() => {
+            void props.openEnvironment(props.environment, 'connect');
+          }}
+        >
+          {props.environment.open_action_label}
+        </Button>
+        <Show when={props.environment.can_save}>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={props.busyAction === 'save_environment'}
+            onClick={() => {
+              void props.saveEnvironment(props.environment);
+            }}
+          >
+            <Save class="mr-1 h-3.5 w-3.5" />
+            Save
+          </Button>
+        </Show>
+        <Show when={props.environment.can_edit}>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="text-muted-foreground"
+            onClick={() => props.editEnvironment(props.environment)}
+            aria-label={`Edit ${props.environment.label}`}
+            title="Edit connection"
+          >
+            <Pencil class="h-3.5 w-3.5" />
+          </Button>
+        </Show>
+        <Show when={props.environment.can_delete}>
+          <Button
+            size="sm"
+            variant="ghost"
+            class="text-muted-foreground hover:text-destructive"
+            onClick={() => props.deleteEnvironment(props.environment)}
+            aria-label={`Delete ${props.environment.label}`}
+            title="Delete connection"
+          >
+            <Trash class="h-3.5 w-3.5" />
+          </Button>
+        </Show>
+      </CardFooter>
     </Card>
+  );
+}
+
+function ControlPlanesPanel(props: Readonly<{
+  controlPlanes: readonly DesktopControlPlaneSummary[];
+  openWindows: readonly DesktopOpenEnvironmentWindow[];
+  busyAction: BusyAction;
+  openCreateControlPlaneDialog: (message?: string) => void;
+  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
+  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
+  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+}>) {
+  const providerEnvironmentCount = createMemo(() => (
+    props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
+  ));
+
+  return (
+    <div class="space-y-4">
+      <Card class="overflow-hidden border-border/70 bg-card/85 shadow-sm">
+        <CardContent class="flex flex-col gap-3 px-4 py-4 sm:px-5">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex flex-wrap items-center gap-2">
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {props.controlPlanes.length === 1 ? '1 provider' : `${props.controlPlanes.length} providers`}
+              </Tag>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {providerEnvironmentCount() === 1 ? '1 environment card' : `${providerEnvironmentCount()} environment cards`}
+              </Tag>
+            </div>
+            <div class="text-xs leading-5 text-muted-foreground">
+              Provider actions stay in the shelf. The grid below is only environments.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Show
+        when={props.controlPlanes.length > 0}
+        fallback={(
+          <Card class="overflow-hidden border-border/70 bg-card/85 shadow-sm">
+            <CardContent class="space-y-4 px-5 py-6 text-center">
+              <div class="text-base font-medium text-foreground">No Control Planes connected yet.</div>
+              <div class="text-sm text-muted-foreground">
+                Add a provider and its environments will appear here as cards.
+              </div>
+              <div class="flex justify-center">
+                <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
+                  <Plus class="mr-1 h-3.5 w-3.5" />
+                  Add Control Plane
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      >
+        <div class="space-y-4">
+          <For each={props.controlPlanes}>
+            {(controlPlane) => (
+              <ControlPlaneShelf
+                controlPlane={controlPlane}
+                openWindows={props.openWindows}
+                busyAction={props.busyAction}
+                openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                reconnectControlPlane={props.reconnectControlPlane}
+                refreshControlPlane={props.refreshControlPlane}
+                deleteControlPlane={props.deleteControlPlane}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function ControlPlaneEnvironmentCard(props: Readonly<{
+  controlPlane: DesktopControlPlaneSummary;
+  environment: DesktopControlPlaneSummary['environments'][number];
+  openWindow: DesktopOpenEnvironmentWindow | null;
+  busyAction: BusyAction;
+  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+}>) {
+  const statusLabel = createMemo(() => props.environment.status || props.environment.lifecycle_status || 'Unknown');
+  const statusTone = createMemo<'neutral' | 'primary' | 'success'>(() => (
+    props.openWindow ? 'success' : statusLabel().toLowerCase().includes('online') ? 'primary' : 'neutral'
+  ));
+  const facts = createMemo(() => [
+    {
+      label: 'Namespace',
+      value: props.environment.namespace_name || props.environment.namespace_public_id || 'Unknown',
+    },
+    {
+      label: 'Environment ID',
+      value: props.environment.env_public_id,
+      monospace: true,
+    },
+    {
+      label: 'Last seen',
+      value: formatTimestamp(props.environment.last_seen_at_unix_ms) || 'Unknown',
+    },
+  ]);
+
+  return (
+    <Card class={cn(
+      'redeven-environment-card h-full overflow-hidden border shadow-sm',
+      props.openWindow
+        ? 'border-emerald-500/30 bg-emerald-500/[0.03]'
+        : 'border-border/70 bg-background/85',
+    )}>
+      <CardHeader class="pb-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <CardTitle class="truncate text-sm sm:text-base">{props.environment.label}</CardTitle>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {props.controlPlane.provider.display_name}
+              </Tag>
+              <Tag variant={environmentCardTagVariant(statusTone())} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {props.openWindow ? 'Open' : statusLabel()}
+              </Tag>
+            </div>
+            <CardDescription class="mt-1 text-xs">
+              {trimString(props.environment.description) || props.controlPlane.account.user_display_name}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent class="space-y-3 pb-3">
+        <CardFactGrid items={facts()} />
+      </CardContent>
+      <CardFooter class="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+        <Button
+          size="sm"
+          variant="default"
+          loading={props.busyAction === 'open_control_plane_environment' || props.busyAction === 'focus_environment_window'}
+          onClick={() => {
+            void props.openControlPlaneEnvironment(props.controlPlane, props.environment.env_public_id);
+          }}
+        >
+          {props.openWindow ? 'Focus' : 'Open'}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function ControlPlaneShelf(props: Readonly<{
+  controlPlane: DesktopControlPlaneSummary;
+  openWindows: readonly DesktopOpenEnvironmentWindow[];
+  busyAction: BusyAction;
+  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
+  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
+  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+}>) {
+  const authorizationExpired = hasTimestampExpired(props.controlPlane.account.authorization_expires_at_unix_ms);
+
+  return (
+    <section class="space-y-3">
+      <div class="rounded-2xl border border-border/70 bg-card/85 px-4 py-4 shadow-sm">
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="text-base font-semibold tracking-tight text-foreground">{props.controlPlane.provider.display_name}</div>
+              <Tag
+                variant={authorizationExpired ? 'warning' : 'success'}
+                tone="soft"
+                size="sm"
+                class="cursor-default whitespace-nowrap"
+              >
+                {authorizationExpired ? 'Authorization expired' : 'Authorized'}
+              </Tag>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {props.controlPlane.environments.length === 1 ? '1 environment' : `${props.controlPlane.environments.length} environments`}
+              </Tag>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span>{props.controlPlane.account.user_display_name}</span>
+              <span class="font-mono">{props.controlPlane.provider.provider_origin}</span>
+              <span>Last sync {formatTimestamp(props.controlPlane.last_synced_at_ms) || 'Unknown'}</span>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              loading={props.busyAction === 'start_control_plane_connect'}
+              onClick={() => {
+                void props.reconnectControlPlane(props.controlPlane);
+              }}
+            >
+              Reconnect
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              loading={props.busyAction === 'refresh_control_plane'}
+              onClick={() => {
+                void props.refreshControlPlane(props.controlPlane);
+              }}
+            >
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              class="text-muted-foreground hover:text-destructive"
+              onClick={() => props.deleteControlPlane(props.controlPlane)}
+              aria-label={`Delete ${props.controlPlane.provider.display_name}`}
+              title="Delete Control Plane"
+            >
+              <Trash class="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <Show
+        when={props.controlPlane.environments.length > 0}
+        fallback={(
+          <div class="rounded-2xl border border-dashed border-border/70 bg-card/75 px-5 py-8 text-center shadow-sm">
+            <div class="text-sm font-medium text-foreground">No environments are currently available from this provider.</div>
+            <div class="mt-1 text-xs leading-5 text-muted-foreground">
+              Reconnect or refresh after the provider publishes accessible environments.
+            </div>
+          </div>
+        )}
+      >
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <For each={props.controlPlane.environments}>
+            {(environment) => {
+              const sessionKey = controlPlaneDesktopSessionKey(
+                props.controlPlane.provider.provider_origin,
+                environment.env_public_id,
+              );
+              const openWindow = props.openWindows.find((window) => window.session_key === sessionKey) ?? null;
+              return (
+                <ControlPlaneEnvironmentCard
+                  controlPlane={props.controlPlane}
+                  environment={environment}
+                  openWindow={openWindow}
+                  busyAction={props.busyAction}
+                  openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                />
+              );
+            }}
+          </For>
+        </div>
+      </Show>
+    </section>
   );
 }
 
@@ -2093,522 +2427,6 @@ function IssueCard(props: Readonly<{
   );
 }
 
-function EnvironmentLibraryPanel(props: Readonly<{
-  snapshot: DesktopWelcomeSnapshot;
-  filter: EnvironmentLibraryFilter;
-  query: string;
-  entries: readonly DesktopEnvironmentEntry[];
-  filterOptions: readonly Readonly<{ value: string; label: string }>[];
-  busyAction: BusyAction;
-  setFilter: (value: EnvironmentLibraryFilter) => void;
-  setQuery: (value: string) => void;
-  openCreateConnectionDialog: (message?: string) => void;
-  openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
-  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
-  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
-  deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
-}>) {
-  return (
-    <Card class="overflow-hidden shadow-sm">
-      <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div class="min-w-0">
-            <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Remote environments</div>
-            <CardTitle class="mt-1 text-lg">Environment Library</CardTitle>
-            <CardDescription class="mt-1 text-sm">
-              Compare saved, recent, and currently open connections in a card view built for quick switching.
-            </CardDescription>
-          </div>
-          <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:items-end">
-            <div class={PANEL_HEADER_BADGES_CLASS}>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {environmentLibraryCount(props.snapshot, 'all')} connections
-              </Tag>
-            </div>
-            <div class={PANEL_HEADER_ACTIONS_CLASS}>
-              <Button
-                size="sm"
-                variant="default"
-                aria-label="Add Connection"
-                title="Add Connection"
-                onClick={() => props.openCreateConnectionDialog()}
-              >
-                <Plus class="mr-1 h-3.5 w-3.5" />
-                {compactAddConnectionLabel()}
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div class="grid gap-3 pt-1 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-          <Input
-            value={props.query}
-            onInput={(event) => props.setQuery(event.currentTarget.value)}
-            placeholder="Search label, Redeven URL, or SSH target"
-            size="sm"
-            class="w-full"
-          />
-          <div class="overflow-x-auto">
-            <SegmentedControl
-              value={props.filter}
-              onChange={(value) => props.setFilter(value as EnvironmentLibraryFilter)}
-              options={props.filterOptions.map((option) => ({
-                value: option.value,
-                label: option.label,
-              }))}
-              size="sm"
-            />
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent class="px-0 py-0">
-        <Show
-          when={props.entries.length > 0}
-          fallback={(
-            <div class="px-4 py-10 text-center sm:px-5">
-              <div class="text-sm font-medium text-foreground">No connections match this view.</div>
-              <div class="mt-1 text-xs leading-5 text-muted-foreground">Try another filter or add a connection.</div>
-            </div>
-          )}
-        >
-          <div class="grid gap-4 px-4 py-4 sm:grid-cols-2 sm:px-5 sm:py-5 2xl:grid-cols-3">
-            <For each={props.entries}>
-              {(environment) => (
-                <EnvironmentConnectionCard
-                  environment={environment}
-                  busyAction={props.busyAction}
-                  openEnvironment={props.openEnvironment}
-                  saveEnvironment={props.saveEnvironment}
-                  editEnvironment={props.editEnvironment}
-                  deleteEnvironment={props.deleteEnvironment}
-                />
-              )}
-            </For>
-          </div>
-        </Show>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EnvironmentConnectionCard(props: Readonly<{
-  environment: DesktopEnvironmentEntry;
-  busyAction: BusyAction;
-  openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
-  saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
-  editEnvironment: (environment: DesktopEnvironmentEntry) => void;
-  deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
-}>) {
-  const card = createMemo(() => buildEnvironmentCardModel(props.environment));
-
-  return (
-    <Card class="redeven-grid-card h-full overflow-hidden border-border/70 bg-background/80 shadow-sm">
-      <CardContent class="flex h-full flex-col gap-4 px-4 py-4">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="max-w-[16rem] truncate text-base font-semibold text-foreground">{props.environment.label}</div>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {card().kind_label}
-              </Tag>
-              <Tag variant={environmentCardTagVariant(card().status_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {card().status_label}
-              </Tag>
-            </div>
-            <div class="mt-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">{card().source_label}</div>
-          </div>
-          <Show
-            when={props.environment.last_used_at_ms > 0}
-            fallback={(
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                Never used
-              </Tag>
-            )}
-          >
-            <span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
-              <Clock class="h-3.5 w-3.5" />
-              Recent
-            </span>
-          </Show>
-        </div>
-
-        <div class="rounded-2xl border border-border/70 bg-muted/20 px-4 py-4">
-          <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-            {card().kind_label === 'SSH' ? 'SSH target' : 'Connection target'}
-          </div>
-          <div class={cn(
-            'mt-3 text-sm font-medium text-foreground',
-            card().target_primary_monospace && 'break-all font-mono text-xs leading-6',
-          )}>
-            {card().target_primary}
-          </div>
-          <Show when={card().target_secondary !== ''}>
-            <div class={cn(
-              'mt-3 text-xs leading-5 text-muted-foreground',
-              card().target_secondary_monospace && 'break-all font-mono',
-            )}>
-              {card().target_secondary}
-            </div>
-          </Show>
-        </div>
-
-        <Show when={card().meta.length > 0}>
-          <div class="grid gap-2 sm:grid-cols-2">
-            <For each={card().meta}>
-              {(item) => (
-                <div class="rounded-xl border border-border/70 bg-background px-3 py-3">
-                  <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{item.label}</div>
-                  <div class={cn('mt-2 text-xs text-foreground', item.monospace && 'break-all font-mono')}>
-                    {item.value}
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
-
-        <div class="mt-auto space-y-3">
-          <div class="text-xs text-muted-foreground">
-            {props.environment.last_used_at_ms > 0
-              ? `Last used ${formatTimestamp(props.environment.last_used_at_ms)}`
-              : 'This connection has not been opened from Desktop yet.'}
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="default"
-              loading={
-                props.busyAction === 'open_remote_environment'
-                || props.busyAction === 'open_ssh_environment'
-                || props.busyAction === 'focus_environment_window'
-              }
-              onClick={() => {
-                void props.openEnvironment(props.environment, 'connect');
-              }}
-            >
-              {props.environment.open_action_label}
-            </Button>
-            <Show when={props.environment.can_save}>
-              <Button
-                size="sm"
-                variant="outline"
-                loading={props.busyAction === 'save_environment'}
-                onClick={() => {
-                  void props.saveEnvironment(props.environment);
-                }}
-              >
-                <Save class="mr-1 h-3.5 w-3.5" />
-                Save
-              </Button>
-            </Show>
-            <Show when={props.environment.can_edit}>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="text-muted-foreground"
-                onClick={() => props.editEnvironment(props.environment)}
-                aria-label={`Edit ${props.environment.label}`}
-                title="Edit connection"
-              >
-                <Pencil class="h-3.5 w-3.5" />
-              </Button>
-            </Show>
-            <Show when={props.environment.can_delete}>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="text-muted-foreground hover:text-destructive"
-                onClick={() => props.deleteEnvironment(props.environment)}
-                aria-label={`Delete ${props.environment.label}`}
-                title="Delete connection"
-              >
-                <Trash class="h-3.5 w-3.5" />
-              </Button>
-            </Show>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ControlPlanesPanel(props: Readonly<{
-  controlPlanes: readonly DesktopControlPlaneSummary[];
-  openWindows: readonly DesktopOpenEnvironmentWindow[];
-  busyAction: BusyAction;
-  openCreateControlPlaneDialog: (message?: string) => void;
-  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
-  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
-}>) {
-  return (
-    <div class="space-y-4">
-      <Card class="overflow-hidden shadow-sm">
-        <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div class="min-w-0">
-              <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Control planes</div>
-              <CardTitle class="mt-1 text-xl tracking-tight">Provider-backed Environments</CardTitle>
-              <CardDescription class="mt-1 max-w-3xl text-sm leading-6">
-                Authorize a compatible provider once, then open or refocus its environments directly from the desktop shell.
-              </CardDescription>
-            </div>
-            <div class="flex shrink-0 flex-col items-start gap-2 self-start lg:items-end">
-              <div class={PANEL_HEADER_BADGES_CLASS}>
-                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                  {props.controlPlanes.length === 1 ? '1 provider' : `${props.controlPlanes.length} providers`}
-                </Tag>
-              </div>
-              <div class={PANEL_HEADER_ACTIONS_CLASS}>
-                <Button
-                  size="sm"
-                  variant="default"
-                  aria-label="Add Control Plane"
-                  title="Add Control Plane"
-                  onClick={() => props.openCreateControlPlaneDialog()}
-                >
-                  <Plus class="mr-1 h-3.5 w-3.5" />
-                  Add Control Plane
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
-
-      <Show
-        when={props.controlPlanes.length > 0}
-        fallback={(
-          <Card class="overflow-hidden shadow-sm">
-            <CardContent class="space-y-4 px-5 py-6 text-center">
-              <div class="text-base font-medium text-foreground">No Control Planes connected yet.</div>
-              <div class="text-sm leading-6 text-muted-foreground">
-                Add a provider to let Desktop browse authorized environments from that control plane.
-              </div>
-              <div class="flex justify-center">
-                <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
-                  <Plus class="mr-1 h-3.5 w-3.5" />
-                  Add Control Plane
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-      >
-        <div class="space-y-4">
-          <For each={props.controlPlanes}>
-            {(controlPlane) => (
-              <ControlPlaneCard
-                controlPlane={controlPlane}
-                openWindows={props.openWindows}
-                busyAction={props.busyAction}
-                openControlPlaneEnvironment={props.openControlPlaneEnvironment}
-                reconnectControlPlane={props.reconnectControlPlane}
-                refreshControlPlane={props.refreshControlPlane}
-                deleteControlPlane={props.deleteControlPlane}
-              />
-            )}
-          </For>
-        </div>
-      </Show>
-    </div>
-  );
-}
-
-function ControlPlaneInfoTile(props: Readonly<{
-  label: string;
-  value: string;
-  detail?: string;
-  monospace?: boolean;
-}>) {
-  return (
-    <div class="rounded-xl border border-border/70 bg-background px-3 py-3">
-      <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{props.label}</div>
-      <div class={cn('mt-2 text-sm font-medium text-foreground', props.monospace && 'break-all font-mono text-xs')}>
-        {props.value}
-      </div>
-      <Show when={props.detail}>
-        <div class="mt-2 text-xs leading-5 text-muted-foreground">{props.detail}</div>
-      </Show>
-    </div>
-  );
-}
-
-function ControlPlaneEnvironmentCard(props: Readonly<{
-  controlPlane: DesktopControlPlaneSummary;
-  environment: DesktopControlPlaneSummary['environments'][number];
-  openWindow: DesktopOpenEnvironmentWindow | null;
-  busyAction: BusyAction;
-  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
-}>) {
-  const statusLabel = createMemo(() => props.environment.status || props.environment.lifecycle_status || 'Unknown');
-  const statusTone = createMemo<'neutral' | 'primary' | 'success'>(() => (
-    props.openWindow ? 'success' : statusLabel().toLowerCase().includes('online') ? 'primary' : 'neutral'
-  ));
-
-  return (
-    <div class="rounded-2xl border border-border/70 bg-background/80 px-4 py-4 shadow-sm">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-2">
-            <div class="truncate text-sm font-semibold text-foreground">{props.environment.label}</div>
-            <Tag variant={environmentCardTagVariant(statusTone())} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {props.openWindow ? 'Open' : statusLabel()}
-            </Tag>
-          </div>
-          <div class="mt-2 break-all font-mono text-xs text-muted-foreground">{props.environment.env_public_id}</div>
-          <Show when={trimString(props.environment.description)}>
-            <div class="mt-2 text-xs leading-5 text-muted-foreground">{props.environment.description}</div>
-          </Show>
-        </div>
-      </div>
-
-      <div class="mt-4 grid gap-2 sm:grid-cols-2">
-        <ControlPlaneInfoTile
-          label="Namespace"
-          value={props.environment.namespace_name || props.environment.namespace_public_id || 'Unknown'}
-        />
-        <ControlPlaneInfoTile
-          label="Last seen"
-          value={formatTimestamp(props.environment.last_seen_at_unix_ms) || 'Unknown'}
-        />
-      </div>
-
-      <div class="mt-4 flex justify-end">
-        <Button
-          size="sm"
-          variant="default"
-          loading={props.busyAction === 'open_control_plane_environment' || props.busyAction === 'focus_environment_window'}
-          onClick={() => {
-            void props.openControlPlaneEnvironment(props.controlPlane, props.environment.env_public_id);
-          }}
-        >
-          {props.openWindow ? 'Focus' : 'Open'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function ControlPlaneCard(props: Readonly<{
-  controlPlane: DesktopControlPlaneSummary;
-  openWindows: readonly DesktopOpenEnvironmentWindow[];
-  busyAction: BusyAction;
-  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
-  reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
-  deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
-}>) {
-  const authorizationExpired = hasTimestampExpired(props.controlPlane.account.authorization_expires_at_unix_ms);
-  return (
-    <Card class="overflow-hidden shadow-sm">
-      <CardHeader class="gap-3 border-b border-border/70 px-4 py-4 sm:px-5">
-        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="text-lg font-semibold tracking-tight text-foreground">{props.controlPlane.provider.display_name}</div>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.controlPlane.provider.provider_id}
-              </Tag>
-              <Tag
-                variant={authorizationExpired ? 'warning' : 'success'}
-                tone="soft"
-                size="sm"
-                class="cursor-default whitespace-nowrap"
-              >
-                {authorizationExpired ? 'Authorization expired' : 'Authorized'}
-              </Tag>
-            </div>
-            <div class="mt-2 text-sm text-muted-foreground">
-              {props.controlPlane.account.user_display_name} · {props.controlPlane.account.user_public_id}
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              loading={props.busyAction === 'start_control_plane_connect'}
-              onClick={() => {
-                void props.reconnectControlPlane(props.controlPlane);
-              }}
-            >
-              Reconnect
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={props.busyAction === 'refresh_control_plane'}
-              onClick={() => {
-                void props.refreshControlPlane(props.controlPlane);
-              }}
-            >
-              Refresh
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              class="text-muted-foreground hover:text-destructive"
-              onClick={() => props.deleteControlPlane(props.controlPlane)}
-              aria-label={`Delete ${props.controlPlane.provider.display_name}`}
-              title="Delete Control Plane"
-            >
-              <Trash class="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-4 px-4 py-4 sm:px-5">
-        <div class="grid gap-3 lg:grid-cols-3">
-          <ControlPlaneInfoTile
-            label="Origin"
-            value={props.controlPlane.provider.provider_origin}
-            monospace
-          />
-          <ControlPlaneInfoTile
-            label="Authorization"
-            value={authorizationExpired
-              ? 'Expired'
-              : `Until ${formatTimestamp(props.controlPlane.account.authorization_expires_at_unix_ms) || 'Unknown'}`}
-            detail="Desktop stores a revocable desktop authorization for this provider."
-          />
-          <ControlPlaneInfoTile
-            label="Last sync"
-            value={formatTimestamp(props.controlPlane.last_synced_at_ms) || 'Unknown'}
-            detail={props.controlPlane.environments.length === 1
-              ? '1 environment available'
-              : `${props.controlPlane.environments.length} environments available`}
-          />
-        </div>
-
-        <Show
-          when={props.controlPlane.environments.length > 0}
-          fallback={<div class="text-sm text-muted-foreground">No environments are currently available from this Control Plane.</div>}
-        >
-          <div class="grid gap-3 xl:grid-cols-2">
-            <For each={props.controlPlane.environments}>
-              {(environment) => {
-                const sessionKey = controlPlaneDesktopSessionKey(
-                  props.controlPlane.provider.provider_origin,
-                  environment.env_public_id,
-                );
-                const openWindow = props.openWindows.find((window) => window.session_key === sessionKey) ?? null;
-                return (
-                  <ControlPlaneEnvironmentCard
-                    controlPlane={props.controlPlane}
-                    environment={environment}
-                    openWindow={openWindow}
-                    busyAction={props.busyAction}
-                    openControlPlaneEnvironment={props.openControlPlaneEnvironment}
-                  />
-                );
-              }}
-            </For>
-          </div>
-        </Show>
-      </CardContent>
-    </Card>
-  );
-}
 
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;

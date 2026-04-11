@@ -199,14 +199,15 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('fallback={<div class="h-full min-h-0 bg-background" />}');
   });
 
-  it('uses shared tooltip and aligned header rails for desktop help affordances', () => {
+  it('uses shared tooltip and compact card-grid helpers for desktop help affordances', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("import { DesktopTooltip } from './DesktopTooltip';");
     expect(appSrc).toContain('data-redeven-settings-help=""');
     expect(appSrc).not.toContain('title={tooltip()}');
-    expect(appSrc).toContain('const PANEL_HEADER_BADGES_CLASS =');
-    expect(appSrc).toContain('const PANEL_HEADER_ACTIONS_CLASS =');
+    expect(appSrc).toContain('redeven-launcher-toolbar');
+    expect(appSrc).toContain('redeven-environment-card');
+    expect(appSrc).toContain('function CardFactGrid');
   });
 
   it('renders desktop tooltips through a body-level portal so dialogs do not clip them', () => {
@@ -219,15 +220,17 @@ describe('DesktopWelcomeShell', () => {
     expect(tooltipSrc).toContain('fixed z-[220]');
   });
 
-  it('includes Environment Center tabs and card-based launcher copy inside the source', () => {
+  it('includes compact environment-card launcher copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Environment Center');
-    expect(appSrc).toContain('Switch Environment');
+    expect(appSrc).toContain('Connect Environment');
+    expect(appSrc).toContain('Environment Cards');
     expect(appSrc).toContain('Environments');
     expect(appSrc).toContain('Control Planes');
-    expect(appSrc).toContain('Add Another Environment');
+    expect(appSrc).toContain('Local Environment pinned');
+    expect(appSrc).toContain('Local Environment');
     expect(appSrc).toContain('<EnvironmentConnectionCard');
+    expect(appSrc).toContain('redeven-environment-card--local');
     expect(appSrc).toContain('Provider-backed Environments');
   });
 

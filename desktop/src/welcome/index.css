@@ -31,15 +31,14 @@ body {
     transparent;
 }
 
-.redeven-launcher-hero,
-.redeven-feature-card,
+.redeven-launcher-toolbar,
+.redeven-environment-card,
 .redeven-settings-hero {
   position: relative;
   overflow: hidden;
 }
 
-.redeven-launcher-hero::after,
-.redeven-feature-card::after,
+.redeven-launcher-toolbar::after,
 .redeven-settings-hero::after {
   content: '';
   position: absolute;
@@ -51,7 +50,7 @@ body {
   pointer-events: none;
 }
 
-.redeven-feature-card::before,
+.redeven-environment-card::before,
 .redeven-settings-hero::before {
   content: '';
   position: absolute;
@@ -62,7 +61,7 @@ body {
   pointer-events: none;
 }
 
-.redeven-grid-card {
+.redeven-environment-card {
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -70,10 +69,14 @@ body {
     background-color 180ms ease;
 }
 
-.redeven-grid-card:hover {
+.redeven-environment-card:hover {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--border) 70%, var(--primary) 30%);
   box-shadow: 0 22px 44px -34px rgba(15, 23, 42, 0.55);
+}
+
+.redeven-environment-card--local {
+  box-shadow: 0 20px 40px -34px rgba(37, 99, 235, 0.45);
 }
 
 .redeven-settings-preset[aria-pressed='true'] {

@@ -151,20 +151,17 @@ Visual hierarchy:
 
 - shell title: `Redeven Desktop`
 - shell surface title: `Connect Environment`
-- launcher hero:
-  - `Environment Center`
+- compact launcher header:
   - `Environments / Control Planes` tabs
-  - shell-wide session, connection, and provider counts
-- shared workbench rail:
-  - `Active Sessions`
+  - shell-wide open-window and card counts
+  - add / close actions
 - `Environments` tab:
-  - featured `Local Environment`
-  - `Add Another Environment`
-  - card-based `Environment Library`
-  - `All / Open / Recent / Saved` filters
+  - pinned `Local Environment` card
+  - compact search + `All / Open / Recent / Saved` toolbar
+  - shared card grid for Redeven URL and SSH entries
 - `Control Planes` tab:
-  - provider overview cards
-  - provider environment cards
+  - provider action shelves
+  - provider environment card grids
 - activity bar:
   - one item: `Connect Environment`
 
@@ -193,19 +190,18 @@ Interaction rules:
 - `Add Control Plane` opens a separate dialog that accepts only a Provider URL and then continues in the system browser.
 - The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
 - `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
-- `Active Sessions` stays visible across launcher tabs so users can refocus open windows without leaving the current context.
-- `Local Environment` remains the fixed first-class entry and renders as the featured card in the `Environments` tab.
-- `Add Another Environment` renders as a dedicated shortcut card rather than hiding the add action inside table chrome.
+- Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
+- `Local Environment` remains the fixed first-class entry and renders as the pinned first card in the `Environments` tab.
+- `Local Environment Settings` is reached from the `Settings` action inside the `Local Environment` card.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
   - explicitly saved connections
 - Open launcher entries switch their primary action from `Open` to `Focus`.
-- The launcher shows every currently open Environment window and can focus any of them without opening duplicates.
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
 - Saved SSH Environments render in that same card grid, with the SSH identity (`destination[:port]`) as the primary target and the forwarded Local UI surfaced as secondary detail when present.
-- Saved Control Planes render in a separate tab with provider-level reconnect/refresh/delete controls and per-environment open/focus actions.
+- Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and per-environment open/focus cards.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
