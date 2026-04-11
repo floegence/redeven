@@ -465,12 +465,12 @@ packages:
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
   '@floegence/floe-webapp-core@0.35.56':
-    resolution: {integrity: sha512-vT4gwhwbhk2d4FcpsJMFRldEtYM7+cV7ilugmyWu7hDq/5A9ZrxYWDEwkWXYwYxe/HFvOyjqFVDry1AqgRXPdg==}
+    resolution: {integrity: sha512-b4GuLSJJLvQwKq1dtmRT3vQTfrF0IhJSneGO7CljytK72m/bttFcF3IlW/kKjQt7yRSuLTG1iPSSsi9Z9S1Byg==}
     peerDependencies:
       solid-js: ^1.8.0
 
   '@floegence/floe-webapp-protocol@0.35.56':
-    resolution: {integrity: sha512-+Ln+3hOjaPnOyLtLUHwtj8n7gqpB3AlGZoXxMeVOKcvVw21q70R+6/JV2kD9BQ1h9SIKdCznGG9jkzwSxCamAA==}
+    resolution: {integrity: sha512-/LpUuDfDX4xKwS2sfJLILg6enWc1ZuUsVkBsOrqrjRAL1V04o/snnLFIfjabjaULvjOa5Paf75FDvmADiafsDA==}
     peerDependencies:
       solid-js: ^1.8.0
 
