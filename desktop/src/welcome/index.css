@@ -1,3 +1,4 @@
+@import '@fontsource-variable/inter';
 @import '@fontsource/iosevka/400.css';
 
 @import 'tailwindcss';
@@ -8,16 +9,19 @@
 
 :root {
   color-scheme: light dark;
+  --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Iosevka', 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 html,
 body {
   min-height: 100vh;
   margin: 0;
-  background:
-    radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 30%),
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 28%),
-    var(--background);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--background);
   color: var(--foreground);
 }
 
@@ -27,18 +31,227 @@ body {
 
 .redeven-welcome-surface {
   background:
-    linear-gradient(180deg, rgba(148, 163, 184, 0.05), transparent 18%),
-    transparent;
+    radial-gradient(ellipse at top right, color-mix(in srgb, var(--primary) 6%, transparent), transparent 50%),
+    radial-gradient(ellipse at bottom left, color-mix(in srgb, var(--info) 4%, transparent), transparent 50%),
+    var(--background);
 }
 
-.redeven-launcher-toolbar,
-.redeven-environment-card,
+/*
+ * Dark mode: strengthen structural borders inside our managed surfaces.
+ *
+ * The floe-webapp dark tokens place `--card` (10% lightness) and `--border`
+ * (18% lightness) uncomfortably close together. Once Tailwind dilutes borders
+ * with `/70` alpha, the structural seams of cards, dialogs, and status strips
+ * become nearly invisible against the card-colored dialog body.
+ *
+ * Override `--border` and `--input` within both the welcome surface and any
+ * modal dialog (rendered via Portal to document.body, so the descendant
+ * selector on `.redeven-welcome-surface` alone is not enough). This lifts every
+ * downstream `var(--border)` consumer — Tailwind `border-border`, custom CSS,
+ * and the Dialog component itself — to a visible contrast level.
+ */
+.dark .redeven-welcome-surface,
+.dark [role='dialog'][aria-modal='true'] {
+  --border: hsl(220 15% 26%);
+  --input: hsl(220 18% 22%);
+
+  /* Interior tiles inside a dialog sit on --card. Give them a slightly
+     different background so they read as distinct surfaces. */
+  --redeven-tile: hsl(222 28% 12%);
+}
+
+/* Light mode tile value — slightly warmer than card for a soft inset feel. */
+:root {
+  --redeven-tile: hsl(36 12% 94%);
+}
+
+/* ── Environment card grid ── */
+
+.redeven-environment-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .redeven-environment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .redeven-environment-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ── Environment cards ── */
+
+.redeven-environment-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.redeven-environment-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--border) 60%, var(--primary) 40%);
+  box-shadow:
+    0 4px 12px -4px color-mix(in srgb, var(--foreground) 8%, transparent),
+    0 12px 24px -8px color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.redeven-environment-card--featured {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 4%, var(--card)), var(--card));
+}
+
+.redeven-environment-card--open {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--success) 4%, var(--card)), var(--card));
+}
+
+.redeven-new-environment-card:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 12px -4px color-mix(in srgb, var(--primary) 8%, transparent),
+    0 12px 24px -8px color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
+/* ── Tabs ── */
+
+.redeven-console-tab {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  padding: 0.38rem 0.72rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.redeven-console-tab:hover {
+  color: var(--foreground);
+}
+
+.redeven-console-tab[data-active='true'] {
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+
+/* ── Filters ── */
+
+.redeven-console-filter {
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 9999px;
+  background: transparent;
+  padding: 0.34rem 0.68rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.redeven-console-filter:hover {
+  border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+  color: var(--foreground);
+}
+
+.redeven-console-filter[data-active='true'] {
+  border-color: color-mix(in srgb, var(--primary) 36%, transparent);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--foreground);
+}
+
+/* ── Banners ── */
+
+.redeven-console-banner {
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.redeven-console-banner--error {
+  border-color: color-mix(in srgb, var(--error) 20%, transparent);
+  background: color-mix(in srgb, var(--error) 6%, transparent);
+}
+
+/* ── Issue card ── */
+
+.redeven-console-issue {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--destructive, var(--error)) 3%, transparent), transparent),
+    var(--card);
+}
+
+/* ── Status badges ── */
+
+.redeven-console-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-radius: 9999px;
+  padding: 0.28rem 0.56rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.redeven-console-status[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--success) 28%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  color: color-mix(in srgb, var(--success) 82%, white 18%);
+}
+
+.redeven-console-status[data-tone='primary'] {
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: color-mix(in srgb, var(--primary) 88%, white 12%);
+}
+
+.redeven-console-status[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: color-mix(in srgb, var(--warning) 86%, white 14%);
+}
+
+.redeven-console-status[data-tone='neutral'] {
+  border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  color: color-mix(in srgb, var(--foreground) 76%, transparent);
+}
+
+.redeven-console-status__dot {
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 9999px;
+  background: currentColor;
+}
+
+/* ── Provider shelf ── */
+
+.redeven-launcher-head,
+.redeven-toolbar-strip,
+.redeven-provider-shelf,
 .redeven-settings-hero {
   position: relative;
   overflow: hidden;
 }
 
-.redeven-launcher-toolbar::after,
+.redeven-launcher-head::after,
+.redeven-provider-shelf::after,
 .redeven-settings-hero::after {
   content: '';
   position: absolute;
@@ -46,45 +259,94 @@ body {
   width: 16rem;
   height: 16rem;
   border-radius: 9999px;
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.12), transparent 68%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 12%, transparent), transparent 68%);
   pointer-events: none;
 }
 
-.redeven-environment-card::before,
+.redeven-launcher-head::after {
+  inset: auto -3rem -2.5rem auto;
+  width: 8rem;
+  height: 8rem;
+  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 8%, transparent), transparent 70%);
+}
+
+.redeven-toolbar-strip::after {
+  content: '';
+  position: absolute;
+  inset: auto auto -4.25rem -2rem;
+  width: 11rem;
+  height: 11rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 14%, transparent), transparent 72%);
+  pointer-events: none;
+}
+
+.redeven-launcher-head::before,
+.redeven-toolbar-strip::before,
+.redeven-provider-shelf::before,
 .redeven-settings-hero::before {
   content: '';
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 36%),
-    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 55%);
+    linear-gradient(135deg, color-mix(in srgb, var(--foreground) 3%, transparent), transparent 36%),
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 10%, transparent), transparent 55%);
   pointer-events: none;
 }
 
-.redeven-environment-card {
-  transition:
-    transform 180ms ease,
-    box-shadow 180ms ease,
-    border-color 180ms ease,
-    background-color 180ms ease;
+/* ── Empty state ── */
+
+.redeven-console-empty {
+  border: 1px dashed color-mix(in srgb, var(--foreground) 10%, transparent);
+  background: color-mix(in srgb, var(--foreground) 1.5%, transparent);
 }
 
-.redeven-environment-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--border) 70%, var(--primary) 30%);
-  box-shadow: 0 22px 44px -34px rgba(15, 23, 42, 0.55);
+/* ── Metadata rows ── */
+
+.redeven-metadata-row {
+  background: transparent;
 }
 
-.redeven-environment-card--local {
-  box-shadow: 0 20px 40px -34px rgba(37, 99, 235, 0.45);
-}
+/* ── Settings presets ── */
 
 .redeven-settings-preset[aria-pressed='true'] {
   transform: translateY(-1px);
 }
 
+/* ── Visibility preset cards ── */
+
+.redeven-visibility-card {
+  isolation: isolate;
+}
+
+.redeven-visibility-card[aria-checked='true'] {
+  background-image:
+    linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, transparent), transparent 48%);
+}
+
+.redeven-visibility-card:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* ── Settings status strip ── */
+
+.redeven-settings-statusbar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary) 3%, transparent), transparent 60%),
+    color-mix(in srgb, var(--card) 96%, var(--background) 4%);
+}
+
+/* ── Interior tile surface ── */
+
+.redeven-tile {
+  background-color: var(--redeven-tile, var(--card));
+}
+
+/* ── Monospace fonts ── */
+
 code,
 pre,
 .font-mono {
-  font-family: 'Iosevka', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
 }

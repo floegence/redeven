@@ -2,15 +2,17 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX 
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
 import {
   AlertCircle,
-  Clock,
+  Check,
   Copy,
   Globe,
+  Lock,
   Moon,
   Pencil,
   Plus,
   Save,
   Search,
   Settings,
+  Shield,
   Sun,
   Trash,
 } from '@floegence/floe-webapp-core/icons';
@@ -19,7 +21,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -35,7 +36,6 @@ import {
 import type {
   DesktopAccessMode,
   DesktopSettingsWorkbenchTab,
-  DesktopSettingsSummaryItem,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
 import type {
@@ -67,7 +67,6 @@ import {
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
   buildDesktopBootstrapStatus,
-  buildDesktopSettingsSummaryItems,
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
@@ -86,16 +85,18 @@ import {
   type SSHConnectionDialogAdvancedState,
 } from './sshConnectionDialogState';
 import {
-  compactAddConnectionLabel,
+  accessModeVisual,
   compactBootstrapStatusTagLabel,
   compactClearRequestLabel,
-  compactCloseActionLabel,
   compactOpenLocalEnvironmentLabel,
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
   compactSettingsFieldLabel,
+  describeNextStartAddress,
+  describeRuntimeAddress,
   isRedundantSettingsFieldLabel,
   compactSettingsActionLabel,
+  passwordStateVisualTone,
   plainTextFromHelpHTML,
 } from './welcomeCopy';
 import {
@@ -276,6 +277,24 @@ function formatTimestamp(unixMS: number): string {
   }
 }
 
+function formatRelativeTimestamp(unixMS: number): string {
+  if (!Number.isFinite(unixMS) || unixMS <= 0) {
+    return 'Never';
+  }
+  try {
+    const diff = Math.max(0, Date.now() - unixMS);
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'Just now';
+  } catch {
+    return formatTimestamp(unixMS) || 'Unknown';
+  }
+}
+
 function hasTimestampExpired(unixMS: number): boolean {
   return Number.isFinite(unixMS) && unixMS > 0 && unixMS <= Date.now();
 }
@@ -344,23 +363,6 @@ function passwordStateTagVariant(
       return 'success';
     default:
       return 'neutral';
-  }
-}
-
-function environmentCardTagVariant(tone: 'neutral' | 'primary' | 'success'): 'neutral' | 'primary' | 'success' {
-  return tone;
-}
-
-function summaryItemToneClasses(tone: DesktopSettingsSummaryItem['tone']): string {
-  switch (tone) {
-    case 'primary':
-      return 'border-primary/20 bg-primary/5';
-    case 'warning':
-      return 'border-amber-500/25 bg-amber-500/10';
-    case 'success':
-      return 'border-emerald-500/25 bg-emerald-500/10';
-    default:
-      return 'border-border/70 bg-background';
   }
 }
 
@@ -585,19 +587,37 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setDraft(snapshot().settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
   });
 
-  createEffect(() => {
-    if (visibleSurface() !== 'connect_environment' || !snapshot().issue) {
-      return;
-    }
-    queueMicrotask(() => issueRef?.focus());
-  });
+  {
+    let prevIssueTitle = '';
+    createEffect(() => {
+      if (visibleSurface() !== 'connect_environment' || !snapshot().issue) {
+        prevIssueTitle = '';
+        return;
+      }
+      const title = snapshot().issue!.title;
+      if (title === prevIssueTitle) {
+        return;
+      }
+      prevIssueTitle = title;
+      queueMicrotask(() => issueRef?.focus());
+    });
+  }
 
-  createEffect(() => {
-    if (!settingsError()) {
-      return;
-    }
-    queueMicrotask(() => settingsErrorRef?.focus());
-  });
+  {
+    let prevSettingsError = '';
+    createEffect(() => {
+      const error = settingsError();
+      if (!error) {
+        prevSettingsError = '';
+        return;
+      }
+      if (error === prevSettingsError) {
+        return;
+      }
+      prevSettingsError = error;
+      queueMicrotask(() => settingsErrorRef?.focus());
+    });
+  }
 
   async function refreshSnapshot(): Promise<void> {
     const nextSnapshot = await props.runtime.launcher.getSnapshot();
@@ -646,7 +666,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
   }
 
-  function openCreateConnectionDialog(message = ''): void {
+  function openCreateConnectionDialog(
+    message = '',
+    preferredKind: 'external_local_ui' | 'ssh_environment' = 'external_local_ui',
+  ): void {
     if (snapshot().surface !== 'connect_environment') {
       showConnectEnvironment(message || 'Open the launcher to add a connection.');
       return;
@@ -658,9 +681,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogError('');
     setControlPlaneDialogError('');
     setControlPlaneDialogState(null);
-    setConnectionDialogState(createExternalURLConnectionDialogState('create', {
-      external_local_ui_url: trimString(snapshot().suggested_remote_url),
-    }));
+    setConnectionDialogState(
+      preferredKind === 'ssh_environment'
+        ? createSSHConnectionDialogState('create', {
+          bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+        })
+        : createExternalURLConnectionDialogState('create', {
+          external_local_ui_url: trimString(snapshot().suggested_remote_url),
+        }),
+    );
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
@@ -1323,7 +1352,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           reconnectControlPlane={reconnectControlPlane}
           refreshControlPlane={refreshControlPlane}
           deleteControlPlane={setDeleteControlPlaneTarget}
-          closeLauncherOrQuit={closeLauncherOrQuit}
           copyDiagnostics={async () => {
             await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
             setFeedback('Diagnostics copied to the clipboard.');
@@ -1441,7 +1469,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   issueRef: (value: HTMLElement) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: () => void;
-  openCreateConnectionDialog: (message?: string) => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
   openCreateControlPlaneDialog: (message?: string) => void;
   openRemoteEnvironment: (
     targetURL: string,
@@ -1462,7 +1490,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
-  closeLauncherOrQuit: () => Promise<void>;
   copyDiagnostics: () => Promise<void>;
 }>) {
   const localEnvironmentIssue = createMemo(() => (
@@ -1471,10 +1498,11 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const remoteEnvironmentIssue = createMemo(() => (
     props.snapshot.issue?.scope === 'remote_environment' ? props.snapshot.issue : null
   ));
+  const remoteEnvironmentCount = createMemo(() => environmentLibraryCount(props.snapshot, 'all'));
   const libraryFilterOptions = createMemo(() => (
     LIBRARY_FILTERS.map((filter) => ({
       value: filter,
-      label: `${libraryFilterLabel(filter)} (${environmentLibraryCount(props.snapshot, filter)})`,
+      label: libraryFilterLabel(filter),
     }))
   ));
   const controlPlaneEnvironmentCount = createMemo(() => (
@@ -1483,251 +1511,228 @@ function ConnectEnvironmentSurface(props: Readonly<{
 
   return (
     <div class="redeven-welcome-surface h-full min-h-0 overflow-auto bg-background">
-      <main id="redeven-desktop-main" class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8">
-        <section class="redeven-launcher-toolbar rounded-[1.35rem] border border-border/70 bg-card/85 px-4 py-4 shadow-sm backdrop-blur sm:px-5">
-          <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div class="min-w-0">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Connect Environment</div>
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <h1 class="text-xl font-semibold tracking-tight text-foreground">
-                  {props.activeTab === 'environments' ? 'Environment Cards' : 'Provider-backed Environments'}
-                </h1>
-                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                  {props.snapshot.open_windows.length === 1 ? '1 open window' : `${props.snapshot.open_windows.length} open windows`}
-                </Tag>
-                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                  {props.activeTab === 'environments'
-                    ? `${environmentLibraryCount(props.snapshot, 'all') + 1} environment cards`
-                    : `${controlPlaneEnvironmentCount()} control plane environments`}
-                </Tag>
-              </div>
-              <div class="mt-2 text-xs leading-5 text-muted-foreground">
-                {props.activeTab === 'environments'
-                  ? 'Local, Redeven URL, and SSH targets now share the same compact card list.'
-                  : 'Each environment stays a card. Provider actions move into a slim shelf above each group.'}
-              </div>
+      <main id="redeven-desktop-main" class="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+        <header class="mb-5 space-y-4">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="space-y-1">
+              <h1 class="text-lg font-semibold tracking-tight text-foreground">Environments</h1>
+              <p class="text-xs text-muted-foreground">
+                Manage local and remote environments. Connect, configure, and switch between workspaces.
+              </p>
             </div>
-            <div class="flex w-full flex-col gap-3 xl:w-auto xl:items-end">
-              <div class="w-full max-w-[24rem] xl:w-[23rem]">
-                <SegmentedControl
-                  value={props.activeTab}
-                  onChange={(value) => props.setActiveTab(value as EnvironmentCenterTab)}
-                  options={ENVIRONMENT_CENTER_TABS.map((tab) => ({
-                    value: tab.value,
-                    label: tab.label,
-                  }))}
-                  size="sm"
-                />
-              </div>
-              <div class="flex flex-wrap gap-2 xl:justify-end">
-                <Show
-                  when={props.activeTab === 'environments'}
-                  fallback={(
-                    <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
-                      <Plus class="mr-1 h-3.5 w-3.5" />
-                      Add Control Plane
-                    </Button>
-                  )}
-                >
-                  <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
+            <div class="flex items-center gap-2">
+              <Show when={props.activeTab === 'environments'}>
+                <div class="relative w-full sm:w-[14.5rem]">
+                  <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={props.libraryQuery}
+                    onInput={(event) => props.setLibraryQuery(event.currentTarget.value)}
+                    placeholder="Search environments..."
+                    size="sm"
+                    class="w-full pl-9"
+                  />
+                </div>
+              </Show>
+              <Show
+                when={props.activeTab === 'environments'}
+                fallback={(
+                  <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
                     <Plus class="mr-1 h-3.5 w-3.5" />
-                    {compactAddConnectionLabel()}
+                    Connect Provider
                   </Button>
-                </Show>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  aria-label={props.snapshot.close_action_label}
-                  title={props.snapshot.close_action_label}
-                  onClick={() => { void props.closeLauncherOrQuit(); }}
-                >
-                  {compactCloseActionLabel(props.snapshot.close_action_label)}
+                )}
+              >
+                <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
+                  <Plus class="mr-1 h-3.5 w-3.5" />
+                  New
                 </Button>
-              </div>
+              </Show>
             </div>
           </div>
-        </section>
 
-        <Show when={props.feedback}>
-          <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
-            {props.feedback}
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <For each={ENVIRONMENT_CENTER_TABS}>
+                {(tab) => (
+                  <button
+                    type="button"
+                    class="redeven-console-tab"
+                    data-active={props.activeTab === tab.value}
+                    aria-pressed={props.activeTab === tab.value}
+                    onClick={() => props.setActiveTab(tab.value)}
+                  >
+                    {tab.label}
+                  </button>
+                )}
+              </For>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <Show
+                when={props.activeTab === 'environments'}
+                fallback={(
+                  <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{props.controlPlanes.length} providers</span>
+                    <span class="text-border">·</span>
+                    <span>{controlPlaneEnvironmentCount()} environments</span>
+                  </div>
+                )}
+              >
+                <For each={libraryFilterOptions()}>
+                  {(option) => (
+                    <button
+                      type="button"
+                      class="redeven-console-filter"
+                      data-active={props.libraryFilter === option.value}
+                      aria-pressed={props.libraryFilter === option.value}
+                      onClick={() => props.setLibraryFilter(option.value as EnvironmentLibraryFilter)}
+                    >
+                      {option.label}
+                    </button>
+                  )}
+                </For>
+                <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+                  <span>{remoteEnvironmentCount()} remote</span>
+                  <span class="text-border">·</span>
+                  <span>{props.snapshot.open_windows.length} live</span>
+                </div>
+              </Show>
+            </div>
           </div>
-        </Show>
+        </header>
 
-        <Show when={props.error}>
-          <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {props.error}
-          </div>
-        </Show>
+        <div class="space-y-3">
+          <Show when={props.feedback}>
+            <div class="redeven-console-banner rounded-xl px-3.5 py-2.5 text-sm text-foreground">
+              {props.feedback}
+            </div>
+          </Show>
 
-        <Show when={localEnvironmentIssue()}>
-          {(issue) => (
-            <IssueCard
-              issue={issue()}
-              issueRef={props.issueRef}
-              primaryAction={(
-                <Button
-                  size="sm"
-                  variant="default"
-                  aria-label="Open Local Environment"
-                  title="Open Local Environment"
-                  onClick={() => { void props.openLocalEnvironment(); }}
-                >
-                  Open
-                </Button>
-              )}
-              secondaryAction={(
-                <Button
-                  size="sm"
-                  variant="outline"
-                  aria-label="Open Local Environment Settings"
-                  title="Open Local Environment Settings"
-                  onClick={props.openSettingsSurface}
-                >
-                  {compactSettingsActionLabel()}
-                </Button>
-              )}
-              tertiaryAction={(
-                <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
-                  <Copy class="mr-1 h-3.5 w-3.5" />
-                  Copy Diagnostics
-                </Button>
-              )}
-            />
-          )}
-        </Show>
+          <Show when={props.error}>
+            <div role="alert" class="redeven-console-banner redeven-console-banner--error rounded-xl px-3.5 py-2.5 text-sm text-destructive">
+              {props.error}
+            </div>
+          </Show>
 
-        <Show when={remoteEnvironmentIssue()}>
-          {(issue) => (
-            <IssueCard
-              issue={issue()}
-              issueRef={props.issueRef}
-              primaryAction={(
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={() => {
-                    if (issue().ssh_details) {
-                      void props.openSSHEnvironment(issue().ssh_details!, 'connect');
-                      return;
-                    }
-                    void props.openRemoteEnvironment(issue().target_url);
-                  }}
-                >
-                  Retry
-                </Button>
-              )}
-              tertiaryAction={(
-                <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
-                  <Copy class="mr-1 h-3.5 w-3.5" />
-                  Copy Diagnostics
-                </Button>
-              )}
-            />
-          )}
-        </Show>
+          <Show when={localEnvironmentIssue()}>
+            {(issue) => (
+              <IssueCard
+                issue={issue()}
+                issueRef={props.issueRef}
+                primaryAction={(
+                  <Button
+                    size="sm"
+                    variant="default"
+                    aria-label="Open Local Environment"
+                    title="Open Local Environment"
+                    onClick={() => { void props.openLocalEnvironment(); }}
+                  >
+                    Open
+                  </Button>
+                )}
+                secondaryAction={(
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label="Open Local Environment Settings"
+                    title="Open Local Environment Settings"
+                    onClick={props.openSettingsSurface}
+                  >
+                    {compactSettingsActionLabel()}
+                  </Button>
+                )}
+                tertiaryAction={(
+                  <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
+                    <Copy class="mr-1 h-3.5 w-3.5" />
+                    Copy Diagnostics
+                  </Button>
+                )}
+              />
+            )}
+          </Show>
 
-        <Show
-          when={props.activeTab === 'environments'}
-          fallback={(
-            <ControlPlanesPanel
-              controlPlanes={props.controlPlanes}
-              openWindows={props.snapshot.open_windows}
+          <Show when={remoteEnvironmentIssue()}>
+            {(issue) => (
+              <IssueCard
+                issue={issue()}
+                issueRef={props.issueRef}
+                primaryAction={(
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => {
+                      if (issue().ssh_details) {
+                        void props.openSSHEnvironment(issue().ssh_details!, 'connect');
+                        return;
+                      }
+                      void props.openRemoteEnvironment(issue().target_url);
+                    }}
+                  >
+                    Retry
+                  </Button>
+                )}
+                tertiaryAction={(
+                  <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
+                    <Copy class="mr-1 h-3.5 w-3.5" />
+                    Copy Diagnostics
+                  </Button>
+                )}
+              />
+            )}
+          </Show>
+
+          <Show
+            when={props.activeTab === 'environments'}
+            fallback={(
+              <ControlPlanesPanel
+                controlPlanes={props.controlPlanes}
+                openWindows={props.snapshot.open_windows}
+                busyAction={props.busyAction}
+                openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
+                openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                reconnectControlPlane={props.reconnectControlPlane}
+                refreshControlPlane={props.refreshControlPlane}
+                deleteControlPlane={props.deleteControlPlane}
+              />
+            )}
+          >
+            <EnvironmentCardsPanel
+              localEnvironment={props.localEnvironment}
+              settingsSurface={props.settingsSurface}
+              entries={props.libraryEntries}
+              showQuickAddCards={props.libraryFilter === 'all' && trimString(props.libraryQuery) === ''}
               busyAction={props.busyAction}
-              openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
-              openControlPlaneEnvironment={props.openControlPlaneEnvironment}
-              reconnectControlPlane={props.reconnectControlPlane}
-              refreshControlPlane={props.refreshControlPlane}
-              deleteControlPlane={props.deleteControlPlane}
+              openLocalEnvironment={props.openLocalEnvironment}
+              openSettingsSurface={props.openSettingsSurface}
+              openCreateConnectionDialog={props.openCreateConnectionDialog}
+              openEnvironment={props.openEnvironment}
+              saveEnvironment={props.saveEnvironmentFromLibrary}
+              editEnvironment={props.editEnvironment}
+              deleteEnvironment={props.deleteEnvironment}
             />
-          )}
-        >
-          <EnvironmentCardsPanel
-            snapshot={props.snapshot}
-            localEnvironment={props.localEnvironment}
-            settingsSurface={props.settingsSurface}
-            filter={props.libraryFilter}
-            query={props.libraryQuery}
-            entries={props.libraryEntries}
-            filterOptions={libraryFilterOptions()}
-            busyAction={props.busyAction}
-            setFilter={props.setLibraryFilter}
-            setQuery={props.setLibraryQuery}
-            openLocalEnvironment={props.openLocalEnvironment}
-            openSettingsSurface={props.openSettingsSurface}
-            openEnvironment={props.openEnvironment}
-            saveEnvironment={props.saveEnvironmentFromLibrary}
-            editEnvironment={props.editEnvironment}
-            deleteEnvironment={props.deleteEnvironment}
-          />
-        </Show>
+          </Show>
+        </div>
       </main>
     </div>
   );
 }
 
 function EnvironmentCardsPanel(props: Readonly<{
-  snapshot: DesktopWelcomeSnapshot;
   localEnvironment: DesktopEnvironmentEntry | null;
   settingsSurface: DesktopSettingsSurfaceSnapshot;
-  filter: EnvironmentLibraryFilter;
-  query: string;
   entries: readonly DesktopEnvironmentEntry[];
-  filterOptions: readonly Readonly<{ value: string; label: string }>[];
+  showQuickAddCards: boolean;
   busyAction: BusyAction;
-  setFilter: (value: EnvironmentLibraryFilter) => void;
-  setQuery: (value: string) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: () => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
   return (
-    <div class="space-y-4">
-      <Card class="overflow-hidden border-border/70 bg-card/85 shadow-sm">
-        <CardContent class="flex flex-col gap-3 px-4 py-4 sm:px-5">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex flex-wrap items-center gap-2">
-              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                Local Environment pinned
-              </Tag>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {environmentLibraryCount(props.snapshot, 'all')} remote entries
-              </Tag>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.snapshot.open_windows.length === 1 ? '1 active session' : `${props.snapshot.open_windows.length} active sessions`}
-              </Tag>
-            </div>
-            <div class="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center">
-              <div class="relative w-full lg:w-[20rem]">
-                <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={props.query}
-                  onInput={(event) => props.setQuery(event.currentTarget.value)}
-                  placeholder="Search label, Redeven URL, or SSH target"
-                  size="sm"
-                  class="w-full pl-9"
-                />
-              </div>
-              <div class="overflow-x-auto">
-                <SegmentedControl
-                  value={props.filter}
-                  onChange={(value) => props.setFilter(value as EnvironmentLibraryFilter)}
-                  options={props.filterOptions.map((option) => ({
-                    value: option.value,
-                    label: option.label,
-                  }))}
-                  size="sm"
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div class="space-y-3">
+      <div class="redeven-environment-grid">
         <LocalEnvironmentCard
           environment={props.localEnvironment}
           settingsSurface={props.settingsSurface}
@@ -1748,12 +1753,17 @@ function EnvironmentCardsPanel(props: Readonly<{
             />
           )}
         </For>
+
+        <Show when={props.showQuickAddCards}>
+          <NewEnvironmentPlaceholderCard
+            openCreateConnectionDialog={props.openCreateConnectionDialog}
+          />
+        </Show>
       </div>
 
-      <Show when={props.entries.length === 0}>
-        <div class="rounded-2xl border border-dashed border-border/70 bg-card/75 px-5 py-8 text-center shadow-sm">
-          <div class="text-sm font-medium text-foreground">No remote environment cards match this view.</div>
-          <div class="mt-1 text-xs leading-5 text-muted-foreground">Try another filter, clear the search, or add a new connection.</div>
+      <Show when={props.entries.length === 0 && !props.showQuickAddCards}>
+        <div class="redeven-console-empty rounded-2xl px-4 py-3 text-sm text-muted-foreground">
+          No environment cards match the current search or filter.
         </div>
       </Show>
     </div>
@@ -1768,80 +1778,69 @@ function LocalEnvironmentCard(props: Readonly<{
   openSettingsSurface: () => void;
 }>) {
   const isOpen = createMemo(() => props.environment?.is_open === true);
-  const runtimeAddress = createMemo(() => props.environment?.local_ui_url || props.settingsSurface.next_start_address_display);
-  const runtimeLabel = createMemo(() => props.environment?.local_ui_url ? 'Current runtime' : 'Next start');
-  const summaryByID = createMemo(() => new Map(props.settingsSurface.summary_items.map((item) => [item.id, item])));
-  const localFacts = createMemo(() => [
-    {
-      label: 'Visibility',
-      value: summaryByID().get('visibility')?.value ?? 'Local only',
-    },
-    {
-      label: 'Password',
-      value: summaryByID().get('password_state')?.value ?? props.settingsSurface.password_state_label,
-    },
-    {
-      label: 'Bootstrap',
-      value: summaryByID().get('next_start')?.value ?? props.settingsSurface.bootstrap_status_label,
-    },
-  ]);
+  const endpointAddress = createMemo(() => {
+    const liveURL = props.environment?.local_ui_url ?? '';
+    if (liveURL !== '') {
+      return describeRuntimeAddress(liveURL);
+    }
+    return describeNextStartAddress(props.settingsSurface.next_start_address_display);
+  });
+  const endpointLabel = createMemo(() => (props.environment?.local_ui_url ? 'Endpoint' : 'Next start'));
+  const accessVisual = createMemo(() => accessModeVisual(props.settingsSurface.access_mode));
+  const passwordTone = createMemo(() => passwordStateVisualTone(props.settingsSurface.password_state_tone));
+  const passwordLabel = createMemo(() => compactPasswordStateTagLabel(props.settingsSurface.password_state_label));
 
   return (
     <Card class={cn(
-      'redeven-environment-card redeven-environment-card--local h-full overflow-hidden border shadow-sm',
+      'redeven-environment-card h-full overflow-hidden border transition-all duration-200',
       isOpen()
-        ? 'border-emerald-500/30 bg-emerald-500/[0.035]'
-        : 'border-primary/25 bg-primary/[0.04]',
+        ? 'redeven-environment-card--open'
+        : 'redeven-environment-card--featured',
     )}>
-      <CardHeader class="pb-3">
-        <div class="flex items-start justify-between gap-3">
+      <CardHeader class="pb-2">
+        <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <CardTitle class="truncate text-sm sm:text-base">Local Environment</CardTitle>
-              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                Local
-              </Tag>
-              <Tag variant={isOpen() ? 'success' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {isOpen() ? 'Open' : 'Ready'}
-              </Tag>
-            </div>
-            <CardDescription class="mt-1 text-xs">
-              Desktop-managed on this device.
-            </CardDescription>
+            <CardTitle class="truncate text-sm font-semibold">Local Environment</CardTitle>
+            <div class="mt-1 text-xs text-muted-foreground">Desktop-managed runtime</div>
           </div>
-          <div class="flex flex-wrap justify-end gap-2">
-            <Tag
-              variant={passwordStateTagVariant(props.settingsSurface.password_state_tone)}
-              tone="soft"
-              size="sm"
-              class="cursor-default whitespace-nowrap"
-            >
-              {compactPasswordStateTagLabel(props.settingsSurface.password_state_label)}
-            </Tag>
-            <Show when={props.settingsSurface.bootstrap_pending}>
-              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {compactBootstrapStatusTagLabel(props.settingsSurface.bootstrap_status_label)}
-              </Tag>
-            </Show>
-          </div>
+          <ConsoleStatusBadge tone={isOpen() ? 'success' : 'neutral'}>
+            {isOpen() ? 'Live' : 'Ready'}
+          </ConsoleStatusBadge>
         </div>
       </CardHeader>
-      <CardContent class="space-y-3 pb-3">
-        <div class="rounded-xl border border-border/70 bg-background/80 px-3 py-3">
-          <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{runtimeLabel()}</div>
-          <div class={cn(
-            'mt-2 text-sm font-medium text-foreground',
-            runtimeAddress() !== '' && 'break-all font-mono text-xs leading-6',
-          )}>
-            {runtimeAddress()}
+      <CardContent class="pb-2">
+        <div class="space-y-2.5">
+          <div class="flex flex-wrap gap-1.5">
+            <Tag variant={accessVisual().tone === 'primary' ? 'primary' : accessVisual().tone === 'warning' ? 'warning' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {accessVisual().short_label}
+            </Tag>
+            <Tag variant={passwordTone() === 'success' ? 'success' : passwordTone() === 'warning' ? 'warning' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {passwordLabel()}
+            </Tag>
+          </div>
+          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {endpointLabel()}
+            </div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <div class={cn(
+                'truncate text-sm font-medium text-foreground',
+                endpointAddress().primary_monospace && 'font-mono text-[12px]',
+              )}>
+                {endpointAddress().primary}
+              </div>
+              <Show when={endpointAddress().hint}>
+                <div class="text-[11px] text-muted-foreground">{endpointAddress().hint}</div>
+              </Show>
+            </div>
           </div>
         </div>
-        <CardFactGrid items={localFacts()} />
       </CardContent>
-      <CardFooter class="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
         <Button
           size="sm"
           variant="default"
+          class="flex-1"
           loading={props.busyAction === 'open_local_environment' || props.busyAction === 'focus_environment_window'}
           onClick={() => {
             void props.openLocalEnvironment();
@@ -1849,45 +1848,99 @@ function LocalEnvironmentCard(props: Readonly<{
         >
           {compactOpenLocalEnvironmentLabel(isOpen())}
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          aria-label="Open Local Environment Settings"
-          title="Open Local Environment Settings"
-          onClick={props.openSettingsSurface}
-        >
-          <Settings class="mr-1 h-3.5 w-3.5" />
-          {compactSettingsActionLabel()}
-        </Button>
+        <DesktopTooltip content="Settings" placement="top">
+          <button
+            type="button"
+            aria-label="Open Local Environment Settings"
+            title="Open Local Environment Settings"
+            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            onClick={props.openSettingsSurface}
+          >
+            <Settings class="h-3.5 w-3.5" />
+          </button>
+        </DesktopTooltip>
       </CardFooter>
     </Card>
   );
 }
 
-function CardFactGrid(props: Readonly<{
-  items: readonly Readonly<{
-    label: string;
-    value: string;
-    detail?: string;
-    monospace?: boolean;
-  }>[];
+function ConsoleIconTile(props: Readonly<{
+  label: string;
+}>) {
+  return <div class="redeven-console-card__icon">{props.label}</div>;
+}
+
+function ConsoleBadge(props: Readonly<{
+  children: JSX.Element;
+}>) {
+  return <span class="redeven-console-badge">{props.children}</span>;
+}
+
+function ConsoleStatusBadge(props: Readonly<{
+  tone: 'neutral' | 'primary' | 'success' | 'warning';
+  children: JSX.Element;
 }>) {
   return (
-    <div class="grid gap-2 sm:grid-cols-2">
-      <For each={props.items}>
-        {(item) => (
-          <div class="rounded-xl border border-border/70 bg-background/80 px-3 py-3">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{item.label}</div>
-            <div class={cn('mt-2 text-sm font-medium text-foreground', item.monospace && 'break-all font-mono text-xs leading-5')}>
-              {item.value}
+    <span class="redeven-console-status" data-tone={props.tone}>
+      <span class="redeven-console-status__dot" aria-hidden="true" />
+      {props.children}
+    </span>
+  );
+}
+
+function ConsoleActionIconButton(props: Readonly<{
+  title: string;
+  'aria-label': string;
+  onClick: () => void;
+  danger?: boolean;
+  children: JSX.Element;
+}>) {
+  return (
+    <button
+      type="button"
+      title={props.title}
+      aria-label={props['aria-label']}
+      class={cn(
+        'redeven-console-icon-button',
+        props.danger && 'redeven-console-icon-button--danger',
+      )}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+function QuickCreateConnectionCard(props: Readonly<{
+  title: string;
+  badge: string;
+  detail: string;
+  actionLabel: string;
+  onClick: () => void;
+}>) {
+  return (
+    <Card class="redeven-environment-card redeven-console-card redeven-quick-add-card h-full overflow-hidden border shadow-sm">
+      <CardHeader class="px-4 pb-3 pt-4">
+        <div class="flex items-start gap-3">
+          <ConsoleIconTile label="+" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <CardTitle class="truncate text-sm font-semibold">{props.title}</CardTitle>
+                <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.detail}</div>
+              </div>
+              <ConsoleBadge>{props.badge}</ConsoleBadge>
             </div>
-            <Show when={trimString(item.detail)}>
-              <div class="mt-2 text-xs leading-5 text-muted-foreground">{item.detail}</div>
-            </Show>
           </div>
-        )}
-      </For>
-    </div>
+        </div>
+      </CardHeader>
+      <CardFooter class="mt-auto border-t border-border/70 px-4 py-3">
+        <Button size="sm" variant="outline" class="w-full" onClick={props.onClick}>
+          <Plus class="mr-1 h-3.5 w-3.5" />
+          {props.actionLabel}
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -1897,14 +1950,24 @@ function ControlPlaneInfoTile(props: Readonly<{
   detail?: string;
   monospace?: boolean;
 }>) {
+  const isSet = createMemo(() => props.value !== 'Not set');
   return (
-    <div class="rounded-xl border border-border/70 bg-background px-3 py-3">
-      <div class="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">{props.label}</div>
-      <div class={cn('mt-2 text-sm font-medium text-foreground', props.monospace && 'break-all font-mono text-xs')}>
+    <div class="redeven-tile rounded-lg border border-border px-3.5 py-3">
+      <div class="flex items-center gap-1.5">
+        <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.label}</div>
+        <Show when={isSet()}>
+          <div class="h-1 w-1 rounded-full bg-success" />
+        </Show>
+      </div>
+      <div class={cn(
+        'mt-1.5 text-xs font-medium',
+        isSet() ? 'text-foreground' : 'text-muted-foreground/70',
+        props.monospace && isSet() && 'truncate font-mono text-[12px]',
+      )}>
         {props.value}
       </div>
       <Show when={props.detail}>
-        <div class="mt-2 text-xs leading-5 text-muted-foreground">{props.detail}</div>
+        <div class="mt-1.5 text-[11px] leading-[1.55] text-muted-foreground">{props.detail}</div>
       </Show>
     </div>
   );
@@ -1919,68 +1982,67 @@ function EnvironmentConnectionCard(props: Readonly<{
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
   const card = createMemo(() => buildEnvironmentCardModel(props.environment));
-  const metaFacts = createMemo(() => [
-    {
-      label: card().kind_label === 'SSH' ? 'Target' : 'Endpoint',
-      value: card().target_primary,
-      detail: card().target_secondary,
-      monospace: card().target_primary_monospace,
-    },
-    ...card().meta,
-  ]);
+  const heroLabel = createMemo(() => card().kind_label === 'SSH' ? 'SSH target' : 'Endpoint');
+  const sshBootstrapLabel = createMemo(() => {
+    const strategy = props.environment.ssh_details?.bootstrap_strategy;
+    if (strategy === 'desktop_upload') return 'Upload';
+    if (strategy === 'remote_install') return 'Install';
+    return 'Auto';
+  });
 
   return (
     <Card class={cn(
-      'redeven-environment-card h-full overflow-hidden border shadow-sm',
+      'redeven-environment-card h-full overflow-hidden border transition-all duration-200',
       props.environment.is_open
-        ? 'border-emerald-500/30 bg-emerald-500/[0.03]'
-        : 'border-border/70 bg-background/85',
+        ? 'redeven-environment-card--open'
+        : 'border-border',
     )}>
-      <CardHeader class="pb-3">
-        <div class="flex items-start justify-between gap-3">
+      <CardHeader class="pb-2">
+        <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <CardTitle class="max-w-[14rem] truncate text-sm sm:text-base" title={props.environment.label}>
-                {props.environment.label}
-              </CardTitle>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {card().kind_label}
-              </Tag>
-              <Tag variant={environmentCardTagVariant(card().status_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {card().status_label}
-              </Tag>
+            <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
+              {props.environment.label}
+            </CardTitle>
+            <div class="mt-1 text-xs text-muted-foreground">
+              {formatRelativeTimestamp(props.environment.last_used_at_ms)}
             </div>
-            <CardDescription class="mt-1 text-xs">
-              {card().source_label}
-            </CardDescription>
           </div>
-          <Show
-            when={props.environment.last_used_at_ms > 0}
-            fallback={(
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                Never used
-              </Tag>
-            )}
-          >
-            <span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-background px-2.5 py-1 text-[11px] text-muted-foreground">
-              <Clock class="h-3.5 w-3.5" />
-              Used
-            </span>
-          </Show>
+          <ConsoleStatusBadge tone={card().status_tone}>
+            {card().status_label}
+          </ConsoleStatusBadge>
         </div>
       </CardHeader>
-      <CardContent class="space-y-3 pb-3">
-        <CardFactGrid items={metaFacts()} />
-        <div class="text-xs text-muted-foreground">
-          {props.environment.last_used_at_ms > 0
-            ? `Last used ${formatTimestamp(props.environment.last_used_at_ms)}`
-            : 'This connection has not been opened from Desktop yet.'}
+      <CardContent class="pb-2">
+        <div class="space-y-2.5">
+          <div class="flex flex-wrap gap-1.5">
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {card().kind_label}
+            </Tag>
+            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {card().source_label}
+            </Tag>
+            <Show when={props.environment.kind === 'ssh_environment'}>
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {sshBootstrapLabel()}
+              </Tag>
+            </Show>
+          </div>
+          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{heroLabel()}</div>
+            <div class={cn(
+              'mt-1 truncate text-sm font-medium text-foreground',
+              card().target_primary_monospace && 'font-mono text-[12px]',
+            )}>
+              {card().target_primary}
+            </div>
+          </div>
         </div>
       </CardContent>
-      <CardFooter class="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
         <Button
           size="sm"
           variant="default"
+          class="flex-1"
           loading={
             props.busyAction === 'open_remote_environment'
             || props.busyAction === 'open_ssh_environment'
@@ -1992,44 +2054,92 @@ function EnvironmentConnectionCard(props: Readonly<{
         >
           {props.environment.open_action_label}
         </Button>
-        <Show when={props.environment.can_save}>
-          <Button
-            size="sm"
-            variant="outline"
-            loading={props.busyAction === 'save_environment'}
-            onClick={() => {
-              void props.saveEnvironment(props.environment);
+        <div class="flex items-center gap-0.5">
+          <Show when={props.environment.can_save}>
+            <DesktopTooltip content="Save" placement="top">
+              <button
+                type="button"
+                title="Save connection"
+                aria-label={`Save ${props.environment.label}`}
+                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                onClick={() => {
+                  void props.saveEnvironment(props.environment);
+                }}
+              >
+                <Save class="h-3.5 w-3.5" />
+              </button>
+            </DesktopTooltip>
+          </Show>
+          <Show when={props.environment.can_edit}>
+            <DesktopTooltip content="Edit" placement="top">
+              <button
+                type="button"
+                title="Edit connection"
+                aria-label={`Edit ${props.environment.label}`}
+                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                onClick={() => props.editEnvironment(props.environment)}
+              >
+                <Pencil class="h-3.5 w-3.5" />
+              </button>
+            </DesktopTooltip>
+          </Show>
+          <Show when={props.environment.can_delete}>
+            <DesktopTooltip content="Delete" placement="top">
+              <button
+                type="button"
+                title="Delete connection"
+                aria-label={`Delete ${props.environment.label}`}
+                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-destructive"
+                onClick={() => props.deleteEnvironment(props.environment)}
+              >
+                <Trash class="h-3.5 w-3.5" />
+              </button>
+            </DesktopTooltip>
+          </Show>
+        </div>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function NewEnvironmentPlaceholderCard(props: Readonly<{
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+}>) {
+  return (
+    <Card class="redeven-environment-card redeven-new-environment-card group h-full cursor-pointer overflow-hidden border border-dashed border-border/70 transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.02]"
+      onClick={() => props.openCreateConnectionDialog()}
+    >
+      <div class="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 text-muted-foreground transition-colors group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
+          <Plus class="h-5 w-5" />
+        </div>
+        <div class="space-y-1 text-center">
+          <div class="text-sm font-medium text-foreground">New Environment</div>
+          <div class="text-xs text-muted-foreground">Add a Redeven URL or SSH target</div>
+        </div>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+            onClick={(event) => {
+              event.stopPropagation();
+              props.openCreateConnectionDialog('', 'external_local_ui');
             }}
           >
-            <Save class="mr-1 h-3.5 w-3.5" />
-            Save
-          </Button>
-        </Show>
-        <Show when={props.environment.can_edit}>
-          <Button
-            size="sm"
-            variant="ghost"
-            class="text-muted-foreground"
-            onClick={() => props.editEnvironment(props.environment)}
-            aria-label={`Edit ${props.environment.label}`}
-            title="Edit connection"
+            URL
+          </button>
+          <button
+            type="button"
+            class="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+            onClick={(event) => {
+              event.stopPropagation();
+              props.openCreateConnectionDialog('', 'ssh_environment');
+            }}
           >
-            <Pencil class="h-3.5 w-3.5" />
-          </Button>
-        </Show>
-        <Show when={props.environment.can_delete}>
-          <Button
-            size="sm"
-            variant="ghost"
-            class="text-muted-foreground hover:text-destructive"
-            onClick={() => props.deleteEnvironment(props.environment)}
-            aria-label={`Delete ${props.environment.label}`}
-            title="Delete connection"
-          >
-            <Trash class="h-3.5 w-3.5" />
-          </Button>
-        </Show>
-      </CardFooter>
+            SSH
+          </button>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -2044,50 +2154,23 @@ function ControlPlanesPanel(props: Readonly<{
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
-  const providerEnvironmentCount = createMemo(() => (
-    props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
-  ));
-
   return (
-    <div class="space-y-4">
-      <Card class="overflow-hidden border-border/70 bg-card/85 shadow-sm">
-        <CardContent class="flex flex-col gap-3 px-4 py-4 sm:px-5">
-          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex flex-wrap items-center gap-2">
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.controlPlanes.length === 1 ? '1 provider' : `${props.controlPlanes.length} providers`}
-              </Tag>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {providerEnvironmentCount() === 1 ? '1 environment card' : `${providerEnvironmentCount()} environment cards`}
-              </Tag>
-            </div>
-            <div class="text-xs leading-5 text-muted-foreground">
-              Provider actions stay in the shelf. The grid below is only environments.
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
+    <div class="space-y-3">
       <Show
         when={props.controlPlanes.length > 0}
         fallback={(
-          <Card class="overflow-hidden border-border/70 bg-card/85 shadow-sm">
-            <CardContent class="space-y-4 px-5 py-6 text-center">
-              <div class="text-base font-medium text-foreground">No Control Planes connected yet.</div>
-              <div class="text-sm text-muted-foreground">
-                Add a provider and its environments will appear here as cards.
-              </div>
-              <div class="flex justify-center">
-                <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
-                  <Plus class="mr-1 h-3.5 w-3.5" />
-                  Add Control Plane
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div class="redeven-environment-grid">
+            <QuickCreateConnectionCard
+              title="Add Control Plane"
+              badge="Provider"
+              detail="Authorize a compatible provider."
+              actionLabel="Connect Provider"
+              onClick={() => props.openCreateControlPlaneDialog()}
+            />
+          </div>
         )}
       >
-        <div class="space-y-4">
+        <div class="space-y-3">
           <For each={props.controlPlanes}>
             {(controlPlane) => (
               <ControlPlaneShelf
@@ -2118,54 +2201,49 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
   const statusTone = createMemo<'neutral' | 'primary' | 'success'>(() => (
     props.openWindow ? 'success' : statusLabel().toLowerCase().includes('online') ? 'primary' : 'neutral'
   ));
-  const facts = createMemo(() => [
-    {
-      label: 'Namespace',
-      value: props.environment.namespace_name || props.environment.namespace_public_id || 'Unknown',
-    },
-    {
-      label: 'Environment ID',
-      value: props.environment.env_public_id,
-      monospace: true,
-    },
-    {
-      label: 'Last seen',
-      value: formatTimestamp(props.environment.last_seen_at_unix_ms) || 'Unknown',
-    },
-  ]);
+  const heroValue = createMemo(() => (
+    props.environment.namespace_name
+    || props.environment.namespace_public_id
+    || 'Unassigned namespace'
+  ));
 
   return (
     <Card class={cn(
-      'redeven-environment-card h-full overflow-hidden border shadow-sm',
+      'redeven-environment-card h-full overflow-hidden border transition-all duration-200',
       props.openWindow
-        ? 'border-emerald-500/30 bg-emerald-500/[0.03]'
-        : 'border-border/70 bg-background/85',
+        ? 'redeven-environment-card--open'
+        : 'border-border',
     )}>
-      <CardHeader class="pb-3">
-        <div class="flex items-start justify-between gap-3">
+      <CardHeader class="pb-2">
+        <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <CardTitle class="truncate text-sm sm:text-base">{props.environment.label}</CardTitle>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.controlPlane.provider.display_name}
-              </Tag>
-              <Tag variant={environmentCardTagVariant(statusTone())} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.openWindow ? 'Open' : statusLabel()}
-              </Tag>
-            </div>
-            <CardDescription class="mt-1 text-xs">
-              {trimString(props.environment.description) || props.controlPlane.account.user_display_name}
-            </CardDescription>
+            <CardTitle class="truncate text-sm font-semibold">{props.environment.label}</CardTitle>
+            <div class="mt-1 text-xs text-muted-foreground">Published environment</div>
           </div>
+          <ConsoleStatusBadge tone={statusTone()}>
+            {props.openWindow ? 'Open' : statusLabel()}
+          </ConsoleStatusBadge>
         </div>
       </CardHeader>
-      <CardContent class="space-y-3 pb-3">
-        <CardFactGrid items={facts()} />
+      <CardContent class="pb-2">
+        <div class="space-y-2">
+          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Namespace</div>
+            <div class="mt-1.5 text-sm font-medium text-foreground">{heroValue()}</div>
+          </div>
+          <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+            <div class="text-muted-foreground">State</div>
+            <div class="text-right font-medium">{statusLabel()}</div>
+            <div class="text-muted-foreground">Last seen</div>
+            <div class="text-right font-medium">{formatRelativeTimestamp(props.environment.last_seen_at_unix_ms)}</div>
+          </div>
+        </div>
       </CardContent>
-      <CardFooter class="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
         <Button
           size="sm"
           variant="default"
+          class="flex-1"
           loading={props.busyAction === 'open_control_plane_environment' || props.busyAction === 'focus_environment_window'}
           onClick={() => {
             void props.openControlPlaneEnvironment(props.controlPlane, props.environment.env_public_id);
@@ -2190,28 +2268,23 @@ function ControlPlaneShelf(props: Readonly<{
   const authorizationExpired = hasTimestampExpired(props.controlPlane.account.authorization_expires_at_unix_ms);
 
   return (
-    <section class="space-y-3">
-      <div class="rounded-2xl border border-border/70 bg-card/85 px-4 py-4 shadow-sm">
-        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div class="min-w-0">
+    <section class="space-y-2.5">
+      <div class="redeven-provider-shelf rounded-[1.1rem] border border-border px-4 py-3 shadow-sm">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <ConsoleIconTile label="C" />
+            <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-base font-semibold tracking-tight text-foreground">{props.controlPlane.provider.display_name}</div>
-              <Tag
-                variant={authorizationExpired ? 'warning' : 'success'}
-                tone="soft"
-                size="sm"
-                class="cursor-default whitespace-nowrap"
-              >
-                {authorizationExpired ? 'Authorization expired' : 'Authorized'}
-              </Tag>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {props.controlPlane.environments.length === 1 ? '1 environment' : `${props.controlPlane.environments.length} environments`}
-              </Tag>
+                <div class="truncate text-sm font-semibold tracking-tight text-foreground">{props.controlPlane.provider.display_name}</div>
+              <ConsoleStatusBadge tone={authorizationExpired ? 'warning' : 'success'}>
+                {authorizationExpired ? 'Expired' : 'Authorized'}
+              </ConsoleStatusBadge>
+              <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
             </div>
-            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{props.controlPlane.account.user_display_name}</span>
-              <span class="font-mono">{props.controlPlane.provider.provider_origin}</span>
-              <span>Last sync {formatTimestamp(props.controlPlane.last_synced_at_ms) || 'Unknown'}</span>
+                <span>Synced {formatRelativeTimestamp(props.controlPlane.last_synced_at_ms)}</span>
+              </div>
             </div>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -2235,16 +2308,14 @@ function ControlPlaneShelf(props: Readonly<{
             >
               Refresh
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              class="text-muted-foreground hover:text-destructive"
+            <ConsoleActionIconButton
+              title="Delete Control Plane"
+              danger
               onClick={() => props.deleteControlPlane(props.controlPlane)}
               aria-label={`Delete ${props.controlPlane.provider.display_name}`}
-              title="Delete Control Plane"
             >
-              <Trash class="h-3.5 w-3.5" />
-            </Button>
+              <Trash class="h-4 w-4" />
+            </ConsoleActionIconButton>
           </div>
         </div>
       </div>
@@ -2252,15 +2323,12 @@ function ControlPlaneShelf(props: Readonly<{
       <Show
         when={props.controlPlane.environments.length > 0}
         fallback={(
-          <div class="rounded-2xl border border-dashed border-border/70 bg-card/75 px-5 py-8 text-center shadow-sm">
-            <div class="text-sm font-medium text-foreground">No environments are currently available from this provider.</div>
-            <div class="mt-1 text-xs leading-5 text-muted-foreground">
-              Reconnect or refresh after the provider publishes accessible environments.
-            </div>
+          <div class="redeven-console-empty rounded-2xl px-4 py-3 text-sm text-muted-foreground">
+            No environments published from this provider yet.
           </div>
         )}
       >
-        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div class="redeven-environment-grid">
           <For each={props.controlPlane.environments}>
             {(environment) => {
               const sessionKey = controlPlaneDesktopSessionKey(
@@ -2289,10 +2357,21 @@ const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
   'flex max-w-none flex-col overflow-hidden rounded-md p-0',
   '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
   '[&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:overflow-auto [&>div:last-child]:pt-2',
-  'max-h-[calc(100dvh-1rem)] w-[min(64rem,96vw)]',
+  'max-h-[calc(100dvh-1rem)] w-[min(52rem,96vw)]',
 );
 
-const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'rounded-lg border border-border/70 bg-background px-4 py-4 shadow-sm';
+const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-lg border border-border px-4 py-4';
+
+function accessModeIcon(mode: DesktopAccessMode): (props?: { class?: string }) => JSX.Element {
+  switch (mode) {
+    case 'shared_local_network':
+      return Globe;
+    case 'custom_exposure':
+      return Settings;
+    default:
+      return Lock;
+  }
+}
 
 function settingsAddressCardTitle(accessMode: DesktopAccessMode): string {
   return accessMode === 'custom_exposure' ? 'Bind address' : 'Port';
@@ -2308,7 +2387,7 @@ function settingsAddressCardHelp(accessMode: DesktopAccessMode): string {
 }
 
 function settingsProtectionCardTitle(accessMode: DesktopAccessMode): string {
-  return accessMode === 'local_only' ? 'Auto port' : 'Password';
+  return accessMode === 'local_only' ? 'Protection' : 'Password';
 }
 
 function settingsProtectionCardHelp(accessMode: DesktopAccessMode): string {
@@ -2318,7 +2397,7 @@ function settingsProtectionCardHelp(accessMode: DesktopAccessMode): string {
   if (accessMode === 'custom_exposure') {
     return 'Review the password used with your custom bind rules before the next desktop-managed start.';
   }
-  return 'Desktop can auto-select a free localhost port when you do not need a fixed local address.';
+  return 'Local-only mode binds to loopback and never exposes the runtime beyond this machine.';
 }
 
 function SettingsHelpBadge(props: Readonly<{
@@ -2360,36 +2439,22 @@ function SettingsCardHeading(props: Readonly<{
   );
 }
 
-function SettingsSurfaceCard(props: Readonly<{
-  title: string;
-  help?: string;
+function SettingsSectionHeader(props: Readonly<{
+  label: string;
+  hint?: string;
   accessory?: JSX.Element;
-  class?: string;
-  children: JSX.Element;
 }>) {
   return (
-    <section class={cn(LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS, props.class)}>
-      <SettingsCardHeading title={props.title} help={props.help} accessory={props.accessory} />
-      <div class="mt-4">{props.children}</div>
-    </section>
-  );
-}
-
-function SummaryItemTile(props: Readonly<{
-  item: DesktopSettingsSummaryItem;
-}>) {
-  return (
-    <div class={cn('rounded-lg border px-3 py-3', summaryItemToneClasses(props.item.tone))}>
-      <div class="flex items-start justify-between gap-2">
-        <div class="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{props.item.label}</div>
-        <SettingsHelpBadge label={props.item.label} content={props.item.detail} />
+    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <div class="flex items-baseline gap-2">
+        <h3 class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          {props.label}
+        </h3>
+        <Show when={props.hint}>
+          <span class="text-[11px] text-muted-foreground/70">{props.hint}</span>
+        </Show>
       </div>
-      <div class={cn(
-        'mt-2 text-sm font-medium text-foreground',
-        props.item.id === 'next_start_address' && 'break-all font-mono text-xs',
-      )}>
-        {props.item.value}
-      </div>
+      {props.accessory}
     </div>
   );
 }
@@ -2403,26 +2468,28 @@ function IssueCard(props: Readonly<{
 }>) {
   return (
     <div ref={props.issueRef} tabIndex={-1} class="outline-none">
-      <Card class="overflow-hidden border-destructive/25 shadow-sm">
-        <CardHeader class="gap-2 border-b border-destructive/20 bg-destructive/5">
-          <div class="flex items-center gap-2 text-destructive">
-            <AlertCircle class="h-4 w-4" />
-            <div class="text-[11px] font-semibold uppercase tracking-widest">{issueKicker(props.issue)}</div>
+      <div class="redeven-console-issue rounded-[1.05rem] border border-destructive/20 px-4 py-3 shadow-sm">
+        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div class="flex min-w-0 items-start gap-3">
+            <div class="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-destructive/20 bg-destructive/10 text-destructive">
+              <AlertCircle class="h-4 w-4" />
+            </div>
+            <div class="min-w-0">
+              <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-destructive">{issueKicker(props.issue)}</div>
+              <div class="mt-1 text-sm font-semibold text-foreground">{props.issue.title}</div>
+              <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.issue.message}</div>
+              <Show when={props.issue.diagnostics_copy}>
+                <div class="mt-2 text-[11px] text-muted-foreground">Diagnostics are ready if you want to copy them.</div>
+              </Show>
+            </div>
           </div>
-          <CardTitle class="text-base">{props.issue.title}</CardTitle>
-          <CardDescription class="text-sm">{props.issue.message}</CardDescription>
-        </CardHeader>
-        <CardContent class="space-y-3 px-4 py-4">
-          <Show when={props.issue.diagnostics_copy}>
-            <div class="text-xs text-muted-foreground">Diagnostics are available if you need to copy them.</div>
-          </Show>
           <div class="flex flex-wrap gap-2">
             {props.primaryAction}
             {props.secondaryAction}
             {props.tertiaryAction}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2453,9 +2520,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     mode_override: accessModeOverride(),
   }));
   const accessModel = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessModelOptions()));
-  const liveSummaryItems = createMemo(() => buildDesktopSettingsSummaryItems(props.draft, accessModelOptions()));
   const liveBootstrapStatus = createMemo(() => buildDesktopBootstrapStatus(props.draft));
-  const selectedOption = createMemo(() => props.snapshot.access_mode_options.find((option) => option.value === accessModel().access_mode) ?? null);
   const addressCardTitle = createMemo(() => settingsAddressCardTitle(accessModel().access_mode));
   const addressCardHelp = createMemo(() => settingsAddressCardHelp(accessModel().access_mode));
   const protectionCardTitle = createMemo(() => settingsProtectionCardTitle(accessModel().access_mode));
@@ -2468,9 +2533,13 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     }
   });
 
+  // See ConnectionDialog: memoize the open boolean so that identity churn
+  // upstream never re-triggers the overlay-mask focus trap mid-typing.
+  const isOpen = createMemo(() => props.open);
+
   return (
     <Dialog
-      open={props.open}
+      open={isOpen()}
       onOpenChange={(open) => {
         if (!open) {
           props.cancelSettings();
@@ -2498,67 +2567,86 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
         </div>
       )}
     >
-      <div class="space-y-5">
-        <div class="redeven-settings-hero rounded-[1.5rem] border border-border/70 bg-card/80 px-4 py-4 shadow-sm">
-          <div class="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-            <div class="space-y-4">
-              <div class="space-y-2">
-                <div class="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">Local environment workbench</div>
-                <div class="text-xl font-semibold tracking-tight text-foreground">Future startup behavior for the managed runtime</div>
-                <div class="text-sm leading-6 text-muted-foreground">
-                  Tune local visibility, security, and one-shot bootstrap requests without switching away from the current environment.
+      <div class="space-y-6">
+        {/* Runtime status strip */}
+        <div class="redeven-settings-statusbar overflow-hidden rounded-xl border border-border">
+          <div class="grid divide-y divide-border sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
+            <div class="flex items-start gap-3 px-4 py-3">
+              <div class={cn(
+                'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors',
+                accessModel().current_runtime_url !== ''
+                  ? 'border-success/30 bg-success/10 text-success'
+                  : 'border-border/60 bg-muted/30 text-muted-foreground',
+              )}>
+                <div class={cn(
+                  'h-1.5 w-1.5 rounded-full',
+                  accessModel().current_runtime_url !== '' ? 'bg-success' : 'bg-muted-foreground/50',
+                )} />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Runtime</div>
+                <div class={cn(
+                  'mt-0.5 truncate text-xs font-medium text-foreground',
+                  describeRuntimeAddress(accessModel().current_runtime_url).primary_monospace && 'font-mono text-[12px]',
+                )}>
+                  {describeRuntimeAddress(accessModel().current_runtime_url).primary}
                 </div>
               </div>
-              <div class="grid gap-3 sm:grid-cols-2">
-                <SettingsSurfaceCard
-                  title="Current runtime"
-                  help="This is the address the managed Local Environment is using right now."
-                  class="bg-background/80"
-                >
-                  <div class={cn(
-                    'text-sm text-foreground',
-                    accessModel().current_runtime_url !== '' && 'break-all font-mono text-xs leading-6',
-                  )}>
-                    {accessModel().current_runtime_url || 'Not currently running'}
-                  </div>
-                </SettingsSurfaceCard>
-                <SettingsSurfaceCard
-                  title="Next start"
-                  help="Desktop will use this address and protection state the next time it starts the managed runtime."
-                  class="bg-background/80"
-                >
-                  <div class="space-y-2">
-                    <div class="break-all font-mono text-xs text-foreground">{props.snapshot.next_start_address_display}</div>
-                    <div class="flex flex-wrap gap-2">
-                      <Tag variant={passwordStateTagVariant(props.snapshot.password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                        {compactPasswordStateTagLabel(props.snapshot.password_state_label)}
-                      </Tag>
-                      <Tag variant={liveBootstrapStatus().pending ? 'primary' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                        {compactBootstrapStatusTagLabel(liveBootstrapStatus().label)}
-                      </Tag>
-                    </div>
-                  </div>
-                </SettingsSurfaceCard>
-              </div>
             </div>
-            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-2 [&>*]:h-full">
-              <For each={liveSummaryItems()}>
-                {(item) => <SummaryItemTile item={item} />}
-              </For>
+            <div class="hidden items-center justify-center px-4 text-muted-foreground sm:flex">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </div>
+            <div class="flex items-start gap-3 px-4 py-3">
+              <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
+                {(() => {
+                  const Icon = accessModeIcon(accessModel().access_mode);
+                  return <Icon class="h-3.5 w-3.5" />;
+                })()}
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next start</div>
+                <div class="mt-0.5 flex items-baseline gap-1.5">
+                  <div class={cn(
+                    'truncate text-xs font-medium text-foreground',
+                    describeNextStartAddress(props.snapshot.next_start_address_display).primary_monospace && 'font-mono text-[12px]',
+                  )}>
+                    {describeNextStartAddress(props.snapshot.next_start_address_display).primary}
+                  </div>
+                  <Show when={describeNextStartAddress(props.snapshot.next_start_address_display).hint}>
+                    <div class="truncate text-[11px] text-muted-foreground">{describeNextStartAddress(props.snapshot.next_start_address_display).hint}</div>
+                  </Show>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        <SegmentedControl
-          value={activeTab()}
-          onChange={(value) => setActiveTab(value as DesktopSettingsWorkbenchTab)}
-          options={[
-            { value: 'access_security', label: 'Access & Security' },
-            { value: 'bootstrap', label: 'Bootstrap' },
-          ]}
-          size="sm"
-        />
+        {/* Tab navigation */}
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <SegmentedControl
+            value={activeTab()}
+            onChange={(value) => setActiveTab(value as DesktopSettingsWorkbenchTab)}
+            options={[
+              { value: 'access_security', label: 'Access & Security' },
+              { value: 'bootstrap', label: 'Bootstrap' },
+            ]}
+            size="sm"
+          />
+          <div class="flex flex-wrap items-center gap-1.5">
+            <Tag variant={passwordStateTagVariant(props.snapshot.password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {compactPasswordStateTagLabel(props.snapshot.password_state_label)}
+            </Tag>
+            <Show when={liveBootstrapStatus().pending}>
+              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {compactBootstrapStatusTagLabel(liveBootstrapStatus().label)}
+              </Tag>
+            </Show>
+          </div>
+        </div>
 
+        {/* Tab content */}
         <Show when={activeTab() === 'access_security'} fallback={(
           <BootstrapSettingsPanel
             snapshot={props.snapshot}
@@ -2569,130 +2657,148 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             updateDraftField={props.updateDraftField}
           />
         )}>
-          <div class="space-y-4">
-            <SettingsSurfaceCard
-              title="Visibility presets"
-              help={selectedOption()?.description ?? 'Choose how the next desktop-managed start should be exposed.'}
-            >
-              <div class="grid gap-3 lg:grid-cols-3">
+          <div class="space-y-6">
+            {/* Visibility presets — radio-group style */}
+            <section>
+              <SettingsSectionHeader
+                label="Visibility"
+                hint="Choose how the Local Environment is exposed on the next desktop-managed start"
+              />
+              <div
+                role="radiogroup"
+                aria-label="Visibility presets"
+                class="mt-3 grid gap-3 sm:grid-cols-3"
+              >
                 <For each={props.snapshot.access_mode_options}>
-                  {(option) => (
-                    <button
-                      type="button"
-                      class={cn(
-                        'redeven-settings-preset flex cursor-pointer flex-col items-start gap-3 rounded-2xl border px-4 py-4 text-left transition-all',
-                        accessModel().access_mode === option.value
-                          ? 'border-primary/50 bg-primary/10 shadow-sm'
-                          : 'border-border/70 bg-background hover:border-border hover:bg-muted/20',
-                      )}
-                      aria-pressed={accessModel().access_mode === option.value}
-                      onClick={() => {
-                        if (option.value === 'custom_exposure') {
-                          setAccessModeOverride('custom_exposure');
-                          return;
-                        }
-                        setAccessModeOverride(null);
-                        props.applyAccessMode(option.value);
-                      }}
-                    >
-                      <div class="flex w-full items-center justify-between gap-3">
-                        <div class="text-sm font-medium text-foreground">{option.label}</div>
-                        <Tag
-                          variant={accessModel().access_mode === option.value ? 'primary' : 'neutral'}
-                          tone="soft"
-                          size="sm"
-                          class="cursor-default whitespace-nowrap"
-                        >
-                          {accessModel().access_mode === option.value ? 'Selected' : 'Preset'}
-                        </Tag>
-                      </div>
-                      <div class="text-xs leading-5 text-muted-foreground">{option.description}</div>
-                    </button>
-                  )}
+                  {(option) => {
+                    const selected = createMemo(() => accessModel().access_mode === option.value);
+                    const Icon = accessModeIcon(option.value);
+                    return (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={selected()}
+                        class={cn(
+                          'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-all duration-150',
+                          selected()
+                            ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
+                            : 'redeven-tile border-border hover:-translate-y-[1px] hover:border-primary/25 hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
+                        )}
+                        onClick={() => {
+                          if (option.value === 'custom_exposure') {
+                            setAccessModeOverride('custom_exposure');
+                            return;
+                          }
+                          setAccessModeOverride(null);
+                          props.applyAccessMode(option.value);
+                        }}
+                      >
+                        <div class="flex items-start justify-between gap-3">
+                          <div class={cn(
+                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors',
+                            selected()
+                              ? 'border-primary/40 bg-primary/15 text-primary'
+                              : 'border-border/70 bg-muted/25 text-muted-foreground group-hover:border-primary/25 group-hover:text-foreground',
+                          )}>
+                            <Icon class="h-4 w-4" />
+                          </div>
+                          <div class={cn(
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                            selected()
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border/80 bg-background group-hover:border-primary/40',
+                          )}>
+                            <Show when={selected()}>
+                              <Check class="h-2.5 w-2.5" />
+                            </Show>
+                          </div>
+                        </div>
+                        <div class="mt-1 text-sm font-semibold text-foreground">{option.label}</div>
+                        <div class="text-[11px] leading-[1.55] text-muted-foreground">{option.description}</div>
+                      </button>
+                    );
+                  }}
                 </For>
               </div>
-            </SettingsSurfaceCard>
+            </section>
 
-            <div class="grid gap-4 lg:grid-cols-2 [&>*]:h-full">
-              <SettingsSurfaceCard
-                title={addressCardTitle()}
-                help={addressCardHelp()}
-                class="min-h-[12rem]"
-              >
-                <Show
-                  when={accessModel().access_mode === 'custom_exposure'}
-                  fallback={(
-                    <div class="space-y-4">
-                      <label class="grid gap-2">
-                        <span class="text-xs font-medium text-foreground">Port</span>
-                        <Input
-                          value={accessModel().fixed_port_value}
-                          inputMode="numeric"
-                          disabled={accessModel().port_mode === 'auto'}
-                          size="sm"
-                          class="w-full"
-                          aria-label="Port"
-                          onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
-                        />
-                      </label>
-                      <div class="rounded-xl border border-border/70 bg-muted/20 px-3 py-3 text-xs leading-5 text-muted-foreground">
-                        {accessModel().port_mode === 'auto'
-                          ? 'Desktop will pick an available localhost port on each start.'
-                          : 'Use a fixed port when you want a stable address for bookmarks, scripts, or local handoff.'}
-                      </div>
-                    </div>
-                  )}
-                >
-                  <SettingsFieldInput
-                    field={props.snapshot.host_fields[0]!}
-                    value={props.draft.local_ui_bind}
-                    updateDraftField={props.updateDraftField}
-                    sectionTitle={addressCardTitle()}
-                  />
-                </Show>
-              </SettingsSurfaceCard>
-
-              <SettingsSurfaceCard
-                title={protectionCardTitle()}
-                help={protectionCardHelp()}
-                class="min-h-[12rem]"
-              >
-                <Show
-                  when={accessModel().access_mode === 'local_only'}
-                  fallback={(
-                    <LocalUIPasswordField
-                      snapshot={props.snapshot}
-                      draft={props.draft}
-                      updateDraftField={props.updateDraftField}
-                      clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
-                      sectionTitle={protectionCardTitle()}
-                    />
-                  )}
-                >
-                  <div class="flex h-full flex-col justify-between gap-4">
-                    <div class="space-y-3">
-                      <div class="flex flex-wrap gap-2">
-                        <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                          {accessModel().port_mode === 'auto' ? 'Auto port enabled' : 'Fixed port'}
-                        </Tag>
-                        <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                          No password
-                        </Tag>
-                      </div>
-                      <div class="rounded-xl border border-border/70 bg-muted/20 px-3 py-3 text-xs leading-5 text-muted-foreground">
-                        Local-only mode never exposes the managed runtime beyond this machine. Turn on auto port when you want Desktop to pick a free loopback port.
-                      </div>
-                    </div>
-                    <Checkbox
-                      checked={accessModel().port_mode === 'auto'}
-                      onChange={props.toggleAutoPort}
-                      label="Auto port"
-                      size="sm"
-                    />
+            {/* Port & Protection side by side */}
+            <section>
+              <SettingsSectionHeader
+                label="Details"
+                hint={`Fine-tune the ${addressCardTitle().toLowerCase()} and ${accessModel().access_mode === 'local_only' ? 'protection' : 'password'} for this preset`}
+              />
+              <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
+                  <SettingsCardHeading title={addressCardTitle()} help={addressCardHelp()} />
+                  <div class="mt-3 space-y-3">
+                    <Show
+                      when={accessModel().access_mode === 'custom_exposure'}
+                      fallback={(
+                        <>
+                          <label class="block">
+                            <span class="sr-only">Port</span>
+                            <Input
+                              value={accessModel().fixed_port_value}
+                              inputMode="numeric"
+                              disabled={accessModel().port_mode === 'auto'}
+                              size="sm"
+                              class="w-full font-mono"
+                              aria-label="Port"
+                              placeholder="23998"
+                              onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
+                            />
+                          </label>
+                          <Show when={accessModel().access_mode === 'local_only'}>
+                            <div class="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
+                              <Checkbox
+                                checked={accessModel().port_mode === 'auto'}
+                                onChange={props.toggleAutoPort}
+                                label="Auto-select a free port each start"
+                                size="sm"
+                              />
+                            </div>
+                          </Show>
+                        </>
+                      )}
+                    >
+                      <SettingsFieldInput
+                        field={props.snapshot.host_fields[0]!}
+                        value={props.draft.local_ui_bind}
+                        updateDraftField={props.updateDraftField}
+                        sectionTitle={addressCardTitle()}
+                      />
+                    </Show>
                   </div>
-                </Show>
-              </SettingsSurfaceCard>
-            </div>
+                </div>
+
+                <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
+                  <SettingsCardHeading title={protectionCardTitle()} help={protectionCardHelp()} />
+                  <div class="mt-3">
+                    <Show
+                      when={accessModel().access_mode === 'local_only'}
+                      fallback={(
+                        <LocalUIPasswordField
+                          snapshot={props.snapshot}
+                          draft={props.draft}
+                          updateDraftField={props.updateDraftField}
+                          clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
+                          sectionTitle={protectionCardTitle()}
+                        />
+                      )}
+                    >
+                      <div class="flex items-start gap-2.5 rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
+                        <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <div class="text-[11px] leading-[1.55] text-muted-foreground">
+                          Loopback bind keeps the runtime on this machine only. No password is required.
+                        </div>
+                      </div>
+                    </Show>
+                  </div>
+                </div>
+              </div>
+            </section>
+
           </div>
         </Show>
 
@@ -2721,22 +2827,23 @@ function BootstrapSettingsPanel(props: Readonly<{
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
 }>) {
   return (
-    <div class="space-y-4">
-      <SettingsSurfaceCard
-        title="Next-start registration request"
-        help="Desktop stores this request locally and consumes it on the next successful desktop-managed start."
-        accessory={(
-          <Tag
-            variant={props.bootstrapPending ? 'primary' : 'neutral'}
-            tone="soft"
-            size="sm"
-            class="cursor-default whitespace-nowrap"
-          >
-            {compactBootstrapStatusTagLabel(props.liveBootstrapStatusLabel)}
-          </Tag>
-        )}
-      >
-        <div class="grid gap-3 lg:grid-cols-3">
+    <div class="space-y-6">
+      <section>
+        <SettingsSectionHeader
+          label="Queued request"
+          hint="Consumed on the next successful desktop-managed start"
+          accessory={(
+            <Tag
+              variant={props.bootstrapPending ? 'primary' : 'neutral'}
+              tone="soft"
+              size="sm"
+              class="cursor-default whitespace-nowrap"
+            >
+              {compactBootstrapStatusTagLabel(props.liveBootstrapStatusLabel)}
+            </Tag>
+          )}
+        />
+        <div class="mt-3 grid gap-3 sm:grid-cols-3">
           <ControlPlaneInfoTile
             label="Control plane"
             value={trimString(props.draft.controlplane_url) || 'Not set'}
@@ -2745,32 +2852,36 @@ function BootstrapSettingsPanel(props: Readonly<{
           <ControlPlaneInfoTile
             label="Environment ID"
             value={trimString(props.draft.env_id) || 'Not set'}
+            monospace={trimString(props.draft.env_id) !== ''}
           />
           <ControlPlaneInfoTile
             label="Token"
             value={trimString(props.draft.env_token) === '' ? 'Not set' : 'Configured'}
-            detail="The token is stored locally and remains write-only in the renderer."
+            detail="Stored locally, write-only in the renderer."
           />
         </div>
-      </SettingsSurfaceCard>
+      </section>
 
-      <SettingsSurfaceCard
-        title="Bootstrap fields"
-        help="Queue a one-shot registration request for the next desktop-managed start."
-      >
-        <div class="grid gap-4 lg:grid-cols-3 [&>*]:h-full">
+      <section>
+        <SettingsSectionHeader
+          label="Bootstrap fields"
+          hint="Queue a one-shot registration request for the next desktop-managed start"
+        />
+        <div class="mt-3 grid gap-3 sm:grid-cols-3 [&>*]:h-full">
           <For each={props.snapshot.bootstrap_fields}>
             {(field) => (
-              <SettingsFieldInput
-                field={field}
-                value={props.draft[field.name]}
-                updateDraftField={props.updateDraftField}
-              />
+              <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
+                <SettingsFieldInput
+                  field={field}
+                  value={props.draft[field.name]}
+                  updateDraftField={props.updateDraftField}
+                />
+              </div>
             )}
           </For>
         </div>
         <Show when={props.bootstrapPending}>
-          <div class="mt-4 flex justify-end">
+          <div class="mt-3 flex justify-end">
             <Button
               size="sm"
               variant="outline"
@@ -2782,7 +2893,7 @@ function BootstrapSettingsPanel(props: Readonly<{
             </Button>
           </div>
         </Show>
-      </SettingsSurfaceCard>
+      </section>
     </div>
   );
 }
@@ -2801,6 +2912,11 @@ function ConnectionDialog(props: Readonly<{
   onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
 }>) {
+  // NOTE: `open` MUST be derived through a createMemo so that Solid's default `===`
+  // equality check absorbs identity churn in `props.state`. Without this, every
+  // keystroke creates a new state object, which re-runs the Dialog's overlay-mask
+  // effect (focus trap), stealing focus from the active input.
+  const isOpen = createMemo(() => props.state !== null);
   const isCreate = createMemo(() => props.state?.mode === 'create');
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
   const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
@@ -2835,7 +2951,7 @@ function ConnectionDialog(props: Readonly<{
 
   return (
     <Dialog
-      open={props.state !== null}
+      open={isOpen()}
       onOpenChange={props.onOpenChange}
       title={isCreate() ? 'Add Connection' : 'Edit Connection'}
       footer={(
@@ -3046,9 +3162,12 @@ function ControlPlaneDialog(props: Readonly<{
   updateField: (name: 'provider_origin', value: string) => void;
   onConnect: () => Promise<void>;
 }>) {
+  // See ConnectionDialog: memoize the open boolean so that identity churn in
+  // `props.state` never re-triggers the overlay-mask focus trap mid-typing.
+  const isOpen = createMemo(() => props.state !== null);
   return (
     <Dialog
-      open={props.state !== null}
+      open={isOpen()}
       onOpenChange={props.onOpenChange}
       title="Add Control Plane"
       footer={(
@@ -3104,26 +3223,21 @@ function LocalUIPasswordField(props: Readonly<{
   sectionTitle?: string;
 }>) {
   return (
-    <div class="flex h-full flex-col justify-between gap-3">
-      <div class="space-y-3">
-        <div class="flex flex-wrap gap-2">
-          <Tag
-            variant={passwordStateTagVariant(props.snapshot.password_state_tone)}
-            tone="soft"
-            size="sm"
-            class="cursor-default whitespace-nowrap"
-          >
-            {compactPasswordStateTagLabel(props.snapshot.password_state_label)}
+    <div class="space-y-3">
+      <div class="flex flex-wrap gap-1.5">
+        <Tag
+          variant={passwordStateTagVariant(props.snapshot.password_state_tone)}
+          tone="soft"
+          size="sm"
+          class="cursor-default whitespace-nowrap"
+        >
+          {compactPasswordStateTagLabel(props.snapshot.password_state_label)}
+        </Tag>
+        <Show when={trimString(props.draft.local_ui_password) !== ''}>
+          <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+            Replacement queued
           </Tag>
-          <Show when={trimString(props.draft.local_ui_password) !== ''}>
-            <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              Replacement queued
-            </Tag>
-          </Show>
-        </div>
-        <div class="rounded-xl border border-border/70 bg-muted/20 px-3 py-3 text-xs leading-5 text-muted-foreground">
-          Shared or custom exposure modes should keep a stored password ready before the next open of Local Environment.
-        </div>
+        </Show>
       </div>
       <SettingsFieldInput
         field={props.snapshot.host_fields[1]!}

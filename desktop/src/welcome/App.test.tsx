@@ -205,9 +205,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("import { DesktopTooltip } from './DesktopTooltip';");
     expect(appSrc).toContain('data-redeven-settings-help=""');
     expect(appSrc).not.toContain('title={tooltip()}');
-    expect(appSrc).toContain('redeven-launcher-toolbar');
+    expect(appSrc).toContain('redeven-console-tab');
+    expect(appSrc).toContain('redeven-console-filter');
     expect(appSrc).toContain('redeven-environment-card');
-    expect(appSrc).toContain('function CardFactGrid');
+    expect(appSrc).toContain('redeven-environment-grid');
   });
 
   it('renders desktop tooltips through a body-level portal so dialogs do not clip them', () => {
@@ -224,14 +225,14 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('Connect Environment');
-    expect(appSrc).toContain('Environment Cards');
     expect(appSrc).toContain('Environments');
     expect(appSrc).toContain('Control Planes');
-    expect(appSrc).toContain('Local Environment pinned');
+    expect(appSrc).toContain('Search environments...');
     expect(appSrc).toContain('Local Environment');
     expect(appSrc).toContain('<EnvironmentConnectionCard');
-    expect(appSrc).toContain('redeven-environment-card--local');
-    expect(appSrc).toContain('Provider-backed Environments');
+    expect(appSrc).toContain('redeven-environment-card--featured');
+    expect(appSrc).toContain('New Environment');
+    expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {
@@ -241,8 +242,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Add Control Plane');
     expect(appSrc).toContain('Continue in Browser');
     expect(appSrc).toContain('revocable desktop authorization');
-    expect(appSrc).toContain('Authorization expired');
-    expect(appSrc).toContain('Provider-backed Environments');
+    expect(appSrc).toContain('Expired');
+    expect(appSrc).toContain('Connect Provider');
   });
 
   it('includes SSH connection mode copy inside the connection dialog source', () => {
@@ -268,8 +269,22 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('Access & Security');
     expect(appSrc).toContain('Bootstrap');
-    expect(appSrc).toContain('Visibility presets');
-    expect(appSrc).toContain('Next-start registration request');
-    expect(appSrc).toContain('Local environment workbench');
+    expect(appSrc).toContain('Visibility');
+    expect(appSrc).toContain('Queued request');
+    expect(appSrc).toContain('Runtime');
+    expect(appSrc).toContain('Next start');
+  });
+
+  it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {
+    const appSrc = readWelcomeSource();
+
+    // ConnectionDialog: state -> open must go through a memo accessor.
+    // `props.state !== null` evaluated inline would re-track props.state on every
+    // re-read, re-running the overlay-mask effect (cleanup restores focus to the
+    // previously-focused element, body re-autofocuses the first focusable) on every
+    // state update - which makes typing in any input of the dialog impossible.
+    expect(appSrc).not.toMatch(/<Dialog\b[^>]*open=\{props\.state\s*!==\s*null\}/);
+    expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.state !== null\)/);
+    expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.open\)/);
   });
 });
