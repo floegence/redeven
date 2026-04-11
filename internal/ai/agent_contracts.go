@@ -63,6 +63,7 @@ type ProviderControls struct {
 	ThinkingBudgetTokens int      `json:"thinking_budget_tokens,omitempty"`
 	CacheControl         string   `json:"cache_control,omitempty"`
 	ResponseFormat       string   `json:"response_format,omitempty"`
+	PreviousResponseID   string   `json:"previous_response_id,omitempty"`
 	Temperature          *float64 `json:"temperature,omitempty"`
 	TopP                 *float64 `json:"top_p,omitempty"`
 }
@@ -118,16 +119,22 @@ type TurnUsage struct {
 	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
 }
 
+type TurnProviderState struct {
+	ContinuationKind string `json:"continuation_kind,omitempty"`
+	ContinuationID   string `json:"continuation_id,omitempty"`
+}
+
 type TurnResult struct {
-	FinishReason    string         `json:"finish_reason"`
-	Text            string         `json:"text,omitempty"`
-	Reasoning       string         `json:"reasoning,omitempty"`
-	ToolCalls       []ToolCall     `json:"tool_calls,omitempty"`
-	Sources         []SourceRef    `json:"sources,omitempty"`
-	Usage           TurnUsage      `json:"usage,omitempty"`
-	RawProviderDiag map[string]any `json:"raw_provider_diag,omitempty"`
-	StreamEvents    []StreamEvent  `json:"stream_events,omitempty"`
-	ToolResults     []ToolResult   `json:"tool_results,omitempty"`
+	FinishReason    string             `json:"finish_reason"`
+	Text            string             `json:"text,omitempty"`
+	Reasoning       string             `json:"reasoning,omitempty"`
+	ToolCalls       []ToolCall         `json:"tool_calls,omitempty"`
+	Sources         []SourceRef        `json:"sources,omitempty"`
+	Usage           TurnUsage          `json:"usage,omitempty"`
+	ProviderState   *TurnProviderState `json:"provider_state,omitempty"`
+	RawProviderDiag map[string]any     `json:"raw_provider_diag,omitempty"`
+	StreamEvents    []StreamEvent      `json:"stream_events,omitempty"`
+	ToolResults     []ToolResult       `json:"tool_results,omitempty"`
 }
 
 // Provider is the normalized runtime adapter contract.

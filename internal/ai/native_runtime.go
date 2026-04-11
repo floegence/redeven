@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
 	contextcompactor "github.com/floegence/redeven/internal/ai/context/compactor"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
@@ -25,16 +27,17 @@ import (
 )
 
 const (
-	nativeDefaultMaxSteps         = 24
-	nativeDefaultMaxOutputTokens  = 4096
-	nativeDefaultNoToolRounds     = 3
-	nativeDefaultCompactThreshold = 0.80
-	nativeMinCompactThreshold     = 0.65
-	nativeMaxCompactThreshold     = 0.90
-	nativeDefaultContextLimit     = 128000
-	nativeToolResultPruneBudget   = 50000
-	nativeToolResultPruneRunes    = 480
-	nativeToolResultKeepTurns     = 2
+	nativeDefaultMaxSteps                   = 24
+	nativeDefaultMaxOutputTokens            = 4096
+	nativeDefaultNoToolRounds               = 3
+	nativeDefaultCompactThreshold           = 0.80
+	nativeMinCompactThreshold               = 0.65
+	nativeMaxCompactThreshold               = 0.90
+	nativeDefaultContextLimit               = 128000
+	nativeToolResultPruneBudget             = 50000
+	nativeToolResultPruneRunes              = 480
+	nativeToolResultKeepTurns               = 2
+	providerContinuationKindOpenAIResponses = "openai_responses"
 	// nativeHardMaxSteps is the absolute safety net for the task-driven loop.
 	// The loop is now driven by explicit completion signals (task_complete,
 	// ask_user), NOT by a step budget. This constant only prevents
@@ -77,6 +80,9 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	}
 	if req.ProviderControls.TopP != nil {
 		params.TopP = openai.Float(*req.ProviderControls.TopP)
+	}
+	if previousResponseID := strings.TrimSpace(req.ProviderControls.PreviousResponseID); previousResponseID != "" {
+		params.PreviousResponseID = openai.String(previousResponseID)
 	}
 	switch strings.ToLower(strings.TrimSpace(req.ProviderControls.ResponseFormat)) {
 	case "":
@@ -307,6 +313,10 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		}
 		if rid := strings.TrimSpace(completed.ID); rid != "" {
 			result.RawProviderDiag["response_id"] = rid
+			result.ProviderState = &TurnProviderState{
+				ContinuationKind: providerContinuationKindOpenAIResponses,
+				ContinuationID:   rid,
+			}
 		}
 	} else {
 		result.RawProviderDiag["missing_response_completed"] = true
@@ -1780,10 +1790,10 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	})
 
 	if intent == RunIntentSocial {
-		return r.runNativeSocial(execCtx, adapter, providerType, modelName, mode, req)
+		return r.runNativeSocial(execCtx, adapter, providerCfg, providerType, modelName, mode, req)
 	}
 	if intent == RunIntentCreative {
-		return r.runNativeCreative(execCtx, adapter, providerType, modelName, mode, req)
+		return r.runNativeCreative(execCtx, adapter, providerCfg, providerType, modelName, mode, req)
 	}
 	r.persistRunEvent("completion.contract", RealtimeStreamKindLifecycle, map[string]any{
 		"contract":           completionContractForExecutionContract(executionContract),
@@ -1854,6 +1864,30 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		})
 	}
 	messages := buildMessagesForRun(req)
+	resumeState, resumeStateErr := r.loadProviderTurnResumeState(execCtx, providerCfg, providerType, modelName)
+	if resumeStateErr != nil {
+		r.persistRunEvent("provider.continuation.load_failed", RealtimeStreamKindLifecycle, map[string]any{
+			"provider_type": providerType,
+			"error":         sanitizeLogText(resumeStateErr.Error(), 240),
+		})
+		resumeState = providerTurnResumeState{SkipReason: "load_failed"}
+	} else if resumeState.Enabled {
+		r.persistRunEvent("provider.continuation.available", RealtimeStreamKindLifecycle, map[string]any{
+			"provider_type":        providerType,
+			"provider_id":          strings.TrimSpace(providerCfg.ID),
+			"model":                modelName,
+			"continuation_kind":    providerContinuationKindOpenAIResponses,
+			"previous_response_id": resumeState.PreviousResponseID,
+			"provider_base_url":    canonicalProviderContinuationBaseURL(providerType, providerCfg.BaseURL),
+		})
+	} else if strings.TrimSpace(resumeState.SkipReason) != "" {
+		r.persistRunEvent("provider.continuation.skipped", RealtimeStreamKindLifecycle, map[string]any{
+			"provider_type": providerType,
+			"provider_id":   strings.TrimSpace(providerCfg.ID),
+			"model":         modelName,
+			"reason":        resumeState.SkipReason,
+		})
+	}
 	contextWindow := nativeDefaultContextLimit
 	if req.ModelCapability.MaxContextTokens > 0 {
 		contextWindow = req.ModelCapability.MaxContextTokens
@@ -2319,6 +2353,18 @@ mainLoop:
 			})
 			turnReq.Messages = repaired
 		}
+		baseTurnMessages := turnReq.Messages
+		resumeTurn := step == 0 && resumeState.Enabled && strings.TrimSpace(resumeState.PreviousResponseID) != ""
+		if resumeTurn {
+			turnReq.Messages = composeTurnMessages(systemPrompt, buildResumeMessagesForRun(req))
+			turnReq.ProviderControls.PreviousResponseID = resumeState.PreviousResponseID
+			r.persistRunEvent("provider.continuation.resume_requested", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":           step,
+				"provider_type":        providerType,
+				"previous_response_id": resumeState.PreviousResponseID,
+				"sent_messages":        len(turnReq.Messages),
+			})
+		}
 		estimateTokens, estimateSource = estimateTurnTokens(providerType, turnReq)
 		state.EstimateSource = estimateSource
 		r.emitContextUsageEvent(contextUsageEventInput{
@@ -2363,6 +2409,28 @@ mainLoop:
 			return result, err
 		}
 		stepResult, stepErr := runTurn(turnReq)
+		if resumeTurn && stepErr != nil && isOpenAIContinuationRejection(stepErr) {
+			r.persistRunEvent("provider.continuation.invalidated", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":           step,
+				"provider_type":        providerType,
+				"previous_response_id": resumeState.PreviousResponseID,
+				"reason":               "provider_rejected_previous_response_id",
+				"error":                sanitizeLogText(stepErr.Error(), 240),
+			})
+			resumeState = providerTurnResumeState{SkipReason: "provider_rejected_previous_response_id"}
+			r.setProviderContinuationCandidate(threadstore.ThreadProviderContinuation{})
+			turnReq.Messages = baseTurnMessages
+			turnReq.ProviderControls.PreviousResponseID = ""
+			estimateTokens, estimateSource = estimateTurnTokens(providerType, turnReq)
+			state.EstimateSource = estimateSource
+			turnTextSeen = false
+			stepResult, stepErr = runTurn(turnReq)
+			r.persistRunEvent("provider.continuation.fallback_replay", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":    step,
+				"provider_type": providerType,
+				"success":       stepErr == nil,
+			})
+		}
 		if stepErr != nil && isProviderToolCallReferenceError(stepErr) {
 			r.persistRunEvent("provider.error.classified", RealtimeStreamKindLifecycle, map[string]any{
 				"step_index":    step,
@@ -2446,6 +2514,13 @@ mainLoop:
 		if strings.TrimSpace(stepResult.Text) != "" {
 			turnTextSeen = true
 		}
+		r.setProviderContinuationCandidate(buildProviderContinuationCandidate(
+			strings.TrimSpace(providerCfg.ID),
+			providerType,
+			modelName,
+			providerCfg.BaseURL,
+			stepResult.ProviderState,
+		))
 		finishReason := normalizeReplyFinishReason(stepResult.FinishReason)
 		r.recordRuntimeTurnUsage(stepResult.Usage, estimateTokens)
 		r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
@@ -3264,28 +3339,31 @@ mainLoop:
 func (r *run) runNativeSocial(
 	execCtx context.Context,
 	adapter Provider,
+	providerCfg config.AIProvider,
 	providerType string,
 	modelName string,
 	mode string,
 	req RunRequest,
 ) error {
-	return r.runNativeConversational(execCtx, adapter, providerType, modelName, mode, req, RunIntentSocial)
+	return r.runNativeConversational(execCtx, adapter, providerCfg, providerType, modelName, mode, req, RunIntentSocial)
 }
 
 func (r *run) runNativeCreative(
 	execCtx context.Context,
 	adapter Provider,
+	providerCfg config.AIProvider,
 	providerType string,
 	modelName string,
 	mode string,
 	req RunRequest,
 ) error {
-	return r.runNativeConversational(execCtx, adapter, providerType, modelName, mode, req, RunIntentCreative)
+	return r.runNativeConversational(execCtx, adapter, providerCfg, providerType, modelName, mode, req, RunIntentCreative)
 }
 
 func (r *run) runNativeConversational(
 	execCtx context.Context,
 	adapter Provider,
+	providerCfg config.AIProvider,
 	providerType string,
 	modelName string,
 	mode string,
@@ -3314,6 +3392,33 @@ func (r *run) runNativeConversational(
 
 	r.emitLifecyclePhase("synthesizing", map[string]any{"intent": intent})
 	messages := buildMessagesForRun(req)
+	resumeState, resumeStateErr := r.loadProviderTurnResumeState(execCtx, providerCfg, providerType, modelName)
+	if resumeStateErr != nil {
+		r.persistRunEvent("provider.continuation.load_failed", RealtimeStreamKindLifecycle, map[string]any{
+			"provider_type": providerType,
+			"error":         sanitizeLogText(resumeStateErr.Error(), 240),
+			"intent":        intent,
+		})
+		resumeState = providerTurnResumeState{SkipReason: "load_failed"}
+	} else if resumeState.Enabled {
+		r.persistRunEvent("provider.continuation.available", RealtimeStreamKindLifecycle, map[string]any{
+			"provider_type":        providerType,
+			"provider_id":          strings.TrimSpace(providerCfg.ID),
+			"model":                modelName,
+			"continuation_kind":    providerContinuationKindOpenAIResponses,
+			"previous_response_id": resumeState.PreviousResponseID,
+			"provider_base_url":    canonicalProviderContinuationBaseURL(providerType, providerCfg.BaseURL),
+			"intent":               intent,
+		})
+	} else if strings.TrimSpace(resumeState.SkipReason) != "" {
+		r.persistRunEvent("provider.continuation.skipped", RealtimeStreamKindLifecycle, map[string]any{
+			"provider_type": providerType,
+			"provider_id":   strings.TrimSpace(providerCfg.ID),
+			"model":         modelName,
+			"reason":        resumeState.SkipReason,
+			"intent":        intent,
+		})
+	}
 	continuationCount := 0
 	for step := 0; ; step++ {
 		turnReq := TurnRequest{
@@ -3323,6 +3428,19 @@ func (r *run) runNativeConversational(
 			Budgets:          TurnBudgets{MaxSteps: 1, MaxInputTokens: req.Options.MaxInputTokens, MaxOutputToken: req.Options.MaxOutputTokens, MaxCostUSD: req.Options.MaxCostUSD},
 			ModeFlags:        ModeFlags{Mode: mode, ReasoningOnly: true},
 			ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
+		}
+		baseTurnMessages := turnReq.Messages
+		resumeTurn := step == 0 && resumeState.Enabled && strings.TrimSpace(resumeState.PreviousResponseID) != ""
+		if resumeTurn {
+			turnReq.Messages = composeTurnMessages(systemPrompt, buildResumeMessagesForRun(req))
+			turnReq.ProviderControls.PreviousResponseID = resumeState.PreviousResponseID
+			r.persistRunEvent("provider.continuation.resume_requested", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":           step,
+				"provider_type":        providerType,
+				"previous_response_id": resumeState.PreviousResponseID,
+				"sent_messages":        len(turnReq.Messages),
+				"intent":               intent,
+			})
 		}
 		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
 		contextWindow := nativeDefaultContextLimit
@@ -3363,6 +3481,45 @@ func (r *run) runNativeConversational(
 			}
 		})
 		endBusy()
+		if resumeTurn && stepErr != nil && isOpenAIContinuationRejection(stepErr) {
+			r.persistRunEvent("provider.continuation.invalidated", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":           step,
+				"provider_type":        providerType,
+				"previous_response_id": resumeState.PreviousResponseID,
+				"reason":               "provider_rejected_previous_response_id",
+				"error":                sanitizeLogText(stepErr.Error(), 240),
+				"intent":               intent,
+			})
+			resumeState = providerTurnResumeState{SkipReason: "provider_rejected_previous_response_id"}
+			r.setProviderContinuationCandidate(threadstore.ThreadProviderContinuation{})
+			turnReq.Messages = baseTurnMessages
+			turnReq.ProviderControls.PreviousResponseID = ""
+			estimateTokens, estimateSource = estimateTurnTokens(providerType, turnReq)
+			endBusy = r.beginBusy()
+			stepResult, stepErr = adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
+				switch event.Type {
+				case StreamEventTextDelta:
+					if strings.TrimSpace(event.Text) != "" {
+						_ = r.appendTextDelta(event.Text)
+					}
+				case StreamEventThinkingDelta:
+					if strings.TrimSpace(event.Text) != "" {
+						r.touchActivity()
+						_ = r.appendThinkingDelta(event.Text)
+						r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
+							"delta": truncateRunes(event.Text, 2000),
+						})
+					}
+				}
+			})
+			endBusy()
+			r.persistRunEvent("provider.continuation.fallback_replay", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index":    step,
+				"provider_type": providerType,
+				"success":       stepErr == nil,
+				"intent":        intent,
+			})
+		}
 		if stepErr != nil {
 			if r.finalizeIfContextCanceled(execCtx) {
 				return nil
@@ -3370,6 +3527,13 @@ func (r *run) runNativeConversational(
 			return r.failRun("Failed to generate conversational response", stepErr)
 		}
 
+		r.setProviderContinuationCandidate(buildProviderContinuationCandidate(
+			strings.TrimSpace(providerCfg.ID),
+			providerType,
+			modelName,
+			providerCfg.BaseURL,
+			stepResult.ProviderState,
+		))
 		finishReason := normalizeReplyFinishReason(stepResult.FinishReason)
 		r.recordRuntimeTurnUsage(stepResult.Usage, estimateTokens)
 		r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
@@ -3478,7 +3642,44 @@ func buildMessagesForRun(req RunRequest) []Message {
 	return messages
 }
 
+func buildResumeMessagesForRun(req RunRequest) []Message {
+	if strings.TrimSpace(req.ContextPack.ThreadID) != "" {
+		return buildMessagesFromPromptPackWithOptions(req.ContextPack, req.Input.Text, promptPackMessageBuildOptions{
+			IncludeRecentDialogue: false,
+		})
+	}
+	messages := make([]Message, 0, 1+len(req.Input.Attachments))
+	if txt := strings.TrimSpace(req.Input.Text); txt != "" {
+		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
+	}
+	for _, it := range req.Input.Attachments {
+		if strings.TrimSpace(it.URL) == "" {
+			continue
+		}
+		messages = append(messages, Message{
+			Role: "user",
+			Content: []ContentPart{{
+				Type:     "file",
+				FileURI:  strings.TrimSpace(it.URL),
+				MimeType: strings.TrimSpace(it.MimeType),
+				Text:     strings.TrimSpace(it.Name),
+			}},
+		})
+	}
+	return messages
+}
+
 func buildMessagesFromPromptPack(pack contextmodel.PromptPack, currentUserInput string) []Message {
+	return buildMessagesFromPromptPackWithOptions(pack, currentUserInput, promptPackMessageBuildOptions{
+		IncludeRecentDialogue: true,
+	})
+}
+
+type promptPackMessageBuildOptions struct {
+	IncludeRecentDialogue bool
+}
+
+func buildMessagesFromPromptPackWithOptions(pack contextmodel.PromptPack, currentUserInput string, opts promptPackMessageBuildOptions) []Message {
 	messages := make([]Message, 0, len(pack.RecentDialogue)*2+8)
 	if txt := strings.TrimSpace(pack.SystemContract); txt != "" {
 		messages = append(messages, Message{Role: "system", Content: []ContentPart{{Type: "text", Text: txt}}})
@@ -3506,12 +3707,14 @@ func buildMessagesFromPromptPack(pack contextmodel.PromptPack, currentUserInput 
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: strings.Join(contextParts, "\n")}}})
 	}
 
-	for _, turn := range pack.RecentDialogue {
-		if txt := strings.TrimSpace(turn.UserText); txt != "" {
-			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
-		}
-		if txt := strings.TrimSpace(turn.AssistantText); txt != "" {
-			messages = append(messages, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: txt}}})
+	if opts.IncludeRecentDialogue {
+		for _, turn := range pack.RecentDialogue {
+			if txt := strings.TrimSpace(turn.UserText); txt != "" {
+				messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
+			}
+			if txt := strings.TrimSpace(turn.AssistantText); txt != "" {
+				messages = append(messages, Message{Role: "assistant", Content: []ContentPart{{Type: "text", Text: txt}}})
+			}
 		}
 	}
 
@@ -3616,6 +3819,116 @@ func buildMessagesFromPromptPack(pack contextmodel.PromptPack, currentUserInput 
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
 	}
 	return messages
+}
+
+type providerTurnResumeState struct {
+	Enabled            bool
+	PreviousResponseID string
+	SkipReason         string
+}
+
+func canonicalProviderContinuationBaseURL(providerType string, baseURL string) string {
+	providerType = strings.ToLower(strings.TrimSpace(providerType))
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL != "" {
+		return baseURL
+	}
+	if providerType == "openai" {
+		return "https://api.openai.com/v1"
+	}
+	return ""
+}
+
+func isOpenAIResponsesProviderContinuationEnabled(providerType string) bool {
+	return strings.EqualFold(strings.TrimSpace(providerType), "openai")
+}
+
+func isOpenAIContinuationRejection(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr *openai.Error
+	if !errors.As(err, &apiErr) || apiErr == nil {
+		return false
+	}
+	if apiErr.StatusCode != http.StatusBadRequest && apiErr.StatusCode != http.StatusNotFound {
+		return false
+	}
+	payload := strings.ToLower(strings.Join([]string{
+		strings.TrimSpace(apiErr.Code),
+		strings.TrimSpace(apiErr.Param),
+		strings.TrimSpace(apiErr.Type),
+		strings.TrimSpace(apiErr.Message),
+	}, " "))
+	if strings.Contains(payload, "previous_response_id") {
+		return true
+	}
+	if strings.Contains(payload, "response_id") && (strings.Contains(payload, "invalid") || strings.Contains(payload, "not found") || strings.Contains(payload, "expired")) {
+		return true
+	}
+	return false
+}
+
+func buildProviderContinuationCandidate(providerID string, providerType string, modelName string, baseURL string, state *TurnProviderState) threadstore.ThreadProviderContinuation {
+	if state == nil {
+		return threadstore.ThreadProviderContinuation{}
+	}
+	kind := strings.TrimSpace(state.ContinuationKind)
+	continuationID := strings.TrimSpace(state.ContinuationID)
+	if kind == "" || continuationID == "" {
+		return threadstore.ThreadProviderContinuation{}
+	}
+	return threadstore.ThreadProviderContinuation{
+		Kind:            kind,
+		ContinuationID:  continuationID,
+		ProviderID:      strings.TrimSpace(providerID),
+		Model:           strings.TrimSpace(modelName),
+		BaseURL:         canonicalProviderContinuationBaseURL(providerType, baseURL),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}.Normalized()
+}
+
+func (r *run) loadProviderTurnResumeState(ctx context.Context, providerCfg config.AIProvider, providerType string, modelName string) (providerTurnResumeState, error) {
+	state := providerTurnResumeState{}
+	if r == nil || r.threadsDB == nil {
+		state.SkipReason = "thread_store_unavailable"
+		return state, nil
+	}
+	if strings.TrimSpace(r.endpointID) == "" || strings.TrimSpace(r.threadID) == "" {
+		state.SkipReason = "thread_identity_missing"
+		return state, nil
+	}
+	if !isOpenAIResponsesProviderContinuationEnabled(providerType) {
+		state.SkipReason = "provider_not_supported"
+		return state, nil
+	}
+	continuation, err := r.threadsDB.GetThreadProviderContinuation(ctx, strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID))
+	if err != nil {
+		return state, err
+	}
+	if continuation == nil || continuation.IsZero() {
+		state.SkipReason = "thread_state_missing"
+		return state, nil
+	}
+	if continuation.Kind != providerContinuationKindOpenAIResponses {
+		state.SkipReason = "kind_mismatch"
+		return state, nil
+	}
+	if continuation.ProviderID != strings.TrimSpace(providerCfg.ID) {
+		state.SkipReason = "provider_id_mismatch"
+		return state, nil
+	}
+	if continuation.Model != strings.TrimSpace(modelName) {
+		state.SkipReason = "model_mismatch"
+		return state, nil
+	}
+	if continuation.BaseURL != canonicalProviderContinuationBaseURL(providerType, providerCfg.BaseURL) {
+		state.SkipReason = "base_url_mismatch"
+		return state, nil
+	}
+	state.Enabled = true
+	state.PreviousResponseID = continuation.ContinuationID
+	return state, nil
 }
 
 func composeTurnMessages(systemPrompt string, history []Message) []Message {

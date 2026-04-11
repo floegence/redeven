@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 21
+	threadstoreCurrentSchemaVersion = 22
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -49,6 +49,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 18, ToVersion: 19, Apply: migrateThreadstoreToV19},
 			{FromVersion: 19, ToVersion: 20, Apply: migrateThreadstoreToV20},
 			{FromVersion: 20, ToVersion: 21, Apply: migrateThreadstoreToV21},
+			{FromVersion: 21, ToVersion: 22, Apply: migrateThreadstoreToV22},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -208,6 +209,10 @@ func migrateThreadstoreToV21(tx *sql.Tx) error {
 	return ensureUploadTablesTx(tx)
 }
 
+func migrateThreadstoreToV22(tx *sql.Tx) error {
+	return ensureAIThreadStateContinuationColumnsTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -269,6 +274,26 @@ func ensureAIThreadsWaitingUserInputJSONTx(tx *sql.Tx) error {
 
 func ensureAIThreadsLastContextRunIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "last_context_run_id", `ALTER TABLE ai_threads ADD COLUMN last_context_run_id TEXT NOT NULL DEFAULT ''`)
+}
+
+func ensureAIThreadStateContinuationColumnsTx(tx *sql.Tx) error {
+	stmts := []struct {
+		column string
+		sql    string
+	}{
+		{column: "provider_continuation_kind", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_kind TEXT NOT NULL DEFAULT ''`},
+		{column: "provider_continuation_id", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_id TEXT NOT NULL DEFAULT ''`},
+		{column: "provider_continuation_provider_id", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_provider_id TEXT NOT NULL DEFAULT ''`},
+		{column: "provider_continuation_model", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_model TEXT NOT NULL DEFAULT ''`},
+		{column: "provider_continuation_base_url", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_base_url TEXT NOT NULL DEFAULT ''`},
+		{column: "provider_continuation_updated_at_unix_ms", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0`},
+	}
+	for _, stmt := range stmts {
+		if err := ensureColumnTx(tx, "ai_thread_state", stmt.column, stmt.sql); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ensureAIThreadsTitleMetadataColumnsTx(tx *sql.Tx) error {
@@ -344,6 +369,12 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   thread_id TEXT NOT NULL,
   open_goal TEXT NOT NULL DEFAULT '',
   last_assistant_summary TEXT NOT NULL DEFAULT '',
+  provider_continuation_kind TEXT NOT NULL DEFAULT '',
+  provider_continuation_id TEXT NOT NULL DEFAULT '',
+  provider_continuation_provider_id TEXT NOT NULL DEFAULT '',
+  provider_continuation_model TEXT NOT NULL DEFAULT '',
+  provider_continuation_base_url TEXT NOT NULL DEFAULT '',
+  provider_continuation_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(endpoint_id, thread_id)
 );
@@ -744,7 +775,10 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"payload_json", "at_unix_ms",
 		},
 		"ai_thread_state": {
-			"endpoint_id", "thread_id", "open_goal", "last_assistant_summary", "updated_at_unix_ms",
+			"endpoint_id", "thread_id", "open_goal", "last_assistant_summary",
+			"provider_continuation_kind", "provider_continuation_id", "provider_continuation_provider_id",
+			"provider_continuation_model", "provider_continuation_base_url",
+			"provider_continuation_updated_at_unix_ms", "updated_at_unix_ms",
 		},
 		"ai_thread_todos": {
 			"endpoint_id", "thread_id", "version", "todos_json", "updated_at_unix_ms",

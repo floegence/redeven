@@ -1791,12 +1791,42 @@ type RunEventsQuery struct {
 	Category string
 }
 
+type ThreadProviderContinuation struct {
+	Kind            string `json:"kind"`
+	ContinuationID  string `json:"continuation_id"`
+	ProviderID      string `json:"provider_id"`
+	Model           string `json:"model"`
+	BaseURL         string `json:"base_url"`
+	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms"`
+}
+
+func (c ThreadProviderContinuation) normalized() ThreadProviderContinuation {
+	c.Kind = strings.TrimSpace(c.Kind)
+	c.ContinuationID = strings.TrimSpace(c.ContinuationID)
+	c.ProviderID = strings.TrimSpace(c.ProviderID)
+	c.Model = strings.TrimSpace(c.Model)
+	c.BaseURL = strings.TrimSpace(c.BaseURL)
+	if c.Kind == "" || c.ContinuationID == "" {
+		return ThreadProviderContinuation{}
+	}
+	return c
+}
+
+func (c ThreadProviderContinuation) Normalized() ThreadProviderContinuation {
+	return c.normalized()
+}
+
+func (c ThreadProviderContinuation) IsZero() bool {
+	return c.normalized() == (ThreadProviderContinuation{})
+}
+
 type ThreadState struct {
-	EndpointID           string `json:"endpoint_id"`
-	ThreadID             string `json:"thread_id"`
-	OpenGoal             string `json:"open_goal"`
-	LastAssistantSummary string `json:"last_assistant_summary"`
-	UpdatedAtUnixMs      int64  `json:"updated_at_unix_ms"`
+	EndpointID           string                     `json:"endpoint_id"`
+	ThreadID             string                     `json:"thread_id"`
+	OpenGoal             string                     `json:"open_goal"`
+	LastAssistantSummary string                     `json:"last_assistant_summary"`
+	ProviderContinuation ThreadProviderContinuation `json:"provider_continuation,omitempty"`
+	UpdatedAtUnixMs      int64                      `json:"updated_at_unix_ms"`
 }
 
 func (s *Store) GetThreadState(ctx context.Context, endpointID string, threadID string) (*ThreadState, error) {
@@ -1813,10 +1843,25 @@ func (s *Store) GetThreadState(ctx context.Context, endpointID string, threadID 
 	}
 	var st ThreadState
 	err := s.db.QueryRowContext(ctx, `
-SELECT endpoint_id, thread_id, open_goal, last_assistant_summary, updated_at_unix_ms
+SELECT endpoint_id, thread_id, open_goal, last_assistant_summary,
+       provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
+       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
+       updated_at_unix_ms
 FROM ai_thread_state
 WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(&st.EndpointID, &st.ThreadID, &st.OpenGoal, &st.LastAssistantSummary, &st.UpdatedAtUnixMs)
+`, endpointID, threadID).Scan(
+		&st.EndpointID,
+		&st.ThreadID,
+		&st.OpenGoal,
+		&st.LastAssistantSummary,
+		&st.ProviderContinuation.Kind,
+		&st.ProviderContinuation.ContinuationID,
+		&st.ProviderContinuation.ProviderID,
+		&st.ProviderContinuation.Model,
+		&st.ProviderContinuation.BaseURL,
+		&st.ProviderContinuation.UpdatedAtUnixMs,
+		&st.UpdatedAtUnixMs,
+	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -1825,6 +1870,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	}
 	st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 	st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
+	st.ProviderContinuation = st.ProviderContinuation.normalized()
 	return &st, nil
 }
 
@@ -1839,6 +1885,7 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 	st.ThreadID = strings.TrimSpace(st.ThreadID)
 	st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 	st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
+	st.ProviderContinuation = st.ProviderContinuation.normalized()
 	if st.EndpointID == "" || st.ThreadID == "" {
 		return errors.New("invalid thread state")
 	}
@@ -1846,13 +1893,130 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 		st.UpdatedAtUnixMs = time.Now().UnixMilli()
 	}
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO ai_thread_state(endpoint_id, thread_id, open_goal, last_assistant_summary, updated_at_unix_ms)
-VALUES(?, ?, ?, ?, ?)
+INSERT INTO ai_thread_state(
+  endpoint_id, thread_id, open_goal, last_assistant_summary,
+  provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
+  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
+  updated_at_unix_ms
+)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
   open_goal=excluded.open_goal,
   last_assistant_summary=excluded.last_assistant_summary,
+  provider_continuation_kind=excluded.provider_continuation_kind,
+  provider_continuation_id=excluded.provider_continuation_id,
+  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
+  provider_continuation_model=excluded.provider_continuation_model,
+  provider_continuation_base_url=excluded.provider_continuation_base_url,
+  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
   updated_at_unix_ms=excluded.updated_at_unix_ms
-`, st.EndpointID, st.ThreadID, st.OpenGoal, st.LastAssistantSummary, st.UpdatedAtUnixMs)
+`, st.EndpointID, st.ThreadID, st.OpenGoal, st.LastAssistantSummary,
+		st.ProviderContinuation.Kind, st.ProviderContinuation.ContinuationID, st.ProviderContinuation.ProviderID,
+		st.ProviderContinuation.Model, st.ProviderContinuation.BaseURL, st.ProviderContinuation.UpdatedAtUnixMs,
+		st.UpdatedAtUnixMs)
+	return err
+}
+
+func (s *Store) GetThreadProviderContinuation(ctx context.Context, endpointID string, threadID string) (*ThreadProviderContinuation, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+
+	var cont ThreadProviderContinuation
+	err := s.db.QueryRowContext(ctx, `
+SELECT provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
+       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms
+FROM ai_thread_state
+WHERE endpoint_id = ? AND thread_id = ?
+`, endpointID, threadID).Scan(
+		&cont.Kind,
+		&cont.ContinuationID,
+		&cont.ProviderID,
+		&cont.Model,
+		&cont.BaseURL,
+		&cont.UpdatedAtUnixMs,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	cont = cont.normalized()
+	if cont.IsZero() {
+		return nil, nil
+	}
+	return &cont, nil
+}
+
+func (s *Store) SetThreadProviderContinuation(ctx context.Context, endpointID string, threadID string, cont ThreadProviderContinuation) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	cont = cont.normalized()
+	if endpointID == "" || threadID == "" || cont.IsZero() {
+		return errors.New("invalid request")
+	}
+	if cont.UpdatedAtUnixMs <= 0 {
+		cont.UpdatedAtUnixMs = time.Now().UnixMilli()
+	}
+	updatedAt := time.Now().UnixMilli()
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO ai_thread_state(
+  endpoint_id, thread_id, open_goal, last_assistant_summary,
+  provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
+  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
+  updated_at_unix_ms
+)
+VALUES(?, ?, '', '', ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
+  provider_continuation_kind=excluded.provider_continuation_kind,
+  provider_continuation_id=excluded.provider_continuation_id,
+  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
+  provider_continuation_model=excluded.provider_continuation_model,
+  provider_continuation_base_url=excluded.provider_continuation_base_url,
+  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
+  updated_at_unix_ms=excluded.updated_at_unix_ms
+`, endpointID, threadID, cont.Kind, cont.ContinuationID, cont.ProviderID, cont.Model, cont.BaseURL, cont.UpdatedAtUnixMs, updatedAt)
+	return err
+}
+
+func (s *Store) ClearThreadProviderContinuation(ctx context.Context, endpointID string, threadID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+	_, err := s.db.ExecContext(ctx, `
+UPDATE ai_thread_state
+SET provider_continuation_kind = '',
+    provider_continuation_id = '',
+    provider_continuation_provider_id = '',
+    provider_continuation_model = '',
+    provider_continuation_base_url = '',
+    provider_continuation_updated_at_unix_ms = 0,
+    updated_at_unix_ms = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, time.Now().UnixMilli(), endpointID, threadID)
 	return err
 }
 

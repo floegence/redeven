@@ -137,6 +137,7 @@ type run struct {
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 	assistantAnswer          assistantAnswerState
+	providerContinuation     threadstore.ThreadProviderContinuation
 
 	finalizationReason string
 	executionContract  string
@@ -405,6 +406,24 @@ func (r *run) getFinalizationReason() string {
 	v := strings.TrimSpace(r.finalizationReason)
 	r.muCancel.Unlock()
 	return v
+}
+
+func (r *run) setProviderContinuationCandidate(cont threadstore.ThreadProviderContinuation) {
+	if r == nil {
+		return
+	}
+	r.muAssistant.Lock()
+	r.providerContinuation = cont.Normalized()
+	r.muAssistant.Unlock()
+}
+
+func (r *run) getProviderContinuationCandidate() threadstore.ThreadProviderContinuation {
+	if r == nil {
+		return threadstore.ThreadProviderContinuation{}
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	return r.providerContinuation.Normalized()
 }
 
 func (r *run) setExecutionContract(contract string) {
