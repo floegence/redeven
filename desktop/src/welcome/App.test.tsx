@@ -24,6 +24,28 @@ function readDesktopTooltipSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopTooltip.tsx'), 'utf8');
 }
 
+function readWelcomeStyles(): string {
+  return fs.readFileSync(path.join(__dirname, 'index.css'), 'utf8');
+}
+
+function readInstalledDialogSource(): string {
+  return fs.readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      '..',
+      'node_modules',
+      '@floegence',
+      'floe-webapp-core',
+      'dist',
+      'components',
+      'ui',
+      'Dialog.js',
+    ),
+    'utf8',
+  );
+}
+
 describe('DesktopWelcomeShell', () => {
   it('describes Connect Environment inside the shared shell model', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -211,6 +233,17 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-grid');
   });
 
+  it('routes welcome action controls through shared pointer-ready button classes', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('redeven-console-icon-button');
+    expect(appSrc).toContain('redeven-console-chip-button');
+    expect(styles).toContain('.redeven-console-icon-button');
+    expect(styles).toContain('.redeven-console-chip-button');
+    expect(styles).toContain('cursor: pointer;');
+  });
+
   it('renders desktop tooltips through a body-level portal so dialogs do not clip them', () => {
     const tooltipSrc = readDesktopTooltipSource();
 
@@ -273,6 +306,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Queued request');
     expect(appSrc).toContain('Runtime');
     expect(appSrc).toContain('Next start');
+  });
+
+  it('keeps destructive hover affordances aligned with floe-webapp dialog close behavior', () => {
+    const styles = readWelcomeStyles();
+    const dialogSrc = readInstalledDialogSource();
+
+    expect(styles).toContain('.redeven-console-icon-button--danger:hover');
+    expect(styles).toContain('background: var(--error);');
+    expect(styles).toContain('color: var(--error-foreground);');
+    expect(dialogSrc).toContain('variant: "ghost-destructive"');
   });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {

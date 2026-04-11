@@ -1849,15 +1849,13 @@ function LocalEnvironmentCard(props: Readonly<{
           {compactOpenLocalEnvironmentLabel(isOpen())}
         </Button>
         <DesktopTooltip content="Settings" placement="top">
-          <button
-            type="button"
-            aria-label="Open Local Environment Settings"
+          <ConsoleActionIconButton
             title="Open Local Environment Settings"
-            class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            aria-label="Open Local Environment Settings"
             onClick={props.openSettingsSurface}
           >
             <Settings class="h-3.5 w-3.5" />
-          </button>
+          </ConsoleActionIconButton>
         </DesktopTooltip>
       </CardFooter>
     </Card>
@@ -1904,6 +1902,21 @@ function ConsoleActionIconButton(props: Readonly<{
         'redeven-console-icon-button',
         props.danger && 'redeven-console-icon-button--danger',
       )}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+function ConsoleChipActionButton(props: Readonly<{
+  onClick: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent>;
+  children: JSX.Element;
+}>) {
+  return (
+    <button
+      type="button"
+      class="redeven-console-chip-button"
       onClick={props.onClick}
     >
       {props.children}
@@ -2057,43 +2070,38 @@ function EnvironmentConnectionCard(props: Readonly<{
         <div class="flex items-center gap-0.5">
           <Show when={props.environment.can_save}>
             <DesktopTooltip content="Save" placement="top">
-              <button
-                type="button"
+              <ConsoleActionIconButton
                 title="Save connection"
                 aria-label={`Save ${props.environment.label}`}
-                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
                 onClick={() => {
                   void props.saveEnvironment(props.environment);
                 }}
               >
                 <Save class="h-3.5 w-3.5" />
-              </button>
+              </ConsoleActionIconButton>
             </DesktopTooltip>
           </Show>
           <Show when={props.environment.can_edit}>
             <DesktopTooltip content="Edit" placement="top">
-              <button
-                type="button"
+              <ConsoleActionIconButton
                 title="Edit connection"
                 aria-label={`Edit ${props.environment.label}`}
-                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
                 onClick={() => props.editEnvironment(props.environment)}
               >
                 <Pencil class="h-3.5 w-3.5" />
-              </button>
+              </ConsoleActionIconButton>
             </DesktopTooltip>
           </Show>
           <Show when={props.environment.can_delete}>
             <DesktopTooltip content="Delete" placement="top">
-              <button
-                type="button"
+              <ConsoleActionIconButton
                 title="Delete connection"
                 aria-label={`Delete ${props.environment.label}`}
-                class="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-destructive"
+                danger
                 onClick={() => props.deleteEnvironment(props.environment)}
               >
                 <Trash class="h-3.5 w-3.5" />
-              </button>
+              </ConsoleActionIconButton>
             </DesktopTooltip>
           </Show>
         </div>
@@ -2118,26 +2126,22 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
           <div class="text-xs text-muted-foreground">Add a Redeven URL or SSH target</div>
         </div>
         <div class="flex gap-2">
-          <button
-            type="button"
-            class="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+          <ConsoleChipActionButton
             onClick={(event) => {
               event.stopPropagation();
               props.openCreateConnectionDialog('', 'external_local_ui');
             }}
           >
             URL
-          </button>
-          <button
-            type="button"
-            class="rounded-full border border-border/70 bg-muted/20 px-3 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
+          </ConsoleChipActionButton>
+          <ConsoleChipActionButton
             onClick={(event) => {
               event.stopPropagation();
               props.openCreateConnectionDialog('', 'ssh_environment');
             }}
           >
             SSH
-          </button>
+          </ConsoleChipActionButton>
         </div>
       </div>
     </Card>
