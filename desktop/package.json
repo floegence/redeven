@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "@floegence/floe-webapp-core": "^0.35.57",
+    "@floegence/floe-webapp-core": "^0.35.58",
     "@fontsource/iosevka": "^5.2.5",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^20.19.24",
