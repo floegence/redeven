@@ -1398,6 +1398,33 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 
 	finalReason := strings.TrimSpace(r.getFinalizationReason())
+	if db != nil {
+		continuationCtx, cancelContinuation := context.WithTimeout(context.Background(), persistTO)
+		continuationCandidate := r.getProviderContinuationCandidate()
+		if syncErr := syncThreadProviderContinuationAfterRun(continuationCtx, db, endpointID, threadID, finalReason, continuationCandidate); syncErr != nil && finalErr == nil {
+			finalErr = syncErr
+		} else if syncErr == nil {
+			eventType := "provider.continuation.cleared"
+			payload := map[string]any{
+				"finalization_reason": finalReason,
+			}
+			if shouldClearThreadState(finalReason) {
+				payload["reason"] = "thread_completed"
+			} else if continuationCandidate.IsZero() {
+				payload["reason"] = "no_candidate"
+			} else {
+				eventType = "provider.continuation.persisted"
+				payload["reason"] = "provider_state_available"
+				payload["continuation_kind"] = continuationCandidate.Kind
+				payload["continuation_id"] = continuationCandidate.ContinuationID
+				payload["provider_id"] = continuationCandidate.ProviderID
+				payload["model"] = continuationCandidate.Model
+				payload["base_url"] = continuationCandidate.BaseURL
+			}
+			r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, payload)
+		}
+		cancelContinuation()
+	}
 	finalExecutionContract := r.getExecutionContract()
 	if finalExecutionContract == "" {
 		finalExecutionContract = normalizeExecutionContract(
@@ -1537,6 +1564,16 @@ func shouldClearThreadState(finalReason string) bool {
 	default:
 		return false
 	}
+}
+
+func syncThreadProviderContinuationAfterRun(ctx context.Context, db *threadstore.Store, endpointID string, threadID string, finalReason string, continuation threadstore.ThreadProviderContinuation) error {
+	if db == nil {
+		return nil
+	}
+	if shouldClearThreadState(finalReason) || continuation.IsZero() {
+		return db.ClearThreadProviderContinuation(ctx, endpointID, threadID)
+	}
+	return db.SetThreadProviderContinuation(ctx, endpointID, threadID, continuation)
 }
 
 func shouldPersistOpenGoalAfterRun(executionContract string, finalReason string) bool {

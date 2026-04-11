@@ -156,6 +156,24 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 		t.Fatalf("AppendRunEvent baseline: %v", err)
 	}
 
+	if err := s.UpsertThreadState(ctx, ThreadState{
+		EndpointID:           endpointID,
+		ThreadID:             threadID,
+		OpenGoal:             "baseline goal",
+		LastAssistantSummary: "baseline summary",
+		ProviderContinuation: ThreadProviderContinuation{
+			Kind:            "openai_responses",
+			ContinuationID:  "resp_baseline",
+			ProviderID:      "openai",
+			Model:           "gpt-5-mini",
+			BaseURL:         "https://api.openai.com/v1",
+			UpdatedAtUnixMs: now,
+		},
+		UpdatedAtUnixMs: now,
+	}); err != nil {
+		t.Fatalf("UpsertThreadState baseline: %v", err)
+	}
+
 	// Create checkpoint before a new run.
 	cpID := "cp_run_new"
 	if _, err := s.CreateThreadCheckpoint(ctx, endpointID, threadID, cpID, "run_new", CheckpointKindPreRun); err != nil {
@@ -286,6 +304,24 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 		t.Fatalf("AppendRunEvent after: %v", err)
 	}
 
+	if err := s.UpsertThreadState(ctx, ThreadState{
+		EndpointID:           endpointID,
+		ThreadID:             threadID,
+		OpenGoal:             "mutated goal",
+		LastAssistantSummary: "mutated summary",
+		ProviderContinuation: ThreadProviderContinuation{
+			Kind:            "openai_responses",
+			ContinuationID:  "resp_mutated",
+			ProviderID:      "openai",
+			Model:           "gpt-5",
+			BaseURL:         "https://proxy.example/v1",
+			UpdatedAtUnixMs: msg2At,
+		},
+		UpdatedAtUnixMs: msg2At,
+	}); err != nil {
+		t.Fatalf("UpsertThreadState after: %v", err)
+	}
+
 	// Restore checkpoint and ensure planes are reverted.
 	if _, err := s.RestoreThreadCheckpoint(ctx, endpointID, threadID, cpID); err != nil {
 		t.Fatalf("RestoreThreadCheckpoint: %v", err)
@@ -337,6 +373,20 @@ func TestThreadCheckpoint_RestoreReplacesDerivedAndPreservesUserTranscript(t *te
 	}
 	if len(spans) != 1 || spans[0].SpanID != "span_1" {
 		t.Fatalf("spans=%v, want only span_1", spans)
+	}
+
+	state, err := s.GetThreadState(ctx, endpointID, threadID)
+	if err != nil {
+		t.Fatalf("GetThreadState: %v", err)
+	}
+	if state == nil {
+		t.Fatalf("expected thread state after restore")
+	}
+	if state.OpenGoal != "baseline goal" || state.LastAssistantSummary != "baseline summary" {
+		t.Fatalf("thread state=%+v, want baseline goal + summary", state)
+	}
+	if state.ProviderContinuation.ContinuationID != "resp_baseline" {
+		t.Fatalf("continuation=%+v, want resp_baseline", state.ProviderContinuation)
 	}
 
 	toolCalls, err := s.ListRecentThreadToolCalls(ctx, endpointID, threadID, 10)

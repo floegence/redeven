@@ -1878,6 +1878,77 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 	}
 }
 
+func TestStore_ThreadProviderContinuationCRUD(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateThread(ctx, Thread{
+		ThreadID:              "th_resume",
+		EndpointID:            "env_resume",
+		NamespacePublicID:     "ns_resume",
+		CreatedByUserPublicID: "u1",
+		CreatedByUserEmail:    "u1@example.com",
+		UpdatedByUserPublicID: "u1",
+		UpdatedByUserEmail:    "u1@example.com",
+		CreatedAtUnixMs:       1,
+		UpdatedAtUnixMs:       1,
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	continuation := ThreadProviderContinuation{
+		Kind:            "openai_responses",
+		ContinuationID:  "resp_1",
+		ProviderID:      "openai",
+		Model:           "gpt-5-mini",
+		BaseURL:         "https://api.openai.com/v1",
+		UpdatedAtUnixMs: 10,
+	}
+	if err := s.SetThreadProviderContinuation(ctx, "env_resume", "th_resume", continuation); err != nil {
+		t.Fatalf("SetThreadProviderContinuation: %v", err)
+	}
+
+	got, err := s.GetThreadProviderContinuation(ctx, "env_resume", "th_resume")
+	if err != nil {
+		t.Fatalf("GetThreadProviderContinuation: %v", err)
+	}
+	if got == nil {
+		t.Fatalf("expected continuation state")
+	}
+	if *got != continuation {
+		t.Fatalf("continuation=%+v, want %+v", *got, continuation)
+	}
+
+	state, err := s.GetThreadState(ctx, "env_resume", "th_resume")
+	if err != nil {
+		t.Fatalf("GetThreadState: %v", err)
+	}
+	if state == nil {
+		t.Fatalf("expected thread state row")
+	}
+	if state.ProviderContinuation != continuation {
+		t.Fatalf("thread state continuation=%+v, want %+v", state.ProviderContinuation, continuation)
+	}
+
+	if err := s.ClearThreadProviderContinuation(ctx, "env_resume", "th_resume"); err != nil {
+		t.Fatalf("ClearThreadProviderContinuation: %v", err)
+	}
+	got, err = s.GetThreadProviderContinuation(ctx, "env_resume", "th_resume")
+	if err != nil {
+		t.Fatalf("GetThreadProviderContinuation after clear: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("continuation after clear=%+v, want nil", got)
+	}
+}
+
 func countRowsForTest(t *testing.T, db *sql.DB, query string, args ...any) int {
 	t.Helper()
 

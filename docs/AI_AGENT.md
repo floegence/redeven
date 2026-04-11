@@ -11,6 +11,7 @@ High-level design:
   - OpenAI: `openai-go` (Responses API)
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
   - Anthropic: `anthropic-sdk-go` (Messages API)
+- OpenAI Responses continuation is treated as an optimization layer rather than a second context system: Flower resumes with `previous_response_id` only when the same thread stays on a compatible OpenAI provider/model/base URL fingerprint, and otherwise falls back to the canonical local `PromptPack` replay path.
 
 ## Prompt architecture
 
@@ -239,6 +240,7 @@ Installer note:
 - Fresh uploads start as staged runtime-local blobs. Once a message or queued followup claims them, they become thread-owned resources; deleting that thread or deleting an unconsumed followup removes the corresponding refs, deletes any newly unreferenced upload blobs/metadata, and then runs best-effort SQLite compaction so on-disk usage converges after cleanup.
 - Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
 - The `workspace_json` column is now a legacy compatibility payload only. New checkpoints are thread-state-only; old workspace checkpoint artifacts are cleaned up best-effort during retention pruning, thread deletion, and startup orphan sweeps.
+- OpenAI Responses continuation state is persisted in `ai_thread_state` together with other thread-scoped runtime metadata. Flower updates that state only after the assistant transcript has been durably appended, clears it when a run reaches terminal task completion or when no fresh continuation survives the run, and invalidates it before retrying a local replay turn if the provider rejects `previous_response_id`.
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.
 - The current shipped schema keeps semantic memory in `memory_items`. Redeven does not currently ship a separate persistent embeddings table until the runtime fully owns that lifecycle.
 - Per-user thread read watermarks are intentionally stored outside the shared Flower threadstore because unread state is a user/session concern rather than collaborative thread content.

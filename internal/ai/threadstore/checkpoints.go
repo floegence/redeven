@@ -679,15 +679,31 @@ WHERE endpoint_id = ? AND thread_id = ?
 	// Thread state.
 	var st ThreadState
 	stErr := tx.QueryRowContext(ctx, `
-SELECT endpoint_id, thread_id, open_goal, last_assistant_summary, updated_at_unix_ms
+SELECT endpoint_id, thread_id, open_goal, last_assistant_summary,
+       provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
+       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
+       updated_at_unix_ms
 FROM ai_thread_state
 WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(&st.EndpointID, &st.ThreadID, &st.OpenGoal, &st.LastAssistantSummary, &st.UpdatedAtUnixMs)
+`, endpointID, threadID).Scan(
+		&st.EndpointID,
+		&st.ThreadID,
+		&st.OpenGoal,
+		&st.LastAssistantSummary,
+		&st.ProviderContinuation.Kind,
+		&st.ProviderContinuation.ContinuationID,
+		&st.ProviderContinuation.ProviderID,
+		&st.ProviderContinuation.Model,
+		&st.ProviderContinuation.BaseURL,
+		&st.ProviderContinuation.UpdatedAtUnixMs,
+		&st.UpdatedAtUnixMs,
+	)
 	if stErr == nil {
 		st.EndpointID = strings.TrimSpace(st.EndpointID)
 		st.ThreadID = strings.TrimSpace(st.ThreadID)
 		st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 		st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
+		st.ProviderContinuation = st.ProviderContinuation.normalized()
 		out.ThreadState = &st
 	} else if !errors.Is(stErr, sql.ErrNoRows) {
 		return out, stErr
@@ -1020,11 +1036,20 @@ INSERT INTO ai_thread_todos(
 	}
 	if snap.ThreadState != nil {
 		st := *snap.ThreadState
-		if st.UpdatedAtUnixMs > 0 || st.OpenGoal != "" || st.LastAssistantSummary != "" {
+		if st.UpdatedAtUnixMs > 0 || st.OpenGoal != "" || st.LastAssistantSummary != "" || !st.ProviderContinuation.IsZero() {
 			if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_thread_state(endpoint_id, thread_id, open_goal, last_assistant_summary, updated_at_unix_ms)
-VALUES(?, ?, ?, ?, ?)
-`, endpointID, threadID, strings.TrimSpace(st.OpenGoal), strings.TrimSpace(st.LastAssistantSummary), st.UpdatedAtUnixMs); err != nil {
+INSERT INTO ai_thread_state(
+  endpoint_id, thread_id, open_goal, last_assistant_summary,
+  provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
+  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
+  updated_at_unix_ms
+)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, endpointID, threadID, strings.TrimSpace(st.OpenGoal), strings.TrimSpace(st.LastAssistantSummary),
+				strings.TrimSpace(st.ProviderContinuation.Kind), strings.TrimSpace(st.ProviderContinuation.ContinuationID),
+				strings.TrimSpace(st.ProviderContinuation.ProviderID), strings.TrimSpace(st.ProviderContinuation.Model),
+				strings.TrimSpace(st.ProviderContinuation.BaseURL), st.ProviderContinuation.UpdatedAtUnixMs,
+				st.UpdatedAtUnixMs); err != nil {
 				return err
 			}
 		}
