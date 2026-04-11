@@ -14,12 +14,70 @@ html,
 body {
   min-height: 100vh;
   margin: 0;
-  background: var(--background);
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 30%),
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 28%),
+    var(--background);
   color: var(--foreground);
 }
 
 #root {
   min-height: 100vh;
+}
+
+.redeven-welcome-surface {
+  background:
+    linear-gradient(180deg, rgba(148, 163, 184, 0.05), transparent 18%),
+    transparent;
+}
+
+.redeven-launcher-hero,
+.redeven-feature-card,
+.redeven-settings-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.redeven-launcher-hero::after,
+.redeven-feature-card::after,
+.redeven-settings-hero::after {
+  content: '';
+  position: absolute;
+  inset: auto -12% -35% auto;
+  width: 16rem;
+  height: 16rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.12), transparent 68%);
+  pointer-events: none;
+}
+
+.redeven-feature-card::before,
+.redeven-settings-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent 36%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.02), transparent 55%);
+  pointer-events: none;
+}
+
+.redeven-grid-card {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.redeven-grid-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--primary) 30%);
+  box-shadow: 0 22px 44px -34px rgba(15, 23, 42, 0.55);
+}
+
+.redeven-settings-preset[aria-pressed='true'] {
+  transform: translateY(-1px);
 }
 
 code,

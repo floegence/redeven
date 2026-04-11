@@ -219,6 +219,18 @@ describe('DesktopWelcomeShell', () => {
     expect(tooltipSrc).toContain('fixed z-[220]');
   });
 
+  it('includes Environment Center tabs and card-based launcher copy inside the source', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('Environment Center');
+    expect(appSrc).toContain('Switch Environment');
+    expect(appSrc).toContain('Environments');
+    expect(appSrc).toContain('Control Planes');
+    expect(appSrc).toContain('Add Another Environment');
+    expect(appSrc).toContain('<EnvironmentConnectionCard');
+    expect(appSrc).toContain('Provider-backed Environments');
+  });
+
   it('includes Control Plane management copy inside the launcher source', () => {
     const appSrc = readWelcomeSource();
 
@@ -226,7 +238,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Add Control Plane');
     expect(appSrc).toContain('Continue in Browser');
     expect(appSrc).toContain('revocable desktop authorization');
-    expect(appSrc).toContain('Authorized until');
+    expect(appSrc).toContain('Authorization expired');
+    expect(appSrc).toContain('Provider-backed Environments');
   });
 
   it('includes SSH connection mode copy inside the connection dialog source', () => {
@@ -244,6 +257,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Remote Install Directory');
     expect(appSrc).toContain('Release Base URL');
     expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
-    expect(appSrc).toContain('Forwarded UI:');
+    expect(appSrc).toContain('Desktop Upload resolves the remote OS and architecture first');
+  });
+
+  it('includes tabbed Local Environment Settings workbench copy inside the source', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('Access & Security');
+    expect(appSrc).toContain('Bootstrap');
+    expect(appSrc).toContain('Visibility presets');
+    expect(appSrc).toContain('Next-start registration request');
+    expect(appSrc).toContain('Local environment workbench');
   });
 });

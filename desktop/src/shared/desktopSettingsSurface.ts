@@ -3,6 +3,7 @@ import type { DesktopSettingsDraft } from './settingsIPC';
 export type DesktopPageMode = 'local_environment_settings';
 export type DesktopAccessMode = 'local_only' | 'shared_local_network' | 'custom_exposure';
 export type DesktopSettingsSummaryTone = 'default' | 'warning' | 'success' | 'primary';
+export type DesktopSettingsWorkbenchTab = 'access_security' | 'bootstrap';
 
 export interface DesktopSettingsSummaryItem {
   id: 'visibility' | 'next_start_address' | 'password_state' | 'next_start';

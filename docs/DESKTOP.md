@@ -151,14 +151,20 @@ Visual hierarchy:
 
 - shell title: `Redeven Desktop`
 - shell surface title: `Connect Environment`
-- primary workbench column:
-  - `Open Windows`
-  - `Local Environment`
-- secondary workbench column:
-  - `Environment Library`
-  - `Control Planes`
-  - `Add` (`Add Connection` in tooltip and accessibility copy)
+- launcher hero:
+  - `Environment Center`
+  - `Environments / Control Planes` tabs
+  - shell-wide session, connection, and provider counts
+- shared workbench rail:
+  - `Active Sessions`
+- `Environments` tab:
+  - featured `Local Environment`
+  - `Add Another Environment`
+  - card-based `Environment Library`
   - `All / Open / Recent / Saved` filters
+- `Control Planes` tab:
+  - provider overview cards
+  - provider environment cards
 - activity bar:
   - one item: `Connect Environment`
 
@@ -185,6 +191,11 @@ Interaction rules:
   - Desktop reuses only the exact Desktop-managed release, installs it on demand when needed, and tunnels its Local UI over SSH.
   - Automatic reuses only the exact Desktop-managed release, prefers a desktop upload for offline targets, then falls back to the remote installer.
 - `Add Control Plane` opens a separate dialog that accepts only a Provider URL and then continues in the system browser.
+- The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
+- `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
+- `Active Sessions` stays visible across launcher tabs so users can refocus open windows without leaving the current context.
+- `Local Environment` remains the fixed first-class entry and renders as the featured card in the `Environments` tab.
+- `Add Another Environment` renders as a dedicated shortcut card rather than hiding the add action inside table chrome.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -192,9 +203,9 @@ Interaction rules:
 - Open launcher entries switch their primary action from `Open` to `Focus`.
 - The launcher shows every currently open Environment window and can focus any of them without opening duplicates.
 - Recent remote Environments stay one click away after a successful connection.
-- Saved remote Environments render in a compact library table and can be opened, edited, or deleted inline.
-- Saved SSH Environments render in that same library table, but the visible target stays the SSH identity (`destination[:port]`) instead of the ephemeral forwarded localhost URL.
-- Saved Control Planes render as a separate provider list with refresh, delete, and per-environment open/focus actions.
+- Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
+- Saved SSH Environments render in that same card grid, with the SSH identity (`destination[:port]`) as the primary target and the forwarded Local UI surfaced as secondary detail when present.
+- Saved Control Planes render in a separate tab with provider-level reconnect/refresh/delete controls and per-environment open/focus actions.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
@@ -239,7 +250,13 @@ Rules:
 - One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
 - The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
 - Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
-- The dialog starts with a compact summary grid for visibility, next-start address, password state, and next start status.
+- The dialog starts with a workbench-style overview that shows:
+  - the current managed runtime address
+  - the next-start address and protection state
+  - a compact summary grid for visibility, next-start address, password state, and next-start bootstrap status
+- The dialog uses two internal tabs:
+  - `Access & Security`
+  - `Bootstrap`
 - Summary-card details and field-level help stay available through compact question-mark tooltip affordances instead of always-visible helper paragraphs.
 - Those tooltips render through the shared overlay portal so hover/focus help is visible above cards and dialogs instead of relying on browser-native `title` text.
 - The first decision is a visibility intent, not a raw bind field:
@@ -247,9 +264,15 @@ Rules:
   - `Shared on your local network`
   - `Custom exposure`
 - The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving, but it keeps port selection as a separate control instead of hiding it inside the scope preset.
-- The settings dialog also shows the current managed runtime URL separately from the next-start configuration when the local environment is already running.
+- `Access & Security` presents those visibility options as selectable preset cards rather than a dense field-only form.
+- The settings dialog always shows the current managed runtime URL separately from the next-start configuration when the local environment is already running.
 - The main editor uses a wider two-column card layout so visibility changes keep the form aligned instead of reflowing a long stack of helper text.
-- The one-shot bootstrap request stays in a compact `Advanced` section so the main settings flow stays focused on common local access decisions.
+- Password handling becomes explicitly stateful:
+  - current password state is visible through summary chips
+  - replacing a password is expressed as a queued replacement
+  - removing a stored password remains an explicit action
+- The one-shot bootstrap request moves into the dedicated `Bootstrap` tab instead of hiding inside a generic `Advanced` disclosure.
+- The `Bootstrap` tab frames the request as a next-start registration request with a clear queued-state summary and an explicit clear action.
 
 ## Desktop Preferences
 

@@ -9,6 +9,26 @@ export type DesktopWelcomeShellViewModel = Readonly<{
 }>;
 
 export type EnvironmentLibraryFilter = 'all' | 'open' | 'recent' | 'saved';
+export type EnvironmentCenterTab = 'environments' | 'control_planes';
+export type EnvironmentCardTone = 'neutral' | 'primary' | 'success';
+
+export type EnvironmentCardMetaItem = Readonly<{
+  label: string;
+  value: string;
+  monospace?: boolean;
+}>;
+
+export type EnvironmentCardModel = Readonly<{
+  kind_label: 'Local' | 'Redeven URL' | 'SSH';
+  status_label: string;
+  status_tone: EnvironmentCardTone;
+  source_label: string;
+  target_primary: string;
+  target_secondary: string;
+  target_primary_monospace: boolean;
+  target_secondary_monospace: boolean;
+  meta: readonly EnvironmentCardMetaItem[];
+}>;
 
 export function capabilityUnavailableMessage(label: string): string {
   return `Connect to an Environment first to open ${label}.`;
@@ -57,6 +77,17 @@ export function isRemoteEnvironmentEntry(environment: DesktopEnvironmentEntry): 
   return environment.kind === 'external_local_ui' || environment.kind === 'ssh_environment';
 }
 
+export function environmentKindLabel(environment: DesktopEnvironmentEntry): EnvironmentCardModel['kind_label'] {
+  switch (environment.kind) {
+    case 'ssh_environment':
+      return 'SSH';
+    case 'external_local_ui':
+      return 'Redeven URL';
+    default:
+      return 'Local';
+  }
+}
+
 export function libraryFilterLabel(filter: EnvironmentLibraryFilter): string {
   switch (filter) {
     case 'open':
@@ -68,6 +99,120 @@ export function libraryFilterLabel(filter: EnvironmentLibraryFilter): string {
     default:
       return 'All';
   }
+}
+
+export function environmentSourceLabel(environment: DesktopEnvironmentEntry): string {
+  switch (environment.category) {
+    case 'open_unsaved':
+      return 'Open window';
+    case 'recent_auto':
+      return 'Recent';
+    case 'saved':
+      return 'Saved';
+    default:
+      return 'Local Environment';
+  }
+}
+
+export function environmentStatusLabel(environment: DesktopEnvironmentEntry): string {
+  if (environment.is_open) {
+    return 'Open';
+  }
+  if (environment.kind === 'local_environment') {
+    return 'Ready';
+  }
+  if (environment.category === 'recent_auto') {
+    return 'Recent';
+  }
+  if (environment.category === 'saved') {
+    return 'Saved';
+  }
+  return 'Available';
+}
+
+export function environmentStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
+  if (environment.is_open) {
+    return 'success';
+  }
+  if (environment.category === 'recent_auto') {
+    return 'primary';
+  }
+  return 'neutral';
+}
+
+function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly EnvironmentCardMetaItem[] {
+  if (environment.kind === 'ssh_environment') {
+    return [
+      {
+        label: 'Bootstrap',
+        value: environment.ssh_details?.bootstrap_strategy === 'desktop_upload'
+          ? 'Desktop upload'
+          : environment.ssh_details?.bootstrap_strategy === 'remote_install'
+            ? 'Remote install'
+            : 'Automatic',
+      },
+      {
+        label: 'Install root',
+        value: environment.ssh_details?.remote_install_dir ?? '',
+        monospace: true,
+      },
+    ].filter((item) => item.value !== '');
+  }
+  if (environment.kind === 'external_local_ui') {
+    return [
+      {
+        label: 'Source',
+        value: environmentSourceLabel(environment),
+      },
+    ];
+  }
+  return [];
+}
+
+export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
+  if (environment.kind === 'local_environment') {
+    return {
+      kind_label: 'Local',
+      status_label: environmentStatusLabel(environment),
+      status_tone: environmentStatusTone(environment),
+      source_label: 'Desktop-managed',
+      target_primary: environment.local_ui_url || 'Desktop-managed runtime on this machine',
+      target_secondary: environment.local_ui_url === ''
+        ? 'Open the managed environment or adjust startup settings before the next launch.'
+        : 'Current runtime URL',
+      target_primary_monospace: environment.local_ui_url !== '',
+      target_secondary_monospace: false,
+      meta: [],
+    };
+  }
+
+  if (environment.kind === 'ssh_environment') {
+    return {
+      kind_label: 'SSH',
+      status_label: environmentStatusLabel(environment),
+      status_tone: environmentStatusTone(environment),
+      source_label: environmentSourceLabel(environment),
+      target_primary: environment.secondary_text,
+      target_secondary: environment.local_ui_url === ''
+        ? 'Desktop bootstraps the matching Redeven runtime over SSH and tunnels Local UI back into the shell.'
+        : `Forwarded UI ${environment.local_ui_url}`,
+      target_primary_monospace: true,
+      target_secondary_monospace: environment.local_ui_url !== '',
+      meta: environmentCardMeta(environment),
+    };
+  }
+
+  return {
+    kind_label: 'Redeven URL',
+    status_label: environmentStatusLabel(environment),
+    status_tone: environmentStatusTone(environment),
+    source_label: environmentSourceLabel(environment),
+    target_primary: environment.local_ui_url || environment.secondary_text,
+    target_secondary: 'Redeven Local UI origin saved in Desktop.',
+    target_primary_monospace: true,
+    target_secondary_monospace: false,
+    meta: environmentCardMeta(environment),
+  };
 }
 
 export function environmentMatchesLibraryFilter(
