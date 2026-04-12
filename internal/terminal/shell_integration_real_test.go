@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 const (
 	shellLifecycleReadyMarker = "\x1b]633;A\x07"
 	shellLifecycleStartMarker = "\x1b]633;B\x07"
+	shellLifecycleCwdPrefix   = "\x1b]633;P;Cwd="
 )
 
 func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
@@ -123,7 +125,72 @@ func TestRealPosixShellFallbackOmitsLifecycleMarkers(t *testing.T) {
 	}
 }
 
+func TestRealShellIntegrationEmitsCwdMarkersAndNameUpdatesForBashAndZsh(t *testing.T) {
+	for _, shellPath := range []string{"/bin/bash", "/bin/zsh"} {
+		shellPath := shellPath
+		t.Run(filepath.Base(shellPath), func(t *testing.T) {
+			if _, err := os.Stat(shellPath); err != nil {
+				t.Skipf("shell %q unavailable: %v", shellPath, err)
+			}
+
+			t.Setenv("HOME", newIsolatedShellHome(t))
+
+			root := t.TempDir()
+			childDir := filepath.Join(root, "repo dir")
+			if err := os.MkdirAll(childDir, 0o755); err != nil {
+				t.Fatalf("MkdirAll(%q): %v", childDir, err)
+			}
+			expectedChildDir := mustEvalPathForShell(t, childDir)
+
+			manager, recorder := newShellLifecycleTestManagerWithRecorder(t, root, shellPath)
+			t.Cleanup(func() {
+				manager.Cleanup()
+			})
+
+			session, err := manager.createSession("test", "")
+			if err != nil {
+				t.Fatalf("createSession() error = %v", err)
+			}
+			if err := manager.attachSession(session.ID, "conn-1", 80, 24, nil); err != nil {
+				t.Fatalf("attachSession() error = %v", err)
+			}
+
+			time.Sleep(250 * time.Millisecond)
+
+			startSeq := nextHistorySequence(t, session)
+			command := "cd " + shellSingleQuote(expectedChildDir) + " && printf '__REDEVEN_CD__\\n'\n"
+			if err := session.WriteData(command); err != nil {
+				t.Fatalf("WriteData(cd) error = %v", err)
+			}
+
+			output := waitForHistoryContains(
+				t,
+				session,
+				startSeq,
+				5*time.Second,
+				shellLifecycleStartMarker,
+				"__REDEVEN_CD__",
+				"\x1b]633;D;0\x07",
+				shellLifecycleCwdPrefix+expectedChildDir+"\x07",
+				shellLifecycleReadyMarker,
+			)
+			assertContainsInOrder(t, output, []string{
+				shellLifecycleStartMarker,
+				"\x1b]633;D;0\x07",
+				shellLifecycleCwdPrefix + expectedChildDir + "\x07",
+				shellLifecycleReadyMarker,
+			})
+			waitForNameUpdate(t, recorder, 5*time.Second, session.ID, filepath.Base(expectedChildDir), expectedChildDir)
+		})
+	}
+}
+
 func newShellLifecycleTestManager(t *testing.T, root string, shellPath string) *Manager {
+	manager, _ := newShellLifecycleTestManagerWithRecorder(t, root, shellPath)
+	return manager
+}
+
+func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPath string) (*Manager, *shellEventRecorder) {
 	t.Helper()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
@@ -148,9 +215,10 @@ func newShellLifecycleTestManager(t *testing.T, root string, shellPath string) *
 		InitialResizeSuppressDuration: 10 * time.Millisecond,
 		ResizeSuppressDuration:        10 * time.Millisecond,
 	})
-	manager.term.SetEventHandler(&eventHandler{m: manager})
+	recorder := &shellEventRecorder{delegate: &eventHandler{m: manager}}
+	manager.term.SetEventHandler(recorder)
 
-	return manager
+	return manager, recorder
 }
 
 func newIsolatedShellHome(t *testing.T) string {
@@ -238,4 +306,97 @@ func assertContainsInOrder(t *testing.T, output string, needles []string) {
 		}
 		searchFrom += index + len(needle)
 	}
+}
+
+type shellNameUpdate struct {
+	sessionID  string
+	oldName    string
+	newName    string
+	workingDir string
+}
+
+type shellEventRecorder struct {
+	delegate termgo.TerminalEventHandler
+
+	mu          sync.Mutex
+	nameUpdates []shellNameUpdate
+}
+
+func (r *shellEventRecorder) OnTerminalData(sessionID string, data []byte, sequenceNumber int64, isEcho bool, originalSource string) {
+	if r.delegate != nil {
+		r.delegate.OnTerminalData(sessionID, data, sequenceNumber, isEcho, originalSource)
+	}
+}
+
+func (r *shellEventRecorder) OnTerminalNameChanged(sessionID string, oldName string, newName string, workingDir string) {
+	r.mu.Lock()
+	r.nameUpdates = append(r.nameUpdates, shellNameUpdate{
+		sessionID:  sessionID,
+		oldName:    oldName,
+		newName:    newName,
+		workingDir: workingDir,
+	})
+	r.mu.Unlock()
+
+	if r.delegate != nil {
+		r.delegate.OnTerminalNameChanged(sessionID, oldName, newName, workingDir)
+	}
+}
+
+func (r *shellEventRecorder) OnTerminalSessionCreated(session *termgo.Session) {
+	if r.delegate != nil {
+		r.delegate.OnTerminalSessionCreated(session)
+	}
+}
+
+func (r *shellEventRecorder) OnTerminalSessionClosed(sessionID string) {
+	if r.delegate != nil {
+		r.delegate.OnTerminalSessionClosed(sessionID)
+	}
+}
+
+func (r *shellEventRecorder) OnTerminalError(sessionID string, err error) {
+	if r.delegate != nil {
+		r.delegate.OnTerminalError(sessionID, err)
+	}
+}
+
+func waitForNameUpdate(t *testing.T, recorder *shellEventRecorder, timeout time.Duration, sessionID string, newName string, workingDir string) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if recorder.hasNameUpdate(sessionID, newName, workingDir) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	t.Fatalf("timeout waiting for name update session=%q newName=%q workingDir=%q", sessionID, newName, workingDir)
+}
+
+func (r *shellEventRecorder) hasNameUpdate(sessionID string, newName string, workingDir string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, update := range r.nameUpdates {
+		if update.sessionID == sessionID && update.newName == newName && update.workingDir == workingDir {
+			return true
+		}
+	}
+	return false
+}
+
+func shellSingleQuote(path string) string {
+	return "'" + strings.ReplaceAll(path, "'", `'\"'\"'`) + "'"
+}
+
+func mustEvalPathForShell(t *testing.T, path string) string {
+	t.Helper()
+
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", path, err)
+	}
+	return filepath.Clean(resolved)
 }

@@ -128,10 +128,13 @@ func TestRedevenShellInitWriterGeneratesLifecycleHooks(t *testing.T) {
 
 	assertFileContains(t, paths.BashRC(), "__redeven_terminal_command_start")
 	assertFileContains(t, paths.BashRC(), "__redeven_terminal_precmd")
+	assertFileContains(t, paths.BashRC(), "P;Cwd=$PWD")
 	assertFileContains(t, paths.ZshRC(), "__redeven_terminal_preexec")
 	assertFileContains(t, paths.ZshRC(), "add-zsh-hook preexec __redeven_terminal_preexec")
+	assertFileContains(t, paths.ZshRC(), "P;Cwd=$PWD")
 	assertFileContains(t, paths.FishConfig(), "function __redeven_terminal_fish_preexec --on-event fish_preexec")
 	assertFileContains(t, paths.FishConfig(), "function fish_prompt")
+	assertFileContains(t, paths.FishConfig(), "P;Cwd=$PWD")
 	assertFileContains(t, paths.PosixRC(), "do not inject command lifecycle markers")
 	assertFileContains(t, paths.BashRC(), redevenShellInitPathPrependSentinel)
 }

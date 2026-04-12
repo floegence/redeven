@@ -111,6 +111,24 @@ end
 `, redevenShellInitPathPrependSentinel)
 }
 
+func shellCWDEmitBashSnippet() string {
+	return `__redeven_terminal_emit_cwd() {
+    if [ -n "${PWD:-}" ]; then
+        __redeven_terminal_osc "P;Cwd=$PWD"
+    fi
+}
+`
+}
+
+func shellCWDEmitFishSnippet() string {
+	return `function __redeven_terminal_emit_cwd
+    if test -n "$PWD"
+        __redeven_terminal_osc "P;Cwd=$PWD"
+    end
+end
+`
+}
+
 func redevenBashInitScript() string {
 	return `#!/bin/bash
 # redeven shell integration - auto-generated, do not edit.
@@ -130,6 +148,8 @@ __redeven_terminal_osc() {
     printf '\033]633;%s\a' "$1"
 }
 
+` + shellCWDEmitBashSnippet() + `
+
 __redeven_terminal_command_start() {
     if [ "${__redeven_terminal_at_prompt:-0}" = "1" ]; then
         __redeven_terminal_at_prompt=0
@@ -144,6 +164,7 @@ __redeven_terminal_precmd() {
     fi
     __redeven_terminal_prompt_seen=1
     __redeven_terminal_at_prompt=1
+    __redeven_terminal_emit_cwd
     __redeven_terminal_osc "A"
 }
 
@@ -210,6 +231,7 @@ __redeven_terminal_osc() {
     printf '\033]633;%%s\a' "$1"
 }
 
+%s
 __redeven_terminal_preexec() {
     __redeven_terminal_command_running=1
     __redeven_terminal_osc "B"
@@ -222,6 +244,7 @@ __redeven_terminal_precmd() {
     fi
     __redeven_terminal_prompt_seen=1
     __redeven_terminal_command_running=0
+    __redeven_terminal_emit_cwd
     __redeven_terminal_osc "A"
 }
 
@@ -237,7 +260,7 @@ if [[ -z "${__REDEVEN_TERMINAL_SHELL_INTEGRATION_LOADED:-}" ]]; then
         precmd_functions+=(__redeven_terminal_precmd)
     fi
 fi
-`, homeDir, homeDir, homeDir, homeDir, shellPathPrependBashSnippet())
+`, homeDir, homeDir, homeDir, homeDir, shellPathPrependBashSnippet(), shellCWDEmitBashSnippet())
 }
 
 func redevenFishInitScript() string {
@@ -259,6 +282,7 @@ function __redeven_terminal_osc --argument payload
     printf '\e]633;%%s\a' $payload
 end
 
+%s
 set -g __redeven_terminal_prompt_seen 0
 set -g __redeven_terminal_command_running 0
 
@@ -281,13 +305,14 @@ if not functions -q __redeven_terminal_original_fish_prompt
 
     function fish_prompt
         set -g __redeven_terminal_prompt_seen 1
+        __redeven_terminal_emit_cwd
         __redeven_terminal_osc A
         if functions -q __redeven_terminal_original_fish_prompt
             __redeven_terminal_original_fish_prompt
         end
     end
 end
-`, homeDir, homeDir, shellPathPrependFishSnippet())
+`, homeDir, homeDir, shellPathPrependFishSnippet(), shellCWDEmitFishSnippet())
 }
 
 func redevenPosixInitScript() string {
