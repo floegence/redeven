@@ -34,6 +34,7 @@ import (
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/threadreadstate"
 )
@@ -4377,6 +4378,13 @@ func externalOriginFromRequest(r *http.Request) (scheme string, host string, err
 }
 
 func channelIDFromRequest(r *http.Request) (string, error) {
+	if r != nil {
+		channelID := strings.TrimSpace(r.Header.Get(sessionhop.HeaderChannelID))
+		if channelID != "" {
+			return channelID, nil
+		}
+	}
+
 	_, host, err := externalOriginFromRequest(r)
 	if err != nil {
 		return "", err

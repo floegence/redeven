@@ -235,6 +235,8 @@ Browser side:
 Runtime side:
 
 - The runtime serves Env App static assets under `/_redeven_proxy/env/*` via the local gateway.
+- The per-session local access proxy must preserve the browser-visible external origin context (`Host` / projected scheme / browser `Origin`) when forwarding to the gateway.
+- Session binding for gateway APIs is carried on a trusted runtime-local hop (`X-Redeven-Session-Channel`) instead of overloading the browser-visible sandbox host labels.
 - The Env App UI talks to the runtime using **Flowersec RPC/streams** (fs/terminal/monitor domains).
 - Codex uses a separate browser-facing gateway contract under `/_redeven_proxy/api/codex/*`; the browser never connects directly to `codex app-server`, and the runtime resolves the host `codex` binary on demand instead of mirroring Codex runtime defaults into `config.json`.
 - Codex transcript scrolling uses an explicit follow-bottom controller: thread switches and sends re-enter follow mode, late transcript reflow keeps the viewport at the latest output while following, and manual user scroll-away pauses bottom following until the user returns near the bottom or triggers a new explicit bottom intent.
@@ -262,6 +264,7 @@ The Env App UI runs on sandbox origins and uses the Redeven session-bootstrap fl
 - Sandbox bootstrap exchanges `boot_ticket` for an HttpOnly `env_session` cookie.
 - Env App uses `env_session` to mint one-time `entry_ticket` values on demand.
 - `entry_ticket` is then redeemed for a canonical `connect_artifact`, and Flowersec uses the embedded tunnel grant to establish the runtime session.
+- The shared browser bootstrap helper layer for artifact fetching, reconnect config assembly, and default `proxy.runtime` scope validation is now consumed from released `@floegence/floe-webapp-boot`; Redeven keeps runtime preflight, Local UI direct artifacts, access resume, and recovery UX as product-owned logic.
 - In Local UI mode, the browser still uses the same canonical shape: Local UI mints a direct-transport `connect_artifact`, and the Env App reconnect contract stays artifact-first even though the underlying transport is direct instead of tunnel.
 
 Security baseline:

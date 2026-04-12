@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
@@ -489,6 +490,73 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("other.txt status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
+	}
+}
+
+func TestGateway_DistRoutes_AllowExternalOriginWithoutBrowserOriginHeader(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/env/", nil)
+	req.Host = "env-123.example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("env UI status = %d, want %d (body=%q)", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "env") {
+		t.Fatalf("env UI body mismatch: %q", rr.Body.String())
+	}
+}
+
+func TestGateway_ManagementAPI_AllowsInternalSessionHeaderOnPublicEnvOrigin(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	b := &stubBackend{
+		listSpaces: func(ctx context.Context) ([]SpaceStatus, error) {
+			return []SpaceStatus{{CodeSpaceID: "abc"}}, nil
+		},
+	}
+	channelID := "ch_test_1"
+	gw, err := New(Options{
+		Backend:            b,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/spaces", nil)
+	req.Host = "env-123.example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set(sessionhop.HeaderChannelID, channelID)
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("env origin with internal channel header status = %d, want %d (body=%q)", rr.Code, http.StatusOK, rr.Body.String())
 	}
 }
 

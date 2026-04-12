@@ -1,5 +1,5 @@
+import { createEntryControlplaneArtifactSource } from '@floegence/floe-webapp-boot';
 import { assertConnectArtifact, type ConnectArtifact } from '@floegence/flowersec-core';
-import { requestEntryConnectArtifact } from '@floegence/flowersec-core/controlplane';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
@@ -503,18 +503,27 @@ export async function mintEnvEntryTicketForApp(args: { envId: string; floeApp: L
   return t;
 }
 
-export async function connectArtifactEntry(args: { endpointId: string; floeApp: string; entryTicket: string }): Promise<ConnectArtifact> {
+export async function connectArtifactEntry(args: {
+  endpointId: string;
+  floeApp: string;
+  entryTicket: string;
+  signal?: AbortSignal;
+  traceId?: string;
+}): Promise<ConnectArtifact> {
   const endpointId = args.endpointId.trim();
   const floeApp = args.floeApp.trim();
   const entryTicket = args.entryTicket.trim();
   if (!endpointId || !floeApp || !entryTicket) throw new Error('Invalid request');
 
-  return requestEntryConnectArtifact({
+  return createEntryControlplaneArtifactSource({
     endpointId,
     entryTicket,
     credentials: 'omit',
     payload: {
       floe_app: floeApp,
     },
+  }).getArtifact({
+    ...(args.signal === undefined ? {} : { signal: args.signal }),
+    ...(args.traceId === undefined ? {} : { traceId: args.traceId }),
   });
 }
