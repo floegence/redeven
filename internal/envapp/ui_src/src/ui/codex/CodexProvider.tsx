@@ -784,6 +784,7 @@ export function CodexProvider(props: ParentProps) {
       if (!threadID) continue;
       merged.set(threadID, thread);
     }
+    const selectedThread = String(selectedThreadID() ?? '').trim();
     const foregroundThread = String(foregroundThreadID() ?? '').trim();
     const displayedThread = String(displayedThreadID() ?? '').trim();
     for (const entry of Object.values(threadController.sessionEntriesByID())) {
@@ -800,7 +801,7 @@ export function CodexProvider(props: ParentProps) {
         merged.set(threadID, existing);
         continue;
       }
-      const pinnedThread = threadID === foregroundThread || threadID === displayedThread;
+      const pinnedThread = threadID === selectedThread || threadID === foregroundThread || threadID === displayedThread;
       const existingUpdatedAt = Number(existing.updated_at_unix_s ?? 0) || 0;
       const sessionUpdatedAt = Number(sessionThread.updated_at_unix_s ?? 0) || 0;
       if (pinnedThread || sessionUpdatedAt > existingUpdatedAt) {

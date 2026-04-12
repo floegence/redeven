@@ -28,6 +28,7 @@ const envContextMocks = vi.hoisted(() => ({
     }),
     { state: 'ready', loading: false, error: null },
   ),
+  localRuntime: vi.fn(() => null),
   settingsSeq: vi.fn(() => 0),
   debugConsoleEnabled: vi.fn(() => false),
   setDebugConsoleEnabled: vi.fn(),
@@ -195,6 +196,7 @@ vi.mock('../icons/CodexIcon', () => ({
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env: envContextMocks.env,
+    localRuntime: envContextMocks.localRuntime,
     settingsSeq: envContextMocks.settingsSeq,
     debugConsoleEnabled: envContextMocks.debugConsoleEnabled,
     setDebugConsoleEnabled: envContextMocks.setDebugConsoleEnabled,

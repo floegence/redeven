@@ -2,23 +2,19 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const requestEntryConnectArtifact = vi.fn();
-const browserRequestEntryConnectArtifact = vi.fn();
+const getArtifact = vi.fn();
+const createEntryControlplaneArtifactSource = vi.fn(() => ({ getArtifact }));
 
-vi.mock('@floegence/flowersec-core/controlplane', () => ({
-  requestEntryConnectArtifact,
-}));
-
-vi.mock('@floegence/flowersec-core/browser', () => ({
-  requestEntryConnectArtifact: browserRequestEntryConnectArtifact,
+vi.mock('@floegence/floe-webapp-boot', () => ({
+  createEntryControlplaneArtifactSource,
 }));
 
 describe('controlplaneApi controlplane helper usage', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
-    requestEntryConnectArtifact.mockReset();
-    browserRequestEntryConnectArtifact.mockReset();
+    getArtifact.mockReset();
+    createEntryControlplaneArtifactSource.mockClear();
   });
 
   afterEach(() => {
@@ -41,7 +37,7 @@ describe('controlplaneApi controlplane helper usage', () => {
         default_suite: 1,
       },
     } as const;
-    requestEntryConnectArtifact.mockResolvedValue(artifact);
+    getArtifact.mockResolvedValue(artifact);
 
     const mod = await import('./controlplaneApi');
     const out = await mod.connectArtifactEntry({
@@ -51,7 +47,7 @@ describe('controlplaneApi controlplane helper usage', () => {
     });
 
     expect(out).toBe(artifact);
-    expect(requestEntryConnectArtifact).toHaveBeenCalledWith({
+    expect(createEntryControlplaneArtifactSource).toHaveBeenCalledWith({
       endpointId: 'env_demo',
       entryTicket: 'ticket-1',
       credentials: 'omit',
@@ -59,6 +55,6 @@ describe('controlplaneApi controlplane helper usage', () => {
         floe_app: 'com.floegence.redeven.agent',
       },
     });
-    expect(browserRequestEntryConnectArtifact).not.toHaveBeenCalled();
+    expect(getArtifact).toHaveBeenCalledWith({});
   });
 });

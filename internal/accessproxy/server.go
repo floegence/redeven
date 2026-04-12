@@ -14,6 +14,7 @@ import (
 
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionhop"
 )
 
 type Options struct {
@@ -64,6 +65,20 @@ func New(opts Options) (*Server, error) {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(upstreamURL)
+			// Preserve the browser-visible origin context projected by flowersec-proxy.
+			// The gateway uses this for origin-role isolation of Env / Codespace / Forward
+			// surfaces, so the trusted local hop must not collapse it back to 127.0.0.1.
+			pr.Out.Host = pr.In.Host
+			if proto := strings.TrimSpace(pr.In.Header.Get("X-Forwarded-Proto")); proto != "" {
+				pr.Out.Header.Set("X-Forwarded-Proto", proto)
+			} else {
+				pr.Out.Header.Del("X-Forwarded-Proto")
+			}
+			// Recover session binding on the internal hop without relying on public host labels.
+			pr.Out.Header.Del(sessionhop.HeaderChannelID)
+			if channelID := strings.TrimSpace(opts.Meta.ChannelID); channelID != "" {
+				pr.Out.Header.Set(sessionhop.HeaderChannelID, channelID)
+			}
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)

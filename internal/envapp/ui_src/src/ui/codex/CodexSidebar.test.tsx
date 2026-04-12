@@ -1534,9 +1534,10 @@ describe('CodexSidebar', () => {
       thread_id: 'thread_new',
       thread_name: 'Codex renamed thread',
     });
-    await flushAsync();
-
-    expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('Codex renamed thread');
+    await waitForCondition(
+      () => host.querySelector('[aria-current="page"]')?.textContent?.includes('Codex renamed thread') === true,
+      'renamed selected thread title',
+    );
   });
 
   it('shows a loading state instead of stale transcript content when switching to an uncached thread', async () => {

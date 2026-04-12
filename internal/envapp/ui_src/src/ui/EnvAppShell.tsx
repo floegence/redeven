@@ -23,8 +23,12 @@ import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import {
+  createArtifactDirectReconnectConfig,
+  createArtifactSourceFromFactory,
+  createProxyRuntimeTunnelReconnectConfig,
+} from '@floegence/floe-webapp-boot';
 import type { ClientObserverLike } from '@floegence/flowersec-core';
-import { assertProxyRuntimeScopeV1 } from '@floegence/flowersec-core/proxy';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import {
@@ -152,19 +156,6 @@ const ACCESS_GATE_IDS = {
   error: 'redeven-access-error',
   notice: 'redeven-access-notice',
 } as const;
-
-const PROXY_RUNTIME_SCOPE_NAME = 'proxy.runtime';
-
-function validateProxyRuntimeScope(entry: Readonly<{ scope_version: number; payload: unknown }>): void {
-  if (entry.scope_version !== 1) {
-    throw new Error(`unsupported ${PROXY_RUNTIME_SCOPE_NAME} scope_version: ${entry.scope_version}`);
-  }
-  assertProxyRuntimeScopeV1(entry.payload as Record<string, unknown>);
-}
-
-const FLOWERSEC_SCOPE_RESOLVERS = Object.freeze({
-  [PROXY_RUNTIME_SCOPE_NAME]: validateProxyRuntimeScope,
-});
 
 class AccessResumeTimeoutError extends Error {
   constructor(message: string) {
@@ -861,7 +852,7 @@ export function EnvAppShell() {
     }
   };
 
-  const createGetArtifact = () => async () => {
+  const createGetArtifact = () => async (ctx: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
     const id = envId();
     if (!id) throw new Error('Missing env context. Please reopen from the Redeven Portal.');
 
@@ -886,7 +877,13 @@ export function EnvAppShell() {
       codeSpaceId: CODE_SPACE_ID_ENV_UI,
     });
 
-    return connectArtifactEntry({ endpointId: id, floeApp: FLOE_APP_AGENT, entryTicket });
+    return connectArtifactEntry({
+      endpointId: id,
+      floeApp: FLOE_APP_AGENT,
+      entryTicket,
+      traceId: ctx.traceId,
+      signal: ctx.signal,
+    });
   };
 
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
@@ -911,30 +908,23 @@ export function EnvAppShell() {
     try {
       if (isLocalMode()) {
         setLocalAccessChannelReady(false);
-        await fn({
-          mode: 'direct',
-          getArtifact: mintLocalDirectConnectArtifact,
+        await fn(createArtifactDirectReconnectConfig({
+          artifactSource: createArtifactSourceFromFactory(mintLocalDirectConnectArtifact),
           observer,
-          connect: {
-            keepaliveIntervalMs: 15_000,
-          },
+          connect: { keepaliveIntervalMs: 15_000 },
           autoReconnect: LOCAL_FAST_RECONNECT_POLICY,
-        });
+        }));
         if (accessRecoverySeq !== attemptKey) return;
         accessResumeClient = protocol.client();
         setLocalAccessChannelReady(true);
         setCurrentAccessError(null);
         setManualError(null);
       } else {
-        await fn({
-          mode: 'tunnel',
-          getArtifact: createGetArtifact(),
+        await fn(createProxyRuntimeTunnelReconnectConfig({
+          artifactSource: createArtifactSourceFromFactory(createGetArtifact()),
           observer,
-          connect: {
-            scopeResolvers: FLOWERSEC_SCOPE_RESOLVERS,
-          },
           autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
-        });
+        }));
         if (accessRecoverySeq !== attemptKey) return;
         await ensureAccessResumed(attemptKey);
       }
