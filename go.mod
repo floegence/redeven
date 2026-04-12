@@ -5,8 +5,9 @@ go 1.25.9
 require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/creack/pty v1.1.24
-	github.com/floegence/floeterm/terminal-go v0.4.12
+	github.com/floegence/floeterm/terminal-go v0.4.13
 	github.com/floegence/flowersec/flowersec-go v0.19.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go v1.12.0
 	github.com/shirou/gopsutil/v4 v4.25.12
 	golang.org/x/sys v0.38.0
@@ -20,7 +21,6 @@ require (
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

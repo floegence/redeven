@@ -9,6 +9,8 @@ const FLOE_WEBAPP_DEPENDENCIES = [
   '@floegence/floe-webapp-protocol',
 ] as const;
 
+const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/floeterm-terminal-web'] as const;
+
 const LOCAL_REFERENCE_PREFIXES = ['file:', 'link:', 'workspace:', 'portal:'] as const;
 
 type PackageJson = {
@@ -36,7 +38,10 @@ function readDependencySpecifiers(): Record<string, string> {
   return readJson<PackageJson>('package.json').dependencies ?? {};
 }
 
-function getDependencySpecifier(dependencies: Record<string, string>, dependencyName: (typeof FLOE_WEBAPP_DEPENDENCIES)[number]): string {
+function getDependencySpecifier(
+  dependencies: Record<string, string>,
+  dependencyName: (typeof PUBLISHED_NPM_DEPENDENCIES)[number],
+): string {
   const specifier = dependencies[dependencyName];
   if (!specifier) {
     throw new Error(`${dependencyName} must stay declared in package.json`);
@@ -61,7 +66,7 @@ function expectedTarballUrl(packageName: string, version: string): string {
   return `https://registry.npmjs.org/${packageName}/-/${tarballName}-${version}.tgz`;
 }
 
-describe('floe-webapp dependency policy', () => {
+describe('published npm dependency policy', () => {
   it('keeps floe-webapp core and protocol aligned to the same released version', () => {
     const dependencies = readDependencySpecifiers();
     const versions = FLOE_WEBAPP_DEPENDENCIES.map((dependencyName) =>
@@ -71,10 +76,10 @@ describe('floe-webapp dependency policy', () => {
     expect(new Set(versions).size, 'floe-webapp packages must be upgraded together').toBe(1);
   });
 
-  it('keeps floe-webapp dependencies on released semver ranges instead of local references', () => {
+  it('keeps published UI dependencies on released semver ranges instead of local references', () => {
     const dependencies = readDependencySpecifiers();
 
-    for (const dependencyName of FLOE_WEBAPP_DEPENDENCIES) {
+    for (const dependencyName of PUBLISHED_NPM_DEPENDENCIES) {
       const specifier = getDependencySpecifier(dependencies, dependencyName);
 
       expect(
@@ -85,11 +90,11 @@ describe('floe-webapp dependency policy', () => {
     }
   });
 
-  it('keeps package-lock pinned to npm tarballs for the declared floe-webapp release', () => {
+  it('keeps package-lock pinned to npm tarballs for declared published UI releases', () => {
     const dependencies = readDependencySpecifiers();
     const packageLock = readJson<PackageLockJson>('package-lock.json');
 
-    for (const dependencyName of FLOE_WEBAPP_DEPENDENCIES) {
+    for (const dependencyName of PUBLISHED_NPM_DEPENDENCIES) {
       const specifier = getDependencySpecifier(dependencies, dependencyName);
       const expectedVersion = extractVersionSpecifier(specifier);
       const packageEntry = packageLock.packages?.[`node_modules/${dependencyName}`];
@@ -101,11 +106,11 @@ describe('floe-webapp dependency policy', () => {
     }
   });
 
-  it('keeps pnpm-lock aligned to the declared floe-webapp release without local link entries', () => {
+  it('keeps pnpm-lock aligned to declared published UI releases without local link entries', () => {
     const dependencies = readDependencySpecifiers();
     const pnpmLock = readText('pnpm-lock.yaml');
 
-    for (const dependencyName of FLOE_WEBAPP_DEPENDENCIES) {
+    for (const dependencyName of PUBLISHED_NPM_DEPENDENCIES) {
       const specifier = getDependencySpecifier(dependencies, dependencyName);
       const expectedVersion = extractVersionSpecifier(specifier);
 
