@@ -103,16 +103,40 @@ export function buildSSHConnectionIssue(
 export function buildControlPlaneIssue(
   code: string,
   message: string,
+  options: Readonly<{
+    providerOrigin?: string;
+    status?: number;
+  }> = {},
 ): DesktopWelcomeIssue {
+  const providerOrigin = compact(options.providerOrigin);
+  const status = Number.isInteger(options.status) && Number(options.status) >= 100
+    ? Math.floor(Number(options.status))
+    : 0;
   return {
     scope: 'startup',
     code,
-    title: code === 'control_plane_invalid' ? 'Control Plane configuration is invalid' : 'Unable to use that Control Plane',
+    title: (() => {
+      if (code === 'control_plane_invalid') {
+        return 'Control Plane configuration is invalid';
+      }
+      if (code === 'provider_tls_untrusted') {
+        return 'Trust the Control Plane certificate';
+      }
+      if (code === 'provider_dns_failed' || code === 'provider_connection_failed' || code === 'provider_timeout') {
+        return 'Control Plane is unreachable';
+      }
+      if (code === 'provider_invalid_json' || code === 'provider_invalid_response') {
+        return 'Control Plane returned an invalid response';
+      }
+      return 'Unable to use that Control Plane';
+    })(),
     message,
     diagnostics_copy: diagnosticsLines([
       'status: blocked',
       `code: ${code}`,
       `message: ${message}`,
+      providerOrigin !== '' ? `provider origin: ${providerOrigin}` : '',
+      status > 0 ? `http status: ${status}` : '',
     ]),
     target_url: '',
   };

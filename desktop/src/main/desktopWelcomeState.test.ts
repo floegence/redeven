@@ -10,6 +10,7 @@ import {
 } from '../testSupport/desktopTestHelpers';
 import {
   buildBlockedLaunchIssue,
+  buildControlPlaneIssue,
   buildDesktopWelcomeSnapshot,
   buildRemoteConnectionIssue,
   buildSSHConnectionIssue,
@@ -408,5 +409,20 @@ describe('desktopWelcomeState', () => {
     expect(issue.title).toBe('Redeven is already starting elsewhere');
     expect(issue.message).toContain('Desktop can attach to it');
     expect(issue.diagnostics_copy).toContain('lock owner pid: 1234');
+  });
+
+  it('adds provider diagnostics to control plane issues and maps titles by failure class', () => {
+    const issue = buildControlPlaneIssue(
+      'provider_tls_untrusted',
+      'Desktop could not verify the Control Plane certificate. Trust that certificate on this machine, then try again.',
+      {
+        providerOrigin: 'https://dev.redeven.test',
+        status: 502,
+      },
+    );
+
+    expect(issue.title).toBe('Trust the Control Plane certificate');
+    expect(issue.diagnostics_copy).toContain('provider origin: https://dev.redeven.test');
+    expect(issue.diagnostics_copy).toContain('http status: 502');
   });
 });

@@ -81,6 +81,7 @@ import {
   revokeProviderDesktopAuthorization,
   requestDesktopOpenSession,
 } from './controlPlaneProviderClient';
+import { DesktopProviderRequestError } from './controlPlaneProviderTransport';
 import {
   applyRestoredWindowState,
   attachDesktopWindowStatePersistence,
@@ -964,6 +965,28 @@ async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {})
   await openUtilityWindow('launcher', options);
 }
 
+function controlPlaneIssueForError(
+  error: unknown,
+  fallbackMessage: string,
+): DesktopWelcomeIssue {
+  if (error instanceof DesktopProviderRequestError) {
+    return buildControlPlaneIssue(
+      error.code,
+      String(error.message ?? '').trim() || fallbackMessage,
+      {
+        providerOrigin: error.providerOrigin,
+        status: error.status,
+      },
+    );
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return buildControlPlaneIssue(
+    'control_plane_request_failed',
+    message || fallbackMessage,
+  );
+}
+
 function preferredManagedEnvironmentID(preferences: DesktopPreferences): string {
   if (lastFocusedSessionKey) {
     const sessionRecord = liveSession(lastFocusedSessionKey);
@@ -1831,10 +1854,12 @@ async function openControlPlaneEnvironmentFromLauncher(
       label: environment.label,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     return openUtilityWindow('launcher', {
       entryReason: 'connect_failed',
-      issue: buildControlPlaneIssue('control_plane_request_failed', message || 'Desktop failed to talk to the Control Plane.'),
+      issue: controlPlaneIssueForError(
+        error,
+        'Desktop failed to talk to the Control Plane.',
+      ),
       stealAppFocus: true,
     });
   }
@@ -2429,10 +2454,12 @@ async function handleDesktopDeepLink(rawURL: string): Promise<void> {
 
     await openControlPlaneEnvironmentFromDeepLink(request);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     await openDesktopWelcomeWindow({
       entryReason: 'connect_failed',
-      issue: buildControlPlaneIssue('control_plane_request_failed', message || 'Desktop failed to process the Control Plane deep link.'),
+      issue: controlPlaneIssueForError(
+        error,
+        'Desktop failed to process the Control Plane deep link.',
+      ),
       stealAppFocus: true,
     });
   }
