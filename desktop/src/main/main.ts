@@ -61,9 +61,9 @@ import { startManagedSSHRuntime } from './sshRuntime';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
+import { resolveManagedEnvironmentOpenTarget } from './managedEnvironmentOpen';
 import {
   desktopManagedLocalEnvironmentID,
-  managedEnvironmentDefaultOpenRoute,
   managedEnvironmentKind,
   managedEnvironmentLocalAccess,
   managedEnvironmentProviderID,
@@ -79,7 +79,7 @@ import {
   fetchProviderEnvironments,
   refreshProviderDesktopAccessToken,
   revokeProviderDesktopAuthorization,
-  requestDesktopBootstrapTicket,
+  requestDesktopOpenSession,
 } from './controlPlaneProviderClient';
 import {
   applyRestoredWindowState,
@@ -827,14 +827,20 @@ async function createSessionRecord(
   recordWindowLifecycle(
     diagnostics,
     target.kind === 'managed_environment'
-      ? 'agent_started'
+      ? options.attached === true
+        ? 'agent_attached'
+        : 'agent_started'
       : target.kind === 'ssh_environment'
         ? 'ssh_environment_connected'
         : 'external_target_connected',
     target.kind === 'managed_environment'
-      ? target.managed_environment_kind === 'controlplane'
-        ? 'desktop opened a desktop-managed Control Plane environment session'
-        : 'desktop opened a desktop-managed Local Environment session'
+      ? options.attached === true
+        ? target.managed_environment_kind === 'controlplane'
+          ? 'desktop attached to an existing Control Plane environment runtime'
+          : 'desktop attached to an existing Local Environment runtime'
+        : target.managed_environment_kind === 'controlplane'
+          ? 'desktop opened a desktop-managed Control Plane environment session'
+          : 'desktop opened a desktop-managed Local Environment session'
       : target.kind === 'ssh_environment'
         ? 'desktop opened an SSH-bootstrapped environment session'
         : 'desktop connected to an external Redeven Local UI target',
@@ -1399,7 +1405,9 @@ async function openManagedEnvironmentRecord(
   }
 
   await createSessionRecord(target, prepared.launch.managedAgent.startup, {
-    runtimeHandle: desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent),
+    runtimeHandle: desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent, {
+      persistedOwner: environment.local_hosting?.owner,
+    }),
     attached: prepared.launch.managedAgent.attached,
     stealAppFocus: options.stealAppFocus !== false,
   });
@@ -1419,6 +1427,42 @@ function remoteManagedSessionStartup(remoteSessionURL: string): StartupReport {
     remote_enabled: true,
     desktop_managed: false,
   };
+}
+
+function controlPlaneBootstrap(
+  providerOrigin: string,
+  envPublicID: string,
+  bootstrapTicket: string,
+): DesktopAgentBootstrap {
+  return {
+    kind: 'bootstrap_ticket',
+    controlplane_url: providerOrigin,
+    env_id: envPublicID,
+    bootstrap_ticket: bootstrapTicket,
+  };
+}
+
+async function openManagedControlPlaneEnvironmentRecord(
+  preferences: DesktopPreferences,
+  environment: DesktopManagedEnvironment,
+  providerOrigin: string,
+  envPublicID: string,
+  openSession: Readonly<{
+    bootstrap_ticket?: string;
+    remote_session_url?: string;
+  }>,
+  requestedRoute: 'auto' | 'local_host' | 'remote_desktop' = 'auto',
+): Promise<DesktopLauncherActionResult> {
+  const resolvedTarget = resolveManagedEnvironmentOpenTarget(environment, openSession, requestedRoute);
+  if (resolvedTarget.route === 'remote_desktop') {
+    return openManagedRemoteEnvironmentRecord(preferences, environment, resolvedTarget.remote_session_url, {
+      stealAppFocus: true,
+    });
+  }
+  return openManagedEnvironmentRecord(preferences, environment, {
+    bootstrap: controlPlaneBootstrap(providerOrigin, envPublicID, resolvedTarget.bootstrap_ticket),
+    stealAppFocus: true,
+  });
 }
 
 async function openManagedRemoteEnvironmentRecord(
@@ -1491,34 +1535,16 @@ async function openControlPlaneEnvironmentWithOpenSession(args: Readonly<{
   if (!environment) {
     throw new Error('Desktop could not register that Control Plane environment.');
   }
-  if (environment.local_hosting && compact(args.bootstrapTicket) !== '') {
-    return openManagedEnvironmentRecord(nextPreferences, environment, {
-      bootstrap: {
-        kind: 'bootstrap_ticket',
-        controlplane_url: providerOrigin,
-        env_id: args.envPublicID,
-        bootstrap_ticket: String(args.bootstrapTicket),
-      },
-      stealAppFocus: true,
-    });
-  }
-  if (compact(args.remoteSessionURL) !== '') {
-    return openManagedRemoteEnvironmentRecord(nextPreferences, environment, String(args.remoteSessionURL), {
-      stealAppFocus: true,
-    });
-  }
-  if (compact(args.bootstrapTicket) !== '') {
-    return openManagedEnvironmentRecord(nextPreferences, environment, {
-      bootstrap: {
-        kind: 'bootstrap_ticket',
-        controlplane_url: providerOrigin,
-        env_id: args.envPublicID,
-        bootstrap_ticket: String(args.bootstrapTicket),
-      },
-      stealAppFocus: true,
-    });
-  }
-  throw new Error('Desktop could not open that Control Plane environment.');
+  return openManagedControlPlaneEnvironmentRecord(
+    nextPreferences,
+    environment,
+    providerOrigin,
+    args.envPublicID,
+    {
+      bootstrap_ticket: compact(args.bootstrapTicket) || undefined,
+      remote_session_url: compact(args.remoteSessionURL) || undefined,
+    },
+  );
 }
 
 async function openManagedEnvironmentFromLauncher(
@@ -1532,13 +1558,6 @@ async function openManagedEnvironmentFromLauncher(
   const requestedRoute = request.route === 'local_host' || request.route === 'remote_desktop'
     ? request.route
     : 'auto';
-  const effectiveRoute = requestedRoute === 'auto'
-    ? (
-      managedEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
-        ? 'remote_desktop'
-        : 'local_host'
-    )
-    : requestedRoute;
   if (managedEnvironmentKind(environment) === 'controlplane') {
     const controlPlane = savedControlPlaneByIdentity(
       preferences,
@@ -1549,41 +1568,21 @@ async function openManagedEnvironmentFromLauncher(
       throw new Error('Reconnect the Control Plane before reopening this environment.');
     }
     const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
-    const openSession = await requestDesktopBootstrapTicket(
+    const openSession = await requestDesktopOpenSession(
       authorized.controlPlane.provider,
       authorized.accessToken,
       managedEnvironmentPublicID(environment),
     );
-    if (effectiveRoute === 'remote_desktop') {
-      if (!openSession.remote_session_url) {
-        throw new Error('Remote desktop access is unavailable for this environment.');
-      }
-      return openManagedRemoteEnvironmentRecord(preferences, environment, openSession.remote_session_url, {
-        stealAppFocus: true,
-      });
-    }
-    if (effectiveRoute === 'local_host' && !environment.local_hosting) {
-      throw new Error('This environment is not hosted on this device.');
-    }
-    if (effectiveRoute !== 'local_host' && !environment.local_hosting && openSession.remote_session_url) {
-      return openManagedRemoteEnvironmentRecord(preferences, environment, openSession.remote_session_url, {
-        stealAppFocus: true,
-      });
-    }
-    if (!openSession.bootstrap_ticket) {
-      throw new Error('Desktop could not obtain a local host bootstrap ticket for this environment.');
-    }
-    return openManagedEnvironmentRecord(preferences, environment, {
-      bootstrap: {
-        kind: 'bootstrap_ticket',
-        controlplane_url: authorized.controlPlane.provider.provider_origin,
-        env_id: managedEnvironmentPublicID(environment),
-        bootstrap_ticket: String(openSession.bootstrap_ticket),
-      },
-      stealAppFocus: true,
-    });
+    return openManagedControlPlaneEnvironmentRecord(
+      authorized.preferences,
+      environment,
+      authorized.controlPlane.provider.provider_origin,
+      managedEnvironmentPublicID(environment),
+      openSession,
+      requestedRoute,
+    );
   }
-  if (effectiveRoute === 'remote_desktop') {
+  if (requestedRoute === 'remote_desktop') {
     throw new Error('Remote desktop access is unavailable for this local-only environment.');
   }
   return openManagedEnvironmentRecord(preferences, environment, { stealAppFocus: true });
@@ -1818,7 +1817,7 @@ async function openControlPlaneEnvironmentFromLauncher(
 
   try {
     const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
-    const openSession = await requestDesktopBootstrapTicket(
+    const openSession = await requestDesktopOpenSession(
       authorized.controlPlane.provider,
       authorized.accessToken,
       request.env_public_id,
@@ -1856,11 +1855,18 @@ async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLaunch
 
 async function restartManagedRuntimeFromShell(webContentsID: number): Promise<DesktopShellRuntimeActionResponse> {
   const sessionRecord = sessionRecordForWebContentsID(webContentsID);
-  if (!sessionRecord || sessionRecord.target.kind !== 'managed_environment' || !sessionRecord.runtime_handle || sessionRecord.runtime_handle.owner_kind !== 'managed_environment_runtime') {
+  if (!sessionRecord || sessionRecord.target.kind !== 'managed_environment' || !sessionRecord.runtime_handle || sessionRecord.runtime_handle.runtime_kind !== 'managed_environment') {
     return {
       ok: false,
       started: false,
       message: 'Managed runtime is not active.',
+    };
+  }
+  if (sessionRecord.runtime_handle.lifecycle_owner !== 'desktop') {
+    return {
+      ok: false,
+      started: false,
+      message: 'This runtime is attached from another Redeven host process. Restart it from that host process instead.',
     };
   }
   const previousRuntimeHandle = sessionRecord.runtime_handle;
@@ -1889,12 +1895,12 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
       };
     }
     const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
-    const bootstrapTicket = await requestDesktopBootstrapTicket(
+    const openSession = await requestDesktopOpenSession(
       authorized.controlPlane.provider,
       authorized.accessToken,
       managedEnvironmentPublicID(environment),
     );
-    if (!bootstrapTicket.bootstrap_ticket) {
+    if (!openSession.bootstrap_ticket) {
       return {
         ok: false,
         started: false,
@@ -1902,10 +1908,11 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
       };
     }
     bootstrap = {
-      kind: 'bootstrap_ticket',
-      controlplane_url: authorized.controlPlane.provider.provider_origin,
-      env_id: managedEnvironmentPublicID(environment),
-      bootstrap_ticket: bootstrapTicket.bootstrap_ticket,
+      ...controlPlaneBootstrap(
+        authorized.controlPlane.provider.provider_origin,
+        managedEnvironmentPublicID(environment),
+        openSession.bootstrap_ticket,
+      ),
     };
   }
 
@@ -1958,7 +1965,9 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
     };
   }
 
-  sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent);
+  sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent, {
+    persistedOwner: environment.local_hosting?.owner,
+  });
   sessionRecord.startup = prepared.launch.managedAgent.startup;
   sessionRecord.allowed_base_url = prepared.launch.managedAgent.startup.local_ui_url;
   sessionRecord.target = buildManagedEnvironmentDesktopTarget(environment, { route: 'local_host' });
@@ -1997,6 +2006,16 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
       ok: false,
       started: false,
       message: 'This environment is hosted on another device. Run updates on the host device instead.',
+    };
+  }
+  if (
+    sessionRecord.runtime_handle.runtime_kind !== 'managed_environment'
+    || sessionRecord.runtime_handle.lifecycle_owner !== 'desktop'
+  ) {
+    return {
+      ok: false,
+      started: false,
+      message: 'This environment is managed by another Redeven host process on this device. Run updates from that host process instead.',
     };
   }
 
@@ -2050,7 +2069,14 @@ async function upsertManagedLocalEnvironmentFromWelcome(
   environmentID: string | undefined,
   environmentName: string,
   draft: DesktopSettingsDraft,
-  label: string,
+  options: Readonly<{
+    label: string;
+    remoteAccessEnabled: boolean;
+    providerOrigin?: string;
+    providerID?: string;
+    envPublicID?: string;
+    preferredOpenRoute?: 'auto' | 'local_host' | 'remote_desktop';
+  }>,
 ): Promise<DesktopManagedEnvironment> {
   const preferences = await loadDesktopPreferencesCached();
   const existing = environmentID ? findManagedEnvironmentByID(preferences, environmentID) : null;
@@ -2062,12 +2088,28 @@ async function upsertManagedLocalEnvironmentFromWelcome(
   const next = upsertManagedLocalEnvironment(preferences, {
     environment_id: environmentID,
     name: environmentName,
-    label,
+    label: options.label,
     access,
+    provider_binding_enabled: options.remoteAccessEnabled,
+    provider_origin: options.providerOrigin,
+    provider_id: options.providerID,
+    env_public_id: options.envPublicID,
+    preferred_open_route: options.remoteAccessEnabled ? options.preferredOpenRoute : 'auto',
     last_used_at_ms: existing?.last_used_at_ms ?? 0,
   });
   await persistDesktopPreferences(next);
-  const resolvedEnvironment = findManagedEnvironmentByID(next, environmentID ?? desktopManagedLocalEnvironmentID(environmentName));
+  const resolvedEnvironment = (
+    (environmentID ? findManagedEnvironmentByID(next, environmentID) : null)
+    ?? (
+      options.remoteAccessEnabled && options.providerOrigin && options.envPublicID
+        ? next.managed_environments.find((environment) => (
+          managedEnvironmentProviderOrigin(environment) === options.providerOrigin
+          && managedEnvironmentPublicID(environment) === options.envPublicID
+        )) ?? null
+        : null
+    )
+    ?? findManagedEnvironmentByID(next, desktopManagedLocalEnvironmentID(environmentName))
+  );
   if (!resolvedEnvironment) {
     throw new Error('Desktop could not save that Local Environment.');
   }
@@ -2134,7 +2176,14 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         local_ui_bind: request.local_ui_bind,
         local_ui_password: request.local_ui_password,
         local_ui_password_mode: request.local_ui_password_mode,
-      }, request.label);
+      }, {
+        label: request.label,
+        remoteAccessEnabled: request.remote_access_enabled === true,
+        providerOrigin: request.provider_origin,
+        providerID: request.provider_id,
+        envPublicID: request.env_public_id,
+        preferredOpenRoute: request.preferred_open_route,
+      });
       return {
         outcome: 'saved_environment',
       };

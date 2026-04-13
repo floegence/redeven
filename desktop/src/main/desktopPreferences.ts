@@ -267,6 +267,7 @@ export type UpsertDesktopManagedLocalEnvironmentInput = Readonly<{
   label?: string;
   pinned?: boolean;
   access?: DesktopManagedEnvironmentAccess;
+  provider_binding_enabled?: boolean;
   preferred_open_route?: 'auto' | 'local_host' | 'remote_desktop';
   provider_origin?: string;
   provider_id?: string;
@@ -1040,12 +1041,37 @@ function providerBindingFromInput(
   return createManagedEnvironmentProviderBinding(providerOrigin, envPublicID, { providerID });
 }
 
+function resolveProviderBindingUpdate(
+  input: Readonly<{
+    provider_binding_enabled?: boolean;
+    provider_origin?: string;
+    provider_id?: string;
+    env_public_id?: string;
+  }>,
+): ReturnType<typeof createManagedEnvironmentProviderBinding> | null | undefined {
+  const hasProviderFields = input.provider_origin !== undefined || input.provider_id !== undefined || input.env_public_id !== undefined;
+  if (input.provider_binding_enabled === false) {
+    return null;
+  }
+  if (input.provider_binding_enabled === true) {
+    const providerBinding = providerBindingFromInput(input);
+    if (!providerBinding) {
+      throw new Error('Provider binding requires provider origin, provider ID, and environment ID.');
+    }
+    return providerBinding;
+  }
+  if (!hasProviderFields) {
+    return undefined;
+  }
+  return providerBindingFromInput(input);
+}
+
 export function upsertManagedLocalEnvironment(
   preferences: DesktopPreferences,
   input: UpsertDesktopManagedLocalEnvironmentInput,
 ): DesktopPreferences {
   const name = normalizeDesktopLocalEnvironmentName(input.name);
-  const requestedProviderBinding = providerBindingFromInput(input);
+  const requestedProviderBinding = resolveProviderBindingUpdate(input);
   const existingByID = compact(input.environment_id) === ''
     ? null
     : preferences.managed_environments.find((environment) => environment.id === compact(input.environment_id)) ?? null;
@@ -1059,6 +1085,9 @@ export function upsertManagedLocalEnvironment(
     )) ?? null
     : null;
   const existing = existingByID ?? existingByProviderBinding ?? null;
+  const nextProviderBinding = requestedProviderBinding === undefined
+    ? existing?.provider_binding ?? null
+    : requestedProviderBinding;
   const environmentID = compact(input.environment_id)
     || existing?.id
     || desktopManagedLocalEnvironmentID(name);
@@ -1067,12 +1096,14 @@ export function upsertManagedLocalEnvironment(
     environmentID,
     label: compact(input.label) || existing?.label || defaultLocalManagedEnvironmentLabel(name),
     pinned: input.pinned ?? existing?.pinned ?? false,
-    preferredOpenRoute: normalizePreferredOpenRoute(
-      input.preferred_open_route,
-      existing?.preferred_open_route ?? 'auto',
-    ),
-    localHosting: localHostingForScopeName(name, access, requestedProviderBinding ?? existing?.provider_binding ?? null, existing),
-    providerBinding: requestedProviderBinding ?? existing?.provider_binding,
+    preferredOpenRoute: nextProviderBinding
+      ? normalizePreferredOpenRoute(
+        input.preferred_open_route,
+        existing?.preferred_open_route ?? 'auto',
+      )
+      : 'auto',
+    localHosting: localHostingForScopeName(name, access, nextProviderBinding, existing),
+    providerBinding: nextProviderBinding ?? undefined,
     createdAtMS: input.created_at_ms ?? existing?.created_at_ms ?? Date.now(),
     updatedAtMS: input.updated_at_ms ?? Date.now(),
     lastUsedAtMS: input.last_used_at_ms ?? existing?.last_used_at_ms ?? 0,

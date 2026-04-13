@@ -28,6 +28,11 @@ describe('desktopLauncherIPC', () => {
       local_ui_bind: ' localhost:23998 ',
       local_ui_password: ' secret ',
       local_ui_password_mode: ' replace ',
+      remote_access_enabled: true,
+      provider_origin: ' https://cp.example.invalid ',
+      provider_id: ' redeven_portal ',
+      env_public_id: ' env_demo ',
+      preferred_open_route: ' remote_desktop ',
     })).toEqual({
       kind: 'upsert_managed_local_environment',
       environment_id: 'local:default',
@@ -36,10 +41,11 @@ describe('desktopLauncherIPC', () => {
       local_ui_bind: 'localhost:23998',
       local_ui_password: ' secret ',
       local_ui_password_mode: 'replace',
-      provider_origin: undefined,
-      provider_id: undefined,
-      env_public_id: undefined,
-      preferred_open_route: 'auto',
+      remote_access_enabled: true,
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'redeven_portal',
+      env_public_id: 'env_demo',
+      preferred_open_route: 'remote_desktop',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_remote_environment',

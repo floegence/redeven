@@ -1175,7 +1175,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openControlPlaneEnvironment(
     controlPlane: DesktopControlPlaneSummary,
     envPublicID: string,
+    managedEntry: DesktopEnvironmentEntry | null,
   ): Promise<boolean> {
+    if (managedEntry) {
+      const opened = await openManagedEnvironment(managedEntry);
+      if (opened) {
+        setFeedback('Control Plane environment opened.');
+      }
+      return opened;
+    }
+
     const sessionKey = controlPlaneDesktopSessionKey(controlPlane.provider.provider_origin, envPublicID);
     const openWindow = snapshot().open_windows.find((window) => window.session_key === sessionKey) ?? null;
     if (openWindow) {
@@ -1414,6 +1423,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         local_ui_bind: state.local_ui_bind,
         local_ui_password: state.local_ui_password,
         local_ui_password_mode: state.local_ui_password_mode,
+        remote_access_enabled: state.remote_access_enabled,
         provider_origin: state.remote_access_enabled ? trimString(state.provider_origin) || undefined : undefined,
         provider_id: state.remote_access_enabled ? trimString(state.provider_id) || undefined : undefined,
         env_public_id: state.remote_access_enabled ? trimString(state.env_public_id) || undefined : undefined,
@@ -1479,6 +1489,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         local_ui_bind: state.local_ui_bind,
         local_ui_password: state.local_ui_password,
         local_ui_password_mode: state.local_ui_password_mode,
+        remote_access_enabled: state.remote_access_enabled,
         provider_origin: state.remote_access_enabled ? trimString(state.provider_origin) || undefined : undefined,
         provider_id: state.remote_access_enabled ? trimString(state.provider_id) || undefined : undefined,
         env_public_id: state.remote_access_enabled ? trimString(state.env_public_id) || undefined : undefined,
@@ -1790,7 +1801,11 @@ function ConnectEnvironmentSurface(props: Readonly<{
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
-  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  openControlPlaneEnvironment: (
+    controlPlane: DesktopControlPlaneSummary,
+    envPublicID: string,
+    managedEntry: DesktopEnvironmentEntry | null,
+  ) => Promise<boolean>;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
@@ -2418,7 +2433,11 @@ function ControlPlanesPanel(props: Readonly<{
   openWindows: readonly DesktopOpenEnvironmentWindow[];
   busyAction: BusyAction;
   openCreateControlPlaneDialog: (message?: string) => void;
-  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  openControlPlaneEnvironment: (
+    controlPlane: DesktopControlPlaneSummary,
+    envPublicID: string,
+    managedEntry: DesktopEnvironmentEntry | null,
+  ) => Promise<boolean>;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
@@ -2466,7 +2485,11 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
   managedEntry: DesktopEnvironmentEntry | null;
   openWindow: DesktopOpenEnvironmentWindow | null;
   busyAction: BusyAction;
-  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  openControlPlaneEnvironment: (
+    controlPlane: DesktopControlPlaneSummary,
+    envPublicID: string,
+    managedEntry: DesktopEnvironmentEntry | null,
+  ) => Promise<boolean>;
 }>) {
   const statusLabel = createMemo(() => props.environment.status || props.environment.lifecycle_status || 'Unknown');
   const statusTone = createMemo<'neutral' | 'primary' | 'success'>(() => (
@@ -2534,7 +2557,7 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
           class="flex-1"
           loading={props.busyAction === 'open_control_plane_environment' || props.busyAction === 'focus_environment_window'}
           onClick={() => {
-            void props.openControlPlaneEnvironment(props.controlPlane, props.environment.env_public_id);
+            void props.openControlPlaneEnvironment(props.controlPlane, props.environment.env_public_id, props.managedEntry);
           }}
         >
           {props.openWindow || props.managedEntry?.is_open ? 'Focus' : 'Open'}
@@ -2549,7 +2572,11 @@ function ControlPlaneShelf(props: Readonly<{
   libraryEntries: readonly DesktopEnvironmentEntry[];
   openWindows: readonly DesktopOpenEnvironmentWindow[];
   busyAction: BusyAction;
-  openControlPlaneEnvironment: (controlPlane: DesktopControlPlaneSummary, envPublicID: string) => Promise<boolean>;
+  openControlPlaneEnvironment: (
+    controlPlane: DesktopControlPlaneSummary,
+    envPublicID: string,
+    managedEntry: DesktopEnvironmentEntry | null,
+  ) => Promise<boolean>;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
@@ -2919,7 +2946,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Access &amp; Security</div>
-            <div class="mt-1 text-sm text-foreground">Local Environment always uses the launcher-owned local scope on this machine.</div>
+            <div class="mt-1 text-sm text-foreground">This environment keeps its own local scope on this machine.</div>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
             <Tag variant={passwordStateTagVariant(props.snapshot.password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
