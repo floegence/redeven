@@ -10,6 +10,7 @@ describe('desktopLauncherIPC', () => {
     })).toEqual({
       kind: 'open_managed_environment',
       environment_id: 'local:default',
+      route: 'auto',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_managed_environment_settings',
@@ -35,6 +36,10 @@ describe('desktopLauncherIPC', () => {
       local_ui_bind: 'localhost:23998',
       local_ui_password: ' secret ',
       local_ui_password_mode: 'replace',
+      provider_origin: undefined,
+      provider_id: undefined,
+      env_public_id: undefined,
+      preferred_open_route: 'auto',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_remote_environment',

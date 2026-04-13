@@ -1,13 +1,14 @@
 import type { DesktopPreferences } from '../main/desktopPreferences';
 import { defaultDesktopPreferences } from '../main/desktopPreferences';
+import { controlPlaneManagedStateLayout, localManagedStateLayout } from '../main/statePaths';
 import {
   buildManagedEnvironmentDesktopTarget,
-  managedEnvironmentDesktopSessionKey,
   type DesktopSessionSummary,
 } from '../main/desktopTarget';
 import type { StartupReport } from '../main/startup';
 import {
   createManagedControlPlaneEnvironment,
+  createManagedEnvironmentLocalHosting,
   createManagedLocalEnvironment,
   defaultDesktopManagedEnvironmentAccess,
   type DesktopManagedControlPlaneEnvironment,
@@ -22,6 +23,7 @@ type TestManagedLocalEnvironmentOptions = Readonly<{
   label?: string;
   access?: TestManagedAccessOverrides;
   pinned?: boolean;
+  stateDir?: string;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -32,6 +34,7 @@ type TestManagedControlPlaneEnvironmentOptions = Readonly<{
   label?: string;
   access?: TestManagedAccessOverrides;
   pinned?: boolean;
+  stateDir?: string;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -57,6 +60,7 @@ export function testManagedLocalEnvironment(
   return createManagedLocalEnvironment(name, {
     label: options.label,
     pinned: options.pinned,
+    stateDir: options.stateDir ?? localManagedStateLayout(name).stateDir,
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
@@ -69,6 +73,8 @@ export function testManagedControlPlaneEnvironment(
   envPublicID: string,
   options: TestManagedControlPlaneEnvironmentOptions = {},
 ): DesktopManagedControlPlaneEnvironment {
+  const layout = controlPlaneManagedStateLayout(providerOrigin, envPublicID);
+  const scopeParts = layout.scopeKey.split('/');
   return createManagedControlPlaneEnvironment(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'redeven_portal',
     label: options.label,
@@ -76,7 +82,19 @@ export function testManagedControlPlaneEnvironment(
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
-    access: testManagedAccess(options.access),
+    localHosting: createManagedEnvironmentLocalHosting(
+      {
+        kind: 'controlplane',
+        provider_origin: providerOrigin,
+        provider_key: scopeParts[1] ?? 'redeven_portal',
+        env_public_id: envPublicID,
+      },
+      {
+        access: testManagedAccess(options.access),
+        owner: 'desktop',
+        stateDir: options.stateDir ?? layout.stateDir,
+      },
+    ),
   });
 }
 
@@ -96,9 +114,11 @@ export function testManagedSession(
   localUIURL: string,
   startupOverrides: Partial<StartupReport> = {},
 ): DesktopSessionSummary {
+  const target = buildManagedEnvironmentDesktopTarget(environment);
   return {
-    session_key: managedEnvironmentDesktopSessionKey(environment),
-    target: buildManagedEnvironmentDesktopTarget(environment),
+    session_key: target.session_key,
+    target,
+    entry_url: localUIURL,
     startup: {
       local_ui_url: localUIURL,
       local_ui_urls: [localUIURL],

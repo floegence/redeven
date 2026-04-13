@@ -1,7 +1,13 @@
-import type { DesktopManagedEnvironment } from '../shared/desktopManagedEnvironment';
+import {
+  managedEnvironmentLocalAccess,
+  managedEnvironmentProviderOrigin,
+  managedEnvironmentPublicID,
+  type DesktopManagedEnvironment,
+} from '../shared/desktopManagedEnvironment';
 import {
   controlPlaneManagedStateLayout,
   localManagedStateLayout,
+  namedManagedStateLayout,
   type DesktopManagedStateLayout,
 } from './statePaths';
 
@@ -48,7 +54,8 @@ export function buildDesktopAgentArgs(
   environment: DesktopManagedEnvironment,
   options: BuildDesktopAgentArgsOptions = {},
 ): string[] {
-  const localUIBind = String(options.localUIBind ?? environment.access.local_ui_bind).trim() || environment.access.local_ui_bind;
+  const access = managedEnvironmentLocalAccess(environment);
+  const localUIBind = String(options.localUIBind ?? access.local_ui_bind).trim() || access.local_ui_bind;
   const args = [
     'run',
     '--mode',
@@ -62,7 +69,7 @@ export function buildDesktopAgentArgs(
     args.push('--config-path', configPath);
   }
 
-  if (environment.access.local_ui_password_configured) {
+  if (access.local_ui_password_configured) {
     args.push('--password-stdin');
   }
 
@@ -118,8 +125,9 @@ function buildDesktopAgentPlan(
     bootstrap: options?.bootstrap,
     configPath: stateLayout.configPath,
   });
-  const passwordStdin = environment.access.local_ui_password_configured
-    ? String(environment.access.local_ui_password ?? '')
+  const access = managedEnvironmentLocalAccess(environment);
+  const passwordStdin = access.local_ui_password_configured
+    ? String(access.local_ui_password ?? '')
     : '';
   return {
     args,
@@ -160,8 +168,22 @@ export function resolveDesktopManagedStateLayout(
   environment: DesktopManagedEnvironment,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): DesktopManagedStateLayout {
-  if (environment.kind === 'controlplane') {
-    return controlPlaneManagedStateLayout(environment.provider_origin, environment.env_public_id, baseEnv);
+  const scope = environment.local_hosting?.scope;
+  if (scope?.kind === 'controlplane') {
+    return controlPlaneManagedStateLayout(scope.provider_origin, scope.env_public_id, baseEnv);
   }
-  return localManagedStateLayout(environment.name, baseEnv);
+  if (scope?.kind === 'named') {
+    return namedManagedStateLayout(scope.name, baseEnv);
+  }
+  if (scope?.kind === 'local') {
+    return localManagedStateLayout(scope.name, baseEnv);
+  }
+  if (environment.provider_binding) {
+    return controlPlaneManagedStateLayout(
+      managedEnvironmentProviderOrigin(environment),
+      managedEnvironmentPublicID(environment),
+      baseEnv,
+    );
+  }
+  return localManagedStateLayout('default', baseEnv);
 }

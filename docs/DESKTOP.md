@@ -21,13 +21,17 @@ This document describes the public Electron desktop shell that ships with each `
 - Each opened Environment owns its own top-level session window, plus any detached child windows it spawns.
 - Detached child windows are session-scoped tools rather than global shell utilities. File preview and Debug Console are current examples.
 - Session deduplication happens in Electron main through a canonical session key:
-  - `local:<name>` for a desktop-managed local environment
+  - `env:<environment_id>:local_host` for a locally hosted managed environment window
+  - `env:<environment_id>:remote_desktop` for a remote desktop window opened through a Control Plane provider
   - `url:<normalized-local-ui-origin>` for remote Local UI targets
   - `ssh:<normalized-ssh-identity>` for SSH-bootstrap targets
-  - `cp:<encoded-provider-origin>:env:<env_public_id>` for Control Plane environments
 - Desktop-managed environments are the entries that own a real Redeven scope directory on this machine:
   - local environments map to `~/.redeven/scopes/local/<name>`
   - Control Plane environments map to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>`
+- Desktop and agent-only/CLI mode also share one canonical environment catalog under:
+  - `~/.redeven/catalog/environments/*.json`
+  - `~/.redeven/catalog/connections/*.json`
+  - `~/.redeven/catalog/providers/*.json`
 - Saved Redeven URL and SSH entries are connection records only. They do not own an additional Desktop-private runtime state directory.
 - Desktop and agent-only/CLI mode resolve the same scope directories. Desktop does not invent a second local-environment state root.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
@@ -345,7 +349,7 @@ Desktop supports compatible first-party and third-party control planes through o
 - desktop token revoke: `POST /api/rcpp/v1/desktop/token/revoke`
 - desktop account lookup: `GET /api/rcpp/v1/me`
 - provider environment list: `GET /api/rcpp/v1/environments`
-- per-environment bootstrap ticket: `POST /api/rcpp/v1/environments/:env_public_id/desktop/bootstrap-ticket`
+- per-environment open session: `POST /api/rcpp/v1/environments/:env_public_id/desktop/open-session`
 - runtime bootstrap exchange: `POST /api/rcpp/v1/runtime/bootstrap/exchange`
 
 Desktop assumptions:
@@ -362,8 +366,9 @@ The Control Plane flow is:
 4. Desktop exchanges the `connect` handoff for a short-lived in-memory access token plus a long-lived revocable refresh token.
 5. Desktop loads `me` and `environments` with the access token.
 6. Desktop refreshes access tokens on demand with the stored refresh token.
-7. Desktop requests a one-time `bootstrap_ticket` only when it opens a specific environment.
-8. The managed runtime exchanges that ticket for direct connect info.
+7. Desktop requests a unified per-environment open session only when it opens a specific environment.
+8. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.
+9. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
 
 Browser handoff may also open Desktop through a custom protocol link:
 
@@ -372,7 +377,7 @@ Browser handoff may also open Desktop through a custom protocol link:
 
 For `connect`, the deep link carries a one-time `handoff_ticket`.
 
-For `open`, the provider origin, target environment ID, and one-time `handoff_ticket` are sufficient. Desktop exchanges that handoff for a one-time `bootstrap_ticket`. `provider_id` is optional because Desktop can resolve it through discovery.
+For `open`, the provider origin, target environment ID, and one-time `handoff_ticket` are sufficient. Desktop exchanges that handoff for a unified open-session response that may include a `bootstrap_ticket`, a `remote_session_url`, or both. `provider_id` is optional because Desktop can resolve it through discovery.
 
 ## Shell-Owned Theme State
 

@@ -19,7 +19,7 @@ export type EnvironmentCardMetaItem = Readonly<{
 }>;
 
 export type EnvironmentCardModel = Readonly<{
-  kind_label: 'Local' | 'Control Plane' | 'Redeven URL' | 'SSH';
+  kind_label: 'Local' | 'Environment' | 'Remote Environment' | 'Redeven URL' | 'SSH';
   status_label: string;
   status_tone: EnvironmentCardTone;
   source_label: string;
@@ -82,7 +82,13 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
     case 'ssh_environment':
       return 'SSH';
     case 'managed_environment':
-      return environment.managed_environment_kind === 'controlplane' ? 'Control Plane' : 'Local';
+      if (environment.managed_has_local_hosting && environment.managed_has_remote_desktop) {
+        return 'Environment';
+      }
+      if (environment.managed_has_remote_desktop) {
+        return 'Remote Environment';
+      }
+      return 'Local';
     case 'external_local_ui':
       return 'Redeven URL';
     default:
@@ -198,17 +204,26 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   if (environment.kind === 'managed_environment') {
+    const hasLocalHosting = environment.managed_has_local_hosting === true;
+    const hasRemoteDesktop = environment.managed_has_remote_desktop === true;
+    const providerSummary = [environment.provider_origin, environment.env_public_id].filter(Boolean).join(' · ');
+    const hostSummary = environment.managed_local_ui_bind || environment.managed_environment_name || environment.secondary_text;
     return {
-      kind_label: environment.managed_environment_kind === 'controlplane' ? 'Control Plane' : 'Local',
+      kind_label: environmentKindLabel(environment),
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
       source_label: 'Desktop-managed',
-      target_primary: environment.local_ui_url || environment.secondary_text || 'Desktop-managed runtime on this machine',
-      target_secondary: environment.local_ui_url === ''
-        ? environment.managed_environment_kind === 'controlplane'
-          ? 'Desktop will request a fresh Control Plane bootstrap ticket when reopening this environment.'
-          : 'Open the managed environment or adjust startup settings before the next launch.'
-        : 'Current runtime URL',
+      target_primary: environment.local_ui_url
+        || (hasLocalHosting
+          ? hostSummary
+          : providerSummary || environment.secondary_text || 'Provider-backed environment'),
+      target_secondary: environment.local_ui_url !== ''
+        ? 'Current entry URL'
+        : hasLocalHosting && hasRemoteDesktop
+          ? providerSummary || 'Hosted on this device and linked to a Control Plane environment.'
+          : hasRemoteDesktop
+            ? 'Desktop opens a remote session through the Control Plane without starting a local runtime here.'
+            : 'Open the managed environment or adjust startup settings before the next launch.',
       target_primary_monospace: true,
       target_secondary_monospace: false,
       meta: environmentCardMeta(environment),

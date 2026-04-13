@@ -537,6 +537,10 @@ func (c *cli) runCmd(args []string) int {
 
 	localUIBindLabel := localUIBind.ListenLabel()
 	localUIURLs := localUIBind.DisplayURLs()
+	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
+		fmt.Fprintf(c.stderr, "failed to update environment catalog: %v\n", err)
+		return 1
+	}
 	announce := func() {
 		printWelcomeBanner(c.stderr, welcomeBannerOptions{
 			Version:             Version,
@@ -613,6 +617,10 @@ func (c *cli) runCmd(args []string) int {
 		}
 		localUIBindLabel = srv.ListenLabel()
 		localUIURLs = srv.DisplayURLs()
+		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
+			fmt.Fprintf(c.stderr, "failed to refresh environment catalog: %v\n", err)
+			return 1
+		}
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
 			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
 				LocalUIURL:         firstNonEmptyString(localUIURLs),

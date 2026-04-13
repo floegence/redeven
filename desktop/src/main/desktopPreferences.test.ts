@@ -46,9 +46,16 @@ function draft(overrides: Partial<DesktopSettingsDraft> = {}): DesktopSettingsDr
 
 async function withTempPreferencesDir(testFn: (root: string) => Promise<void>): Promise<void> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preferences-test-'));
+  const previousStateRoot = process.env.REDEVEN_STATE_ROOT;
+  process.env.REDEVEN_STATE_ROOT = path.join(root, '.redeven');
   try {
     await testFn(root);
   } finally {
+    if (previousStateRoot === undefined) {
+      delete process.env.REDEVEN_STATE_ROOT;
+    } else {
+      process.env.REDEVEN_STATE_ROOT = previousStateRoot;
+    }
     await fs.rm(root, { recursive: true, force: true });
   }
 }
@@ -182,19 +189,41 @@ describe('desktopPreferences', () => {
       const preferencesFile = JSON.parse(await fs.readFile(paths.preferencesFile, 'utf8')) as {
         control_planes?: Array<{ account?: Record<string, unknown> }>;
       };
+      const providerCatalogDir = path.join(paths.stateRoot, 'catalog', 'providers');
+      const providerCatalogFiles = await fs.readdir(providerCatalogDir);
+      expect(providerCatalogFiles).toHaveLength(1);
+      const providerCatalogFile = JSON.parse(
+        await fs.readFile(path.join(providerCatalogDir, providerCatalogFiles[0]!), 'utf8'),
+      ) as { account?: Record<string, unknown> };
       const secretsFile = JSON.parse(await fs.readFile(paths.secretsFile, 'utf8')) as {
         control_planes?: Array<{ refresh_token?: { data?: string } }>;
       };
 
       expect(JSON.stringify(preferencesFile)).not.toContain('refresh-demo-token');
-      expect(preferencesFile.control_planes?.[0]?.account).toEqual({
+      expect(providerCatalogFile.account).toEqual({
         user_public_id: 'user_demo',
         user_display_name: 'Demo User',
         authorization_expires_at_unix_ms: 1_770_000_000_000,
       });
       expect(secretsFile.control_planes?.[0]?.refresh_token?.data).toBe('refresh-demo-token');
 
-      await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual(preferences);
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(loaded).toEqual(expect.objectContaining({
+        saved_environments: [],
+        saved_ssh_environments: [],
+        recent_external_local_ui_urls: [],
+        control_plane_refresh_tokens: preferences.control_plane_refresh_tokens,
+        control_planes: preferences.control_planes,
+      }));
+      expect(loaded.managed_environments).toEqual([
+        expect.objectContaining({
+          id: 'local:default',
+          identity: { kind: 'provisional_local', local_name: 'default' },
+          local_hosting: expect.objectContaining({
+            scope: { kind: 'local', name: 'default' },
+          }),
+        }),
+      ]);
     });
   });
 
@@ -239,14 +268,16 @@ describe('desktopPreferences', () => {
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
           id: 'local:default',
-          kind: 'local',
-          name: 'default',
           label: 'Local Environment',
-          access: {
-            local_ui_bind: '0.0.0.0:24000',
-            local_ui_password: 'super-secret',
-            local_ui_password_configured: true,
-          },
+          identity: { kind: 'provisional_local', local_name: 'default' },
+          local_hosting: expect.objectContaining({
+            scope: { kind: 'local', name: 'default' },
+            access: {
+              local_ui_bind: '0.0.0.0:24000',
+              local_ui_password: 'super-secret',
+              local_ui_password_configured: true,
+            },
+          }),
         }),
       ]);
     });
@@ -268,14 +299,16 @@ describe('desktopPreferences', () => {
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
           id: 'local:default',
-          kind: 'local',
-          name: 'default',
           label: 'Local Environment',
-          access: {
-            local_ui_bind: 'localhost:23998',
-            local_ui_password: '',
-            local_ui_password_configured: false,
-          },
+          identity: { kind: 'provisional_local', local_name: 'default' },
+          local_hosting: expect.objectContaining({
+            scope: { kind: 'local', name: 'default' },
+            access: {
+              local_ui_bind: 'localhost:23998',
+              local_ui_password: '',
+              local_ui_password_configured: false,
+            },
+          }),
         }),
       ]);
     });
@@ -301,13 +334,15 @@ describe('desktopPreferences', () => {
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
           id: 'local:default',
-          kind: 'local',
-          name: 'default',
-          access: {
-            local_ui_bind: '127.0.0.1:0',
-            local_ui_password: '',
-            local_ui_password_configured: false,
-          },
+          identity: { kind: 'provisional_local', local_name: 'default' },
+          local_hosting: expect.objectContaining({
+            scope: { kind: 'local', name: 'default' },
+            access: {
+              local_ui_bind: '127.0.0.1:0',
+              local_ui_password: '',
+              local_ui_password_configured: false,
+            },
+          }),
         }),
       ]);
     });
@@ -351,13 +386,15 @@ describe('desktopPreferences', () => {
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
           id: 'local:default',
-          kind: 'local',
-          name: 'default',
-          access: {
-            local_ui_bind: 'localhost:23998',
-            local_ui_password: '',
-            local_ui_password_configured: false,
-          },
+          identity: { kind: 'provisional_local', local_name: 'default' },
+          local_hosting: expect.objectContaining({
+            scope: { kind: 'local', name: 'default' },
+            access: {
+              local_ui_bind: 'localhost:23998',
+              local_ui_password: '',
+              local_ui_password_configured: false,
+            },
+          }),
         }),
       ]);
     });

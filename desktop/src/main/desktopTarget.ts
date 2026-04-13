@@ -1,32 +1,37 @@
 import { defaultSavedEnvironmentLabel, desktopEnvironmentID } from './desktopPreferences';
 import { normalizeLocalUIBaseURL } from './localUIURL';
-import { normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
+import type { StartupReport } from './startup';
+import {
+  desktopManagedControlPlaneEnvironmentID,
+  managedEnvironmentDefaultOpenRoute,
+  managedEnvironmentKind,
+  normalizeDesktopLocalEnvironmentName,
+  type DesktopManagedEnvironment,
+} from '../shared/desktopManagedEnvironment';
 import {
   defaultSavedSSHEnvironmentLabel,
   desktopSSHEnvironmentID as buildSSHEnvironmentID,
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
-import {
-  desktopManagedControlPlaneEnvironmentID,
-  desktopManagedLocalEnvironmentID,
-  type DesktopManagedEnvironment,
-} from '../shared/desktopManagedEnvironment';
-import type { StartupReport } from './startup';
 
 export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
-export type DesktopSessionKey = `local:${string}` | `url:${string}` | `ssh:${string}` | `cp:${string}:env:${string}`;
+export type DesktopManagedEnvironmentSessionRoute = 'local_host' | 'remote_desktop';
+export type DesktopSessionKey = `env:${string}:${DesktopManagedEnvironmentSessionRoute}` | `url:${string}` | `ssh:${string}`;
 
 export type ManagedEnvironmentDesktopTarget = Readonly<{
   kind: 'managed_environment';
   session_key: DesktopSessionKey;
   environment_id: string;
   label: string;
-  managed_environment_kind: DesktopManagedEnvironment['kind'];
+  route: DesktopManagedEnvironmentSessionRoute;
+  managed_environment_kind: 'local' | 'controlplane';
   local_environment_name?: string;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  has_local_hosting: boolean;
+  has_remote_desktop: boolean;
 }>;
 
 export type ExternalLocalUIDesktopTarget = Readonly<{
@@ -55,15 +60,30 @@ export type DesktopSessionTarget = ManagedEnvironmentDesktopTarget | ExternalLoc
 export type DesktopSessionSummary = Readonly<{
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
-  startup: StartupReport;
+  entry_url?: string;
+  startup?: StartupReport;
 }>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function localEnvironmentDesktopSessionKey(name: string): `local:${string}` {
-  return desktopManagedLocalEnvironmentID(name) as `local:${string}`;
+export function managedEnvironmentDesktopSessionKey(
+  environmentID: string,
+  route: DesktopManagedEnvironmentSessionRoute,
+): `env:${string}:${DesktopManagedEnvironmentSessionRoute}` {
+  const cleanEnvironmentID = compact(environmentID);
+  if (cleanEnvironmentID === '') {
+    throw new Error('Environment ID is required.');
+  }
+  return `env:${encodeURIComponent(cleanEnvironmentID)}:${route}`;
+}
+
+export function controlPlaneDesktopSessionKey(
+  rawProviderOrigin: string,
+  rawEnvPublicID: string,
+): `env:${string}:remote_desktop` {
+  return `env:${encodeURIComponent(desktopManagedControlPlaneEnvironmentID(rawProviderOrigin, rawEnvPublicID))}:remote_desktop`;
 }
 
 export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSessionKey {
@@ -74,43 +94,39 @@ export function sshDesktopSessionKey(rawDetails: DesktopSSHEnvironmentDetails): 
   return buildSSHEnvironmentID(rawDetails);
 }
 
-export function controlPlaneDesktopSessionKey(rawProviderOrigin: string, rawEnvPublicID: string): `cp:${string}:env:${string}` {
-  return desktopManagedControlPlaneEnvironmentID(rawProviderOrigin, rawEnvPublicID) as `cp:${string}:env:${string}`;
-}
-
 export function desktopSessionStateKeyFragment(sessionKey: DesktopSessionKey): string {
   return encodeURIComponent(String(sessionKey ?? '').trim());
 }
 
-export function managedEnvironmentDesktopSessionKey(environment: DesktopManagedEnvironment): DesktopSessionKey {
-  if (environment.kind === 'local') {
-    return localEnvironmentDesktopSessionKey(environment.name);
-  }
-  return controlPlaneDesktopSessionKey(environment.provider_origin, environment.env_public_id);
-}
+type BuildManagedEnvironmentDesktopTargetOptions = Readonly<{
+  route?: DesktopManagedEnvironmentSessionRoute;
+}>;
 
 export function buildManagedEnvironmentDesktopTarget(
   environment: DesktopManagedEnvironment,
+  options: BuildManagedEnvironmentDesktopTargetOptions = {},
 ): ManagedEnvironmentDesktopTarget {
-  if (environment.kind === 'local') {
-    return {
-      kind: 'managed_environment',
-      session_key: managedEnvironmentDesktopSessionKey(environment),
-      environment_id: environment.id,
-      label: environment.label,
-      managed_environment_kind: environment.kind,
-      local_environment_name: environment.name,
-    };
-  }
+  const route = options.route ?? (
+    managedEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
+      ? 'remote_desktop'
+      : 'local_host'
+  );
+  const localScope = environment.local_hosting?.scope;
   return {
     kind: 'managed_environment',
-    session_key: managedEnvironmentDesktopSessionKey(environment),
+    session_key: managedEnvironmentDesktopSessionKey(environment.id, route),
     environment_id: environment.id,
     label: environment.label,
-    managed_environment_kind: environment.kind,
-    provider_origin: normalizeControlPlaneOrigin(environment.provider_origin),
-    provider_id: environment.provider_id,
-    env_public_id: environment.env_public_id,
+    route,
+    managed_environment_kind: managedEnvironmentKind(environment),
+    local_environment_name: localScope && localScope.kind !== 'controlplane'
+      ? normalizeDesktopLocalEnvironmentName(localScope.name)
+      : undefined,
+    provider_origin: environment.provider_binding?.provider_origin,
+    provider_id: environment.provider_binding?.provider_id,
+    env_public_id: environment.provider_binding?.env_public_id,
+    has_local_hosting: Boolean(environment.local_hosting),
+    has_remote_desktop: environment.provider_binding?.remote_desktop_supported === true,
   };
 }
 
