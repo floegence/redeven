@@ -358,6 +358,8 @@ Desktop assumptions:
 - The provider either implements the fixed contract or it does not.
 - Desktop does not ask the provider for a capability matrix.
 - Runtime features still come from the runtime itself, not from provider feature declarations.
+- Desktop sends provider HTTP requests from Electron main through Chromium's network stack so certificate trust, proxies, and DNS behavior stay aligned with the local browser session.
+- For local development over HTTPS, the machine running Desktop must trust the development CA that issued the provider certificate.
 
 The Control Plane flow is:
 

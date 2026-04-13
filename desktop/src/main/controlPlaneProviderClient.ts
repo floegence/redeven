@@ -7,6 +7,12 @@ import {
   type DesktopControlPlaneProvider,
   type DesktopProviderEnvironment,
 } from '../shared/controlPlaneProvider';
+import {
+  DesktopProviderRequestError,
+  electronDesktopProviderTransport,
+  type DesktopProviderTransport,
+  type DesktopProviderTransportResponse,
+} from './controlPlaneProviderTransport';
 
 const PROVIDER_DISCOVERY_PATH = '/.well-known/redeven-provider.json';
 const PROVIDER_ME_PATH = '/api/rcpp/v1/me';
@@ -47,6 +53,10 @@ type ProviderJSONErrorEnvelope = Readonly<{
   }> | null;
 }>;
 
+type ProviderClientRequestOptions = Readonly<{
+  transport?: DesktopProviderTransport;
+}>;
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -67,22 +77,57 @@ function providerRequestURL(providerOrigin: string, pathname: string): string {
   return base.toString();
 }
 
-async function readResponseJSON(response: Response): Promise<unknown> {
-  const body = await response.text();
+function headersRecord(headers: Headers): Readonly<Record<string, string>> {
+  const normalized: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    normalized[key] = value;
+  });
+  return normalized;
+}
+
+function invalidProviderResponseError(
+  providerOrigin: string,
+  message: string,
+): DesktopProviderRequestError {
+  return new DesktopProviderRequestError('provider_invalid_response', message, { providerOrigin });
+}
+
+function normalizeProviderUnixMS(
+  providerOrigin: string,
+  value: unknown,
+  message: string,
+): number {
+  try {
+    return normalizeUnixMS(value);
+  } catch {
+    throw invalidProviderResponseError(providerOrigin, message);
+  }
+}
+
+async function readResponseJSON(
+  providerOrigin: string,
+  response: DesktopProviderTransportResponse,
+  operationLabel: string,
+): Promise<unknown> {
+  const body = response.body_text;
   if (compact(body) === '') {
     return null;
   }
   try {
     return JSON.parse(body) as unknown;
   } catch {
-    if (!response.ok) {
-      throw new Error(`Provider request failed (${response.status}): ${compact(body) || 'Invalid JSON response.'}`);
-    }
-    throw new Error('Provider returned invalid JSON.');
+    throw new DesktopProviderRequestError(
+      'provider_invalid_json',
+      `The Control Plane returned invalid JSON for ${operationLabel}.`,
+      {
+        providerOrigin,
+        status: response.status,
+      },
+    );
   }
 }
 
-function providerErrorMessage(response: Response, body: unknown): string {
+function providerErrorMessage(status: number, body: unknown): string {
   if (body && typeof body === 'object') {
     const envelope = body as ProviderJSONErrorEnvelope;
     const message = compact(envelope.error?.message);
@@ -90,7 +135,7 @@ function providerErrorMessage(response: Response, body: unknown): string {
       return message;
     }
   }
-  return `Provider request failed (${response.status}).`;
+  return `Control Plane request failed (${status}).`;
 }
 
 async function fetchProviderJSON(
@@ -99,7 +144,9 @@ async function fetchProviderJSON(
     method?: 'GET' | 'POST';
     bearerToken?: string;
     body?: unknown;
-  }> = {},
+    operationLabel: string;
+    transport?: DesktopProviderTransport;
+  }>,
 ): Promise<unknown> {
   const headers = new Headers({
     Accept: 'application/json',
@@ -113,51 +160,82 @@ async function fetchProviderJSON(
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(url, {
+  const providerOrigin = normalizeControlPlaneOrigin(url);
+  const transport = options.transport ?? electronDesktopProviderTransport;
+  const response = await transport({
+    url,
     method: options.method ?? 'GET',
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    signal: AbortSignal.timeout(DEFAULT_PROVIDER_TIMEOUT_MS),
+    headers: headersRecord(headers),
+    body_text: options.body === undefined ? undefined : JSON.stringify(options.body),
+    timeout_ms: DEFAULT_PROVIDER_TIMEOUT_MS,
   });
-  const body = await readResponseJSON(response);
-  if (!response.ok) {
-    throw new Error(providerErrorMessage(response, body));
+  const body = await readResponseJSON(providerOrigin, response, options.operationLabel);
+  if (response.status < 200 || response.status >= 300) {
+    throw new DesktopProviderRequestError(
+      'provider_request_failed',
+      providerErrorMessage(response.status, body),
+      {
+        providerOrigin,
+        status: response.status,
+      },
+    );
   }
   return body;
 }
 
-function normalizeProviderOpenSessionResponse(body: unknown): ProviderDesktopOpenSession {
+function normalizeProviderOpenSessionResponse(
+  providerOrigin: string,
+  body: unknown,
+  message: string,
+): ProviderDesktopOpenSession {
   if (!body || typeof body !== 'object') {
-    throw new Error('Provider open response is invalid.');
+    throw invalidProviderResponseError(providerOrigin, message);
   }
 
   const candidate = body as Record<string, unknown>;
   const bootstrapTicket = compact(candidate.bootstrap_ticket);
   const remoteSessionURL = compact(candidate.remote_session_url);
   if (bootstrapTicket === '' && remoteSessionURL === '') {
-    throw new Error('Provider open response is invalid.');
+    throw invalidProviderResponseError(providerOrigin, message);
   }
   return {
     bootstrap_ticket: bootstrapTicket || undefined,
     remote_session_url: remoteSessionURL || undefined,
-    expires_at_unix_ms: normalizeUnixMS(candidate.expires_at_unix_ms),
+    expires_at_unix_ms: normalizeProviderUnixMS(providerOrigin, candidate.expires_at_unix_ms, message),
   };
 }
 
-function normalizeProviderDesktopTokenRefreshResponse(body: unknown): ProviderDesktopTokenRefreshResult {
+function normalizeProviderDesktopTokenRefreshResponse(
+  providerOrigin: string,
+  body: unknown,
+): ProviderDesktopTokenRefreshResult {
   if (!body || typeof body !== 'object') {
-    throw new Error('Provider refresh response is invalid.');
+    throw invalidProviderResponseError(
+      providerOrigin,
+      'The Control Plane desktop token refresh response is invalid.',
+    );
   }
 
   const candidate = body as Record<string, unknown>;
   const accessToken = compact(candidate.access_token);
   if (accessToken === '') {
-    throw new Error('Provider refresh response is invalid.');
+    throw invalidProviderResponseError(
+      providerOrigin,
+      'The Control Plane desktop token refresh response is invalid.',
+    );
   }
   return {
     access_token: accessToken,
-    access_expires_at_unix_ms: normalizeUnixMS(candidate.access_expires_at_unix_ms),
-    authorization_expires_at_unix_ms: normalizeUnixMS(candidate.authorization_expires_at_unix_ms),
+    access_expires_at_unix_ms: normalizeProviderUnixMS(
+      providerOrigin,
+      candidate.access_expires_at_unix_ms,
+      'The Control Plane desktop token refresh response is invalid.',
+    ),
+    authorization_expires_at_unix_ms: normalizeProviderUnixMS(
+      providerOrigin,
+      candidate.authorization_expires_at_unix_ms,
+      'The Control Plane desktop token refresh response is invalid.',
+    ),
   };
 }
 
@@ -166,15 +244,25 @@ function normalizeProviderDesktopConnectExchangeResponse(
   body: unknown,
 ): ProviderDesktopConnectExchangeResult {
   if (!body || typeof body !== 'object') {
-    throw new Error('Provider connect response is invalid.');
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The Control Plane desktop connect response is invalid.',
+    );
   }
 
   const candidate = body as Record<string, unknown>;
   const accessToken = compact(candidate.access_token);
   const refreshToken = compact(candidate.refresh_token);
-  const authorizationExpiresAtUnixMS = normalizeUnixMS(candidate.authorization_expires_at_unix_ms);
+  const authorizationExpiresAtUnixMS = normalizeProviderUnixMS(
+    provider.provider_origin,
+    candidate.authorization_expires_at_unix_ms,
+    'The Control Plane desktop connect response is invalid.',
+  );
   if (accessToken === '' || refreshToken === '') {
-    throw new Error('Provider connect response is invalid.');
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The Control Plane desktop connect response is invalid.',
+    );
   }
 
   const account = normalizeDesktopControlPlaneAccount({
@@ -184,12 +272,19 @@ function normalizeProviderDesktopConnectExchangeResponse(
     authorization_expires_at_unix_ms: authorizationExpiresAtUnixMS,
   }, { provider });
   if (!account) {
-    throw new Error('Provider connect response is invalid.');
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The Control Plane desktop connect response is invalid.',
+    );
   }
 
   return {
     access_token: accessToken,
-    access_expires_at_unix_ms: normalizeUnixMS(candidate.access_expires_at_unix_ms),
+    access_expires_at_unix_ms: normalizeProviderUnixMS(
+      provider.provider_origin,
+      candidate.access_expires_at_unix_ms,
+      'The Control Plane desktop connect response is invalid.',
+    ),
     refresh_token: refreshToken,
     authorization_expires_at_unix_ms: authorizationExpiresAtUnixMS,
     account,
@@ -199,11 +294,21 @@ function normalizeProviderDesktopConnectExchangeResponse(
   };
 }
 
-export async function fetchProviderDiscovery(providerOrigin: string): Promise<DesktopControlPlaneProvider> {
-  const body = await fetchProviderJSON(providerRequestURL(providerOrigin, PROVIDER_DISCOVERY_PATH));
+export async function fetchProviderDiscovery(
+  providerOrigin: string,
+  requestOptions: ProviderClientRequestOptions = {},
+): Promise<DesktopControlPlaneProvider> {
+  const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
+  const body = await fetchProviderJSON(providerRequestURL(normalizedOrigin, PROVIDER_DISCOVERY_PATH), {
+    operationLabel: 'the provider discovery document',
+    transport: requestOptions.transport,
+  });
   const provider = normalizeDesktopControlPlaneProvider(body);
   if (!provider) {
-    throw new Error('Provider discovery response is invalid.');
+    throw invalidProviderResponseError(
+      normalizedOrigin,
+      'The Control Plane provider discovery document is invalid.',
+    );
   }
   return provider;
 }
@@ -211,12 +316,15 @@ export async function fetchProviderDiscovery(providerOrigin: string): Promise<De
 export async function exchangeProviderDesktopConnectHandoff(
   provider: DesktopControlPlaneProvider,
   handoffTicket: string,
+  requestOptions: ProviderClientRequestOptions = {},
 ): Promise<ProviderDesktopConnectExchangeResult> {
   const body = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH),
     {
       method: 'POST',
       bearerToken: handoffTicket,
+      operationLabel: 'the desktop connect exchange',
+      transport: requestOptions.transport,
     },
   );
   return normalizeProviderDesktopConnectExchangeResponse(provider, body);
@@ -225,20 +333,28 @@ export async function exchangeProviderDesktopConnectHandoff(
 export async function exchangeProviderDesktopOpenHandoff(
   providerOrigin: string,
   handoffTicket: string,
+  requestOptions: ProviderClientRequestOptions = {},
 ): Promise<ProviderDesktopOpenSession> {
   const body = await fetchProviderJSON(
     providerRequestURL(providerOrigin, PROVIDER_DESKTOP_OPEN_EXCHANGE_PATH),
     {
       method: 'POST',
       bearerToken: handoffTicket,
+      operationLabel: 'the desktop open exchange',
+      transport: requestOptions.transport,
     },
   );
-  return normalizeProviderOpenSessionResponse(body);
+  return normalizeProviderOpenSessionResponse(
+    normalizeControlPlaneOrigin(providerOrigin),
+    body,
+    'The Control Plane desktop open exchange response is invalid.',
+  );
 }
 
 export async function refreshProviderDesktopAccessToken(
   provider: DesktopControlPlaneProvider,
   refreshToken: string,
+  requestOptions: ProviderClientRequestOptions = {},
 ): Promise<ProviderDesktopTokenRefreshResult> {
   const body = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_DESKTOP_TOKEN_REFRESH_PATH),
@@ -247,14 +363,17 @@ export async function refreshProviderDesktopAccessToken(
       body: {
         refresh_token: compact(refreshToken),
       },
+      operationLabel: 'the desktop token refresh response',
+      transport: requestOptions.transport,
     },
   );
-  return normalizeProviderDesktopTokenRefreshResponse(body);
+  return normalizeProviderDesktopTokenRefreshResponse(provider.provider_origin, body);
 }
 
 export async function revokeProviderDesktopAuthorization(
   provider: DesktopControlPlaneProvider,
   refreshToken: string,
+  requestOptions: ProviderClientRequestOptions = {},
 ): Promise<void> {
   await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_DESKTOP_TOKEN_REVOKE_PATH),
@@ -263,6 +382,8 @@ export async function revokeProviderDesktopAuthorization(
       body: {
         refresh_token: compact(refreshToken),
       },
+      operationLabel: 'the desktop token revoke response',
+      transport: requestOptions.transport,
     },
   );
 }
@@ -270,14 +391,22 @@ export async function revokeProviderDesktopAuthorization(
 export async function fetchProviderAccount(
   provider: DesktopControlPlaneProvider,
   accessToken: string,
+  requestOptions: ProviderClientRequestOptions = {},
 ): Promise<DesktopControlPlaneAccount> {
   const body = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_ME_PATH),
-    { bearerToken: accessToken },
+    {
+      bearerToken: accessToken,
+      operationLabel: 'the account summary',
+      transport: requestOptions.transport,
+    },
   );
   const account = normalizeDesktopControlPlaneAccount(body, { provider });
   if (!account) {
-    throw new Error('Provider account response is invalid.');
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The Control Plane account summary is invalid.',
+    );
   }
   return account;
 }
@@ -285,11 +414,22 @@ export async function fetchProviderAccount(
 export async function fetchProviderEnvironments(
   provider: DesktopControlPlaneProvider,
   accessToken: string,
+  requestOptions: ProviderClientRequestOptions = {},
 ): Promise<readonly DesktopProviderEnvironment[]> {
   const body = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_ENVIRONMENTS_PATH),
-    { bearerToken: accessToken },
+    {
+      bearerToken: accessToken,
+      operationLabel: 'the published environment list',
+      transport: requestOptions.transport,
+    },
   );
+  if (!body || typeof body !== 'object' || !Array.isArray((body as { environments?: unknown }).environments)) {
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The Control Plane environment list is invalid.',
+    );
+  }
   return normalizeDesktopProviderEnvironmentList(body, { provider });
 }
 
@@ -297,6 +437,7 @@ export async function requestDesktopOpenSession(
   provider: DesktopControlPlaneProvider,
   accessToken: string,
   envPublicID: string,
+  requestOptions: ProviderClientRequestOptions = {},
 ): Promise<ProviderDesktopOpenSession> {
   const cleanEnvPublicID = compact(envPublicID);
   if (cleanEnvPublicID === '') {
@@ -310,9 +451,15 @@ export async function requestDesktopOpenSession(
     {
       method: 'POST',
       bearerToken: accessToken,
+      operationLabel: 'the desktop open session',
+      transport: requestOptions.transport,
     },
   );
-  return normalizeProviderOpenSessionResponse(body);
+  return normalizeProviderOpenSessionResponse(
+    provider.provider_origin,
+    body,
+    'The Control Plane desktop open session response is invalid.',
+  );
 }
 
 export function providerBootstrapExchangeURL(providerOrigin: string): string {
