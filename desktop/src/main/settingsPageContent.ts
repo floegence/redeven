@@ -9,7 +9,6 @@ import {
   type DesktopSettingsDraft,
 } from '../shared/settingsIPC';
 import {
-  buildDesktopBootstrapStatus,
   buildDesktopSettingsSummaryItems,
   deriveDesktopAccessDraftModel,
   DESKTOP_ACCESS_MODE_OPTIONS,
@@ -23,35 +22,6 @@ export { desktopAccessModeForDraft };
 export function pageWindowTitle(_mode: DesktopPageMode): string {
   return 'Local Environment Settings';
 }
-
-const bootstrapFields = [
-  {
-    id: 'controlplane-url',
-    name: 'controlplane_url',
-    label: 'Control plane URL',
-    type: 'url',
-    autocomplete: 'url',
-    inputMode: 'url',
-    describedBy: ['settings-error'],
-  },
-  {
-    id: 'env-id',
-    name: 'env_id',
-    label: 'Environment ID',
-    autocomplete: 'off',
-    describedBy: ['settings-error'],
-  },
-  {
-    id: 'env-token',
-    name: 'env_token',
-    label: 'Environment token',
-    type: 'password',
-    autocomplete: 'off',
-    helpHTML: 'Desktop stores this request locally and consumes it on the next successful desktop-managed start.',
-    helpId: 'env-token-help',
-    describedBy: ['env-token-help', 'settings-error'],
-  },
-] as const satisfies readonly DesktopPageFieldModel[];
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
@@ -133,7 +103,6 @@ export function buildDesktopSettingsSurfaceSnapshot(
 ): DesktopSettingsSurfaceSnapshot {
   const localUIPasswordConfigured = options.local_ui_password_configured === true;
   const accessModel = deriveDesktopAccessDraftModel(draft, options);
-  const bootstrap = buildDesktopBootstrapStatus(draft);
   const canClearLocalUIPassword = localUIPasswordConfigured
     && localUIPasswordMode(draft, localUIPasswordConfigured) !== 'clear'
     && loopbackBindDraft(draft);
@@ -152,11 +121,8 @@ export function buildDesktopSettingsSurfaceSnapshot(
     local_ui_password_configured: localUIPasswordConfigured,
     runtime_password_required: options.runtime_password_required === true,
     local_ui_password_can_clear: canClearLocalUIPassword,
-    bootstrap_pending: bootstrap.pending,
-    bootstrap_status_label: bootstrap.label,
     summary_items: buildDesktopSettingsSummaryItems(draft, options),
     host_fields: hostFields(draft, options),
-    bootstrap_fields: bootstrapFields,
     draft,
   };
 }

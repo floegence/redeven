@@ -9,7 +9,9 @@ import { defaultRuntimeStatePath, loadAttachableRuntimeState, loadExternalLocalU
 
 describe('runtimeState', () => {
   it('uses the standard runtime state path under the redeven home directory', () => {
-    expect(defaultRuntimeStatePath({ HOME: '/Users/tester' }, () => '/ignored')).toBe('/Users/tester/.redeven/runtime/local-ui.json');
+    expect(defaultRuntimeStatePath({ HOME: '/Users/tester' }, () => '/ignored')).toBe(
+      '/Users/tester/.redeven/scopes/local/default/runtime/local-ui.json',
+    );
   });
 
   it('fails clearly when no home directory is available', () => {

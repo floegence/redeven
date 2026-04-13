@@ -3,10 +3,9 @@ import type { DesktopSettingsDraft } from './settingsIPC';
 export type DesktopPageMode = 'local_environment_settings';
 export type DesktopAccessMode = 'local_only' | 'shared_local_network' | 'custom_exposure';
 export type DesktopSettingsSummaryTone = 'default' | 'warning' | 'success' | 'primary';
-export type DesktopSettingsWorkbenchTab = 'access_security' | 'bootstrap';
 
 export interface DesktopSettingsSummaryItem {
-  id: 'visibility' | 'next_start_address' | 'password_state' | 'next_start';
+  id: 'visibility' | 'next_start_address' | 'password_state';
   label: string;
   value: string;
   detail?: string;
@@ -47,10 +46,7 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   local_ui_password_configured: boolean;
   runtime_password_required: boolean;
   local_ui_password_can_clear: boolean;
-  bootstrap_pending: boolean;
-  bootstrap_status_label: string;
   summary_items: readonly DesktopSettingsSummaryItem[];
   host_fields: readonly DesktopPageFieldModel[];
-  bootstrap_fields: readonly DesktopPageFieldModel[];
   draft: DesktopSettingsDraft;
 }>;

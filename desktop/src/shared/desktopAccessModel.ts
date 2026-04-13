@@ -49,13 +49,6 @@ export type DesktopAccessDraftModel = Readonly<{
   current_runtime_url: string;
 }>;
 
-export type DesktopBootstrapStatus = Readonly<{
-  pending: boolean;
-  label: string;
-  detail: string;
-  tone: 'default' | 'primary';
-}>;
-
 export type DesktopAccessModelOptions = Readonly<{
   current_runtime_url?: string;
   local_ui_password_configured?: boolean;
@@ -320,42 +313,11 @@ export function buildDesktopAccessSummaryItems(
   ] as const;
 }
 
-export function buildDesktopBootstrapStatus(draft: DesktopSettingsDraft): DesktopBootstrapStatus {
-  const hasBootstrap = trimString(draft.controlplane_url) !== ''
-    || trimString(draft.env_id) !== ''
-    || trimString(draft.env_token) !== '';
-  if (hasBootstrap) {
-    return {
-      pending: true,
-      label: 'Registration queued for next start',
-      detail: 'Will be consumed after the next successful desktop-managed start.',
-      tone: 'primary',
-    };
-  }
-  return {
-    pending: false,
-    label: 'No bootstrap request queued',
-    detail: 'Optional for the next desktop-managed start only.',
-    tone: 'default',
-  };
-}
-
 export function buildDesktopSettingsSummaryItems(
   draft: DesktopSettingsDraft,
   options: DesktopAccessModelOptions = {},
 ): readonly DesktopSettingsSummaryItem[] {
-  const accessModel = deriveDesktopAccessDraftModel(draft, options);
-  const bootstrap = buildDesktopBootstrapStatus(draft);
-  return [
-    ...buildDesktopAccessSummaryItems(accessModel),
-    {
-      id: 'next_start',
-      label: 'Next start',
-      value: bootstrap.label,
-      detail: bootstrap.detail,
-      tone: bootstrap.tone,
-    },
-  ] as const;
+  return buildDesktopAccessSummaryItems(deriveDesktopAccessDraftModel(draft, options));
 }
 
 function nextFixedPortForDraft(draft: DesktopSettingsDraft): string {

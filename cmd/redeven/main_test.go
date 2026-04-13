@@ -24,6 +24,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"Quick start:",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 			"redeven run --mode local",
+			"redeven run --mode local --scope named/dev-a",
 		)
 	})
 
@@ -38,11 +39,14 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"redeven run",
 			"Modes:",
+			"Scope selection rules:",
 			"Local UI bind rules:",
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
+			"--scope <selector>",
+			"--state-root <path>",
 			"--config-path <path>",
 			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
-			"redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000",
+			"redeven run --mode local --scope named/dev-a",
 		)
 	})
 
@@ -62,6 +66,8 @@ func TestRunCLIHelp(t *testing.T) {
 			"--env-token-env <env_name>",
 			"--bootstrap-ticket <ticket>",
 			"--bootstrap-ticket-env <env_name>",
+			"--scope <selector>",
+			"--state-root <path>",
 			"redeven bootstrap --controlplane https://region.example.invalid --env-id env_123 --env-token <token>",
 		)
 	})
@@ -328,7 +334,7 @@ func TestResolveRunStateLayoutUsesExplicitConfigPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "custom", "config.json")
 
-	layout, err := resolveRunStateLayout(configPath, "env_123", true)
+	layout, err := resolveRunStateLayout(configPath, "", nil, "", "", false)
 	if err != nil {
 		t.Fatalf("resolveRunStateLayout() error = %v", err)
 	}
@@ -337,6 +343,50 @@ func TestResolveRunStateLayoutUsesExplicitConfigPath(t *testing.T) {
 	}
 	if layout.StateDir != filepath.Join(tmpDir, "custom") {
 		t.Fatalf("StateDir = %q", layout.StateDir)
+	}
+}
+
+func TestResolveRunStateLayoutDefaultsToLocalScope(t *testing.T) {
+	stateRoot := t.TempDir()
+
+	layout, err := resolveRunStateLayout("", stateRoot, nil, "", "", false)
+	if err != nil {
+		t.Fatalf("resolveRunStateLayout() error = %v", err)
+	}
+	if layout.ScopeKey != "local/default" {
+		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
+	}
+	if layout.ConfigPath != filepath.Join(stateRoot, "scopes", "local", "default", "config.json") {
+		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
+	}
+}
+
+func TestResolveRunStateLayoutUsesInlineBootstrapControlPlaneScope(t *testing.T) {
+	stateRoot := t.TempDir()
+
+	layout, err := resolveRunStateLayout("", stateRoot, nil, "https://region.example.invalid", "env_123", true)
+	if err != nil {
+		t.Fatalf("resolveRunStateLayout() error = %v", err)
+	}
+	if layout.ScopeKey != "controlplane/https__region.example.invalid/env_123" {
+		t.Fatalf("ScopeKey = %q", layout.ScopeKey)
+	}
+	if layout.ConfigPath != filepath.Join(stateRoot, "scopes", "controlplane", "https__region.example.invalid", "env_123", "config.json") {
+		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
+	}
+}
+
+func TestValidateStateLayoutSelectionRejectsConfigPathWithScopeOrStateRoot(t *testing.T) {
+	scopeRef := &config.ScopeRef{Kind: config.ScopeKindNamed, Name: "dev-a"}
+
+	err := validateStateLayoutSelection("/tmp/config.json", scopeRef, "")
+	if err == nil || !strings.Contains(err.Error(), "`--config-path` cannot be combined with `--scope`") {
+		t.Fatalf("validateStateLayoutSelection() error = %v", err)
+	}
+
+	err = validateStateLayoutSelection("/tmp/config.json", nil, "/tmp/state")
+	if err == nil || !strings.Contains(err.Error(), "`--config-path` cannot be combined with `--state-root`") {
+		t.Fatalf("validateStateLayoutSelection() error = %v", err)
 	}
 }
 

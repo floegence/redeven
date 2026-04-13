@@ -53,7 +53,6 @@ describe('DesktopWelcomeShell', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         local_ui_password_configured: false,
-        pending_bootstrap: null,
         saved_environments: [
           {
             id: 'http://192.168.1.11:24000/',
@@ -90,11 +89,6 @@ describe('DesktopWelcomeShell', () => {
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
-        pending_bootstrap: {
-          controlplane_url: 'https://region.example.invalid',
-          env_id: 'env_123',
-          env_token: 'token-123',
-        },
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
@@ -136,7 +130,6 @@ describe('DesktopWelcomeShell', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         local_ui_password_configured: false,
-        pending_bootstrap: null,
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -297,13 +290,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Desktop Upload resolves the remote OS and architecture first');
   });
 
-  it('includes tabbed Local Environment Settings workbench copy inside the source', () => {
+  it('includes scope-first Local Environment Settings copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Access & Security');
-    expect(appSrc).toContain('Bootstrap');
+    expect(appSrc).toContain('Local Environment always uses the launcher-owned local scope on this machine.');
     expect(appSrc).toContain('Visibility');
-    expect(appSrc).toContain('Queued request');
+    expect(appSrc).toContain('Details');
     expect(appSrc).toContain('Runtime');
     expect(appSrc).toContain('Next start');
   });

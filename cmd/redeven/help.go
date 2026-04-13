@@ -36,15 +36,15 @@ Commands:
   help        Show detailed help and startup examples.
 
 Quick start:
-  Bootstrap once, then run:
+  Bootstrap once into a control-plane scope, then run:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
     redeven run --mode hybrid
 
   Local-only mode on this machine:
     redeven run --mode local
 
-  Hybrid mode with a custom Local UI bind:
-    redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000
+  Local-only mode in a reusable named scope:
+    redeven run --mode local --scope named/dev-a
 
   Expose Local UI to another machine on a trusted network:
     %[4]s=replace-with-a-long-password \
@@ -76,6 +76,9 @@ Required flags:
     --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
 
 Optional flags:
+  --scope <selector>               Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>.
+  --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --config-path <path>             Config path override (advanced).
   --agent-home-dir <path>           Runtime home dir for filesystem-facing features.
   --shell <command>                 Shell command (default: $SHELL or /bin/bash).
   --permission-policy <preset>      Local permission policy: execute_read, read_only, or execute_read_write.
@@ -84,9 +87,14 @@ Optional flags:
                                     Log level override.
   --timeout <duration>              Bootstrap request timeout (default: 15s).
 
+Scope selection:
+  - Default target: scopes/controlplane/<provider_key>/<env_id>/ derived from --controlplane and --env-id.
+  - Use --scope for reusable local or named scopes when you want the config written elsewhere.
+  - Use --config-path only when you need a fully explicit file path.
+
 Writes by default:
-  ~/.redeven/config.json
-  ~/.redeven/
+  ~/.redeven/scopes/controlplane/<provider_key>/<env_id>/config.json
+  ~/.redeven/scopes/controlplane/<provider_key>/<env_id>/scope.json
 
 Examples:
   Minimal bootstrap:
@@ -97,6 +105,9 @@ Examples:
 
   Bootstrap with a stricter permission preset:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s --permission-policy read_only
+
+  Bootstrap into a reusable named scope under a custom state root:
+    redeven bootstrap --scope named/dev-a --state-root /tmp/redeven-state --controlplane %[1]s --env-id %[2]s --env-token %[3]s
 
   Bootstrap, then start the runtime:
     redeven bootstrap --controlplane %[1]s --env-id %[2]s --env-token %[3]s
@@ -120,8 +131,14 @@ Modes:
   desktop   Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.
 
 Bootstrap rules:
-  - Recommended flow: run %[5]s once, then use %[6]s.
+  - Recommended flow: run %[5]s once into a control-plane scope, then use %[6]s.
   - One-shot flow: pass --controlplane, --env-id, and exactly one bootstrap credential to %[6]s.
+
+Scope selection rules:
+  - Without --config-path, --scope, or inline bootstrap flags, redeven uses the local/default scope.
+  - With inline bootstrap flags and no --scope, redeven uses a derived control-plane scope.
+  - Use --scope for reusable local or named scopes.
+  - Use --state-root to relocate the entire scope tree, including desktop-managed SSH runtimes.
 
 Local UI bind rules:
   - Default bind: localhost:23998
@@ -148,6 +165,8 @@ Flags:
   --password-stdin                  Read the Local UI password from stdin.
   --password-env <env_name>         Read the Local UI password from an environment variable.
   --password-file <path>            Read the Local UI password from a file.
+  --scope <selector>                Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --config-path <path>              Config path override.
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
   --startup-report-file <path>      Write machine-readable Local UI readiness JSON.
@@ -162,11 +181,11 @@ Examples:
   Local-only mode:
     redeven run --mode local
 
+  Local-only mode in a reusable named scope:
+    redeven run --mode local --scope named/dev-a
+
   Desktop shell mode:
     redeven run --mode desktop --desktop-managed --local-ui-bind 127.0.0.1:0
-
-  Hybrid mode with a custom Local UI bind:
-    redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000
 
   Hybrid mode exposed to another machine on a trusted network:
     %[8]s=replace-with-a-long-password \
@@ -193,6 +212,8 @@ Flags:
   --provider <name>                 Web search provider (default: brave).
   --count <n>                       Number of results to return (default: 5, max: 10).
   --format <json|text>              Output format (default: json).
+  --scope <selector>                Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --config-path <path>              Config path override.
   --secrets-path <path>             Secrets path override.
   --timeout <duration>              Search timeout (default: 15s).

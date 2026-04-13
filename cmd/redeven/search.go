@@ -22,7 +22,9 @@ func (c *cli) searchCmd(args []string) int {
 	provider := fs.String("provider", websearch.ProviderBrave, "Web search provider (default: brave)")
 	count := fs.Int("count", 5, "Number of results to return (default: 5, max: 10)")
 	format := fs.String("format", "json", "Output format: json|text (default: json)")
-	configPath := fs.String("config-path", "", "Config path (default: ~/.redeven/config.json)")
+	scopeRaw := fs.String("scope", "", "Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>")
+	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
+	configPath := fs.String("config-path", "", "Config path override")
 	secretsPath := fs.String("secrets-path", "", "Secrets path (default: <config dir>/secrets.json)")
 	timeout := fs.Duration("timeout", 15*time.Second, "Search timeout")
 
@@ -47,7 +49,17 @@ func (c *cli) searchCmd(args []string) int {
 		return 2
 	}
 
-	stateLayout, err := resolveSearchStateLayout(*configPath)
+	scopeRef, err := parseOptionalScopeRef(*scopeRaw)
+	if err != nil {
+		writeErrorWithHelp(c.stderr, fmt.Sprintf("invalid value for `--scope`: %v", err), nil, searchHelpText())
+		return 2
+	}
+	if err := validateStateLayoutSelection(*configPath, scopeRef, *stateRoot); err != nil {
+		writeErrorWithHelp(c.stderr, err.Error(), nil, searchHelpText())
+		return 2
+	}
+
+	stateLayout, err := resolveSearchStateLayout(*configPath, *stateRoot, scopeRef)
 	if err != nil {
 		if errors.Is(err, config.ErrHomeDirUnavailable) {
 			writeErrorWithHelp(
@@ -141,10 +153,13 @@ func (c *cli) searchCmd(args []string) int {
 	}
 }
 
-func resolveSearchStateLayout(configPath string) (config.StateLayout, error) {
+func resolveSearchStateLayout(configPath string, stateRoot string, scopeRef *config.ScopeRef) (config.StateLayout, error) {
 	cleanPath := strings.TrimSpace(configPath)
 	if cleanPath == "" {
-		return config.DefaultStateLayout()
+		if scopeRef != nil {
+			return config.StateLayoutForScope(*scopeRef, stateRoot)
+		}
+		return config.LocalStateLayout(config.DefaultLocalScopeName, stateRoot)
 	}
 	return config.StateLayoutForConfigPath(cleanPath)
 }

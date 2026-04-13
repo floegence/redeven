@@ -1,5 +1,5 @@
 import type { DesktopPreferences } from './desktopPreferences';
-import { defaultManagedStateLayout, envManagedStateLayout, type DesktopManagedStateLayout } from './statePaths';
+import { controlPlaneManagedStateLayout, defaultManagedStateLayout, type DesktopManagedStateLayout } from './statePaths';
 
 export const ENV_TOKEN_ENV_NAME = 'REDEVEN_DESKTOP_ENV_TOKEN';
 export const BOOTSTRAP_TICKET_ENV_NAME = 'REDEVEN_DESKTOP_BOOTSTRAP_TICKET';
@@ -23,7 +23,6 @@ export type DesktopAgentSpawnPlan = Readonly<{
   args: string[];
   env: NodeJS.ProcessEnv;
   password_stdin: string;
-  uses_pending_bootstrap: boolean;
   state_layout: DesktopManagedStateLayout;
 }>;
 
@@ -35,24 +34,11 @@ type BuildDesktopAgentArgsOptions = Readonly<{
   configPath?: string;
 }>;
 
-function pendingBootstrapToAgentBootstrap(preferences: DesktopPreferences): DesktopAgentBootstrap | null {
-  const pendingBootstrap = preferences.pending_bootstrap;
-  if (!pendingBootstrap) {
-    return null;
-  }
-  return {
-    kind: 'env_token',
-    controlplane_url: pendingBootstrap.controlplane_url,
-    env_id: pendingBootstrap.env_id,
-    env_token: pendingBootstrap.env_token,
-  };
-}
-
 function resolvedAgentBootstrap(
-  preferences: DesktopPreferences,
+  _preferences: DesktopPreferences,
   bootstrap: DesktopAgentBootstrap | null | undefined,
 ): DesktopAgentBootstrap | null {
-  return bootstrap ?? pendingBootstrapToAgentBootstrap(preferences);
+  return bootstrap ?? null;
 }
 
 export function buildDesktopAgentArgs(preferences: DesktopPreferences, options?: BuildDesktopAgentArgsOptions): string[] {
@@ -131,7 +117,6 @@ function buildDesktopAgentPlan(
     args,
     env,
     password_stdin: passwordStdin,
-    uses_pending_bootstrap: preferences.pending_bootstrap !== null,
     state_layout: stateLayout,
   };
 }
@@ -170,7 +155,7 @@ export function resolveDesktopManagedStateLayout(
 ): DesktopManagedStateLayout {
   const bootstrap = resolvedAgentBootstrap(preferences, options?.bootstrap);
   if (bootstrap) {
-    return envManagedStateLayout(bootstrap.env_id, baseEnv);
+    return controlPlaneManagedStateLayout(bootstrap.controlplane_url, bootstrap.env_id, baseEnv);
   }
   return defaultManagedStateLayout(baseEnv);
 }

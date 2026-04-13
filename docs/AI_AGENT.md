@@ -41,7 +41,7 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 
 ## Configuration
 
-Enable Flower by adding an `ai` section to the runtime config file (default: `~/.redeven/config.json`).
+Enable Flower by adding an `ai` section to the runtime config file (default local scope: `~/.redeven/scopes/local/default/config.json`).
 
 Notes:
 
@@ -53,7 +53,7 @@ Notes:
 
 API keys:
 
-- Keys are stored in `~/.redeven/secrets.json` (chmod `0600`) and never returned in plaintext.
+- Keys are stored in the active scope's `secrets.json` (for example `~/.redeven/scopes/local/default/secrets.json`, chmod `0600`) and never returned in plaintext.
 - You can configure keys from the Env App UI: Runtime Settings -> `AI & Extensions` -> Flower -> Provider -> API key.
 - Multiple provider keys can be stored at the same time (keyed by `providers[].id`).
 - At runtime, Go resolves the provider key from local secrets per run and injects it directly into the provider SDK client.

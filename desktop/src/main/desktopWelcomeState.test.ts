@@ -28,7 +28,6 @@ describe('desktopWelcomeState', () => {
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
-        pending_bootstrap: null,
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -183,7 +182,6 @@ describe('desktopWelcomeState', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         local_ui_password_configured: false,
-        pending_bootstrap: null,
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
@@ -224,7 +222,6 @@ describe('desktopWelcomeState', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         local_ui_password_configured: false,
-        pending_bootstrap: null,
         saved_environments: [],
         saved_ssh_environments: [{
           id: 'ssh:devbox:2222:remote_default',
@@ -297,11 +294,6 @@ describe('desktopWelcomeState', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         local_ui_password_configured: false,
-        pending_bootstrap: {
-          controlplane_url: 'https://region.example.invalid',
-          env_id: 'env_123',
-          env_token: 'token-123',
-        },
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
@@ -316,25 +308,20 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
     expect(snapshot.settings_surface.save_label).toBe('Save Local Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('local_only');
-    expect(snapshot.settings_surface.bootstrap_pending).toBe(true);
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'visibility',
         value: 'Local only',
       }),
       expect.objectContaining({
-        id: 'next_start',
-        value: 'Registration queued for next start',
-        tone: 'primary',
+        id: 'next_start_address',
+        value: 'Auto-select on localhost',
       }),
     ]));
     expect(snapshot.settings_surface.draft).toEqual({
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
-      controlplane_url: 'https://region.example.invalid',
-      env_id: 'env_123',
-      env_token: 'token-123',
     });
   });
 
@@ -344,7 +331,6 @@ describe('desktopWelcomeState', () => {
         local_ui_bind: 'localhost:23998',
         local_ui_password: '',
         local_ui_password_configured: false,
-        pending_bootstrap: null,
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],

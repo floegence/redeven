@@ -23,6 +23,7 @@ const (
 type desktopLaunchLockOwner struct {
 	PID              int    `json:"pid,omitempty"`
 	Mode             string `json:"mode,omitempty"`
+	ScopeKey         string `json:"scope_key,omitempty"`
 	DesktopManaged   bool   `json:"desktop_managed"`
 	LocalUIEnabled   bool   `json:"local_ui_enabled"`
 	ConfigPath       string `json:"config_path,omitempty"`

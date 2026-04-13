@@ -8,9 +8,6 @@ function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
     local_ui_bind: 'localhost:23998',
     local_ui_password: '',
     local_ui_password_mode: 'replace',
-    controlplane_url: '',
-    env_id: '',
-    env_token: '',
     ...overrides,
   };
 }
@@ -22,18 +19,13 @@ describe('settingsPageContent', () => {
     }))).toBe('local_only');
   });
 
-  it('derives shared local network mode and marks bootstrap as pending when queued', () => {
+  it('derives shared local network mode and describes the next start address', () => {
     const snapshot = buildDesktopSettingsSurfaceSnapshot('local_environment_settings', draft({
       local_ui_bind: '0.0.0.0:23998',
-      controlplane_url: 'https://region.example.invalid',
-      env_id: 'env_123',
-      env_token: 'token-123',
     }));
 
     expect(snapshot.access_mode).toBe('shared_local_network');
     expect(snapshot.password_state_tone).toBe('warning');
-    expect(snapshot.bootstrap_pending).toBe(true);
-    expect(snapshot.bootstrap_status_label).toBe('Registration queued for next start');
     expect(snapshot.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'visibility',
@@ -47,11 +39,6 @@ describe('settingsPageContent', () => {
         id: 'password_state',
         value: 'Password required before the next open of Local Environment',
         tone: 'warning',
-      }),
-      expect.objectContaining({
-        id: 'next_start',
-        value: 'Registration queued for next start',
-        tone: 'primary',
       }),
     ]));
   });

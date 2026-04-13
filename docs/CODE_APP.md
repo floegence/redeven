@@ -34,14 +34,14 @@ This document describes the **Code App** implementation in the Redeven runtime:
 
 The Code App stores all code space data on the user's machine (not on Redeven servers).
 
-By default, the runtime config is `~/.redeven/config.json`, so the state directory is:
+By default, the local scope config is `~/.redeven/scopes/local/default/config.json`, so the state directory is:
 
-- `state_dir = ~/.redeven/`
+- `state_dir = ~/.redeven/scopes/local/default/`
 
 Code App data:
 
 ```
-~/.redeven/
+~/.redeven/scopes/local/default/
   config.json
   apps/
     code/

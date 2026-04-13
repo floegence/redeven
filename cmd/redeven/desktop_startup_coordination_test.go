@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/floegence/redeven/internal/config"
 	localuiruntime "github.com/floegence/redeven/internal/localui/runtime"
 	"github.com/floegence/redeven/internal/lockfile"
 )
@@ -70,8 +71,10 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 		"remote",
 		false,
 		false,
-		cfgPath,
-		localuiruntime.RuntimeStatePath(cfgPath),
+		config.StateLayout{
+			ConfigPath:       cfgPath,
+			RuntimeStatePath: localuiruntime.RuntimeStatePath(cfgPath),
+		},
 	)); err != nil {
 		t.Fatalf("writeAgentLockMetadata() error = %v", err)
 	}

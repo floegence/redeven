@@ -68,8 +68,8 @@ Behavior:
 - Local UI always starts for `Local Environment`.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - Desktop resolves the managed config path before spawn and passes it explicitly to `redeven run`.
-- `Local Environment` uses the global managed config at `~/.redeven/config.json`.
-- Desktop startup flows that include a bootstrap target use the matching isolated config at `~/.redeven/envs/<env_public_id>/config.json`.
+- `Local Environment` uses the local/default scope at `~/.redeven/scopes/local/default/config.json`.
+- Desktop startup flows that include a bootstrap target use the matching control-plane scope at `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json`.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - The Local UI password stays out of process args and environment variables.
 - The one-time bootstrap ticket also stays out of process args and is passed only through a desktop-owned environment variable.
@@ -80,7 +80,7 @@ Behavior:
 - Managed restart reuses Desktop-owned startup preferences, including `--password-stdin`, and preserves the current resolved loopback bind when the saved bind uses the advanced auto-port loopback option such as `127.0.0.1:0`.
 - `--startup-report-file` lets Electron wait for a structured desktop launch report instead of scraping terminal output.
 - On lock conflicts, the runtime first tries to attach to an existing Local UI from the same state directory before reporting a blocked launch outcome.
-- Desktop-managed startup settings do not create a separate runtime state directory; `~/.redeven` remains the runtime source of truth.
+- Desktop-managed startup settings do not create a second preference-owned runtime target; the resolved scope directory remains the runtime source of truth.
 - Desktop-managed runtime state never falls back to the Electron process working directory; if no usable home directory exists and no explicit config path is available, startup fails clearly instead of writing inside an arbitrary repository or shell cwd.
 
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
@@ -233,26 +233,18 @@ It edits only future startup behavior for `Local Environment`:
 
 - `local_ui_bind`
 - `local_ui_password`
-- one-shot bootstrap request:
-  - `controlplane_url`
-  - `env_id`
-  - `env_token`
 
 Rules:
 
 - Saving options only persists configuration.
 - Saving options does not switch Environments.
 - Cancel closes the dialog and returns the launcher to `Connect Environment`.
-- One-shot bootstrap data is cleared automatically after a fresh successful desktop-managed start consumes it.
 - The Local UI password input is write-only. When Desktop already has a stored password, the field stays blank and blank means `keep the stored password`.
 - Removing a stored password requires an explicit remove action. Simply seeing an empty write-only field must not clear the stored secret.
 - The dialog starts with a workbench-style overview that shows:
   - the current managed runtime address
   - the next-start address and protection state
-  - a compact summary grid for visibility, next-start address, password state, and next-start bootstrap status
-- The dialog uses two internal tabs:
-  - `Access & Security`
-  - `Bootstrap`
+  - a compact summary grid for visibility, next-start address, and password state
 - Summary-card details and field-level help stay available through compact question-mark tooltip affordances instead of always-visible helper paragraphs.
 - Those tooltips render through the shared overlay portal so hover/focus help is visible above cards and dialogs instead of relying on browser-native `title` text.
 - The first decision is a visibility intent, not a raw bind field:
@@ -267,8 +259,7 @@ Rules:
   - current password state is visible through summary chips
   - replacing a password is expressed as a queued replacement
   - removing a stored password remains an explicit action
-- The one-shot bootstrap request moves into the dedicated `Bootstrap` tab instead of hiding inside a generic `Advanced` disclosure.
-- The `Bootstrap` tab frames the request as a next-start registration request with a clear queued-state summary and an explicit clear action.
+- The dialog explains that control-plane environments must be opened from the launcher / provider list, not queued inside Local Environment Settings.
 
 ## Desktop Preferences
 
@@ -277,7 +268,6 @@ Desktop keeps one persisted preference model for stable `Local Environment` conf
 - `local_ui_bind`
 - `local_ui_password`
 - `local_ui_password_configured`
-- `pending_bootstrap`
 - `saved_environments`
 - `saved_ssh_environments`
 - `recent_external_local_ui_urls`

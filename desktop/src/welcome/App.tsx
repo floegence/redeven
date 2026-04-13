@@ -35,7 +35,6 @@ import {
 
 import type {
   DesktopAccessMode,
-  DesktopSettingsWorkbenchTab,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
 import type {
@@ -66,7 +65,6 @@ import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
-  buildDesktopBootstrapStatus,
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
@@ -86,8 +84,6 @@ import {
 } from './sshConnectionDialogState';
 import {
   accessModeVisual,
-  compactBootstrapStatusTagLabel,
-  compactClearRequestLabel,
   compactOpenLocalEnvironmentLabel,
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
@@ -190,9 +186,6 @@ const EMPTY_SETTINGS_DRAFT: DesktopSettingsDraft = {
   local_ui_bind: '',
   local_ui_password: '',
   local_ui_password_mode: 'replace',
-  controlplane_url: '',
-  env_id: '',
-  env_token: '',
 };
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
@@ -1042,15 +1035,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }));
   }
 
-  function clearBootstrapDraft(): void {
-    setDraft((current) => ({
-      ...current,
-      controlplane_url: '',
-      env_id: '',
-      env_token: '',
-    }));
-  }
-
   async function saveSettings(): Promise<void> {
     setSettingsError('');
     setBusyAction('save_settings');
@@ -1372,7 +1356,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         applyAccessMode={applyAccessMode}
         applyAccessFixedPort={applyAccessFixedPort}
         toggleAutoPort={toggleAutoPort}
-        clearBootstrapDraft={clearBootstrapDraft}
         saveSettings={saveSettings}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
@@ -1957,35 +1940,6 @@ function QuickCreateConnectionCard(props: Readonly<{
   );
 }
 
-function ControlPlaneInfoTile(props: Readonly<{
-  label: string;
-  value: string;
-  detail?: string;
-  monospace?: boolean;
-}>) {
-  const isSet = createMemo(() => props.value !== 'Not set');
-  return (
-    <div class="redeven-tile rounded-lg border border-border px-3.5 py-3">
-      <div class="flex items-center gap-1.5">
-        <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.label}</div>
-        <Show when={isSet()}>
-          <div class="h-1 w-1 rounded-full bg-success" />
-        </Show>
-      </div>
-      <div class={cn(
-        'mt-1.5 text-xs font-medium',
-        isSet() ? 'text-foreground' : 'text-muted-foreground/70',
-        props.monospace && isSet() && 'truncate font-mono text-[12px]',
-      )}>
-        {props.value}
-      </div>
-      <Show when={props.detail}>
-        <div class="mt-1.5 text-[11px] leading-[1.55] text-muted-foreground">{props.detail}</div>
-      </Show>
-    </div>
-  );
-}
-
 function EnvironmentConnectionCard(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
@@ -2510,12 +2464,10 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   applyAccessMode: (mode: DesktopAccessMode) => void;
   applyAccessFixedPort: (portText: string) => void;
   toggleAutoPort: (enabled: boolean) => void;
-  clearBootstrapDraft: () => void;
   saveSettings: () => Promise<void>;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
 }>) {
-  const [activeTab, setActiveTab] = createSignal<DesktopSettingsWorkbenchTab>('access_security');
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
   const accessModelOptions = createMemo(() => ({
     current_runtime_url: props.snapshot.current_runtime_url,
@@ -2524,7 +2476,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     mode_override: accessModeOverride(),
   }));
   const accessModel = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessModelOptions()));
-  const liveBootstrapStatus = createMemo(() => buildDesktopBootstrapStatus(props.draft));
   const addressCardTitle = createMemo(() => settingsAddressCardTitle(accessModel().access_mode));
   const addressCardHelp = createMemo(() => settingsAddressCardHelp(accessModel().access_mode));
   const protectionCardTitle = createMemo(() => settingsProtectionCardTitle(accessModel().access_mode));
@@ -2533,7 +2484,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   createEffect(() => {
     if (!props.open) {
       setAccessModeOverride(null);
-      setActiveTab('access_security');
     }
   });
 
@@ -2627,41 +2577,20 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           </div>
         </div>
 
-        {/* Tab navigation */}
+        {/* Section header */}
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedControl
-            value={activeTab()}
-            onChange={(value) => setActiveTab(value as DesktopSettingsWorkbenchTab)}
-            options={[
-              { value: 'access_security', label: 'Access & Security' },
-              { value: 'bootstrap', label: 'Bootstrap' },
-            ]}
-            size="sm"
-          />
+          <div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Access &amp; Security</div>
+            <div class="mt-1 text-sm text-foreground">Local Environment always uses the launcher-owned local scope on this machine.</div>
+          </div>
           <div class="flex flex-wrap items-center gap-1.5">
             <Tag variant={passwordStateTagVariant(props.snapshot.password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
               {compactPasswordStateTagLabel(props.snapshot.password_state_label)}
             </Tag>
-            <Show when={liveBootstrapStatus().pending}>
-              <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {compactBootstrapStatusTagLabel(liveBootstrapStatus().label)}
-              </Tag>
-            </Show>
           </div>
         </div>
 
-        {/* Tab content */}
-        <Show when={activeTab() === 'access_security'} fallback={(
-          <BootstrapSettingsPanel
-            snapshot={props.snapshot}
-            draft={props.draft}
-            liveBootstrapStatusLabel={liveBootstrapStatus().label}
-            bootstrapPending={liveBootstrapStatus().pending}
-            clearBootstrapDraft={props.clearBootstrapDraft}
-            updateDraftField={props.updateDraftField}
-          />
-        )}>
-          <div class="space-y-6">
+        <div class="space-y-6">
             {/* Visibility presets — radio-group style */}
             <section>
               <SettingsSectionHeader
@@ -2803,8 +2732,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               </div>
             </section>
 
-          </div>
-        </Show>
+        </div>
 
         <Show when={props.settingsError}>
           <div
@@ -2819,86 +2747,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
         </Show>
       </div>
     </Dialog>
-  );
-}
-
-function BootstrapSettingsPanel(props: Readonly<{
-  snapshot: DesktopSettingsSurfaceSnapshot;
-  draft: DesktopSettingsDraft;
-  liveBootstrapStatusLabel: string;
-  bootstrapPending: boolean;
-  clearBootstrapDraft: () => void;
-  updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
-}>) {
-  return (
-    <div class="space-y-6">
-      <section>
-        <SettingsSectionHeader
-          label="Queued request"
-          hint="Consumed on the next successful desktop-managed start"
-          accessory={(
-            <Tag
-              variant={props.bootstrapPending ? 'primary' : 'neutral'}
-              tone="soft"
-              size="sm"
-              class="cursor-default whitespace-nowrap"
-            >
-              {compactBootstrapStatusTagLabel(props.liveBootstrapStatusLabel)}
-            </Tag>
-          )}
-        />
-        <div class="mt-3 grid gap-3 sm:grid-cols-3">
-          <ControlPlaneInfoTile
-            label="Control plane"
-            value={trimString(props.draft.controlplane_url) || 'Not set'}
-            monospace={trimString(props.draft.controlplane_url) !== ''}
-          />
-          <ControlPlaneInfoTile
-            label="Environment ID"
-            value={trimString(props.draft.env_id) || 'Not set'}
-            monospace={trimString(props.draft.env_id) !== ''}
-          />
-          <ControlPlaneInfoTile
-            label="Token"
-            value={trimString(props.draft.env_token) === '' ? 'Not set' : 'Configured'}
-            detail="Stored locally, write-only in the renderer."
-          />
-        </div>
-      </section>
-
-      <section>
-        <SettingsSectionHeader
-          label="Bootstrap fields"
-          hint="Queue a one-shot registration request for the next desktop-managed start"
-        />
-        <div class="mt-3 grid gap-3 sm:grid-cols-3 [&>*]:h-full">
-          <For each={props.snapshot.bootstrap_fields}>
-            {(field) => (
-              <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-                <SettingsFieldInput
-                  field={field}
-                  value={props.draft[field.name]}
-                  updateDraftField={props.updateDraftField}
-                />
-              </div>
-            )}
-          </For>
-        </div>
-        <Show when={props.bootstrapPending}>
-          <div class="mt-3 flex justify-end">
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Clear queued request"
-              title="Clear queued request"
-              onClick={props.clearBootstrapDraft}
-            >
-              {compactClearRequestLabel()}
-            </Button>
-          </div>
-        </Show>
-      </section>
-    </div>
   );
 }
 

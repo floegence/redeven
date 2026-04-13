@@ -122,6 +122,9 @@ func (c *cli) bootstrapCmd(args []string) int {
 	envTokenEnv := fs.String("env-token-env", "", "Environment variable name holding the environment token")
 	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket (raw ticket; 'Bearer <ticket>' is also accepted)")
 	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
+	scopeRaw := fs.String("scope", "", "Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>")
+	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
+	configPath := fs.String("config-path", "", "Config path override")
 
 	agentHomeDir := fs.String("agent-home-dir", "", "Runtime home dir used for filesystem-facing features (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
@@ -193,6 +196,20 @@ func (c *cli) bootstrapCmd(args []string) int {
 		return 2
 	}
 
+	scopeRef, err := parseOptionalScopeRef(*scopeRaw)
+	if err != nil {
+		writeErrorWithHelp(c.stderr, fmt.Sprintf("invalid value for `--scope`: %v", err), nil, bootstrapHelpText())
+		return 2
+	}
+	if err := validateStateLayoutSelection(*configPath, scopeRef, *stateRoot); err != nil {
+		writeErrorWithHelp(c.stderr, err.Error(), nil, bootstrapHelpText())
+		return 2
+	}
+	stateLayout, err := resolveBootstrapTargetLayout(*configPath, *stateRoot, scopeRef, *controlplane, *envID)
+	if err != nil {
+		return c.printRunStateLayoutGuidance(err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
@@ -201,6 +218,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 		EnvironmentID:          *envID,
 		EnvironmentToken:       resolvedEnvToken,
 		BootstrapTicket:        resolvedBootstrapTicket,
+		ConfigPath:             stateLayout.ConfigPath,
 		AgentHomeDir:           *agentHomeDir,
 		Shell:                  *shell,
 		LogFormat:              *logFormat,
@@ -212,7 +230,12 @@ func (c *cli) bootstrapCmd(args []string) int {
 		return 1
 	}
 
-	fmt.Fprintf(c.stdout, "Bootstrap complete. Run `redeven run`.\n")
+	fmt.Fprintf(c.stdout, "Bootstrap complete.\n")
+	if strings.TrimSpace(stateLayout.ScopeKey) != "" {
+		fmt.Fprintf(c.stdout, "Scope: %s\n", stateLayout.ScopeKey)
+	}
+	fmt.Fprintf(c.stdout, "Config: %s\n", stateLayout.ConfigPath)
+	fmt.Fprintf(c.stdout, "Next: redeven run --mode hybrid --config-path %s\n", stateLayout.ConfigPath)
 	return 0
 }
 
@@ -225,6 +248,8 @@ func (c *cli) runCmd(args []string) int {
 	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket (required when used instead of --env-token)")
 	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (optional; applies when bootstrapping)")
+	scopeRaw := fs.String("scope", "", "Scope selector: local, local/<name>, named/<name>, or controlplane/<provider_key>/<env_id>")
+	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
 	password := fs.String("password", "", "Access password (not recommended; prefer --password-env or --password-file)")
@@ -233,7 +258,7 @@ func (c *cli) runCmd(args []string) int {
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
-	configPath := fs.String("config-path", "", "Config path override (default: ~/.redeven/config.json)")
+	configPath := fs.String("config-path", "", "Config path override")
 
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -317,6 +342,16 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
+	scopeRef, err := parseOptionalScopeRef(*scopeRaw)
+	if err != nil {
+		writeErrorWithHelp(c.stderr, fmt.Sprintf("invalid value for `--scope`: %v", err), nil, runHelpText())
+		return 2
+	}
+	if err := validateStateLayoutSelection(*configPath, scopeRef, *stateRoot); err != nil {
+		writeErrorWithHelp(c.stderr, err.Error(), nil, runHelpText())
+		return 2
+	}
+
 	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
 		strings.TrimSpace(*envID) != "" ||
 		resolvedEnvToken != "" ||
@@ -358,7 +393,7 @@ func (c *cli) runCmd(args []string) int {
 		}
 	}
 
-	stateLayout, err := resolveRunStateLayout(*configPath, *envID, bootstrapViaFlags)
+	stateLayout, err := resolveRunStateLayout(*configPath, *stateRoot, scopeRef, *controlplane, *envID, bootstrapViaFlags)
 	if err != nil {
 		return c.printRunStateLayoutGuidance(err)
 	}
@@ -395,7 +430,7 @@ func (c *cli) runCmd(args []string) int {
 	}
 	defer func() { _ = lk.Release() }()
 
-	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, stateLayout.ConfigPath, stateLayout.RuntimeStatePath)); err != nil {
+	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), *desktopManaged, mode != runModeRemote, stateLayout)); err != nil {
 		fmt.Fprintf(c.stderr, "failed to write runtime lock metadata: %v\n", err)
 		return 1
 	}
@@ -476,6 +511,10 @@ func (c *cli) runCmd(args []string) int {
 			fmt.Fprintf(c.stderr, "failed to load config: %v\n", err)
 			return 1
 		}
+	}
+	if err := config.WriteScopeMetadataForConfig(stateLayout, cfg); err != nil {
+		fmt.Fprintf(c.stderr, "failed to update scope metadata: %v\n", err)
+		return 1
 	}
 
 	remoteErr := cfg.ValidateRemoteStrict()
@@ -606,15 +645,68 @@ func (c *cli) runCmd(args []string) int {
 	return 0
 }
 
-func resolveRunStateLayout(configPath string, envID string, bootstrapViaFlags bool) (config.StateLayout, error) {
+func parseOptionalScopeRef(raw string) (*config.ScopeRef, error) {
+	clean := strings.TrimSpace(raw)
+	if clean == "" {
+		return nil, nil
+	}
+	scopeRef, err := config.ParseScopeRef(clean)
+	if err != nil {
+		return nil, err
+	}
+	return &scopeRef, nil
+}
+
+func validateStateLayoutSelection(configPath string, scopeRef *config.ScopeRef, stateRoot string) error {
+	cleanPath := strings.TrimSpace(configPath)
+	if cleanPath == "" {
+		return nil
+	}
+	if scopeRef != nil {
+		return errors.New("`--config-path` cannot be combined with `--scope`")
+	}
+	if strings.TrimSpace(stateRoot) != "" {
+		return errors.New("`--config-path` cannot be combined with `--state-root`")
+	}
+	return nil
+}
+
+func resolveBootstrapTargetLayout(
+	configPath string,
+	stateRoot string,
+	scopeRef *config.ScopeRef,
+	controlplane string,
+	envID string,
+) (config.StateLayout, error) {
 	cleanPath := strings.TrimSpace(configPath)
 	if cleanPath != "" {
 		return config.StateLayoutForConfigPath(cleanPath)
 	}
-	if bootstrapViaFlags {
-		return config.EnvStateLayout(envID)
+	if scopeRef != nil {
+		return config.StateLayoutForScope(*scopeRef, stateRoot)
 	}
-	return config.DefaultStateLayout()
+	return config.ControlPlaneStateLayout(controlplane, envID, stateRoot)
+}
+
+func resolveRunStateLayout(
+	configPath string,
+	stateRoot string,
+	scopeRef *config.ScopeRef,
+	controlplane string,
+	envID string,
+	bootstrapViaFlags bool,
+) (config.StateLayout, error) {
+	cleanPath := strings.TrimSpace(configPath)
+	if cleanPath != "" {
+		return config.StateLayoutForConfigPath(cleanPath)
+	}
+	if scopeRef != nil {
+		return config.StateLayoutForScope(*scopeRef, stateRoot)
+	}
+	if bootstrapViaFlags {
+		return config.ControlPlaneStateLayout(controlplane, envID, stateRoot)
+	}
+	return config.LocalStateLayout(config.DefaultLocalScopeName, stateRoot)
 }
 
 func (c *cli) printRunStateLayoutGuidance(reason error) int {
