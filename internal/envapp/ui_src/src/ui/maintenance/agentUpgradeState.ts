@@ -8,6 +8,7 @@ export type AgentUpgradeState = Readonly<{
   automaticPromptAllowed: boolean;
   message: string;
   releasePageURL: string;
+  actionLabel: string;
 }>;
 
 const DEFAULT_DESKTOP_RELEASE_MESSAGE = 'Managed by Redeven Desktop. Update from the desktop release instead of self-upgrade.';
@@ -36,9 +37,10 @@ export function resolveAgentUpgradeState(latestMeta: AgentLatestVersion | null |
 
   return {
     policy,
-    allowsUpgradeAction: policy !== 'desktop_release',
+    allowsUpgradeAction: true,
     automaticPromptAllowed: policy === 'self_upgrade',
     message,
     releasePageURL,
+    actionLabel: policy === 'desktop_release' ? 'Manage in Desktop' : 'Update Redeven',
   };
 }

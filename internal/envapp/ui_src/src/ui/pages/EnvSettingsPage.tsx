@@ -20,6 +20,7 @@ import { useAgentUpdateContext } from '../maintenance/AgentUpdateContext';
 import { resolveAgentUpgradeState } from '../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
+import { manageDesktopUpdate, openExternalURLInDesktopShell } from '../services/desktopShellBridge';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import { shouldOpenDetachedSurface } from '../services/detachedSurface';
 import {
@@ -478,6 +479,13 @@ export function EnvSettingsPage() {
 
   const startUpgrade = async () => {
     try {
+      if (upgradeState().policy === 'desktop_release') {
+        const desktopResult = await manageDesktopUpdate();
+        if (!desktopResult?.ok && upgradeState().releasePageURL) {
+          await openExternalURLInDesktopShell(upgradeState().releasePageURL);
+        }
+        return;
+      }
       await agentUpdate.maintenance.startUpgrade(targetUpgradeVersion());
     } finally {
       setUpgradeOpen(false);
@@ -2663,7 +2671,7 @@ export function EnvSettingsPage() {
                       loading={isUpgrading()}
                       disabled={!canStartUpgrade()}
                     >
-                      Update Redeven
+                      {upgradeState().actionLabel}
                     </Button>
                   </Show>
                 </>
@@ -2699,7 +2707,7 @@ export function EnvSettingsPage() {
                     </SettingsTableCell>
                     <SettingsTableCell class="text-[11px] text-muted-foreground">Current status as observed by the maintenance controller.</SettingsTableCell>
                   </SettingsTableRow>
-                  <Show when={upgradeState().allowsUpgradeAction}>
+                  <Show when={upgradeState().allowsUpgradeAction && upgradeState().policy !== 'desktop_release'}>
                     <SettingsTableRow>
                       <SettingsTableCell class="font-medium text-muted-foreground">Target version</SettingsTableCell>
                       <SettingsTableCell>
@@ -2733,14 +2741,7 @@ export function EnvSettingsPage() {
                   <div class="text-xs text-muted-foreground">{upgradeState().message}</div>
                 </Show>
                 <Show when={upgradeState().policy === 'desktop_release' && upgradeState().releasePageURL}>
-                  <a
-                    href={upgradeState().releasePageURL}
-                    target="_blank"
-                    rel="noreferrer"
-                    class="text-xs text-primary underline-offset-4 hover:underline"
-                  >
-                    Open desktop release page
-                  </a>
+                  <div class="text-xs text-muted-foreground">Desktop can open the matching release page if the installed app needs to be updated first.</div>
                 </Show>
                 <Show when={latestVersionError()}>
                   <div class="text-xs text-destructive">Latest version metadata is unavailable: {latestVersionError()}</div>
@@ -3788,20 +3789,31 @@ export function EnvSettingsPage() {
       <ConfirmDialog
         open={upgradeOpen()}
         onOpenChange={(open) => setUpgradeOpen(open)}
-        title="Update Redeven"
-        confirmText="Update"
+        title={upgradeState().policy === 'desktop_release' ? 'Manage in Desktop' : 'Update Redeven'}
+        confirmText={upgradeState().policy === 'desktop_release' ? 'Continue' : 'Update'}
         loading={isUpgrading()}
         onConfirm={() => void startUpgrade()}
       >
         <div class="space-y-3">
-          <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
-          <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
-          <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
-          <p class="text-xs text-muted-foreground">
-            Target version: <span class="font-mono">{targetUpgradeVersion() || '—'}</span>
-          </p>
-          <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
-            <p class="text-xs text-destructive">Target version is invalid. Please use a release tag like v1.2.3.</p>
+          <Show
+            when={upgradeState().policy === 'desktop_release'}
+            fallback={(
+              <>
+                <p class="text-sm">This will restart the runtime and terminate all running activities. Continue?</p>
+                <p class="text-xs text-muted-foreground">You will reconnect automatically after the runtime comes back online.</p>
+                <p class="text-xs text-muted-foreground">If the secure session needs to be verified again, this page will ask for the access password without a manual refresh.</p>
+                <p class="text-xs text-muted-foreground">
+                  Target version: <span class="font-mono">{targetUpgradeVersion() || '—'}</span>
+                </p>
+                <Show when={targetUpgradeVersion() && !targetUpgradeVersionValid()}>
+                  <p class="text-xs text-destructive">Target version is invalid. Please use a release tag like v1.2.3.</p>
+                </Show>
+              </>
+            )}
+          >
+            <p class="text-sm">This runtime is managed by Redeven Desktop.</p>
+            <p class="text-xs text-muted-foreground">Desktop will explain whether this update only rebinds this managed runtime or requires installing a newer desktop release first.</p>
+            <p class="text-xs text-muted-foreground">If Desktop cannot complete the update directly, it will open the matching release page for this host.</p>
           </Show>
         </div>
       </ConfirmDialog>

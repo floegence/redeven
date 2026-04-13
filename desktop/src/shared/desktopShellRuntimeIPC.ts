@@ -1,6 +1,6 @@
 export const DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL = 'redeven-desktop:shell-runtime-action';
 
-export type DesktopShellRuntimeAction = 'restart_managed_runtime';
+export type DesktopShellRuntimeAction = 'restart_managed_runtime' | 'manage_desktop_update';
 
 export type DesktopShellRuntimeActionRequest = Readonly<{
   action: DesktopShellRuntimeAction;
@@ -20,6 +20,9 @@ export function normalizeDesktopShellRuntimeAction(value: unknown): DesktopShell
   const action = compact(value);
   if (action === 'restart_managed_runtime' || action === 'restart_runtime' || action === 'restart') {
     return 'restart_managed_runtime';
+  }
+  if (action === 'manage_desktop_update' || action === 'desktop_update' || action === 'update') {
+    return 'manage_desktop_update';
   }
   return '';
 }

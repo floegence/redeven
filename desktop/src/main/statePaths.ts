@@ -158,7 +158,16 @@ export function defaultManagedStateLayout(
   homedir: () => string = os.homedir,
   override?: string,
 ): DesktopManagedStateLayout {
-  return stateLayoutForScope({ kind: 'local', name: DEFAULT_LOCAL_SCOPE_NAME }, resolveStateRoot(env, homedir, override));
+  return localManagedStateLayout(DEFAULT_LOCAL_SCOPE_NAME, env, homedir, override);
+}
+
+export function localManagedStateLayout(
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+  homedir: () => string = os.homedir,
+  override?: string,
+): DesktopManagedStateLayout {
+  return stateLayoutForScope({ kind: 'local', name }, resolveStateRoot(env, homedir, override));
 }
 
 export function namedManagedStateLayout(

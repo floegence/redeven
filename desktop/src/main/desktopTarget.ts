@@ -3,21 +3,30 @@ import { normalizeLocalUIBaseURL } from './localUIURL';
 import { normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
 import {
   defaultSavedSSHEnvironmentLabel,
-  desktopSSHEnvironmentID,
   desktopSSHEnvironmentID as buildSSHEnvironmentID,
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
+import {
+  desktopManagedControlPlaneEnvironmentID,
+  desktopManagedLocalEnvironmentID,
+  type DesktopManagedEnvironment,
+} from '../shared/desktopManagedEnvironment';
 import type { StartupReport } from './startup';
 
-export type DesktopTargetKind = 'managed_local' | 'external_local_ui' | 'ssh_environment' | 'controlplane_environment';
-export type DesktopSessionKey = 'managed_local' | `url:${string}` | `ssh:${string}` | `cp:${string}:env:${string}`;
+export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopSessionKey = `local:${string}` | `url:${string}` | `ssh:${string}` | `cp:${string}:env:${string}`;
 
-export type ManagedLocalDesktopTarget = Readonly<{
-  kind: 'managed_local';
-  session_key: 'managed_local';
-  environment_id: 'env_local';
-  label: 'Local Environment';
+export type ManagedEnvironmentDesktopTarget = Readonly<{
+  kind: 'managed_environment';
+  session_key: DesktopSessionKey;
+  environment_id: string;
+  label: string;
+  managed_environment_kind: DesktopManagedEnvironment['kind'];
+  local_environment_name?: string;
+  provider_origin?: string;
+  provider_id?: string;
+  env_public_id?: string;
 }>;
 
 export type ExternalLocalUIDesktopTarget = Readonly<{
@@ -41,17 +50,7 @@ export type SSHDesktopTarget = Readonly<{
   forwarded_local_ui_url: string;
 }>;
 
-export type ControlPlaneDesktopTarget = Readonly<{
-  kind: 'controlplane_environment';
-  session_key: `cp:${string}:env:${string}`;
-  environment_id: string;
-  provider_id: string;
-  provider_origin: string;
-  env_public_id: string;
-  label: string;
-}>;
-
-export type DesktopSessionTarget = ManagedLocalDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget | ControlPlaneDesktopTarget;
+export type DesktopSessionTarget = ManagedEnvironmentDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget;
 
 export type DesktopSessionSummary = Readonly<{
   session_key: DesktopSessionKey;
@@ -63,8 +62,8 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function managedLocalDesktopSessionKey(): 'managed_local' {
-  return 'managed_local';
+export function localEnvironmentDesktopSessionKey(name: string): `local:${string}` {
+  return desktopManagedLocalEnvironmentID(name) as `local:${string}`;
 }
 
 export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSessionKey {
@@ -72,28 +71,46 @@ export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSession
 }
 
 export function sshDesktopSessionKey(rawDetails: DesktopSSHEnvironmentDetails): `ssh:${string}` {
-  return desktopSSHEnvironmentID(rawDetails);
+  return buildSSHEnvironmentID(rawDetails);
 }
 
 export function controlPlaneDesktopSessionKey(rawProviderOrigin: string, rawEnvPublicID: string): `cp:${string}:env:${string}` {
-  const providerOrigin = normalizeControlPlaneOrigin(rawProviderOrigin);
-  const envPublicID = compact(rawEnvPublicID);
-  if (envPublicID === '') {
-    throw new Error('Environment ID is required.');
-  }
-  return `cp:${encodeURIComponent(providerOrigin)}:env:${encodeURIComponent(envPublicID)}`;
+  return desktopManagedControlPlaneEnvironmentID(rawProviderOrigin, rawEnvPublicID) as `cp:${string}:env:${string}`;
 }
 
 export function desktopSessionStateKeyFragment(sessionKey: DesktopSessionKey): string {
   return encodeURIComponent(String(sessionKey ?? '').trim());
 }
 
-export function buildManagedLocalDesktopTarget(): ManagedLocalDesktopTarget {
+export function managedEnvironmentDesktopSessionKey(environment: DesktopManagedEnvironment): DesktopSessionKey {
+  if (environment.kind === 'local') {
+    return localEnvironmentDesktopSessionKey(environment.name);
+  }
+  return controlPlaneDesktopSessionKey(environment.provider_origin, environment.env_public_id);
+}
+
+export function buildManagedEnvironmentDesktopTarget(
+  environment: DesktopManagedEnvironment,
+): ManagedEnvironmentDesktopTarget {
+  if (environment.kind === 'local') {
+    return {
+      kind: 'managed_environment',
+      session_key: managedEnvironmentDesktopSessionKey(environment),
+      environment_id: environment.id,
+      label: environment.label,
+      managed_environment_kind: environment.kind,
+      local_environment_name: environment.name,
+    };
+  }
   return {
-    kind: 'managed_local',
-    session_key: managedLocalDesktopSessionKey(),
-    environment_id: 'env_local',
-    label: 'Local Environment',
+    kind: 'managed_environment',
+    session_key: managedEnvironmentDesktopSessionKey(environment),
+    environment_id: environment.id,
+    label: environment.label,
+    managed_environment_kind: environment.kind,
+    provider_origin: normalizeControlPlaneOrigin(environment.provider_origin),
+    provider_id: environment.provider_id,
+    env_public_id: environment.env_public_id,
   };
 }
 
@@ -141,37 +158,5 @@ export function buildSSHDesktopTarget(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     forwarded_local_ui_url: forwardedLocalUIURL,
-  };
-}
-
-type BuildControlPlaneDesktopTargetOptions = Readonly<{
-  environmentID?: string;
-  label?: string;
-  providerID: string;
-}>;
-
-export function buildControlPlaneDesktopTarget(
-  rawProviderOrigin: string,
-  rawEnvPublicID: string,
-  options: BuildControlPlaneDesktopTargetOptions,
-): ControlPlaneDesktopTarget {
-  const providerOrigin = normalizeControlPlaneOrigin(rawProviderOrigin);
-  const envPublicID = compact(rawEnvPublicID);
-  if (envPublicID === '') {
-    throw new Error('Environment ID is required.');
-  }
-  const providerID = compact(options.providerID);
-  if (providerID === '') {
-    throw new Error('Provider ID is required.');
-  }
-  const environmentID = compact(options.environmentID) || envPublicID;
-  return {
-    kind: 'controlplane_environment',
-    session_key: controlPlaneDesktopSessionKey(providerOrigin, envPublicID),
-    environment_id: environmentID,
-    provider_id: providerID,
-    provider_origin: providerOrigin,
-    env_public_id: envPublicID,
-    label: compact(options.label) || envPublicID,
   };
 }

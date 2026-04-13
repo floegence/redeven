@@ -15,7 +15,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const utilityWindows = new Map<DesktopUtilityWindowKind, BrowserWindow>();');
     expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain("surface: 'connect_environment'");
-    expect(mainSrc).toContain("surface: 'local_environment_settings'");
+    expect(mainSrc).toContain("surface: 'managed_environment_settings'");
     expect(mainSrc).toContain("return 'window:launcher';");
     expect(mainSrc).not.toContain("'window:settings'");
   });
@@ -35,14 +35,14 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("case 'start_control_plane_connect':");
-    expect(mainSrc).toContain("case 'open_local_environment_settings':");
+    expect(mainSrc).toContain("case 'open_managed_environment_settings':");
     expect(mainSrc).toContain("case 'focus_environment_window':");
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
     expect(mainSrc).not.toContain("case 'return_to_current_environment':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain('await openAdvancedSettingsWindow();');
     expect(mainSrc).toContain("return openUtilityWindow('launcher', {");
-    expect(mainSrc).toContain("surface: 'local_environment_settings',");
+    expect(mainSrc).toContain("surface: 'managed_environment_settings',");
     expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
   });
 

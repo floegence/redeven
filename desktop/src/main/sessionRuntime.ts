@@ -1,6 +1,6 @@
 import type { ManagedAgent } from './agentProcess';
 
-export type DesktopSessionRuntimeOwnerKind = 'managed_local_runtime' | 'ssh_runtime';
+export type DesktopSessionRuntimeOwnerKind = 'managed_environment_runtime' | 'ssh_runtime';
 
 export type DesktopSessionRuntimeHandle = Readonly<{
   owner_kind: DesktopSessionRuntimeOwnerKind;
@@ -10,7 +10,7 @@ export type DesktopSessionRuntimeHandle = Readonly<{
 
 export function desktopSessionRuntimeHandleFromManagedAgent(agent: ManagedAgent): DesktopSessionRuntimeHandle {
   return {
-    owner_kind: 'managed_local_runtime',
+    owner_kind: 'managed_environment_runtime',
     restartable: true,
     stop: agent.stop,
   };

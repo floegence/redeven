@@ -408,7 +408,7 @@ export function buildManagedSSHStartScript(): string {
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
-    'exec "$binary" run --state-root "$state_root" --mode local --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
+    'exec "$binary" run --state-root "$state_root" --mode local --desktop-managed --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
   ].join('\n');
 }
 

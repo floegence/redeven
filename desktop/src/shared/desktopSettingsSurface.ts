@@ -1,6 +1,6 @@
 import type { DesktopSettingsDraft } from './settingsIPC';
 
-export type DesktopPageMode = 'local_environment_settings';
+export type DesktopPageMode = 'managed_environment_settings';
 export type DesktopAccessMode = 'local_only' | 'shared_local_network' | 'custom_exposure';
 export type DesktopSettingsSummaryTone = 'default' | 'warning' | 'success' | 'primary';
 
@@ -34,6 +34,9 @@ export interface DesktopAccessModeOption {
 
 export type DesktopSettingsSurfaceSnapshot = Readonly<{
   mode: DesktopPageMode;
+  environment_id: string;
+  environment_label: string;
+  environment_kind: 'local' | 'controlplane';
   window_title: string;
   save_label: string;
   access_mode: DesktopAccessMode;

@@ -9,7 +9,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Reuse Redeven Local UI instead of introducing a second app runtime.
 - Let Desktop bootstrap a remote Redeven runtime over SSH without requiring a manual preinstall on the target machine.
 - Make environment choice explicit on every cold desktop launch.
-- Keep launcher, recovery, diagnostics, and Local Environment configuration aligned around a launcher-window plus session-window model.
+- Keep launcher, recovery, diagnostics, and per-environment startup configuration aligned around a launcher-window plus session-window model.
 
 ## Architecture
 
@@ -17,22 +17,27 @@ This document describes the public Electron desktop shell that ships with each `
 - `redeven run --mode desktop --desktop-managed` remains the only bundled-runtime entrypoint.
 - Desktop keeps one singleton shell-owned utility window:
   - `Connect Environment` launcher
-- `Local Environment Settings` renders as a launcher-owned modal dialog instead of a second native window.
+- `Environment Settings` renders as a launcher-owned modal dialog instead of a second native window.
 - Each opened Environment owns its own top-level session window, plus any detached child windows it spawns.
 - Detached child windows are session-scoped tools rather than global shell utilities. File preview and Debug Console are current examples.
 - Session deduplication happens in Electron main through a canonical session key:
-  - `managed_local` for the desktop-managed Local Environment
+  - `local:<name>` for a desktop-managed local environment
   - `url:<normalized-local-ui-origin>` for remote Local UI targets
   - `ssh:<normalized-ssh-identity>` for SSH-bootstrap targets
   - `cp:<encoded-provider-origin>:env:<env_public_id>` for Control Plane environments
+- Desktop-managed environments are the entries that own a real Redeven scope directory on this machine:
+  - local environments map to `~/.redeven/scopes/local/<name>`
+  - Control Plane environments map to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>`
+- Saved Redeven URL and SSH entries are connection records only. They do not own an additional Desktop-private runtime state directory.
+- Desktop and agent-only/CLI mode resolve the same scope directories. Desktop does not invent a second local-environment state root.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
-  - `Local Environment`
+  - any known desktop-managed local environment
+  - any known desktop-managed Control Plane environment
   - a remembered recent Environment
-  - a newly entered Redeven Local UI URL
-  - a newly entered SSH target that Desktop bootstraps on demand
-  - a saved compatible `Control Plane`
+  - a saved Redeven Local UI URL
+  - a saved SSH target that Desktop bootstraps on demand
 - Reopening the launcher from an active session does not disconnect anything. Existing Environment windows stay live until the user closes those specific session windows.
 - Common startup failures return to the launcher with inline context instead of bouncing users to a separate blocked-first flow.
 - Electron only allows session-owned navigation to the exact reported Local UI origin for that session and opens all other URLs in the system browser.
@@ -65,10 +70,10 @@ Desktop may add user-configured startup flags on top of that base command:
 
 Behavior:
 
-- Local UI always starts for `Local Environment`.
+- Local UI always starts for a desktop-managed environment that Desktop owns locally.
 - `--password-stdin` is the non-interactive desktop-managed password transport.
 - Desktop resolves the managed config path before spawn and passes it explicitly to `redeven run`.
-- `Local Environment` uses the local/default scope at `~/.redeven/scopes/local/default/config.json`.
+- Desktop-managed local environments use `~/.redeven/scopes/local/<name>/config.json`.
 - Desktop startup flows that include a bootstrap target use the matching control-plane scope at `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json`.
 - Desktop attach probing reads `runtime/local-ui.json` from the same resolved state root as the spawned config path.
 - The Local UI password stays out of process args and environment variables.
@@ -156,9 +161,9 @@ Visual hierarchy:
   - shell-wide open-window and card counts
   - add / close actions
 - `Environments` tab:
-  - pinned `Local Environment` card
+  - desktop-managed environment cards for every saved local and Control Plane environment
   - compact search + `All / Open / Recent / Saved` toolbar
-  - shared card grid for Redeven URL and SSH entries
+  - the same shared grid also includes saved Redeven URL and SSH entries
 - `Control Planes` tab:
   - provider action shelves
   - provider environment card grids
@@ -169,12 +174,21 @@ Interaction rules:
 
 - Cold launch never auto-opens a remembered target.
 - Environment choice is always a launcher action, never a side effect of saving settings.
-- `Local Environment` is the primary path and behaves like a workbench-style open action.
-- `Local Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window.
-- The `Add` action opens a dialog that can either connect immediately or save a remote Environment into the library.
-- `Add Connection` is a two-mode dialog:
+- Desktop-managed local environments are ordinary first-class cards instead of a singleton hard-coded entry.
+- `Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window for the selected managed environment.
+- The `Add` action opens a dialog that can either connect immediately or save a new Environment into the library.
+- `New Environment` is a three-mode dialog:
+  - `Local`
   - `Redeven URL`
   - `SSH`
+- Local mode keeps the flow lightweight and explicit:
+  - `Label`
+  - `Environment Name`
+  - `Local UI Bind`
+  - `Local UI Password`
+- Creating a local environment can either:
+  - save the managed environment card without opening it yet
+  - connect immediately and start or attach to that managed scope
 - SSH mode keeps the same compact launcher shell but adds:
   - `Label`
   - `SSH Destination`
@@ -186,13 +200,13 @@ Interaction rules:
 - The SSH `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Release Base URL` or `Remote Install Directory` does not auto-collapse the section.
 - SSH mode explains the actual behavior inline:
   - Desktop reuses only the exact Desktop-managed release, installs it on demand when needed, and tunnels its Local UI over SSH.
-  - Automatic reuses only the exact Desktop-managed release, prefers a desktop upload for offline targets, then falls back to the remote installer.
 - `Add Control Plane` opens a separate dialog that accepts only a Provider URL and then continues in the system browser.
 - The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
 - `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
-- `Local Environment` remains the fixed first-class entry and renders as the pinned first card in the `Environments` tab.
-- `Local Environment Settings` is reached from the `Settings` action inside the `Local Environment` card.
+- Local managed environments and managed Control Plane environments both render in the `Environments` tab, because both own a real scope on this machine.
+- Control Plane provider management still lives in the `Control Planes` tab, but opening one provider environment also materializes it in the shared managed-environment catalog.
+- Managed environment cards show the label, kind, open state, and the next bind or provider/environment identity that will be reused on the next open.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -225,11 +239,11 @@ Rules:
 - Ordinary page dialogs in the main Env App window do not cover detached tools, because Electron manages them as separate native windows.
 - Debug Console therefore remains available while the main Env App shows ordinary page-level dialogs or floating-window-local confirmation flows.
 
-## Local Environment Settings
+## Environment Settings
 
-`Local Environment Settings` is a launcher-owned dialog that opens above `Connect Environment` inside the same native window.
+`Environment Settings` is a launcher-owned dialog that opens above `Connect Environment` inside the same native window.
 
-It edits only future startup behavior for `Local Environment`:
+It edits only future startup behavior for the selected desktop-managed environment:
 
 - `local_ui_bind`
 - `local_ui_password`
@@ -253,21 +267,19 @@ Rules:
   - `Custom exposure`
 - The UI maps that intent back onto the existing runtime contract (`local_ui_bind` + `local_ui_password`) before saving, but it keeps port selection as a separate control instead of hiding it inside the scope preset.
 - `Access & Security` presents those visibility options as selectable preset cards rather than a dense field-only form.
-- The settings dialog always shows the current managed runtime URL separately from the next-start configuration when the local environment is already running.
+- The settings dialog always shows the current managed runtime URL separately from the next-start configuration when the selected managed environment is already running.
 - The main editor uses a wider two-column card layout so visibility changes keep the form aligned instead of reflowing a long stack of helper text.
 - Password handling becomes explicitly stateful:
   - current password state is visible through summary chips
   - replacing a password is expressed as a queued replacement
   - removing a stored password remains an explicit action
-- The dialog explains that control-plane environments must be opened from the launcher / provider list, not queued inside Local Environment Settings.
+- Control Plane managed environments reuse the same settings surface, but the environment identity itself stays fixed. The editable part is only the local Local UI exposure that Desktop will request the next time it opens that environment.
 
 ## Desktop Preferences
 
-Desktop keeps one persisted preference model for stable `Local Environment` configuration and saved remote Environments:
+Desktop keeps one persisted preference model for desktop-managed environments and saved remote connections:
 
-- `local_ui_bind`
-- `local_ui_password`
-- `local_ui_password_configured`
+- `managed_environments`
 - `saved_environments`
 - `saved_ssh_environments`
 - `recent_external_local_ui_urls`
@@ -278,7 +290,11 @@ Semantics:
 
 - Desktop does not persist a remembered current target for the next launch.
 - Open Environment windows are runtime-only desktop session state.
-- `local_ui_bind`, `local_ui_password`, and `local_ui_password_configured` apply only to future `Local Environment` opens.
+- `managed_environments` stores desktop-managed local and Control Plane environments with:
+  - stable environment identity
+  - user-visible label
+  - per-environment Local UI bind/password configuration
+  - pin and timestamp metadata
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
 - `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
@@ -286,6 +302,7 @@ Semantics:
 - `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
 - `control_planes` stores normalized provider discovery data, the desktop account snapshot, the cached environment list, and the last sync time.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
+- Legacy single-local-environment settings migrate into the managed local environment with identity `local:default`.
 
 Desktop maps user-facing local-access decisions back onto the same runtime contract:
 
@@ -299,6 +316,9 @@ Desktop semantics:
 - Visibility scope and port selection are separate controls.
 - `Local only` and `Shared on your local network` share the same fixed default port baseline.
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
+- Multiple local environments may coexist on one device. Their runtime ownership stays separate because each one resolves to a different `local/<name>` scope directory.
+- A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the runtime still decides whether remote control is enabled for the same environment.
+- Agent-only and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
 
 Target validation rules:
 
@@ -419,10 +439,10 @@ Non-goals:
 - The native app menu exposes one primary shell action: `Connect Environment...`
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Compatible providers may also enter through the registered `redeven://` deep-link scheme.
-- Generic settings aliases such as `advanced_settings` route to the launcher-owned `Local Environment Settings` dialog.
+- Generic settings aliases such as `advanced_settings` route to the launcher-owned `Environment Settings` dialog.
 - After Local UI opens inside Redeven Desktop, Env App still exposes shell-owned window actions through the desktop browser bridge.
 - `Switch Environment` focuses or opens the singleton launcher instead of replacing the active Environment session window.
-- `Runtime Settings` focuses or opens the singleton launcher and presents the `Local Environment Settings` dialog instead of creating a second native window.
+- `Runtime Settings` focuses or opens the singleton launcher and presents the `Environment Settings` dialog instead of creating a second native window.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
 - The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
 - Env App exposes `Switch Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
@@ -464,11 +484,14 @@ Desktop-specific outcomes from this implementation:
 ## Env App Behavior
 
 - Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, and `remote_enabled` through local runtime/version endpoints.
-- Env App hides `Update Redeven` in desktop-managed runs.
+- When the runtime reports a desktop-owned release policy, Env App turns `Update Redeven` into `Manage in Desktop`.
 - Env App keeps `Restart runtime`.
 - When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
-- The maintenance card explains that updates must come from a new desktop release.
+- Desktop resolves update impact before continuing:
+  - Desktop-managed local and Control Plane environments may require a Desktop restart and reopen flow
+  - SSH-managed environments only affect that one SSH target
+  - external Redeven URL targets stay externally managed and do not offer a Desktop-side runtime update action
 - Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.
 
 ## Release Assets

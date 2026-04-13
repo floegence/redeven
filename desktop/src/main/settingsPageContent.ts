@@ -19,15 +19,21 @@ import {
 
 export { desktopAccessModeForDraft };
 
-export function pageWindowTitle(_mode: DesktopPageMode): string {
-  return 'Local Environment Settings';
+type ManagedEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Readonly<{
+  environment_id: string;
+  environment_label: string;
+  environment_kind: 'local' | 'controlplane';
+}>;
+
+export function pageWindowTitle(_mode: DesktopPageMode, environmentLabel: string): string {
+  return `${trimString(environmentLabel) || 'Environment'} Settings`;
 }
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-type BuildDesktopSettingsSurfaceSnapshotOptions = DesktopAccessModelOptions;
+type BuildDesktopSettingsSurfaceSnapshotOptions = ManagedEnvironmentSettingsSnapshotOptions;
 
 function localUIPasswordMode(
   draft: DesktopSettingsDraft,
@@ -49,7 +55,7 @@ function loopbackBindDraft(draft: DesktopSettingsDraft): boolean {
 
 function hostFields(
   draft: DesktopSettingsDraft,
-  options: BuildDesktopSettingsSurfaceSnapshotOptions = {},
+  options: BuildDesktopSettingsSurfaceSnapshotOptions,
 ): readonly DesktopPageFieldModel[] {
   const localUIPasswordConfigured = options.local_ui_password_configured === true;
   const runtimePasswordRequired = options.runtime_password_required === true;
@@ -99,7 +105,7 @@ function hostFields(
 export function buildDesktopSettingsSurfaceSnapshot(
   mode: DesktopPageMode,
   draft: DesktopSettingsDraft,
-  options: BuildDesktopSettingsSurfaceSnapshotOptions = {},
+  options: BuildDesktopSettingsSurfaceSnapshotOptions,
 ): DesktopSettingsSurfaceSnapshot {
   const localUIPasswordConfigured = options.local_ui_password_configured === true;
   const accessModel = deriveDesktopAccessDraftModel(draft, options);
@@ -109,8 +115,11 @@ export function buildDesktopSettingsSurfaceSnapshot(
 
   return {
     mode,
-    window_title: pageWindowTitle(mode),
-    save_label: 'Save Local Environment Settings',
+    environment_id: options.environment_id,
+    environment_label: options.environment_label,
+    environment_kind: options.environment_kind,
+    window_title: pageWindowTitle(mode, options.environment_label),
+    save_label: `Save ${options.environment_label || 'Environment'} Settings`,
     access_mode: accessModel.access_mode,
     access_mode_label: desktopAccessModeLabel(accessModel.access_mode),
     access_mode_options: DESKTOP_ACCESS_MODE_OPTIONS,

@@ -6,8 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   buildExternalLocalUIDesktopTarget,
-  buildManagedLocalDesktopTarget,
 } from '../main/desktopTarget';
+import {
+  testDesktopPreferences,
+  testManagedAccess,
+  testManagedLocalEnvironment,
+  testManagedSession,
+} from '../testSupport/desktopTestHelpers';
 import {
   buildDesktopWelcomeShellViewModel,
   capabilityUnavailableMessage,
@@ -48,11 +53,14 @@ function readInstalledDialogSource(): string {
 
 describe('DesktopWelcomeShell', () => {
   it('describes Connect Environment inside the shared shell model', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: {
+    const managedLocal = testManagedLocalEnvironment('default', {
+      access: testManagedAccess({
         local_ui_bind: '127.0.0.1:0',
-        local_ui_password: '',
-        local_ui_password_configured: false,
+      }),
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedLocal],
         saved_environments: [
           {
             id: 'http://192.168.1.11:24000/',
@@ -64,9 +72,7 @@ describe('DesktopWelcomeShell', () => {
         ],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
-        control_plane_refresh_tokens: {},
-        control_planes: [],
-      },
+      }),
       surface: 'connect_environment',
     });
 
@@ -74,7 +80,7 @@ describe('DesktopWelcomeShell', () => {
       shell_title: 'Redeven Desktop',
       surface_title: 'Connect Environment',
       connect_heading: 'Connect Environment',
-      primary_action_label: 'Open Local Environment',
+      primary_action_label: 'Open Environment',
       settings_save_label: 'Save Local Environment Settings',
     });
     expect(shellStatus(snapshot)).toEqual({
@@ -84,25 +90,26 @@ describe('DesktopWelcomeShell', () => {
   });
 
   it('describes Local Environment Settings inside the same shell model', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: {
+    const managedLocal = testManagedLocalEnvironment('default', {
+      access: testManagedAccess({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'secret',
         local_ui_password_configured: true,
-        saved_environments: [],
-        saved_ssh_environments: [],
-        recent_external_local_ui_urls: [],
-        control_plane_refresh_tokens: {},
-        control_planes: [],
-      },
-      surface: 'local_environment_settings',
+      }),
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedLocal],
+      }),
+      surface: 'managed_environment_settings',
+      selectedManagedEnvironmentID: managedLocal.id,
     });
 
     expect(buildDesktopWelcomeShellViewModel(snapshot)).toEqual({
       shell_title: 'Redeven Desktop',
-      surface_title: 'Local Environment Settings',
+      surface_title: 'Environment Settings',
       connect_heading: 'Connect Environment',
-      primary_action_label: 'Open Local Environment',
+      primary_action_label: 'Open Environment',
       settings_save_label: 'Save Local Environment Settings',
     });
     expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
@@ -125,11 +132,10 @@ describe('DesktopWelcomeShell', () => {
   });
 
   it('filters the Environment Library by open, recent, and saved connections', () => {
+    const managedLocal = testManagedLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: {
-        local_ui_bind: '127.0.0.1:0',
-        local_ui_password: '',
-        local_ui_password_configured: false,
+      preferences: testDesktopPreferences({
+        managed_environments: [managedLocal],
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -151,18 +157,9 @@ describe('DesktopWelcomeShell', () => {
           'http://192.168.1.12:24000/',
           'http://192.168.1.11:24000/',
         ],
-        control_plane_refresh_tokens: {},
-        control_planes: [],
-      },
+      }),
       openSessions: [
-        {
-          session_key: 'managed_local',
-          target: buildManagedLocalDesktopTarget(),
-          startup: {
-            local_ui_url: 'http://localhost:23998/',
-            local_ui_urls: ['http://localhost:23998/'],
-          },
-        },
+        testManagedSession(managedLocal, 'http://localhost:23998/'),
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
@@ -174,12 +171,18 @@ describe('DesktopWelcomeShell', () => {
       ],
     });
 
-    expect(environmentLibraryCount(snapshot, 'all')).toBe(2);
-    expect(environmentLibraryCount(snapshot, 'open')).toBe(1);
+    expect(environmentLibraryCount(snapshot, 'all')).toBe(3);
+    expect(environmentLibraryCount(snapshot, 'open')).toBe(2);
     expect(environmentLibraryCount(snapshot, 'recent')).toBe(1);
-    expect(environmentLibraryCount(snapshot, 'saved')).toBe(1);
+    expect(environmentLibraryCount(snapshot, 'saved')).toBe(2);
 
     expect(filterEnvironmentLibrary(snapshot, 'open')).toEqual([
+      expect.objectContaining({
+        id: 'local:default',
+        category: 'managed',
+        is_open: true,
+        open_action_label: 'Focus',
+      }),
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         category: 'saved',
@@ -210,7 +213,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('<ConnectEnvironmentSurface');
     expect(appSrc).toContain("<LocalEnvironmentSettingsDialog");
-    expect(appSrc).toContain("open={snapshot().surface === 'local_environment_settings'}");
+    expect(appSrc).toContain("open={snapshot().surface === 'managed_environment_settings'}");
     expect(appSrc).not.toContain('fallback={<div class="h-full min-h-0 bg-background" />}');
   });
 
@@ -256,7 +259,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Search environments...');
     expect(appSrc).toContain('Local Environment');
     expect(appSrc).toContain('<EnvironmentConnectionCard');
-    expect(appSrc).toContain('redeven-environment-card--featured');
     expect(appSrc).toContain('New Environment');
     expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
   });
@@ -282,12 +284,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: 'Automatic'");
     expect(appSrc).toContain("label: 'Desktop Upload'");
     expect(appSrc).toContain("label: 'Remote Install'");
-    expect(appSrc).toContain('Automatic reuses only the exact Desktop-managed release, prefers a desktop upload for offline targets, then falls back to the remote installer.');
     expect(appSrc).toContain('SSH Destination');
     expect(appSrc).toContain('Remote Install Directory');
     expect(appSrc).toContain('Release Base URL');
     expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
-    expect(appSrc).toContain('Desktop Upload resolves the remote OS and architecture first');
+    expect(appSrc).toContain('Keep the default remote cache or pin a custom absolute install directory.');
+    expect(appSrc).toContain('Leave blank to use the default remote user cache:');
   });
 
   it('includes scope-first Local Environment Settings copy inside the source', () => {
