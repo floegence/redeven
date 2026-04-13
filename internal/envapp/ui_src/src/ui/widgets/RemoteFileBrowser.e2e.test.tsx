@@ -45,6 +45,7 @@ const legacyClipboardStore = vi.hoisted(() => ({
 const gitWorkspaceRenderStore = vi.hoisted(() => ({
   snapshots: [] as Array<{
     subview: string;
+    onSubviewChange?: (view: 'changes' | 'branches' | 'history') => void;
     selectedBranchSubview?: string;
     selectedBranchName?: string;
     branchDetailKind?: string;
@@ -568,6 +569,7 @@ vi.mock('./GitWorkspace', () => ({
     listRefreshing?: boolean;
     shellLoadingMessage?: string;
     onModeChange?: (mode: string) => void;
+    onSubviewChange?: (view: 'changes' | 'branches' | 'history' | 'overview') => void;
     onResize?: (delta: number) => void;
     repoInfoLoading?: boolean;
     repoSummaryLoading?: boolean;
@@ -658,6 +660,9 @@ vi.mock('./GitWorkspace', () => ({
         <div>branch-detail:{props.branchDetailState?.kind ?? ''}</div>
         <div>shell-loading:{props.shellLoadingMessage ?? ''}</div>
         <button type="button" onClick={() => props.onModeChange?.('files')}>mock-to-files</button>
+        <button type="button" onClick={() => props.onSubviewChange?.('changes')}>mock-to-changes</button>
+        <button type="button" onClick={() => props.onSubviewChange?.('branches')}>mock-to-branches</button>
+        <button type="button" onClick={() => props.onSubviewChange?.('history')}>mock-to-history</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onRefresh?.()}>mock-refresh</button>
         <button type="button" onClick={() => props.onSelectBranchSubview?.('status')}>mock-branch-status</button>
@@ -2095,7 +2100,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('does not refetch the same branch history when returning from status to history', async () => {
+  it('refetches the same branch history when returning from status to history', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -2139,7 +2144,52 @@ describe('RemoteFileBrowser persistence', () => {
       toHistoryButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
+      expect(mockRpc.git.listCommits).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('refetches graph commits when returning from changes to the same graph view', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'history' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.git.listCommits.mockClear();
+
+      const toChangesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-changes') as HTMLButtonElement | undefined;
+      const toHistoryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-history') as HTMLButtonElement | undefined;
+      expect(toChangesButton).toBeTruthy();
+      expect(toHistoryButton).toBeTruthy();
+
+      toChangesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      toHistoryButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
       expect(mockRpc.git.listCommits).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.listCommits).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        ref: undefined,
+        offset: 0,
+        limit: 50,
+      });
     } finally {
       dispose();
     }
@@ -3258,6 +3308,89 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('revalidates the loaded changes view when returning from branches without blocking the shell', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const initialWorkspacePage = {
+      repoRootPath: '/workspace/repo',
+      section: 'changes',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
+    };
+    const refreshedWorkspacePage = {
+      repoRootPath: '/workspace/repo',
+      section: 'changes',
+      summary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 2,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: false,
+      items: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' },
+        { section: 'unstaged', changeType: 'modified', path: 'src/config.ts', displayPath: 'src/config.ts' },
+      ],
+    };
+
+    let resolveRefreshWorkspacePage!: (value: typeof refreshedWorkspacePage) => void;
+    const refreshWorkspacePagePromise = new Promise<typeof refreshedWorkspacePage>((resolve) => {
+      resolveRefreshWorkspacePage = resolve;
+    });
+
+    mockRpc.git.listWorkspacePage.mockReset();
+    mockRpc.git.listWorkspacePage
+      .mockResolvedValueOnce(initialWorkspacePage)
+      .mockImplementationOnce(() => refreshWorkspacePagePromise);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(1);
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const toBranchesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-branches') as HTMLButtonElement | undefined;
+      const toChangesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-changes') as HTMLButtonElement | undefined;
+      expect(toBranchesButton).toBeTruthy();
+      expect(toChangesButton).toBeTruthy();
+
+      toBranchesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      toChangesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenLastCalledWith({
+        repoRootPath: '/workspace/repo',
+        section: 'changes',
+        offset: 0,
+        limit: 200,
+      });
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.subview === 'changes' && item.workspaceLoading)).toBe(false);
+
+      resolveRefreshWorkspacePage(refreshedWorkspacePage);
+      await flush();
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps checkout on local busy state and shows a toast without global reload flags', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -3544,6 +3677,83 @@ describe('RemoteFileBrowser persistence', () => {
       expect(selectBranchButton).toBeTruthy();
 
       selectBranchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      expect(mockRpc.git.listBranches).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.listBranches).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
+      expect(host.textContent).toContain('selected-branch:refs/heads/feature/demo');
+      expect(host.textContent).toContain('branch-detail:missing');
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => (
+        item.subview === 'branches'
+        && item.selectedBranchName === 'refs/heads/feature/demo'
+        && item.branchDetailKind === 'missing'
+      ))).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('revalidates the selected branch when returning to branches and surfaces a missing detail state', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'branches' },
+    };
+
+    const initialBranches = {
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      local: [
+        { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+        { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' },
+      ],
+      remote: [],
+    };
+    const branchesAfterDeletion = {
+      repoRootPath: '/workspace/repo',
+      currentRef: 'main',
+      local: [
+        { name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true },
+      ],
+      remote: [],
+    };
+
+    mockRpc.git.listBranches.mockReset();
+    mockRpc.git.listBranches.mockResolvedValue(initialBranches);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const selectBranchButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-select-feature-branch') as HTMLButtonElement | undefined;
+      const toChangesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-changes') as HTMLButtonElement | undefined;
+      const toBranchesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-branches') as HTMLButtonElement | undefined;
+      expect(selectBranchButton).toBeTruthy();
+      expect(toChangesButton).toBeTruthy();
+      expect(toBranchesButton).toBeTruthy();
+
+      selectBranchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+
+      mockRpc.git.listBranches.mockReset();
+      mockRpc.git.listBranches.mockResolvedValueOnce(branchesAfterDeletion);
+      gitWorkspaceRenderStore.snapshots = [];
+
+      toChangesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      toBranchesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
       await flush();
 

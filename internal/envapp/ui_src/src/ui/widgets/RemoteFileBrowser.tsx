@@ -94,6 +94,10 @@ import {
   stashReviewMatchesTarget,
   type GitStashReviewState,
 } from '../utils/gitStashReview';
+import {
+  buildGitActivationRefreshPlan,
+  normalizeGitActivationSubview,
+} from '../utils/gitActivationRefresh';
 import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
 import {
   buildChildPath,
@@ -635,6 +639,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let stashReviewReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
+  let lastGitSubviewActivationKey = '';
+  let lastGitBranchStatusActivationKey = '';
 
   const readGitCommitCacheEntry = (contextKey: string): GitCommitListCacheEntry | null => {
     const key = String(contextKey ?? '').trim();
@@ -1291,6 +1297,74 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const refreshSelectedGitBranch = () => {
     void reconcileSelectedGitBranch({ showVerifying: true });
+  };
+
+  const refreshVisibleGitWorkspaceSection = async (
+    repoRootPath: string,
+  ): Promise<void> => {
+    const activeSection = selectedGitWorkspaceSection();
+    const state = gitWorkspacePageState(activeSection);
+    if (state.loading) return;
+    invalidateInactiveGitWorkspaceSections(WORKSPACE_VIEW_SECTIONS, activeSection);
+    await loadGitWorkspaceSection(activeSection, {
+      repoRootPath,
+      silent: state.initialized,
+      force: true,
+    });
+  };
+
+  const refreshVisibleGitBranches = async (
+    repoRootPath: string,
+    options: {
+      background: boolean;
+      showVerifying: boolean;
+    },
+  ): Promise<void> => {
+    if (selectedGitBranchName().trim()) {
+      await reconcileSelectedGitBranch({
+        repoRootPath,
+        showVerifying: options.showVerifying,
+      });
+      return;
+    }
+    await loadGitBranches({
+      silent: options.background && Boolean(gitBranches()),
+      repoRootPath,
+      selectionMode: 'default_if_empty',
+    });
+  };
+
+  const refreshActivatedGitSubview = async (
+    repoRootPath: string,
+  ): Promise<void> => {
+    const plan = buildGitActivationRefreshPlan({
+      subview: gitSubview(),
+      branchSubview: selectedGitBranchSubview(),
+    });
+    const refreshes: Array<Promise<unknown>> = [];
+
+    if (plan.refreshRepoSummary && gitRepoSummary()) {
+      refreshes.push(loadGitRepoSummary({ silent: true, repoRootPath }));
+    }
+
+    if (plan.refreshWorkspace) {
+      const state = gitWorkspacePageState(selectedGitWorkspaceSection());
+      if (state.initialized && !state.loading) {
+        refreshes.push(refreshVisibleGitWorkspaceSection(repoRootPath));
+      }
+    }
+
+    if (plan.refreshBranches) {
+      const hasBranchContext = Boolean(gitBranches()) || selectedGitBranchName().trim().length > 0;
+      if (hasBranchContext && !gitBranchesLoading()) {
+        refreshes.push(refreshVisibleGitBranches(repoRootPath, {
+          background: true,
+          showVerifying: false,
+        }));
+      }
+    }
+
+    await Promise.all(refreshes);
   };
 
   const selectCurrentGitBranch = () => {
@@ -2561,31 +2635,43 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       resetGitWorkbenchData();
       return;
     }
-    void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
-    if (gitSubview() === 'changes') {
-      const activeSection = selectedGitWorkspaceSection();
-      invalidateInactiveGitWorkspaceSections(WORKSPACE_VIEW_SECTIONS, activeSection);
-      void loadGitWorkspaceSection(activeSection, {
-        repoRootPath: String(nextInfo.repoRootPath ?? '').trim() || undefined,
-        silent: false,
-        force: true,
-      });
+    const repoRootPath = String(nextInfo.repoRootPath ?? '').trim();
+    const plan = buildGitActivationRefreshPlan({
+      subview: gitSubview(),
+      branchSubview: selectedGitBranchSubview(),
+    });
+
+    const refreshes: Array<Promise<unknown>> = [];
+    if (plan.refreshRepoSummary) {
+      refreshes.push(loadGitRepoSummary({
+        silent: Boolean(gitRepoSummary()),
+        repoRootPath,
+      }));
     }
-    if (gitSubview() === 'branches') {
-      const repoRootPath = String(nextInfo.repoRootPath ?? '').trim() || undefined;
-      if (selectedGitBranchName().trim()) {
-        void reconcileSelectedGitBranch({ repoRootPath, showVerifying: true });
-      } else {
-        void loadGitBranches({ silent: Boolean(gitBranches()), repoRootPath, selectionMode: 'default_if_empty' });
-      }
+    if (plan.refreshWorkspace) {
+      refreshes.push(refreshVisibleGitWorkspaceSection(repoRootPath));
     }
+    if (plan.refreshBranches) {
+      refreshes.push(refreshVisibleGitBranches(repoRootPath, {
+        background: false,
+        showVerifying: true,
+      }));
+    }
+    await Promise.all(refreshes);
+
+    if (plan.refreshBranchStatus) {
+      setGitBranchStatusRefreshToken((value) => value + 1);
+    }
+
     const commitContext = currentGitCommitContext();
     if (commitContext) {
       const useBackgroundRefresh = prefersBackgroundGitCommitReload(commitContext);
+      lastGitCommitContextKey = '';
       void loadGitCommits(true, commitContext.ref, {
         context: commitContext,
         mode: useBackgroundRefresh ? 'background' : 'blocking',
         silent: useBackgroundRefresh,
+        repoRootPath,
       });
     }
   };
@@ -3619,6 +3705,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
     if (!context) {
+      lastGitCommitContextKey = '';
       setGitListRefreshing(false);
       return;
     }
@@ -3633,6 +3720,43 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       mode: hasCachedContext ? 'background' : 'blocking',
       silent: hasCachedContext,
     });
+  });
+
+  createEffect(() => {
+    const mode = pageMode();
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const subview = normalizeGitActivationSubview(gitSubview());
+    const activationKey = mode === 'git' && repoRootPath ? subview : '';
+    if (!activationKey) {
+      lastGitSubviewActivationKey = '';
+      return;
+    }
+    if (activationKey === lastGitSubviewActivationKey) {
+      return;
+    }
+    lastGitSubviewActivationKey = activationKey;
+    void refreshActivatedGitSubview(repoRootPath);
+  });
+
+  createEffect(() => {
+    const mode = pageMode();
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    const subview = normalizeGitActivationSubview(gitSubview());
+    const branchSubview = selectedGitBranchSubview();
+    const activationKey = mode === 'git' && repoRootPath && subview === 'branches' && branchSubview === 'status'
+      ? `${subview}:${branchSubview}`
+      : '';
+    if (!activationKey) {
+      lastGitBranchStatusActivationKey = '';
+      return;
+    }
+    if (activationKey === lastGitBranchStatusActivationKey) {
+      return;
+    }
+    lastGitBranchStatusActivationKey = activationKey;
+    if (selectedGitBranchName().trim()) {
+      setGitBranchStatusRefreshToken((value) => value + 1);
+    }
   });
 
   createEffect(() => {

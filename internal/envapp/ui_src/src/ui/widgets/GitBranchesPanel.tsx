@@ -7,7 +7,7 @@ import {
   onCleanup,
   type Component,
 } from "solid-js";
-import { cn, useLayout } from "@floegence/floe-webapp-core";
+import { cn, useLayout, useNotification } from "@floegence/floe-webapp-core";
 import {
   ChevronRight,
   Folder,
@@ -1386,6 +1386,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
 
 export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const rpc = useRedevenRpc();
+  const notification = useNotification();
   const branchSubviewTabRefs = new Map<GitBranchSubview, HTMLButtonElement>();
   const [branchHeaderTopRowElement, setBranchHeaderTopRowElement] =
     createSignal<HTMLDivElement>();
@@ -1412,6 +1413,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     staged: 0,
   };
   let lastStatusDataContextKey = "";
+  let lastStatusRefreshContextKey = "";
   let lastStatusSelectionContextKey = "";
 
   const branchDetailState = (): GitBranchDetailPresentationState =>
@@ -1965,7 +1967,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   const loadStatusSection = async (
     section: GitWorkspaceViewSection,
-    options: { append?: boolean; force?: boolean } = {},
+    options: { append?: boolean; force?: boolean; background?: boolean } = {},
   ): Promise<GitListWorkspacePageResponse | undefined> => {
     const repoRootPath = statusRepoRootPath();
     if (!repoRootPath) return;
@@ -1973,6 +1975,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const currentState = statusPageState(section);
     const append = Boolean(options.append);
     const offset = append ? currentState.nextOffset : 0;
+    const background = Boolean(
+      options.background && !append && currentState.initialized,
+    );
 
     if (!options.force) {
       if (append) {
@@ -1994,9 +1999,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     updateStatusPageState(section, (state) => ({
       ...state,
       loading: true,
-      error: "",
+      error: background ? state.error : "",
     }));
-    if (selectedStatusSection() === section && !append) {
+    if (selectedStatusSection() === section && !append && !background) {
       setStatusLoading(true);
       setStatusError("");
     }
@@ -2020,14 +2025,16 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       updateStatusPageState(section, (state) => ({
         ...state,
         loading: false,
-        error: message,
+        error: background ? state.error : message,
       }));
-      if (selectedStatusSection() === section && !append) {
+      if (selectedStatusSection() === section && !append && !background) {
         if (!currentState.initialized) {
           setStatusWorkspace(null);
         }
         setStatusError(message);
         props.onBranchDetailLoadFailure?.();
+      } else if (background) {
+        notification.warning("Git refresh incomplete", message);
       }
     } finally {
       if (seq === statusReqSeqBySection[section]) {
@@ -2039,6 +2046,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       if (
         selectedStatusSection() === section &&
         !append &&
+        !background &&
         seq === statusReqSeqBySection[section]
       ) {
         setStatusLoading(false);
@@ -2089,15 +2097,17 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   createEffect(() => {
     const branch = interactiveBranch();
-    const subview = branchSubview();
     const repoRootPath = statusRepoRootPath();
     const refreshToken = Number(props.statusRefreshToken ?? 0);
     const contextKey =
-      branch && subview === "status" && repoRootPath
-        ? `${branchIdentity(branch)}|${repoRootPath}|${refreshToken}`
+      branch && repoRootPath
+        ? `${branchIdentity(branch)}|${repoRootPath}`
         : "";
     if (contextKey === lastStatusDataContextKey) return;
     lastStatusDataContextKey = contextKey;
+    lastStatusRefreshContextKey = contextKey
+      ? `${contextKey}|${refreshToken}`
+      : "";
     resetStatusWorkspace();
   });
 
@@ -2111,6 +2121,25 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (!pageState.initialized && !pageState.loading) {
       void loadStatusSection(section);
     }
+  });
+
+  createEffect(() => {
+    const branch = interactiveBranch();
+    const subview = branchSubview();
+    const repoRootPath = statusRepoRootPath();
+    const refreshToken = Number(props.statusRefreshToken ?? 0);
+    if (!branch || subview !== "status" || !repoRootPath) return;
+    const contextKey = `${branchIdentity(branch)}|${repoRootPath}`;
+    const refreshKey = `${contextKey}|${refreshToken}`;
+    if (refreshKey === lastStatusRefreshContextKey) return;
+    lastStatusRefreshContextKey = refreshKey;
+    const section = selectedStatusSection();
+    const pageState = statusPageState(section);
+    if (!pageState.initialized || pageState.loading) return;
+    void loadStatusSection(section, {
+      force: true,
+      background: true,
+    });
   });
 
   createEffect(() => {

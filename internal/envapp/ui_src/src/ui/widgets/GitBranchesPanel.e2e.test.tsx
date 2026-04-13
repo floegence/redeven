@@ -2569,6 +2569,132 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
+  it("keeps the loaded branch status visible while a refresh-token revalidation is in flight", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const initialPage = {
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 1,
+        untrackedCount: 0,
+        conflictedCount: 0,
+      },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [
+        {
+          section: "unstaged",
+          changeType: "modified",
+          path: "src/linked.ts",
+          displayPath: "src/linked.ts",
+        },
+      ],
+    };
+    const refreshedPage = {
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 2,
+        untrackedCount: 0,
+        conflictedCount: 0,
+      },
+      totalCount: 2,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: false,
+      items: [
+        {
+          section: "unstaged",
+          changeType: "modified",
+          path: "src/linked.ts",
+          displayPath: "src/linked.ts",
+        },
+        {
+          section: "unstaged",
+          changeType: "modified",
+          path: "src/config.ts",
+          displayPath: "src/config.ts",
+        },
+      ],
+    };
+
+    let resolveRefresh!: (value: typeof refreshedPage) => void;
+    const refreshPromise = new Promise<typeof refreshedPage>((resolve) => {
+      resolveRefresh = resolve;
+    });
+
+    mockListWorkspacePage.mockReset();
+    mockListWorkspacePage
+      .mockResolvedValueOnce(initialPage)
+      .mockImplementationOnce(() => refreshPromise);
+
+    let setRefreshToken!: (value: number) => number;
+    const branch = {
+      name: "feature/linked",
+      fullName: "refs/heads/feature/linked",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+
+    const dispose = render(() => {
+      const [refreshToken, updateRefreshToken] = createSignal(0);
+      setRefreshToken = updateRefreshToken;
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  statusRefreshToken={refreshToken()}
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      expect(host.textContent).toContain("src/linked.ts");
+
+      setRefreshToken(1);
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(host.textContent).toContain("src/linked.ts");
+      expect(host.textContent).not.toContain("Branch status is unavailable");
+
+      resolveRefresh(refreshedPage);
+      await flush();
+      expect(host.textContent).toContain("src/config.ts");
+    } finally {
+      dispose();
+    }
+  });
+
   it("shows a tooltip on the linked-worktree delete confirm button when safe delete is blocked", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
