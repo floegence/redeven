@@ -397,6 +397,7 @@ export function buildManagedSSHStartScript(): string {
     'set -eu',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
+    'state_root="${version_root}/state"',
     'session_token="$3"',
     'session_dir="${version_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
@@ -407,7 +408,7 @@ export function buildManagedSSHStartScript(): string {
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
-    'exec "$binary" run --mode local --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
+    'exec "$binary" run --state-root "$state_root" --mode local --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path"',
   ].join('\n');
 }
 

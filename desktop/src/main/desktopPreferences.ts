@@ -31,12 +31,6 @@ import {
   type DesktopSettingsDraft,
 } from '../shared/settingsIPC';
 
-export type PendingBootstrap = Readonly<{
-  controlplane_url: string;
-  env_id: string;
-  env_token: string;
-}>;
-
 export type DesktopSavedEnvironment = Readonly<{
   id: string;
   label: string;
@@ -63,7 +57,6 @@ export type DesktopPreferences = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
   local_ui_password_configured: boolean;
-  pending_bootstrap: PendingBootstrap | null;
   saved_environments: readonly DesktopSavedEnvironment[];
   saved_ssh_environments: readonly DesktopSavedSSHEnvironment[];
   recent_external_local_ui_urls: readonly string[];
@@ -121,10 +114,6 @@ type DesktopPreferencesFile = Readonly<{
   saved_ssh_environments?: readonly DesktopSavedSSHEnvironmentFile[];
   recent_external_local_ui_urls?: readonly unknown[];
   control_planes?: readonly DesktopControlPlaneFile[];
-  pending_bootstrap?: Readonly<{
-    controlplane_url?: string;
-    env_id?: string;
-  }>;
 }>;
 
 type DesktopControlPlaneSecretFile = Readonly<{
@@ -137,9 +126,6 @@ type DesktopSecretsFile = Readonly<{
   version?: number;
   local_ui_password?: StoredSecret;
   control_planes?: readonly DesktopControlPlaneSecretFile[];
-  pending_bootstrap?: Readonly<{
-    env_token?: StoredSecret;
-  }>;
 }>;
 
 export type DesktopSecretCodec = Readonly<{
@@ -219,7 +205,6 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
     local_ui_password_configured: false,
-    pending_bootstrap: null,
     saved_environments: [],
     saved_ssh_environments: [],
     recent_external_local_ui_urls: [],
@@ -247,9 +232,6 @@ export function desktopPreferencesToDraft(preferences: DesktopPreferences): Desk
     local_ui_bind: preferences.local_ui_bind,
     local_ui_password: '',
     local_ui_password_mode: preferences.local_ui_password_configured ? 'keep' : 'replace',
-    controlplane_url: preferences.pending_bootstrap?.controlplane_url ?? '',
-    env_id: preferences.pending_bootstrap?.env_id ?? '',
-    env_token: preferences.pending_bootstrap?.env_token ?? '',
   };
 }
 
@@ -775,32 +757,11 @@ export function rememberRecentSSHEnvironmentTarget(
 }
 
 export function managedDesktopLaunchKey(preferences: DesktopPreferences): string {
-  const pendingBootstrap = preferences.pending_bootstrap;
   return JSON.stringify({
     local_ui_bind: preferences.local_ui_bind,
     local_ui_password: preferences.local_ui_password,
     local_ui_password_configured: preferences.local_ui_password_configured,
-    controlplane_url: pendingBootstrap?.controlplane_url ?? '',
-    env_id: pendingBootstrap?.env_id ?? '',
-    env_token: pendingBootstrap?.env_token ?? '',
   });
-}
-
-function normalizeControlplaneURL(raw: string): string {
-  const clean = compact(raw);
-  if (!clean) {
-    return '';
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(clean);
-  } catch {
-    throw new Error('Control plane URL must be a valid absolute URL.');
-  }
-  if (!parsed.protocol || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
-    throw new Error('Control plane URL must start with http:// or https://.');
-  }
-  return parsed.toString().replace(/\/$/u, '');
 }
 
 type ValidateDesktopSettingsDraftOptions = Readonly<{
@@ -861,46 +822,15 @@ export function validateDesktopSettingsDraft(
     throw new Error('Non-loopback Local UI binds require a Local UI password.');
   }
 
-  const controlplaneURL = compact(draft.controlplane_url);
-  const envID = compact(draft.env_id);
-  const envToken = String(draft.env_token ?? '');
-  const hasBootstrap = controlplaneURL !== '' || envID !== '' || compact(envToken) !== '';
-
-  let pendingBootstrap: PendingBootstrap | null = null;
-  if (hasBootstrap) {
-    if (controlplaneURL === '') {
-      throw new Error('Control plane URL is required when bootstrap settings are provided.');
-    }
-    if (envID === '') {
-      throw new Error('Environment ID is required when bootstrap settings are provided.');
-    }
-    if (compact(envToken) === '') {
-      throw new Error('Environment token is required when bootstrap settings are provided.');
-    }
-    pendingBootstrap = {
-      controlplane_url: normalizeControlplaneURL(controlplaneURL),
-      env_id: envID,
-      env_token: compact(envToken),
-    };
-  }
-
   return {
     local_ui_bind: localUIBind,
     local_ui_password: passwordState.local_ui_password,
     local_ui_password_configured: passwordState.local_ui_password_configured,
-    pending_bootstrap: pendingBootstrap,
     saved_environments: [],
     saved_ssh_environments: [],
     recent_external_local_ui_urls: [],
     control_plane_refresh_tokens: {},
     control_planes: [],
-  };
-}
-
-export function clearPendingBootstrap(preferences: DesktopPreferences): DesktopPreferences {
-  return {
-    ...preferences,
-    pending_bootstrap: null,
   };
 }
 
@@ -950,31 +880,6 @@ function shouldMigrateLegacyAutoLoopbackBind(bind: string, version: unknown): bo
   return bind === DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND && isLegacyDesktopPreferencesVersion(version);
 }
 
-function recoverPendingBootstrap(
-  controlplaneURLRaw: unknown,
-  envIDRaw: unknown,
-  envTokenRaw: unknown,
-): PendingBootstrap | null {
-  const controlplaneURL = compact(controlplaneURLRaw);
-  const envID = compact(envIDRaw);
-  const envToken = compact(envTokenRaw);
-  if (controlplaneURL === '' && envID === '' && envToken === '') {
-    return null;
-  }
-  if (controlplaneURL === '' || envID === '' || envToken === '') {
-    return null;
-  }
-  try {
-    return {
-      controlplane_url: normalizeControlplaneURL(controlplaneURL),
-      env_id: envID,
-      env_token: envToken,
-    };
-  } catch {
-    return null;
-  }
-}
-
 function recoverDesktopPreferencesDraft(
   draft: Partial<DesktopSettingsDraft>,
   options: Readonly<{ preferencesVersion?: unknown }> = {},
@@ -999,15 +904,10 @@ function recoverDesktopPreferencesDraft(
     localUIBind = DEFAULT_DESKTOP_LOCAL_UI_BIND;
   }
 
-  const pendingBootstrap = recoverPendingBootstrap(draft.controlplane_url, draft.env_id, draft.env_token);
-
   return {
     local_ui_bind: localUIBind,
     local_ui_password: localUIPassword,
     local_ui_password_mode: localUIPasswordMode,
-    controlplane_url: pendingBootstrap?.controlplane_url ?? '',
-    env_id: pendingBootstrap?.env_id ?? '',
-    env_token: pendingBootstrap?.env_token ?? '',
   };
 }
 
@@ -1022,9 +922,6 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     local_ui_bind: preferencesFile?.local_ui_bind ?? DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
     local_ui_password_mode: localUIPasswordConfigured ? 'keep' : 'replace',
-    controlplane_url: preferencesFile?.pending_bootstrap?.controlplane_url ?? '',
-    env_id: preferencesFile?.pending_bootstrap?.env_id ?? '',
-    env_token: decodeOptionalSecret(codec, secretsFile?.pending_bootstrap?.env_token),
   }, {
     preferencesVersion: preferencesFile?.version,
   }), {
@@ -1071,7 +968,7 @@ export async function saveDesktopPreferences(
   const recentExternalLocalUIURLs = deriveRecentExternalLocalUIURLs(savedEnvironments);
 
   const preferencesFile: DesktopPreferencesFile = {
-    version: 7,
+    version: 8,
     local_ui_bind: nextPreferences.local_ui_bind,
     saved_environments: savedEnvironments.map((environment) => ({
       id: environment.id,
@@ -1117,12 +1014,6 @@ export async function saveDesktopPreferences(
       })),
       last_synced_at_ms: controlPlane.last_synced_at_ms,
     })),
-    pending_bootstrap: nextPreferences.pending_bootstrap
-      ? {
-          controlplane_url: nextPreferences.pending_bootstrap.controlplane_url,
-          env_id: nextPreferences.pending_bootstrap.env_id,
-        }
-      : undefined,
   };
   const secretsFile: DesktopSecretsFile = {
     version: 1,
@@ -1144,11 +1035,6 @@ export async function saveDesktopPreferences(
         refresh_token: codec.encodeSecret(refreshToken),
       }];
     }),
-    pending_bootstrap: nextPreferences.pending_bootstrap
-      ? {
-          env_token: codec.encodeSecret(nextPreferences.pending_bootstrap.env_token),
-        }
-      : undefined,
   };
 
   await fs.mkdir(path.dirname(paths.preferencesFile), { recursive: true });

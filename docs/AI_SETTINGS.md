@@ -17,13 +17,13 @@ Backward compatibility for older AI settings layouts is intentionally out of sco
 
 Flower deliberately splits non-secret settings and secrets into two local files:
 
-1. `~/.redeven/config.json`
+1. `~/.redeven/scopes/local/default/config.json`
    - bootstrap connection data
    - provider registry
    - allowed models
    - execution policy
 
-2. `~/.redeven/secrets.json`
+2. `~/.redeven/scopes/local/default/secrets.json`
    - provider API keys
    - future user secrets
 

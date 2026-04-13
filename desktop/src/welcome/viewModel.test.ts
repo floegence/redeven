@@ -15,7 +15,6 @@ describe('buildEnvironmentCardModel', () => {
         local_ui_bind: '127.0.0.1:0',
         local_ui_password: '',
         local_ui_password_configured: false,
-        pending_bootstrap: null,
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',

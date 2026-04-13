@@ -15,9 +15,6 @@ function draft(overrides: Partial<DesktopSettingsDraft>): DesktopSettingsDraft {
     local_ui_bind: 'localhost:23998',
     local_ui_password: '',
     local_ui_password_mode: 'replace',
-    controlplane_url: '',
-    env_id: '',
-    env_token: '',
     ...overrides,
   };
 }
@@ -121,8 +118,8 @@ describe('desktopAccessModel', () => {
         value: 'localhost:23998',
       }),
       expect.objectContaining({
-        id: 'next_start',
-        value: 'No bootstrap request queued',
+        id: 'password_state',
+        value: 'No password required',
       }),
     ]));
   });

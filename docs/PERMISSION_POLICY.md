@@ -27,7 +27,7 @@ Notes:
 
 ## Config Schema
 
-`~/.redeven/config.json`:
+`~/.redeven/scopes/local/default/config.json` (or the equivalent `config.json` inside the active scope directory):
 
 ```json
 {

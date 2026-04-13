@@ -14,9 +14,6 @@ export type DesktopSettingsDraft = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
   local_ui_password_mode: DesktopLocalUIPasswordMode;
-  controlplane_url: string;
-  env_id: string;
-  env_token: string;
 }>;
 
 export type SaveDesktopSettingsResult = Readonly<

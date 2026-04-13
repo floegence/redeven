@@ -2,10 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, se
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { launchStartedFreshManagedRuntime, startManagedAgent } from './agentProcess';
+import { startManagedAgent } from './agentProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
-  clearPendingBootstrap,
   createSafeStorageSecretCodec,
   deleteSavedControlPlane,
   deleteSavedEnvironment,
@@ -1407,10 +1406,6 @@ async function openLocalEnvironmentFromLauncher(): Promise<DesktopLauncherAction
     });
   }
 
-  if (launchStartedFreshManagedRuntime(prepared.launch) && preferences.pending_bootstrap) {
-    await persistDesktopPreferences(clearPendingBootstrap(preferences));
-  }
-
   const target = buildManagedLocalDesktopTarget();
   await createSessionRecord(target, prepared.launch.managedAgent.startup, {
     runtimeHandle: desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent),
@@ -1744,10 +1739,6 @@ async function restartManagedRuntimeFromShell(): Promise<DesktopShellRuntimeActi
       started: false,
       message: prepared.issue.message,
     };
-  }
-
-  if (launchStartedFreshManagedRuntime(prepared.launch) && preferences.pending_bootstrap) {
-    await persistDesktopPreferences(clearPendingBootstrap(preferences));
   }
 
   sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent);

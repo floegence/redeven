@@ -119,7 +119,7 @@ redeven bootstrap \
   --env-token <env_token>
 ```
 
-Bootstrap writes the default local config to `~/.redeven/config.json` and applies the local permission cap preset `execute_read_write`.
+Bootstrap writes the control-plane scope config to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json` by default and applies the local permission cap preset `execute_read_write`.
 
 Desktop and browser handoff flows may use one-time `bootstrap_ticket` credentials instead of a long-lived `env_token`. The runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
@@ -224,17 +224,17 @@ Notes:
 
 ### Common local files
 
-- `~/.redeven/config.json`
-- `~/.redeven/agent.lock`
-- `~/.redeven/secrets.json`
-- `~/.redeven/audit/events.jsonl`
-- `~/.redeven/diagnostics/agent-events.jsonl` for runtime-side request/direct-session diagnostics
-- `~/.redeven/diagnostics/desktop-events.jsonl` when the same runtime is attached by Redeven Desktop
-- `~/.redeven/apps/code/...`
+- `~/.redeven/scopes/local/default/config.json`
+- `~/.redeven/scopes/local/default/secrets.json`
+- `~/.redeven/scopes/local/default/agent.lock`
+- `~/.redeven/scopes/local/default/audit/events.jsonl`
+- `~/.redeven/scopes/local/default/diagnostics/agent-events.jsonl` for runtime-side request/direct-session diagnostics
+- `~/.redeven/scopes/local/default/diagnostics/desktop-events.jsonl` when the same runtime is attached by Redeven Desktop
+- `~/.redeven/scopes/local/default/apps/code/...`
 
-Multi-environment mode uses isolated state per environment:
+Derived control-plane scopes use isolated state per environment:
 
-- `~/.redeven/envs/<env_public_id>/config.json`
+- `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json`
 
 Desktop-managed launches resolve one of those config paths explicitly before spawn and derive runtime-state plus diagnostics from the same state root, so they do not depend on the current working directory.
 

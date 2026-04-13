@@ -25,6 +25,8 @@ type BootstrapArgs struct {
 	BootstrapTicket     string
 
 	ConfigPath string
+	StateRoot  string
+	ScopeRef   *ScopeRef
 
 	AgentHomeDir string
 	Shell        string
@@ -58,7 +60,7 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	envID := strings.TrimSpace(args.EnvironmentID)
 	envToken := normalizeBearerToken(args.EnvironmentToken)
 	bootstrapTicket := normalizeBearerToken(args.BootstrapTicket)
-	layout, err := resolveBootstrapStateLayout(args.ConfigPath)
+	layout, err := resolveBootstrapStateLayout(args)
 	if err != nil {
 		return "", err
 	}
@@ -165,15 +167,21 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	if err := Save(cfgPath, cfg); err != nil {
 		return "", err
 	}
+	if err := WriteScopeMetadataForConfig(layout, cfg); err != nil {
+		return "", err
+	}
 	return filepath.Clean(cfgPath), nil
 }
 
-func resolveBootstrapStateLayout(configPath string) (StateLayout, error) {
-	cleanPath := strings.TrimSpace(configPath)
-	if cleanPath == "" {
-		return DefaultStateLayout()
+func resolveBootstrapStateLayout(args BootstrapArgs) (StateLayout, error) {
+	cleanPath := strings.TrimSpace(args.ConfigPath)
+	if cleanPath != "" {
+		return StateLayoutForConfigPath(cleanPath)
 	}
-	return StateLayoutForConfigPath(cleanPath)
+	if args.ScopeRef != nil {
+		return StateLayoutForScope(*args.ScopeRef, args.StateRoot)
+	}
+	return ControlPlaneStateLayout(args.ControlplaneBaseURL, args.EnvironmentID, args.StateRoot)
 }
 
 func fetchBootstrap(ctx context.Context, baseURL string, envID string, envToken string) (*directv1.DirectConnectInfo, error) {

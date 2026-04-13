@@ -21,6 +21,7 @@ function readSSHRuntimeSource(): string {
 describe('sshRuntime', () => {
   it('builds remote install, upload-install, runtime-probe, and report scripts around the managed install root', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('REDEVEN_INSTALL_MODE=upgrade');
+    expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
     expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${version_root}'}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`);

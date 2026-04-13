@@ -21,12 +21,6 @@ export function compactSettingsFieldLabel(label: string): string {
       return 'Bind address';
     case 'Local UI password':
       return 'Password';
-    case 'Control plane URL':
-      return 'Control plane';
-    case 'Environment ID':
-      return 'Env ID';
-    case 'Environment token':
-      return 'Env token';
     default:
       return label;
   }
@@ -48,10 +42,6 @@ export function compactSaveActionLabel(): string {
   return 'Save';
 }
 
-export function compactClearRequestLabel(): string {
-  return 'Clear request';
-}
-
 export function compactPasswordStateTagLabel(label: string): string {
   switch (label) {
     case 'No password required':
@@ -68,17 +58,6 @@ export function compactPasswordStateTagLabel(label: string): string {
       return 'Password needed';
     case 'Password optional':
       return 'Optional';
-    default:
-      return label;
-  }
-}
-
-export function compactBootstrapStatusTagLabel(label: string): string {
-  switch (label) {
-    case 'Registration queued for next start':
-      return 'Queued';
-    case 'No bootstrap request queued':
-      return 'No request';
     default:
       return label;
   }
