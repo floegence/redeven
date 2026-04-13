@@ -18,11 +18,17 @@ describe('desktopTarget', () => {
   it('builds the managed local session target with a stable per-environment key', () => {
     expect(buildManagedEnvironmentDesktopTarget(testManagedLocalEnvironment())).toEqual({
       kind: 'managed_environment',
-      session_key: 'local:default',
+      session_key: 'env:local%3Adefault:local_host',
       environment_id: 'local:default',
       label: 'Local Environment',
+      route: 'local_host',
       managed_environment_kind: 'local',
       local_environment_name: 'default',
+      provider_origin: undefined,
+      provider_id: undefined,
+      env_public_id: undefined,
+      has_local_hosting: true,
+      has_remote_desktop: false,
     });
   });
 
@@ -54,7 +60,7 @@ describe('desktopTarget', () => {
 
   it('builds provider-backed targets with provider-scoped session keys', () => {
     expect(controlPlaneDesktopSessionKey('https://cp.example.invalid/path', ' env_demo ')).toBe(
-      'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      'env:cp%3Ahttps%253A%252F%252Fcp.example.invalid%3Aenv%3Aenv_demo:remote_desktop',
     );
     expect(buildManagedEnvironmentDesktopTarget(testManagedControlPlaneEnvironment(
       'https://cp.example.invalid/path',
@@ -63,15 +69,19 @@ describe('desktopTarget', () => {
         providerID: ' redeven_portal ',
         label: ' Demo Environment ',
       },
-    ))).toEqual({
+    ), { route: 'remote_desktop' })).toEqual({
       kind: 'managed_environment',
-      session_key: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      session_key: 'env:cp%3Ahttps%253A%252F%252Fcp.example.invalid%3Aenv%3Aenv_demo:remote_desktop',
       environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      route: 'remote_desktop',
       managed_environment_kind: 'controlplane',
       provider_id: 'redeven_portal',
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
+      local_environment_name: undefined,
+      has_local_hosting: true,
+      has_remote_desktop: true,
     });
   });
 

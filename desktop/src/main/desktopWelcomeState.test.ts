@@ -111,8 +111,9 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.close_action_label).toBe('Close Launcher');
     expect(snapshot.open_windows).toEqual([
       expect.objectContaining({
-        session_key: 'local:default',
+        session_key: 'env:local%3Adefault:local_host',
         target_kind: 'managed_environment',
+        environment_id: 'local:default',
         label: 'Local Environment',
         local_ui_url: 'http://localhost:23998/',
       }),

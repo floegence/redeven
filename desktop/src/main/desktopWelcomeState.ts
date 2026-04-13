@@ -13,6 +13,7 @@ import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherSurface,
+  DesktopManagedEnvironmentRoute,
   DesktopOpenEnvironmentWindow,
   DesktopWelcomeEntryReason,
   DesktopWelcomeIssue,
@@ -25,6 +26,15 @@ import {
 } from '../shared/desktopSSH';
 import {
   createManagedLocalEnvironment,
+  managedEnvironmentKind,
+  managedEnvironmentLocalAccess,
+  managedEnvironmentLocalName,
+  managedEnvironmentDefaultOpenRoute,
+  managedEnvironmentProviderID,
+  managedEnvironmentProviderOrigin,
+  managedEnvironmentPublicID,
+  managedEnvironmentSupportsLocalHosting,
+  managedEnvironmentSupportsRemoteDesktop,
   type DesktopManagedEnvironment,
 } from '../shared/desktopManagedEnvironment';
 
@@ -150,7 +160,8 @@ function sortOpenSessions(
     if (left.target.kind !== 'managed_environment' && right.target.kind === 'managed_environment') {
       return 1;
     }
-    return left.target.label.localeCompare(right.target.label) || left.startup.local_ui_url.localeCompare(right.startup.local_ui_url);
+    return left.target.label.localeCompare(right.target.label)
+      || (left.entry_url ?? left.startup?.local_ui_url ?? '').localeCompare(right.entry_url ?? right.startup?.local_ui_url ?? '');
   });
 }
 
@@ -162,7 +173,7 @@ function buildOpenEnvironmentWindows(
     target_kind: session.target.kind,
     environment_id: session.target.environment_id,
     label: session.target.label,
-    local_ui_url: session.startup.local_ui_url,
+    local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
   }));
 }
 
@@ -196,41 +207,67 @@ function openSessionBySSHEnvironment(
   )) ?? null;
 }
 
-function openSessionByManagedEnvironment(
+function openSessionsByManagedEnvironment(
   sessions: readonly DesktopSessionSummary[],
   environment: DesktopManagedEnvironment,
-): DesktopSessionSummary | null {
-  return sessions.find((session) => (
-    session.target.kind === 'managed_environment' && session.target.environment_id === environment.id
-  )) ?? null;
+): Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>> {
+  const out: Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>> = {};
+  for (const session of sessions) {
+    if (session.target.kind !== 'managed_environment' || session.target.environment_id !== environment.id) {
+      continue;
+    }
+    out[session.target.route] = session;
+  }
+  return out;
 }
 
 function buildManagedEnvironmentEntry(
   environment: DesktopManagedEnvironment,
-  openSession: DesktopSessionSummary | null,
+  openSessions: Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>>,
 ): DesktopEnvironmentEntry {
-  const isOpen = openSession !== null;
+  const localSession = openSessions.local_host ?? null;
+  const remoteSession = openSessions.remote_desktop ?? null;
+  const isOpen = Boolean(localSession || remoteSession);
+  const access = managedEnvironmentLocalAccess(environment);
+  const kind = managedEnvironmentKind(environment);
+  const providerOrigin = managedEnvironmentProviderOrigin(environment);
+  const providerID = managedEnvironmentProviderID(environment);
+  const envPublicID = managedEnvironmentPublicID(environment);
+  const defaultRoute = managedEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
+    ? 'remote_desktop'
+    : 'local_host';
+  const defaultSession = defaultRoute === 'remote_desktop'
+    ? (remoteSession ?? localSession)
+    : (localSession ?? remoteSession);
   return {
     id: environment.id,
     kind: 'managed_environment',
     label: environment.label,
-    local_ui_url: openSession?.startup.local_ui_url ?? '',
-    secondary_text: environment.kind === 'local'
-      ? environment.access.local_ui_bind
-      : `${environment.provider_origin} · ${environment.env_public_id}`,
-    managed_environment_kind: environment.kind,
-    managed_environment_name: environment.kind === 'local' ? environment.name : undefined,
-    managed_local_ui_bind: environment.access.local_ui_bind,
-    managed_local_ui_password_configured: environment.access.local_ui_password_configured,
-    provider_origin: environment.kind === 'controlplane' ? environment.provider_origin : undefined,
-    provider_id: environment.kind === 'controlplane' ? environment.provider_id : undefined,
-    env_public_id: environment.kind === 'controlplane' ? environment.env_public_id : undefined,
+    local_ui_url: defaultSession?.entry_url ?? defaultSession?.startup?.local_ui_url ?? '',
+    secondary_text: kind === 'local'
+      ? access.local_ui_bind
+      : managedEnvironmentSupportsLocalHosting(environment)
+        ? `${access.local_ui_bind} · ${providerOrigin} · ${envPublicID}`
+        : `${providerOrigin} · ${envPublicID}`,
+    managed_environment_kind: kind,
+    managed_environment_name: managedEnvironmentLocalName(environment),
+    managed_local_ui_bind: access.local_ui_bind,
+    managed_local_ui_password_configured: access.local_ui_password_configured,
+    managed_has_local_hosting: managedEnvironmentSupportsLocalHosting(environment),
+    managed_has_remote_desktop: managedEnvironmentSupportsRemoteDesktop(environment),
+    managed_preferred_open_route: environment.preferred_open_route,
+    default_open_route: defaultRoute,
+    open_local_session_key: localSession?.session_key,
+    open_remote_session_key: remoteSession?.session_key,
+    provider_origin: kind === 'controlplane' ? providerOrigin : undefined,
+    provider_id: kind === 'controlplane' ? providerID : undefined,
+    env_public_id: kind === 'controlplane' ? envPublicID : undefined,
     tag: isOpen ? 'Open' : 'Managed',
     category: 'managed',
     is_open: isOpen,
-    open_session_key: openSession?.session_key ?? '',
-    open_action_label: isOpen ? 'Focus' : 'Open',
-    can_edit: true,
+    open_session_key: defaultSession?.session_key ?? '',
+    open_action_label: defaultSession ? 'Focus' : 'Open',
+    can_edit: managedEnvironmentSupportsLocalHosting(environment),
     can_delete: false,
     can_save: false,
     last_used_at_ms: environment.last_used_at_ms,
@@ -244,7 +281,7 @@ function buildEnvironmentEntries(
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
   const entries: DesktopEnvironmentEntry[] = preferences.managed_environments.map((environment) => (
-    buildManagedEnvironmentEntry(environment, openSessionByManagedEnvironment(openSessions, environment))
+    buildManagedEnvironmentEntry(environment, openSessionsByManagedEnvironment(openSessions, environment))
   ));
 
   const catalog = preferences.saved_environments;
@@ -252,14 +289,15 @@ function buildEnvironmentEntries(
   const seenRemoteURLs = new Set<string>();
 
   for (const session of openRemoteSessions) {
-    if (seenRemoteURLs.has(session.startup.local_ui_url)) {
+    const entryURL = session.entry_url ?? session.startup?.local_ui_url ?? '';
+    if (seenRemoteURLs.has(entryURL)) {
       continue;
     }
-    seenRemoteURLs.add(session.startup.local_ui_url);
+    seenRemoteURLs.add(entryURL);
   }
 
   for (const session of openRemoteSessions) {
-    const localUIURL = session.startup.local_ui_url;
+    const localUIURL = session.entry_url ?? session.startup?.local_ui_url ?? '';
     if (catalog.some((environment) => environment.local_ui_url === localUIURL)) {
       continue;
     }
@@ -300,7 +338,7 @@ function buildEnvironmentEntries(
       id: desktopSSHEnvironmentID(target),
       kind: 'ssh_environment',
       label: target.label || defaultSavedSSHEnvironmentLabel(target),
-      local_ui_url: session.startup.local_ui_url,
+      local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
       secondary_text: target.ssh_port === null
         ? target.ssh_destination
         : `${target.ssh_destination}:${target.ssh_port}`,
@@ -365,7 +403,7 @@ function buildSavedSSHEnvironmentEntry(
     id: environment.id,
     kind: 'ssh_environment',
     label: environment.label,
-    local_ui_url: openSession?.startup.local_ui_url ?? '',
+    local_ui_url: openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '',
     secondary_text: environment.ssh_port === null
       ? environment.ssh_destination
       : `${environment.ssh_destination}:${environment.ssh_port}`,
@@ -415,10 +453,17 @@ export function buildDesktopWelcomeSnapshot(
   const environments = buildEnvironmentEntries(preferences, openSessions);
   const selectedManagedEnvironment = (
     findManagedEnvironmentByID(preferences, args.selectedManagedEnvironmentID ?? '')
+    ?? preferences.managed_environments.find((environment) => Boolean(environment.local_hosting))
     ?? preferences.managed_environments[0]
     ?? createManagedLocalEnvironment('default')
   );
-  const managedSession = openSessionByManagedEnvironment(openSessions, selectedManagedEnvironment);
+  const managedSessions = openSessionsByManagedEnvironment(openSessions, selectedManagedEnvironment);
+  const managedSession = (
+    (managedEnvironmentDefaultOpenRoute(selectedManagedEnvironment) === 'remote_desktop'
+      ? managedSessions.remote_desktop ?? managedSessions.local_host
+      : managedSessions.local_host ?? managedSessions.remote_desktop)
+    ?? null
+  );
 
   return {
     surface,
@@ -432,10 +477,10 @@ export function buildDesktopWelcomeSnapshot(
     settings_surface: buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', desktopPreferencesToDraft(preferences, selectedManagedEnvironment.id), {
       environment_id: selectedManagedEnvironment.id,
       environment_label: selectedManagedEnvironment.label,
-      environment_kind: selectedManagedEnvironment.kind,
-      current_runtime_url: managedSession?.startup.local_ui_url ?? '',
-      local_ui_password_configured: selectedManagedEnvironment.access.local_ui_password_configured,
-      runtime_password_required: managedSession?.startup.password_required === true,
+      environment_kind: managedEnvironmentKind(selectedManagedEnvironment),
+      current_runtime_url: managedSession?.entry_url ?? managedSession?.startup?.local_ui_url ?? '',
+      local_ui_password_configured: managedEnvironmentLocalAccess(selectedManagedEnvironment).local_ui_password_configured,
+      runtime_password_required: managedSession?.startup?.password_required === true,
     }),
   };
 }

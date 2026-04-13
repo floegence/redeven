@@ -15,11 +15,13 @@ const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v1/desktop/connect/exc
 const PROVIDER_DESKTOP_OPEN_EXCHANGE_PATH = '/api/rcpp/v1/desktop/open/exchange';
 const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v1/desktop/token/refresh';
 const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v1/desktop/token/revoke';
+const PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX = '/desktop/open-session';
 const PROVIDER_BOOTSTRAP_EXCHANGE_PATH = '/api/rcpp/v1/runtime/bootstrap/exchange';
 const DEFAULT_PROVIDER_TIMEOUT_MS = 15_000;
 
-export type ProviderDesktopBootstrapTicket = Readonly<{
-  bootstrap_ticket: string;
+export type ProviderDesktopOpenSession = Readonly<{
+  bootstrap_ticket?: string;
+  remote_session_url?: string;
   expires_at_unix_ms: number;
 }>;
 
@@ -124,18 +126,20 @@ async function fetchProviderJSON(
   return body;
 }
 
-function normalizeProviderBootstrapTicketResponse(body: unknown): ProviderDesktopBootstrapTicket {
+function normalizeProviderOpenSessionResponse(body: unknown): ProviderDesktopOpenSession {
   if (!body || typeof body !== 'object') {
-    throw new Error('Provider bootstrap response is invalid.');
+    throw new Error('Provider open response is invalid.');
   }
 
   const candidate = body as Record<string, unknown>;
   const bootstrapTicket = compact(candidate.bootstrap_ticket);
-  if (bootstrapTicket === '') {
-    throw new Error('Provider bootstrap response is invalid.');
+  const remoteSessionURL = compact(candidate.remote_session_url);
+  if (bootstrapTicket === '' && remoteSessionURL === '') {
+    throw new Error('Provider open response is invalid.');
   }
   return {
-    bootstrap_ticket: bootstrapTicket,
+    bootstrap_ticket: bootstrapTicket || undefined,
+    remote_session_url: remoteSessionURL || undefined,
     expires_at_unix_ms: normalizeUnixMS(candidate.expires_at_unix_ms),
   };
 }
@@ -221,7 +225,7 @@ export async function exchangeProviderDesktopConnectHandoff(
 export async function exchangeProviderDesktopOpenHandoff(
   providerOrigin: string,
   handoffTicket: string,
-): Promise<ProviderDesktopBootstrapTicket> {
+): Promise<ProviderDesktopOpenSession> {
   const body = await fetchProviderJSON(
     providerRequestURL(providerOrigin, PROVIDER_DESKTOP_OPEN_EXCHANGE_PATH),
     {
@@ -229,7 +233,7 @@ export async function exchangeProviderDesktopOpenHandoff(
       bearerToken: handoffTicket,
     },
   );
-  return normalizeProviderBootstrapTicketResponse(body);
+  return normalizeProviderOpenSessionResponse(body);
 }
 
 export async function refreshProviderDesktopAccessToken(
@@ -293,7 +297,7 @@ export async function requestDesktopBootstrapTicket(
   provider: DesktopControlPlaneProvider,
   accessToken: string,
   envPublicID: string,
-): Promise<ProviderDesktopBootstrapTicket> {
+): Promise<ProviderDesktopOpenSession> {
   const cleanEnvPublicID = compact(envPublicID);
   if (cleanEnvPublicID === '') {
     throw new Error('Environment ID is required.');
@@ -301,14 +305,14 @@ export async function requestDesktopBootstrapTicket(
   const body = await fetchProviderJSON(
     providerRequestURL(
       provider.provider_origin,
-      `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}/desktop/bootstrap-ticket`,
+      `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}${PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX}`,
     ),
     {
       method: 'POST',
       bearerToken: accessToken,
     },
   );
-  return normalizeProviderBootstrapTicketResponse(body);
+  return normalizeProviderOpenSessionResponse(body);
 }
 
 export function providerBootstrapExchangeURL(providerOrigin: string): string {

@@ -14,6 +14,7 @@ export type DesktopLauncherSurface = 'connect_environment' | 'managed_environmen
 export type DesktopEnvironmentEntryKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Managed' | '';
 export type DesktopEnvironmentEntryCategory = 'managed' | 'open_unsaved' | DesktopSavedEnvironmentSource;
+export type DesktopManagedEnvironmentRoute = 'local_host' | 'remote_desktop';
 export type DesktopLauncherActionKind =
   | 'open_managed_environment'
   | 'open_remote_environment'
@@ -59,6 +60,12 @@ export type DesktopEnvironmentEntry = Readonly<{
   managed_environment_name?: string;
   managed_local_ui_bind?: string;
   managed_local_ui_password_configured?: boolean;
+  managed_has_local_hosting?: boolean;
+  managed_has_remote_desktop?: boolean;
+  managed_preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
+  default_open_route?: DesktopManagedEnvironmentRoute;
+  open_local_session_key?: string;
+  open_remote_session_key?: string;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -90,6 +97,7 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'open_managed_environment';
       environment_id: string;
+      route?: 'auto' | DesktopManagedEnvironmentRoute;
     }
   | {
       kind: 'open_remote_environment';
@@ -138,6 +146,10 @@ export type DesktopLauncherActionRequest = Readonly<
       local_ui_bind: string;
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
+      provider_origin?: string;
+      provider_id?: string;
+      env_public_id?: string;
+      preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
     }
   | {
       kind: 'upsert_saved_environment';
@@ -203,6 +215,17 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         environment_id: environmentID,
+        ...(kind === 'open_managed_environment'
+          ? {
+              route: (() => {
+                const route = compact((candidate as { route?: unknown }).route);
+                if (route === 'local_host' || route === 'remote_desktop') {
+                  return route;
+                }
+                return 'auto';
+              })(),
+            }
+          : {}),
       };
     }
     case 'open_remote_environment':
@@ -244,6 +267,16 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         local_ui_password_mode: compact(
           (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
         ) as 'keep' | 'replace' | 'clear',
+        provider_origin: compact((candidate as { provider_origin?: unknown }).provider_origin) || undefined,
+        provider_id: compact((candidate as { provider_id?: unknown }).provider_id) || undefined,
+        env_public_id: compact((candidate as { env_public_id?: unknown }).env_public_id) || undefined,
+        preferred_open_route: (() => {
+          const route = compact((candidate as { preferred_open_route?: unknown }).preferred_open_route);
+          if (route === 'local_host' || route === 'remote_desktop') {
+            return route;
+          }
+          return 'auto';
+        })(),
       };
     case 'focus_environment_window': {
       const sessionKey = compact((candidate as { session_key?: unknown }).session_key);

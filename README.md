@@ -125,6 +125,8 @@ Bootstrap writes the control-plane scope config to `~/.redeven/scopes/controlpla
 
 Desktop and browser handoff flows may use one-time `bootstrap_ticket` credentials instead of a long-lived `env_token`. The runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
+For provider-backed Desktop opens, the Control Plane may also return a `remote_session_url` so the same environment can be reopened remotely without starting a second local runtime on the current machine.
+
 ### 3. Run the endpoint
 
 ```bash
@@ -239,6 +241,12 @@ Derived control-plane scopes use isolated state per environment:
 - `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json`
 
 Desktop-managed launches resolve one of those config paths explicitly before spawn and derive runtime-state plus diagnostics from the same state root, so they do not depend on the current working directory.
+
+The shared Desktop and agent-only catalog also lives under `~/.redeven/catalog/`:
+
+- `~/.redeven/catalog/environments/*.json`
+- `~/.redeven/catalog/connections/*.json`
+- `~/.redeven/catalog/providers/*.json`
 
 ### Public release contract
 
