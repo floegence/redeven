@@ -7,6 +7,11 @@ import { describe, expect, it } from 'vitest';
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import {
+  testDesktopPreferences,
+  testManagedAccess,
+  testManagedLocalEnvironment,
+} from '../testSupport/desktopTestHelpers';
+import {
   createPlaintextSecretCodec,
   type DesktopPreferences,
   defaultDesktopPreferences,
@@ -54,11 +59,6 @@ describe('desktopPreferences', () => {
       local_ui_bind: 'localhost:23998',
       local_ui_password: '',
       local_ui_password_configured: false,
-      saved_environments: [],
-      saved_ssh_environments: [],
-      recent_external_local_ui_urls: [],
-      control_plane_refresh_tokens: {},
-      control_planes: [],
     });
   });
 
@@ -98,11 +98,16 @@ describe('desktopPreferences', () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
-      const preferences: DesktopPreferences = {
-        ...validateDesktopSettingsDraft(draft({
-          local_ui_bind: '0.0.0.0:23998',
-          local_ui_password: 'super-secret',
-        })),
+      const preferences: DesktopPreferences = testDesktopPreferences({
+        managed_environments: [
+          testManagedLocalEnvironment('default', {
+            access: testManagedAccess({
+              local_ui_bind: '0.0.0.0:23998',
+              local_ui_password: 'super-secret',
+              local_ui_password_configured: true,
+            }),
+          }),
+        ],
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -126,7 +131,7 @@ describe('desktopPreferences', () => {
           },
         ],
         recent_external_local_ui_urls: ['http://192.168.1.12:24000/'],
-      };
+      });
 
       await saveDesktopPreferences(paths, preferences, codec);
       await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual(preferences);
@@ -197,28 +202,53 @@ describe('desktopPreferences', () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
-      const initial = validateDesktopSettingsDraft(draft({
+      const initialAccess = validateDesktopSettingsDraft(draft({
         local_ui_bind: '0.0.0.0:24000',
         local_ui_password: 'super-secret',
       }));
+      const initial = testDesktopPreferences({
+        managed_environments: [
+          testManagedLocalEnvironment('default', {
+            access: initialAccess,
+          }),
+        ],
+      });
 
       await saveDesktopPreferences(paths, initial, codec);
       await saveDesktopPreferences(paths, {
         ...initial,
-        local_ui_password: '',
-        local_ui_password_configured: true,
+        managed_environments: [
+          testManagedLocalEnvironment('default', {
+            access: {
+              ...initialAccess,
+              local_ui_password: '',
+              local_ui_password_configured: true,
+            },
+          }),
+        ],
       }, codec);
 
-      await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual({
-        local_ui_bind: '0.0.0.0:24000',
-        local_ui_password: 'super-secret',
-        local_ui_password_configured: true,
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
-      });
+      }));
+      expect(loaded.managed_environments).toEqual([
+        expect.objectContaining({
+          id: 'local:default',
+          kind: 'local',
+          name: 'default',
+          label: 'Local Environment',
+          access: {
+            local_ui_bind: '0.0.0.0:24000',
+            local_ui_password: 'super-secret',
+            local_ui_password_configured: true,
+          },
+        }),
+      ]);
     });
   });
 
@@ -228,7 +258,26 @@ describe('desktopPreferences', () => {
       await fs.writeFile(paths.preferencesFile, '{not valid json', 'utf8');
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
-      expect(loaded).toEqual(defaultDesktopPreferences());
+      expect(loaded).toEqual(expect.objectContaining({
+        saved_environments: [],
+        saved_ssh_environments: [],
+        recent_external_local_ui_urls: [],
+        control_plane_refresh_tokens: {},
+        control_planes: [],
+      }));
+      expect(loaded.managed_environments).toEqual([
+        expect.objectContaining({
+          id: 'local:default',
+          kind: 'local',
+          name: 'default',
+          label: 'Local Environment',
+          access: {
+            local_ui_bind: 'localhost:23998',
+            local_ui_password: '',
+            local_ui_password_configured: false,
+          },
+        }),
+      ]);
     });
   });
 
@@ -242,16 +291,25 @@ describe('desktopPreferences', () => {
       await fs.writeFile(paths.secretsFile, '{"broken"', 'utf8');
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
-      expect(loaded).toEqual({
-        local_ui_bind: '127.0.0.1:0',
-        local_ui_password: '',
-        local_ui_password_configured: false,
+      expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
         saved_ssh_environments: [],
         recent_external_local_ui_urls: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
-      });
+      }));
+      expect(loaded.managed_environments).toEqual([
+        expect.objectContaining({
+          id: 'local:default',
+          kind: 'local',
+          name: 'default',
+          access: {
+            local_ui_bind: '127.0.0.1:0',
+            local_ui_password: '',
+            local_ui_password_configured: false,
+          },
+        }),
+      ]);
     });
   });
 
@@ -275,10 +333,7 @@ describe('desktopPreferences', () => {
       }), 'utf8');
 
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
-      expect(loaded).toEqual({
-        local_ui_bind: 'localhost:23998',
-        local_ui_password: '',
-        local_ui_password_configured: false,
+      expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [
           {
             id: 'http://192.168.1.11:24000/',
@@ -292,7 +347,19 @@ describe('desktopPreferences', () => {
         recent_external_local_ui_urls: ['http://192.168.1.11:24000/'],
         control_plane_refresh_tokens: {},
         control_planes: [],
-      });
+      }));
+      expect(loaded.managed_environments).toEqual([
+        expect.objectContaining({
+          id: 'local:default',
+          kind: 'local',
+          name: 'default',
+          access: {
+            local_ui_bind: 'localhost:23998',
+            local_ui_password: '',
+            local_ui_password_configured: false,
+          },
+        }),
+      ]);
     });
   });
 
@@ -454,16 +521,17 @@ describe('desktopPreferences', () => {
   });
 
   it('serializes local-environment settings into a settings draft', () => {
-    expect(desktopPreferencesToDraft({
-      local_ui_bind: '0.0.0.0:23998',
-      local_ui_password: 'secret',
-      local_ui_password_configured: true,
-      saved_environments: [],
-      saved_ssh_environments: [],
-      recent_external_local_ui_urls: [],
-      control_plane_refresh_tokens: {},
-      control_planes: [],
-    })).toEqual({
+    expect(desktopPreferencesToDraft(testDesktopPreferences({
+      managed_environments: [
+        testManagedLocalEnvironment('default', {
+          access: {
+            local_ui_bind: '0.0.0.0:23998',
+            local_ui_password: 'secret',
+            local_ui_password_configured: true,
+          },
+        }),
+      ],
+    }))).toEqual({
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password: '',
       local_ui_password_mode: 'keep',
@@ -471,26 +539,28 @@ describe('desktopPreferences', () => {
   });
 
   it('includes local-environment startup inputs in the managed launch key', () => {
-    const left = managedDesktopLaunchKey({
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      local_ui_password_configured: false,
-      saved_environments: [],
-      saved_ssh_environments: [],
-      recent_external_local_ui_urls: [],
-      control_plane_refresh_tokens: {},
-      control_planes: [],
-    });
-    const right = managedDesktopLaunchKey({
-      local_ui_bind: '0.0.0.0:24000',
-      local_ui_password: 'secret',
-      local_ui_password_configured: true,
-      saved_environments: [],
-      saved_ssh_environments: [],
-      recent_external_local_ui_urls: [],
-      control_plane_refresh_tokens: {},
-      control_planes: [],
-    });
+    const left = managedDesktopLaunchKey(testDesktopPreferences({
+      managed_environments: [
+        testManagedLocalEnvironment('default', {
+          access: {
+            local_ui_bind: '127.0.0.1:0',
+            local_ui_password: '',
+            local_ui_password_configured: false,
+          },
+        }),
+      ],
+    }));
+    const right = managedDesktopLaunchKey(testDesktopPreferences({
+      managed_environments: [
+        testManagedLocalEnvironment('default', {
+          access: {
+            local_ui_bind: '0.0.0.0:24000',
+            local_ui_password: 'secret',
+            local_ui_password_configured: true,
+          },
+        }),
+      ],
+    }));
 
     expect(left).not.toBe(right);
   });

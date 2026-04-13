@@ -83,8 +83,6 @@ import {
   type SSHConnectionDialogAdvancedState,
 } from './sshConnectionDialogState';
 import {
-  accessModeVisual,
-  compactOpenLocalEnvironmentLabel,
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
   compactSettingsFieldLabel,
@@ -92,7 +90,6 @@ import {
   describeRuntimeAddress,
   isRedundantSettingsFieldLabel,
   compactSettingsActionLabel,
-  passwordStateVisualTone,
   plainTextFromHelpHTML,
 } from './welcomeCopy';
 import {
@@ -139,19 +136,32 @@ declare global {
 
 type BusyAction =
   | ''
-  | 'open_local_environment'
+  | 'open_managed_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'start_control_plane_connect'
   | 'focus_environment_window'
-  | 'open_local_environment_settings'
+  | 'open_managed_environment_settings'
   | 'open_control_plane_environment'
   | 'refresh_control_plane'
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
+  | 'upsert_managed_local_environment'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
+
+type LocalConnectionDialogState = Readonly<{
+  mode: 'create' | 'edit';
+  connection_kind: 'managed_local';
+  environment_id: string;
+  label: string;
+  environment_name: string;
+  local_ui_bind: string;
+  local_ui_password: string;
+  local_ui_password_mode: DesktopLocalUIPasswordMode;
+  local_ui_password_configured: boolean;
+}>;
 
 type ExternalURLConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
@@ -173,7 +183,7 @@ type SSHConnectionDialogState = Readonly<{
   release_base_url: string;
 }>;
 
-type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
+type ConnectionDialogState = LocalConnectionDialogState | ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
 
 type ControlPlaneDialogState = Readonly<{
   provider_origin: string;
@@ -305,6 +315,27 @@ function createExternalURLConnectionDialogState(
   };
 }
 
+function createLocalConnectionDialogState(
+  mode: 'create' | 'edit',
+  overrides: Partial<LocalConnectionDialogState> = {},
+): LocalConnectionDialogState {
+  const passwordConfigured = overrides.local_ui_password_configured === true;
+  return {
+    mode,
+    connection_kind: 'managed_local',
+    environment_id: trimString(overrides.environment_id),
+    label: trimString(overrides.label),
+    environment_name: trimString(overrides.environment_name),
+    local_ui_bind: trimString(overrides.local_ui_bind) || EMPTY_SETTINGS_DRAFT.local_ui_bind || 'localhost:23998',
+    local_ui_password: trimString(overrides.local_ui_password),
+    local_ui_password_mode: normalizeDesktopLocalUIPasswordMode(
+      overrides.local_ui_password_mode,
+      passwordConfigured ? 'keep' : 'replace',
+    ),
+    local_ui_password_configured: passwordConfigured,
+  };
+}
+
 function createSSHConnectionDialogState(
   mode: 'create' | 'edit',
   overrides: Partial<SSHConnectionDialogState> = {},
@@ -326,8 +357,8 @@ function issueKicker(issue: DesktopWelcomeIssue): string {
   switch (issue.scope) {
     case 'remote_environment':
       return 'Remote Environment';
-    case 'local_environment':
-      return 'Local Environment';
+    case 'managed_environment':
+      return 'Environment';
     default:
       return 'Desktop startup';
   }
@@ -403,8 +434,8 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
 function DesktopCommandRegistrar(props: Readonly<{
   snapshot: () => DesktopWelcomeSnapshot;
   showConnectEnvironment: (message?: string) => void;
-  openCreateConnectionDialog: (message?: string) => void;
-  openSettingsSurface: () => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
+  openSettingsSurface: (environmentID?: string) => void;
   openLocalEnvironment: () => Promise<void>;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
@@ -430,8 +461,8 @@ function DesktopCommandRegistrar(props: Readonly<{
       },
       {
         id: 'redeven.desktop.openLocalEnvironment',
-        title: 'Open Local Environment',
-        description: 'Open the desktop-managed Environment on this machine',
+        title: 'Open Environment',
+        description: 'Open the selected desktop-managed environment on this machine',
         category: 'Desktop',
         keybind: 'mod+enter',
         icon: Globe,
@@ -441,8 +472,8 @@ function DesktopCommandRegistrar(props: Readonly<{
       },
       {
         id: 'redeven.desktop.openLocalEnvironmentSettings',
-        title: 'Local Environment Settings',
-        description: 'Edit local startup, access, and bootstrap settings',
+        title: 'Environment Settings',
+        description: 'Edit startup, access, and exposure settings for the selected desktop-managed environment',
         category: 'Desktop',
         keybind: 'mod+,',
         icon: Settings,
@@ -451,10 +482,10 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.focusEnvironmentURL',
         title: 'Connect Another Environment',
-        description: 'Open the Add Connection dialog for a Redeven URL or SSH target',
+        description: 'Open the New Environment dialog for a local environment, Redeven URL, or SSH target',
         category: 'Desktop',
         icon: Search,
-        execute: () => props.openCreateConnectionDialog('Enter a Redeven URL, SSH target, or choose a saved connection.'),
+        execute: () => props.openCreateConnectionDialog('Create a Local Environment, enter a Redeven URL, or add an SSH target.'),
       },
       {
         id: 'redeven.desktop.closeLauncherOrQuit',
@@ -487,7 +518,7 @@ function DesktopCommandRegistrar(props: Readonly<{
       },
     ];
 
-    for (const environment of snapshot.environments.filter((entry) => entry.kind !== 'local_environment').slice(0, 5)) {
+    for (const environment of snapshot.environments.slice(0, 5)) {
       list.push({
         id: `redeven.desktop.openEnvironment.${environment.id}`,
         title: `${environment.open_action_label} ${environment.label}`,
@@ -544,8 +575,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const shellView = createMemo(() => buildDesktopWelcomeShellViewModel(snapshot(), visibleSurface()));
   const headerLogoSrc = createMemo(() => theme.resolvedTheme() === 'light' ? LOGO_LIGHT_URL : LOGO_DARK_URL);
   const settingsSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => snapshot().settings_surface);
-  const localEnvironmentEntry = createMemo(() => (
-    snapshot().environments.find((environment) => environment.kind === 'local_environment') ?? null
+  const selectedManagedEnvironmentEntry = createMemo(() => (
+    snapshot().environments.find((environment) => (
+      environment.kind === 'managed_environment'
+      && environment.id === snapshot().settings_surface.environment_id
+    )) ?? snapshot().environments.find((environment) => environment.kind === 'managed_environment') ?? null
   ));
   const controlPlanes = createMemo(() => snapshot().control_planes);
   const openWindowsSubtitle = createMemo(() => {
@@ -645,12 +679,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  function openSettingsSurface(): void {
+  function openSettingsSurface(environmentID = selectedManagedEnvironmentEntry()?.id ?? ''): void {
+    if (environmentID === '') {
+      setSettingsError('Choose an environment first.');
+      return;
+    }
     resetMessages();
     setConnectionDialogState(null);
     setControlPlaneDialogState(null);
-    setBusyAction('open_local_environment_settings');
-    void props.runtime.launcher.performAction({ kind: 'open_local_environment_settings' })
+    setBusyAction('open_managed_environment_settings');
+    void props.runtime.launcher.performAction({ kind: 'open_managed_environment_settings', environment_id: environmentID })
       .catch((error) => {
         setSettingsError(getErrorMessage(error));
       })
@@ -661,7 +699,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openCreateConnectionDialog(
     message = '',
-    preferredKind: 'external_local_ui' | 'ssh_environment' = 'external_local_ui',
+    preferredKind: 'managed_local' | 'external_local_ui' | 'ssh_environment' = 'managed_local',
   ): void {
     if (snapshot().surface !== 'connect_environment') {
       showConnectEnvironment(message || 'Open the launcher to add a connection.');
@@ -675,7 +713,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setControlPlaneDialogError('');
     setControlPlaneDialogState(null);
     setConnectionDialogState(
-      preferredKind === 'ssh_environment'
+      preferredKind === 'managed_local'
+        ? createLocalConnectionDialogState('create', {
+          local_ui_bind: 'localhost:23998',
+          local_ui_password_mode: 'replace',
+        })
+        : preferredKind === 'ssh_environment'
         ? createSSHConnectionDialogState('create', {
           bootstrap_strategy: DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         })
@@ -686,7 +729,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
-    if (environment.kind === 'ssh_environment') {
+    if (environment.kind === 'managed_environment' && environment.managed_environment_kind === 'local') {
+      setConnectionDialogState(createLocalConnectionDialogState('edit', {
+        environment_id: environment.id,
+        label: environment.label,
+        environment_name: environment.managed_environment_name ?? '',
+        local_ui_bind: environment.managed_local_ui_bind ?? 'localhost:23998',
+        local_ui_password_mode: environment.managed_local_ui_password_configured ? 'keep' : 'replace',
+        local_ui_password_configured: environment.managed_local_ui_password_configured === true,
+      }));
+    } else if (environment.kind === 'managed_environment') {
+      openSettingsSurface(environment.id);
+    } else if (environment.kind === 'ssh_environment') {
       setConnectionDialogState(createSSHConnectionDialogState('edit', {
         environment_id: environment.id,
         label: environment.label,
@@ -747,10 +801,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function switchConnectionDialogKind(kind: 'external_local_ui' | 'ssh_environment'): void {
+  function switchConnectionDialogKind(kind: 'managed_local' | 'external_local_ui' | 'ssh_environment'): void {
     setConnectionDialogState((current) => {
       if (!current || current.mode !== 'create' || current.connection_kind === kind) {
         return current;
+      }
+      if (kind === 'managed_local') {
+        return createLocalConnectionDialogState('create', {
+          label: current.label,
+          local_ui_bind: 'localhost:23998',
+        });
       }
       if (kind === 'ssh_environment') {
         return createSSHConnectionDialogState('create', {
@@ -768,12 +828,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
       if (!current) {
         return current;
+      }
+      if (name === 'local_ui_password' && current.connection_kind === 'managed_local') {
+        return {
+          ...current,
+          local_ui_password: value,
+          local_ui_password_mode: passwordModeForInput(value, current.local_ui_password_configured),
+        };
       }
       return {
         ...current,
@@ -837,13 +904,30 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === 'focused_environment_window';
   }
 
-  async function openLocalEnvironment(): Promise<void> {
-    const localEntry = localEnvironmentEntry();
-    if (localEntry?.is_open && localEntry.open_session_key) {
-      await focusEnvironmentWindow(localEntry.open_session_key, visibleSurface() === 'local_environment_settings' ? 'settings' : 'connect');
+  async function openManagedEnvironment(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind !== 'managed_environment') {
+      return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
+    }
+    if (environment.is_open && environment.open_session_key) {
+      return focusEnvironmentWindow(environment.open_session_key, errorTarget);
+    }
+    const result = await performLauncherAction({
+      kind: 'open_managed_environment',
+      environment_id: environment.id,
+    }, errorTarget);
+    return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+  }
+
+  async function openPrimaryManagedEnvironment(): Promise<void> {
+    const entry = selectedManagedEnvironmentEntry();
+    if (!entry) {
+      setErrorMessage(visibleSurface() === 'managed_environment_settings' ? 'settings' : 'connect', 'Create a Local Environment or authorize a Control Plane first.');
       return;
     }
-    await performLauncherAction({ kind: 'open_local_environment' }, visibleSurface() === 'local_environment_settings' ? 'settings' : 'connect');
+    await openManagedEnvironment(entry, visibleSurface() === 'managed_environment_settings' ? 'settings' : 'connect');
   }
 
   async function openRemoteEnvironment(
@@ -903,6 +987,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
   ): Promise<boolean> {
+    if (environment.kind === 'managed_environment') {
+      return openManagedEnvironment(environment, errorTarget);
+    }
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
       if (!details) {
@@ -1045,7 +1132,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
       await refreshSnapshot();
-      setFeedback('Local Environment settings saved.');
+      setFeedback('Environment settings saved.');
     } catch (error) {
       setSettingsError(getErrorMessage(error));
     } finally {
@@ -1129,6 +1216,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function saveEnvironmentFromLibrary(environment: DesktopEnvironmentEntry): Promise<void> {
+    if (environment.kind === 'managed_environment') {
+      setConnectError('Desktop-managed environments are already saved on this device.');
+      return;
+    }
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
       if (!details) {
@@ -1163,7 +1254,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!state) {
       return;
     }
-    const saved = state.connection_kind === 'ssh_environment'
+    const saved = state.connection_kind === 'managed_local'
+      ? await performLauncherAction({
+        kind: 'upsert_managed_local_environment',
+        environment_id: state.environment_id || undefined,
+        environment_name: state.environment_name,
+        label: state.label,
+        local_ui_bind: state.local_ui_bind,
+        local_ui_password: state.local_ui_password,
+        local_ui_password_mode: state.local_ui_password_mode,
+      }, 'dialog')
+      : state.connection_kind === 'ssh_environment'
       ? await upsertSavedSSHEnvironment({
         environment_id: state.environment_id,
         label: state.label,
@@ -1196,6 +1297,35 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function connectFromDialog(): Promise<void> {
     const state = connectionDialogState();
     if (!state) {
+      return;
+    }
+    if (state.connection_kind === 'managed_local') {
+      const saved = await performLauncherAction({
+        kind: 'upsert_managed_local_environment',
+        environment_id: state.environment_id || undefined,
+        environment_name: state.environment_name,
+        label: state.label,
+        local_ui_bind: state.local_ui_bind,
+        local_ui_password: state.local_ui_password,
+        local_ui_password_mode: state.local_ui_password_mode,
+      }, 'dialog');
+      if (!saved) {
+        return;
+      }
+      await refreshSnapshot();
+      const managedEntry = snapshot().environments.find((environment) => (
+        environment.kind === 'managed_environment'
+        && environment.managed_environment_kind === 'local'
+        && environment.managed_environment_name === trimString(state.environment_name)
+      )) ?? null;
+      if (!managedEntry) {
+        setConnectionDialogError('Desktop saved the Local Environment, but could not reopen it yet.');
+        return;
+      }
+      const opened = await openManagedEnvironment(managedEntry, 'dialog');
+      if (opened) {
+        closeConnectionDialog();
+      }
       return;
     }
     if (state.connection_kind === 'ssh_environment') {
@@ -1255,7 +1385,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         showConnectEnvironment={showConnectEnvironment}
         openCreateConnectionDialog={openCreateConnectionDialog}
         openSettingsSurface={openSettingsSurface}
-        openLocalEnvironment={openLocalEnvironment}
+        openLocalEnvironment={openPrimaryManagedEnvironment}
         openEnvironment={openEnvironment}
         closeLauncherOrQuit={closeLauncherOrQuit}
       />
@@ -1307,7 +1437,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <ConnectEnvironmentSurface
           snapshot={snapshot()}
           settingsSurface={settingsSurface()}
-          localEnvironment={localEnvironmentEntry()}
           feedback={feedback()}
           error={connectError()}
           busyAction={busyAction()}
@@ -1321,7 +1450,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           issueRef={(value) => {
             issueRef = value;
           }}
-          openLocalEnvironment={openLocalEnvironment}
+          openLocalEnvironment={openPrimaryManagedEnvironment}
           openSettingsSurface={openSettingsSurface}
           openCreateConnectionDialog={openCreateConnectionDialog}
           openCreateControlPlaneDialog={openCreateControlPlaneDialog}
@@ -1344,7 +1473,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       </DesktopLauncherShell>
 
       <LocalEnvironmentSettingsDialog
-        open={snapshot().surface === 'local_environment_settings'}
+        open={snapshot().surface === 'managed_environment_settings'}
         snapshot={settingsSurface()}
         draft={draft()}
         busyAction={busyAction()}
@@ -1438,7 +1567,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 function ConnectEnvironmentSurface(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
   settingsSurface: DesktopSettingsSurfaceSnapshot;
-  localEnvironment: DesktopEnvironmentEntry | null;
   feedback: string;
   error: string;
   busyAction: BusyAction;
@@ -1451,8 +1579,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
   setLibraryQuery: (value: string) => void;
   issueRef: (value: HTMLElement) => void;
   openLocalEnvironment: () => Promise<void>;
-  openSettingsSurface: () => void;
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+  openSettingsSurface: (environmentID?: string) => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
   openCreateControlPlaneDialog: (message?: string) => void;
   openRemoteEnvironment: (
     targetURL: string,
@@ -1476,7 +1604,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   copyDiagnostics: () => Promise<void>;
 }>) {
   const localEnvironmentIssue = createMemo(() => (
-    props.snapshot.issue?.scope === 'local_environment' ? props.snapshot.issue : null
+    props.snapshot.issue?.scope === 'managed_environment' ? props.snapshot.issue : null
   ));
   const remoteEnvironmentIssue = createMemo(() => (
     props.snapshot.issue?.scope === 'remote_environment' ? props.snapshot.issue : null
@@ -1618,7 +1746,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     variant="outline"
                     aria-label="Open Local Environment Settings"
                     title="Open Local Environment Settings"
-                    onClick={props.openSettingsSurface}
+                    onClick={() => props.openSettingsSurface()}
                   >
                     {compactSettingsActionLabel()}
                   </Button>
@@ -1679,8 +1807,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
             )}
           >
             <EnvironmentCardsPanel
-              localEnvironment={props.localEnvironment}
-              settingsSurface={props.settingsSurface}
               entries={props.libraryEntries}
               showQuickAddCards={props.libraryFilter === 'all' && trimString(props.libraryQuery) === ''}
               busyAction={props.busyAction}
@@ -1700,14 +1826,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
 }
 
 function EnvironmentCardsPanel(props: Readonly<{
-  localEnvironment: DesktopEnvironmentEntry | null;
-  settingsSurface: DesktopSettingsSurfaceSnapshot;
   entries: readonly DesktopEnvironmentEntry[];
   showQuickAddCards: boolean;
   busyAction: BusyAction;
   openLocalEnvironment: () => Promise<void>;
-  openSettingsSurface: () => void;
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+  openSettingsSurface: (environmentID?: string) => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (environment: DesktopEnvironmentEntry, errorTarget?: 'connect' | 'dialog') => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -1716,14 +1840,6 @@ function EnvironmentCardsPanel(props: Readonly<{
   return (
     <div class="space-y-3">
       <div class="redeven-environment-grid">
-        <LocalEnvironmentCard
-          environment={props.localEnvironment}
-          settingsSurface={props.settingsSurface}
-          busyAction={props.busyAction}
-          openLocalEnvironment={props.openLocalEnvironment}
-          openSettingsSurface={props.openSettingsSurface}
-        />
-
         <For each={props.entries}>
           {(environment) => (
             <EnvironmentConnectionCard
@@ -1750,98 +1866,6 @@ function EnvironmentCardsPanel(props: Readonly<{
         </div>
       </Show>
     </div>
-  );
-}
-
-function LocalEnvironmentCard(props: Readonly<{
-  environment: DesktopEnvironmentEntry | null;
-  settingsSurface: DesktopSettingsSurfaceSnapshot;
-  busyAction: BusyAction;
-  openLocalEnvironment: () => Promise<void>;
-  openSettingsSurface: () => void;
-}>) {
-  const isOpen = createMemo(() => props.environment?.is_open === true);
-  const endpointAddress = createMemo(() => {
-    const liveURL = props.environment?.local_ui_url ?? '';
-    if (liveURL !== '') {
-      return describeRuntimeAddress(liveURL);
-    }
-    return describeNextStartAddress(props.settingsSurface.next_start_address_display);
-  });
-  const endpointLabel = createMemo(() => (props.environment?.local_ui_url ? 'Endpoint' : 'Next start'));
-  const accessVisual = createMemo(() => accessModeVisual(props.settingsSurface.access_mode));
-  const passwordTone = createMemo(() => passwordStateVisualTone(props.settingsSurface.password_state_tone));
-  const passwordLabel = createMemo(() => compactPasswordStateTagLabel(props.settingsSurface.password_state_label));
-
-  return (
-    <Card class={cn(
-      'redeven-environment-card h-full overflow-hidden border transition-all duration-200',
-      isOpen()
-        ? 'redeven-environment-card--open'
-        : 'redeven-environment-card--featured',
-    )}>
-      <CardHeader class="pb-2">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0 flex-1">
-            <CardTitle class="truncate text-sm font-semibold">Local Environment</CardTitle>
-            <div class="mt-1 text-xs text-muted-foreground">Desktop-managed runtime</div>
-          </div>
-          <ConsoleStatusBadge tone={isOpen() ? 'success' : 'neutral'}>
-            {isOpen() ? 'Live' : 'Ready'}
-          </ConsoleStatusBadge>
-        </div>
-      </CardHeader>
-      <CardContent class="pb-2">
-        <div class="space-y-2.5">
-          <div class="flex flex-wrap gap-1.5">
-            <Tag variant={accessVisual().tone === 'primary' ? 'primary' : accessVisual().tone === 'warning' ? 'warning' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {accessVisual().short_label}
-            </Tag>
-            <Tag variant={passwordTone() === 'success' ? 'success' : passwordTone() === 'warning' ? 'warning' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {passwordLabel()}
-            </Tag>
-          </div>
-          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              {endpointLabel()}
-            </div>
-            <div class="mt-1 flex items-baseline gap-2">
-              <div class={cn(
-                'truncate text-sm font-medium text-foreground',
-                endpointAddress().primary_monospace && 'font-mono text-[12px]',
-              )}>
-                {endpointAddress().primary}
-              </div>
-              <Show when={endpointAddress().hint}>
-                <div class="text-[11px] text-muted-foreground">{endpointAddress().hint}</div>
-              </Show>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
-        <Button
-          size="sm"
-          variant="default"
-          class="flex-1"
-          loading={props.busyAction === 'open_local_environment' || props.busyAction === 'focus_environment_window'}
-          onClick={() => {
-            void props.openLocalEnvironment();
-          }}
-        >
-          {compactOpenLocalEnvironmentLabel(isOpen())}
-        </Button>
-        <DesktopTooltip content="Settings" placement="top">
-          <ConsoleActionIconButton
-            title="Open Local Environment Settings"
-            aria-label="Open Local Environment Settings"
-            onClick={props.openSettingsSurface}
-          >
-            <Settings class="h-3.5 w-3.5" />
-          </ConsoleActionIconButton>
-        </DesktopTooltip>
-      </CardFooter>
-    </Card>
   );
 }
 
@@ -2065,7 +2089,7 @@ function EnvironmentConnectionCard(props: Readonly<{
 }
 
 function NewEnvironmentPlaceholderCard(props: Readonly<{
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
 }>) {
   return (
     <Card class="redeven-environment-card redeven-new-environment-card group h-full cursor-pointer overflow-hidden border border-dashed border-border/70 transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.02]"
@@ -2077,9 +2101,17 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
         </div>
         <div class="space-y-1 text-center">
           <div class="text-sm font-medium text-foreground">New Environment</div>
-          <div class="text-xs text-muted-foreground">Add a Redeven URL or SSH target</div>
+          <div class="text-xs text-muted-foreground">Create a Local Environment, add a Redeven URL, or connect over SSH</div>
         </div>
         <div class="flex gap-2">
+          <ConsoleChipActionButton
+            onClick={(event) => {
+              event.stopPropagation();
+              props.openCreateConnectionDialog('', 'managed_local');
+            }}
+          >
+            Local
+          </ConsoleChipActionButton>
           <ConsoleChipActionButton
             onClick={(event) => {
               event.stopPropagation();
@@ -2756,21 +2788,17 @@ function ConnectionDialog(props: Readonly<{
   busyAction: BusyAction;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
     value: string,
   ) => void;
-  switchKind: (kind: 'external_local_ui' | 'ssh_environment') => void;
+  switchKind: (kind: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
 }>) {
-  // NOTE: `open` MUST be derived through a createMemo so that Solid's default `===`
-  // equality check absorbs identity churn in `props.state`. Without this, every
-  // keystroke creates a new state object, which re-runs the Dialog's overlay-mask
-  // effect (focus trap), stealing focus from the active input.
   const isOpen = createMemo(() => props.state !== null);
   const isCreate = createMemo(() => props.state?.mode === 'create');
-  const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
+  const connectionKind = createMemo(() => props.state?.connection_kind ?? 'managed_local');
   const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
     open: false,
     initialized_for_state_key: 'closed',
@@ -2798,14 +2826,17 @@ function ConnectionDialog(props: Readonly<{
   });
 
   createEffect(() => {
-    setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(current, props.state));
+    setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(
+      current,
+      props.state?.connection_kind === 'managed_local' ? null : props.state,
+    ));
   });
 
   return (
     <Dialog
       open={isOpen()}
       onOpenChange={props.onOpenChange}
-      title={isCreate() ? 'Add Connection' : 'Edit Connection'}
+      title={isCreate() ? 'New Environment' : 'Edit Environment'}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
@@ -2815,8 +2846,6 @@ function ConnectionDialog(props: Readonly<{
             size="sm"
             variant={isCreate() ? 'outline' : 'default'}
             loading={props.busyAction === 'save_environment'}
-            aria-label="Save Connection"
-            title="Save Connection"
             onClick={() => {
               void props.onSave();
             }}
@@ -2828,7 +2857,11 @@ function ConnectionDialog(props: Readonly<{
             <Button
               size="sm"
               variant="default"
-              loading={props.busyAction === 'open_remote_environment' || props.busyAction === 'open_ssh_environment'}
+              loading={
+                props.busyAction === 'open_managed_environment'
+                || props.busyAction === 'open_remote_environment'
+                || props.busyAction === 'open_ssh_environment'
+              }
               onClick={() => {
                 void props.onConnect();
               }}
@@ -2842,11 +2875,12 @@ function ConnectionDialog(props: Readonly<{
       <div class="space-y-4">
         <Show when={isCreate()}>
           <div class="space-y-1.5">
-            <label class="block text-xs font-medium text-foreground">Connection Type</label>
+            <label class="block text-xs font-medium text-foreground">Environment Type</label>
             <SegmentedControl
               value={connectionKind()}
-              onChange={(value) => props.switchKind(value as 'external_local_ui' | 'ssh_environment')}
+              onChange={(value) => props.switchKind(value as 'managed_local' | 'external_local_ui' | 'ssh_environment')}
               options={[
+                { value: 'managed_local', label: 'Local' },
                 { value: 'external_local_ui', label: 'Redeven URL' },
                 { value: 'ssh_environment', label: 'SSH' },
               ]}
@@ -2854,6 +2888,7 @@ function ConnectionDialog(props: Readonly<{
             />
           </div>
         </Show>
+
         <div class="space-y-1.5">
           <label for="environment-label" class="block text-xs font-medium text-foreground">Label</label>
           <Input
@@ -2865,24 +2900,77 @@ function ConnectionDialog(props: Readonly<{
             class="w-full"
           />
         </div>
-        <Show
-          when={connectionKind() === 'ssh_environment'}
-          fallback={(
-            <div class="space-y-1.5">
-              <label for="environment-url" class="block text-xs font-medium text-foreground">Environment URL</label>
-              <Input
-                id="environment-url"
-                value={props.state?.connection_kind === 'external_local_ui' ? props.state.external_local_ui_url : ''}
-                onInput={(event) => props.updateField('external_local_ui_url', event.currentTarget.value)}
-                placeholder="http://192.168.1.11:24000/"
-                size="sm"
-                class="w-full font-mono"
-                spellcheck={false}
-                autofocus={props.state?.mode === 'create'}
-              />
+
+        <Show when={connectionKind() === 'managed_local'}>
+          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+            <div class="space-y-3">
+              <div class="space-y-1.5">
+                <label for="environment-name" class="block text-xs font-medium text-foreground">Environment Name</label>
+                <Input
+                  id="environment-name"
+                  value={props.state?.connection_kind === 'managed_local' ? props.state.environment_name : ''}
+                  onInput={(event) => props.updateField('environment_name', event.currentTarget.value)}
+                  placeholder="dev-a"
+                  size="sm"
+                  class="w-full font-mono"
+                  spellcheck={false}
+                  autofocus={props.state?.mode === 'create'}
+                />
+                <div class="text-[11px] text-muted-foreground">
+                  Desktop stores this environment under `local/&lt;name&gt;` inside the shared Redeven state root.
+                </div>
+              </div>
+              <div class="space-y-1.5">
+                <label for="environment-local-bind" class="block text-xs font-medium text-foreground">Local UI Bind</label>
+                <Input
+                  id="environment-local-bind"
+                  value={props.state?.connection_kind === 'managed_local' ? props.state.local_ui_bind : ''}
+                  onInput={(event) => props.updateField('local_ui_bind', event.currentTarget.value)}
+                  placeholder="localhost:23998"
+                  size="sm"
+                  class="w-full font-mono"
+                  spellcheck={false}
+                />
+              </div>
+              <div class="space-y-1.5">
+                <label for="environment-local-password" class="block text-xs font-medium text-foreground">Local UI Password</label>
+                <Input
+                  id="environment-local-password"
+                  value={props.state?.connection_kind === 'managed_local' ? props.state.local_ui_password : ''}
+                  onInput={(event) => props.updateField('local_ui_password', event.currentTarget.value)}
+                  placeholder={props.state?.connection_kind === 'managed_local' && props.state.local_ui_password_configured
+                    ? 'Leave blank to keep the stored password'
+                    : 'Optional on loopback binds'}
+                  type="password"
+                  autocomplete="new-password"
+                  size="sm"
+                  class="w-full"
+                />
+                <div class="text-[11px] text-muted-foreground">
+                  Use a password for non-loopback binds. Leave this blank to keep the stored password when editing.
+                </div>
+              </div>
             </div>
-          )}
-        >
+          </div>
+        </Show>
+
+        <Show when={connectionKind() === 'external_local_ui'}>
+          <div class="space-y-1.5">
+            <label for="environment-url" class="block text-xs font-medium text-foreground">Environment URL</label>
+            <Input
+              id="environment-url"
+              value={props.state?.connection_kind === 'external_local_ui' ? props.state.external_local_ui_url : ''}
+              onInput={(event) => props.updateField('external_local_ui_url', event.currentTarget.value)}
+              placeholder="http://192.168.1.11:24000/"
+              size="sm"
+              class="w-full font-mono"
+              spellcheck={false}
+              autofocus={props.state?.mode === 'create'}
+            />
+          </div>
+        </Show>
+
+        <Show when={connectionKind() === 'ssh_environment'}>
           <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
             <div class="text-xs leading-5 text-muted-foreground">
               Desktop reuses only the exact Desktop-managed Redeven release, installs it on demand when needed, and tunnels its Local UI over SSH.
@@ -2913,9 +3001,6 @@ function ConnectionDialog(props: Readonly<{
                   ]}
                   size="sm"
                 />
-                <div class="text-[11px] text-muted-foreground">
-                  Automatic reuses only the exact Desktop-managed release, prefers a desktop upload for offline targets, then falls back to the remote installer.
-                </div>
               </div>
               <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
                 <div class="space-y-1.5">
@@ -2986,9 +3071,6 @@ function ConnectionDialog(props: Readonly<{
                           Leave blank to use {DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL}. Set an internal release mirror when this desktop cannot use GitHub directly.
                         </div>
                       </div>
-                      <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground">
-                        Desktop Upload resolves the remote OS and architecture first, then uploads the matching Redeven release tarball over SSH.
-                      </div>
                     </div>
                   </div>
                 </Show>
@@ -2996,6 +3078,7 @@ function ConnectionDialog(props: Readonly<{
             </div>
           </div>
         </Show>
+
         <Show when={props.error}>
           <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {props.error}

@@ -1,23 +1,28 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildControlPlaneDesktopTarget,
   buildExternalLocalUIDesktopTarget,
-  buildManagedLocalDesktopTarget,
+  buildManagedEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
   controlPlaneDesktopSessionKey,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
   sshDesktopSessionKey,
 } from './desktopTarget';
+import {
+  testManagedControlPlaneEnvironment,
+  testManagedLocalEnvironment,
+} from '../testSupport/desktopTestHelpers';
 
 describe('desktopTarget', () => {
-  it('builds the managed local session target with a stable singleton key', () => {
-    expect(buildManagedLocalDesktopTarget()).toEqual({
-      kind: 'managed_local',
-      session_key: 'managed_local',
-      environment_id: 'env_local',
+  it('builds the managed local session target with a stable per-environment key', () => {
+    expect(buildManagedEnvironmentDesktopTarget(testManagedLocalEnvironment())).toEqual({
+      kind: 'managed_environment',
+      session_key: 'local:default',
+      environment_id: 'local:default',
       label: 'Local Environment',
+      managed_environment_kind: 'local',
+      local_environment_name: 'default',
     });
   });
 
@@ -51,13 +56,18 @@ describe('desktopTarget', () => {
     expect(controlPlaneDesktopSessionKey('https://cp.example.invalid/path', ' env_demo ')).toBe(
       'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
     );
-    expect(buildControlPlaneDesktopTarget('https://cp.example.invalid/path', ' env_demo ', {
-      providerID: ' redeven_portal ',
-      label: ' Demo Environment ',
-    })).toEqual({
-      kind: 'controlplane_environment',
+    expect(buildManagedEnvironmentDesktopTarget(testManagedControlPlaneEnvironment(
+      'https://cp.example.invalid/path',
+      ' env_demo ',
+      {
+        providerID: ' redeven_portal ',
+        label: ' Demo Environment ',
+      },
+    ))).toEqual({
+      kind: 'managed_environment',
       session_key: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-      environment_id: 'env_demo',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      managed_environment_kind: 'controlplane',
       provider_id: 'redeven_portal',
       provider_origin: 'https://cp.example.invalid',
       env_public_id: 'env_demo',

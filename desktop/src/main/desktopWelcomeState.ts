@@ -1,6 +1,7 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import {
   desktopPreferencesToDraft,
+  findManagedEnvironmentByID,
   type DesktopSavedEnvironment,
   type DesktopSavedSSHEnvironment,
   type DesktopPreferences,
@@ -22,6 +23,10 @@ import {
   desktopSSHEnvironmentID,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
+import {
+  createManagedLocalEnvironment,
+  type DesktopManagedEnvironment,
+} from '../shared/desktopManagedEnvironment';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
@@ -29,6 +34,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
+  selectedManagedEnvironmentID?: string;
 }>;
 
 function diagnosticsLines(lines: readonly string[]): string {
@@ -106,7 +112,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
   if (report.code === 'state_dir_locked') {
     if (report.lock_owner?.local_ui_enabled === true) {
       return {
-        scope: 'local_environment',
+        scope: 'managed_environment',
         code: report.code,
         title: 'Redeven is already starting elsewhere',
         message: 'Another Redeven runtime instance is using the default state directory and appears to provide Local UI. Retry in a moment so Desktop can attach to it.',
@@ -115,7 +121,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
       };
     }
     return {
-      scope: 'local_environment',
+      scope: 'managed_environment',
       code: report.code,
       title: 'Redeven is already running',
       message: 'Another Redeven runtime instance is using the default state directory without an attachable Local UI. Stop that runtime or restart it in a Local UI mode, then try again.',
@@ -125,7 +131,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
   }
 
   return {
-    scope: 'local_environment',
+    scope: 'managed_environment',
     code: report.code,
     title: 'Local Environment needs attention',
     message: report.message,
@@ -138,10 +144,10 @@ function sortOpenSessions(
   sessions: readonly DesktopSessionSummary[],
 ): readonly DesktopSessionSummary[] {
   return [...sessions].sort((left, right) => {
-    if (left.target.kind === 'managed_local' && right.target.kind !== 'managed_local') {
+    if (left.target.kind === 'managed_environment' && right.target.kind !== 'managed_environment') {
       return -1;
     }
-    if (left.target.kind !== 'managed_local' && right.target.kind === 'managed_local') {
+    if (left.target.kind !== 'managed_environment' && right.target.kind === 'managed_environment') {
       return 1;
     }
     return left.target.label.localeCompare(right.target.label) || left.startup.local_ui_url.localeCompare(right.startup.local_ui_url);
@@ -190,31 +196,56 @@ function openSessionBySSHEnvironment(
   )) ?? null;
 }
 
+function openSessionByManagedEnvironment(
+  sessions: readonly DesktopSessionSummary[],
+  environment: DesktopManagedEnvironment,
+): DesktopSessionSummary | null {
+  return sessions.find((session) => (
+    session.target.kind === 'managed_environment' && session.target.environment_id === environment.id
+  )) ?? null;
+}
+
+function buildManagedEnvironmentEntry(
+  environment: DesktopManagedEnvironment,
+  openSession: DesktopSessionSummary | null,
+): DesktopEnvironmentEntry {
+  const isOpen = openSession !== null;
+  return {
+    id: environment.id,
+    kind: 'managed_environment',
+    label: environment.label,
+    local_ui_url: openSession?.startup.local_ui_url ?? '',
+    secondary_text: environment.kind === 'local'
+      ? environment.access.local_ui_bind
+      : `${environment.provider_origin} · ${environment.env_public_id}`,
+    managed_environment_kind: environment.kind,
+    managed_environment_name: environment.kind === 'local' ? environment.name : undefined,
+    managed_local_ui_bind: environment.access.local_ui_bind,
+    managed_local_ui_password_configured: environment.access.local_ui_password_configured,
+    provider_origin: environment.kind === 'controlplane' ? environment.provider_origin : undefined,
+    provider_id: environment.kind === 'controlplane' ? environment.provider_id : undefined,
+    env_public_id: environment.kind === 'controlplane' ? environment.env_public_id : undefined,
+    tag: isOpen ? 'Open' : 'Managed',
+    category: 'managed',
+    is_open: isOpen,
+    open_session_key: openSession?.session_key ?? '',
+    open_action_label: isOpen ? 'Focus' : 'Open',
+    can_edit: true,
+    can_delete: false,
+    can_save: false,
+    last_used_at_ms: environment.last_used_at_ms,
+  };
+}
+
 function buildEnvironmentEntries(
   preferences: DesktopPreferences,
   openSessions: readonly DesktopSessionSummary[],
 ): readonly DesktopEnvironmentEntry[] {
-  const managedSession = openSessions.find((session) => session.target.kind === 'managed_local') ?? null;
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
-  const entries: DesktopEnvironmentEntry[] = [
-    {
-      id: 'local_environment',
-      kind: 'local_environment',
-      label: 'Local Environment',
-      local_ui_url: managedSession?.startup.local_ui_url ?? '',
-      secondary_text: managedSession?.startup.local_ui_url || 'Open the desktop-managed environment on this machine.',
-      tag: managedSession ? 'Open' : 'Local',
-      category: 'local_environment',
-      is_open: managedSession !== null,
-      open_session_key: managedSession?.session_key ?? '',
-      open_action_label: managedSession ? 'Focus' : 'Open',
-      can_edit: true,
-      can_delete: false,
-      can_save: false,
-      last_used_at_ms: managedSession ? Date.now() : 0,
-    },
-  ];
+  const entries: DesktopEnvironmentEntry[] = preferences.managed_environments.map((environment) => (
+    buildManagedEnvironmentEntry(environment, openSessionByManagedEnvironment(openSessions, environment))
+  ));
 
   const catalog = preferences.saved_environments;
   const sshCatalog = preferences.saved_ssh_environments;
@@ -382,7 +413,12 @@ export function buildDesktopWelcomeSnapshot(
   const issue = args.issue ?? null;
   const surface = args.surface ?? 'connect_environment';
   const environments = buildEnvironmentEntries(preferences, openSessions);
-  const managedSession = openSessions.find((session) => session.target.kind === 'managed_local') ?? null;
+  const selectedManagedEnvironment = (
+    findManagedEnvironmentByID(preferences, args.selectedManagedEnvironmentID ?? '')
+    ?? preferences.managed_environments[0]
+    ?? createManagedLocalEnvironment('default')
+  );
+  const managedSession = openSessionByManagedEnvironment(openSessions, selectedManagedEnvironment);
 
   return {
     surface,
@@ -393,9 +429,12 @@ export function buildDesktopWelcomeSnapshot(
     control_planes: preferences.control_planes,
     suggested_remote_url: suggestedRemoteURL(issue, openSessions, environments),
     issue,
-    settings_surface: buildDesktopSettingsSurfaceSnapshot('local_environment_settings', desktopPreferencesToDraft(preferences), {
+    settings_surface: buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', desktopPreferencesToDraft(preferences, selectedManagedEnvironment.id), {
+      environment_id: selectedManagedEnvironment.id,
+      environment_label: selectedManagedEnvironment.label,
+      environment_kind: selectedManagedEnvironment.kind,
       current_runtime_url: managedSession?.startup.local_ui_url ?? '',
-      local_ui_password_configured: preferences.local_ui_password_configured,
+      local_ui_password_configured: selectedManagedEnvironment.access.local_ui_password_configured,
       runtime_password_required: managedSession?.startup.password_required === true,
     }),
   };

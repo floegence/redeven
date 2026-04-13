@@ -3,18 +3,21 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   buildExternalLocalUIDesktopTarget,
-  buildManagedLocalDesktopTarget,
   buildSSHDesktopTarget,
 } from '../main/desktopTarget';
+import {
+  testDesktopPreferences,
+  testManagedLocalEnvironment,
+  testManagedSession,
+} from '../testSupport/desktopTestHelpers';
 import { buildEnvironmentCardModel } from './viewModel';
 
 describe('buildEnvironmentCardModel', () => {
   it('builds local, URL, and SSH card metadata from desktop snapshot entries', () => {
+    const managedLocal = testManagedLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: {
-        local_ui_bind: '127.0.0.1:0',
-        local_ui_password: '',
-        local_ui_password_configured: false,
+      preferences: testDesktopPreferences({
+        managed_environments: [managedLocal],
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -38,18 +41,9 @@ describe('buildEnvironmentCardModel', () => {
           },
         ],
         recent_external_local_ui_urls: ['http://192.168.1.12:24000/'],
-        control_plane_refresh_tokens: {},
-        control_planes: [],
-      },
+      }),
       openSessions: [
-        {
-          session_key: 'managed_local',
-          target: buildManagedLocalDesktopTarget(),
-          startup: {
-            local_ui_url: 'http://localhost:23998/',
-            local_ui_urls: ['http://localhost:23998/'],
-          },
-        },
+        testManagedSession(managedLocal, 'http://localhost:23998/'),
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
@@ -82,7 +76,9 @@ describe('buildEnvironmentCardModel', () => {
       ],
     });
 
-    const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
+    const localEntry = snapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'local'
+    ));
     const urlEntry = snapshot.environments.find((environment) => environment.kind === 'external_local_ui');
     const sshEntry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
 

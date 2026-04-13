@@ -15,6 +15,7 @@ export interface DesktopShellBridge {
   openWindow?: (kind: unknown) => Promise<void>;
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
+  manageDesktopUpdate?: () => Promise<DesktopManagedRuntimeRestartResult>;
 }
 
 declare global {
@@ -37,6 +38,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.openWindow !== 'function'
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.restartManagedRuntime !== 'function'
+      && typeof candidate.manageDesktopUpdate !== 'function'
     )
   ) {
     return null;
@@ -102,4 +104,12 @@ export async function restartDesktopManagedRuntime(): Promise<DesktopManagedRunt
     return null;
   }
   return bridge.restartManagedRuntime();
+}
+
+export async function manageDesktopUpdate(): Promise<DesktopManagedRuntimeRestartResult | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge || typeof bridge.manageDesktopUpdate !== 'function') {
+    return null;
+  }
+  return bridge.manageDesktopUpdate();
 }

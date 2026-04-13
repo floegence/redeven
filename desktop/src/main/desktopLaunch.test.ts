@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateDesktopSettingsDraft } from './desktopPreferences';
 import {
   BOOTSTRAP_TICKET_ENV_NAME,
   buildDesktopAgentArgs,
@@ -9,16 +8,23 @@ import {
   buildDesktopAgentSpawnPlan,
   ENV_TOKEN_ENV_NAME,
 } from './desktopLaunch';
+import {
+  testManagedAccess,
+  testManagedControlPlaneEnvironment,
+  testManagedLocalEnvironment,
+} from '../testSupport/desktopTestHelpers';
 
 describe('desktopLaunch', () => {
   it('builds desktop-managed args from persistent local settings', () => {
-    const preferences = validateDesktopSettingsDraft({
-      local_ui_bind: '0.0.0.0:24000',
-      local_ui_password: 'secret',
-      local_ui_password_mode: 'replace',
+    const environment = testManagedLocalEnvironment('default', {
+      access: testManagedAccess({
+        local_ui_bind: '0.0.0.0:24000',
+        local_ui_password: 'secret',
+        local_ui_password_configured: true,
+      }),
     });
 
-    expect(buildDesktopAgentArgs(preferences)).toEqual([
+    expect(buildDesktopAgentArgs(environment)).toEqual([
       'run',
       '--mode',
       'desktop',
@@ -30,15 +36,21 @@ describe('desktopLaunch', () => {
   });
 
   it('adds one-shot environment bootstrap args and secret env vars to the spawn plan', () => {
-    const preferences = validateDesktopSettingsDraft({
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: 'secret',
-      local_ui_password_mode: 'replace',
-    });
+    const environment = testManagedControlPlaneEnvironment(
+      'https://region.example.invalid',
+      'env_123',
+      {
+        access: testManagedAccess({
+          local_ui_bind: '127.0.0.1:0',
+          local_ui_password: 'secret',
+          local_ui_password_configured: true,
+        }),
+      },
+    );
 
     const plan = buildDesktopAgentSpawnPlan(
       '/tmp/startup.json',
-      preferences,
+      environment,
       { HOME: '/Users/tester' },
       {
         bootstrap: {
@@ -79,13 +91,13 @@ describe('desktopLaunch', () => {
   });
 
   it('adds one-shot bootstrap ticket env vars without keeping stale environment tokens', () => {
-    const preferences = validateDesktopSettingsDraft({
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
+    const environment = testManagedControlPlaneEnvironment('https://region.example.invalid', 'env_123', {
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:0',
+      }),
     });
 
-    const env = buildDesktopAgentEnvironment(preferences, {
+    const env = buildDesktopAgentEnvironment(environment, {
       HOME: '/Users/tester',
       [ENV_TOKEN_ENV_NAME]: 'old-token',
     }, {
@@ -102,13 +114,13 @@ describe('desktopLaunch', () => {
   });
 
   it('removes stale secret env vars when the current settings do not use them', () => {
-    const preferences = validateDesktopSettingsDraft({
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
+    const environment = testManagedLocalEnvironment('default', {
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:0',
+      }),
     });
 
-    const env = buildDesktopAgentEnvironment(preferences, {
+    const env = buildDesktopAgentEnvironment(environment, {
       HOME: '/Users/tester',
       [ENV_TOKEN_ENV_NAME]: 'old-token',
       [BOOTSTRAP_TICKET_ENV_NAME]: 'old-ticket',
@@ -120,13 +132,13 @@ describe('desktopLaunch', () => {
   });
 
   it('builds a launch plan with the local default scope when no bootstrap target is provided', () => {
-    const preferences = validateDesktopSettingsDraft({
-      local_ui_bind: '127.0.0.1:0',
-      local_ui_password: '',
-      local_ui_password_mode: 'replace',
+    const environment = testManagedLocalEnvironment('default', {
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:0',
+      }),
     });
 
-    const plan = buildDesktopAgentLaunchPlan(preferences, { HOME: '/Users/tester' });
+    const plan = buildDesktopAgentLaunchPlan(environment, { HOME: '/Users/tester' });
     expect(plan.args).toEqual([
       'run',
       '--mode',

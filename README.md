@@ -80,7 +80,7 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 | --- | --- | --- |
 | Secure remote environment access 🔐 | Open Env App, inspect files, attach a terminal, and check monitoring panels | Operate on the user machine without routing plaintext application traffic through the control plane |
 | Browser-based development ⚙️ | Launch a codespace from Env App, explicitly install the managed runtime if prompted, then move into Code App | Reach code-server through the local runtime gateway and Flowersec E2EE proxy |
-| Desktop operations 🖥️ | Start Redeven Desktop, open the Local Environment, direct Local UI URLs, SSH targets that Desktop bootstraps on demand, or compatible Control Plane environments, and move between them without duplicate windows | Use the startup launcher, compact environment card grids, SSH bootstrap flow, offline-friendly desktop upload strategy, launcher-owned Local Environment Settings workbench, diagnostics, and shell-owned connection management around the same runtime contract |
+| Desktop operations 🖥️ | Start Redeven Desktop, open managed local environments, direct Local UI URLs, SSH targets that Desktop bootstraps on demand, or compatible Control Plane environments, and move between them without duplicate windows | Use the startup launcher, shared environment card grids, multi-local-environment management, SSH bootstrap flow, offline-friendly desktop upload strategy, launcher-owned Environment Settings workbench, diagnostics, and shell-owned connection management around the same runtime contract |
 
 ## Quick start
 
@@ -94,7 +94,9 @@ curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/inst
 
 If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven/releases).
 
-Redeven Desktop can open the bundled `Local Environment`, attach to a reachable Redeven Local UI URL, or SSH into another machine, reuse only an exact matching Desktop-managed Redeven runtime, install the current Desktop release on demand when needed, and tunnel its Local UI back into the same desktop shell.
+Redeven Desktop keeps one shared environment catalog across local managed scopes, Control Plane managed scopes, saved Redeven Local UI URLs, and saved SSH targets. You can create multiple desktop-managed local environments, reopen the same Control Plane environment locally or remotely, and keep Desktop plus agent-only/CLI mode aligned on the same `~/.redeven/scopes/...` runtime layout.
+
+Desktop can open any desktop-managed environment in that catalog, attach to a reachable Redeven Local UI URL, or SSH into another machine, reuse only an exact matching Desktop-managed Redeven runtime, install the current Desktop release on demand when needed, and tunnel its Local UI back into the same desktop shell.
 
 For SSH Environments, Desktop now supports three bootstrap delivery modes:
 

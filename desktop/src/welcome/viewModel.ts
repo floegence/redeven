@@ -4,7 +4,7 @@ export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
   surface_title: string;
   connect_heading: 'Connect Environment';
-  primary_action_label: 'Open Local Environment';
+  primary_action_label: 'Open Environment';
   settings_save_label: string;
 }>;
 
@@ -19,7 +19,7 @@ export type EnvironmentCardMetaItem = Readonly<{
 }>;
 
 export type EnvironmentCardModel = Readonly<{
-  kind_label: 'Local' | 'Redeven URL' | 'SSH';
+  kind_label: 'Local' | 'Control Plane' | 'Redeven URL' | 'SSH';
   status_label: string;
   status_tone: EnvironmentCardTone;
   source_label: string;
@@ -35,7 +35,7 @@ export function capabilityUnavailableMessage(label: string): string {
 }
 
 export function surfaceTitle(surface: DesktopLauncherSurface): string {
-  return surface === 'local_environment_settings' ? 'Local Environment Settings' : 'Connect Environment';
+  return surface === 'managed_environment_settings' ? 'Environment Settings' : 'Connect Environment';
 }
 
 export function shellStatus(snapshot: DesktopWelcomeSnapshot): Readonly<{
@@ -68,19 +68,21 @@ export function buildDesktopWelcomeShellViewModel(
     shell_title: 'Redeven Desktop',
     surface_title: surfaceTitle(visibleSurface),
     connect_heading: 'Connect Environment',
-    primary_action_label: 'Open Local Environment',
+    primary_action_label: 'Open Environment',
     settings_save_label: snapshot.settings_surface.save_label,
   };
 }
 
 export function isRemoteEnvironmentEntry(environment: DesktopEnvironmentEntry): boolean {
-  return environment.kind === 'external_local_ui' || environment.kind === 'ssh_environment';
+  return environment.kind !== 'managed_environment';
 }
 
 export function environmentKindLabel(environment: DesktopEnvironmentEntry): EnvironmentCardModel['kind_label'] {
   switch (environment.kind) {
     case 'ssh_environment':
       return 'SSH';
+    case 'managed_environment':
+      return environment.managed_environment_kind === 'controlplane' ? 'Control Plane' : 'Local';
     case 'external_local_ui':
       return 'Redeven URL';
     default:
@@ -103,6 +105,8 @@ export function libraryFilterLabel(filter: EnvironmentLibraryFilter): string {
 
 export function environmentSourceLabel(environment: DesktopEnvironmentEntry): string {
   switch (environment.category) {
+    case 'managed':
+      return 'Desktop-managed';
     case 'open_unsaved':
       return 'Open window';
     case 'recent_auto':
@@ -118,7 +122,7 @@ export function environmentStatusLabel(environment: DesktopEnvironmentEntry): st
   if (environment.is_open) {
     return 'Open';
   }
-  if (environment.kind === 'local_environment') {
+  if (environment.kind === 'managed_environment') {
     return 'Ready';
   }
   if (environment.category === 'recent_auto') {
@@ -141,6 +145,29 @@ export function environmentStatusTone(environment: DesktopEnvironmentEntry): Env
 }
 
 function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly EnvironmentCardMetaItem[] {
+  if (environment.kind === 'managed_environment') {
+    if (environment.managed_environment_kind === 'controlplane') {
+      return [
+        {
+          label: 'Provider',
+          value: environment.provider_origin ?? '',
+          monospace: true,
+        },
+        {
+          label: 'Environment ID',
+          value: environment.env_public_id ?? '',
+          monospace: true,
+        },
+      ].filter((item) => item.value !== '');
+    }
+    return [
+      {
+        label: 'Scope',
+        value: environment.managed_environment_name ?? '',
+        monospace: true,
+      },
+    ].filter((item) => item.value !== '');
+  }
   if (environment.kind === 'ssh_environment') {
     return [
       {
@@ -170,19 +197,21 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 }
 
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
-  if (environment.kind === 'local_environment') {
+  if (environment.kind === 'managed_environment') {
     return {
-      kind_label: 'Local',
+      kind_label: environment.managed_environment_kind === 'controlplane' ? 'Control Plane' : 'Local',
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
       source_label: 'Desktop-managed',
-      target_primary: environment.local_ui_url || 'Desktop-managed runtime on this machine',
+      target_primary: environment.local_ui_url || environment.secondary_text || 'Desktop-managed runtime on this machine',
       target_secondary: environment.local_ui_url === ''
-        ? 'Open the managed environment or adjust startup settings before the next launch.'
+        ? environment.managed_environment_kind === 'controlplane'
+          ? 'Desktop will request a fresh Control Plane bootstrap ticket when reopening this environment.'
+          : 'Open the managed environment or adjust startup settings before the next launch.'
         : 'Current runtime URL',
-      target_primary_monospace: environment.local_ui_url !== '',
+      target_primary_monospace: true,
       target_secondary_monospace: false,
-      meta: [],
+      meta: environmentCardMeta(environment),
     };
   }
 
@@ -219,16 +248,13 @@ export function environmentMatchesLibraryFilter(
   environment: DesktopEnvironmentEntry,
   filter: EnvironmentLibraryFilter,
 ): boolean {
-  if (!isRemoteEnvironmentEntry(environment)) {
-    return false;
-  }
   switch (filter) {
     case 'open':
       return environment.is_open;
     case 'recent':
       return environment.category === 'recent_auto';
     case 'saved':
-      return environment.category === 'saved';
+      return environment.category === 'saved' || environment.category === 'managed';
     default:
       return true;
   }
@@ -238,9 +264,6 @@ export function environmentMatchesLibrarySearch(
   environment: DesktopEnvironmentEntry,
   query: string,
 ): boolean {
-  if (!isRemoteEnvironmentEntry(environment)) {
-    return false;
-  }
   const clean = query.trim().toLowerCase();
   if (!clean) {
     return true;
@@ -249,6 +272,9 @@ export function environmentMatchesLibrarySearch(
     environment.label,
     environment.local_ui_url,
     environment.secondary_text,
+    environment.managed_environment_name ?? '',
+    environment.provider_origin ?? '',
+    environment.env_public_id ?? '',
     environment.ssh_details?.ssh_destination ?? '',
     environment.ssh_details?.remote_install_dir ?? '',
     environment.ssh_details?.release_base_url ?? '',
