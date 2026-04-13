@@ -293,7 +293,7 @@ export async function fetchProviderEnvironments(
   return normalizeDesktopProviderEnvironmentList(body, { provider });
 }
 
-export async function requestDesktopBootstrapTicket(
+export async function requestDesktopOpenSession(
   provider: DesktopControlPlaneProvider,
   accessToken: string,
   envPublicID: string,

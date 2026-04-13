@@ -14,6 +14,8 @@ import {
   type DesktopManagedControlPlaneEnvironment,
   type DesktopManagedEnvironment,
   type DesktopManagedEnvironmentAccess,
+  type DesktopManagedEnvironmentLocalOwner,
+  type DesktopManagedEnvironmentPreferredOpenRoute,
   type DesktopManagedLocalEnvironment,
 } from '../shared/desktopManagedEnvironment';
 
@@ -24,6 +26,8 @@ type TestManagedLocalEnvironmentOptions = Readonly<{
   access?: TestManagedAccessOverrides;
   pinned?: boolean;
   stateDir?: string;
+  owner?: DesktopManagedEnvironmentLocalOwner;
+  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -35,6 +39,9 @@ type TestManagedControlPlaneEnvironmentOptions = Readonly<{
   access?: TestManagedAccessOverrides;
   pinned?: boolean;
   stateDir?: string;
+  owner?: DesktopManagedEnvironmentLocalOwner;
+  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
+  localHosting?: boolean;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -61,6 +68,8 @@ export function testManagedLocalEnvironment(
     label: options.label,
     pinned: options.pinned,
     stateDir: options.stateDir ?? localManagedStateLayout(name).stateDir,
+    owner: options.owner,
+    preferredOpenRoute: options.preferredOpenRoute,
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
@@ -79,22 +88,25 @@ export function testManagedControlPlaneEnvironment(
     providerID: options.providerID ?? 'redeven_portal',
     label: options.label,
     pinned: options.pinned,
+    preferredOpenRoute: options.preferredOpenRoute,
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
-    localHosting: createManagedEnvironmentLocalHosting(
-      {
-        kind: 'controlplane',
-        provider_origin: providerOrigin,
-        provider_key: scopeParts[1] ?? 'redeven_portal',
-        env_public_id: envPublicID,
-      },
-      {
-        access: testManagedAccess(options.access),
-        owner: 'desktop',
-        stateDir: options.stateDir ?? layout.stateDir,
-      },
-    ),
+    localHosting: options.localHosting === false
+      ? undefined
+      : createManagedEnvironmentLocalHosting(
+        {
+          kind: 'controlplane',
+          provider_origin: providerOrigin,
+          provider_key: scopeParts[1] ?? 'redeven_portal',
+          env_public_id: envPublicID,
+        },
+        {
+          access: testManagedAccess(options.access),
+          owner: options.owner ?? 'desktop',
+          stateDir: options.stateDir ?? layout.stateDir,
+        },
+      ),
   });
 }
 

@@ -1237,8 +1237,9 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       startup,
       local_forward_url: forwardedURL,
       runtime_handle: {
-        owner_kind: 'ssh_runtime',
-        restartable: false,
+        runtime_kind: 'ssh',
+        lifecycle_owner: 'desktop',
+        launch_mode: 'spawned',
         stop,
       },
       stop,

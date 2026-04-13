@@ -4,6 +4,7 @@ import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProv
 import {
   testDesktopPreferences,
   testManagedAccess,
+  testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
@@ -14,7 +15,9 @@ import {
   buildSSHConnectionIssue,
 } from './desktopWelcomeState';
 import {
+  buildManagedEnvironmentDesktopTarget,
   buildExternalLocalUIDesktopTarget,
+  controlPlaneDesktopSessionKey,
   buildSSHDesktopTarget,
 } from './desktopTarget';
 
@@ -340,6 +343,51 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
+  });
+
+  it('prefers the remote managed session in launcher snapshots when a control-plane environment defaults to remote desktop', () => {
+    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      preferredOpenRoute: 'remote_desktop',
+    });
+    const localTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'local_host' });
+    const remoteTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'remote_desktop' });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedControlPlane],
+      }),
+      openSessions: [
+        {
+          session_key: localTarget.session_key,
+          target: localTarget,
+          entry_url: 'http://localhost:23998/',
+          startup: {
+            local_ui_url: 'http://localhost:23998/',
+            local_ui_urls: ['http://localhost:23998/'],
+          },
+        },
+        {
+          session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
+          target: remoteTarget,
+          entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+          startup: {
+            local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+            local_ui_urls: ['https://env.example.invalid/_redeven_boot/#redeven=abc'],
+            effective_run_mode: 'remote_desktop',
+          },
+        },
+      ],
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: managedControlPlane.id,
+        default_open_route: 'remote_desktop',
+        open_local_session_key: localTarget.session_key,
+        open_remote_session_key: remoteTarget.session_key,
+        open_session_key: remoteTarget.session_key,
+        local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+      }),
+    ]));
   });
 
   it('turns blocked local-runtime reports into managed-environment recovery copy', () => {

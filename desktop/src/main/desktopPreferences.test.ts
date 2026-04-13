@@ -29,6 +29,7 @@ import {
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
+  upsertManagedLocalEnvironment,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -555,6 +556,92 @@ describe('desktopPreferences', () => {
       'http://192.168.1.12:24000/',
       'http://192.168.1.13:24000/',
     ]);
+  });
+
+  it('binds a local environment to a control-plane identity while preserving its record id', () => {
+    const existing = testManagedLocalEnvironment('dev-a');
+    const next = upsertManagedLocalEnvironment(testDesktopPreferences({
+      managed_environments: [existing],
+    }), {
+      environment_id: existing.id,
+      name: 'dev-a',
+      label: 'Dev A',
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:0',
+      }),
+      provider_binding_enabled: true,
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'redeven_portal',
+      env_public_id: 'env_demo',
+      preferred_open_route: 'remote_desktop',
+    });
+
+    expect(next.managed_environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: existing.id,
+        label: 'Dev A',
+        preferred_open_route: 'remote_desktop',
+        identity: {
+          kind: 'provider',
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'redeven_portal',
+          env_public_id: 'env_demo',
+        },
+        provider_binding: expect.objectContaining({
+          provider_origin: 'https://cp.example.invalid',
+          provider_id: 'redeven_portal',
+          env_public_id: 'env_demo',
+        }),
+        local_hosting: expect.objectContaining({
+          scope: expect.objectContaining({
+            kind: 'controlplane',
+            env_public_id: 'env_demo',
+          }),
+        }),
+      }),
+    ]));
+  });
+
+  it('can clear a control-plane binding and resets the preferred open route to auto', () => {
+    const existing = testManagedLocalEnvironment('dev-a');
+    const bound = upsertManagedLocalEnvironment(testDesktopPreferences({
+      managed_environments: [existing],
+    }), {
+      environment_id: existing.id,
+      name: 'dev-a',
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:0',
+      }),
+      provider_binding_enabled: true,
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'redeven_portal',
+      env_public_id: 'env_demo',
+      preferred_open_route: 'remote_desktop',
+    });
+
+    const cleared = upsertManagedLocalEnvironment(bound, {
+      environment_id: existing.id,
+      name: 'dev-a',
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:0',
+      }),
+      provider_binding_enabled: false,
+      preferred_open_route: 'remote_desktop',
+    });
+
+    const clearedEnvironment = cleared.managed_environments.find((environment) => environment.id === existing.id);
+
+    expect(clearedEnvironment).toEqual(expect.objectContaining({
+      id: existing.id,
+      preferred_open_route: 'auto',
+      local_hosting: expect.objectContaining({
+        scope: {
+          kind: 'local',
+          name: 'dev-a',
+        },
+      }),
+    }));
+    expect(clearedEnvironment?.provider_binding).toBeUndefined();
   });
 
   it('serializes local-environment settings into a settings draft', () => {

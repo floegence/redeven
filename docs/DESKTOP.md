@@ -322,6 +322,7 @@ Desktop semantics:
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
 - Multiple local environments may coexist on one device. Their runtime ownership stays separate because each one resolves to a different `local/<name>` scope directory.
 - A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the runtime still decides whether remote control is enabled for the same environment.
+- If Desktop attaches to a runtime that was started by agent-only or CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
 - Agent-only and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
 
 Target validation rules:
@@ -367,8 +368,13 @@ The Control Plane flow is:
 5. Desktop loads `me` and `environments` with the access token.
 6. Desktop refreshes access tokens on demand with the stored refresh token.
 7. Desktop requests a unified per-environment open session only when it opens a specific environment.
-8. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.
-9. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
+8. Desktop resolves the actual open route from the saved environment record:
+   - explicit or default `preferred_open_route`
+   - whether that environment is declared as locally hosted on this device
+   - whether the provider returned `bootstrap_ticket`, `remote_session_url`, or both
+9. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.
+10. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
+11. Desktop never silently local-starts a Control Plane environment that is not declared as hosted on this device.
 
 Browser handoff may also open Desktop through a custom protocol link:
 
@@ -490,7 +496,8 @@ Desktop-specific outcomes from this implementation:
 
 - Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, and `remote_enabled` through local runtime/version endpoints.
 - When the runtime reports a desktop-owned release policy, Env App turns `Update Redeven` into `Manage in Desktop`.
-- Env App keeps `Restart runtime`.
+- Env App keeps `Restart runtime` only for Desktop-owned managed runtimes.
+- When Desktop is attached to an externally owned local runtime, restart and update hand off to the owning host process instead of trying to stop that runtime from Electron.
 - When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - Desktop resolves update impact before continuing:

@@ -295,7 +295,7 @@ describe('DesktopWelcomeShell', () => {
   it('includes scope-first Local Environment Settings copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Local Environment always uses the launcher-owned local scope on this machine.');
+    expect(appSrc).toContain('This environment keeps its own local scope on this machine.');
     expect(appSrc).toContain('Visibility');
     expect(appSrc).toContain('Details');
     expect(appSrc).toContain('Runtime');
