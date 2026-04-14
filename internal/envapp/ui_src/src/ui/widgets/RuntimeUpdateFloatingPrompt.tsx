@@ -2,7 +2,7 @@ import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { Refresh, X } from '@floegence/floe-webapp-core/icons';
 
-import type { AgentUpdatePromptMode } from '../maintenance/createAgentUpdatePromptCoordinator';
+import type { RuntimeUpdatePromptMode } from '../maintenance/createRuntimeUpdatePromptCoordinator';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 
 const WINDOW_MARGIN_DESKTOP = 16;
@@ -11,9 +11,9 @@ const WINDOW_WIDTH_DESKTOP = 360;
 const WINDOW_WIDTH_MOBILE = 320;
 const WINDOW_HEIGHT = 220;
 
-type AgentUpdateFloatingPromptProps = Readonly<{
+type RuntimeUpdateFloatingPromptProps = Readonly<{
   open: boolean;
-  mode: AgentUpdatePromptMode;
+  mode: RuntimeUpdatePromptMode;
   currentVersion: string;
   targetVersion: string;
   latestMessage?: string;
@@ -51,7 +51,7 @@ function resolveWindowWidth(viewport: { width: number; height: number }): number
   return Math.max(280, Math.min(preferred, viewport.width - margin * 2));
 }
 
-export function AgentUpdateFloatingPrompt(props: AgentUpdateFloatingPromptProps) {
+export function RuntimeUpdateFloatingPrompt(props: RuntimeUpdateFloatingPromptProps) {
   const [viewport, setViewport] = createSignal(currentViewportSize());
 
   onMount(() => {
@@ -138,12 +138,12 @@ export function AgentUpdateFloatingPrompt(props: AgentUpdateFloatingPromptProps)
           if (!next) props.onClose();
         }}
         title={title()}
-        persistenceKey="agent-update-prompt"
+        persistenceKey="runtime-update-prompt"
         defaultPosition={position()}
         defaultSize={{ width: width(), height: WINDOW_HEIGHT }}
         minSize={{ width: width(), height: WINDOW_HEIGHT }}
         maxSize={{ width: width(), height: WINDOW_HEIGHT }}
-        class="agent-update-floating-prompt"
+        class="runtime-update-floating-prompt"
         zIndex={140}
         footer={footer()}
       >

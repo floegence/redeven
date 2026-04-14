@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, s
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { startManagedAgent } from './agentProcess';
+import { startManagedRuntime } from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
   createSafeStorageSecretCodec,
@@ -41,8 +41,8 @@ import {
   type DesktopSessionTarget,
 } from './desktopTarget';
 import {
-  buildDesktopAgentLaunchPlan,
-  type DesktopAgentBootstrap,
+  buildDesktopRuntimeLaunchPlan,
+  type DesktopRuntimeBootstrap,
 } from './desktopLaunch';
 import { parseLocalUIBind } from './localUIBind';
 import {
@@ -57,9 +57,9 @@ import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateS
 import { DesktopThemeState } from './desktopThemeState';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { isAllowedAppNavigation } from './navigation';
-import { resolveBrowserPreloadPath, resolveBundledAgentPath, resolveWelcomeRendererPath } from './paths';
+import { resolveBrowserPreloadPath, resolveBundledRuntimePath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
-import { desktopSessionRuntimeHandleFromManagedAgent, type DesktopSessionRuntimeHandle } from './sessionRuntime';
+import { desktopSessionRuntimeHandleFromManagedRuntime, type DesktopSessionRuntimeHandle } from './sessionRuntime';
 import { startManagedSSHRuntime } from './sshRuntime';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
@@ -214,7 +214,7 @@ type PreparedExternalTargetResult = Readonly<
     }
 >;
 
-type ManagedTargetLaunch = Exclude<Awaited<ReturnType<typeof startManagedAgent>>, Readonly<{ kind: 'blocked' }>>;
+type ManagedTargetLaunch = Exclude<Awaited<ReturnType<typeof startManagedRuntime>>, Readonly<{ kind: 'blocked' }>>;
 
 type PreparedManagedTargetResult = Readonly<
   | {
@@ -999,8 +999,8 @@ async function createSessionRecord(
     diagnostics,
     target.kind === 'managed_environment'
       ? options.attached === true
-        ? 'agent_attached'
-        : 'agent_started'
+        ? 'runtime_attached'
+        : 'runtime_started'
       : target.kind === 'ssh_environment'
         ? 'ssh_environment_connected'
         : 'external_target_connected',
@@ -1225,24 +1225,24 @@ async function prepareExternalTarget(targetURL: string): Promise<PreparedExterna
 type PrepareManagedTargetOptions = Readonly<{
   environment: DesktopManagedEnvironment;
   localUIBind?: string;
-  bootstrap?: DesktopAgentBootstrap | null;
+  bootstrap?: DesktopRuntimeBootstrap | null;
 }>;
 
 async function prepareManagedTarget(
   options: PrepareManagedTargetOptions,
 ): Promise<PreparedManagedTargetResult> {
-  const executablePath = resolveBundledAgentPath({
+  const executablePath = resolveBundledRuntimePath({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   });
-  const launchPlan = buildDesktopAgentLaunchPlan(options.environment, process.env, {
+  const launchPlan = buildDesktopRuntimeLaunchPlan(options.environment, process.env, {
     localUIBind: options.localUIBind,
     bootstrap: options.bootstrap,
   });
-  const launch = await startManagedAgent({
+  const launch = await startManagedRuntime({
     executablePath,
-    agentArgs: launchPlan.args,
+    runtimeArgs: launchPlan.args,
     env: launchPlan.env,
     runtimeStateFile: launchPlan.state_layout.runtimeStateFile,
     passwordStdin: launchPlan.password_stdin,
@@ -1940,7 +1940,7 @@ async function openManagedEnvironmentRecord(
   preferences: DesktopPreferences,
   environment: DesktopManagedEnvironment,
   options: Readonly<{
-    bootstrap?: DesktopAgentBootstrap | null;
+    bootstrap?: DesktopRuntimeBootstrap | null;
     stealAppFocus?: boolean;
   }> = {},
 ): Promise<DesktopLauncherActionResult> {
@@ -1971,11 +1971,11 @@ async function openManagedEnvironmentRecord(
     });
   }
 
-  await createSessionRecord(target, prepared.launch.managedAgent.startup, {
-    runtimeHandle: desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent, {
+  await createSessionRecord(target, prepared.launch.managedRuntime.startup, {
+    runtimeHandle: desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
       persistedOwner: environment.local_hosting?.owner,
     }),
-    attached: prepared.launch.managedAgent.attached,
+    attached: prepared.launch.managedRuntime.attached,
     stealAppFocus: options.stealAppFocus !== false,
   });
   resetLauncherIssueState();
@@ -1999,7 +1999,7 @@ function controlPlaneBootstrap(
   providerOrigin: string,
   envPublicID: string,
   bootstrapTicket: string,
-): DesktopAgentBootstrap {
+): DesktopRuntimeBootstrap {
   return {
     kind: 'bootstrap_ticket',
     controlplane_url: providerOrigin,
@@ -2578,7 +2578,7 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
     };
   }
   const localUIBind = resolveManagedRestartBindOverride(environment, sessionRecord.startup) ?? undefined;
-  let bootstrap: DesktopAgentBootstrap | null = null;
+  let bootstrap: DesktopRuntimeBootstrap | null = null;
   if (managedEnvironmentKind(environment) === 'controlplane') {
     const controlPlane = savedControlPlaneByIdentity(
       preferences,
@@ -2625,7 +2625,7 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
   try {
     await sessionRecord.diagnostics.recordLifecycle(
       'target_restarting',
-      'desktop requested a managed agent restart',
+      'desktop requested a managed runtime restart',
       {
         attached: true,
         local_ui_bind_override: localUIBind ?? '',
@@ -2663,20 +2663,20 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
     };
   }
 
-  sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedAgent(prepared.launch.managedAgent, {
+  sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
     persistedOwner: environment.local_hosting?.owner,
   });
-  sessionRecord.startup = prepared.launch.managedAgent.startup;
-  sessionRecord.allowed_base_url = prepared.launch.managedAgent.startup.local_ui_url;
+  sessionRecord.startup = prepared.launch.managedRuntime.startup;
+  sessionRecord.allowed_base_url = prepared.launch.managedRuntime.startup.local_ui_url;
   sessionRecord.target = buildManagedEnvironmentDesktopTarget(environment, { route: 'local_host' });
   await sessionRecord.diagnostics.configureRuntime(sessionRecord.startup, sessionRecord.allowed_base_url);
   await sessionRecord.diagnostics.recordLifecycle(
-    prepared.launch.managedAgent.attached ? 'agent_attached' : 'agent_started',
-    prepared.launch.managedAgent.attached ? 'desktop attached to an existing agent runtime' : 'desktop restarted a managed agent runtime',
+    prepared.launch.managedRuntime.attached ? 'runtime_attached' : 'runtime_started',
+    prepared.launch.managedRuntime.attached ? 'desktop attached to an existing runtime' : 'desktop restarted a managed runtime',
     {
-      attached: prepared.launch.managedAgent.attached,
+      attached: prepared.launch.managedRuntime.attached,
       spawned: prepared.launch.spawned,
-      effective_run_mode: prepared.launch.managedAgent.startup.effective_run_mode ?? '',
+      effective_run_mode: prepared.launch.managedRuntime.startup.effective_run_mode ?? '',
     },
   );
   await sessionRecord.root_window.loadURL(sessionRecord.allowed_base_url);

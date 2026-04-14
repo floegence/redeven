@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { launchStartedFreshManagedRuntime } from './agentProcess';
+import { launchStartedFreshManagedRuntime } from './runtimeProcess';
 import { parseStartupReport } from './startup';
 
-describe('agentProcess', () => {
-  it('parses the startup report payload returned by the bundled agent', () => {
+describe('runtimeProcess', () => {
+  it('parses the startup report payload returned by the bundled runtime', () => {
     expect(parseStartupReport(JSON.stringify({
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
@@ -36,7 +36,7 @@ describe('agentProcess', () => {
     expect(launchStartedFreshManagedRuntime({
       kind: 'ready',
       spawned: true,
-      managedAgent: {
+      managedRuntime: {
         child: null,
         startup: {
           local_ui_url: 'http://127.0.0.1:43123/',
@@ -57,7 +57,7 @@ describe('agentProcess', () => {
     expect(launchStartedFreshManagedRuntime({
       kind: 'ready',
       spawned: true,
-      managedAgent: {
+      managedRuntime: {
         child: null,
         startup: {
           local_ui_url: 'http://127.0.0.1:43123/',

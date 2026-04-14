@@ -3,17 +3,17 @@ import { createContext, useContext } from 'solid-js';
 import type { AgentMaintenanceController } from './createAgentMaintenanceController';
 import type { AgentVersionModel } from './createAgentVersionModel';
 
-export type AgentUpdateContextValue = Readonly<{
+export type RuntimeUpdateContextValue = Readonly<{
   version: AgentVersionModel;
   maintenance: AgentMaintenanceController;
 }>;
 
-export const AgentUpdateContext = createContext<AgentUpdateContextValue>();
+export const RuntimeUpdateContext = createContext<RuntimeUpdateContextValue>();
 
-export function useAgentUpdateContext(): AgentUpdateContextValue {
-  const context = useContext(AgentUpdateContext);
+export function useRuntimeUpdateContext(): RuntimeUpdateContextValue {
+  const context = useContext(RuntimeUpdateContext);
   if (!context) {
-    throw new Error('AgentUpdateContext is missing');
+    throw new Error('RuntimeUpdateContext is missing');
   }
   return context;
 }

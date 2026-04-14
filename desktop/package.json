@@ -7,13 +7,13 @@
   "homepage": "https://github.com/floegence/redeven",
   "main": "dist/main/main.js",
   "scripts": {
-    "prepare:bundled-agent": "../scripts/build_desktop_bundled_agent.sh",
-    "start": "npm run build && npm run prepare:bundled-agent && electron .",
+    "prepare:bundled-runtime": "../scripts/build_desktop_bundled_runtime.sh",
+    "start": "npm run build && npm run prepare:bundled-runtime && electron .",
     "build": "tsc -p tsconfig.json && node dist/build/buildPreloads.js && vite build --config vite.welcome.config.mjs",
     "lint": "eslint \"src/**/*.ts\" \"src/**/*.tsx\" \"electron-builder.config.mjs\" \"eslint.config.mjs\" \"vite.welcome.config.mjs\" --max-warnings=0",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "test": "vitest run",
-    "package": "npm run build && npm run prepare:bundled-agent && electron-builder --config electron-builder.config.mjs --publish never"
+    "package": "npm run build && npm run prepare:bundled-runtime && electron-builder --config electron-builder.config.mjs --publish never"
   },
   "engines": {
     "node": ">=24.0.0"

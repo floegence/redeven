@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ManagedAgent } from './agentProcess';
+import type { ManagedRuntime } from './runtimeProcess';
 import {
-  desktopSessionRuntimeHandleFromManagedAgent,
+  desktopSessionRuntimeHandleFromManagedRuntime,
   resolveManagedRuntimeLifecycleOwner,
 } from './sessionRuntime';
 
@@ -48,7 +48,7 @@ describe('sessionRuntime', () => {
 
   it('detaches from external attached runtimes without stopping their host process', async () => {
     const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
-    const agent: ManagedAgent = {
+    const runtime: ManagedRuntime = {
       child: null,
       startup: {
         local_ui_url: 'http://localhost:23998/',
@@ -61,7 +61,7 @@ describe('sessionRuntime', () => {
       stop,
     };
 
-    const handle = desktopSessionRuntimeHandleFromManagedAgent(agent, {
+    const handle = desktopSessionRuntimeHandleFromManagedRuntime(runtime, {
       persistedOwner: 'agent',
     });
 
@@ -75,7 +75,7 @@ describe('sessionRuntime', () => {
 
   it('preserves stop control for desktop-owned attached runtimes', async () => {
     const stop = vi.fn<() => Promise<void>>().mockResolvedValue();
-    const agent: ManagedAgent = {
+    const runtime: ManagedRuntime = {
       child: null,
       startup: {
         local_ui_url: 'http://localhost:23998/',
@@ -88,7 +88,7 @@ describe('sessionRuntime', () => {
       stop,
     };
 
-    const handle = desktopSessionRuntimeHandleFromManagedAgent(agent, {
+    const handle = desktopSessionRuntimeHandleFromManagedRuntime(runtime, {
       persistedOwner: 'agent',
     });
 

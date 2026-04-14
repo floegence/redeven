@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentUpdateFloatingPrompt } from './AgentUpdateFloatingPrompt';
+import { RuntimeUpdateFloatingPrompt } from './RuntimeUpdateFloatingPrompt';
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
@@ -34,7 +34,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('AgentUpdateFloatingPrompt', () => {
+describe('RuntimeUpdateFloatingPrompt', () => {
   it('triggers update and skip actions in available mode', () => {
     const onUpdateNow = vi.fn();
     const onSkip = vi.fn();
@@ -43,7 +43,7 @@ describe('AgentUpdateFloatingPrompt', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AgentUpdateFloatingPrompt
+      <RuntimeUpdateFloatingPrompt
         open
         mode="available"
         currentVersion="v1.0.0"
@@ -73,7 +73,7 @@ describe('AgentUpdateFloatingPrompt', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AgentUpdateFloatingPrompt
+      <RuntimeUpdateFloatingPrompt
         open
         mode="failed"
         currentVersion="v1.0.0"

@@ -55,21 +55,21 @@ import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
-import { AgentUpdateContext } from './maintenance/AgentUpdateContext';
+import { RuntimeUpdateContext } from './maintenance/RuntimeUpdateContext';
 import { createAgentMaintenanceController } from './maintenance/createAgentMaintenanceController';
-import { createAgentUpdatePromptCoordinator } from './maintenance/createAgentUpdatePromptCoordinator';
+import { createRuntimeUpdatePromptCoordinator } from './maintenance/createRuntimeUpdatePromptCoordinator';
 import { createAgentVersionModel } from './maintenance/createAgentVersionModel';
 import {
   LOCAL_FAST_RECONNECT_POLICY,
   REMOTE_FAST_RECONNECT_POLICY,
   classifyReconnectFailure,
-  createAgentReconnectController,
+  createRuntimeReconnectController,
   type ReconnectAvailability,
-} from './reconnect/createAgentReconnectController';
+} from './reconnect/createRuntimeReconnectController';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
-import { AgentUpdateFloatingPrompt } from './widgets/AgentUpdateFloatingPrompt';
+import { RuntimeUpdateFloatingPrompt } from './widgets/RuntimeUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
@@ -968,7 +968,7 @@ export function EnvAppShell() {
     reloadCurrentPage(window);
   };
 
-  const reconnectController = createAgentReconnectController({
+  const reconnectController = createRuntimeReconnectController({
     enabled: () => !accessGateVisible() && connectionAttemptSeq() > 0,
     probeAvailability: () => (isLocalMode() ? probeLocalRuntimeAvailability() : probeRemoteRuntimeAvailability()),
     reconnect,
@@ -1022,7 +1022,7 @@ export function EnvAppShell() {
     },
   });
 
-  const agentUpdatePrompt = createAgentUpdatePromptCoordinator({
+  const runtimeUpdatePrompt = createRuntimeUpdatePromptCoordinator({
     envId,
     isLocalMode,
     accessGateVisible,
@@ -1092,7 +1092,7 @@ export function EnvAppShell() {
       case 'waiting_for_runtime':
         if (
           reconnectController.availabilityStatus() === 'offline'
-          || reconnectFailure()?.kind === 'agent_offline'
+          || reconnectFailure()?.kind === 'runtime_offline'
         ) {
           return 'Waiting for runtime';
         }
@@ -1158,7 +1158,7 @@ export function EnvAppShell() {
       case 'waiting_for_runtime':
         if (
           reconnectController.availabilityStatus() === 'offline'
-          || reconnectFailure()?.kind === 'agent_offline'
+          || reconnectFailure()?.kind === 'runtime_offline'
         ) {
           return 'Waiting for runtime...';
         }
@@ -2315,18 +2315,18 @@ export function EnvAppShell() {
       <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
       <FilePreviewHost />
       <FileBrowserSurfaceHost />
-      <AgentUpdateFloatingPrompt
-        open={agentUpdatePrompt.visible()}
-        mode={agentUpdatePrompt.mode()}
-        currentVersion={agentUpdatePrompt.currentVersion()}
-        targetVersion={agentUpdatePrompt.targetVersion()}
-        latestMessage={agentUpdatePrompt.latestMessage()}
-        stage={agentUpdatePrompt.stage()}
-        error={agentUpdatePrompt.error()}
-        onClose={agentUpdatePrompt.dismiss}
-        onUpdateNow={agentUpdatePrompt.startRecommendedUpgrade}
-        onRetry={agentUpdatePrompt.retry}
-        onSkip={agentUpdatePrompt.skipCurrentVersion}
+      <RuntimeUpdateFloatingPrompt
+        open={runtimeUpdatePrompt.visible()}
+        mode={runtimeUpdatePrompt.mode()}
+        currentVersion={runtimeUpdatePrompt.currentVersion()}
+        targetVersion={runtimeUpdatePrompt.targetVersion()}
+        latestMessage={runtimeUpdatePrompt.latestMessage()}
+        stage={runtimeUpdatePrompt.stage()}
+        error={runtimeUpdatePrompt.error()}
+        onClose={runtimeUpdatePrompt.dismiss}
+        onUpdateNow={runtimeUpdatePrompt.startRecommendedUpgrade}
+        onRetry={runtimeUpdatePrompt.retry}
+        onSkip={runtimeUpdatePrompt.skipCurrentVersion}
       />
       <DebugConsoleWindow controller={debugConsole} />
     </Shell>
@@ -2370,7 +2370,7 @@ export function EnvAppShell() {
     >
       <FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>
         <FilePreviewContext.Provider value={filePreviewContextValue}>
-          <AgentUpdateContext.Provider
+          <RuntimeUpdateContext.Provider
             value={{
               version: agentVersionModel,
               maintenance: agentMaintenanceController,
@@ -2392,7 +2392,7 @@ export function EnvAppShell() {
                 />
               </AIChatProviderBridge>
             </FloeRegistryRuntime>
-          </AgentUpdateContext.Provider>
+          </RuntimeUpdateContext.Provider>
         </FilePreviewContext.Provider>
       </FileBrowserSurfaceContext.Provider>
     </EnvContext.Provider>

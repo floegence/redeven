@@ -3,7 +3,7 @@
 import { createRoot, createSignal } from 'solid-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createAgentUpdatePromptCoordinator } from './createAgentUpdatePromptCoordinator';
+import { createRuntimeUpdatePromptCoordinator } from './createRuntimeUpdatePromptCoordinator';
 
 function createStorageMock(): Storage {
   const store = new Map<string, string>();
@@ -73,9 +73,9 @@ function createCoordinatorHarness() {
     setMaintenanceKind('upgrade');
   });
 
-  let coordinator!: ReturnType<typeof createAgentUpdatePromptCoordinator>;
+  let coordinator!: ReturnType<typeof createRuntimeUpdatePromptCoordinator>;
   const dispose = createRoot((disposeRoot) => {
-    coordinator = createAgentUpdatePromptCoordinator({
+    coordinator = createRuntimeUpdatePromptCoordinator({
       envId,
       isLocalMode,
       accessGateVisible,
@@ -140,7 +140,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { configurable: true, value: storage });
 });
 
-describe('createAgentUpdatePromptCoordinator', () => {
+describe('createRuntimeUpdatePromptCoordinator', () => {
   it('opens when a recommended update is available and closes after upgrade success', async () => {
     const harness = createCoordinatorHarness();
     try {

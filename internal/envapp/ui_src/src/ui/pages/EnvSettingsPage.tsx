@@ -16,7 +16,7 @@ import { Sidebar, SidebarContent, SidebarItem, SidebarItemList, SidebarSection }
 import { Button, Checkbox, ConfirmDialog, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
-import { useAgentUpdateContext } from '../maintenance/AgentUpdateContext';
+import { useRuntimeUpdateContext } from '../maintenance/RuntimeUpdateContext';
 import { resolveAgentUpgradeState } from '../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
@@ -300,7 +300,7 @@ function normalizeRepoInput(raw: string): string {
 
 export function EnvSettingsPage() {
   const env = useEnvContext();
-  const agentUpdate = useAgentUpdateContext();
+  const runtimeUpdate = useRuntimeUpdateContext();
   const protocol = useProtocol();
   const notify = useNotification();
 
@@ -379,16 +379,16 @@ export function EnvSettingsPage() {
 
   const canAdmin = createMemo(() => !!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner);
   const controlplaneStatus = createMemo(() => (env.env()?.status ? String(env.env()!.status) : ''));
-  const latestVersion = createMemo(() => agentUpdate.version.latestMeta());
-  const latestVersionLoading = createMemo(() => agentUpdate.version.latestMetaLoading());
-  const latestVersionError = createMemo(() => agentUpdate.version.latestMetaError());
+  const latestVersion = createMemo(() => runtimeUpdate.version.latestMeta());
+  const latestVersionLoading = createMemo(() => runtimeUpdate.version.latestMetaLoading());
+  const latestVersionError = createMemo(() => runtimeUpdate.version.latestMetaError());
   const upgradeState = createMemo(() => resolveAgentUpgradeState(latestVersion()));
-  const displayedStatus = createMemo(() => agentUpdate.maintenance.displayedStatus());
-  const maintenanceStage = createMemo(() => agentUpdate.maintenance.stage());
-  const maintenanceError = createMemo(() => agentUpdate.maintenance.error());
-  const maintaining = createMemo(() => agentUpdate.maintenance.maintaining());
-  const isUpgrading = createMemo(() => agentUpdate.maintenance.isUpgrading());
-  const isRestarting = createMemo(() => agentUpdate.maintenance.isRestarting());
+  const displayedStatus = createMemo(() => runtimeUpdate.maintenance.displayedStatus());
+  const maintenanceStage = createMemo(() => runtimeUpdate.maintenance.stage());
+  const maintenanceError = createMemo(() => runtimeUpdate.maintenance.error());
+  const maintaining = createMemo(() => runtimeUpdate.maintenance.maintaining());
+  const isUpgrading = createMemo(() => runtimeUpdate.maintenance.isUpgrading());
+  const isRestarting = createMemo(() => runtimeUpdate.maintenance.isRestarting());
 
   createEffect(() => {
     if (codeRuntimeStatus()?.operation.state !== 'running') return;
@@ -426,7 +426,7 @@ export function EnvSettingsPage() {
   });
 
   const [targetVersionInput, setTargetVersionInput] = createSignal('');
-  const preferredUpgradeVersion = createMemo(() => agentUpdate.version.preferredTargetVersion());
+  const preferredUpgradeVersion = createMemo(() => runtimeUpdate.version.preferredTargetVersion());
   const targetUpgradeVersion = createMemo(() => String(targetVersionInput() ?? '').trim());
   const targetUpgradeVersionValid = createMemo(() => isReleaseVersion(targetUpgradeVersion()));
 
@@ -444,7 +444,7 @@ export function EnvSettingsPage() {
   const refreshSettingsPage = async () => {
     await Promise.allSettled([
       refetch(),
-      agentUpdate.version.refetchLatestVersion(),
+      runtimeUpdate.version.refetchLatestVersion(),
     ]);
   };
 
@@ -486,14 +486,14 @@ export function EnvSettingsPage() {
         }
         return;
       }
-      await agentUpdate.maintenance.startUpgrade(targetUpgradeVersion());
+      await runtimeUpdate.maintenance.startUpgrade(targetUpgradeVersion());
     } finally {
       setUpgradeOpen(false);
     }
   };
   const startRestart = async () => {
     try {
-      await agentUpdate.maintenance.startRestart();
+      await runtimeUpdate.maintenance.startRestart();
     } finally {
       setRestartOpen(false);
     }
@@ -2688,7 +2688,7 @@ export function EnvSettingsPage() {
                 <SettingsTableBody>
                   <SettingsTableRow>
                     <SettingsTableCell class="font-medium text-muted-foreground">Current version</SettingsTableCell>
-                    <SettingsTableCell class="font-mono text-[11px]">{agentUpdate.version.currentVersion() || '—'}</SettingsTableCell>
+                    <SettingsTableCell class="font-mono text-[11px]">{runtimeUpdate.version.currentVersion() || '—'}</SettingsTableCell>
                     <SettingsTableCell class="text-[11px] text-muted-foreground">Version currently running on this endpoint.</SettingsTableCell>
                   </SettingsTableRow>
                   <SettingsTableRow>
