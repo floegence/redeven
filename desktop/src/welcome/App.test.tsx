@@ -284,6 +284,16 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-environment-inline-notice');
   });
 
+  it('keeps environment cards concise instead of rendering helper prose under the actions', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).not.toContain('managedActionModel()?.helper_text');
+    expect(appSrc).not.toContain('actionModel().helper_text');
+    expect(appSrc).not.toContain('Open the managed environment or adjust startup settings before the next launch.');
+    expect(appSrc).not.toContain('The provider currently reports this environment as offline.');
+    expect(appSrc).not.toContain('Desktop opens a remote session through the Control Plane without starting a local runtime here.');
+  });
+
   it('keeps transient action feedback out of page flow by using a toast viewport', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();

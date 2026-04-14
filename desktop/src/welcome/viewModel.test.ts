@@ -100,12 +100,13 @@ describe('buildEnvironmentCardModel', () => {
     expect(urlCard.status_label).toBe('Open');
     expect(urlCard.source_label).toBe('Saved');
     expect(urlCard.target_primary).toBe('http://192.168.1.12:24000/');
+    expect(urlCard.target_secondary).toBe('');
 
     const sshCard = buildEnvironmentCardModel(sshEntry!);
     expect(sshCard.kind_label).toBe('SSH');
     expect(sshCard.status_label).toBe('Open');
     expect(sshCard.target_primary).toBe('ops@example.internal:2222');
-    expect(sshCard.target_secondary).toContain('Forwarded UI http://127.0.0.1:24111/');
+    expect(sshCard.target_secondary).toBe('http://127.0.0.1:24111/');
     expect(sshCard.meta).toEqual(expect.arrayContaining([
       expect.objectContaining({
         label: 'Bootstrap',

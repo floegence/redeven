@@ -61,7 +61,6 @@ export type EnvironmentActionModel = Readonly<{
 export type ProviderBackedEnvironmentActionModel = Readonly<{
   status_label: string;
   status_tone: EnvironmentCardTone;
-  helper_text: string;
   primary_action: EnvironmentActionModel;
   secondary_action: EnvironmentActionModel | null;
 }>;
@@ -360,54 +359,10 @@ export function buildProviderBackedEnvironmentActionModel(
     })
     : null;
 
-  const helperText = (() => {
-    if (controlPlaneSyncState === 'syncing' && !hasLocalHosting) {
-      return 'Desktop is refreshing provider status for this environment.';
-    }
-    if (hasLocalHosting && hasRemoteDesktop) {
-      switch (environment.remote_route_state) {
-        case 'offline':
-          return 'Remote access is offline right now. Open the local route on this device instead.';
-        case 'stale':
-          return 'Remote status may be outdated. Local access on this device is still available.';
-        case 'auth_required':
-          return 'Remote access needs provider reauthorization. Local access on this device is still available.';
-        case 'provider_unreachable':
-        case 'provider_invalid':
-          return 'Remote provider sync failed. Local access on this device is still available.';
-        case 'removed':
-          return 'The provider no longer lists this environment. Local access on this device is still available.';
-        default:
-          return 'Choose whether to open the local route on this device or the provider-backed remote route.';
-      }
-    }
-    switch (environment.remote_route_state) {
-      case 'ready':
-        return 'Remote Desktop can open this environment without starting a local runtime on this machine.';
-      case 'offline':
-        return 'The provider currently reports this environment as offline.';
-      case 'stale':
-        return 'Remote status is stale. Refresh the provider to confirm the current state.';
-      case 'auth_required':
-        return 'Reconnect this Control Plane in your browser to restore access.';
-      case 'provider_unreachable':
-        return 'Desktop could not refresh the latest provider status from this machine.';
-      case 'provider_invalid':
-        return 'The provider returned an invalid response while Desktop refreshed status.';
-      case 'removed':
-        return 'This environment is no longer published by the provider.';
-      default:
-        return hasRemoteDesktop
-          ? 'Remote status is not yet confirmed.'
-          : 'Open the managed environment or adjust startup settings before the next launch.';
-    }
-  })();
-
   if (hasLocalHosting && hasRemoteDesktop) {
     return {
       status_label: status.label,
       status_tone: status.tone,
-      helper_text: helperText,
       primary_action: localRouteActionModel(environment),
       secondary_action: remoteAction,
     };
@@ -416,7 +371,6 @@ export function buildProviderBackedEnvironmentActionModel(
     return {
       status_label: status.label,
       status_tone: status.tone,
-      helper_text: helperText,
       primary_action: {
         intent: environment.open_local_session_key ? 'focus' : 'open',
         label: environment.open_local_session_key ? 'Focus' : 'Open',
@@ -430,7 +384,6 @@ export function buildProviderBackedEnvironmentActionModel(
   return {
     status_label: status.label,
     status_tone: status.tone,
-    helper_text: helperText,
     primary_action: remoteAction ?? {
       intent: 'refresh_status',
       label: 'Refresh Status',
@@ -623,25 +576,22 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   if (environment.kind === 'managed_environment') {
     const hasLocalHosting = environment.managed_has_local_hosting === true;
-    const hasRemoteDesktop = environment.managed_has_remote_desktop === true;
     const providerSummary = [environment.provider_origin, environment.env_public_id].filter(Boolean).join(' · ');
     const hostSummary = environment.managed_local_ui_bind || environment.managed_environment_name || environment.secondary_text;
+    const targetPrimary = environment.local_ui_url
+      || (hasLocalHosting
+        ? hostSummary
+        : providerSummary || environment.secondary_text || 'Provider-backed environment');
+    const targetSecondary = providerSummary !== '' && providerSummary !== targetPrimary
+      ? providerSummary
+      : '';
     return {
       kind_label: environmentKindLabel(environment),
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
       source_label: 'Desktop-managed',
-      target_primary: environment.local_ui_url
-        || (hasLocalHosting
-          ? hostSummary
-          : providerSummary || environment.secondary_text || 'Provider-backed environment'),
-      target_secondary: environment.local_ui_url !== ''
-        ? 'Current entry URL'
-        : hasLocalHosting && hasRemoteDesktop
-          ? providerSummary || 'Hosted on this device and linked to a Control Plane environment.'
-          : hasRemoteDesktop
-            ? 'Desktop opens a remote session through the Control Plane without starting a local runtime here.'
-            : 'Open the managed environment or adjust startup settings before the next launch.',
+      target_primary: targetPrimary,
+      target_secondary: targetSecondary,
       target_primary_monospace: true,
       target_secondary_monospace: false,
       meta: environmentCardMeta(environment),
@@ -655,9 +605,7 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       status_tone: environmentStatusTone(environment),
       source_label: environmentSourceLabel(environment),
       target_primary: environment.secondary_text,
-      target_secondary: environment.local_ui_url === ''
-        ? 'Desktop bootstraps the matching Redeven runtime over SSH and tunnels Local UI back into the shell.'
-        : `Forwarded UI ${environment.local_ui_url}`,
+      target_secondary: environment.local_ui_url,
       target_primary_monospace: true,
       target_secondary_monospace: environment.local_ui_url !== '',
       meta: environmentCardMeta(environment),
@@ -670,7 +618,7 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
     status_tone: environmentStatusTone(environment),
     source_label: environmentSourceLabel(environment),
     target_primary: environment.local_ui_url || environment.secondary_text,
-    target_secondary: 'Redeven Local UI origin saved in Desktop.',
+    target_secondary: '',
     target_primary_monospace: true,
     target_secondary_monospace: false,
     meta: environmentCardMeta(environment),
