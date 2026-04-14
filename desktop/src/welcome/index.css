@@ -113,6 +113,54 @@ body {
     0 12px 24px -8px color-mix(in srgb, var(--primary) 4%, transparent);
 }
 
+.redeven-environment-keyline {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.redeven-environment-keybadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  padding: 0.32rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--primary) 74%, white 26%);
+}
+
+.redeven-environment-keyfacts {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.redeven-environment-keyfacts__separator {
+  flex-shrink: 0;
+  width: 0.24rem;
+  height: 0.24rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+}
+
+.redeven-environment-keyfacts__item {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── Tabs ── */
 
 .redeven-console-tab {

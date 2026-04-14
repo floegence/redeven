@@ -29,6 +29,11 @@ export type EnvironmentCardMetaItem = Readonly<{
   monospace?: boolean;
 }>;
 
+export type EnvironmentCardKeyInfoModel = Readonly<{
+  badge_label: string;
+  detail_items: readonly string[];
+}>;
+
 export type EnvironmentCardModel = Readonly<{
   kind_label: 'Local' | 'Environment' | 'Remote Environment' | 'Redeven URL' | 'SSH';
   status_label: string;
@@ -163,6 +168,97 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
     default:
       return 'Local Environment';
   }
+}
+
+function environmentSourceSummary(environment: DesktopEnvironmentEntry): string {
+  switch (environment.category) {
+    case 'managed':
+      return 'Managed by Desktop';
+    case 'open_unsaved':
+      return 'Already open';
+    case 'recent_auto':
+      return 'Recent connection';
+    case 'saved':
+      return 'Saved connection';
+    default:
+      return 'Local connection';
+  }
+}
+
+function sshBootstrapSummary(environment: DesktopEnvironmentEntry): string {
+  if (environment.kind !== 'ssh_environment') {
+    return '';
+  }
+  switch (environment.ssh_details?.bootstrap_strategy) {
+    case 'desktop_upload':
+      return 'Desktop upload';
+    case 'remote_install':
+      return 'Remote install';
+    default:
+      return 'Automatic bootstrap';
+  }
+}
+
+export function buildEnvironmentCardKeyInfoModel(
+  environment: DesktopEnvironmentEntry,
+): EnvironmentCardKeyInfoModel {
+  if (environment.kind === 'managed_environment') {
+    const hasLocalHosting = environment.managed_has_local_hosting === true;
+    const hasRemoteDesktop = environment.managed_has_remote_desktop === true;
+    if (hasLocalHosting && hasRemoteDesktop) {
+      return {
+        badge_label: 'Local + Remote',
+        detail_items: ['Managed by Desktop', 'Local and remote access'],
+      };
+    }
+    if (hasRemoteDesktop) {
+      return {
+        badge_label: 'Remote',
+        detail_items: ['Managed by Desktop', 'Remote via Control Plane'],
+      };
+    }
+    return {
+      badge_label: 'Local',
+      detail_items: ['Managed by Desktop', 'Runs on this device'],
+    };
+  }
+
+  if (environment.kind === 'ssh_environment') {
+    return {
+      badge_label: 'SSH',
+      detail_items: [environmentSourceSummary(environment), sshBootstrapSummary(environment)].filter((value) => value !== ''),
+    };
+  }
+
+  return {
+    badge_label: 'URL',
+    detail_items: [environmentSourceSummary(environment)],
+  };
+}
+
+export function buildControlPlaneEnvironmentKeyInfoModel(
+  controlPlane: DesktopControlPlaneSummary,
+  managedEntry: DesktopEnvironmentEntry | null,
+): EnvironmentCardKeyInfoModel {
+  const detailItems: string[] = [];
+  if (managedEntry) {
+    detailItems.push('In Environment Library');
+    if (managedEntry.managed_has_local_hosting) {
+      detailItems.push(
+        managedEntry.managed_has_remote_desktop
+          ? 'Local and remote access'
+          : 'Runs on this device',
+      );
+    } else {
+      detailItems.push('Remote via Control Plane');
+    }
+  } else {
+    detailItems.push(controlPlane.provider.display_name);
+  }
+  return {
+    badge_label: 'Published',
+    detail_items: detailItems,
+  };
 }
 
 function localRouteActionModel(environment: DesktopEnvironmentEntry): EnvironmentActionModel {

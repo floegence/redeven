@@ -274,6 +274,19 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
   });
 
+  it('renders concise header key info through the shared environment keyline helpers', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('buildEnvironmentCardKeyInfoModel');
+    expect(appSrc).toContain('buildControlPlaneEnvironmentKeyInfoModel');
+    expect(appSrc).toContain('function EnvironmentCardKeyLine');
+    expect(appSrc).toContain('<EnvironmentCardKeyLine');
+    expect(styles).toContain('.redeven-environment-keyline');
+    expect(styles).toContain('.redeven-environment-keybadge');
+    expect(styles).toContain('.redeven-environment-keyfacts');
+  });
+
   it('includes Control Plane management copy inside the launcher source', () => {
     const appSrc = readWelcomeSource();
 

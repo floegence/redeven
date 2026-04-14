@@ -12,7 +12,9 @@ import {
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
 import {
+  buildControlPlaneEnvironmentKeyInfoModel,
   buildEnvironmentCardModel,
+  buildEnvironmentCardKeyInfoModel,
   buildProviderBackedEnvironmentActionModel,
 } from './viewModel';
 
@@ -117,6 +119,19 @@ describe('buildEnvironmentCardModel', () => {
         value: '/opt/redeven-desktop/runtime',
       }),
     ]));
+
+    expect(buildEnvironmentCardKeyInfoModel(localEntry!)).toEqual({
+      badge_label: 'Local',
+      detail_items: ['Managed by Desktop', 'Runs on this device'],
+    });
+    expect(buildEnvironmentCardKeyInfoModel(urlEntry!)).toEqual({
+      badge_label: 'URL',
+      detail_items: ['Saved connection'],
+    });
+    expect(buildEnvironmentCardKeyInfoModel(sshEntry!)).toEqual({
+      badge_label: 'SSH',
+      detail_items: ['Saved connection', 'Desktop upload'],
+    });
   });
 
   it('maps provider-backed environments to unified Ready and Offline badges', () => {
@@ -353,6 +368,18 @@ describe('buildEnvironmentCardModel', () => {
       },
     ];
 
+    const controlPlaneSummary = {
+      provider,
+      account,
+      environments,
+      last_synced_at_ms: freshSyncAt,
+      sync_state: 'ready' as const,
+      last_sync_attempt_at_ms: freshSyncAt,
+      last_sync_error_code: '',
+      last_sync_error_message: '',
+      catalog_freshness: 'fresh' as const,
+    };
+
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [remoteOnly, dualRoute],
@@ -363,17 +390,7 @@ describe('buildEnvironmentCardModel', () => {
           last_synced_at_ms: freshSyncAt,
         }],
       }),
-      controlPlanes: [{
-        provider,
-        account,
-        environments,
-        last_synced_at_ms: freshSyncAt,
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: freshSyncAt,
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
+      controlPlanes: [controlPlaneSummary],
     });
 
     const remoteOnlyEntry = snapshot.environments.find((environment) => environment.id === remoteOnly.id);
@@ -408,5 +425,18 @@ describe('buildEnvironmentCardModel', () => {
         route: 'remote_desktop',
       }),
     }));
+
+    expect(buildEnvironmentCardKeyInfoModel(remoteOnlyEntry!)).toEqual({
+      badge_label: 'Remote',
+      detail_items: ['Managed by Desktop', 'Remote via Control Plane'],
+    });
+    expect(buildEnvironmentCardKeyInfoModel(dualRouteEntry!)).toEqual({
+      badge_label: 'Local + Remote',
+      detail_items: ['Managed by Desktop', 'Local and remote access'],
+    });
+    expect(buildControlPlaneEnvironmentKeyInfoModel(controlPlaneSummary, dualRouteEntry!)).toEqual({
+      badge_label: 'Published',
+      detail_items: ['In Environment Library', 'Local and remote access'],
+    });
   });
 });

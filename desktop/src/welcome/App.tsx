@@ -75,9 +75,11 @@ import {
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
+  buildControlPlaneEnvironmentKeyInfoModel,
   buildControlPlaneEnvironmentActionModel,
   buildDesktopWelcomeShellViewModel,
   buildEnvironmentCardModel,
+  buildEnvironmentCardKeyInfoModel,
   buildControlPlaneStatusModel,
   buildProviderBackedEnvironmentActionModel,
   capabilityUnavailableMessage,
@@ -2527,6 +2529,31 @@ function ConsoleChipActionButton(props: Readonly<{
   );
 }
 
+function EnvironmentCardKeyLine(props: Readonly<{
+  badgeLabel: string;
+  detailItems: readonly string[];
+}>) {
+  return (
+    <div class="redeven-environment-keyline">
+      <span class="redeven-environment-keybadge">{props.badgeLabel}</span>
+      <Show when={props.detailItems.length > 0}>
+        <div class="redeven-environment-keyfacts">
+          <For each={props.detailItems}>
+            {(item, index) => (
+              <>
+                <Show when={index() > 0}>
+                  <span class="redeven-environment-keyfacts__separator" aria-hidden="true" />
+                </Show>
+                <span class="redeven-environment-keyfacts__item">{item}</span>
+              </>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 function QuickCreateConnectionCard(props: Readonly<{
   title: string;
   badge: string;
@@ -2579,31 +2606,13 @@ function EnvironmentConnectionCard(props: Readonly<{
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
   const card = createMemo(() => buildEnvironmentCardModel(props.environment));
+  const keyInfo = createMemo(() => buildEnvironmentCardKeyInfoModel(props.environment));
   const managedActionModel = createMemo(() => (
     props.environment.kind === 'managed_environment'
       ? buildProviderBackedEnvironmentActionModel(props.environment)
       : null
   ));
   const heroLabel = createMemo(() => card().kind_label === 'SSH' ? 'SSH target' : 'Endpoint');
-  const sshBootstrapLabel = createMemo(() => {
-    const strategy = props.environment.ssh_details?.bootstrap_strategy;
-    if (strategy === 'desktop_upload') return 'Upload';
-    if (strategy === 'remote_install') return 'Install';
-    return 'Auto';
-  });
-  const routeBadges = createMemo(() => {
-    if (props.environment.kind !== 'managed_environment') {
-      return [] as string[];
-    }
-    const badges: string[] = [];
-    if (props.environment.managed_has_local_hosting) {
-      badges.push('This device');
-    }
-    if (props.environment.managed_has_remote_desktop) {
-      badges.push(props.environment.managed_has_local_hosting ? 'Remote access' : 'Remote only');
-    }
-    return badges;
-  });
   const isEnvironmentActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
     || props.busyAction === 'open_remote_environment'
@@ -2637,26 +2646,10 @@ function EnvironmentConnectionCard(props: Readonly<{
       </CardHeader>
       <CardContent class="pb-2">
         <div class="space-y-2.5">
-          <div class="flex flex-wrap gap-1.5">
-            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {card().kind_label}
-            </Tag>
-            <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {card().source_label}
-            </Tag>
-            <For each={routeBadges()}>
-              {(badge) => (
-                <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                  {badge}
-                </Tag>
-              )}
-            </For>
-            <Show when={props.environment.kind === 'ssh_environment'}>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {sshBootstrapLabel()}
-              </Tag>
-            </Show>
-          </div>
+          <EnvironmentCardKeyLine
+            badgeLabel={keyInfo().badge_label}
+            detailItems={keyInfo().detail_items}
+          />
           <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
             <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{heroLabel()}</div>
             <div class={cn(
@@ -2896,6 +2889,10 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
     props.managedEntry,
     props.openWindow,
   ));
+  const keyInfo = createMemo(() => buildControlPlaneEnvironmentKeyInfoModel(
+    props.controlPlane,
+    props.managedEntry,
+  ));
   const runtimeLabel = createMemo(() => desktopProviderEnvironmentRuntimeLabel(
     props.environment.status,
     props.environment.lifecycle_status,
@@ -2926,23 +2923,10 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
       </CardHeader>
       <CardContent class="pb-2">
         <div class="space-y-2">
-          <div class="flex flex-wrap gap-1.5">
-            <Show when={props.managedEntry}>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                In library
-              </Tag>
-            </Show>
-            <Show when={props.managedEntry?.managed_has_local_hosting}>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                Hosted here
-              </Tag>
-            </Show>
-            <Show when={props.managedEntry?.managed_has_remote_desktop}>
-              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                Remote desktop
-              </Tag>
-            </Show>
-          </div>
+          <EnvironmentCardKeyLine
+            badgeLabel={keyInfo().badge_label}
+            detailItems={keyInfo().detail_items}
+          />
           <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
             <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Namespace</div>
             <div class="mt-1.5 text-sm font-medium text-foreground">{heroValue()}</div>
