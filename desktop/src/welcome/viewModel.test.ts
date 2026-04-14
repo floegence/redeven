@@ -11,7 +11,10 @@ import {
   testManagedLocalEnvironment,
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
-import { buildEnvironmentCardModel } from './viewModel';
+import {
+  buildEnvironmentCardModel,
+  buildProviderBackedEnvironmentActionModel,
+} from './viewModel';
 
 describe('buildEnvironmentCardModel', () => {
   it('builds local, URL, and SSH card metadata from desktop snapshot entries', () => {
@@ -116,6 +119,7 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('maps provider-backed environments to unified Ready and Offline badges', () => {
+    const freshSyncAt = Date.now();
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
       localHosting: false,
     });
@@ -155,6 +159,28 @@ describe('buildEnvironmentCardModel', () => {
           last_synced_at_ms: 500,
         }],
       }),
+      controlPlanes: [{
+        provider,
+        account,
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'offline',
+          lifecycle_status: 'suspended',
+          last_seen_at_unix_ms: 123,
+        }],
+        last_synced_at_ms: freshSyncAt,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: freshSyncAt,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
     });
 
     const offlineEntry = snapshot.environments.find((environment) => (
@@ -189,6 +215,28 @@ describe('buildEnvironmentCardModel', () => {
           last_synced_at_ms: 600,
         }],
       }),
+      controlPlanes: [{
+        provider,
+        account,
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+        }],
+        last_synced_at_ms: freshSyncAt,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: freshSyncAt,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
     });
 
     const readyEntry = openSnapshot.environments.find((environment) => (
@@ -199,6 +247,165 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardModel(readyEntry!)).toEqual(expect.objectContaining({
       status_label: 'Ready',
       status_tone: 'primary',
+    }));
+  });
+
+  it('marks remote-only provider cards as stale when the provider catalog is outdated', () => {
+    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      localHosting: false,
+    });
+    const provider = {
+      protocol_version: 'rcpp-v1' as const,
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    };
+    const account = {
+      provider_id: 'redeven_portal',
+      provider_origin: 'https://cp.example.invalid',
+      display_name: 'Redeven Portal',
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      authorization_expires_at_unix_ms: Date.now() + 60_000,
+    };
+
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedControlPlane],
+        control_planes: [{
+          provider,
+          account,
+          environments: [{
+            provider_id: 'redeven_portal',
+            provider_origin: 'https://cp.example.invalid',
+            env_public_id: 'env_demo',
+            label: 'Demo Environment',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'online',
+            lifecycle_status: 'active',
+            last_seen_at_unix_ms: 456,
+          }],
+          last_synced_at_ms: 600,
+        }],
+      }),
+    });
+
+    const staleEntry = snapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
+    ));
+
+    expect(staleEntry).toBeTruthy();
+    expect(buildEnvironmentCardModel(staleEntry!)).toEqual(expect.objectContaining({
+      status_label: 'Status stale',
+      status_tone: 'warning',
+    }));
+  });
+
+  it('derives offline remote-only and dual-route action models from the same provider state', () => {
+    const freshSyncAt = Date.now();
+    const remoteOnly = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_remote_only', {
+      localHosting: false,
+    });
+    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route');
+    const provider = {
+      protocol_version: 'rcpp-v1' as const,
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    };
+    const account = {
+      provider_id: 'redeven_portal',
+      provider_origin: 'https://cp.example.invalid',
+      display_name: 'Redeven Portal',
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      authorization_expires_at_unix_ms: Date.now() + 60_000,
+    };
+    const environments = [
+      {
+        provider_id: 'redeven_portal',
+        provider_origin: 'https://cp.example.invalid',
+        env_public_id: 'env_remote_only',
+        label: 'Remote Only',
+        description: 'remote only sandbox',
+        namespace_public_id: 'ns_demo',
+        namespace_name: 'Demo Team',
+        status: 'offline',
+        lifecycle_status: 'suspended',
+        last_seen_at_unix_ms: 123,
+      },
+      {
+        provider_id: 'redeven_portal',
+        provider_origin: 'https://cp.example.invalid',
+        env_public_id: 'env_dual_route',
+        label: 'Dual Route',
+        description: 'dual-route sandbox',
+        namespace_public_id: 'ns_demo',
+        namespace_name: 'Demo Team',
+        status: 'offline',
+        lifecycle_status: 'suspended',
+        last_seen_at_unix_ms: 456,
+      },
+    ];
+
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [remoteOnly, dualRoute],
+        control_planes: [{
+          provider,
+          account,
+          environments,
+          last_synced_at_ms: freshSyncAt,
+        }],
+      }),
+      controlPlanes: [{
+        provider,
+        account,
+        environments,
+        last_synced_at_ms: freshSyncAt,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: freshSyncAt,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
+    });
+
+    const remoteOnlyEntry = snapshot.environments.find((environment) => environment.id === remoteOnly.id);
+    const dualRouteEntry = snapshot.environments.find((environment) => environment.id === dualRoute.id);
+
+    expect(remoteOnlyEntry).toBeTruthy();
+    expect(dualRouteEntry).toBeTruthy();
+
+    expect(buildProviderBackedEnvironmentActionModel(remoteOnlyEntry!)).toEqual(expect.objectContaining({
+      status_label: 'Offline',
+      primary_action: expect.objectContaining({
+        intent: 'check_status',
+        label: 'Check Remote Status',
+        enabled: true,
+        route: 'remote_desktop',
+      }),
+      secondary_action: null,
+    }));
+
+    expect(buildProviderBackedEnvironmentActionModel(dualRouteEntry!)).toEqual(expect.objectContaining({
+      status_label: 'Local Ready',
+      primary_action: expect.objectContaining({
+        intent: 'open',
+        label: 'Open Local',
+        enabled: true,
+        route: 'local_host',
+      }),
+      secondary_action: expect.objectContaining({
+        intent: 'check_status',
+        label: 'Check Remote Status',
+        enabled: true,
+        route: 'remote_desktop',
+      }),
     }));
   });
 });

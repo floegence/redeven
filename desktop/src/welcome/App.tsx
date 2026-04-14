@@ -74,12 +74,15 @@ import {
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
+  buildControlPlaneEnvironmentActionModel,
   buildDesktopWelcomeShellViewModel,
   buildEnvironmentCardModel,
-  buildProviderBackedEnvironmentStatusModel,
+  buildControlPlaneStatusModel,
+  buildProviderBackedEnvironmentActionModel,
   capabilityUnavailableMessage,
   environmentLibraryCount,
   filterEnvironmentLibrary,
+  type EnvironmentActionModel,
   type EnvironmentCenterTab,
   libraryFilterLabel,
   type EnvironmentLibraryFilter,
@@ -278,10 +281,6 @@ function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function managedEnvironmentRouteLabel(route: DesktopManagedEnvironmentRoute): string {
-  return route === 'remote_desktop' ? 'Remote' : 'Local';
-}
-
 function defaultLocalControlPlaneSelection(controlPlanes: readonly DesktopControlPlaneSummary[]): Readonly<{
   provider_origin: string;
   provider_id: string;
@@ -349,10 +348,6 @@ function formatRelativeTimestamp(unixMS: number): string {
   } catch {
     return formatTimestamp(unixMS) || 'Unknown';
   }
-}
-
-function hasTimestampExpired(unixMS: number): boolean {
-  return Number.isFinite(unixMS) && unixMS > 0 && unixMS <= Date.now();
 }
 
 function createExternalURLConnectionDialogState(
@@ -1283,6 +1278,56 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return openRemoteEnvironment(environment.local_ui_url, errorTarget, environment);
   }
 
+  async function triggerManagedEnvironmentAction(
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    switch (action.intent) {
+      case 'open':
+      case 'focus':
+        return openManagedEnvironment(environment, errorTarget, action.route ?? 'auto');
+      case 'refresh_status':
+      case 'check_status':
+      case 'retry_sync': {
+        const controlPlane = snapshot().control_planes.find((entry) => (
+          entry.provider.provider_origin === environment.provider_origin
+          && entry.provider.provider_id === environment.provider_id
+        )) ?? null;
+        if (!controlPlane) {
+          setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Reconnect this Control Plane first.');
+          return false;
+        }
+        await refreshControlPlane(controlPlane);
+        return false;
+      }
+      case 'reconnect_provider':
+        if (!environment.provider_origin) {
+          setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Reconnect this Control Plane first.');
+          return false;
+        }
+        {
+          const controlPlane = snapshot().control_planes.find((entry) => (
+            entry.provider.provider_origin === environment.provider_origin
+            && entry.provider.provider_id === environment.provider_id
+          )) ?? null;
+          if (controlPlane) {
+            await reconnectControlPlane(controlPlane);
+            return false;
+          }
+          await performLauncherAction({
+            kind: 'start_control_plane_connect',
+            provider_origin: environment.provider_origin,
+          }, errorTarget === 'settings' ? 'connect' : errorTarget, {
+            noticeKeys: noticeKeysForEnvironment(environment),
+          });
+        }
+        return false;
+      default:
+        return false;
+    }
+  }
+
   async function connectControlPlaneFromDialog(): Promise<void> {
     const state = controlPlaneDialogState();
     if (!state) {
@@ -1356,6 +1401,32 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setFeedback('Control Plane environment opened.');
     }
     return opened;
+  }
+
+  async function triggerControlPlaneEnvironmentAction(
+    controlPlane: DesktopControlPlaneSummary,
+    envPublicID: string,
+    managedEntry: DesktopEnvironmentEntry | null,
+    action: EnvironmentActionModel,
+  ): Promise<boolean> {
+    switch (action.intent) {
+      case 'open':
+      case 'focus':
+        if (managedEntry && action.route === 'local_host') {
+          return triggerManagedEnvironmentAction(managedEntry, action, 'connect');
+        }
+        return openControlPlaneEnvironment(controlPlane, envPublicID, managedEntry);
+      case 'refresh_status':
+      case 'check_status':
+      case 'retry_sync':
+        await refreshControlPlane(controlPlane);
+        return false;
+      case 'reconnect_provider':
+        await reconnectControlPlane(controlPlane);
+        return false;
+      default:
+        return false;
+    }
   }
 
   async function closeLauncherOrQuit(): Promise<void> {
@@ -1827,11 +1898,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openRemoteEnvironment={openRemoteEnvironment}
           openSSHEnvironment={openSSHEnvironment}
           openEnvironment={openEnvironment}
+          runManagedEnvironmentAction={triggerManagedEnvironmentAction}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
           editEnvironment={startEditingEnvironment}
           deleteEnvironment={setDeleteTarget}
           controlPlanes={controlPlanes()}
-          openControlPlaneEnvironment={openControlPlaneEnvironment}
+          runControlPlaneEnvironmentAction={triggerControlPlaneEnvironmentAction}
           reconnectControlPlane={reconnectControlPlane}
           refreshControlPlane={refreshControlPlane}
           deleteControlPlane={setDeleteControlPlaneTarget}
@@ -1979,14 +2051,20 @@ function ConnectEnvironmentSurface(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     route?: 'auto' | DesktopManagedEnvironmentRoute,
   ) => Promise<boolean>;
+  runManagedEnvironmentAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
-  openControlPlaneEnvironment: (
+  runControlPlaneEnvironmentAction: (
     controlPlane: DesktopControlPlaneSummary,
     envPublicID: string,
     managedEntry: DesktopEnvironmentEntry | null,
+    action: EnvironmentActionModel,
   ) => Promise<boolean>;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
@@ -2191,7 +2269,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 busyAction={props.busyAction}
                 environmentNotice={props.controlPlaneEnvironmentNotice}
                 openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
-                openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                runControlPlaneEnvironmentAction={props.runControlPlaneEnvironmentAction}
                 reconnectControlPlane={props.reconnectControlPlane}
                 refreshControlPlane={props.refreshControlPlane}
                 deleteControlPlane={props.deleteControlPlane}
@@ -2207,6 +2285,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               openSettingsSurface={props.openSettingsSurface}
               openCreateConnectionDialog={props.openCreateConnectionDialog}
               openEnvironment={props.openEnvironment}
+              runManagedEnvironmentAction={props.runManagedEnvironmentAction}
               saveEnvironment={props.saveEnvironmentFromLibrary}
               editEnvironment={props.editEnvironment}
               deleteEnvironment={props.deleteEnvironment}
@@ -2231,6 +2310,11 @@ function EnvironmentCardsPanel(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     route?: 'auto' | DesktopManagedEnvironmentRoute,
   ) => Promise<boolean>;
+  runManagedEnvironmentAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -2245,6 +2329,7 @@ function EnvironmentCardsPanel(props: Readonly<{
               busyAction={props.busyAction}
               notice={props.environmentNotice(environment)}
               openEnvironment={props.openEnvironment}
+              runManagedEnvironmentAction={props.runManagedEnvironmentAction}
               saveEnvironment={props.saveEnvironment}
               editEnvironment={props.editEnvironment}
               deleteEnvironment={props.deleteEnvironment}
@@ -2383,11 +2468,21 @@ function EnvironmentConnectionCard(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
     route?: 'auto' | DesktopManagedEnvironmentRoute,
   ) => Promise<boolean>;
+  runManagedEnvironmentAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
   const card = createMemo(() => buildEnvironmentCardModel(props.environment));
+  const managedActionModel = createMemo(() => (
+    props.environment.kind === 'managed_environment'
+      ? buildProviderBackedEnvironmentActionModel(props.environment)
+      : null
+  ));
   const heroLabel = createMemo(() => card().kind_label === 'SSH' ? 'SSH target' : 'Endpoint');
   const sshBootstrapLabel = createMemo(() => {
     const strategy = props.environment.ssh_details?.bootstrap_strategy;
@@ -2408,27 +2503,15 @@ function EnvironmentConnectionCard(props: Readonly<{
     }
     return badges;
   });
-  const localRouteButtonLabel = createMemo(() => (
-    props.environment.open_local_session_key ? 'Focus Local' : 'Open Local'
+  const helperText = createMemo(() => managedActionModel()?.helper_text ?? '');
+  const isEnvironmentActionBusy = createMemo(() => (
+    props.busyAction === 'open_managed_environment'
+    || props.busyAction === 'open_remote_environment'
+    || props.busyAction === 'open_ssh_environment'
+    || props.busyAction === 'focus_environment_window'
+    || props.busyAction === 'refresh_control_plane'
+    || props.busyAction === 'start_control_plane_connect'
   ));
-  const remoteRouteButtonLabel = createMemo(() => (
-    props.environment.open_remote_session_key ? 'Focus Remote' : 'Open Remote'
-  ));
-  const showDualManagedRoutes = createMemo(() => (
-    props.environment.kind === 'managed_environment'
-    && props.environment.managed_has_local_hosting
-    && props.environment.managed_has_remote_desktop
-  ));
-  const primaryOpenLabel = createMemo(() => {
-    if (props.environment.kind === 'managed_environment' && props.environment.default_open_route) {
-      const route = props.environment.default_open_route;
-      const focused = route === 'remote_desktop'
-        ? props.environment.open_remote_session_key
-        : props.environment.open_local_session_key;
-      return `${focused ? 'Focus' : 'Open'} ${managedEnvironmentRouteLabel(route)}`;
-    }
-    return props.environment.open_action_label;
-  });
 
   return (
     <Card class={cn(
@@ -2492,52 +2575,61 @@ function EnvironmentConnectionCard(props: Readonly<{
           <Show when={props.notice}>
             {(notice) => <EnvironmentInlineNotice notice={notice()} />}
           </Show>
+          <Show when={helperText() !== ''}>
+            <div class="text-[11px] leading-5 text-muted-foreground">
+              {helperText()}
+            </div>
+          </Show>
         </div>
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
         <Show
-          when={showDualManagedRoutes()}
+          when={props.environment.kind === 'managed_environment' && managedActionModel()}
           fallback={(
             <Button
               size="sm"
               variant="default"
               class="flex-1"
-              loading={
-                props.busyAction === 'open_managed_environment'
-                || props.busyAction === 'open_remote_environment'
-                || props.busyAction === 'open_ssh_environment'
-                || props.busyAction === 'focus_environment_window'
-              }
+              loading={isEnvironmentActionBusy()}
               onClick={() => {
                 void props.openEnvironment(props.environment, 'connect');
               }}
             >
-              {primaryOpenLabel()}
+              {props.environment.open_action_label}
             </Button>
           )}
         >
-          <div class="grid flex-1 grid-cols-2 gap-2">
-            <Button
-              size="sm"
-              variant="default"
-              loading={props.busyAction === 'open_managed_environment' || props.busyAction === 'focus_environment_window'}
-              onClick={() => {
-                void props.openEnvironment(props.environment, 'connect', 'local_host');
-              }}
-            >
-              {localRouteButtonLabel()}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={props.busyAction === 'open_managed_environment' || props.busyAction === 'focus_environment_window'}
-              onClick={() => {
-                void props.openEnvironment(props.environment, 'connect', 'remote_desktop');
-              }}
-            >
-              {remoteRouteButtonLabel()}
-            </Button>
-          </div>
+          {(actionModel) => (
+            <div class="flex flex-1 items-center gap-2">
+              <Button
+                size="sm"
+                variant={actionModel().primary_action.variant}
+                class="flex-1"
+                loading={isEnvironmentActionBusy()}
+                disabled={!actionModel().primary_action.enabled}
+                onClick={() => {
+                  void props.runManagedEnvironmentAction(props.environment, actionModel().primary_action, 'connect');
+                }}
+              >
+                {actionModel().primary_action.label}
+              </Button>
+              <Show when={actionModel().secondary_action}>
+                {(secondaryAction) => (
+                  <Button
+                    size="sm"
+                    variant={secondaryAction().variant}
+                    loading={isEnvironmentActionBusy()}
+                    disabled={!secondaryAction().enabled}
+                    onClick={() => {
+                      void props.runManagedEnvironmentAction(props.environment, secondaryAction(), 'connect');
+                    }}
+                  >
+                    {secondaryAction().label}
+                  </Button>
+                )}
+              </Show>
+            </div>
+          )}
         </Show>
         <div class="flex items-center gap-0.5">
           <Show when={props.environment.can_save}>
@@ -2639,10 +2731,11 @@ function ControlPlanesPanel(props: Readonly<{
     managedEntry: DesktopEnvironmentEntry | null,
   ) => EnvironmentActionNotice | null;
   openCreateControlPlaneDialog: (message?: string) => void;
-  openControlPlaneEnvironment: (
+  runControlPlaneEnvironmentAction: (
     controlPlane: DesktopControlPlaneSummary,
     envPublicID: string,
     managedEntry: DesktopEnvironmentEntry | null,
+    action: EnvironmentActionModel,
   ) => Promise<boolean>;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
@@ -2673,7 +2766,7 @@ function ControlPlanesPanel(props: Readonly<{
                 openWindows={props.openWindows}
                 busyAction={props.busyAction}
                 environmentNotice={props.environmentNotice}
-                openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                runControlPlaneEnvironmentAction={props.runControlPlaneEnvironmentAction}
                 reconnectControlPlane={props.reconnectControlPlane}
                 refreshControlPlane={props.refreshControlPlane}
                 deleteControlPlane={props.deleteControlPlane}
@@ -2693,19 +2786,19 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
   openWindow: DesktopOpenEnvironmentWindow | null;
   busyAction: BusyAction;
   notice: EnvironmentActionNotice | null;
-  openControlPlaneEnvironment: (
+  runControlPlaneEnvironmentAction: (
     controlPlane: DesktopControlPlaneSummary,
     envPublicID: string,
     managedEntry: DesktopEnvironmentEntry | null,
+    action: EnvironmentActionModel,
   ) => Promise<boolean>;
 }>) {
-  const status = createMemo(() => buildProviderBackedEnvironmentStatusModel({
-    isOpen: Boolean(props.openWindow || props.managedEntry?.is_open),
-    hasLocalHosting: props.managedEntry?.managed_has_local_hosting === true,
-    hasRemoteDesktop: true,
-    providerStatus: props.environment.status,
-    providerLifecycleStatus: props.environment.lifecycle_status,
-  }));
+  const actionModel = createMemo(() => buildControlPlaneEnvironmentActionModel(
+    props.controlPlane,
+    props.environment,
+    props.managedEntry,
+    props.openWindow,
+  ));
   const runtimeLabel = createMemo(() => desktopProviderEnvironmentRuntimeLabel(
     props.environment.status,
     props.environment.lifecycle_status,
@@ -2729,8 +2822,8 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
             <CardTitle class="truncate text-sm font-semibold">{props.environment.label}</CardTitle>
             <div class="mt-1 text-xs text-muted-foreground">Published environment</div>
           </div>
-          <ConsoleStatusBadge tone={status().tone}>
-            {status().label}
+          <ConsoleStatusBadge tone={actionModel().status_tone}>
+            {actionModel().status_label}
           </ConsoleStatusBadge>
         </div>
       </CardHeader>
@@ -2766,20 +2859,63 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
           <Show when={props.notice}>
             {(notice) => <EnvironmentInlineNotice notice={notice()} />}
           </Show>
+          <Show when={actionModel().helper_text !== ''}>
+            <div class="text-[11px] leading-5 text-muted-foreground">
+              {actionModel().helper_text}
+            </div>
+          </Show>
         </div>
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
-        <Button
-          size="sm"
-          variant="default"
-          class="flex-1"
-          loading={props.busyAction === 'open_control_plane_environment' || props.busyAction === 'focus_environment_window'}
-          onClick={() => {
-            void props.openControlPlaneEnvironment(props.controlPlane, props.environment.env_public_id, props.managedEntry);
-          }}
-        >
-          {props.openWindow || props.managedEntry?.is_open ? 'Focus' : 'Open'}
-        </Button>
+        <div class="flex flex-1 items-center gap-2">
+          <Button
+            size="sm"
+            variant={actionModel().primary_action.variant}
+            class="flex-1"
+            loading={
+              props.busyAction === 'open_control_plane_environment'
+              || props.busyAction === 'focus_environment_window'
+              || props.busyAction === 'refresh_control_plane'
+              || props.busyAction === 'start_control_plane_connect'
+            }
+            disabled={!actionModel().primary_action.enabled}
+            onClick={() => {
+              void props.runControlPlaneEnvironmentAction(
+                props.controlPlane,
+                props.environment.env_public_id,
+                props.managedEntry,
+                actionModel().primary_action,
+              );
+            }}
+          >
+            {actionModel().primary_action.label}
+          </Button>
+          <Show when={actionModel().secondary_action}>
+            {(secondaryAction) => (
+              <Button
+                size="sm"
+                variant={secondaryAction().variant}
+                loading={
+                  props.busyAction === 'open_control_plane_environment'
+                  || props.busyAction === 'focus_environment_window'
+                  || props.busyAction === 'refresh_control_plane'
+                  || props.busyAction === 'start_control_plane_connect'
+                }
+                disabled={!secondaryAction().enabled}
+                onClick={() => {
+                  void props.runControlPlaneEnvironmentAction(
+                    props.controlPlane,
+                    props.environment.env_public_id,
+                    props.managedEntry,
+                    secondaryAction(),
+                  );
+                }}
+              >
+                {secondaryAction().label}
+              </Button>
+            )}
+          </Show>
+        </div>
       </CardFooter>
     </Card>
   );
@@ -2795,16 +2931,17 @@ function ControlPlaneShelf(props: Readonly<{
     envPublicID: string,
     managedEntry: DesktopEnvironmentEntry | null,
   ) => EnvironmentActionNotice | null;
-  openControlPlaneEnvironment: (
+  runControlPlaneEnvironmentAction: (
     controlPlane: DesktopControlPlaneSummary,
     envPublicID: string,
     managedEntry: DesktopEnvironmentEntry | null,
+    action: EnvironmentActionModel,
   ) => Promise<boolean>;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
-  const authorizationExpired = hasTimestampExpired(props.controlPlane.account.authorization_expires_at_unix_ms);
+  const statusModel = createMemo(() => buildControlPlaneStatusModel(props.controlPlane));
 
   return (
     <section class="space-y-2.5">
@@ -2815,14 +2952,17 @@ function ControlPlaneShelf(props: Readonly<{
             <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
                 <div class="truncate text-sm font-semibold tracking-tight text-foreground">{props.controlPlane.provider.display_name}</div>
-              <ConsoleStatusBadge tone={authorizationExpired ? 'warning' : 'success'}>
-                {authorizationExpired ? 'Expired' : 'Authorized'}
+              <ConsoleStatusBadge tone={statusModel().tone}>
+                {statusModel().label}
               </ConsoleStatusBadge>
               <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
             </div>
               <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span>{props.controlPlane.account.user_display_name}</span>
                 <span>Synced {formatRelativeTimestamp(props.controlPlane.last_synced_at_ms)}</span>
+              </div>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                {statusModel().detail}
               </div>
             </div>
           </div>
@@ -2841,6 +2981,7 @@ function ControlPlaneShelf(props: Readonly<{
               size="sm"
               variant="outline"
               loading={props.busyAction === 'refresh_control_plane'}
+              disabled={props.controlPlane.sync_state === 'syncing'}
               onClick={() => {
                 void props.refreshControlPlane(props.controlPlane);
               }}
@@ -2889,7 +3030,7 @@ function ControlPlaneShelf(props: Readonly<{
                 openWindow={openWindow}
                 busyAction={props.busyAction}
                 notice={props.environmentNotice(props.controlPlane, environment.env_public_id, managedEntry)}
-                openControlPlaneEnvironment={props.openControlPlaneEnvironment}
+                runControlPlaneEnvironmentAction={props.runControlPlaneEnvironmentAction}
               />
             );
             }}

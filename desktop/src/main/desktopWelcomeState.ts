@@ -3,7 +3,6 @@ import {
   desktopPreferencesToDraft,
   findManagedEnvironmentByID,
   type DesktopSavedEnvironment,
-  type DesktopSavedControlPlane,
   type DesktopSavedSSHEnvironment,
   type DesktopPreferences,
   defaultSavedEnvironmentLabel,
@@ -20,6 +19,7 @@ import type {
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
+import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
   defaultSavedSSHEnvironmentLabel,
   desktopSSHEnvironmentID,
@@ -38,9 +38,17 @@ import {
   managedEnvironmentSupportsRemoteDesktop,
   type DesktopManagedEnvironment,
 } from '../shared/desktopManagedEnvironment';
+import {
+  desktopProviderCatalogFreshness,
+  desktopProviderRemoteRouteState,
+  type DesktopManagedLocalRouteState,
+  type DesktopProviderCatalogFreshness,
+  type DesktopProviderRemoteRouteState,
+} from '../shared/providerEnvironmentState';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
+  controlPlanes?: readonly DesktopControlPlaneSummary[];
   openSessions?: readonly DesktopSessionSummary[];
   surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
@@ -246,32 +254,140 @@ function openSessionsByManagedEnvironment(
   return out;
 }
 
-function controlPlaneEnvironmentSummary(
-  controlPlanes: readonly DesktopSavedControlPlane[],
+function fallbackControlPlaneSummaries(
+  controlPlanes: DesktopPreferences['control_planes'],
+): readonly DesktopControlPlaneSummary[] {
+  return controlPlanes.map((controlPlane) => ({
+    ...controlPlane,
+    sync_state: controlPlane.last_synced_at_ms > 0 ? 'ready' : 'idle',
+    last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
+    last_sync_error_code: '',
+    last_sync_error_message: '',
+    catalog_freshness: desktopProviderCatalogFreshness(controlPlane.last_synced_at_ms),
+  }));
+}
+
+function controlPlaneSummaryByIdentity(
+  controlPlanes: readonly DesktopControlPlaneSummary[],
   providerOrigin: string,
   providerID: string,
-  envPublicID: string,
-): DesktopSavedControlPlane['environments'][number] | null {
+): DesktopControlPlaneSummary | null {
   const cleanProviderOrigin = compact(providerOrigin);
   const cleanProviderID = compact(providerID);
-  const cleanEnvPublicID = compact(envPublicID);
-  if (cleanProviderOrigin === '' || cleanProviderID === '' || cleanEnvPublicID === '') {
+  if (cleanProviderOrigin === '' || cleanProviderID === '') {
     return null;
   }
-  const controlPlane = controlPlanes.find((entry) => (
+  return controlPlanes.find((entry) => (
     entry.provider.provider_origin === cleanProviderOrigin
     && entry.provider.provider_id === cleanProviderID
   )) ?? null;
+}
+
+function controlPlaneEnvironmentSummary(
+  controlPlanes: readonly DesktopControlPlaneSummary[],
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): DesktopControlPlaneSummary['environments'][number] | null {
+  const cleanEnvPublicID = compact(envPublicID);
+  if (cleanEnvPublicID === '') {
+    return null;
+  }
+  const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, providerOrigin, providerID);
   if (!controlPlane) {
     return null;
   }
   return controlPlane.environments.find((entry) => entry.env_public_id === cleanEnvPublicID) ?? null;
 }
 
+function managedLocalRouteState(
+  environment: DesktopManagedEnvironment,
+  localSession: DesktopSessionSummary | null,
+): DesktopManagedLocalRouteState {
+  if (localSession) {
+    return 'open';
+  }
+  return managedEnvironmentSupportsLocalHosting(environment) ? 'ready' : 'unavailable';
+}
+
+function managedRemoteRouteDetails(
+  environment: DesktopManagedEnvironment,
+  controlPlanes: readonly DesktopControlPlaneSummary[],
+): Readonly<{
+  providerEnvironment: DesktopControlPlaneSummary['environments'][number] | null;
+  remoteRouteState: DesktopProviderRemoteRouteState;
+  remoteCatalogFreshness: DesktopProviderCatalogFreshness;
+  remoteStateReason: string;
+}> {
+  if (!managedEnvironmentSupportsRemoteDesktop(environment)) {
+    return {
+      providerEnvironment: null,
+      remoteRouteState: 'unknown',
+      remoteCatalogFreshness: 'unknown',
+      remoteStateReason: '',
+    };
+  }
+
+  const providerOrigin = managedEnvironmentProviderOrigin(environment);
+  const providerID = managedEnvironmentProviderID(environment);
+  const envPublicID = managedEnvironmentPublicID(environment);
+  const controlPlane = controlPlaneSummaryByIdentity(controlPlanes, providerOrigin, providerID);
+  if (!controlPlane) {
+    return {
+      providerEnvironment: null,
+      remoteRouteState: 'auth_required',
+      remoteCatalogFreshness: 'unknown',
+      remoteStateReason: 'Reconnect this Control Plane in Desktop to restore remote access.',
+    };
+  }
+
+  const providerEnvironment = controlPlaneEnvironmentSummary(
+    controlPlanes,
+    providerOrigin,
+    providerID,
+    envPublicID,
+  );
+  const remoteRouteState = desktopProviderRemoteRouteState({
+    syncState: controlPlane.sync_state,
+    environmentPresent: providerEnvironment !== null,
+    providerStatus: providerEnvironment?.status,
+    providerLifecycleStatus: providerEnvironment?.lifecycle_status,
+    lastSyncedAtMS: controlPlane.last_synced_at_ms,
+  });
+  const remoteCatalogFreshness = controlPlane.catalog_freshness;
+  const remoteStateReason = (() => {
+    switch (remoteRouteState) {
+      case 'ready':
+        return 'Remote Desktop is ready.';
+      case 'offline':
+        return 'The provider currently reports this environment as offline.';
+      case 'stale':
+        return 'Remote status is stale. Refresh the provider to confirm the current state.';
+      case 'removed':
+        return 'This environment is no longer published by the provider.';
+      case 'auth_required':
+        return 'Reconnect this Control Plane in your browser to restore access.';
+      case 'provider_unreachable':
+        return 'Desktop could not refresh this provider from the current machine.';
+      case 'provider_invalid':
+        return 'The provider returned an invalid response while Desktop refreshed status.';
+      default:
+        return 'Remote status is not yet confirmed.';
+    }
+  })();
+
+  return {
+    providerEnvironment,
+    remoteRouteState,
+    remoteCatalogFreshness,
+    remoteStateReason,
+  };
+}
+
 function buildManagedEnvironmentEntry(
   environment: DesktopManagedEnvironment,
   openSessions: Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>>,
-  controlPlanes: readonly DesktopSavedControlPlane[],
+  controlPlanes: readonly DesktopControlPlaneSummary[],
 ): DesktopEnvironmentEntry {
   const localSession = openSessions.local_host ?? null;
   const remoteSession = openSessions.remote_desktop ?? null;
@@ -287,9 +403,15 @@ function buildManagedEnvironmentEntry(
   const defaultSession = defaultRoute === 'remote_desktop'
     ? (remoteSession ?? localSession)
     : (localSession ?? remoteSession);
-  const providerEnvironment = kind === 'controlplane'
-    ? controlPlaneEnvironmentSummary(controlPlanes, providerOrigin, providerID, envPublicID)
-    : null;
+  const localRouteState = managedLocalRouteState(environment, localSession);
+  const remoteRoute = kind === 'controlplane'
+    ? managedRemoteRouteDetails(environment, controlPlanes)
+    : {
+      providerEnvironment: null,
+      remoteRouteState: 'unknown' as DesktopProviderRemoteRouteState,
+      remoteCatalogFreshness: 'unknown' as DesktopProviderCatalogFreshness,
+      remoteStateReason: '',
+    };
   return {
     id: environment.id,
     kind: 'managed_environment',
@@ -313,9 +435,16 @@ function buildManagedEnvironmentEntry(
     provider_origin: kind === 'controlplane' ? providerOrigin : undefined,
     provider_id: kind === 'controlplane' ? providerID : undefined,
     env_public_id: kind === 'controlplane' ? envPublicID : undefined,
-    provider_status: providerEnvironment?.status,
-    provider_lifecycle_status: providerEnvironment?.lifecycle_status,
-    provider_last_seen_at_unix_ms: providerEnvironment?.last_seen_at_unix_ms,
+    provider_status: remoteRoute.providerEnvironment?.status,
+    provider_lifecycle_status: remoteRoute.providerEnvironment?.lifecycle_status,
+    provider_last_seen_at_unix_ms: remoteRoute.providerEnvironment?.last_seen_at_unix_ms,
+    control_plane_sync_state: kind === 'controlplane'
+      ? controlPlaneSummaryByIdentity(controlPlanes, providerOrigin, providerID)?.sync_state
+      : undefined,
+    local_route_state: localRouteState,
+    remote_route_state: kind === 'controlplane' ? remoteRoute.remoteRouteState : undefined,
+    remote_catalog_freshness: kind === 'controlplane' ? remoteRoute.remoteCatalogFreshness : undefined,
+    remote_state_reason: kind === 'controlplane' ? remoteRoute.remoteStateReason : undefined,
     tag: isOpen ? 'Open' : 'Managed',
     category: 'managed',
     is_open: isOpen,
@@ -330,6 +459,7 @@ function buildManagedEnvironmentEntry(
 
 function buildEnvironmentEntries(
   preferences: DesktopPreferences,
+  controlPlanes: readonly DesktopControlPlaneSummary[],
   openSessions: readonly DesktopSessionSummary[],
 ): readonly DesktopEnvironmentEntry[] {
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
@@ -338,7 +468,7 @@ function buildEnvironmentEntries(
     buildManagedEnvironmentEntry(
       environment,
       openSessionsByManagedEnvironment(openSessions, environment),
-      preferences.control_planes,
+      controlPlanes,
     )
   ));
 
@@ -505,10 +635,11 @@ export function buildDesktopWelcomeSnapshot(
   args: BuildDesktopWelcomeSnapshotArgs,
 ): DesktopWelcomeSnapshot {
   const preferences = args.preferences;
+  const controlPlanes = args.controlPlanes ?? fallbackControlPlaneSummaries(preferences.control_planes);
   const openSessions = sortOpenSessions(args.openSessions ?? []);
   const issue = args.issue ?? null;
   const surface = args.surface ?? 'connect_environment';
-  const environments = buildEnvironmentEntries(preferences, openSessions);
+  const environments = buildEnvironmentEntries(preferences, controlPlanes, openSessions);
   const selectedManagedEnvironment = (
     findManagedEnvironmentByID(preferences, args.selectedManagedEnvironmentID ?? '')
     ?? preferences.managed_environments.find((environment) => Boolean(environment.local_hosting))
@@ -529,7 +660,7 @@ export function buildDesktopWelcomeSnapshot(
     close_action_label: openSessions.length > 0 ? 'Close Launcher' : 'Quit',
     open_windows: buildOpenEnvironmentWindows(openSessions),
     environments,
-    control_planes: preferences.control_planes,
+    control_planes: controlPlanes,
     suggested_remote_url: suggestedRemoteURL(issue, openSessions, environments),
     issue,
     settings_surface: buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', desktopPreferencesToDraft(preferences, selectedManagedEnvironment.id), {

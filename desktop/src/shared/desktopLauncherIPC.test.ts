@@ -152,7 +152,7 @@ describe('desktopLauncherIPC', () => {
       ok: false,
       code: 'session_stale',
       scope: 'environment',
-      message: 'Window closed. Status refreshed.',
+      message: 'That window was already closed. Desktop refreshed the environment list.',
       should_refresh_snapshot: true,
     })).toBe(true);
   });

@@ -1,5 +1,15 @@
-import type { DesktopEnvironmentEntry, DesktopLauncherSurface, DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
-import { desktopProviderEnvironmentAvailability } from '../shared/providerEnvironmentState';
+import type {
+  DesktopEnvironmentEntry,
+  DesktopLauncherSurface,
+  DesktopManagedEnvironmentRoute,
+  DesktopWelcomeSnapshot,
+} from '../shared/desktopLauncherIPC';
+import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import {
+  desktopProviderRemoteRouteState,
+  type DesktopControlPlaneSyncState,
+  type DesktopProviderRemoteRouteState,
+} from '../shared/providerEnvironmentState';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -29,6 +39,37 @@ export type EnvironmentCardModel = Readonly<{
   target_primary_monospace: boolean;
   target_secondary_monospace: boolean;
   meta: readonly EnvironmentCardMetaItem[];
+}>;
+
+export type EnvironmentActionIntent =
+  | 'open'
+  | 'focus'
+  | 'refresh_status'
+  | 'check_status'
+  | 'reconnect_provider'
+  | 'retry_sync'
+  | 'unavailable';
+
+export type EnvironmentActionModel = Readonly<{
+  intent: EnvironmentActionIntent;
+  label: string;
+  enabled: boolean;
+  variant: 'default' | 'outline';
+  route?: DesktopManagedEnvironmentRoute;
+}>;
+
+export type ProviderBackedEnvironmentActionModel = Readonly<{
+  status_label: string;
+  status_tone: EnvironmentCardTone;
+  helper_text: string;
+  primary_action: EnvironmentActionModel;
+  secondary_action: EnvironmentActionModel | null;
+}>;
+
+export type ControlPlaneStatusModel = Readonly<{
+  label: string;
+  tone: EnvironmentCardTone;
+  detail: string;
 }>;
 
 export function capabilityUnavailableMessage(label: string): string {
@@ -125,12 +166,95 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
   }
 }
 
-export function buildProviderBackedEnvironmentStatusModel(options: Readonly<{
+function localRouteActionModel(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
+  return {
+    intent: environment.open_local_session_key ? 'focus' : 'open',
+    label: environment.open_local_session_key ? 'Focus Local' : 'Open Local',
+    enabled: true,
+    variant: 'default',
+    route: 'local_host',
+  };
+}
+
+function remoteRouteActionModel(options: Readonly<{
+  remoteRouteState: DesktopProviderRemoteRouteState | undefined;
+  remoteSessionOpen: boolean;
+}>): EnvironmentActionModel {
+  if (options.remoteSessionOpen) {
+    return {
+      intent: 'focus',
+      label: 'Focus Remote',
+      enabled: true,
+      variant: 'outline',
+      route: 'remote_desktop',
+    };
+  }
+
+  switch (options.remoteRouteState) {
+    case 'ready':
+      return {
+        intent: 'open',
+        label: 'Open Remote',
+        enabled: true,
+        variant: 'outline',
+        route: 'remote_desktop',
+      };
+    case 'offline':
+      return {
+        intent: 'check_status',
+        label: 'Check Remote Status',
+        enabled: true,
+        variant: 'outline',
+        route: 'remote_desktop',
+      };
+    case 'stale':
+    case 'unknown':
+      return {
+        intent: 'refresh_status',
+        label: 'Refresh Status',
+        enabled: true,
+        variant: 'outline',
+      };
+    case 'auth_required':
+      return {
+        intent: 'reconnect_provider',
+        label: 'Reconnect',
+        enabled: true,
+        variant: 'outline',
+      };
+    case 'provider_unreachable':
+    case 'provider_invalid':
+      return {
+        intent: 'retry_sync',
+        label: 'Retry Sync',
+        enabled: true,
+        variant: 'outline',
+      };
+    case 'removed':
+      return {
+        intent: 'unavailable',
+        label: 'Unavailable',
+        enabled: false,
+        variant: 'outline',
+      };
+    default:
+      return {
+        intent: 'check_status',
+        label: 'Check Remote Status',
+        enabled: true,
+        variant: 'outline',
+      };
+  }
+}
+
+function providerBackedStatusModel(options: Readonly<{
   isOpen: boolean;
   hasLocalHosting: boolean;
   hasRemoteDesktop: boolean;
-  providerStatus?: string;
-  providerLifecycleStatus?: string;
+  localSessionOpen: boolean;
+  remoteSessionOpen: boolean;
+  remoteRouteState?: DesktopProviderRemoteRouteState;
+  controlPlaneSyncState?: DesktopControlPlaneSyncState;
 }>): Readonly<{
   label: string;
   tone: EnvironmentCardTone;
@@ -141,33 +265,278 @@ export function buildProviderBackedEnvironmentStatusModel(options: Readonly<{
       tone: 'success',
     };
   }
-
-  const providerAvailability = desktopProviderEnvironmentAvailability(
-    options.providerStatus,
-    options.providerLifecycleStatus,
-  );
-  if (providerAvailability === 'offline') {
+  if (
+    options.controlPlaneSyncState === 'syncing'
+    && !options.hasLocalHosting
+    && options.remoteRouteState !== 'ready'
+  ) {
     return {
-      label: 'Offline',
-      tone: 'warning',
-    };
-  }
-  if (providerAvailability === 'online') {
-    return {
-      label: 'Ready',
+      label: 'Checking',
       tone: 'primary',
     };
   }
-  if (options.hasRemoteDesktop && !options.hasLocalHosting) {
+  if (options.hasLocalHosting && options.hasRemoteDesktop) {
+    switch (options.remoteRouteState) {
+      case 'offline':
+      case 'stale':
+      case 'auth_required':
+      case 'provider_unreachable':
+      case 'provider_invalid':
+      case 'removed':
+        return {
+          label: 'Local Ready',
+          tone: 'primary',
+        };
+      default:
+        break;
+    }
+  }
+  switch (options.remoteRouteState) {
+    case 'ready':
+      return {
+        label: 'Ready',
+        tone: 'primary',
+      };
+    case 'offline':
+      return {
+        label: 'Offline',
+        tone: 'warning',
+      };
+    case 'stale':
+      return {
+        label: 'Status stale',
+        tone: 'warning',
+      };
+    case 'auth_required':
+      return {
+        label: 'Reconnect required',
+        tone: 'warning',
+      };
+    case 'provider_unreachable':
+    case 'provider_invalid':
+      return {
+        label: 'Sync needed',
+        tone: 'warning',
+      };
+    case 'removed':
+      return {
+        label: 'Unavailable',
+        tone: 'neutral',
+      };
+    case 'unknown':
+      return {
+        label: 'Unknown',
+        tone: 'neutral',
+      };
+    default:
+      return {
+        label: options.hasRemoteDesktop ? 'Unknown' : 'Ready',
+        tone: options.hasRemoteDesktop ? 'neutral' : 'primary',
+      };
+  }
+}
+
+export function buildProviderBackedEnvironmentActionModel(
+  environment: DesktopEnvironmentEntry,
+  controlPlaneSyncState: DesktopControlPlaneSyncState = environment.control_plane_sync_state ?? 'ready',
+): ProviderBackedEnvironmentActionModel {
+  const hasLocalHosting = environment.managed_has_local_hosting === true;
+  const hasRemoteDesktop = environment.managed_has_remote_desktop === true;
+  const localSessionOpen = Boolean(environment.open_local_session_key);
+  const remoteSessionOpen = Boolean(environment.open_remote_session_key);
+  const status = providerBackedStatusModel({
+    isOpen: environment.is_open,
+    hasLocalHosting,
+    hasRemoteDesktop,
+    localSessionOpen,
+    remoteSessionOpen,
+    remoteRouteState: environment.remote_route_state,
+    controlPlaneSyncState,
+  });
+  const remoteAction = hasRemoteDesktop
+    ? remoteRouteActionModel({
+      remoteRouteState: environment.remote_route_state,
+      remoteSessionOpen,
+    })
+    : null;
+
+  const helperText = (() => {
+    if (controlPlaneSyncState === 'syncing' && !hasLocalHosting) {
+      return 'Desktop is refreshing provider status for this environment.';
+    }
+    if (hasLocalHosting && hasRemoteDesktop) {
+      switch (environment.remote_route_state) {
+        case 'offline':
+          return 'Remote access is offline right now. Open the local route on this device instead.';
+        case 'stale':
+          return 'Remote status may be outdated. Local access on this device is still available.';
+        case 'auth_required':
+          return 'Remote access needs provider reauthorization. Local access on this device is still available.';
+        case 'provider_unreachable':
+        case 'provider_invalid':
+          return 'Remote provider sync failed. Local access on this device is still available.';
+        case 'removed':
+          return 'The provider no longer lists this environment. Local access on this device is still available.';
+        default:
+          return 'Choose whether to open the local route on this device or the provider-backed remote route.';
+      }
+    }
+    switch (environment.remote_route_state) {
+      case 'ready':
+        return 'Remote Desktop can open this environment without starting a local runtime on this machine.';
+      case 'offline':
+        return 'The provider currently reports this environment as offline.';
+      case 'stale':
+        return 'Remote status is stale. Refresh the provider to confirm the current state.';
+      case 'auth_required':
+        return 'Reconnect this Control Plane in your browser to restore access.';
+      case 'provider_unreachable':
+        return 'Desktop could not refresh the latest provider status from this machine.';
+      case 'provider_invalid':
+        return 'The provider returned an invalid response while Desktop refreshed status.';
+      case 'removed':
+        return 'This environment is no longer published by the provider.';
+      default:
+        return hasRemoteDesktop
+          ? 'Remote status is not yet confirmed.'
+          : 'Open the managed environment or adjust startup settings before the next launch.';
+    }
+  })();
+
+  if (hasLocalHosting && hasRemoteDesktop) {
     return {
-      label: 'Unavailable',
-      tone: 'neutral',
+      status_label: status.label,
+      status_tone: status.tone,
+      helper_text: helperText,
+      primary_action: localRouteActionModel(environment),
+      secondary_action: remoteAction,
+    };
+  }
+  if (hasLocalHosting) {
+    return {
+      status_label: status.label,
+      status_tone: status.tone,
+      helper_text: helperText,
+      primary_action: {
+        intent: environment.open_local_session_key ? 'focus' : 'open',
+        label: environment.open_local_session_key ? 'Focus' : 'Open',
+        enabled: true,
+        variant: 'default',
+        route: 'local_host',
+      },
+      secondary_action: null,
     };
   }
   return {
-    label: 'Ready',
-    tone: 'neutral',
+    status_label: status.label,
+    status_tone: status.tone,
+    helper_text: helperText,
+    primary_action: remoteAction ?? {
+      intent: 'refresh_status',
+      label: 'Refresh Status',
+      enabled: true,
+      variant: 'default',
+    },
+    secondary_action: null,
   };
+}
+
+export function buildControlPlaneEnvironmentActionModel(
+  controlPlane: DesktopControlPlaneSummary,
+  environment: DesktopControlPlaneSummary['environments'][number],
+  managedEntry: DesktopEnvironmentEntry | null,
+  openWindow: { session_key: string } | null,
+): ProviderBackedEnvironmentActionModel {
+  const syntheticEntry: DesktopEnvironmentEntry = managedEntry ?? {
+    id: `${controlPlane.provider.provider_origin}|${controlPlane.provider.provider_id}|${environment.env_public_id}`,
+    kind: 'managed_environment',
+    label: environment.label,
+    local_ui_url: '',
+    secondary_text: `${controlPlane.provider.provider_origin} · ${environment.env_public_id}`,
+    managed_environment_kind: 'controlplane',
+    managed_has_local_hosting: false,
+    managed_has_remote_desktop: true,
+    managed_preferred_open_route: 'auto',
+    default_open_route: 'remote_desktop',
+    open_remote_session_key: openWindow?.session_key,
+    open_action_label: openWindow ? 'Focus' : 'Open',
+    provider_origin: controlPlane.provider.provider_origin,
+    provider_id: controlPlane.provider.provider_id,
+    env_public_id: environment.env_public_id,
+    provider_status: environment.status,
+    provider_lifecycle_status: environment.lifecycle_status,
+    provider_last_seen_at_unix_ms: environment.last_seen_at_unix_ms,
+    control_plane_sync_state: controlPlane.sync_state,
+    local_route_state: 'unavailable',
+    remote_route_state: desktopProviderRemoteRouteState({
+      syncState: controlPlane.sync_state,
+      environmentPresent: true,
+      providerStatus: environment.status,
+      providerLifecycleStatus: environment.lifecycle_status,
+      lastSyncedAtMS: controlPlane.last_synced_at_ms,
+    }),
+    remote_catalog_freshness: controlPlane.catalog_freshness,
+    remote_state_reason: '',
+    tag: openWindow ? 'Open' : 'Managed',
+    category: 'managed',
+    is_open: Boolean(openWindow),
+    open_session_key: openWindow?.session_key ?? '',
+    can_edit: false,
+    can_delete: false,
+    can_save: false,
+    last_used_at_ms: 0,
+  };
+  return buildProviderBackedEnvironmentActionModel(syntheticEntry, controlPlane.sync_state);
+}
+
+export function buildControlPlaneStatusModel(
+  controlPlane: DesktopControlPlaneSummary,
+): ControlPlaneStatusModel {
+  switch (controlPlane.sync_state) {
+    case 'syncing':
+      return {
+        label: 'Checking',
+        tone: 'primary',
+        detail: 'Refreshing the latest environment status from this provider.',
+      };
+    case 'auth_required':
+      return {
+        label: 'Reconnect required',
+        tone: 'warning',
+        detail: 'Desktop authorization expired. Reconnect in your browser to refresh environments again.',
+      };
+    case 'provider_unreachable':
+      return {
+        label: 'Sync failed',
+        tone: 'warning',
+        detail: controlPlane.last_sync_error_message || 'Desktop could not reach this provider.',
+      };
+    case 'provider_invalid':
+      return {
+        label: 'Invalid response',
+        tone: 'warning',
+        detail: controlPlane.last_sync_error_message || 'This provider returned an invalid response.',
+      };
+    case 'sync_error':
+      return {
+        label: 'Sync failed',
+        tone: 'warning',
+        detail: controlPlane.last_sync_error_message || 'Desktop could not refresh this provider.',
+      };
+    default:
+      if (controlPlane.catalog_freshness === 'stale') {
+        return {
+          label: 'Status stale',
+          tone: 'warning',
+          detail: 'The last provider sync is getting old. Refresh to confirm the latest environment status.',
+        };
+      }
+      return {
+        label: 'Authorized',
+        tone: 'success',
+        detail: 'Desktop has active provider authorization and a fresh environment catalog.',
+      };
+  }
 }
 
 export function environmentStatusLabel(environment: DesktopEnvironmentEntry): string {
@@ -175,13 +544,7 @@ export function environmentStatusLabel(environment: DesktopEnvironmentEntry): st
     return 'Open';
   }
   if (environment.kind === 'managed_environment') {
-    return buildProviderBackedEnvironmentStatusModel({
-      isOpen: environment.is_open,
-      hasLocalHosting: environment.managed_has_local_hosting === true,
-      hasRemoteDesktop: environment.managed_has_remote_desktop === true,
-      providerStatus: environment.provider_status,
-      providerLifecycleStatus: environment.provider_lifecycle_status,
-    }).label;
+    return buildProviderBackedEnvironmentActionModel(environment).status_label;
   }
   if (environment.category === 'recent_auto') {
     return 'Recent';
@@ -197,13 +560,7 @@ export function environmentStatusTone(environment: DesktopEnvironmentEntry): Env
     return 'success';
   }
   if (environment.kind === 'managed_environment') {
-    return buildProviderBackedEnvironmentStatusModel({
-      isOpen: environment.is_open,
-      hasLocalHosting: environment.managed_has_local_hosting === true,
-      hasRemoteDesktop: environment.managed_has_remote_desktop === true,
-      providerStatus: environment.provider_status,
-      providerLifecycleStatus: environment.provider_lifecycle_status,
-    }).tone;
+    return buildProviderBackedEnvironmentActionModel(environment).status_tone;
   }
   if (environment.category === 'recent_auto') {
     return 'primary';

@@ -50,7 +50,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("'session_stale'");
-    expect(mainSrc).toContain("'Window closed. Status refreshed.'");
+    expect(mainSrc).toContain("'That window was already closed. Desktop refreshed the environment list.'");
     expect(mainSrc).not.toContain("throw new Error('That environment window is no longer open.')");
   });
 

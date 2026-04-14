@@ -69,7 +69,35 @@ export function launcherActionFailurePresentation(
     case 'session_stale':
       return {
         global_message: globalMessage,
-        notice_message: failure.message,
+        notice_message: 'That window was already closed. Desktop refreshed the environment list.',
+        notice_tone: 'info',
+        refresh_snapshot: refreshSnapshot,
+      };
+    case 'environment_offline':
+      return {
+        global_message: globalMessage,
+        notice_message: 'This environment is currently offline in the provider.',
+        notice_tone: 'warning',
+        refresh_snapshot: refreshSnapshot,
+      };
+    case 'environment_status_stale':
+      return {
+        global_message: globalMessage,
+        notice_message: 'Remote status is stale. Refresh the provider to confirm the latest state.',
+        notice_tone: 'info',
+        refresh_snapshot: refreshSnapshot,
+      };
+    case 'provider_sync_required':
+      return {
+        global_message: globalMessage,
+        notice_message: 'Desktop needs a fresh provider sync before opening this environment.',
+        notice_tone: 'info',
+        refresh_snapshot: refreshSnapshot,
+      };
+    case 'provider_sync_in_progress':
+      return {
+        global_message: globalMessage,
+        notice_message: 'Desktop is already checking the latest provider status.',
         notice_tone: 'info',
         refresh_snapshot: refreshSnapshot,
       };
@@ -77,7 +105,10 @@ export function launcherActionFailurePresentation(
     case 'environment_route_unavailable':
     case 'control_plane_missing':
     case 'control_plane_environment_missing':
+    case 'provider_environment_removed':
     case 'control_plane_auth_required':
+    case 'provider_unreachable':
+    case 'provider_invalid_response':
       return {
         global_message: globalMessage,
         notice_message: failure.message,

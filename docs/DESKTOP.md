@@ -214,9 +214,26 @@ Interaction rules:
 - Managed environment cards and Control Plane environment cards normalize provider runtime into the same user-facing state model:
   - `Open`
   - `Ready`
+  - `Local Ready`
+  - `Checking`
   - `Offline`
+  - `Status stale`
+  - `Reconnect required`
+  - `Sync needed`
   - `Unavailable`
 - Control Plane shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
+- Provider-backed state is freshness-aware instead of being treated as timeless cache:
+  - Desktop marks provider catalogs as `fresh`, `stale`, or `unknown`
+  - opening the launcher, refocusing it, and waking the machine all trigger best-effort provider refresh
+  - while the launcher stays visible, Desktop also polls stale providers in the background
+- Card CTA and badge now come from the same normalized route model:
+  - Desktop never shows a normal clickable `Open` for a remote route that is already known `Offline`
+  - stale remote state prefers `Refresh Status`
+  - expired provider authorization prefers `Reconnect`
+  - provider refresh failures prefer `Retry Sync`
+- Dual-route managed environments stay route-aware:
+  - if this device can still host the environment locally, `Open Local` remains available even when the remote route is degraded
+  - remote recovery actions still stay visible as the secondary action on that same card
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -231,7 +248,12 @@ Interaction rules:
 - Expected launcher failures no longer rely on raw IPC exception text:
   - stale session focus returns a structured `session_stale` result
   - environment/control-plane missing states return structured launcher failures
+  - remote provider failures return structured reconnect / refresh / retry states
   - the renderer refreshes its snapshot and prefers inline card notices for environment-scoped failures
+- Environment-scoped recovery copy stays action-oriented instead of surfacing Electron IPC internals:
+  - `That window was already closed. Desktop refreshed the environment list.`
+  - `Remote status is stale. Refresh the provider to confirm the latest state.`
+  - `This environment is currently offline in the provider.`
 - The top error banner is reserved for global or dialog-scoped failures that cannot be cleanly attached to a specific environment card.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:

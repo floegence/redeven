@@ -270,7 +270,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Add Control Plane');
     expect(appSrc).toContain('Continue in Browser');
     expect(appSrc).toContain('revocable desktop authorization');
-    expect(appSrc).toContain('Expired');
+    expect(appSrc).toContain('Reconnect');
     expect(appSrc).toContain('Connect Provider');
   });
 

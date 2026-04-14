@@ -14,11 +14,11 @@ describe('launcherActionFeedback', () => {
       ok: false,
       code: 'session_stale',
       scope: 'environment',
-      message: 'Window closed. Status refreshed.',
+      message: 'That window was already closed. Desktop refreshed the environment list.',
       should_refresh_snapshot: true,
     }, ['environment:local:default'])).toEqual({
       global_message: '',
-      notice_message: 'Window closed. Status refreshed.',
+      notice_message: 'That window was already closed. Desktop refreshed the environment list.',
       notice_tone: 'info',
       refresh_snapshot: true,
     });

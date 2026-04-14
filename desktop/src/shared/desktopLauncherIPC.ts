@@ -2,6 +2,12 @@ import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
+import type {
+  DesktopControlPlaneSyncState,
+  DesktopManagedLocalRouteState,
+  DesktopProviderCatalogFreshness,
+  DesktopProviderRemoteRouteState,
+} from './providerEnvironmentState';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
@@ -32,9 +38,14 @@ export type DesktopLauncherActionFailureCode =
   | 'session_stale'
   | 'environment_missing'
   | 'environment_route_unavailable'
+  | 'environment_offline'
+  | 'environment_status_stale'
   | 'control_plane_missing'
   | 'control_plane_environment_missing'
+  | 'provider_environment_removed'
   | 'control_plane_auth_required'
+  | 'provider_sync_in_progress'
+  | 'provider_sync_required'
   | 'provider_unreachable'
   | 'provider_invalid_response'
   | 'action_invalid';
@@ -95,6 +106,11 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_status?: string;
   provider_lifecycle_status?: string;
   provider_last_seen_at_unix_ms?: number;
+  control_plane_sync_state?: DesktopControlPlaneSyncState;
+  local_route_state?: DesktopManagedLocalRouteState;
+  remote_route_state?: DesktopProviderRemoteRouteState;
+  remote_catalog_freshness?: DesktopProviderCatalogFreshness;
+  remote_state_reason?: string;
   ssh_details?: DesktopSSHEnvironmentDetails;
   tag: DesktopEnvironmentEntryTag;
   category: DesktopEnvironmentEntryCategory;

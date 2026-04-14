@@ -1,4 +1,40 @@
 export type DesktopProviderEnvironmentAvailability = 'online' | 'offline' | 'unknown';
+export type DesktopProviderCatalogFreshness = 'fresh' | 'stale' | 'unknown';
+export type DesktopManagedLocalRouteState = 'ready' | 'opening' | 'open' | 'unavailable';
+export type DesktopControlPlaneSyncState =
+  | 'idle'
+  | 'syncing'
+  | 'ready'
+  | 'auth_required'
+  | 'provider_unreachable'
+  | 'provider_invalid'
+  | 'sync_error';
+export type DesktopProviderRemoteRouteState =
+  | 'ready'
+  | 'offline'
+  | 'unknown'
+  | 'stale'
+  | 'removed'
+  | 'auth_required'
+  | 'provider_unreachable'
+  | 'provider_invalid';
+
+export const DESKTOP_PROVIDER_CATALOG_STALE_AFTER_MS = 30_000;
+
+type DesktopProviderCatalogFreshnessOptions = Readonly<{
+  now?: number;
+  staleAfterMS?: number;
+}>;
+
+export type DesktopProviderRemoteRouteStateOptions = Readonly<{
+  syncState: DesktopControlPlaneSyncState;
+  environmentPresent: boolean;
+  providerStatus?: string | null;
+  providerLifecycleStatus?: string | null;
+  lastSyncedAtMS?: number;
+  now?: number;
+  staleAfterMS?: number;
+}>;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -6,6 +42,11 @@ function compact(value: unknown): string {
 
 function normalizedRuntimeState(value: unknown): string {
   return compact(value).toLowerCase();
+}
+
+function normalizeUnixMS(value: unknown): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0;
 }
 
 export function desktopProviderEnvironmentAvailability(
@@ -34,6 +75,60 @@ export function desktopProviderEnvironmentAvailability(
     return 'online';
   }
 
+  return 'unknown';
+}
+
+export function desktopProviderCatalogFreshness(
+  lastSyncedAtMS: number | null | undefined,
+  options: DesktopProviderCatalogFreshnessOptions = {},
+): DesktopProviderCatalogFreshness {
+  const normalizedLastSyncedAtMS = normalizeUnixMS(lastSyncedAtMS);
+  if (normalizedLastSyncedAtMS <= 0) {
+    return 'unknown';
+  }
+
+  const now = normalizeUnixMS(options.now) || Date.now();
+  const staleAfterMS = normalizeUnixMS(options.staleAfterMS) || DESKTOP_PROVIDER_CATALOG_STALE_AFTER_MS;
+  return now - normalizedLastSyncedAtMS <= staleAfterMS ? 'fresh' : 'stale';
+}
+
+export function desktopProviderRemoteRouteState(
+  options: DesktopProviderRemoteRouteStateOptions,
+): DesktopProviderRemoteRouteState {
+  if (options.syncState === 'auth_required') {
+    return 'auth_required';
+  }
+  if (options.syncState === 'provider_unreachable' || options.syncState === 'sync_error') {
+    return 'provider_unreachable';
+  }
+  if (options.syncState === 'provider_invalid') {
+    return 'provider_invalid';
+  }
+
+  const freshness = desktopProviderCatalogFreshness(options.lastSyncedAtMS, {
+    now: options.now,
+    staleAfterMS: options.staleAfterMS,
+  });
+  if (freshness === 'unknown') {
+    return 'unknown';
+  }
+  if (freshness === 'stale') {
+    return 'stale';
+  }
+  if (!options.environmentPresent) {
+    return 'removed';
+  }
+
+  const availability = desktopProviderEnvironmentAvailability(
+    options.providerStatus,
+    options.providerLifecycleStatus,
+  );
+  if (availability === 'online') {
+    return 'ready';
+  }
+  if (availability === 'offline') {
+    return 'offline';
+  }
   return 'unknown';
 }
 

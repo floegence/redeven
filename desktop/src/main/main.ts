@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -64,6 +64,7 @@ import type { StartupReport } from './startup';
 import { resolveManagedEnvironmentOpenTarget } from './managedEnvironmentOpen';
 import {
   desktopManagedLocalEnvironmentID,
+  managedEnvironmentDefaultOpenRoute,
   managedEnvironmentKind,
   managedEnvironmentLocalAccess,
   managedEnvironmentProviderID,
@@ -142,8 +143,14 @@ import {
   type DesktopWelcomeEntryReason,
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
-import { desktopControlPlaneKey, normalizeControlPlaneOrigin } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey, normalizeControlPlaneOrigin, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import type { DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
+import {
+  desktopProviderCatalogFreshness,
+  desktopProviderRemoteRouteState,
+  type DesktopControlPlaneSyncState,
+  type DesktopProviderRemoteRouteState,
+} from '../shared/providerEnvironmentState';
 
 type OpenDesktopWelcomeOptions = Readonly<{
   surface?: DesktopLauncherSurface;
@@ -179,6 +186,13 @@ type DesktopControlPlaneAccessState = Readonly<{
   access_token: string;
   access_expires_at_unix_ms: number;
   authorization_expires_at_unix_ms: number;
+}>;
+
+type DesktopControlPlaneSyncRecord = Readonly<{
+  sync_state: DesktopControlPlaneSyncState;
+  last_sync_attempt_at_ms: number;
+  last_sync_error_code: string;
+  last_sync_error_message: string;
 }>;
 
 type PreparedExternalTargetResult = Readonly<
@@ -237,12 +251,19 @@ let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
 const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessState>();
+const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
+const controlPlaneSyncTaskByKey = new Map<string, Promise<Readonly<{
+  preferences: DesktopPreferences;
+  controlPlane: DesktopSavedControlPlane;
+}>>>();
 const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
   String(process.env.REDEVEN_DESKTOP_OPEN_DEVTOOLS ?? '').trim().toLowerCase(),
 );
 const DESKTOP_PROTOCOL_SCHEME = 'redeven';
 const CONTROL_PLANE_ACCESS_TOKEN_EXPIRY_SKEW_MS = 15_000;
+const CONTROL_PLANE_SYNC_POLL_INTERVAL_MS = 15_000;
 const pendingDesktopDeepLinks: string[] = [];
+let controlPlaneSyncPollTimer: NodeJS.Timeout | null = null;
 
 installStdioBrokenPipeGuards();
 
@@ -313,6 +334,45 @@ function launcherActionFailureFromProviderAuthError(
     );
   }
   return null;
+}
+
+function launcherActionFailureFromUnexpectedError(error: unknown): DesktopLauncherActionFailure {
+  if (error instanceof DesktopProviderRequestError) {
+    if (error.status === 401 || error.status === 403) {
+      return launcherActionFailure(
+        'control_plane_auth_required',
+        'control_plane',
+        'Reconnect the Control Plane in your browser, then try again.',
+        {
+          providerOrigin: error.providerOrigin,
+        },
+      );
+    }
+    if (error.code === 'provider_invalid_json' || error.code === 'provider_invalid_response') {
+      return launcherActionFailure(
+        'provider_invalid_response',
+        'control_plane',
+        error.message || 'The provider returned an invalid response.',
+        {
+          providerOrigin: error.providerOrigin,
+        },
+      );
+    }
+    return launcherActionFailure(
+      'provider_unreachable',
+      'control_plane',
+      error.message || 'Desktop could not reach the Control Plane.',
+      {
+        providerOrigin: error.providerOrigin,
+      },
+    );
+  }
+
+  return launcherActionFailure(
+    'action_invalid',
+    'global',
+    error instanceof Error ? error.message : String(error) || 'Desktop could not complete that action.',
+  );
 }
 
 function preferencesPaths() {
@@ -555,6 +615,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   const state = currentUtilityWindowState(kind);
   return buildDesktopWelcomeSnapshot({
     preferences,
+    controlPlanes: currentControlPlaneSummaries(preferences),
     openSessions: openSessionSummaries(),
     surface: state.surface,
     entryReason: overrides.entryReason ?? state.entryReason,
@@ -1007,6 +1068,10 @@ async function openUtilityWindow(
   if (existing) {
     await emitDesktopWelcomeSnapshot(kind);
     presentAppWindow(existing, { stealAppFocus: options.stealAppFocus });
+    updateControlPlaneSyncPoller();
+    if (kind === 'launcher') {
+      void syncVisibleControlPlanesIfNeeded();
+    }
     return launcherActionSuccess('focused_utility_window', {
       utilityWindowKind: kind,
     });
@@ -1020,11 +1085,21 @@ async function openUtilityWindow(
     onClosed: () => {
       utilityWindows.delete(kind);
       utilityWindowKindByWebContentsID.delete(win.webContents.id);
+      updateControlPlaneSyncPoller();
     },
   });
 
   utilityWindows.set(kind, win);
   utilityWindowKindByWebContentsID.set(win.webContents.id, kind);
+  if (kind === 'launcher') {
+    win.on('focus', () => {
+      void syncVisibleControlPlanesIfNeeded();
+    });
+  }
+  updateControlPlaneSyncPoller();
+  if (kind === 'launcher') {
+    void syncVisibleControlPlanesIfNeeded();
+  }
   return launcherActionSuccess('opened_utility_window', {
     utilityWindowKind: kind,
   });
@@ -1288,6 +1363,170 @@ function clearControlPlaneAccessState(providerOrigin: string, providerID: string
   }
 }
 
+function controlPlaneSyncRecordFromError(
+  error: unknown,
+  lastSyncAttemptAtMS: number,
+): DesktopControlPlaneSyncRecord {
+  if (error instanceof DesktopProviderRequestError) {
+    if (error.status === 401 || error.status === 403) {
+      return {
+        sync_state: 'auth_required',
+        last_sync_attempt_at_ms: lastSyncAttemptAtMS,
+        last_sync_error_code: error.code,
+        last_sync_error_message: error.message,
+      };
+    }
+    if (
+      error.code === 'provider_tls_untrusted'
+      || error.code === 'provider_dns_failed'
+      || error.code === 'provider_connection_failed'
+      || error.code === 'provider_timeout'
+      || error.code === 'provider_request_failed'
+    ) {
+      return {
+        sync_state: 'provider_unreachable',
+        last_sync_attempt_at_ms: lastSyncAttemptAtMS,
+        last_sync_error_code: error.code,
+        last_sync_error_message: error.message,
+      };
+    }
+    if (error.code === 'provider_invalid_json' || error.code === 'provider_invalid_response') {
+      return {
+        sync_state: 'provider_invalid',
+        last_sync_attempt_at_ms: lastSyncAttemptAtMS,
+        last_sync_error_code: error.code,
+        last_sync_error_message: error.message,
+      };
+    }
+  }
+
+  return {
+    sync_state: 'sync_error',
+    last_sync_attempt_at_ms: lastSyncAttemptAtMS,
+    last_sync_error_code: 'control_plane_sync_failed',
+    last_sync_error_message: error instanceof Error ? error.message : String(error),
+  };
+}
+
+function defaultControlPlaneSyncRecord(controlPlane: DesktopSavedControlPlane): DesktopControlPlaneSyncRecord {
+  if (
+    controlPlane.account.authorization_expires_at_unix_ms > 0
+    && controlPlane.account.authorization_expires_at_unix_ms <= Date.now()
+  ) {
+    return {
+      sync_state: 'auth_required',
+      last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
+      last_sync_error_code: 'authorization_expired',
+      last_sync_error_message: 'Reconnect this Control Plane in your browser to restore access.',
+    };
+  }
+  return {
+    sync_state: controlPlane.last_synced_at_ms > 0 ? 'ready' : 'idle',
+    last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
+    last_sync_error_code: '',
+    last_sync_error_message: '',
+  };
+}
+
+function currentControlPlaneSyncRecord(controlPlane: DesktopSavedControlPlane): DesktopControlPlaneSyncRecord {
+  const key = desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id);
+  return controlPlaneSyncStateByKey.get(key) ?? defaultControlPlaneSyncRecord(controlPlane);
+}
+
+function setControlPlaneSyncRecord(
+  providerOrigin: string,
+  providerID: string,
+  nextRecord: DesktopControlPlaneSyncRecord,
+): void {
+  const key = desktopControlPlaneKey(providerOrigin, providerID);
+  const previous = controlPlaneSyncStateByKey.get(key);
+  if (
+    previous
+    && previous.sync_state === nextRecord.sync_state
+    && previous.last_sync_attempt_at_ms === nextRecord.last_sync_attempt_at_ms
+    && previous.last_sync_error_code === nextRecord.last_sync_error_code
+    && previous.last_sync_error_message === nextRecord.last_sync_error_message
+  ) {
+    return;
+  }
+  controlPlaneSyncStateByKey.set(key, nextRecord);
+  broadcastDesktopWelcomeSnapshots();
+}
+
+function clearControlPlaneSyncRecord(providerOrigin: string, providerID: string): void {
+  try {
+    const key = desktopControlPlaneKey(providerOrigin, providerID);
+    if (controlPlaneSyncStateByKey.delete(key)) {
+      broadcastDesktopWelcomeSnapshots();
+    }
+  } catch {
+    // Ignore malformed identifiers during best-effort cleanup.
+  }
+}
+
+function controlPlaneSummary(controlPlane: DesktopSavedControlPlane): DesktopControlPlaneSummary {
+  const syncRecord = currentControlPlaneSyncRecord(controlPlane);
+  return {
+    ...controlPlane,
+    sync_state: syncRecord.sync_state,
+    last_sync_attempt_at_ms: syncRecord.last_sync_attempt_at_ms,
+    last_sync_error_code: syncRecord.last_sync_error_code,
+    last_sync_error_message: syncRecord.last_sync_error_message,
+    catalog_freshness: desktopProviderCatalogFreshness(controlPlane.last_synced_at_ms),
+  };
+}
+
+function currentControlPlaneSummaries(preferences: DesktopPreferences): readonly DesktopControlPlaneSummary[] {
+  return preferences.control_planes.map((controlPlane) => controlPlaneSummary(controlPlane));
+}
+
+function controlPlaneNeedsAutoSync(controlPlane: DesktopSavedControlPlane): boolean {
+  const summary = controlPlaneSummary(controlPlane);
+  if (summary.sync_state === 'syncing' || summary.sync_state === 'auth_required') {
+    return false;
+  }
+  return summary.catalog_freshness !== 'fresh';
+}
+
+function updateControlPlaneSyncPoller(): void {
+  const shouldPoll = Boolean(liveUtilityWindow('launcher'));
+  if (!shouldPoll) {
+    if (controlPlaneSyncPollTimer) {
+      clearInterval(controlPlaneSyncPollTimer);
+      controlPlaneSyncPollTimer = null;
+    }
+    return;
+  }
+  if (controlPlaneSyncPollTimer) {
+    return;
+  }
+  controlPlaneSyncPollTimer = setInterval(() => {
+    void syncVisibleControlPlanesIfNeeded();
+  }, CONTROL_PLANE_SYNC_POLL_INTERVAL_MS);
+}
+
+async function syncVisibleControlPlanesIfNeeded(options: Readonly<{ force?: boolean }> = {}): Promise<void> {
+  const launcher = liveUtilityWindow('launcher');
+  if (!launcher || launcher.isDestroyed()) {
+    updateControlPlaneSyncPoller();
+    return;
+  }
+  const preferences = await loadDesktopPreferencesCached();
+  const tasks = preferences.control_planes.flatMap((controlPlane) => {
+    if (!options.force && !controlPlaneNeedsAutoSync(controlPlane)) {
+      return [];
+    }
+    return [syncSavedControlPlaneAccountWithState(
+      controlPlane.provider.provider_origin,
+      controlPlane.provider.provider_id,
+      { force: options.force === true },
+    ).catch(() => {
+      // Sync state is already updated for the launcher UI; best-effort background polling should not surface a second error here.
+    })];
+  });
+  await Promise.all(tasks);
+}
+
 function providerDesktopConnectPageURL(providerOrigin: string): string {
   return new URL('/desktop/connect', normalizeControlPlaneOrigin(providerOrigin)).toString();
 }
@@ -1326,6 +1565,12 @@ async function saveConnectedControlPlane(
     throw new Error('Desktop failed to save the Control Plane account.');
   }
   await persistDesktopPreferences(nextPreferences);
+  setControlPlaneSyncRecord(provider.provider_origin, provider.provider_id, {
+    sync_state: 'ready',
+    last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
+    last_sync_error_code: '',
+    last_sync_error_message: '',
+  });
   return {
     preferences: nextPreferences,
     controlPlane,
@@ -1379,6 +1624,68 @@ async function syncSavedControlPlaneAccount(
     preferences: nextPreferences,
     controlPlane,
   };
+}
+
+async function syncSavedControlPlaneAccountWithState(
+  providerOrigin: string,
+  providerID: string,
+  options: Readonly<{ force?: boolean }> = {},
+): Promise<Readonly<{
+  preferences: DesktopPreferences;
+  controlPlane: DesktopSavedControlPlane;
+}>> {
+  const key = desktopControlPlaneKey(providerOrigin, providerID);
+  const inFlight = controlPlaneSyncTaskByKey.get(key);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const task = (async () => {
+    const preferences = await loadDesktopPreferencesCached();
+    const controlPlane = savedControlPlaneByIdentity(preferences, providerOrigin, providerID);
+    if (!controlPlane) {
+      throw new Error('This Control Plane is no longer saved in Desktop.');
+    }
+
+    const summary = controlPlaneSummary(controlPlane);
+    if (!options.force && summary.catalog_freshness === 'fresh' && summary.sync_state === 'ready') {
+      return {
+        preferences,
+        controlPlane,
+      };
+    }
+
+    const lastSyncAttemptAtMS = Date.now();
+    setControlPlaneSyncRecord(providerOrigin, providerID, {
+      sync_state: 'syncing',
+      last_sync_attempt_at_ms: lastSyncAttemptAtMS,
+      last_sync_error_code: '',
+      last_sync_error_message: '',
+    });
+
+    try {
+      const synced = await syncSavedControlPlaneAccount(preferences, providerOrigin, providerID);
+      setControlPlaneSyncRecord(providerOrigin, providerID, {
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: lastSyncAttemptAtMS,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+      });
+      return synced;
+    } catch (error) {
+      setControlPlaneSyncRecord(
+        providerOrigin,
+        providerID,
+        controlPlaneSyncRecordFromError(error, lastSyncAttemptAtMS),
+      );
+      throw error;
+    } finally {
+      controlPlaneSyncTaskByKey.delete(key);
+    }
+  })();
+
+  controlPlaneSyncTaskByKey.set(key, task);
+  return task;
 }
 
 async function ensureControlPlaneAccessToken(
@@ -1458,6 +1765,133 @@ function controlPlaneEnvironmentLabel(
   const cleanFallback = String(fallbackLabel ?? '').trim();
   const environment = controlPlane?.environments.find((entry) => entry.env_public_id === cleanEnvPublicID) ?? null;
   return environment?.label || cleanFallback || cleanEnvPublicID;
+}
+
+function controlPlaneRouteSnapshot(
+  preferences: DesktopPreferences,
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): Readonly<{
+  controlPlane: DesktopSavedControlPlane | null;
+  summary: DesktopControlPlaneSummary | null;
+  environment: DesktopSavedControlPlane['environments'][number] | null;
+  remoteRouteState: DesktopProviderRemoteRouteState;
+}> {
+  const controlPlane = savedControlPlaneByIdentity(preferences, providerOrigin, providerID);
+  if (!controlPlane) {
+    return {
+      controlPlane: null,
+      summary: null,
+      environment: null,
+      remoteRouteState: 'auth_required',
+    };
+  }
+  const summary = controlPlaneSummary(controlPlane);
+  const environment = controlPlane.environments.find((entry) => entry.env_public_id === envPublicID) ?? null;
+  return {
+    controlPlane,
+    summary,
+    environment,
+    remoteRouteState: desktopProviderRemoteRouteState({
+      syncState: summary.sync_state,
+      environmentPresent: environment !== null,
+      providerStatus: environment?.status,
+      providerLifecycleStatus: environment?.lifecycle_status,
+      lastSyncedAtMS: controlPlane.last_synced_at_ms,
+    }),
+  };
+}
+
+function launcherActionFailureForRemoteRouteState(
+  remoteRouteState: DesktopProviderRemoteRouteState,
+  options: Readonly<{
+    environmentID?: string;
+    providerOrigin: string;
+    providerID: string;
+    envPublicID: string;
+  }>,
+): DesktopLauncherActionFailure | null {
+  switch (remoteRouteState) {
+    case 'offline':
+      return launcherActionFailure(
+        'environment_offline',
+        'environment',
+        'This environment is currently offline in the provider.',
+        {
+          environmentID: options.environmentID,
+          providerOrigin: options.providerOrigin,
+          providerID: options.providerID,
+          envPublicID: options.envPublicID,
+        },
+      );
+    case 'stale':
+    case 'unknown':
+      return launcherActionFailure(
+        remoteRouteState === 'stale' ? 'environment_status_stale' : 'provider_sync_required',
+        'control_plane',
+        remoteRouteState === 'stale'
+          ? 'Remote status is stale. Refresh the provider before opening this environment.'
+          : 'Desktop needs a fresh provider sync before opening this environment.',
+        {
+          environmentID: options.environmentID,
+          providerOrigin: options.providerOrigin,
+          providerID: options.providerID,
+          envPublicID: options.envPublicID,
+        },
+      );
+    case 'removed':
+      return launcherActionFailure(
+        'provider_environment_removed',
+        'environment',
+        'This environment is no longer published by the provider. Refresh the provider and try again.',
+        {
+          environmentID: options.environmentID,
+          providerOrigin: options.providerOrigin,
+          providerID: options.providerID,
+          envPublicID: options.envPublicID,
+          shouldRefreshSnapshot: true,
+        },
+      );
+    case 'auth_required':
+      return launcherActionFailure(
+        'control_plane_auth_required',
+        'control_plane',
+        'Reconnect the Control Plane in your browser, then try again.',
+        {
+          environmentID: options.environmentID,
+          providerOrigin: options.providerOrigin,
+          providerID: options.providerID,
+          envPublicID: options.envPublicID,
+        },
+      );
+    case 'provider_unreachable':
+      return launcherActionFailure(
+        'provider_sync_required',
+        'control_plane',
+        'Desktop could not confirm the latest provider status. Retry sync, then open this environment again.',
+        {
+          environmentID: options.environmentID,
+          providerOrigin: options.providerOrigin,
+          providerID: options.providerID,
+          envPublicID: options.envPublicID,
+        },
+      );
+    case 'provider_invalid':
+      return launcherActionFailure(
+        'provider_invalid_response',
+        'control_plane',
+        'The provider returned an invalid response while Desktop refreshed status.',
+        {
+          environmentID: options.environmentID,
+          providerOrigin: options.providerOrigin,
+          providerID: options.providerID,
+          envPublicID: options.envPublicID,
+        },
+      );
+    default:
+      return null;
+  }
 }
 
 async function openManagedEnvironmentRecord(
@@ -1655,54 +2089,79 @@ async function openManagedEnvironmentFromLauncher(
     ? request.route
     : 'auto';
   if (managedEnvironmentKind(environment) === 'controlplane') {
-    const controlPlane = savedControlPlaneByIdentity(
+    const providerOrigin = managedEnvironmentProviderOrigin(environment);
+    const providerID = managedEnvironmentProviderID(environment);
+    const envPublicID = managedEnvironmentPublicID(environment);
+    const controlPlaneState = controlPlaneRouteSnapshot(
       preferences,
-      managedEnvironmentProviderOrigin(environment),
-      managedEnvironmentProviderID(environment),
+      providerOrigin,
+      providerID,
+      envPublicID,
     );
-    if (!controlPlane) {
+    if (!controlPlaneState.controlPlane) {
       return launcherActionFailure(
         'control_plane_missing',
         'control_plane',
         'Reconnect the Control Plane for this environment, then try again.',
         {
           environmentID: environment.id,
-          providerOrigin: managedEnvironmentProviderOrigin(environment),
-          providerID: managedEnvironmentProviderID(environment),
-          envPublicID: managedEnvironmentPublicID(environment),
+          providerOrigin,
+          providerID,
+          envPublicID,
           shouldRefreshSnapshot: true,
         },
       );
     }
     try {
-      const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
+      let synchronized = {
+        preferences,
+        controlPlane: controlPlaneState.controlPlane,
+      };
+      const targetRoute = requestedRoute === 'local_host' || requestedRoute === 'remote_desktop'
+        ? requestedRoute
+        : managedEnvironmentDefaultOpenRoute(environment);
+      const requiresRemoteRoute = targetRoute === 'remote_desktop';
+      if (requiresRemoteRoute && controlPlaneState.summary?.catalog_freshness !== 'fresh') {
+        synchronized = await syncSavedControlPlaneAccountWithState(providerOrigin, providerID, { force: true });
+      }
+      const latestState = controlPlaneRouteSnapshot(
+        synchronized.preferences,
+        providerOrigin,
+        providerID,
+        envPublicID,
+      );
+      if (requiresRemoteRoute) {
+        const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
+          environmentID: environment.id,
+          providerOrigin,
+          providerID,
+          envPublicID,
+        });
+        if (routeFailure) {
+          return routeFailure;
+        }
+      }
+      const authorized = await ensureControlPlaneAccessToken(synchronized.preferences, synchronized.controlPlane);
       const openSession = await requestDesktopOpenSession(
         authorized.controlPlane.provider,
         authorized.accessToken,
-        managedEnvironmentPublicID(environment),
+        envPublicID,
       );
       return openManagedControlPlaneEnvironmentRecord(
         authorized.preferences,
         environment,
         authorized.controlPlane.provider.provider_origin,
-        managedEnvironmentPublicID(environment),
+        envPublicID,
         openSession,
         requestedRoute,
       );
     } catch (error) {
       return launcherActionFailureFromProviderAuthError(error, {
         environmentID: environment.id,
-        providerOrigin: managedEnvironmentProviderOrigin(environment),
-        providerID: managedEnvironmentProviderID(environment),
-        envPublicID: managedEnvironmentPublicID(environment),
-      }) ?? openUtilityWindow('launcher', {
-        entryReason: 'connect_failed',
-        issue: controlPlaneIssueForError(
-          error,
-          'Desktop failed to talk to the Control Plane.',
-        ),
-        stealAppFocus: true,
-      });
+        providerOrigin,
+        providerID,
+        envPublicID,
+      }) ?? launcherActionFailureFromUnexpectedError(error);
     }
   }
   if (requestedRoute === 'remote_desktop') {
@@ -1901,15 +2360,30 @@ async function refreshControlPlaneFromLauncher(
       },
     );
   }
-  await syncSavedControlPlaneAccount(
-    preferences,
-    controlPlane.provider.provider_origin,
-    controlPlane.provider.provider_id,
-  );
-  resetLauncherIssueState();
-  return launcherActionSuccess('refreshed_control_plane', {
-    utilityWindowKind: 'launcher',
-  });
+  try {
+    await syncSavedControlPlaneAccountWithState(
+      controlPlane.provider.provider_origin,
+      controlPlane.provider.provider_id,
+      { force: true },
+    );
+    resetLauncherIssueState();
+    return launcherActionSuccess('refreshed_control_plane', {
+      utilityWindowKind: 'launcher',
+    });
+  } catch (error) {
+    return launcherActionFailureFromProviderAuthError(error, {
+      providerOrigin: controlPlane.provider.provider_origin,
+      providerID: controlPlane.provider.provider_id,
+    }) ?? launcherActionFailure(
+      'provider_unreachable',
+      'control_plane',
+      controlPlaneIssueForError(error, 'Desktop failed to refresh this Control Plane.').message,
+      {
+        providerOrigin: controlPlane.provider.provider_origin,
+        providerID: controlPlane.provider.provider_id,
+      },
+    );
+  }
 }
 
 async function deleteControlPlaneFromLauncher(
@@ -1934,6 +2408,7 @@ async function deleteControlPlaneFromLauncher(
     await revokeProviderDesktopAuthorization(controlPlane.provider, refreshToken);
   }
   clearControlPlaneAccessState(request.provider_origin, request.provider_id);
+  clearControlPlaneSyncRecord(request.provider_origin, request.provider_id);
   await persistDesktopPreferences(deleteSavedControlPlane(preferences, request.provider_origin, request.provider_id));
   resetLauncherIssueState();
   return launcherActionSuccess('deleted_control_plane', {
@@ -1945,8 +2420,13 @@ async function openControlPlaneEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_control_plane_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
   const preferences = await loadDesktopPreferencesCached();
-  const controlPlane = savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id);
-  if (!controlPlane) {
+  const initialState = controlPlaneRouteSnapshot(
+    preferences,
+    request.provider_origin,
+    request.provider_id,
+    request.env_public_id,
+  );
+  if (!initialState.controlPlane) {
     return launcherActionFailure(
       'control_plane_missing',
       'control_plane',
@@ -1959,22 +2439,34 @@ async function openControlPlaneEnvironmentFromLauncher(
       },
     );
   }
-  const environment = controlPlane.environments.find((entry) => entry.env_public_id === request.env_public_id) ?? null;
-  if (!environment) {
-    return launcherActionFailure(
-      'control_plane_environment_missing',
-      'environment',
-      'This environment is no longer available from the provider. Refresh the provider and try again.',
-      {
-        providerOrigin: request.provider_origin,
-        providerID: request.provider_id,
-        envPublicID: request.env_public_id,
-      },
-    );
-  }
 
   try {
-    const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
+    let synchronized = {
+      preferences,
+      controlPlane: initialState.controlPlane,
+    };
+    if (initialState.summary?.catalog_freshness !== 'fresh') {
+      synchronized = await syncSavedControlPlaneAccountWithState(
+        request.provider_origin,
+        request.provider_id,
+        { force: true },
+      );
+    }
+    const latestState = controlPlaneRouteSnapshot(
+      synchronized.preferences,
+      request.provider_origin,
+      request.provider_id,
+      request.env_public_id,
+    );
+    const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
+      providerOrigin: request.provider_origin,
+      providerID: request.provider_id,
+      envPublicID: request.env_public_id,
+    });
+    if (routeFailure) {
+      return routeFailure;
+    }
+    const authorized = await ensureControlPlaneAccessToken(synchronized.preferences, synchronized.controlPlane);
     const openSession = await requestDesktopOpenSession(
       authorized.controlPlane.provider,
       authorized.accessToken,
@@ -1986,21 +2478,14 @@ async function openControlPlaneEnvironmentFromLauncher(
       envPublicID: request.env_public_id,
       bootstrapTicket: openSession.bootstrap_ticket,
       remoteSessionURL: openSession.remote_session_url,
-      label: environment.label,
+      label: latestState.environment?.label,
     });
   } catch (error) {
     return launcherActionFailureFromProviderAuthError(error, {
       providerOrigin: request.provider_origin,
       providerID: request.provider_id,
       envPublicID: request.env_public_id,
-    }) ?? openUtilityWindow('launcher', {
-      entryReason: 'connect_failed',
-      issue: controlPlaneIssueForError(
-        error,
-        'Desktop failed to talk to the Control Plane.',
-      ),
-      stealAppFocus: true,
-    });
+    }) ?? launcherActionFailureFromUnexpectedError(error);
   }
 }
 
@@ -2010,7 +2495,7 @@ async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLaunch
     return launcherActionFailure(
       'session_stale',
       'environment',
-      'Window closed. Status refreshed.',
+      'That window was already closed. Desktop refreshed the environment list.',
       {
         shouldRefreshSnapshot: true,
       },
@@ -2708,7 +3193,11 @@ if (!app.requestSingleInstanceLock()) {
         'Desktop could not understand that action.',
       );
     }
-    return performDesktopLauncherAction(normalized);
+    try {
+      return await performDesktopLauncherAction(normalized);
+    } catch (error) {
+      return launcherActionFailureFromUnexpectedError(error);
+    }
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, async (_event, request) => {
     const normalized = normalizeDesktopShellOpenWindowRequest(request);
@@ -2831,10 +3320,19 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('activate', () => {
+    void syncVisibleControlPlanesIfNeeded().catch(() => {
+      // Best-effort refresh when the app becomes active again.
+    });
     void restoreBestAvailableWindow().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to restore a window', message || 'Unknown restore error.');
       app.quit();
+    });
+  });
+
+  powerMonitor.on('resume', () => {
+    void syncVisibleControlPlanesIfNeeded({ force: true }).catch(() => {
+      // Best-effort refresh after sleep/wake.
     });
   });
 
@@ -2848,6 +3346,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('window-all-closed', () => {
+    updateControlPlaneSyncPoller();
     if (process.platform !== 'darwin') {
       app.quit();
     }

@@ -1,3 +1,8 @@
+import type {
+  DesktopControlPlaneSyncState,
+  DesktopProviderCatalogFreshness,
+} from './providerEnvironmentState';
+
 export type DesktopProviderProtocolVersion = 'rcpp-v1';
 
 export type DesktopControlPlaneProvider = Readonly<{
@@ -35,6 +40,11 @@ export type DesktopControlPlaneSummary = Readonly<{
   account: DesktopControlPlaneAccount;
   environments: readonly DesktopProviderEnvironment[];
   last_synced_at_ms: number;
+  sync_state: DesktopControlPlaneSyncState;
+  last_sync_attempt_at_ms: number;
+  last_sync_error_code: string;
+  last_sync_error_message: string;
+  catalog_freshness: DesktopProviderCatalogFreshness;
 }>;
 
 function compact(value: unknown): string {
