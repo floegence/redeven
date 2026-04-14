@@ -2268,7 +2268,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
 
         <div class="space-y-3">
           <Show when={props.error}>
-            <div role="alert" class="redeven-console-banner redeven-console-banner--error rounded-xl px-3.5 py-2.5 text-sm text-destructive">
+            <div role="alert" class="redeven-console-banner redeven-console-banner--error rounded-lg px-3.5 py-2.5 text-sm text-destructive">
               {props.error}
             </div>
           </Show>
@@ -2865,13 +2865,18 @@ function EnvironmentConnectionCard(props: Readonly<{
             </DesktopTooltip>
           </Show>
           <Show when={props.environment.can_edit}>
-            <DesktopTooltip content="Edit" placement="top">
+            <DesktopTooltip
+              content={props.environment.kind === 'managed_environment' ? 'Settings' : 'Edit'}
+              placement="top"
+            >
               <ConsoleActionIconButton
-                title="Edit connection"
-                aria-label={`Edit ${props.environment.label}`}
+                title={props.environment.kind === 'managed_environment' ? 'Environment settings' : 'Edit connection'}
+                aria-label={props.environment.kind === 'managed_environment' ? `Settings for ${props.environment.label}` : `Edit ${props.environment.label}`}
                 onClick={() => props.editEnvironment(props.environment)}
               >
-                <Pencil class="h-3.5 w-3.5" />
+                {props.environment.kind === 'managed_environment'
+                  ? <Settings class="h-3.5 w-3.5" />
+                  : <Pencil class="h-3.5 w-3.5" />}
               </ConsoleActionIconButton>
             </DesktopTooltip>
           </Show>
@@ -3032,7 +3037,7 @@ function ControlPlaneShelf(props: Readonly<{
 
   return (
     <section class="space-y-2.5">
-      <div class="redeven-provider-shelf rounded-[0.625rem] border border-border">
+      <div class="redeven-provider-shelf rounded-[0.625rem] border border-border bg-card">
         <div class="px-4 py-3">
           <div class="flex" style="flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:0.75rem">
             <div class="flex min-w-0 items-center gap-3">
@@ -3156,7 +3161,7 @@ const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
   'max-h-[calc(100dvh-1rem)] w-[min(52rem,96vw)]',
 );
 
-const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-lg border border-border px-4 py-4';
+const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-md border border-border px-4 py-4';
 
 function accessModeIcon(mode: DesktopAccessMode): (props?: { class?: string }) => JSX.Element {
   switch (mode) {
@@ -3267,7 +3272,7 @@ function IssueCard(props: Readonly<{
       <div class="redeven-console-issue rounded-[1.05rem] border border-destructive/20 px-4 py-3 shadow-sm">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div class="flex min-w-0 items-start gap-3">
-            <div class="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-destructive/20 bg-destructive/10 text-destructive">
+            <div class="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-destructive/20 bg-destructive/10 text-destructive">
               <AlertCircle class="h-4 w-4" />
             </div>
             <div class="min-w-0">
@@ -3361,7 +3366,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     >
       <div class="space-y-6">
         {/* Runtime status strip */}
-        <div class="redeven-settings-statusbar overflow-hidden rounded-xl border border-border">
+        <div class="redeven-settings-statusbar overflow-hidden rounded-md border border-border">
           <div class="grid divide-y divide-border sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
             <div class="flex items-start gap-3 px-4 py-3">
               <div class={cn(
@@ -3450,7 +3455,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                         role="radio"
                         aria-checked={selected()}
                         class={cn(
-                          'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-[border-color,background-color,box-shadow] duration-150',
+                          'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-md border px-4 py-3.5 text-left transition-[border-color,background-color,box-shadow] duration-150',
                           selected()
                             ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
                             : 'redeven-tile border-border hover:-translate-y-[1px] hover:border-primary/25 hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
@@ -3466,7 +3471,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                       >
                         <div class="flex items-start justify-between gap-3">
                           <div class={cn(
-                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors',
+                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors',
                             selected()
                               ? 'border-primary/40 bg-primary/15 text-primary'
                               : 'border-border/70 bg-muted/25 text-muted-foreground group-hover:border-primary/25 group-hover:text-foreground',
@@ -3578,7 +3583,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             tabIndex={-1}
             id="settings-error"
             role="alert"
-            class="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none"
+            class="rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none"
           >
             {props.settingsError}
           </div>
@@ -3708,7 +3713,7 @@ function ConnectionDialog(props: Readonly<{
         </div>
 
         <Show when={connectionKind() === 'managed_local'}>
-          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+          <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="space-y-3">
               <div class="space-y-1.5">
                 <label for="environment-name" class="block text-xs font-medium text-foreground">Environment Name</label>
@@ -3756,12 +3761,6 @@ function ConnectionDialog(props: Readonly<{
                   Use a password for non-loopback binds. Leave this blank to keep the stored password when editing.
                 </div>
               </div>
-              <div class="rounded-lg border border-dashed border-border/70 bg-background/80 px-3 py-3">
-                <div class="text-xs font-medium text-foreground">Provider discovery is automatic</div>
-                <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                  If this runtime is also reachable through a connected Control Plane, Desktop will merge the local host and remote route into one shared Environment card automatically.
-                </div>
-              </div>
             </div>
           </div>
         </Show>
@@ -3783,7 +3782,7 @@ function ConnectionDialog(props: Readonly<{
         </Show>
 
         <Show when={connectionKind() === 'ssh_environment'}>
-          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+          <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="text-xs leading-5 text-muted-foreground">
               Desktop reuses only the exact Desktop-managed Redeven release, installs it on demand when needed, and tunnels its Local UI over SSH.
             </div>
@@ -3834,7 +3833,7 @@ function ConnectionDialog(props: Readonly<{
                   </Tag>
                 </div>
               </div>
-              <div class="overflow-hidden rounded-lg border border-border/70 bg-background/80">
+              <div class="overflow-hidden rounded-md border border-border/70 bg-background/80">
                 <button
                   type="button"
                   class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left"
@@ -3892,7 +3891,7 @@ function ConnectionDialog(props: Readonly<{
         </Show>
 
         <Show when={props.error}>
-          <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {props.error}
           </div>
         </Show>
@@ -3965,7 +3964,7 @@ function ControlPlaneDialog(props: Readonly<{
           Desktop will open your browser, use your current Portal session to authorize this Control Plane, and store only a revocable desktop authorization locally.
         </div>
         <Show when={props.error}>
-          <div role="alert" class="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {props.error}
           </div>
         </Show>
