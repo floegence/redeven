@@ -12,10 +12,12 @@ import {
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
 import {
-  buildControlPlaneEnvironmentKeyInfoModel,
+  buildControlPlaneEnvironmentFactsModel,
   buildEnvironmentCardModel,
-  buildEnvironmentCardKeyInfoModel,
+  buildEnvironmentCardEndpointsModel,
+  buildEnvironmentCardFactsModel,
   buildProviderBackedEnvironmentActionModel,
+  splitPinnedEnvironmentEntries,
 } from './viewModel';
 
 describe('buildEnvironmentCardModel', () => {
@@ -30,6 +32,7 @@ describe('buildEnvironmentCardModel', () => {
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
             source: 'saved',
+            pinned: false,
             last_used_at_ms: 20,
           },
         ],
@@ -43,6 +46,7 @@ describe('buildEnvironmentCardModel', () => {
             bootstrap_strategy: 'desktop_upload',
             release_base_url: '',
             source: 'saved',
+            pinned: false,
             last_used_at_ms: 30,
           },
         ],
@@ -120,18 +124,31 @@ describe('buildEnvironmentCardModel', () => {
       }),
     ]));
 
-    expect(buildEnvironmentCardKeyInfoModel(localEntry!)).toEqual({
-      badge_label: 'Local',
-      detail_items: ['Managed by Desktop', 'Runs on this device'],
-    });
-    expect(buildEnvironmentCardKeyInfoModel(urlEntry!)).toEqual({
-      badge_label: 'URL',
-      detail_items: ['Saved connection'],
-    });
-    expect(buildEnvironmentCardKeyInfoModel(sshEntry!)).toEqual({
-      badge_label: 'SSH',
-      detail_items: ['Saved connection', 'Desktop upload'],
-    });
+    expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
+      { label: 'RUNS ON', value: 'This device' },
+      { label: 'ACCESS', value: 'Local' },
+    ]);
+    expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
+      { label: 'ACCESS', value: 'Redeven URL' },
+      { label: 'CONNECTION', value: 'Open' },
+    ]);
+    expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
+      { label: 'ACCESS', value: 'SSH' },
+      { label: 'CONNECTION', value: 'Open' },
+      { label: 'BOOTSTRAP', value: 'Desktop upload' },
+    ]);
+    expect(buildEnvironmentCardEndpointsModel(sshEntry!)).toEqual([
+      {
+        value: 'ops@example.internal:2222',
+        monospace: true,
+        copy_label: 'Copy SSH target',
+      },
+      {
+        value: 'http://127.0.0.1:24111/',
+        monospace: true,
+        copy_label: 'Copy forwarded URL',
+      },
+    ]);
   });
 
   it('maps provider-backed environments to unified Ready and Offline badges', () => {
@@ -160,6 +177,7 @@ describe('buildEnvironmentCardModel', () => {
         control_planes: [{
           provider,
           account,
+          display_label: 'cp.example.invalid',
           environments: [{
             provider_id: 'redeven_portal',
             provider_origin: 'https://cp.example.invalid',
@@ -178,6 +196,7 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [{
         provider,
         account,
+        display_label: 'cp.example.invalid',
         environments: [{
           provider_id: 'redeven_portal',
           provider_origin: 'https://cp.example.invalid',
@@ -216,6 +235,7 @@ describe('buildEnvironmentCardModel', () => {
         control_planes: [{
           provider,
           account,
+          display_label: 'cp.example.invalid',
           environments: [{
             provider_id: 'redeven_portal',
             provider_origin: 'https://cp.example.invalid',
@@ -234,6 +254,7 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [{
         provider,
         account,
+        display_label: 'cp.example.invalid',
         environments: [{
           provider_id: 'redeven_portal',
           provider_origin: 'https://cp.example.invalid',
@@ -292,6 +313,7 @@ describe('buildEnvironmentCardModel', () => {
         control_planes: [{
           provider,
           account,
+          display_label: 'cp.example.invalid',
           environments: [{
             provider_id: 'redeven_portal',
             provider_origin: 'https://cp.example.invalid',
@@ -371,6 +393,7 @@ describe('buildEnvironmentCardModel', () => {
     const controlPlaneSummary = {
       provider,
       account,
+      display_label: 'Demo Portal',
       environments,
       last_synced_at_ms: freshSyncAt,
       sync_state: 'ready' as const,
@@ -386,6 +409,7 @@ describe('buildEnvironmentCardModel', () => {
         control_planes: [{
           provider,
           account,
+          display_label: 'Demo Portal',
           environments,
           last_synced_at_ms: freshSyncAt,
         }],
@@ -426,17 +450,47 @@ describe('buildEnvironmentCardModel', () => {
       }),
     }));
 
-    expect(buildEnvironmentCardKeyInfoModel(remoteOnlyEntry!)).toEqual({
-      badge_label: 'Remote',
-      detail_items: ['Managed by Desktop', 'Remote via Control Plane'],
+    expect(buildEnvironmentCardFactsModel(remoteOnlyEntry!)).toEqual([
+      { label: 'RUNS ON', value: 'Control Plane' },
+      { label: 'ACCESS', value: 'Remote' },
+      { label: 'CONTROL PLANE', value: 'Demo Portal' },
+    ]);
+    expect(buildEnvironmentCardFactsModel(dualRouteEntry!)).toEqual([
+      { label: 'RUNS ON', value: 'This device' },
+      { label: 'ACCESS', value: 'Local + Remote' },
+      { label: 'CONTROL PLANE', value: 'Demo Portal' },
+    ]);
+    expect(buildControlPlaneEnvironmentFactsModel(controlPlaneSummary, dualRouteEntry!)).toEqual([
+      { label: 'RUNS ON', value: 'This device' },
+      { label: 'ACCESS', value: 'Local + Remote' },
+      { label: 'CONTROL PLANE', value: 'Demo Portal' },
+    ]);
+  });
+
+  it('splits pinned entries ahead of the regular environment list', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [
+          testManagedLocalEnvironment('default', { pinned: true }),
+          testManagedLocalEnvironment('lab', { pinned: false }),
+        ],
+        saved_environments: [{
+          id: 'http://192.168.1.12:24000/',
+          label: 'Staging',
+          local_ui_url: 'http://192.168.1.12:24000/',
+          source: 'saved',
+          pinned: true,
+          last_used_at_ms: 20,
+        }],
+      }),
     });
-    expect(buildEnvironmentCardKeyInfoModel(dualRouteEntry!)).toEqual({
-      badge_label: 'Local + Remote',
-      detail_items: ['Managed by Desktop', 'Local and remote access'],
-    });
-    expect(buildControlPlaneEnvironmentKeyInfoModel(controlPlaneSummary, dualRouteEntry!)).toEqual({
-      badge_label: 'Published',
-      detail_items: ['In Environment Library', 'Local and remote access'],
-    });
+
+    const grouped = splitPinnedEnvironmentEntries(snapshot.environments);
+
+    expect(grouped.pinned_entries.map((environment) => environment.label)).toEqual([
+      'Local Environment',
+      'Staging',
+    ]);
+    expect(grouped.regular_entries.map((environment) => environment.id)).toContain('local:lab');
   });
 });

@@ -67,6 +67,7 @@ describe('DesktopWelcomeShell', () => {
             label: '192.168.1.11:24000',
             local_ui_url: 'http://192.168.1.11:24000/',
             source: 'saved',
+            pinned: false,
             last_used_at_ms: 10,
           },
         ],
@@ -142,6 +143,7 @@ describe('DesktopWelcomeShell', () => {
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
             source: 'saved',
+            pinned: false,
             last_used_at_ms: 20,
           },
           {
@@ -149,6 +151,7 @@ describe('DesktopWelcomeShell', () => {
             label: 'Laptop',
             local_ui_url: 'http://192.168.1.11:24000/',
             source: 'recent_auto',
+            pinned: false,
             last_used_at_ms: 10,
           },
         ],
@@ -280,17 +283,23 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
   });
 
-  it('renders concise header key info through the shared environment keyline helpers', () => {
+  it('renders facts rows, endpoint copy inputs, and pinned sections in the environment library', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('buildEnvironmentCardKeyInfoModel');
-    expect(appSrc).toContain('buildControlPlaneEnvironmentKeyInfoModel');
-    expect(appSrc).toContain('function EnvironmentCardKeyLine');
-    expect(appSrc).toContain('<EnvironmentCardKeyLine');
-    expect(styles).toContain('.redeven-environment-keyline');
-    expect(styles).toContain('.redeven-environment-keybadge');
-    expect(styles).toContain('.redeven-environment-keyfacts');
+    expect(appSrc).toContain('buildEnvironmentCardFactsModel');
+    expect(appSrc).toContain('buildControlPlaneEnvironmentFactsModel');
+    expect(appSrc).toContain('buildEnvironmentCardEndpointsModel');
+    expect(appSrc).toContain('splitPinnedEnvironmentEntries');
+    expect(appSrc).toContain('function EnvironmentCardFactsBlock');
+    expect(appSrc).toContain('function EnvironmentCardEndpointBlock');
+    expect(appSrc).toContain('Pinned');
+    expect(appSrc).toContain('copyEnvironmentValue');
+    expect(appSrc).toContain('<Pin class=');
+    expect(styles).toContain('.redeven-environment-card__facts');
+    expect(styles).toContain('.redeven-environment-card__fact-row');
+    expect(styles).toContain('.redeven-environment-card__endpoints');
+    expect(styles).toContain('.redeven-environment-card__endpoint-row');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {
@@ -298,6 +307,8 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('Control Planes');
     expect(appSrc).toContain('Add Control Plane');
+    expect(appSrc).toContain('control-plane-label');
+    expect(appSrc).toContain('suggestControlPlaneDisplayLabel');
     expect(appSrc).toContain('Continue in Browser');
     expect(appSrc).toContain('revocable desktop authorization');
     expect(appSrc).toContain('Reconnect');

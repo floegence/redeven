@@ -19,6 +19,7 @@ import {
 } from '../shared/desktopSSH';
 import {
   desktopControlPlaneKey,
+  normalizeControlPlaneDisplayLabel,
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentList,
@@ -62,6 +63,7 @@ export type DesktopSavedEnvironment = Readonly<{
   label: string;
   local_ui_url: string;
   source: DesktopSavedEnvironmentSource;
+  pinned: boolean;
   last_used_at_ms: number;
 }>;
 
@@ -69,6 +71,7 @@ export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails &
   id: string;
   label: string;
   source: DesktopSavedEnvironmentSource;
+  pinned: boolean;
   last_used_at_ms: number;
 }>;
 
@@ -76,6 +79,7 @@ export type DesktopSavedControlPlane = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
   environments: readonly DesktopProviderEnvironment[];
+  display_label: string;
   last_synced_at_ms: number;
 }>;
 
@@ -112,6 +116,7 @@ type DesktopSavedEnvironmentFile = Readonly<{
   label?: unknown;
   local_ui_url?: unknown;
   source?: unknown;
+  pinned?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -124,6 +129,7 @@ type DesktopSavedSSHEnvironmentFile = Readonly<{
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   source?: unknown;
+  pinned?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -197,6 +203,7 @@ type DesktopConnectionCatalogFile = Readonly<{
   bootstrap_strategy?: unknown;
   release_base_url?: unknown;
   source?: unknown;
+  pinned?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -206,6 +213,7 @@ type DesktopProviderCatalogFile = Readonly<{
   provider?: unknown;
   account?: DesktopControlPlaneAccountFile;
   environments?: readonly unknown[];
+  display_label?: unknown;
   last_synced_at_ms?: unknown;
 }>;
 
@@ -219,6 +227,7 @@ type DesktopControlPlaneFile = Readonly<{
   provider?: unknown;
   account?: DesktopControlPlaneAccountFile;
   environments?: readonly unknown[];
+  display_label?: unknown;
   last_synced_at_ms?: unknown;
 }>;
 
@@ -295,6 +304,7 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   label: string;
   local_ui_url: string;
   source?: DesktopSavedEnvironmentSource;
+  pinned?: boolean;
   last_used_at_ms?: number;
 }>;
 
@@ -302,6 +312,7 @@ export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironme
   environment_id: string;
   label: string;
   source?: DesktopSavedEnvironmentSource;
+  pinned?: boolean;
   last_used_at_ms?: number;
 }>;
 
@@ -309,6 +320,7 @@ export type UpsertDesktopSavedControlPlaneInput = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
   environments?: readonly DesktopProviderEnvironment[];
+  display_label?: string;
   last_synced_at_ms?: number;
   refresh_token?: string;
 }>;
@@ -439,7 +451,8 @@ function sortSavedEnvironmentsByLastUsed(
   environments: readonly DesktopSavedEnvironment[],
 ): readonly DesktopSavedEnvironment[] {
   return [...environments].sort((left, right) => (
-    right.last_used_at_ms - left.last_used_at_ms
+    (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
+    || right.last_used_at_ms - left.last_used_at_ms
     || left.label.localeCompare(right.label)
     || left.local_ui_url.localeCompare(right.local_ui_url)
   ));
@@ -449,7 +462,8 @@ function sortSavedSSHEnvironmentsByLastUsed(
   environments: readonly DesktopSavedSSHEnvironment[],
 ): readonly DesktopSavedSSHEnvironment[] {
   return [...environments].sort((left, right) => (
-    right.last_used_at_ms - left.last_used_at_ms
+    (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
+    || right.last_used_at_ms - left.last_used_at_ms
     || left.label.localeCompare(right.label)
     || left.ssh_destination.localeCompare(right.ssh_destination)
     || String(left.ssh_port ?? '').localeCompare(String(right.ssh_port ?? ''))
@@ -709,6 +723,7 @@ function normalizeSavedEnvironmentCandidate(
     label,
     local_ui_url: normalizedURL,
     source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
+    pinned: normalizePinned(candidate.pinned),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
 }
@@ -746,6 +761,7 @@ function normalizeSavedSSHEnvironmentCandidate(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     source: normalizeSavedEnvironmentSource(candidate.source, 'saved'),
+    pinned: normalizePinned(candidate.pinned),
     last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
   };
 }
@@ -786,6 +802,7 @@ function normalizeSavedControlPlaneCandidate(
     provider,
     account,
     environments: normalizeDesktopProviderEnvironmentList({ environments: candidate.environments }, { provider }),
+    display_label: normalizeControlPlaneDisplayLabel(candidate.display_label, provider.provider_origin),
     last_synced_at_ms: normalizeLastUsedAtMS(candidate.last_synced_at_ms, fallbackLastSyncedAtMS),
   };
 }
@@ -808,6 +825,7 @@ function legacyRecentURLsToSavedEnvironments(values: readonly unknown[]): readon
         label: defaultSavedEnvironmentLabel(normalizedURL),
         local_ui_url: normalizedURL,
         source: 'recent_auto',
+        pinned: false,
         last_used_at_ms: values.length - index,
       });
     } catch {
@@ -1216,6 +1234,28 @@ export function rememberManagedEnvironmentUse(
   };
 }
 
+export function setManagedEnvironmentPinned(
+  preferences: DesktopPreferences,
+  environmentID: string,
+  pinned: boolean,
+): DesktopPreferences {
+  const cleanEnvironmentID = compact(environmentID);
+  return {
+    ...preferences,
+    managed_environments: ensureDefaultManagedEnvironment(
+      preferences.managed_environments.map((environment) => (
+        environment.id === cleanEnvironmentID
+          ? {
+              ...environment,
+              pinned,
+              updated_at_ms: Date.now(),
+            }
+          : environment
+      )),
+    ),
+  };
+}
+
 export function upsertSavedEnvironment(
   preferences: DesktopPreferences,
   input: UpsertDesktopSavedEnvironmentInput,
@@ -1235,6 +1275,7 @@ export function upsertSavedEnvironment(
     label,
     local_ui_url: normalizedURL,
     source,
+    pinned: input.pinned ?? existing?.pinned ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
   };
 
@@ -1280,6 +1321,7 @@ export function upsertSavedSSHEnvironment(
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
     source,
+    pinned: input.pinned ?? existing?.pinned ?? false,
     last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, Date.now()),
   };
 
@@ -1305,13 +1347,20 @@ export function upsertSavedControlPlane(
   preferences: DesktopPreferences,
   input: UpsertDesktopSavedControlPlaneInput,
 ): DesktopPreferences {
+  const key = desktopControlPlaneKey(input.provider.provider_origin, input.provider.provider_id);
+  const existing = preferences.control_planes.find((controlPlane) => (
+    desktopControlPlaneKey(controlPlane.provider.provider_origin, controlPlane.provider.provider_id) === key
+  )) ?? null;
   const nextControlPlane: DesktopSavedControlPlane = {
     provider: input.provider,
     account: input.account,
     environments: input.environments ?? [],
+    display_label: normalizeControlPlaneDisplayLabel(
+      input.display_label ?? existing?.display_label,
+      input.provider.provider_origin,
+    ),
     last_synced_at_ms: normalizeLastUsedAtMS(input.last_synced_at_ms, Date.now()),
   };
-  const key = desktopControlPlaneKey(nextControlPlane.provider.provider_origin, nextControlPlane.provider.provider_id);
   const nextRefreshTokens = {
     ...preferences.control_plane_refresh_tokens,
   };
@@ -1331,6 +1380,49 @@ export function upsertSavedControlPlane(
     control_plane_refresh_tokens: nextRefreshTokens,
     control_planes: controlPlanes,
   };
+}
+
+export function setSavedEnvironmentPinned(
+  preferences: DesktopPreferences,
+  input: Readonly<{
+    environment_id: string;
+    label: string;
+    local_ui_url: string;
+    pinned: boolean;
+    last_used_at_ms?: number;
+  }>,
+): DesktopPreferences {
+  return upsertSavedEnvironment(preferences, {
+    environment_id: input.environment_id,
+    label: input.label,
+    local_ui_url: input.local_ui_url,
+    source: 'saved',
+    pinned: input.pinned,
+    last_used_at_ms: input.last_used_at_ms,
+  });
+}
+
+export function setSavedSSHEnvironmentPinned(
+  preferences: DesktopPreferences,
+  input: Readonly<{
+    environment_id: string;
+    label: string;
+    pinned: boolean;
+    last_used_at_ms?: number;
+  }> & DesktopSSHEnvironmentDetails,
+): DesktopPreferences {
+  return upsertSavedSSHEnvironment(preferences, {
+    environment_id: input.environment_id,
+    label: input.label,
+    ssh_destination: input.ssh_destination,
+    ssh_port: input.ssh_port,
+    remote_install_dir: input.remote_install_dir,
+    bootstrap_strategy: input.bootstrap_strategy,
+    release_base_url: input.release_base_url,
+    source: 'saved',
+    pinned: input.pinned,
+    last_used_at_ms: input.last_used_at_ms,
+  });
 }
 
 export function deleteSavedEnvironment(
@@ -1812,6 +1904,7 @@ function serializeSavedEnvironmentCatalog(environment: DesktopSavedEnvironment):
     label: environment.label,
     local_ui_url: environment.local_ui_url,
     source: environment.source,
+    pinned: environment.pinned,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }
@@ -1829,6 +1922,7 @@ function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnviron
     bootstrap_strategy: environment.bootstrap_strategy,
     release_base_url: environment.release_base_url,
     source: environment.source,
+    pinned: environment.pinned,
     last_used_at_ms: environment.last_used_at_ms,
   };
 }
@@ -1849,6 +1943,7 @@ function serializeSavedControlPlaneCatalog(controlPlane: DesktopSavedControlPlan
       user_display_name: controlPlane.account.user_display_name,
       authorization_expires_at_unix_ms: controlPlane.account.authorization_expires_at_unix_ms,
     },
+    display_label: controlPlane.display_label,
     environments: controlPlane.environments.map((environment) => ({
       env_public_id: environment.env_public_id,
       name: environment.label,

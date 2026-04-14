@@ -96,6 +96,8 @@ If you want the native desktop app instead, download the installers from [GitHub
 
 Redeven Desktop keeps one shared environment catalog across local managed scopes, Control Plane managed scopes, saved Redeven Local UI URLs, and saved SSH targets. You can create multiple desktop-managed local environments, reopen the same Control Plane environment locally or remotely, and keep Desktop plus agent-only/CLI mode aligned on the same `~/.redeven/scopes/...` runtime layout.
 
+The launcher Environment Library keeps those entries in one consistent card system: pinned environments surface in a dedicated `Pinned` section first, every card uses the same compact facts layout, and Endpoint values render as readonly copy-friendly inputs. Control Planes also get a local Desktop display label so the same provider can appear with the name that makes sense on that device while still keeping the underlying provider origin stable.
+
 Desktop can open any desktop-managed environment in that catalog, attach to a reachable Redeven Local UI URL, or SSH into another machine, reuse only an exact matching Desktop-managed Redeven runtime, install the current Desktop release on demand when needed, and tunnel its Local UI back into the same desktop shell.
 
 For SSH Environments, Desktop now supports three bootstrap delivery modes:

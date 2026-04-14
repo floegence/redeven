@@ -1,6 +1,7 @@
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopSavedEnvironmentSource } from './desktopConnectionTypes';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
+import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type {
   DesktopControlPlaneSyncState,
@@ -54,6 +55,9 @@ export type DesktopLauncherActionKind =
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'start_control_plane_connect'
+  | 'set_managed_environment_pinned'
+  | 'set_saved_environment_pinned'
+  | 'set_saved_ssh_environment_pinned'
   | 'open_managed_environment_settings'
   | 'focus_environment_window'
   | 'open_control_plane_environment'
@@ -112,6 +116,8 @@ export type DesktopEnvironmentEntry = Readonly<{
   remote_catalog_freshness?: DesktopProviderCatalogFreshness;
   remote_state_reason?: string;
   ssh_details?: DesktopSSHEnvironmentDetails;
+  pinned: boolean;
+  control_plane_label?: string;
   tag: DesktopEnvironmentEntryTag;
   category: DesktopEnvironmentEntryCategory;
   is_open: boolean;
@@ -155,7 +161,27 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'start_control_plane_connect';
       provider_origin: string;
+      display_label?: string;
     }
+  | {
+      kind: 'set_managed_environment_pinned';
+      environment_id: string;
+      pinned: boolean;
+    }
+  | {
+      kind: 'set_saved_environment_pinned';
+      environment_id: string;
+      label: string;
+      external_local_ui_url: string;
+      pinned: boolean;
+    }
+  | ({
+      kind: 'set_saved_ssh_environment_pinned';
+      environment_id: string;
+      label: string;
+      pinned: boolean;
+    }
+    & DesktopSSHEnvironmentDetails)
   | {
       kind: 'open_managed_environment_settings';
       environment_id: string;
@@ -311,10 +337,66 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
       }
     case 'start_control_plane_connect':
+      {
+        const providerOrigin = compact((candidate as { provider_origin?: unknown }).provider_origin);
+        if (providerOrigin === '') {
+          return null;
+        }
+        try {
+          return {
+            kind,
+            provider_origin: normalizeControlPlaneOrigin(providerOrigin),
+            display_label: compact((candidate as { display_label?: unknown }).display_label) || undefined,
+          };
+        } catch {
+          return null;
+        }
+      }
+    case 'set_managed_environment_pinned': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
       return {
         kind,
-        provider_origin: compact((candidate as { provider_origin?: unknown }).provider_origin),
+        environment_id: environmentID,
+        pinned: (candidate as { pinned?: unknown }).pinned === true,
       };
+    }
+    case 'set_saved_environment_pinned': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+        label: compact((candidate as { label?: unknown }).label),
+        external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
+        pinned: (candidate as { pinned?: unknown }).pinned === true,
+      };
+    }
+    case 'set_saved_ssh_environment_pinned':
+      {
+        const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+        if (environmentID === '') {
+          return null;
+        }
+        const sshPortText = compact((candidate as { ssh_port?: unknown }).ssh_port);
+        return {
+          kind,
+          environment_id: environmentID,
+          label: compact((candidate as { label?: unknown }).label),
+          pinned: (candidate as { pinned?: unknown }).pinned === true,
+          ssh_destination: compact((candidate as { ssh_destination?: unknown }).ssh_destination),
+          ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
+            ? null
+            : Number.parseInt(sshPortText, 10),
+          remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
+          bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
+          release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
+        };
+      }
     case 'upsert_managed_local_environment':
       return {
         kind,
