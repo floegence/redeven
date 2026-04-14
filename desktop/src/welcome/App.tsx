@@ -8,6 +8,7 @@ import {
   Globe,
   Lock,
   Moon,
+  Pin,
   Pencil,
   Plus,
   Save,
@@ -75,17 +76,21 @@ import {
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
-  buildControlPlaneEnvironmentKeyInfoModel,
+  buildControlPlaneEnvironmentFactsModel,
   buildControlPlaneEnvironmentActionModel,
   buildDesktopWelcomeShellViewModel,
   buildEnvironmentCardModel,
-  buildEnvironmentCardKeyInfoModel,
+  buildEnvironmentCardEndpointsModel,
+  buildEnvironmentCardFactsModel,
   buildControlPlaneStatusModel,
   buildProviderBackedEnvironmentActionModel,
   capabilityUnavailableMessage,
   environmentLibraryCount,
   filterEnvironmentLibrary,
+  splitPinnedEnvironmentEntries,
   type EnvironmentActionModel,
+  type EnvironmentCardEndpointModel,
+  type EnvironmentCardFactModel,
   type EnvironmentCenterTab,
   libraryFilterLabel,
   type EnvironmentLibraryFilter,
@@ -121,6 +126,7 @@ import {
 import { DesktopTooltip } from './DesktopTooltip';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
 import { controlPlaneDesktopSessionKey } from '../main/desktopTarget';
+import { suggestControlPlaneDisplayLabel } from '../shared/controlPlaneProvider';
 import {
   DESKTOP_ACTION_TOAST_LIMIT,
   queueDesktopActionToast,
@@ -170,6 +176,9 @@ type BusyAction =
   | 'open_managed_environment_settings'
   | 'open_control_plane_environment'
   | 'refresh_control_plane'
+  | 'set_managed_environment_pinned'
+  | 'set_saved_environment_pinned'
+  | 'set_saved_ssh_environment_pinned'
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
   | 'upsert_managed_local_environment'
@@ -221,6 +230,8 @@ type SSHConnectionDialogState = Readonly<{
 type ConnectionDialogState = LocalConnectionDialogState | ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
 
 type ControlPlaneDialogState = Readonly<{
+  display_label: string;
+  display_label_touched: boolean;
   provider_origin: string;
 }> | null;
 
@@ -331,6 +342,10 @@ function getErrorMessage(error: unknown): string {
   return trimString(error);
 }
 
+function controlPlaneName(controlPlane: DesktopControlPlaneSummary): string {
+  return trimString(controlPlane.display_label) || controlPlane.provider.display_name;
+}
+
 function formatTimestamp(unixMS: number): string {
   if (!Number.isFinite(unixMS) || unixMS <= 0) {
     return '';
@@ -415,6 +430,18 @@ function createSSHConnectionDialogState(
     remote_install_dir: trimString(overrides.remote_install_dir),
     bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
     release_base_url: trimString(overrides.release_base_url),
+  };
+}
+
+function createControlPlaneDialogState(
+  overrides: Partial<Exclude<ControlPlaneDialogState, null>> = {},
+): Exclude<ControlPlaneDialogState, null> {
+  const providerOrigin = trimString(overrides.provider_origin);
+  const displayLabel = trimString(overrides.display_label);
+  return {
+    provider_origin: providerOrigin,
+    display_label: displayLabel || suggestControlPlaneDisplayLabel(providerOrigin),
+    display_label_touched: overrides.display_label_touched === true,
   };
 }
 
@@ -1023,9 +1050,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setSettingsError('');
     setConnectionDialogError('');
     setControlPlaneDialogError('');
-    setControlPlaneDialogState({
-      provider_origin: '',
-    });
+    setControlPlaneDialogState(createControlPlaneDialogState());
   }
 
   function closeControlPlaneDialog(): void {
@@ -1033,14 +1058,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setControlPlaneDialogError('');
   }
 
-  function updateControlPlaneDialogField(name: 'provider_origin', value: string): void {
+  function updateControlPlaneDialogField(name: 'display_label' | 'provider_origin', value: string): void {
     setControlPlaneDialogState((current) => {
       if (!current) {
         return current;
       }
+      if (name === 'display_label') {
+        return {
+          ...current,
+          display_label: value,
+          display_label_touched: true,
+        };
+      }
+      const nextProviderOrigin = value;
       return {
         ...current,
-        [name]: value,
+        provider_origin: nextProviderOrigin,
+        display_label: current.display_label_touched
+          ? current.display_label
+          : suggestControlPlaneDisplayLabel(nextProviderOrigin),
       };
     });
   }
@@ -1404,6 +1440,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction({
       kind: 'start_control_plane_connect',
       provider_origin: trimString(state.provider_origin),
+      display_label: trimString(state.display_label),
     }, 'control_plane_dialog');
     if (result?.outcome === 'started_control_plane_connect') {
       closeControlPlaneDialog();
@@ -1415,9 +1452,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction({
       kind: 'start_control_plane_connect',
       provider_origin: controlPlane.provider.provider_origin,
+      display_label: controlPlane.display_label,
     });
     if (result?.outcome === 'started_control_plane_connect') {
-      showActionToast(`Continue in your browser to reconnect ${controlPlane.provider.display_name}.`, 'info');
+      showActionToast(`Continue in your browser to reconnect ${controlPlaneName(controlPlane)}.`, 'info');
     }
   }
 
@@ -1428,7 +1466,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       provider_id: controlPlane.provider.provider_id,
     });
     if (result?.outcome === 'refreshed_control_plane') {
-      showActionToast(`Refreshed ${controlPlane.provider.display_name}.`);
+      showActionToast(`Refreshed ${controlPlaneName(controlPlane)}.`);
     }
   }
 
@@ -1828,6 +1866,68 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     await openRemoteEnvironment(state.external_local_ui_url, 'dialog');
   }
 
+  async function toggleEnvironmentPinned(environment: DesktopEnvironmentEntry): Promise<void> {
+    const nextPinned = !environment.pinned;
+    const successMessage = nextPinned
+      ? `${environment.label} pinned.`
+      : `${environment.label} unpinned.`;
+    if (environment.kind === 'managed_environment') {
+      const result = await performLauncherAction({
+        kind: 'set_managed_environment_pinned',
+        environment_id: environment.id,
+        pinned: nextPinned,
+      }, 'connect', {
+        noticeKeys: noticeKeysForEnvironment(environment),
+      });
+      if (result?.outcome === 'saved_environment') {
+        showActionToast(successMessage);
+      }
+      return;
+    }
+    if (environment.kind === 'ssh_environment') {
+      const details = environment.ssh_details;
+      if (!details) {
+        setConnectError('SSH connection details are missing.');
+        return;
+      }
+      const result = await performLauncherAction({
+        kind: 'set_saved_ssh_environment_pinned',
+        environment_id: environment.id,
+        label: environment.label,
+        pinned: nextPinned,
+        ssh_destination: details.ssh_destination,
+        ssh_port: details.ssh_port,
+        remote_install_dir: details.remote_install_dir,
+        bootstrap_strategy: details.bootstrap_strategy,
+        release_base_url: details.release_base_url,
+      }, 'connect', {
+        noticeKeys: noticeKeysForEnvironment(environment),
+      });
+      if (result?.outcome === 'saved_environment') {
+        showActionToast(successMessage);
+      }
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'set_saved_environment_pinned',
+      environment_id: environment.id,
+      label: environment.label,
+      external_local_ui_url: environment.local_ui_url,
+      pinned: nextPinned,
+    }, 'connect', {
+      noticeKeys: noticeKeysForEnvironment(environment),
+    });
+    if (result?.outcome === 'saved_environment') {
+      showActionToast(successMessage);
+    }
+  }
+
+  async function copyEnvironmentValue(value: string, copyLabel: string): Promise<void> {
+    await copyToClipboard(value);
+    const messageLabel = trimString(copyLabel).replace(/^Copy\s+/u, '');
+    showActionToast(messageLabel ? `${messageLabel} copied.` : 'Copied to clipboard.');
+  }
+
   async function deleteEnvironment(): Promise<void> {
     const target = deleteTarget();
     if (!target) {
@@ -1966,6 +2066,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openSSHEnvironment={openSSHEnvironment}
           openEnvironment={openEnvironment}
           runManagedEnvironmentAction={triggerManagedEnvironmentAction}
+          toggleEnvironmentPinned={toggleEnvironmentPinned}
+          copyEnvironmentValue={copyEnvironmentValue}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
           editEnvironment={startEditingEnvironment}
           deleteEnvironment={setDeleteTarget}
@@ -2075,7 +2177,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Remove <span class="font-semibold">{deleteControlPlaneTarget()?.provider.display_name}</span> from Desktop?
+            Remove <span class="font-semibold">{deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : ''}</span> from Desktop?
           </p>
           <p class="text-xs text-muted-foreground">Desktop will revoke the saved authorization, then remove the local account snapshot and cached environment list.</p>
         </div>
@@ -2165,6 +2267,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -2384,11 +2488,11 @@ function ConnectEnvironmentSurface(props: Readonly<{
               showQuickAddCards={props.libraryFilter === 'all' && trimString(props.libraryQuery) === ''}
               busyAction={props.busyAction}
               environmentNotice={props.environmentNotice}
-              openLocalEnvironment={props.openLocalEnvironment}
-              openSettingsSurface={props.openSettingsSurface}
               openCreateConnectionDialog={props.openCreateConnectionDialog}
               openEnvironment={props.openEnvironment}
               runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+              toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+              copyEnvironmentValue={props.copyEnvironmentValue}
               saveEnvironment={props.saveEnvironmentFromLibrary}
               editEnvironment={props.editEnvironment}
               deleteEnvironment={props.deleteEnvironment}
@@ -2405,8 +2509,6 @@ function EnvironmentCardsPanel(props: Readonly<{
   showQuickAddCards: boolean;
   busyAction: BusyAction;
   environmentNotice: (environment: DesktopEnvironmentEntry) => EnvironmentActionNotice | null;
-  openLocalEnvironment: () => Promise<void>;
-  openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
@@ -2418,34 +2520,63 @@ function EnvironmentCardsPanel(props: Readonly<{
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
+  const groupedEntries = createMemo(() => splitPinnedEnvironmentEntries(props.entries));
+
   return (
     <div class="space-y-3">
-      <div class="redeven-environment-grid">
-        <For each={props.entries}>
-          {(environment) => (
-            <EnvironmentConnectionCard
-              environment={environment}
-              busyAction={props.busyAction}
-              notice={props.environmentNotice(environment)}
-              openEnvironment={props.openEnvironment}
-              runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-              saveEnvironment={props.saveEnvironment}
-              editEnvironment={props.editEnvironment}
-              deleteEnvironment={props.deleteEnvironment}
-            />
-          )}
-        </For>
+      <Show when={groupedEntries().pinned_entries.length > 0}>
+        <EnvironmentCardSection title="Pinned">
+          <For each={groupedEntries().pinned_entries}>
+            {(environment) => (
+              <EnvironmentConnectionCard
+                environment={environment}
+                busyAction={props.busyAction}
+                notice={props.environmentNotice(environment)}
+                openEnvironment={props.openEnvironment}
+                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                copyEnvironmentValue={props.copyEnvironmentValue}
+                saveEnvironment={props.saveEnvironment}
+                editEnvironment={props.editEnvironment}
+                deleteEnvironment={props.deleteEnvironment}
+              />
+            )}
+          </For>
+        </EnvironmentCardSection>
+      </Show>
 
-        <Show when={props.showQuickAddCards}>
-          <NewEnvironmentPlaceholderCard
-            openCreateConnectionDialog={props.openCreateConnectionDialog}
-          />
-        </Show>
-      </div>
+      <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
+        <EnvironmentCardSection title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}>
+          <For each={groupedEntries().regular_entries}>
+            {(environment) => (
+              <EnvironmentConnectionCard
+                environment={environment}
+                busyAction={props.busyAction}
+                notice={props.environmentNotice(environment)}
+                openEnvironment={props.openEnvironment}
+                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                copyEnvironmentValue={props.copyEnvironmentValue}
+                saveEnvironment={props.saveEnvironment}
+                editEnvironment={props.editEnvironment}
+                deleteEnvironment={props.deleteEnvironment}
+              />
+            )}
+          </For>
+
+          <Show when={props.showQuickAddCards}>
+            <NewEnvironmentPlaceholderCard
+              openCreateConnectionDialog={props.openCreateConnectionDialog}
+            />
+          </Show>
+        </EnvironmentCardSection>
+      </Show>
 
       <Show when={props.entries.length === 0 && !props.showQuickAddCards}>
         <div class="redeven-console-empty rounded-2xl px-4 py-3 text-sm text-muted-foreground">
@@ -2453,6 +2584,26 @@ function EnvironmentCardsPanel(props: Readonly<{
         </div>
       </Show>
     </div>
+  );
+}
+
+function EnvironmentCardSection(props: Readonly<{
+  title?: string;
+  children: JSX.Element;
+}>) {
+  return (
+    <section class="space-y-2.5">
+      <Show when={props.title}>
+        {(title) => (
+          <div class="px-1">
+            <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title()}</h2>
+          </div>
+        )}
+      </Show>
+      <div class="redeven-environment-grid">
+        {props.children}
+      </div>
+    </section>
   );
 }
 
@@ -2495,6 +2646,8 @@ function ConsoleActionIconButton(props: Readonly<{
   title: string;
   'aria-label': string;
   onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
   danger?: boolean;
   children: JSX.Element;
 }>) {
@@ -2503,6 +2656,9 @@ function ConsoleActionIconButton(props: Readonly<{
       type="button"
       title={props.title}
       aria-label={props['aria-label']}
+      aria-pressed={props.active}
+      data-active={props.active === true}
+      disabled={props.disabled}
       class={cn(
         'redeven-console-icon-button',
         props.danger && 'redeven-console-icon-button--danger',
@@ -2529,27 +2685,70 @@ function ConsoleChipActionButton(props: Readonly<{
   );
 }
 
-function EnvironmentCardKeyLine(props: Readonly<{
-  badgeLabel: string;
-  detailItems: readonly string[];
+function EnvironmentCardFactsBlock(props: Readonly<{
+  facts: readonly EnvironmentCardFactModel[];
+  minRows?: number;
+}>) {
+  const rows = createMemo(() => {
+    const targetLength = Math.max(props.facts.length, props.minRows ?? 0);
+    return Array.from({ length: targetLength }, (_, index) => props.facts[index] ?? null);
+  });
+
+  return (
+    <div class="redeven-environment-card__facts">
+      <For each={rows()}>
+        {(fact) => (
+          <div class="redeven-environment-card__fact-row" data-empty={fact === null}>
+            <div class="redeven-environment-card__fact-label">{fact?.label ?? ''}</div>
+            <div
+              class="redeven-environment-card__fact-value"
+              title={fact?.value ?? undefined}
+            >
+              {fact?.value ?? ''}
+            </div>
+          </div>
+        )}
+      </For>
+    </div>
+  );
+}
+
+function EnvironmentCardEndpointBlock(props: Readonly<{
+  endpoints: readonly EnvironmentCardEndpointModel[];
+  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
   return (
-    <div class="redeven-environment-keyline">
-      <span class="redeven-environment-keybadge">{props.badgeLabel}</span>
-      <Show when={props.detailItems.length > 0}>
-        <div class="redeven-environment-keyfacts">
-          <For each={props.detailItems}>
-            {(item, index) => (
-              <>
-                <Show when={index() > 0}>
-                  <span class="redeven-environment-keyfacts__separator" aria-hidden="true" />
-                </Show>
-                <span class="redeven-environment-keyfacts__item">{item}</span>
-              </>
-            )}
-          </For>
-        </div>
-      </Show>
+    <div class="redeven-environment-card__endpoints">
+      <div class="redeven-environment-card__section-title">Endpoint</div>
+      <div class="space-y-2">
+        <For each={props.endpoints}>
+          {(endpoint) => (
+            <div class="redeven-environment-card__endpoint-row">
+              <Input
+                value={endpoint.value}
+                size="sm"
+                readOnly
+                onFocus={(event) => event.currentTarget.select()}
+                class={cn(
+                  'redeven-environment-card__endpoint-input',
+                  endpoint.monospace && 'font-mono text-[12px]',
+                )}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={endpoint.copy_label}
+                onClick={() => {
+                  void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
+                }}
+              >
+                <Copy class="mr-1 h-3.5 w-3.5" />
+                Copy
+              </Button>
+            </div>
+          )}
+        </For>
+      </div>
     </div>
   );
 }
@@ -2601,18 +2800,20 @@ function EnvironmentConnectionCard(props: Readonly<{
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
+  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
   const card = createMemo(() => buildEnvironmentCardModel(props.environment));
-  const keyInfo = createMemo(() => buildEnvironmentCardKeyInfoModel(props.environment));
+  const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment));
+  const endpoints = createMemo(() => buildEnvironmentCardEndpointsModel(props.environment));
   const managedActionModel = createMemo(() => (
     props.environment.kind === 'managed_environment'
       ? buildProviderBackedEnvironmentActionModel(props.environment)
       : null
   ));
-  const heroLabel = createMemo(() => card().kind_label === 'SSH' ? 'SSH target' : 'Endpoint');
   const isEnvironmentActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
     || props.busyAction === 'open_remote_environment'
@@ -2620,6 +2821,11 @@ function EnvironmentConnectionCard(props: Readonly<{
     || props.busyAction === 'focus_environment_window'
     || props.busyAction === 'refresh_control_plane'
     || props.busyAction === 'start_control_plane_connect'
+  ));
+  const isPinBusy = createMemo(() => (
+    props.busyAction === 'set_managed_environment_pinned'
+    || props.busyAction === 'set_saved_environment_pinned'
+    || props.busyAction === 'set_saved_ssh_environment_pinned'
   ));
 
   return (
@@ -2629,7 +2835,7 @@ function EnvironmentConnectionCard(props: Readonly<{
         ? 'redeven-environment-card--open'
         : 'border-border',
     )}>
-      <CardHeader class="pb-2">
+      <CardHeader class="pb-3">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
@@ -2639,40 +2845,42 @@ function EnvironmentConnectionCard(props: Readonly<{
               {formatRelativeTimestamp(props.environment.last_used_at_ms)}
             </div>
           </div>
-          <ConsoleStatusBadge tone={card().status_tone}>
-            {card().status_label}
-          </ConsoleStatusBadge>
+          <div class="flex items-start gap-1.5">
+            <DesktopTooltip
+              content={props.environment.pinned ? 'Unpin' : 'Pin'}
+              placement="top"
+            >
+              <ConsoleActionIconButton
+                title={props.environment.pinned ? 'Unpin environment' : 'Pin environment'}
+                aria-label={props.environment.pinned ? `Unpin ${props.environment.label}` : `Pin ${props.environment.label}`}
+                active={props.environment.pinned}
+                disabled={isPinBusy()}
+                onClick={() => {
+                  void props.toggleEnvironmentPinned(props.environment);
+                }}
+              >
+                <Pin class="h-3.5 w-3.5" />
+              </ConsoleActionIconButton>
+            </DesktopTooltip>
+            <ConsoleStatusBadge tone={card().status_tone}>
+              {card().status_label}
+            </ConsoleStatusBadge>
+          </div>
         </div>
       </CardHeader>
-      <CardContent class="pb-2">
-        <div class="space-y-2.5">
-          <EnvironmentCardKeyLine
-            badgeLabel={keyInfo().badge_label}
-            detailItems={keyInfo().detail_items}
+      <CardContent class="flex flex-1 flex-col pb-3">
+        <div class="redeven-environment-card__content">
+          <EnvironmentCardFactsBlock facts={facts()} minRows={3} />
+          <EnvironmentCardEndpointBlock
+            endpoints={endpoints()}
+            copyEnvironmentValue={props.copyEnvironmentValue}
           />
-          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{heroLabel()}</div>
-            <div class={cn(
-              'mt-1 truncate text-sm font-medium text-foreground',
-              card().target_primary_monospace && 'font-mono text-[12px]',
-            )}>
-              {card().target_primary}
-            </div>
-            <Show when={card().target_secondary !== ''}>
-              <div class={cn(
-                'mt-1 text-[11px] leading-5 text-muted-foreground',
-                card().target_secondary_monospace && 'font-mono',
-              )}>
-                {card().target_secondary}
-              </div>
-            </Show>
-          </div>
           <Show when={props.notice}>
             {(notice) => <EnvironmentInlineNotice notice={notice()} />}
           </Show>
         </div>
       </CardContent>
-      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
+      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-3">
         <Show
           when={props.environment.kind === 'managed_environment' && managedActionModel()}
           fallback={(
@@ -2889,7 +3097,7 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
     props.managedEntry,
     props.openWindow,
   ));
-  const keyInfo = createMemo(() => buildControlPlaneEnvironmentKeyInfoModel(
+  const facts = createMemo(() => buildControlPlaneEnvironmentFactsModel(
     props.controlPlane,
     props.managedEntry,
   ));
@@ -2914,21 +3122,18 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <CardTitle class="truncate text-sm font-semibold">{props.environment.label}</CardTitle>
-            <div class="mt-1 text-xs text-muted-foreground">Published environment</div>
+            <div class="mt-1 text-xs text-muted-foreground">{controlPlaneName(props.controlPlane)}</div>
           </div>
           <ConsoleStatusBadge tone={actionModel().status_tone}>
             {actionModel().status_label}
           </ConsoleStatusBadge>
         </div>
       </CardHeader>
-      <CardContent class="pb-2">
-        <div class="space-y-2">
-          <EnvironmentCardKeyLine
-            badgeLabel={keyInfo().badge_label}
-            detailItems={keyInfo().detail_items}
-          />
+      <CardContent class="flex flex-1 flex-col pb-3">
+        <div class="redeven-environment-card__content">
+          <EnvironmentCardFactsBlock facts={facts()} minRows={3} />
           <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Namespace</div>
+            <div class="redeven-environment-card__section-title">Namespace</div>
             <div class="mt-1.5 text-sm font-medium text-foreground">{heroValue()}</div>
           </div>
           <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
@@ -3026,15 +3231,17 @@ function ControlPlaneShelf(props: Readonly<{
           <div class="flex min-w-0 items-center gap-3">
             <ConsoleIconTile label="C" />
             <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-                <div class="truncate text-sm font-semibold tracking-tight text-foreground">{props.controlPlane.provider.display_name}</div>
-              <ConsoleStatusBadge tone={statusModel().tone}>
-                {statusModel().label}
-              </ConsoleStatusBadge>
-              <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
-            </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="truncate text-sm font-semibold tracking-tight text-foreground">{controlPlaneName(props.controlPlane)}</div>
+                <ConsoleStatusBadge tone={statusModel().tone}>
+                  {statusModel().label}
+                </ConsoleStatusBadge>
+                <ConsoleBadge>{props.controlPlane.provider.display_name}</ConsoleBadge>
+                <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
+              </div>
               <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>{props.controlPlane.account.user_display_name}</span>
+                <span>{props.controlPlane.account.user_display_name}</span>
+                <span class="font-mono text-[11px]">{props.controlPlane.provider.provider_origin}</span>
                 <span>Synced {formatRelativeTimestamp(props.controlPlane.last_synced_at_ms)}</span>
               </div>
               <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
@@ -3068,7 +3275,7 @@ function ControlPlaneShelf(props: Readonly<{
               title="Delete Control Plane"
               danger
               onClick={() => props.deleteControlPlane(props.controlPlane)}
-              aria-label={`Delete ${props.controlPlane.provider.display_name}`}
+              aria-label={`Delete ${controlPlaneName(props.controlPlane)}`}
             >
               <Trash class="h-4 w-4" />
             </ConsoleActionIconButton>
@@ -3597,7 +3804,7 @@ function ConnectionDialog(props: Readonly<{
   const controlPlaneOptions = createMemo(() => props.controlPlanes.map((controlPlane) => ({
     provider_origin: controlPlane.provider.provider_origin,
     provider_id: controlPlane.provider.provider_id,
-    label: controlPlane.provider.display_name,
+    label: controlPlaneName(controlPlane),
     count: controlPlane.environments.length,
   })));
   const selectedControlPlaneEnvironments = createMemo(() => (
@@ -3985,7 +4192,7 @@ function ControlPlaneDialog(props: Readonly<{
   error: string;
   busyAction: BusyAction;
   onOpenChange: (open: boolean) => void;
-  updateField: (name: 'provider_origin', value: string) => void;
+  updateField: (name: 'display_label' | 'provider_origin', value: string) => void;
   onConnect: () => Promise<void>;
 }>) {
   // See ConnectionDialog: memoize the open boolean so that identity churn in
@@ -4015,6 +4222,18 @@ function ControlPlaneDialog(props: Readonly<{
       )}
     >
       <div class="space-y-4">
+        <div class="space-y-1.5">
+          <label for="control-plane-label" class="block text-xs font-medium text-foreground">Name</label>
+          <Input
+            id="control-plane-label"
+            value={props.state?.display_label ?? ''}
+            onInput={(event) => props.updateField('display_label', event.currentTarget.value)}
+            placeholder="region.example.invalid"
+            size="sm"
+            class="w-full"
+            spellcheck={false}
+          />
+        </div>
         <div class="space-y-1.5">
           <label for="control-plane-origin" class="block text-xs font-medium text-foreground">Control Plane URL</label>
           <Input

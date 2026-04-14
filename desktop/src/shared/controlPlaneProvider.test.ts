@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  normalizeControlPlaneDisplayLabel,
   normalizeControlPlaneOrigin,
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentList,
+  suggestControlPlaneDisplayLabel,
 } from './controlPlaneProvider';
 
 describe('controlPlaneProvider', () => {
@@ -25,6 +27,13 @@ describe('controlPlaneProvider', () => {
     expect(() => normalizeControlPlaneOrigin('ftp://cp.example.invalid')).toThrow(
       'Control Plane URL must start with http:// or https://.',
     );
+  });
+
+  it('derives stable local display labels from provider origins', () => {
+    expect(suggestControlPlaneDisplayLabel('https://cp.example.invalid/root/path')).toBe('cp.example.invalid');
+    expect(suggestControlPlaneDisplayLabel(' http://127.0.0.1:8094/desktop/connect ')).toBe('127.0.0.1');
+    expect(normalizeControlPlaneDisplayLabel('', 'https://cp.example.invalid')).toBe('cp.example.invalid');
+    expect(normalizeControlPlaneDisplayLabel(' Team Portal ', 'https://cp.example.invalid')).toBe('Team Portal');
   });
 
   it('normalizes discovery payloads', () => {

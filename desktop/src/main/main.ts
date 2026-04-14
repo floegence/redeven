@@ -16,6 +16,9 @@ import {
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
+  setManagedEnvironmentPinned,
+  setSavedEnvironmentPinned,
+  setSavedSSHEnvironmentPinned,
   updateManagedEnvironmentAccess,
   upsertManagedControlPlaneEnvironment,
   upsertManagedLocalEnvironment,
@@ -143,7 +146,11 @@ import {
   type DesktopWelcomeEntryReason,
   type DesktopWelcomeIssue,
 } from '../shared/desktopLauncherIPC';
-import { desktopControlPlaneKey, normalizeControlPlaneOrigin, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import {
+  desktopControlPlaneKey,
+  normalizeControlPlaneOrigin,
+  type DesktopControlPlaneSummary,
+} from '../shared/controlPlaneProvider';
 import type { DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
 import {
   desktopProviderCatalogFreshness,
@@ -252,6 +259,7 @@ let desktopStateStoreCache: DesktopStateStore | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
 const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessState>();
 const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
+const pendingControlPlaneDisplayLabelByOrigin = new Map<string, string>();
 const controlPlaneSyncTaskByKey = new Map<string, Promise<Readonly<{
   preferences: DesktopPreferences;
   controlPlane: DesktopSavedControlPlane;
@@ -269,6 +277,36 @@ installStdioBrokenPipeGuards();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function peekPendingControlPlaneDisplayLabel(providerOrigin: string): string {
+  try {
+    return String(pendingControlPlaneDisplayLabelByOrigin.get(normalizeControlPlaneOrigin(providerOrigin)) ?? '');
+  } catch {
+    return '';
+  }
+}
+
+function rememberPendingControlPlaneDisplayLabel(providerOrigin: string, displayLabel?: string): void {
+  try {
+    const key = normalizeControlPlaneOrigin(providerOrigin);
+    const cleanLabel = compact(displayLabel);
+    if (cleanLabel === '') {
+      pendingControlPlaneDisplayLabelByOrigin.delete(key);
+      return;
+    }
+    pendingControlPlaneDisplayLabelByOrigin.set(key, cleanLabel);
+  } catch {
+    // Ignore invalid origins while the launcher is still validating input.
+  }
+}
+
+function clearPendingControlPlaneDisplayLabel(providerOrigin: string): void {
+  try {
+    pendingControlPlaneDisplayLabelByOrigin.delete(normalizeControlPlaneOrigin(providerOrigin));
+  } catch {
+    // Ignore invalid origins during best-effort cleanup.
+  }
 }
 
 function launcherActionSuccess(
@@ -1536,6 +1574,7 @@ async function saveConnectedControlPlane(
   providerOrigin: string,
   expectedProviderID: string | undefined,
   handoffTicket: string,
+  displayLabel?: string,
 ): Promise<Readonly<{
   preferences: DesktopPreferences;
   controlPlane: DesktopSavedControlPlane;
@@ -1553,10 +1592,12 @@ async function saveConnectedControlPlane(
     exchange.access_expires_at_unix_ms,
     exchange.authorization_expires_at_unix_ms,
   );
+  const resolvedDisplayLabel = compact(displayLabel) || peekPendingControlPlaneDisplayLabel(provider.provider_origin);
   const nextPreferences = upsertSavedControlPlane(preferences, {
     provider,
     account: exchange.account,
     environments: exchange.environments,
+    display_label: resolvedDisplayLabel || undefined,
     last_synced_at_ms: Date.now(),
     refresh_token: exchange.refresh_token,
   });
@@ -1565,6 +1606,7 @@ async function saveConnectedControlPlane(
     throw new Error('Desktop failed to save the Control Plane account.');
   }
   await persistDesktopPreferences(nextPreferences);
+  clearPendingControlPlaneDisplayLabel(provider.provider_origin);
   setControlPlaneSyncRecord(provider.provider_origin, provider.provider_id, {
     sync_state: 'ready',
     last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
@@ -2335,6 +2377,7 @@ async function startControlPlaneConnectFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'start_control_plane_connect' }>>,
 ): Promise<DesktopLauncherActionResult> {
   const provider = await fetchProviderDiscovery(request.provider_origin);
+  rememberPendingControlPlaneDisplayLabel(provider.provider_origin, request.display_label);
   await openExternalURL(providerDesktopConnectPageURL(provider.provider_origin));
   resetLauncherIssueState();
   broadcastDesktopWelcomeSnapshots();
@@ -2792,6 +2835,52 @@ async function upsertSavedSSHEnvironmentFromWelcome(
   await persistDesktopPreferences(next);
 }
 
+async function setManagedEnvironmentPinnedFromWelcome(
+  environmentID: string,
+  pinned: boolean,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  await persistDesktopPreferences(setManagedEnvironmentPinned(preferences, environmentID, pinned));
+}
+
+async function setSavedEnvironmentPinnedFromWelcome(
+  environmentID: string,
+  label: string,
+  externalLocalUIURL: string,
+  pinned: boolean,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const existing = preferences.saved_environments.find((environment) => environment.id === environmentID);
+  await persistDesktopPreferences(setSavedEnvironmentPinned(preferences, {
+    environment_id: environmentID,
+    label,
+    local_ui_url: externalLocalUIURL,
+    pinned,
+    last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
+  }));
+}
+
+async function setSavedSSHEnvironmentPinnedFromWelcome(
+  environmentID: string,
+  label: string,
+  details: DesktopSSHEnvironmentDetails,
+  pinned: boolean,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const existing = preferences.saved_ssh_environments.find((environment) => environment.id === environmentID);
+  await persistDesktopPreferences(setSavedSSHEnvironmentPinned(preferences, {
+    environment_id: environmentID,
+    label,
+    pinned,
+    last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
+    ssh_destination: details.ssh_destination,
+    ssh_port: details.ssh_port,
+    remote_install_dir: details.remote_install_dir,
+    bootstrap_strategy: details.bootstrap_strategy,
+    release_base_url: details.release_base_url,
+  }));
+}
+
 async function deleteSavedEnvironmentFromWelcome(environmentID: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await persistDesktopPreferences(deleteSavedEnvironment(preferences, environmentID));
@@ -2812,6 +2901,31 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return openSSHEnvironmentFromLauncher(request);
     case 'start_control_plane_connect':
       return startControlPlaneConnectFromLauncher(request);
+    case 'set_managed_environment_pinned':
+      await setManagedEnvironmentPinnedFromWelcome(request.environment_id, request.pinned);
+      return launcherActionSuccess('saved_environment');
+    case 'set_saved_environment_pinned':
+      await setSavedEnvironmentPinnedFromWelcome(
+        request.environment_id,
+        request.label,
+        request.external_local_ui_url,
+        request.pinned,
+      );
+      return launcherActionSuccess('saved_environment');
+    case 'set_saved_ssh_environment_pinned':
+      await setSavedSSHEnvironmentPinnedFromWelcome(
+        request.environment_id,
+        request.label,
+        {
+          ssh_destination: request.ssh_destination,
+          ssh_port: request.ssh_port,
+          remote_install_dir: request.remote_install_dir,
+          bootstrap_strategy: request.bootstrap_strategy,
+          release_base_url: request.release_base_url,
+        },
+        request.pinned,
+      );
+      return launcherActionSuccess('saved_environment');
     case 'open_managed_environment_settings':
       return openUtilityWindow('launcher', {
         surface: 'managed_environment_settings',
@@ -3027,6 +3141,7 @@ async function connectControlPlaneFromDeepLink(
     request.provider_origin,
     undefined,
     request.handoff_ticket,
+    undefined,
   );
   resetLauncherIssueState();
 }

@@ -29,6 +29,9 @@ import {
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
+  setManagedEnvironmentPinned,
+  setSavedEnvironmentPinned,
+  setSavedSSHEnvironmentPinned,
   upsertManagedLocalEnvironment,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
@@ -122,6 +125,7 @@ describe('desktopPreferences', () => {
             label: 'Staging',
             local_ui_url: 'http://192.168.1.12:24000/',
             source: 'saved',
+            pinned: true,
             last_used_at_ms: 100,
           },
         ],
@@ -135,6 +139,7 @@ describe('desktopPreferences', () => {
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
             source: 'saved',
+            pinned: false,
             last_used_at_ms: 90,
           },
         ],
@@ -182,6 +187,7 @@ describe('desktopPreferences', () => {
           last_seen_at_unix_ms: 123,
         }],
         refresh_token: 'refresh-demo-token',
+        display_label: 'Demo Portal',
         last_synced_at_ms: 456,
       });
 
@@ -376,6 +382,7 @@ describe('desktopPreferences', () => {
             label: 'Recovered target',
             local_ui_url: 'http://192.168.1.11:24000/',
             source: 'saved',
+            pinned: false,
             last_used_at_ms: 20,
           },
         ],
@@ -414,6 +421,7 @@ describe('desktopPreferences', () => {
         label: '192.168.1.11:24000',
         local_ui_url: 'http://192.168.1.11:24000/',
         source: 'recent_auto',
+        pinned: false,
         last_used_at_ms: 2,
       },
       {
@@ -421,6 +429,7 @@ describe('desktopPreferences', () => {
         label: '192.168.1.12:24000',
         local_ui_url: 'http://192.168.1.12:24000/',
         source: 'recent_auto',
+        pinned: false,
         last_used_at_ms: 1,
       },
     ]);
@@ -448,6 +457,7 @@ describe('desktopPreferences', () => {
         label: 'Laptop Updated',
         local_ui_url: 'http://192.168.1.11:24000/',
         source: 'saved',
+        pinned: false,
         last_used_at_ms: 300,
       },
       {
@@ -455,6 +465,7 @@ describe('desktopPreferences', () => {
         label: defaultSavedEnvironmentLabel('http://192.168.1.12:24000/'),
         local_ui_url: 'http://192.168.1.12:24000/',
         source: 'saved',
+        pinned: false,
         last_used_at_ms: 200,
       },
     ]);
@@ -469,6 +480,7 @@ describe('desktopPreferences', () => {
         label: 'Laptop Updated',
         local_ui_url: 'http://192.168.1.11:24000/',
         source: 'saved',
+        pinned: false,
         last_used_at_ms: 300,
       },
     ]);
@@ -494,6 +506,7 @@ describe('desktopPreferences', () => {
         bootstrap_strategy: 'auto',
         release_base_url: '',
         source: 'recent_auto',
+        pinned: false,
         last_used_at_ms: expect.any(Number),
       },
     ]);
@@ -511,6 +524,54 @@ describe('desktopPreferences', () => {
     });
 
     expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:remote_default').saved_ssh_environments).toEqual([]);
+  });
+
+  it('persists pin state for managed, URL, and SSH environments', () => {
+    const base = testDesktopPreferences({
+      managed_environments: [testManagedLocalEnvironment('default', { pinned: false })],
+      saved_environments: [{
+        id: 'http://192.168.1.12:24000/',
+        label: 'Staging',
+        local_ui_url: 'http://192.168.1.12:24000/',
+        source: 'saved',
+        pinned: false,
+        last_used_at_ms: 20,
+      }],
+      saved_ssh_environments: [{
+        id: 'ssh:devbox:2222:remote_default',
+        label: 'SSH Lab',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: '',
+        source: 'saved',
+        pinned: false,
+        last_used_at_ms: 10,
+      }],
+    });
+
+    const managedPinned = setManagedEnvironmentPinned(base, 'local:default', true);
+    const urlPinned = setSavedEnvironmentPinned(managedPinned, {
+      environment_id: 'http://192.168.1.12:24000/',
+      label: 'Staging',
+      local_ui_url: 'http://192.168.1.12:24000/',
+      pinned: true,
+    });
+    const sshPinned = setSavedSSHEnvironmentPinned(urlPinned, {
+      environment_id: 'ssh:devbox:2222:remote_default',
+      label: 'SSH Lab',
+      pinned: true,
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+    });
+
+    expect(sshPinned.managed_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
+    expect(sshPinned.saved_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
+    expect(sshPinned.saved_ssh_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
   });
 
   it('normalizes recent URLs and derives them from saved environments ordered by last use', () => {
@@ -535,6 +596,7 @@ describe('desktopPreferences', () => {
         label: 'C',
         local_ui_url: 'http://192.168.1.13:24000/',
         source: 'saved',
+        pinned: false,
         last_used_at_ms: 10,
       },
       {
@@ -542,6 +604,7 @@ describe('desktopPreferences', () => {
         label: 'A',
         local_ui_url: 'http://192.168.1.11:24000/',
         source: 'saved',
+        pinned: true,
         last_used_at_ms: 30,
       },
       {
@@ -549,6 +612,7 @@ describe('desktopPreferences', () => {
         label: 'B',
         local_ui_url: 'http://192.168.1.12:24000/',
         source: 'recent_auto',
+        pinned: false,
         last_used_at_ms: 20,
       },
     ])).toEqual([

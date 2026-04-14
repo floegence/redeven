@@ -204,13 +204,25 @@ Interaction rules:
 - The SSH `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Release Base URL` or `Remote Install Directory` does not auto-collapse the section.
 - SSH mode explains the actual behavior inline:
   - Desktop reuses only the exact Desktop-managed release, installs it on demand when needed, and tunnels its Local UI over SSH.
-- `Add Control Plane` opens a separate dialog that accepts only a Provider URL and then continues in the system browser.
+- `Add Control Plane` opens a separate dialog that accepts:
+  - a user-owned local `Name`
+  - a `Provider URL`
+  - the default `Name` is derived from the provider hostname until the user edits it explicitly
 - The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
 - `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
 - Local managed environments and managed Control Plane environments both render in the `Environments` tab, because both own a real scope on this machine.
 - Control Plane provider management still lives in the `Control Planes` tab, but opening one provider environment also materializes it in the shared managed-environment catalog.
-- Managed environment cards show the label, kind, open state, and the next bind or provider/environment identity that will be reused on the next open.
+- Environment Library cards use one fixed-height layout:
+  - header with label, relative timestamp, pin/unpin icon, and status badge
+  - compact facts rows such as `RUNS ON`, `ACCESS`, and `CONTROL PLANE`
+  - an `Endpoint` block with readonly inputs plus `Copy`
+  - footer actions aligned vertically across card types
+- Environment Library pinning is first-class:
+  - pinned cards render once inside a dedicated `Pinned` section
+  - unpinned cards remain in the regular `Environments` section
+  - pinning an open unsaved Redeven URL or SSH target implicitly promotes it into the saved Environment Library
+- Managed environment cards show the label, status, and the next bind or provider/environment identity that will be reused on the next open.
 - Managed environment cards and Control Plane environment cards normalize provider runtime into the same user-facing state model:
   - `Open`
   - `Ready`
@@ -244,8 +256,9 @@ Interaction rules:
 - Open launcher entries switch their primary action from `Open` to `Focus`.
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
-- Saved SSH Environments render in that same card grid, with the SSH identity (`destination[:port]`) as the primary target and the forwarded Local UI surfaced as secondary detail when present.
+- Saved SSH Environments render in that same card grid, with the SSH identity (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
 - Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and per-environment open/focus cards.
+- Control Plane shelves show the Desktop display label as the primary title while still surfacing the provider product name and origin in the secondary details.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - Expected launcher failures no longer rely on raw IPC exception text:
@@ -258,7 +271,7 @@ Interaction rules:
   - `Remote status is stale. Refresh the provider to confirm the latest state.`
   - `This environment is currently offline in the provider.`
 - Transient operation confirmations stay out of page flow:
-  - success and info feedback such as `Refreshed Redeven Portal.` render as toast notifications
+  - success and info feedback such as `Refreshed this Control Plane.` render as toast notifications
   - Desktop does not insert a success/info banner into the launcher content area just to acknowledge an action
 - The top error banner is reserved for global or dialog-scoped failures that cannot be cleanly attached to a specific environment card.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
@@ -339,11 +352,11 @@ Semantics:
   - per-environment Local UI bind/password configuration
   - pin and timestamp metadata
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
-- `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
-- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), and `last_used_at_ms`.
+- `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
+- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
-- `control_planes` stores normalized provider discovery data, the desktop account snapshot, the cached environment list, and the last sync time.
+- `control_planes` stores normalized provider discovery data, the desktop-owned display label, the desktop account snapshot, the cached environment list, and the last sync time.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 - Legacy single-local-environment settings migrate into the managed local environment with identity `local:default`.
 

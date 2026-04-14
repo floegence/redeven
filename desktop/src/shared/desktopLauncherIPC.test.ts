@@ -88,6 +88,37 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'env-1',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'start_control_plane_connect',
+      provider_origin: ' https://cp.example.invalid/root ',
+      display_label: ' Redeven Portal ',
+    })).toEqual({
+      kind: 'start_control_plane_connect',
+      provider_origin: 'https://cp.example.invalid',
+      display_label: 'Redeven Portal',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'set_managed_environment_pinned',
+      environment_id: ' local:default ',
+      pinned: true,
+    })).toEqual({
+      kind: 'set_managed_environment_pinned',
+      environment_id: 'local:default',
+      pinned: true,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'set_saved_environment_pinned',
+      environment_id: ' env-1 ',
+      label: ' Work laptop ',
+      external_local_ui_url: ' http://192.168.1.11:24000/ ',
+      pinned: false,
+    })).toEqual({
+      kind: 'set_saved_environment_pinned',
+      environment_id: 'env-1',
+      label: 'Work laptop',
+      external_local_ui_url: 'http://192.168.1.11:24000/',
+      pinned: false,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_ssh_environment',
       environment_id: ' ssh-1 ',
       label: ' SSH lab ',
@@ -131,6 +162,27 @@ describe('desktopLauncherIPC', () => {
     })).toEqual({
       kind: 'delete_saved_ssh_environment',
       environment_id: 'ssh-1',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'set_saved_ssh_environment_pinned',
+      environment_id: ' ssh-1 ',
+      label: ' SSH lab ',
+      pinned: true,
+      ssh_destination: ' devbox ',
+      ssh_port: ' 2222 ',
+      remote_install_dir: ' /opt/redeven ',
+      bootstrap_strategy: ' desktop_upload ',
+      release_base_url: ' https://mirror.example.invalid/releases/ ',
+    })).toEqual({
+      kind: 'set_saved_ssh_environment_pinned',
+      environment_id: 'ssh-1',
+      label: 'SSH lab',
+      pinned: true,
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      remote_install_dir: '/opt/redeven',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases/',
     });
   });
 

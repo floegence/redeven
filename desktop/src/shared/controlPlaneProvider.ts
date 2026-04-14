@@ -39,6 +39,7 @@ export type DesktopControlPlaneSummary = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
   environments: readonly DesktopProviderEnvironment[];
+  display_label: string;
   last_synced_at_ms: number;
   sync_state: DesktopControlPlaneSyncState;
   last_sync_attempt_at_ms: number;
@@ -49,6 +50,35 @@ export type DesktopControlPlaneSummary = Readonly<{
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+export function suggestControlPlaneDisplayLabel(rawURL: string): string {
+  const clean = compact(rawURL);
+  if (clean === '') {
+    return '';
+  }
+  try {
+    const parsed = new URL(clean);
+    return compact(parsed.hostname || parsed.host);
+  } catch {
+    return compact(
+      clean
+        .replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//u, '')
+        .split('/')[0]
+        ?.split('?')[0]
+        ?.split('#')[0] ?? '',
+    );
+  }
+}
+
+export function defaultControlPlaneDisplayLabel(providerOrigin: string): string {
+  const suggested = suggestControlPlaneDisplayLabel(normalizeControlPlaneOrigin(providerOrigin));
+  return suggested === '' ? normalizeControlPlaneOrigin(providerOrigin) : suggested;
+}
+
+export function normalizeControlPlaneDisplayLabel(value: unknown, providerOrigin: string): string {
+  const clean = compact(value);
+  return clean === '' ? defaultControlPlaneDisplayLabel(providerOrigin) : clean;
 }
 
 export function normalizeControlPlaneOrigin(rawURL: string): string {
