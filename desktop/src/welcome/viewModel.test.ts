@@ -139,11 +139,13 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     expect(buildEnvironmentCardEndpointsModel(sshEntry!)).toEqual([
       {
+        label: 'SSH',
         value: 'ops@example.internal:2222',
         monospace: true,
         copy_label: 'Copy SSH target',
       },
       {
+        label: 'URL',
         value: 'http://127.0.0.1:24111/',
         monospace: true,
         copy_label: 'Copy forwarded URL',

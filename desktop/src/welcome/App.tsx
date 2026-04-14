@@ -2720,31 +2720,35 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
   return (
     <div class="redeven-environment-card__endpoints">
       <div class="redeven-environment-card__section-title">Endpoint</div>
-      <div class="space-y-2">
+      <div class="space-y-1.5">
         <For each={props.endpoints}>
           {(endpoint) => (
             <div class="redeven-environment-card__endpoint-row">
-              <Input
-                value={endpoint.value}
-                size="sm"
-                readOnly
-                onFocus={(event) => event.currentTarget.select()}
-                class={cn(
-                  'redeven-environment-card__endpoint-input',
-                  endpoint.monospace && 'font-mono text-[12px]',
-                )}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                aria-label={endpoint.copy_label}
-                onClick={() => {
-                  void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
-                }}
-              >
-                <Copy class="mr-1 h-3.5 w-3.5" />
-                Copy
-              </Button>
+              <span class="redeven-environment-card__endpoint-label">{endpoint.label}</span>
+              <div class="redeven-environment-card__endpoint-field">
+                <input
+                  type="text"
+                  value={endpoint.value}
+                  readOnly
+                  onFocus={(event) => event.currentTarget.select()}
+                  class={cn(
+                    'redeven-environment-card__endpoint-input',
+                    endpoint.monospace && 'font-mono text-[11.5px]',
+                  )}
+                />
+              </div>
+              <DesktopTooltip content={endpoint.copy_label} placement="top">
+                <button
+                  type="button"
+                  class="redeven-environment-card__endpoint-copy"
+                  aria-label={endpoint.copy_label}
+                  onClick={() => {
+                    void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
+                  }}
+                >
+                  <Copy class="h-3.5 w-3.5" />
+                </button>
+              </DesktopTooltip>
             </div>
           )}
         </For>
@@ -2762,7 +2766,7 @@ function QuickCreateConnectionCard(props: Readonly<{
 }>) {
   return (
     <Card class="redeven-environment-card redeven-console-card redeven-quick-add-card h-full overflow-hidden border shadow-sm">
-      <CardHeader class="px-4 pb-3 pt-4">
+      <CardHeader class="px-3.5 pb-2.5 pt-3.5">
         <div class="flex items-start gap-3">
           <ConsoleIconTile label="+" />
           <div class="min-w-0 flex-1">
@@ -2776,7 +2780,7 @@ function QuickCreateConnectionCard(props: Readonly<{
           </div>
         </div>
       </CardHeader>
-      <CardFooter class="mt-auto border-t border-border/70 px-4 py-3">
+      <CardFooter class="mt-auto border-t border-border/70 px-3.5 py-2.5">
         <Button size="sm" variant="outline" class="w-full" onClick={props.onClick}>
           <Plus class="mr-1 h-3.5 w-3.5" />
           {props.actionLabel}
@@ -2835,7 +2839,7 @@ function EnvironmentConnectionCard(props: Readonly<{
         ? 'redeven-environment-card--open'
         : 'border-border',
     )}>
-      <CardHeader class="pb-3">
+      <CardHeader class="px-3.5 pb-2.5 pt-3.5">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
@@ -2868,7 +2872,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           </div>
         </div>
       </CardHeader>
-      <CardContent class="flex flex-1 flex-col pb-3">
+      <CardContent class="flex flex-1 flex-col px-3.5 pb-2.5">
         <div class="redeven-environment-card__content">
           <EnvironmentCardFactsBlock facts={facts()} minRows={3} />
           <EnvironmentCardEndpointBlock
@@ -2880,7 +2884,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           </Show>
         </div>
       </CardContent>
-      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-3">
+      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <Show
           when={props.environment.kind === 'managed_environment' && managedActionModel()}
           fallback={(
@@ -3118,7 +3122,7 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
         ? 'redeven-environment-card--open'
         : 'border-border',
     )}>
-      <CardHeader class="pb-2">
+      <CardHeader class="px-3.5 pb-2 pt-3.5">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
             <CardTitle class="truncate text-sm font-semibold">{props.environment.label}</CardTitle>
@@ -3129,7 +3133,7 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
           </ConsoleStatusBadge>
         </div>
       </CardHeader>
-      <CardContent class="flex flex-1 flex-col pb-3">
+      <CardContent class="flex flex-1 flex-col px-3.5 pb-2.5">
         <div class="redeven-environment-card__content">
           <EnvironmentCardFactsBlock facts={facts()} minRows={3} />
           <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-2.5">
@@ -3147,7 +3151,7 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
           </Show>
         </div>
       </CardContent>
-      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border pt-2">
+      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <div class="flex flex-1 items-center gap-2">
           <Button
             size="sm"

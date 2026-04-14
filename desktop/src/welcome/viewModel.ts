@@ -35,6 +35,7 @@ export type EnvironmentCardFactModel = Readonly<{
 }>;
 
 export type EnvironmentCardEndpointModel = Readonly<{
+  label: string;
   value: string;
   monospace: boolean;
   copy_label: string;
@@ -279,9 +280,22 @@ export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
   const card = buildEnvironmentCardModel(environment);
+  const primaryLabel = environment.kind === 'ssh_environment'
+    ? 'SSH'
+    : environment.kind === 'external_local_ui'
+      ? 'URL'
+      : environment.managed_has_local_hosting
+        ? (card.target_primary.startsWith('http://') || card.target_primary.startsWith('https://') ? 'URL' : 'LOCAL')
+        : 'REMOTE';
+  const secondaryLabel = environment.kind === 'ssh_environment'
+    ? 'URL'
+    : environment.kind === 'managed_environment'
+      ? 'REMOTE'
+      : 'DETAIL';
   return [
     card.target_primary !== ''
       ? {
+          label: primaryLabel,
           value: card.target_primary,
           monospace: card.target_primary_monospace,
           copy_label: environment.kind === 'ssh_environment' ? 'Copy SSH target' : 'Copy endpoint',
@@ -289,6 +303,7 @@ export function buildEnvironmentCardEndpointsModel(
       : null,
     card.target_secondary !== ''
       ? {
+          label: secondaryLabel,
           value: card.target_secondary,
           monospace: card.target_secondary_monospace,
           copy_label: environment.kind === 'ssh_environment' ? 'Copy forwarded URL' : 'Copy endpoint',
