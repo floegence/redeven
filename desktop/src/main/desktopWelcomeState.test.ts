@@ -142,7 +142,7 @@ describe('desktopWelcomeState', () => {
         is_open: true,
         open_action_label: 'Focus',
         can_edit: true,
-        can_delete: false,
+        can_delete: true,
         can_save: false,
         managed_environment_kind: 'local',
         managed_environment_name: 'default',

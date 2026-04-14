@@ -2517,9 +2517,9 @@ function EnvironmentCardSection(props: Readonly<{
 }
 
 function ConsoleIconTile(props: Readonly<{
-  label: string;
+  children: JSX.Element;
 }>) {
-  return <div class="redeven-console-card__icon">{props.label}</div>;
+  return <div class="redeven-console-card__icon">{props.children}</div>;
 }
 
 function ConsoleBadge(props: Readonly<{
@@ -2629,6 +2629,42 @@ function EnvironmentCardFactsBlock(props: Readonly<{
   );
 }
 
+function EndpointCopyRow(props: Readonly<{
+  endpoint: EnvironmentCardEndpointModel;
+  copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
+}>) {
+  const [copied, setCopied] = createSignal(false);
+  let resetTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const handleCopy = () => {
+    void props.copyEnvironmentValue(props.endpoint.value, props.endpoint.copy_label);
+    setCopied(true);
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => setCopied(false), 1500);
+  };
+
+  onCleanup(() => clearTimeout(resetTimer));
+
+  return (
+    <div
+      class="redeven-card-endpoint-row"
+      onClick={handleCopy}
+      title={props.endpoint.copy_label}
+    >
+      <span class="redeven-card-endpoint-label">{props.endpoint.label}</span>
+      <span class={cn(
+        'redeven-card-endpoint-value',
+        props.endpoint.monospace && 'font-mono text-[11.5px]',
+      )}>
+        {props.endpoint.value}
+      </span>
+      <span class={cn('redeven-card-endpoint-copy', copied() && 'redeven-card-endpoint-copy--active')} aria-hidden="true">
+        {copied() ? <Check class="h-3 w-3" /> : <Copy class="h-3 w-3" />}
+      </span>
+    </div>
+  );
+}
+
 function EnvironmentCardEndpointBlock(props: Readonly<{
   endpoints: readonly EnvironmentCardEndpointModel[];
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -2639,24 +2675,10 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
       <div class="space-y-0.5">
         <For each={props.endpoints}>
           {(endpoint) => (
-            <div
-              class="redeven-card-endpoint-row"
-              onClick={() => {
-                void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
-              }}
-              title={endpoint.copy_label}
-            >
-              <span class="redeven-card-endpoint-label">{endpoint.label}</span>
-              <span class={cn(
-                'redeven-card-endpoint-value',
-                endpoint.monospace && 'font-mono text-[11.5px]',
-              )}>
-                {endpoint.value}
-              </span>
-              <span class="redeven-card-endpoint-copy" aria-hidden="true">
-                <Copy class="h-3 w-3" />
-              </span>
-            </div>
+            <EndpointCopyRow
+              endpoint={endpoint}
+              copyEnvironmentValue={props.copyEnvironmentValue}
+            />
           )}
         </For>
       </div>
@@ -2675,7 +2697,7 @@ function QuickCreateConnectionCard(props: Readonly<{
     <Card class="redeven-environment-card redeven-console-card redeven-quick-add-card h-full overflow-hidden border shadow-sm">
       <CardHeader class="px-3.5 pb-2.5 pt-3.5">
         <div class="flex items-start gap-3">
-          <ConsoleIconTile label="+" />
+          <ConsoleIconTile><Plus class="h-4 w-4" /></ConsoleIconTile>
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
@@ -3041,7 +3063,7 @@ function ControlPlaneShelf(props: Readonly<{
         <div class="px-4 py-3">
           <div class="flex" style="flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:0.75rem">
             <div class="flex min-w-0 items-center gap-3">
-              <ConsoleIconTile label="C" />
+              <ConsoleIconTile><Shield class="h-4 w-4" /></ConsoleIconTile>
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
                   <div class="truncate text-sm font-semibold tracking-tight text-foreground">{controlPlaneName(props.controlPlane)}</div>
