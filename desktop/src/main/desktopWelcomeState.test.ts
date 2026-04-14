@@ -519,6 +519,58 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
+  it('keeps dual-route entries visible when remote access is removed and marks their local scope as controlplane', () => {
+    const freshSyncAt = Date.now();
+    expect(testProvider).toBeTruthy();
+    if (!testProvider) {
+      throw new Error('Expected normalized test provider.');
+    }
+    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
+    const summaryAccount = {
+      provider_id: testProvider.provider_id,
+      provider_origin: testProvider.provider_origin,
+      display_name: testProvider.display_name,
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      authorization_expires_at_unix_ms: freshSyncAt + 60_000,
+    };
+
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedControlPlane],
+        control_planes: [{
+          provider: testProvider,
+          account: summaryAccount,
+          environments: [],
+          display_label: 'Demo Portal',
+          last_synced_at_ms: freshSyncAt,
+        }],
+      }),
+      controlPlanes: [{
+        provider: testProvider,
+        account: summaryAccount,
+        environments: [],
+        display_label: 'Demo Portal',
+        last_synced_at_ms: freshSyncAt,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: freshSyncAt,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: managedControlPlane.id,
+        managed_local_scope_kind: 'controlplane',
+        managed_has_local_hosting: true,
+        remote_route_state: 'removed',
+        remote_state_reason: 'This environment is no longer published by the provider.',
+      }),
+    ]));
+  });
+
   it('turns blocked local-runtime reports into managed-environment recovery copy', () => {
     const issue = buildBlockedLaunchIssue({
       status: 'blocked',

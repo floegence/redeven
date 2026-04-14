@@ -94,11 +94,11 @@ curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/inst
 
 If you want the native desktop app instead, download the installers from [GitHub Releases](https://github.com/floegence/redeven/releases).
 
-Redeven Desktop keeps one shared environment catalog across local managed scopes, Control Plane managed scopes, saved Redeven Local UI URLs, and saved SSH targets. You can create multiple desktop-managed local environments, reopen the same Control Plane environment locally or remotely, and keep Desktop plus agent-only/CLI mode aligned on the same `~/.redeven/scopes/...` runtime layout.
+Redeven Desktop keeps one shared environment catalog across local managed scopes, provider-backed Control Plane environments, saved Redeven Local UI URLs, and saved SSH targets. Connecting a Control Plane immediately materializes every accessible provider environment into that same catalog, so the `Environments` tab stays environment-first instead of splitting local and provider-backed browsing into separate surfaces.
 
-The launcher Environment Library keeps those entries in one consistent card system: pinned environments surface in a dedicated `Pinned` section first, every card uses the same compact facts layout, and Endpoint values render as readonly copy-friendly inputs. Control Planes also get a local Desktop display label so the same provider can appear with the name that makes sense on that device while still keeping the underlying provider origin stable.
+The launcher Environment Library keeps those entries in one consistent card system: pinned environments surface in a dedicated `Pinned` section first, every card uses the same compact facts layout, Endpoint values render as readonly copy-friendly inputs, and provider-backed environments can be narrowed through a lightweight provider filter. The `Control Planes` tab is now provider management only: it shows account state, sync health, published environment counts, local-host counts, and a shortcut back into the filtered Environment list.
 
-Desktop can open any desktop-managed environment in that catalog, attach to a reachable Redeven Local UI URL, or SSH into another machine, reuse only an exact matching Desktop-managed Redeven runtime, install the current Desktop release on demand when needed, and tunnel its Local UI back into the same desktop shell.
+Desktop can open any desktop-managed environment in that catalog, attach to a reachable Redeven Local UI URL, or SSH into another machine, reuse only an exact matching Desktop-managed Redeven runtime, install the current Desktop release on demand when needed, and tunnel its Local UI back into the same desktop shell. Local runtime discovery also auto-merges with provider-backed identity, so the same environment card can transparently gain both `Open Local` and `Open Remote` routes without asking the user to bind them manually.
 
 For SSH Environments, Desktop now supports three bootstrap delivery modes:
 

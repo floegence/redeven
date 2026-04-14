@@ -95,6 +95,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_ui_url: string;
   secondary_text: string;
   managed_environment_kind?: 'local' | 'controlplane';
+  managed_local_scope_kind?: 'local' | 'named' | 'controlplane';
   managed_environment_name?: string;
   managed_local_ui_bind?: string;
   managed_local_ui_password_configured?: boolean;
@@ -214,11 +215,6 @@ export type DesktopLauncherActionRequest = Readonly<
       local_ui_bind: string;
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
-      remote_access_enabled?: boolean;
-      provider_origin?: string;
-      provider_id?: string;
-      env_public_id?: string;
-      preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
     }
   | {
       kind: 'upsert_saved_environment';
@@ -408,17 +404,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         local_ui_password_mode: compact(
           (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
         ) as 'keep' | 'replace' | 'clear',
-        remote_access_enabled: (candidate as { remote_access_enabled?: unknown }).remote_access_enabled === true,
-        provider_origin: compact((candidate as { provider_origin?: unknown }).provider_origin) || undefined,
-        provider_id: compact((candidate as { provider_id?: unknown }).provider_id) || undefined,
-        env_public_id: compact((candidate as { env_public_id?: unknown }).env_public_id) || undefined,
-        preferred_open_route: (() => {
-          const route = compact((candidate as { preferred_open_route?: unknown }).preferred_open_route);
-          if (route === 'local_host' || route === 'remote_desktop') {
-            return route;
-          }
-          return 'auto';
-        })(),
       };
     case 'focus_environment_window': {
       const sessionKey = compact((candidate as { session_key?: unknown }).session_key);

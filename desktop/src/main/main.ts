@@ -2769,11 +2769,6 @@ async function upsertManagedLocalEnvironmentFromWelcome(
   draft: DesktopSettingsDraft,
   options: Readonly<{
     label: string;
-    remoteAccessEnabled: boolean;
-    providerOrigin?: string;
-    providerID?: string;
-    envPublicID?: string;
-    preferredOpenRoute?: 'auto' | 'local_host' | 'remote_desktop';
   }>,
 ): Promise<DesktopManagedEnvironment> {
   const preferences = await loadDesktopPreferencesCached();
@@ -2788,24 +2783,11 @@ async function upsertManagedLocalEnvironmentFromWelcome(
     name: environmentName,
     label: options.label,
     access,
-    provider_binding_enabled: options.remoteAccessEnabled,
-    provider_origin: options.providerOrigin,
-    provider_id: options.providerID,
-    env_public_id: options.envPublicID,
-    preferred_open_route: options.remoteAccessEnabled ? options.preferredOpenRoute : 'auto',
     last_used_at_ms: existing?.last_used_at_ms ?? 0,
   });
   await persistDesktopPreferences(next);
   const resolvedEnvironment = (
     (environmentID ? findManagedEnvironmentByID(next, environmentID) : null)
-    ?? (
-      options.remoteAccessEnabled && options.providerOrigin && options.envPublicID
-        ? next.managed_environments.find((environment) => (
-          managedEnvironmentProviderOrigin(environment) === options.providerOrigin
-          && managedEnvironmentPublicID(environment) === options.envPublicID
-        )) ?? null
-        : null
-    )
     ?? findManagedEnvironmentByID(next, desktopManagedLocalEnvironmentID(environmentName))
   );
   if (!resolvedEnvironment) {
@@ -2947,11 +2929,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         local_ui_password_mode: request.local_ui_password_mode,
       }, {
         label: request.label,
-        remoteAccessEnabled: request.remote_access_enabled === true,
-        providerOrigin: request.provider_origin,
-        providerID: request.provider_id,
-        envPublicID: request.env_public_id,
-        preferredOpenRoute: request.preferred_open_route,
       });
       return launcherActionSuccess('saved_environment');
     case 'upsert_saved_environment':
