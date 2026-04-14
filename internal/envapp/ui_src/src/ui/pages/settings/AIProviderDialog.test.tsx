@@ -16,7 +16,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
   Dialog: (props: any) => (
     <Show when={props.open}>
-      <div>
+      <div data-dialog-class={props.class}>
         <div>{props.title}</div>
         <div>{props.children}</div>
         <div>{props.footer}</div>
@@ -126,6 +126,8 @@ describe('AIProviderDialog', () => {
     expect(host.textContent).toContain('prov_openai/gpt-5.2');
     expect(host.textContent).toContain('ctx 400,000');
     expect(host.textContent).toContain('Key set');
+    expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('w-[min(80rem,96vw)]');
+    expect(host.querySelector('[data-dialog-class]')?.getAttribute('data-dialog-class')).toContain('max-w-[96vw]');
   });
 
   it('wires provider actions through the dialog controls', () => {

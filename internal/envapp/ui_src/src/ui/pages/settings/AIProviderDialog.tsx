@@ -63,6 +63,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={props.title}
+      class="w-[min(80rem,96vw)] max-w-[96vw]"
       footer={
         <div class="flex items-center justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
