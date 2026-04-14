@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { Motion, Presence } from 'solid-motionone';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
 import {
   AlertCircle,
@@ -427,6 +428,30 @@ function issueKicker(issue: DesktopWelcomeIssue): string {
       return 'Environment';
     default:
       return 'Desktop startup';
+  }
+}
+
+function environmentKindLabel(kind: string): string {
+  switch (kind) {
+    case 'managed_environment':
+      return 'Local';
+    case 'external_local_ui':
+      return 'URL';
+    case 'ssh_environment':
+      return 'SSH';
+    default:
+      return 'Environment';
+  }
+}
+
+function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'success' {
+  switch (kind) {
+    case 'managed_environment':
+      return 'primary';
+    case 'ssh_environment':
+      return 'success';
+    default:
+      return 'neutral';
   }
 }
 
@@ -1979,30 +2004,39 @@ function DesktopActionToastViewport(props: Readonly<{
     <Portal>
       <Show when={props.toasts.length > 0}>
         <div class="redeven-desktop-toast-viewport" aria-live="polite" aria-atomic="true">
-          <For each={props.toasts}>
-            {(toast) => (
-              <div class="redeven-desktop-toast" data-tone={toast.tone} role="status">
-                <div class="redeven-desktop-toast__icon" aria-hidden="true">
-                  {toast.tone === 'success'
-                    ? <Check class="h-3.5 w-3.5" />
-                    : <AlertCircle class="h-3.5 w-3.5" />}
-                </div>
-                <div class="min-w-0 flex-1">
-                  <div class="redeven-desktop-toast__title">
-                    {toast.tone === 'success' ? 'Updated' : 'Notice'}
-                  </div>
-                  <div class="redeven-desktop-toast__message">{toast.message}</div>
-                </div>
-                <button
-                  type="button"
-                  class="redeven-desktop-toast__dismiss"
-                  onClick={() => props.dismissToast(toast.id)}
+          <Presence>
+            <For each={props.toasts}>
+              {(toast) => (
+                <Motion.div
+                  initial={{ opacity: 0, x: 24 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 24 }}
+                  transition={{ duration: 0.25 }}
                 >
-                  Dismiss
-                </button>
-              </div>
-            )}
-          </For>
+                  <div class="redeven-desktop-toast" data-tone={toast.tone} role="status">
+                    <div class="redeven-desktop-toast__icon" aria-hidden="true">
+                      {toast.tone === 'success'
+                        ? <Check class="h-3.5 w-3.5" />
+                        : <AlertCircle class="h-3.5 w-3.5" />}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="redeven-desktop-toast__title">
+                        {toast.tone === 'success' ? 'Updated' : 'Notice'}
+                      </div>
+                      <div class="redeven-desktop-toast__message">{toast.message}</div>
+                    </div>
+                    <button
+                      type="button"
+                      class="redeven-desktop-toast__dismiss"
+                      onClick={() => props.dismissToast(toast.id)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </Motion.div>
+              )}
+            </For>
+          </Presence>
         </div>
       </Show>
     </Portal>
@@ -2096,7 +2130,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   return (
     <div class="redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background">
       <main id="redeven-desktop-main" class="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-        <header class="mb-5 space-y-4">
+        <header class="redeven-header-separator mb-5 space-y-4">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="space-y-1">
               <h1 class="text-lg font-semibold tracking-tight text-foreground">Environments</h1>
@@ -2162,20 +2196,48 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 )}
               >
                 <Show when={providerFilterOptions().length > 0}>
-                  <select
-                    class="redeven-native-select min-w-[12rem]"
-                    value={props.libraryProviderFilter}
-                    onChange={(event) => props.setLibraryProviderFilter(trimString(event.currentTarget.value))}
+                  <Show
+                    when={providerFilterOptions().length < 5}
+                    fallback={(
+                      <select
+                        class="redeven-native-select min-w-[12rem]"
+                        value={props.libraryProviderFilter}
+                        onChange={(event) => props.setLibraryProviderFilter(trimString(event.currentTarget.value))}
+                      >
+                        <option value="">All Providers</option>
+                        <For each={providerFilterOptions()}>
+                          {(option) => (
+                            <option value={option.value}>
+                              {option.label} ({option.count})
+                            </option>
+                          )}
+                        </For>
+                      </select>
+                    )}
                   >
-                    <option value="">All Providers</option>
+                    <button
+                      type="button"
+                      class="redeven-provider-pill"
+                      data-active={props.libraryProviderFilter === ''}
+                      aria-pressed={props.libraryProviderFilter === ''}
+                      onClick={() => props.setLibraryProviderFilter('')}
+                    >
+                      All
+                    </button>
                     <For each={providerFilterOptions()}>
                       {(option) => (
-                        <option value={option.value}>
-                          {option.label} ({option.count})
-                        </option>
+                        <button
+                          type="button"
+                          class="redeven-provider-pill"
+                          data-active={props.libraryProviderFilter === option.value}
+                          aria-pressed={props.libraryProviderFilter === option.value}
+                          onClick={() => props.setLibraryProviderFilter(option.value)}
+                        >
+                          {option.label}
+                        </button>
                       )}
                     </For>
-                  </select>
+                  </Show>
                 </Show>
                 <For each={libraryFilterOptions()}>
                   {(option) => (
@@ -2318,6 +2380,21 @@ function ConnectEnvironmentSurface(props: Readonly<{
   );
 }
 
+function AnimatedCard(props: Readonly<{
+  index: number;
+  children: JSX.Element;
+}>) {
+  return (
+    <Motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: props.index * 0.05 }}
+    >
+      {props.children}
+    </Motion.div>
+  );
+}
+
 function EnvironmentCardsPanel(props: Readonly<{
   entries: readonly DesktopEnvironmentEntry[];
   showQuickAddCards: boolean;
@@ -2347,19 +2424,21 @@ function EnvironmentCardsPanel(props: Readonly<{
       <Show when={groupedEntries().pinned_entries.length > 0}>
         <EnvironmentCardSection title="Pinned">
           <For each={groupedEntries().pinned_entries}>
-            {(environment) => (
-              <EnvironmentConnectionCard
-                environment={environment}
-                busyAction={props.busyAction}
-                notice={props.environmentNotice(environment)}
-                openEnvironment={props.openEnvironment}
-                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                copyEnvironmentValue={props.copyEnvironmentValue}
-                saveEnvironment={props.saveEnvironment}
-                editEnvironment={props.editEnvironment}
-                deleteEnvironment={props.deleteEnvironment}
-              />
+            {(environment, index) => (
+              <AnimatedCard index={index()}>
+                <EnvironmentConnectionCard
+                  environment={environment}
+                  busyAction={props.busyAction}
+                  notice={props.environmentNotice(environment)}
+                  openEnvironment={props.openEnvironment}
+                  runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                  toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                  copyEnvironmentValue={props.copyEnvironmentValue}
+                  saveEnvironment={props.saveEnvironment}
+                  editEnvironment={props.editEnvironment}
+                  deleteEnvironment={props.deleteEnvironment}
+                />
+              </AnimatedCard>
             )}
           </For>
         </EnvironmentCardSection>
@@ -2368,34 +2447,50 @@ function EnvironmentCardsPanel(props: Readonly<{
       <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
         <EnvironmentCardSection title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}>
           <For each={groupedEntries().regular_entries}>
-            {(environment) => (
-              <EnvironmentConnectionCard
-                environment={environment}
-                busyAction={props.busyAction}
-                notice={props.environmentNotice(environment)}
-                openEnvironment={props.openEnvironment}
-                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                copyEnvironmentValue={props.copyEnvironmentValue}
-                saveEnvironment={props.saveEnvironment}
-                editEnvironment={props.editEnvironment}
-                deleteEnvironment={props.deleteEnvironment}
-              />
+            {(environment, index) => (
+              <AnimatedCard index={index()}>
+                <EnvironmentConnectionCard
+                  environment={environment}
+                  busyAction={props.busyAction}
+                  notice={props.environmentNotice(environment)}
+                  openEnvironment={props.openEnvironment}
+                  runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                  toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                  copyEnvironmentValue={props.copyEnvironmentValue}
+                  saveEnvironment={props.saveEnvironment}
+                  editEnvironment={props.editEnvironment}
+                  deleteEnvironment={props.deleteEnvironment}
+                />
+              </AnimatedCard>
             )}
           </For>
 
           <Show when={props.showQuickAddCards}>
-            <NewEnvironmentPlaceholderCard
-              openCreateConnectionDialog={props.openCreateConnectionDialog}
-            />
+            <AnimatedCard index={groupedEntries().regular_entries.length}>
+              <NewEnvironmentPlaceholderCard
+                openCreateConnectionDialog={props.openCreateConnectionDialog}
+              />
+            </AnimatedCard>
           </Show>
         </EnvironmentCardSection>
       </Show>
 
       <Show when={props.entries.length === 0 && !props.showQuickAddCards}>
-        <div class="redeven-console-empty rounded-2xl px-4 py-3 text-sm text-muted-foreground">
-          No environment cards match the current search or filter.
-        </div>
+        <Motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-2xl px-6 py-8 text-center">
+            <Search class="h-8 w-8 text-muted-foreground/50" />
+            <div class="space-y-1">
+              <div class="text-sm font-medium text-foreground">No matching environments</div>
+              <div class="text-xs text-muted-foreground">
+                No environment cards match the current search or filter.
+              </div>
+            </div>
+          </div>
+        </Motion.div>
       </Show>
     </div>
   );
@@ -2503,22 +2598,17 @@ function EnvironmentCardFactsBlock(props: Readonly<{
   facts: readonly EnvironmentCardFactModel[];
   minRows?: number;
 }>) {
-  const rows = createMemo(() => {
-    const targetLength = Math.max(props.facts.length, props.minRows ?? 0);
-    return Array.from({ length: targetLength }, (_, index) => props.facts[index] ?? null);
-  });
-
   return (
-    <div class="redeven-environment-card__facts">
-      <For each={rows()}>
+    <div class="space-y-0">
+      <For each={props.facts}>
         {(fact) => (
-          <div class="redeven-environment-card__fact-row" data-empty={fact === null}>
-            <div class="redeven-environment-card__fact-label">{fact?.label ?? ''}</div>
+          <div class="redeven-card-fact-row">
+            <div class="redeven-card-fact-label">{fact.label}</div>
             <div
-              class="redeven-environment-card__fact-value"
-              title={fact?.value ?? undefined}
+              class="redeven-card-fact-value"
+              title={fact.value}
             >
-              {fact?.value ?? ''}
+              {fact.value}
             </div>
           </div>
         )}
@@ -2532,41 +2622,29 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
   return (
-    <div class="redeven-environment-card__endpoints">
-      <div class="redeven-environment-card__section-title">Endpoint</div>
-      <div class="space-y-1.5">
-        <For each={props.endpoints}>
-          {(endpoint) => (
-            <div class="redeven-environment-card__endpoint-row">
-              <span class="redeven-environment-card__endpoint-label">{endpoint.label}</span>
-              <div class="redeven-environment-card__endpoint-field">
-                <input
-                  type="text"
-                  value={endpoint.value}
-                  readOnly
-                  onFocus={(event) => event.currentTarget.select()}
-                  class={cn(
-                    'redeven-environment-card__endpoint-input',
-                    endpoint.monospace && 'font-mono text-[11.5px]',
-                  )}
-                />
-              </div>
-              <DesktopTooltip content={endpoint.copy_label} placement="top">
-                <button
-                  type="button"
-                  class="redeven-environment-card__endpoint-copy"
-                  aria-label={endpoint.copy_label}
-                  onClick={() => {
-                    void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
-                  }}
-                >
-                  <Copy class="h-3.5 w-3.5" />
-                </button>
-              </DesktopTooltip>
-            </div>
-          )}
-        </For>
-      </div>
+    <div class="space-y-0.5">
+      <For each={props.endpoints}>
+        {(endpoint) => (
+          <div
+            class="redeven-card-endpoint-row"
+            onClick={() => {
+              void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
+            }}
+            title={endpoint.copy_label}
+          >
+            <span class="redeven-card-endpoint-label">{endpoint.label}</span>
+            <span class={cn(
+              'redeven-card-endpoint-value',
+              endpoint.monospace && 'font-mono text-[11.5px]',
+            )}>
+              {endpoint.value}
+            </span>
+            <span class="redeven-card-endpoint-copy" aria-hidden="true">
+              <Copy class="h-3 w-3" />
+            </span>
+          </div>
+        )}
+      </For>
     </div>
   );
 }
@@ -2648,55 +2726,49 @@ function EnvironmentConnectionCard(props: Readonly<{
 
   return (
     <Card class={cn(
-      'redeven-environment-card h-full overflow-hidden border transition-all duration-200',
+      'redeven-environment-card h-full overflow-hidden border',
+      'transition-[transform,border-color,box-shadow] duration-200',
       props.environment.is_open
         ? 'redeven-environment-card--open'
         : 'border-border',
     )}>
-      <CardHeader class="px-3.5 pb-2.5 pt-3.5">
+      <CardHeader class="px-3.5 pb-2 pt-3.5">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
+            <div class="mb-1.5 flex items-center gap-1.5">
+              <Tag variant={environmentKindTagVariant(props.environment.kind)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {environmentKindLabel(props.environment.kind)}
+              </Tag>
+              <ConsoleStatusBadge tone={card().status_tone}>
+                {card().status_label}
+              </ConsoleStatusBadge>
+            </div>
             <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
               {props.environment.label}
             </CardTitle>
-            <div class="mt-1 text-xs text-muted-foreground">
-              {formatRelativeTimestamp(props.environment.last_used_at_ms)}
+            <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{formatRelativeTimestamp(props.environment.last_used_at_ms)}</span>
+              <Show when={props.environment.control_plane_label}>
+                {(cpLabel) => (
+                  <>
+                    <span class="text-border">·</span>
+                    <span>{cpLabel()}</span>
+                  </>
+                )}
+              </Show>
             </div>
-          </div>
-          <div class="flex items-start gap-1.5">
-            <DesktopTooltip
-              content={props.environment.pinned ? 'Unpin' : 'Pin'}
-              placement="top"
-            >
-              <ConsoleActionIconButton
-                title={props.environment.pinned ? 'Unpin environment' : 'Pin environment'}
-                aria-label={props.environment.pinned ? `Unpin ${props.environment.label}` : `Pin ${props.environment.label}`}
-                active={props.environment.pinned}
-                disabled={isPinBusy()}
-                onClick={() => {
-                  void props.toggleEnvironmentPinned(props.environment);
-                }}
-              >
-                <Pin class="h-3.5 w-3.5" />
-              </ConsoleActionIconButton>
-            </DesktopTooltip>
-            <ConsoleStatusBadge tone={card().status_tone}>
-              {card().status_label}
-            </ConsoleStatusBadge>
           </div>
         </div>
       </CardHeader>
-      <CardContent class="flex flex-1 flex-col px-3.5 pb-2.5">
-        <div class="redeven-environment-card__content">
-          <EnvironmentCardFactsBlock facts={facts()} minRows={3} />
-          <EnvironmentCardEndpointBlock
-            endpoints={endpoints()}
-            copyEnvironmentValue={props.copyEnvironmentValue}
-          />
-          <Show when={props.notice}>
-            {(notice) => <EnvironmentInlineNotice notice={notice()} />}
-          </Show>
-        </div>
+      <CardContent class="flex flex-1 flex-col gap-2.5 px-3.5 pb-2.5">
+        <EnvironmentCardFactsBlock facts={facts()} />
+        <EnvironmentCardEndpointBlock
+          endpoints={endpoints()}
+          copyEnvironmentValue={props.copyEnvironmentValue}
+        />
+        <Show when={props.notice}>
+          {(notice) => <EnvironmentInlineNotice notice={notice()} />}
+        </Show>
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <Show
@@ -2748,6 +2820,22 @@ function EnvironmentConnectionCard(props: Readonly<{
           )}
         </Show>
         <div class="flex items-center gap-0.5">
+          <DesktopTooltip
+            content={props.environment.pinned ? 'Unpin' : 'Pin'}
+            placement="top"
+          >
+            <ConsoleActionIconButton
+              title={props.environment.pinned ? 'Unpin environment' : 'Pin environment'}
+              aria-label={props.environment.pinned ? `Unpin ${props.environment.label}` : `Pin ${props.environment.label}`}
+              active={props.environment.pinned}
+              disabled={isPinBusy()}
+              onClick={() => {
+                void props.toggleEnvironmentPinned(props.environment);
+              }}
+            >
+              <Pin class="h-3.5 w-3.5" />
+            </ConsoleActionIconButton>
+          </DesktopTooltip>
           <Show when={props.environment.can_save}>
             <DesktopTooltip content="Save" placement="top">
               <ConsoleActionIconButton
@@ -2794,12 +2882,17 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
 }>) {
   return (
-    <Card class="redeven-environment-card redeven-new-environment-card group h-full cursor-pointer overflow-hidden border border-dashed border-border/70 transition-all duration-200 hover:border-primary/30 hover:bg-primary/[0.02]"
+    <Card class={cn(
+      'redeven-environment-card redeven-new-environment-card group h-full cursor-pointer overflow-hidden',
+      'border border-dashed border-border/70',
+      'transition-[transform,border-color,box-shadow,background-color] duration-200',
+      'hover:border-primary/30 hover:bg-gradient-to-br hover:from-primary/[0.03] hover:to-transparent',
+    )}
       onClick={() => props.openCreateConnectionDialog()}
     >
-      <div class="flex h-full flex-col items-center justify-center gap-3 px-4 py-8">
-        <div class="flex h-10 w-10 items-center justify-center rounded-xl border border-dashed border-border/70 bg-muted/20 text-muted-foreground transition-colors group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
-          <Plus class="h-5 w-5" />
+      <div class="flex h-full flex-col items-center justify-center gap-4 px-4 py-10">
+        <div class="flex h-12 w-12 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-muted-foreground transition-[border-color,background-color,color,transform] duration-200 group-hover:scale-110 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
+          <Plus class="h-6 w-6" />
         </div>
         <div class="space-y-1 text-center">
           <div class="text-sm font-medium text-foreground">New Environment</div>
@@ -3337,7 +3430,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                         role="radio"
                         aria-checked={selected()}
                         class={cn(
-                          'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-all duration-150',
+                          'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-[border-color,background-color,box-shadow] duration-150',
                           selected()
                             ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
                             : 'redeven-tile border-border hover:-translate-y-[1px] hover:border-primary/25 hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
