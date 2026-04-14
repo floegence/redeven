@@ -132,8 +132,12 @@ import {
   DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
   DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL,
   normalizeDesktopLauncherActionRequest,
+  type DesktopLauncherActionFailure,
+  type DesktopLauncherActionFailureCode,
+  type DesktopLauncherActionFailureScope,
   type DesktopLauncherActionRequest,
   type DesktopLauncherActionResult,
+  type DesktopLauncherActionSuccess,
   type DesktopLauncherSurface,
   type DesktopWelcomeEntryReason,
   type DesktopWelcomeIssue,
@@ -244,6 +248,71 @@ installStdioBrokenPipeGuards();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function launcherActionSuccess(
+  outcome: DesktopLauncherActionSuccess['outcome'],
+  options: Readonly<{
+    sessionKey?: string;
+    utilityWindowKind?: DesktopLauncherActionSuccess['utility_window_kind'];
+  }> = {},
+): DesktopLauncherActionSuccess {
+  return {
+    ok: true,
+    outcome,
+    session_key: options.sessionKey,
+    utility_window_kind: options.utilityWindowKind,
+  };
+}
+
+function launcherActionFailure(
+  code: DesktopLauncherActionFailureCode,
+  scope: DesktopLauncherActionFailureScope,
+  message: string,
+  options: Readonly<{
+    environmentID?: string;
+    providerOrigin?: string;
+    providerID?: string;
+    envPublicID?: string;
+    shouldRefreshSnapshot?: boolean;
+  }> = {},
+): DesktopLauncherActionFailure {
+  return {
+    ok: false,
+    code,
+    scope,
+    message: compact(message),
+    environment_id: compact(options.environmentID) || undefined,
+    provider_origin: compact(options.providerOrigin) || undefined,
+    provider_id: compact(options.providerID) || undefined,
+    env_public_id: compact(options.envPublicID) || undefined,
+    should_refresh_snapshot: options.shouldRefreshSnapshot === true || undefined,
+  };
+}
+
+function launcherActionFailureFromProviderAuthError(
+  error: unknown,
+  options: Readonly<{
+    environmentID?: string;
+    providerOrigin?: string;
+    providerID?: string;
+    envPublicID?: string;
+  }> = {},
+): DesktopLauncherActionFailure | null {
+  if (error instanceof DesktopProviderRequestError && (error.status === 401 || error.status === 403)) {
+    return launcherActionFailure(
+      'control_plane_auth_required',
+      'control_plane',
+      'Reconnect the Control Plane in your browser, then try again.',
+      {
+        environmentID: options.environmentID,
+        providerOrigin: options.providerOrigin || error.providerOrigin,
+        providerID: options.providerID,
+        envPublicID: options.envPublicID,
+      },
+    );
+  }
+  return null;
 }
 
 function preferencesPaths() {
@@ -468,7 +537,9 @@ function sessionChildWindowStateKey(sessionKey: DesktopSessionKey, childKey: str
 }
 
 function openSessionSummaries(): readonly DesktopSessionSummary[] {
-  return [...sessionsByKey.values()].map((session) => ({
+  return [...sessionsByKey.values()]
+    .filter((session) => !session.closing && !session.root_window.isDestroyed())
+    .map((session) => ({
     session_key: session.session_key,
     target: session.target,
     entry_url: session.allowed_base_url,
@@ -936,10 +1007,9 @@ async function openUtilityWindow(
   if (existing) {
     await emitDesktopWelcomeSnapshot(kind);
     presentAppWindow(existing, { stealAppFocus: options.stealAppFocus });
-    return {
-      outcome: 'focused_utility_window',
-      utility_window_kind: kind,
-    };
+    return launcherActionSuccess('focused_utility_window', {
+      utilityWindowKind: kind,
+    });
   }
 
   const win = createBrowserWindow({
@@ -955,10 +1025,9 @@ async function openUtilityWindow(
 
   utilityWindows.set(kind, win);
   utilityWindowKindByWebContentsID.set(win.webContents.id, kind);
-  return {
-    outcome: 'opened_utility_window',
-    utility_window_kind: kind,
-  };
+  return launcherActionSuccess('opened_utility_window', {
+    utilityWindowKind: kind,
+  });
 }
 
 async function openDesktopWelcomeWindow(options: OpenDesktopWelcomeOptions = {}): Promise<void> {
@@ -1408,10 +1477,9 @@ async function openManagedEnvironmentRecord(
     if (findManagedEnvironmentByID(preferences, environment.id)) {
       await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
     }
-    return {
-      outcome: 'focused_environment_window',
-      session_key: existingSession.session_key,
-    };
+    return launcherActionSuccess('focused_environment_window', {
+      sessionKey: existingSession.session_key,
+    });
   }
 
   const prepared = await prepareManagedTarget({
@@ -1436,10 +1504,9 @@ async function openManagedEnvironmentRecord(
   });
   resetLauncherIssueState();
   await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
-  return {
-    outcome: 'opened_environment_window',
-    session_key: target.session_key,
-  };
+  return launcherActionSuccess('opened_environment_window', {
+    sessionKey: target.session_key,
+  });
 }
 
 function remoteManagedSessionStartup(remoteSessionURL: string): StartupReport {
@@ -1500,10 +1567,9 @@ async function openManagedRemoteEnvironmentRecord(
     resetLauncherIssueState();
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: options.stealAppFocus !== false });
     await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
-    return {
-      outcome: 'focused_environment_window',
-      session_key: existingSession.session_key,
-    };
+    return launcherActionSuccess('focused_environment_window', {
+      sessionKey: existingSession.session_key,
+    });
   }
 
   await createSessionRecord(
@@ -1513,10 +1579,9 @@ async function openManagedRemoteEnvironmentRecord(
   );
   resetLauncherIssueState();
   await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
-  return {
-    outcome: 'opened_environment_window',
-    session_key: target.session_key,
-  };
+  return launcherActionSuccess('opened_environment_window', {
+    sessionKey: target.session_key,
+  });
 }
 
 async function openControlPlaneEnvironmentWithOpenSession(args: Readonly<{
@@ -1576,7 +1641,15 @@ async function openManagedEnvironmentFromLauncher(
   const preferences = await loadDesktopPreferencesCached();
   const environment = findManagedEnvironmentByID(preferences, request.environment_id);
   if (!environment) {
-    throw new Error('That environment is no longer available.');
+    return launcherActionFailure(
+      'environment_missing',
+      'environment',
+      'This environment is no longer available.',
+      {
+        environmentID: request.environment_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
   }
   const requestedRoute = request.route === 'local_host' || request.route === 'remote_desktop'
     ? request.route
@@ -1588,25 +1661,59 @@ async function openManagedEnvironmentFromLauncher(
       managedEnvironmentProviderID(environment),
     );
     if (!controlPlane) {
-      throw new Error('Reconnect the Control Plane before reopening this environment.');
+      return launcherActionFailure(
+        'control_plane_missing',
+        'control_plane',
+        'Reconnect the Control Plane for this environment, then try again.',
+        {
+          environmentID: environment.id,
+          providerOrigin: managedEnvironmentProviderOrigin(environment),
+          providerID: managedEnvironmentProviderID(environment),
+          envPublicID: managedEnvironmentPublicID(environment),
+          shouldRefreshSnapshot: true,
+        },
+      );
     }
-    const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
-    const openSession = await requestDesktopOpenSession(
-      authorized.controlPlane.provider,
-      authorized.accessToken,
-      managedEnvironmentPublicID(environment),
-    );
-    return openManagedControlPlaneEnvironmentRecord(
-      authorized.preferences,
-      environment,
-      authorized.controlPlane.provider.provider_origin,
-      managedEnvironmentPublicID(environment),
-      openSession,
-      requestedRoute,
-    );
+    try {
+      const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
+      const openSession = await requestDesktopOpenSession(
+        authorized.controlPlane.provider,
+        authorized.accessToken,
+        managedEnvironmentPublicID(environment),
+      );
+      return openManagedControlPlaneEnvironmentRecord(
+        authorized.preferences,
+        environment,
+        authorized.controlPlane.provider.provider_origin,
+        managedEnvironmentPublicID(environment),
+        openSession,
+        requestedRoute,
+      );
+    } catch (error) {
+      return launcherActionFailureFromProviderAuthError(error, {
+        environmentID: environment.id,
+        providerOrigin: managedEnvironmentProviderOrigin(environment),
+        providerID: managedEnvironmentProviderID(environment),
+        envPublicID: managedEnvironmentPublicID(environment),
+      }) ?? openUtilityWindow('launcher', {
+        entryReason: 'connect_failed',
+        issue: controlPlaneIssueForError(
+          error,
+          'Desktop failed to talk to the Control Plane.',
+        ),
+        stealAppFocus: true,
+      });
+    }
   }
   if (requestedRoute === 'remote_desktop') {
-    throw new Error('Remote desktop access is unavailable for this local-only environment.');
+    return launcherActionFailure(
+      'environment_route_unavailable',
+      'environment',
+      'Remote access is not available for this environment.',
+      {
+        environmentID: environment.id,
+      },
+    );
   }
   return openManagedEnvironmentRecord(preferences, environment, { stealAppFocus: true });
 }
@@ -1631,10 +1738,9 @@ async function openRemoteEnvironmentFromLauncher(
     resetLauncherIssueState();
     await rememberRecentExternalTarget(optimisticSession.startup.local_ui_url);
     focusEnvironmentSession(optimisticSession.session_key, { stealAppFocus: true });
-    return {
-      outcome: 'focused_environment_window',
-      session_key: optimisticSession.session_key,
-    };
+    return launcherActionSuccess('focused_environment_window', {
+      sessionKey: optimisticSession.session_key,
+    });
   }
 
   const prepared = await prepareExternalTarget(normalizedTargetURL);
@@ -1657,19 +1763,17 @@ async function openRemoteEnvironmentFromLauncher(
     await rememberRecentExternalTarget(existingSession.startup.local_ui_url);
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
     broadcastDesktopWelcomeSnapshots();
-    return {
-      outcome: 'focused_environment_window',
-      session_key: existingSession.session_key,
-    };
+    return launcherActionSuccess('focused_environment_window', {
+      sessionKey: existingSession.session_key,
+    });
   }
 
   await createSessionRecord(target, prepared.startup, { stealAppFocus: true });
   resetLauncherIssueState();
   await rememberRecentExternalTarget(prepared.startup.local_ui_url);
-  return {
-    outcome: 'opened_environment_window',
-    session_key: target.session_key,
-  };
+  return launcherActionSuccess('opened_environment_window', {
+    sessionKey: target.session_key,
+  });
 }
 
 async function openSSHEnvironmentFromLauncher(
@@ -1698,10 +1802,9 @@ async function openSSHEnvironmentFromLauncher(
       environmentID: request.environment_id,
     });
     focusEnvironmentSession(optimisticSession.session_key, { stealAppFocus: true });
-    return {
-      outcome: 'focused_environment_window',
-      session_key: optimisticSession.session_key,
-    };
+    return launcherActionSuccess('focused_environment_window', {
+      sessionKey: optimisticSession.session_key,
+    });
   }
 
   let managedSSHRuntime;
@@ -1749,10 +1852,9 @@ async function openSSHEnvironmentFromLauncher(
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
     broadcastDesktopWelcomeSnapshots();
     await managedSSHRuntime.stop();
-    return {
-      outcome: 'focused_environment_window',
-      session_key: existingSession.session_key,
-    };
+    return launcherActionSuccess('focused_environment_window', {
+      sessionKey: existingSession.session_key,
+    });
   }
 
   await createSessionRecord(target, managedSSHRuntime.startup, {
@@ -1765,10 +1867,9 @@ async function openSSHEnvironmentFromLauncher(
     label: target.label,
     environmentID: target.environment_id,
   });
-  return {
-    outcome: 'opened_environment_window',
-    session_key: target.session_key,
-  };
+  return launcherActionSuccess('opened_environment_window', {
+    sessionKey: target.session_key,
+  });
 }
 
 async function startControlPlaneConnectFromLauncher(
@@ -1778,10 +1879,9 @@ async function startControlPlaneConnectFromLauncher(
   await openExternalURL(providerDesktopConnectPageURL(provider.provider_origin));
   resetLauncherIssueState();
   broadcastDesktopWelcomeSnapshots();
-  return {
-    outcome: 'started_control_plane_connect',
-    utility_window_kind: 'launcher',
-  };
+  return launcherActionSuccess('started_control_plane_connect', {
+    utilityWindowKind: 'launcher',
+  });
 }
 
 async function refreshControlPlaneFromLauncher(
@@ -1790,7 +1890,16 @@ async function refreshControlPlaneFromLauncher(
   const preferences = await loadDesktopPreferencesCached();
   const controlPlane = savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id);
   if (!controlPlane) {
-    throw new Error('That Control Plane is no longer saved.');
+    return launcherActionFailure(
+      'control_plane_missing',
+      'control_plane',
+      'This Control Plane is no longer saved in Desktop.',
+      {
+        providerOrigin: request.provider_origin,
+        providerID: request.provider_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
   }
   await syncSavedControlPlaneAccount(
     preferences,
@@ -1798,10 +1907,9 @@ async function refreshControlPlaneFromLauncher(
     controlPlane.provider.provider_id,
   );
   resetLauncherIssueState();
-  return {
-    outcome: 'refreshed_control_plane',
-    utility_window_kind: 'launcher',
-  };
+  return launcherActionSuccess('refreshed_control_plane', {
+    utilityWindowKind: 'launcher',
+  });
 }
 
 async function deleteControlPlaneFromLauncher(
@@ -1810,7 +1918,16 @@ async function deleteControlPlaneFromLauncher(
   const preferences = await loadDesktopPreferencesCached();
   const controlPlane = savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id);
   if (!controlPlane) {
-    throw new Error('That Control Plane is no longer saved.');
+    return launcherActionFailure(
+      'control_plane_missing',
+      'control_plane',
+      'This Control Plane is no longer saved in Desktop.',
+      {
+        providerOrigin: request.provider_origin,
+        providerID: request.provider_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
   }
   const refreshToken = controlPlaneRefreshToken(preferences, request.provider_origin, request.provider_id);
   if (refreshToken !== '') {
@@ -1819,10 +1936,9 @@ async function deleteControlPlaneFromLauncher(
   clearControlPlaneAccessState(request.provider_origin, request.provider_id);
   await persistDesktopPreferences(deleteSavedControlPlane(preferences, request.provider_origin, request.provider_id));
   resetLauncherIssueState();
-  return {
-    outcome: 'deleted_control_plane',
-    utility_window_kind: 'launcher',
-  };
+  return launcherActionSuccess('deleted_control_plane', {
+    utilityWindowKind: 'launcher',
+  });
 }
 
 async function openControlPlaneEnvironmentFromLauncher(
@@ -1831,11 +1947,30 @@ async function openControlPlaneEnvironmentFromLauncher(
   const preferences = await loadDesktopPreferencesCached();
   const controlPlane = savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id);
   if (!controlPlane) {
-    throw new Error('That Control Plane is no longer saved.');
+    return launcherActionFailure(
+      'control_plane_missing',
+      'control_plane',
+      'Reconnect the Control Plane for this environment, then try again.',
+      {
+        providerOrigin: request.provider_origin,
+        providerID: request.provider_id,
+        envPublicID: request.env_public_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
   }
   const environment = controlPlane.environments.find((entry) => entry.env_public_id === request.env_public_id) ?? null;
   if (!environment) {
-    throw new Error('That Control Plane environment is no longer available. Refresh the Control Plane and try again.');
+    return launcherActionFailure(
+      'control_plane_environment_missing',
+      'environment',
+      'This environment is no longer available from the provider. Refresh the provider and try again.',
+      {
+        providerOrigin: request.provider_origin,
+        providerID: request.provider_id,
+        envPublicID: request.env_public_id,
+      },
+    );
   }
 
   try {
@@ -1854,7 +1989,11 @@ async function openControlPlaneEnvironmentFromLauncher(
       label: environment.label,
     });
   } catch (error) {
-    return openUtilityWindow('launcher', {
+    return launcherActionFailureFromProviderAuthError(error, {
+      providerOrigin: request.provider_origin,
+      providerID: request.provider_id,
+      envPublicID: request.env_public_id,
+    }) ?? openUtilityWindow('launcher', {
       entryReason: 'connect_failed',
       issue: controlPlaneIssueForError(
         error,
@@ -1868,14 +2007,20 @@ async function openControlPlaneEnvironmentFromLauncher(
 async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLauncherActionResult> {
   const cleanSessionKey = String(sessionKey ?? '').trim() as DesktopSessionKey;
   if (!focusEnvironmentSession(cleanSessionKey, { stealAppFocus: true })) {
-    throw new Error('That environment window is no longer open.');
+    return launcherActionFailure(
+      'session_stale',
+      'environment',
+      'Window closed. Status refreshed.',
+      {
+        shouldRefreshSnapshot: true,
+      },
+    );
   }
   resetLauncherIssueState();
   broadcastDesktopWelcomeSnapshots();
-  return {
-    outcome: 'focused_environment_window',
-    session_key: cleanSessionKey,
-  };
+  return launcherActionSuccess('focused_environment_window', {
+    sessionKey: cleanSessionKey,
+  });
 }
 
 async function restartManagedRuntimeFromShell(webContentsID: number): Promise<DesktopShellRuntimeActionResponse> {
@@ -2209,14 +2354,10 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         envPublicID: request.env_public_id,
         preferredOpenRoute: request.preferred_open_route,
       });
-      return {
-        outcome: 'saved_environment',
-      };
+      return launcherActionSuccess('saved_environment');
     case 'upsert_saved_environment':
       await upsertSavedEnvironmentFromWelcome(request.environment_id, request.label, request.external_local_ui_url);
-      return {
-        outcome: 'saved_environment',
-      };
+      return launcherActionSuccess('saved_environment');
     case 'upsert_saved_ssh_environment':
       await upsertSavedSSHEnvironmentFromWelcome(request.environment_id, request.label, {
         ssh_destination: request.ssh_destination,
@@ -2225,31 +2366,22 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         bootstrap_strategy: request.bootstrap_strategy,
         release_base_url: request.release_base_url,
       });
-      return {
-        outcome: 'saved_environment',
-      };
+      return launcherActionSuccess('saved_environment');
     case 'delete_saved_environment':
       await deleteSavedEnvironmentFromWelcome(request.environment_id);
-      return {
-        outcome: 'deleted_environment',
-      };
+      return launcherActionSuccess('deleted_environment');
     case 'delete_saved_ssh_environment':
       await deleteSavedSSHEnvironmentFromWelcome(request.environment_id);
-      return {
-        outcome: 'deleted_environment',
-      };
+      return launcherActionSuccess('deleted_environment');
     case 'close_launcher_or_quit':
-      if (sessionsByKey.size <= 0) {
+      if (openSessionSummaries().length <= 0) {
         await requestQuit();
-        return {
-          outcome: 'quit_app',
-        };
+        return launcherActionSuccess('quit_app');
       }
       await closeUtilityWindow('launcher');
-      return {
-        outcome: 'closed_launcher',
-        utility_window_kind: 'launcher',
-      };
+      return launcherActionSuccess('closed_launcher', {
+        utilityWindowKind: 'launcher',
+      });
     default: {
       const exhaustive: never = request;
       throw new Error(`Unsupported desktop launcher action: ${JSON.stringify(exhaustive)}`);
@@ -2570,7 +2702,11 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL, async (_event, request): Promise<DesktopLauncherActionResult> => {
     const normalized = normalizeDesktopLauncherActionRequest(request);
     if (!normalized) {
-      throw new Error('Invalid desktop launcher action.');
+      return launcherActionFailure(
+        'action_invalid',
+        'global',
+        'Desktop could not understand that action.',
+      );
     }
     return performDesktopLauncherAction(normalized);
   });
@@ -2681,7 +2817,7 @@ if (!app.requestSingleInstanceLock()) {
           }
           await handleDesktopDeepLink(nextDeepLink);
         }
-        if (sessionsByKey.size <= 0 && !liveUtilityWindow('launcher')) {
+        if (openSessionSummaries().length <= 0 && !liveUtilityWindow('launcher')) {
           await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
         }
         return;

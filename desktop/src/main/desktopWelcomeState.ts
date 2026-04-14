@@ -3,6 +3,7 @@ import {
   desktopPreferencesToDraft,
   findManagedEnvironmentByID,
   type DesktopSavedEnvironment,
+  type DesktopSavedControlPlane,
   type DesktopSavedSSHEnvironment,
   type DesktopPreferences,
   defaultSavedEnvironmentLabel,
@@ -245,9 +246,32 @@ function openSessionsByManagedEnvironment(
   return out;
 }
 
+function controlPlaneEnvironmentSummary(
+  controlPlanes: readonly DesktopSavedControlPlane[],
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): DesktopSavedControlPlane['environments'][number] | null {
+  const cleanProviderOrigin = compact(providerOrigin);
+  const cleanProviderID = compact(providerID);
+  const cleanEnvPublicID = compact(envPublicID);
+  if (cleanProviderOrigin === '' || cleanProviderID === '' || cleanEnvPublicID === '') {
+    return null;
+  }
+  const controlPlane = controlPlanes.find((entry) => (
+    entry.provider.provider_origin === cleanProviderOrigin
+    && entry.provider.provider_id === cleanProviderID
+  )) ?? null;
+  if (!controlPlane) {
+    return null;
+  }
+  return controlPlane.environments.find((entry) => entry.env_public_id === cleanEnvPublicID) ?? null;
+}
+
 function buildManagedEnvironmentEntry(
   environment: DesktopManagedEnvironment,
   openSessions: Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>>,
+  controlPlanes: readonly DesktopSavedControlPlane[],
 ): DesktopEnvironmentEntry {
   const localSession = openSessions.local_host ?? null;
   const remoteSession = openSessions.remote_desktop ?? null;
@@ -263,6 +287,9 @@ function buildManagedEnvironmentEntry(
   const defaultSession = defaultRoute === 'remote_desktop'
     ? (remoteSession ?? localSession)
     : (localSession ?? remoteSession);
+  const providerEnvironment = kind === 'controlplane'
+    ? controlPlaneEnvironmentSummary(controlPlanes, providerOrigin, providerID, envPublicID)
+    : null;
   return {
     id: environment.id,
     kind: 'managed_environment',
@@ -286,6 +313,9 @@ function buildManagedEnvironmentEntry(
     provider_origin: kind === 'controlplane' ? providerOrigin : undefined,
     provider_id: kind === 'controlplane' ? providerID : undefined,
     env_public_id: kind === 'controlplane' ? envPublicID : undefined,
+    provider_status: providerEnvironment?.status,
+    provider_lifecycle_status: providerEnvironment?.lifecycle_status,
+    provider_last_seen_at_unix_ms: providerEnvironment?.last_seen_at_unix_ms,
     tag: isOpen ? 'Open' : 'Managed',
     category: 'managed',
     is_open: isOpen,
@@ -305,7 +335,11 @@ function buildEnvironmentEntries(
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
   const entries: DesktopEnvironmentEntry[] = preferences.managed_environments.map((environment) => (
-    buildManagedEnvironmentEntry(environment, openSessionsByManagedEnvironment(openSessions, environment))
+    buildManagedEnvironmentEntry(
+      environment,
+      openSessionsByManagedEnvironment(openSessions, environment),
+      preferences.control_planes,
+    )
   ));
 
   const catalog = preferences.saved_environments;

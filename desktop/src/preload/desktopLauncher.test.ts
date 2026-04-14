@@ -23,7 +23,7 @@ describe('bootstrapDesktopLauncherBridge', () => {
     ipcRendererInvoke.mockReset();
     ipcRendererOn.mockReset();
     ipcRendererRemoveListener.mockReset();
-    ipcRendererInvoke.mockResolvedValue({ outcome: 'opened_environment_window' });
+    ipcRendererInvoke.mockResolvedValue({ ok: true, outcome: 'opened_environment_window' });
   });
 
   it('exposes snapshot loading, action dispatch, and snapshot subscriptions to the renderer', async () => {

@@ -46,6 +46,14 @@ describe('main routing', () => {
     expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
   });
 
+  it('returns structured launcher failures for stale sessions instead of raw exception text', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain("'session_stale'");
+    expect(mainSrc).toContain("'Window closed. Status refreshed.'");
+    expect(mainSrc).not.toContain("throw new Error('That environment window is no longer open.')");
+  });
+
   it('broadcasts launcher snapshots per utility window and scopes Ask Flower handoff by sender ownership', () => {
     const mainSrc = readMainSource();
 

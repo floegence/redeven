@@ -211,6 +211,12 @@ Interaction rules:
 - Local managed environments and managed Control Plane environments both render in the `Environments` tab, because both own a real scope on this machine.
 - Control Plane provider management still lives in the `Control Planes` tab, but opening one provider environment also materializes it in the shared managed-environment catalog.
 - Managed environment cards show the label, kind, open state, and the next bind or provider/environment identity that will be reused on the next open.
+- Managed environment cards and Control Plane environment cards normalize provider runtime into the same user-facing state model:
+  - `Open`
+  - `Ready`
+  - `Offline`
+  - `Unavailable`
+- Control Plane shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -222,6 +228,11 @@ Interaction rules:
 - Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and per-environment open/focus cards.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
+- Expected launcher failures no longer rely on raw IPC exception text:
+  - stale session focus returns a structured `session_stale` result
+  - environment/control-plane missing states return structured launcher failures
+  - the renderer refreshes its snapshot and prefers inline card notices for environment-scoped failures
+- The top error banner is reserved for global or dialog-scoped failures that cannot be cleanly attached to a specific environment card.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:
   - `Quit` when no environment is open yet

@@ -274,6 +274,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Connect Provider');
   });
 
+  it('routes environment-level launcher failures into card notices instead of only the top error banner', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('launcherActionFailurePresentation');
+    expect(appSrc).toContain('EnvironmentInlineNotice');
+    expect(appSrc).toContain('notice={props.environmentNotice(environment)}');
+    expect(styles).toContain('.redeven-environment-inline-notice');
+  });
+
   it('includes SSH connection mode copy inside the connection dialog source', () => {
     const appSrc = readWelcomeSource();
 

@@ -1,4 +1,5 @@
 import type { DesktopEnvironmentEntry, DesktopLauncherSurface, DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
+import { desktopProviderEnvironmentAvailability } from '../shared/providerEnvironmentState';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
   shell_title: 'Redeven Desktop';
@@ -10,7 +11,7 @@ export type DesktopWelcomeShellViewModel = Readonly<{
 
 export type EnvironmentLibraryFilter = 'all' | 'open' | 'recent' | 'saved';
 export type EnvironmentCenterTab = 'environments' | 'control_planes';
-export type EnvironmentCardTone = 'neutral' | 'primary' | 'success';
+export type EnvironmentCardTone = 'neutral' | 'primary' | 'success' | 'warning';
 
 export type EnvironmentCardMetaItem = Readonly<{
   label: string;
@@ -124,12 +125,63 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
   }
 }
 
+export function buildProviderBackedEnvironmentStatusModel(options: Readonly<{
+  isOpen: boolean;
+  hasLocalHosting: boolean;
+  hasRemoteDesktop: boolean;
+  providerStatus?: string;
+  providerLifecycleStatus?: string;
+}>): Readonly<{
+  label: string;
+  tone: EnvironmentCardTone;
+}> {
+  if (options.isOpen) {
+    return {
+      label: 'Open',
+      tone: 'success',
+    };
+  }
+
+  const providerAvailability = desktopProviderEnvironmentAvailability(
+    options.providerStatus,
+    options.providerLifecycleStatus,
+  );
+  if (providerAvailability === 'offline') {
+    return {
+      label: 'Offline',
+      tone: 'warning',
+    };
+  }
+  if (providerAvailability === 'online') {
+    return {
+      label: 'Ready',
+      tone: 'primary',
+    };
+  }
+  if (options.hasRemoteDesktop && !options.hasLocalHosting) {
+    return {
+      label: 'Unavailable',
+      tone: 'neutral',
+    };
+  }
+  return {
+    label: 'Ready',
+    tone: 'neutral',
+  };
+}
+
 export function environmentStatusLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.is_open) {
     return 'Open';
   }
   if (environment.kind === 'managed_environment') {
-    return 'Ready';
+    return buildProviderBackedEnvironmentStatusModel({
+      isOpen: environment.is_open,
+      hasLocalHosting: environment.managed_has_local_hosting === true,
+      hasRemoteDesktop: environment.managed_has_remote_desktop === true,
+      providerStatus: environment.provider_status,
+      providerLifecycleStatus: environment.provider_lifecycle_status,
+    }).label;
   }
   if (environment.category === 'recent_auto') {
     return 'Recent';
@@ -143,6 +195,15 @@ export function environmentStatusLabel(environment: DesktopEnvironmentEntry): st
 export function environmentStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
   if (environment.is_open) {
     return 'success';
+  }
+  if (environment.kind === 'managed_environment') {
+    return buildProviderBackedEnvironmentStatusModel({
+      isOpen: environment.is_open,
+      hasLocalHosting: environment.managed_has_local_hosting === true,
+      hasRemoteDesktop: environment.managed_has_remote_desktop === true,
+      providerStatus: environment.provider_status,
+      providerLifecycleStatus: environment.provider_lifecycle_status,
+    }).tone;
   }
   if (environment.category === 'recent_auto') {
     return 'primary';

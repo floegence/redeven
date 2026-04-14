@@ -7,6 +7,7 @@ import {
 } from '../main/desktopTarget';
 import {
   testDesktopPreferences,
+  testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
@@ -112,5 +113,92 @@ describe('buildEnvironmentCardModel', () => {
         value: '/opt/redeven-desktop/runtime',
       }),
     ]));
+  });
+
+  it('maps provider-backed environments to unified Ready and Offline badges', () => {
+    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      localHosting: false,
+    });
+    const provider = {
+      protocol_version: 'rcpp-v1' as const,
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+    };
+    const account = {
+      provider_id: 'redeven_portal',
+      provider_origin: 'https://cp.example.invalid',
+      display_name: 'Redeven Portal',
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      authorization_expires_at_unix_ms: 1_000,
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedControlPlane],
+        control_planes: [{
+          provider,
+          account,
+          environments: [{
+            provider_id: 'redeven_portal',
+            provider_origin: 'https://cp.example.invalid',
+            env_public_id: 'env_demo',
+            label: 'Demo Environment',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'offline',
+            lifecycle_status: 'suspended',
+            last_seen_at_unix_ms: 123,
+          }],
+          last_synced_at_ms: 500,
+        }],
+      }),
+    });
+
+    const offlineEntry = snapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
+    ));
+
+    expect(offlineEntry).toBeTruthy();
+    expect(buildEnvironmentCardModel(offlineEntry!)).toEqual(expect.objectContaining({
+      kind_label: 'Remote Environment',
+      status_label: 'Offline',
+      status_tone: 'warning',
+    }));
+
+    const openSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedControlPlane],
+        control_planes: [{
+          provider,
+          account,
+          environments: [{
+            provider_id: 'redeven_portal',
+            provider_origin: 'https://cp.example.invalid',
+            env_public_id: 'env_demo',
+            label: 'Demo Environment',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'online',
+            lifecycle_status: 'active',
+            last_seen_at_unix_ms: 456,
+          }],
+          last_synced_at_ms: 600,
+        }],
+      }),
+    });
+
+    const readyEntry = openSnapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
+    ));
+
+    expect(readyEntry).toBeTruthy();
+    expect(buildEnvironmentCardModel(readyEntry!)).toEqual(expect.objectContaining({
+      status_label: 'Ready',
+      status_tone: 'primary',
+    }));
   });
 });

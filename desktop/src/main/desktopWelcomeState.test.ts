@@ -391,6 +391,53 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
+  it('threads Control Plane runtime state into managed environment library entries', () => {
+    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      localHosting: false,
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedControlPlane],
+        control_planes: testProvider ? [{
+          provider: testProvider,
+          account: {
+            provider_id: testProvider.provider_id,
+            provider_origin: testProvider.provider_origin,
+            display_name: testProvider.display_name,
+            user_public_id: 'user_demo',
+            user_display_name: 'Demo User',
+            authorization_expires_at_unix_ms: 1000,
+          },
+          environments: [{
+            provider_id: testProvider.provider_id,
+            provider_origin: testProvider.provider_origin,
+            env_public_id: 'env_demo',
+            label: 'Demo Environment',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'offline',
+            lifecycle_status: 'suspended',
+            last_seen_at_unix_ms: 456,
+          }],
+          last_synced_at_ms: 500,
+        }] : [],
+      }),
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: managedControlPlane.id,
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'redeven_portal',
+        env_public_id: 'env_demo',
+        provider_status: 'offline',
+        provider_lifecycle_status: 'suspended',
+        provider_last_seen_at_unix_ms: 456,
+      }),
+    ]));
+  });
+
   it('turns blocked local-runtime reports into managed-environment recovery copy', () => {
     const issue = buildBlockedLaunchIssue({
       status: 'blocked',

@@ -206,6 +206,31 @@ body {
   background: color-mix(in srgb, var(--error) 6%, transparent);
 }
 
+/* ── Environment inline notices ── */
+
+.redeven-environment-inline-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.redeven-environment-inline-notice[data-tone='info'] {
+  border-color: color-mix(in srgb, var(--info) 24%, transparent);
+  background: color-mix(in srgb, var(--info) 7%, transparent);
+  color: color-mix(in srgb, var(--info) 84%, white 16%);
+}
+
+.redeven-environment-inline-notice[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 26%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: color-mix(in srgb, var(--warning) 88%, white 12%);
+}
+
 /* ── Issue card ── */
 
 .redeven-console-issue {

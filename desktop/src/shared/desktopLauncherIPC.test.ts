@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeDesktopLauncherActionRequest } from './desktopLauncherIPC';
+import {
+  isDesktopLauncherActionFailure,
+  isDesktopLauncherActionSuccess,
+  normalizeDesktopLauncherActionRequest,
+} from './desktopLauncherIPC';
 
 describe('desktopLauncherIPC', () => {
   it('normalizes launcher actions and trims Environment inputs', () => {
@@ -136,5 +140,20 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest(null)).toBeNull();
+  });
+
+  it('distinguishes structured launcher success and failure payloads', () => {
+    expect(isDesktopLauncherActionSuccess({
+      ok: true,
+      outcome: 'opened_environment_window',
+      session_key: 'env:local%3Adefault:local_host',
+    })).toBe(true);
+    expect(isDesktopLauncherActionFailure({
+      ok: false,
+      code: 'session_stale',
+      scope: 'environment',
+      message: 'Window closed. Status refreshed.',
+      should_refresh_snapshot: true,
+    })).toBe(true);
   });
 });

@@ -15,6 +15,29 @@ export type DesktopEnvironmentEntryKind = 'managed_environment' | 'external_loca
 export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Managed' | '';
 export type DesktopEnvironmentEntryCategory = 'managed' | 'open_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopManagedEnvironmentRoute = 'local_host' | 'remote_desktop';
+export type DesktopLauncherActionOutcome =
+  | 'opened_environment_window'
+  | 'focused_environment_window'
+  | 'opened_utility_window'
+  | 'focused_utility_window'
+  | 'started_control_plane_connect'
+  | 'refreshed_control_plane'
+  | 'deleted_control_plane'
+  | 'saved_environment'
+  | 'deleted_environment'
+  | 'closed_launcher'
+  | 'quit_app';
+export type DesktopLauncherActionFailureScope = 'environment' | 'control_plane' | 'dialog' | 'global';
+export type DesktopLauncherActionFailureCode =
+  | 'session_stale'
+  | 'environment_missing'
+  | 'environment_route_unavailable'
+  | 'control_plane_missing'
+  | 'control_plane_environment_missing'
+  | 'control_plane_auth_required'
+  | 'provider_unreachable'
+  | 'provider_invalid_response'
+  | 'action_invalid';
 export type DesktopLauncherActionKind =
   | 'open_managed_environment'
   | 'open_remote_environment'
@@ -69,6 +92,9 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  provider_status?: string;
+  provider_lifecycle_status?: string;
+  provider_last_seen_at_unix_ms?: number;
   ssh_details?: DesktopSSHEnvironmentDetails;
   tag: DesktopEnvironmentEntryTag;
   category: DesktopEnvironmentEntryCategory;
@@ -176,22 +202,38 @@ export type DesktopLauncherActionRequest = Readonly<
     }
 >;
 
-export type DesktopLauncherActionResult = Readonly<{
-  outcome:
-    | 'opened_environment_window'
-    | 'focused_environment_window'
-    | 'opened_utility_window'
-    | 'focused_utility_window'
-    | 'started_control_plane_connect'
-    | 'refreshed_control_plane'
-    | 'deleted_control_plane'
-    | 'saved_environment'
-    | 'deleted_environment'
-    | 'closed_launcher'
-    | 'quit_app';
+export type DesktopLauncherActionSuccess = Readonly<{
+  ok: true;
+  outcome: DesktopLauncherActionOutcome;
   session_key?: string;
   utility_window_kind?: 'launcher' | 'managed_environment_settings';
 }>;
+
+export type DesktopLauncherActionFailure = Readonly<{
+  ok: false;
+  code: DesktopLauncherActionFailureCode;
+  scope: DesktopLauncherActionFailureScope;
+  message: string;
+  environment_id?: string;
+  provider_origin?: string;
+  provider_id?: string;
+  env_public_id?: string;
+  should_refresh_snapshot?: boolean;
+}>;
+
+export type DesktopLauncherActionResult = DesktopLauncherActionSuccess | DesktopLauncherActionFailure;
+
+export function isDesktopLauncherActionFailure(
+  result: DesktopLauncherActionResult | null | undefined,
+): result is DesktopLauncherActionFailure {
+  return result?.ok === false;
+}
+
+export function isDesktopLauncherActionSuccess(
+  result: DesktopLauncherActionResult | null | undefined,
+): result is DesktopLauncherActionSuccess {
+  return result?.ok === true;
+}
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
