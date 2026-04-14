@@ -58,4 +58,11 @@ describe('DesktopLauncherShell', () => {
     expect(html).toContain('href="#redeven-desktop-main"');
     expect(html).toContain('data-floe-shell-slot="bottom-bar"');
   });
+
+  it('keeps the launcher content slot full-width instead of shrinking to child content width', async () => {
+    const html = await renderShell();
+
+    expect(html).toContain('class="relative min-h-0 min-w-0 flex-1 overflow-hidden"');
+    expect(html).not.toContain('class="flex-1 min-h-0 flex overflow-hidden relative"');
+  });
 });

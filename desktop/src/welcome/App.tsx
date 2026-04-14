@@ -2198,7 +2198,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   ));
 
   return (
-    <div class="redeven-welcome-surface h-full min-h-0 overflow-auto bg-background">
+    <div class="redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background">
       <main id="redeven-desktop-main" class="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
         <header class="mb-5 space-y-4">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

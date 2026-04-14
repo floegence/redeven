@@ -217,6 +217,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('fallback={<div class="h-full min-h-0 bg-background" />}');
   });
 
+  it('pins the welcome surface to the full desktop shell width so filtered views do not shrink the page', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background');
+  });
+
   it('uses shared tooltip and compact card-grid helpers for desktop help affordances', () => {
     const appSrc = readWelcomeSource();
 

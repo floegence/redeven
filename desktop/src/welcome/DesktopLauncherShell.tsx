@@ -55,7 +55,7 @@ export function DesktopLauncherShell(props: DesktopLauncherShellProps) {
         actions={props.trailingActions}
       />
 
-      <div class="flex-1 min-h-0 flex overflow-hidden relative">{props.children}</div>
+      <div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">{props.children}</div>
 
       <BottomBar class="safe-left safe-right">
         <div class="flex min-w-0 items-center gap-2">{props.bottomBarLeading}</div>
