@@ -231,6 +231,9 @@ Interaction rules:
   - stale remote state prefers `Refresh Status`
   - expired provider authorization prefers `Reconnect`
   - provider refresh failures prefer `Retry Sync`
+- Environment cards stay concise:
+  - card bodies avoid explanatory helper prose under the actions
+  - only concrete identifiers, runtime details, badges, and notices stay visible inside the card
 - Dual-route managed environments stay route-aware:
   - if this device can still host the environment locally, `Open Local` remains available even when the remote route is degraded
   - remote recovery actions still stay visible as the secondary action on that same card

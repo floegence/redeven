@@ -2604,7 +2604,6 @@ function EnvironmentConnectionCard(props: Readonly<{
     }
     return badges;
   });
-  const helperText = createMemo(() => managedActionModel()?.helper_text ?? '');
   const isEnvironmentActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
     || props.busyAction === 'open_remote_environment'
@@ -2666,20 +2665,17 @@ function EnvironmentConnectionCard(props: Readonly<{
             )}>
               {card().target_primary}
             </div>
-            <div class={cn(
-              'mt-1 text-[11px] leading-5 text-muted-foreground',
-              card().target_secondary_monospace && 'font-mono',
-            )}>
-              {card().target_secondary}
-            </div>
+            <Show when={card().target_secondary !== ''}>
+              <div class={cn(
+                'mt-1 text-[11px] leading-5 text-muted-foreground',
+                card().target_secondary_monospace && 'font-mono',
+              )}>
+                {card().target_secondary}
+              </div>
+            </Show>
           </div>
           <Show when={props.notice}>
             {(notice) => <EnvironmentInlineNotice notice={notice()} />}
-          </Show>
-          <Show when={helperText() !== ''}>
-            <div class="text-[11px] leading-5 text-muted-foreground">
-              {helperText()}
-            </div>
           </Show>
         </div>
       </CardContent>
@@ -2959,11 +2955,6 @@ function ControlPlaneEnvironmentCard(props: Readonly<{
           </div>
           <Show when={props.notice}>
             {(notice) => <EnvironmentInlineNotice notice={notice()} />}
-          </Show>
-          <Show when={actionModel().helper_text !== ''}>
-            <div class="text-[11px] leading-5 text-muted-foreground">
-              {actionModel().helper_text}
-            </div>
           </Show>
         </div>
       </CardContent>
