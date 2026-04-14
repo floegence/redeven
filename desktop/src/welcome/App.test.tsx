@@ -229,6 +229,17 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-grid');
   });
 
+  it('uses an auto-fitting environment grid so sparse filter results still fill the launcher width', () => {
+    const styles = readWelcomeStyles();
+
+    expect(styles).toContain('--redeven-environment-grid-min-column-size: 19rem;');
+    expect(styles).toMatch(
+      /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*var\(--redeven-environment-grid-min-column-size\)\),\s*1fr\)\);/,
+    );
+    expect(styles).not.toMatch(/@media\s*\(min-width:\s*640px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
+    expect(styles).not.toMatch(/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
+  });
+
   it('routes welcome action controls through shared pointer-ready button classes', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
