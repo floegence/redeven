@@ -85,6 +85,17 @@ body {
   flex-direction: column;
 }
 
+/*
+ * floe-webapp Card 组件在 children 外层包裹了一个 <div class="relative z-10">
+ * 容器。该容器必须参与 flex 布局，否则 CardFooter 的 mt-auto 无法将 footer
+ * 推到卡片底部。
+ */
+.redeven-environment-card > .relative {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
 .redeven-environment-card:hover {
   transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--border) 60%, var(--primary) 40%);

@@ -456,7 +456,7 @@ function buildManagedEnvironmentEntry(
     open_session_key: defaultSession?.session_key ?? '',
     open_action_label: defaultSession ? 'Focus' : 'Open',
     can_edit: managedEnvironmentSupportsLocalHosting(environment),
-    can_delete: false,
+    can_delete: environment.local_hosting?.scope.kind === 'named',
     can_save: false,
     last_used_at_ms: environment.last_used_at_ms,
   };
