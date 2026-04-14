@@ -374,7 +374,7 @@ export function EnvSettingsPage() {
   });
 
   // ============================================================================
-  // Agent maintenance actions (E2EE, data plane)
+  // Runtime maintenance actions (E2EE, data plane)
   // ============================================================================
 
   const canAdmin = createMemo(() => !!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner);

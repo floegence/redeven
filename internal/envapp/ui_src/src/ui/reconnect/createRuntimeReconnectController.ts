@@ -79,8 +79,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
 
   if (
     code === 'AGENT_OFFLINE'
-    || lowerMessage.includes('no agent connected')
-    || lowerMessage.includes('agent is offline')
+    || lowerMessage.includes('runtime is offline')
   ) {
     return {
       kind: 'runtime_offline',
@@ -91,8 +90,8 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
   if (
     code === 'AGENT_UNAVAILABLE'
     || lowerMessage.includes('failed to deliver grant_server')
-    || lowerMessage.includes('agent is restarting')
-    || lowerMessage.includes('agent unavailable')
+    || lowerMessage.includes('runtime is restarting')
+    || lowerMessage.includes('runtime unavailable')
   ) {
     return {
       kind: 'runtime_unavailable',

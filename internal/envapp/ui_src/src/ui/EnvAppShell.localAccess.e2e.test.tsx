@@ -753,7 +753,7 @@ describe('EnvAppShell local access gate', () => {
     connectMock.mockImplementationOnce(async () => {
       protocolStatus = 'error';
       protocolClient = null;
-      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'No agent connected' };
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
     });
     reconnectMock.mockImplementationOnce(async () => {
       protocolStatus = 'connected';
@@ -794,7 +794,7 @@ describe('EnvAppShell local access gate', () => {
     connectMock.mockImplementationOnce(async () => {
       protocolStatus = 'error';
       protocolClient = null;
-      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'No agent connected' };
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
     });
 
     const host = document.createElement('div');
@@ -1259,7 +1259,7 @@ describe('EnvAppShell remote access gate', () => {
     connectMock.mockImplementationOnce(async () => {
       protocolStatus = 'error';
       protocolClient = null;
-      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'No agent connected' };
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
     });
     getEnvironmentMock
       .mockResolvedValueOnce({

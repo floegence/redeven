@@ -980,7 +980,7 @@ function CompactSubagentsSummary(props: {
             </div>
           </div>
 
-          {/* Agent list */}
+          {/* Subagent list */}
           <Show when={props.subagents.length > 0} fallback={
             <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">No subagents yet.</div>
           }>

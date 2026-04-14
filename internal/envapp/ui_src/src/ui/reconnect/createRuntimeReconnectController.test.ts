@@ -17,7 +17,7 @@ async function flushAsync(): Promise<void> {
 
 describe('classifyReconnectFailure', () => {
   it('classifies explicit offline and unavailable control-plane errors', () => {
-    expect(classifyReconnectFailure({ code: 'AGENT_OFFLINE', message: 'No agent connected' })).toMatchObject({
+    expect(classifyReconnectFailure({ code: 'AGENT_OFFLINE', message: 'Runtime is offline' })).toMatchObject({
       kind: 'runtime_offline',
     });
     expect(classifyReconnectFailure({ code: 'AGENT_UNAVAILABLE', message: 'Failed to deliver grant_server' })).toMatchObject({

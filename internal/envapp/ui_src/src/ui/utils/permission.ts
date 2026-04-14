@@ -15,10 +15,9 @@ export function isPermissionDeniedError(e: unknown, kind?: PermissionKind): bool
   const msg = getErrorMessage(e).toLowerCase();
   if (!msg) return false;
 
-  // Most agent errors follow the pattern: "<perm> permission denied" with RPC code=403 or HTTP 403.
+  // Most runtime-side permission errors follow the pattern: "<perm> permission denied" with RPC code=403 or HTTP 403.
   if (!msg.includes('permission denied')) return false;
 
   if (!kind) return true;
   return msg.includes(`${kind} permission denied`) || (msg.includes(kind) && msg.includes('permission denied'));
 }
-
