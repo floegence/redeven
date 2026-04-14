@@ -284,6 +284,19 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-environment-inline-notice');
   });
 
+  it('keeps transient action feedback out of page flow by using a toast viewport', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(appSrc).toContain('<DesktopActionToastViewport');
+    expect(appSrc).toContain('showActionToast(');
+    expect(appSrc).not.toContain('feedback={feedback()}');
+    expect(appSrc).not.toContain('props.feedback');
+    expect(styles).toContain('.redeven-desktop-toast-viewport');
+    expect(styles).toContain('.redeven-desktop-toast');
+  });
+
   it('includes SSH connection mode copy inside the connection dialog source', () => {
     const appSrc = readWelcomeSource();
 

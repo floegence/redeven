@@ -206,6 +206,102 @@ body {
   background: color-mix(in srgb, var(--error) 6%, transparent);
 }
 
+/* ── Action toasts ── */
+
+.redeven-desktop-toast-viewport {
+  pointer-events: none;
+  position: fixed;
+  right: 1rem;
+  top: 1rem;
+  z-index: 260;
+  display: flex;
+  width: min(26rem, calc(100vw - 2rem));
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.redeven-desktop-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, white 6%), var(--card));
+  box-shadow:
+    0 14px 34px -18px color-mix(in srgb, var(--foreground) 28%, transparent),
+    0 8px 22px -18px color-mix(in srgb, var(--foreground) 18%, transparent);
+  padding: 0.85rem 0.95rem;
+  backdrop-filter: blur(12px);
+}
+
+.redeven-desktop-toast[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--success) 22%, var(--border));
+}
+
+.redeven-desktop-toast[data-tone='info'] {
+  border-color: color-mix(in srgb, var(--info) 22%, var(--border));
+}
+
+.redeven-desktop-toast__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 0.4rem;
+  flex-shrink: 0;
+}
+
+.redeven-desktop-toast[data-tone='success'] .redeven-desktop-toast__icon {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: color-mix(in srgb, var(--success) 82%, white 18%);
+}
+
+.redeven-desktop-toast[data-tone='info'] .redeven-desktop-toast__icon {
+  background: color-mix(in srgb, var(--info) 10%, transparent);
+  color: color-mix(in srgb, var(--info) 84%, white 16%);
+}
+
+.redeven-desktop-toast__title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.redeven-desktop-toast__message {
+  margin-top: 0.2rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: var(--foreground);
+}
+
+.redeven-desktop-toast__dismiss {
+  cursor: pointer;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  padding: 0.1rem 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  transition: color 150ms ease;
+}
+
+.redeven-desktop-toast__dismiss:hover {
+  color: var(--foreground);
+}
+
+.redeven-desktop-toast__dismiss:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 48%, transparent);
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+
 /* ── Environment inline notices ── */
 
 .redeven-environment-inline-notice {

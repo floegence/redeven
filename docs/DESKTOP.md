@@ -254,6 +254,9 @@ Interaction rules:
   - `That window was already closed. Desktop refreshed the environment list.`
   - `Remote status is stale. Refresh the provider to confirm the latest state.`
   - `This environment is currently offline in the provider.`
+- Transient operation confirmations stay out of page flow:
+  - success and info feedback such as `Refreshed Redeven Portal.` render as toast notifications
+  - Desktop does not insert a success/info banner into the launcher content area just to acknowledge an action
 - The top error banner is reserved for global or dialog-scoped failures that cannot be cleanly attached to a specific environment card.
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:

@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
+import { Portal } from 'solid-js/web';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
 import {
   AlertCircle,
@@ -118,6 +119,12 @@ import {
 import { DesktopTooltip } from './DesktopTooltip';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
 import { controlPlaneDesktopSessionKey } from '../main/desktopTarget';
+import {
+  DESKTOP_ACTION_TOAST_LIMIT,
+  queueDesktopActionToast,
+  type DesktopActionToast,
+  type DesktopActionToastTone,
+} from './actionToastModel';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -230,6 +237,7 @@ const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
 const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
 const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
 const ENVIRONMENT_ACTION_NOTICE_TTL_MS = 8_000;
+const ACTION_TOAST_TTL_MS = 4_000;
 
 function buildDesktopFloeConfig() {
   const themeBridge = desktopThemeBridge();
@@ -608,7 +616,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
-  const [feedback, setFeedback] = createSignal('');
+  const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
   const [connectError, setConnectError] = createSignal('');
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
@@ -623,7 +631,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [libraryQuery, setLibraryQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
   const [environmentActionNotices, setEnvironmentActionNotices] = createSignal<Readonly<Record<string, EnvironmentActionNotice>>>({});
+  const actionToastTimers = new Map<number, number>();
   const environmentNoticeTimers = new Map<string, number>();
+  let nextActionToastID = 0;
   let issueRef: HTMLElement | undefined;
   let settingsErrorRef: HTMLElement | undefined;
 
@@ -652,6 +662,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const libraryEntries = createMemo(() => filterEnvironmentLibrary(snapshot(), libraryFilter(), libraryQuery()));
 
   onCleanup(() => {
+    for (const handle of actionToastTimers.values()) {
+      window.clearTimeout(handle);
+    }
+    actionToastTimers.clear();
     for (const handle of environmentNoticeTimers.values()) {
       window.clearTimeout(handle);
     }
@@ -713,6 +727,53 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function refreshSnapshot(): Promise<void> {
     const nextSnapshot = await props.runtime.launcher.getSnapshot();
     setSnapshot(nextSnapshot);
+  }
+
+  function dismissActionToast(toastID: number): void {
+    const handle = actionToastTimers.get(toastID);
+    if (handle !== undefined) {
+      window.clearTimeout(handle);
+      actionToastTimers.delete(toastID);
+    }
+    setActionToasts((current) => current.filter((toast) => toast.id !== toastID));
+  }
+
+  function showActionToast(
+    message: string,
+    tone: DesktopActionToastTone = 'success',
+  ): void {
+    const queued = queueDesktopActionToast({
+      current: actionToasts(),
+      next: {
+        id: ++nextActionToastID,
+        tone,
+        message,
+      },
+      limit: DESKTOP_ACTION_TOAST_LIMIT,
+    });
+    if (!queued.active_toast) {
+      return;
+    }
+
+    for (const removedToastID of queued.removed_toast_ids) {
+      const handle = actionToastTimers.get(removedToastID);
+      if (handle !== undefined) {
+        window.clearTimeout(handle);
+        actionToastTimers.delete(removedToastID);
+      }
+    }
+
+    setActionToasts(queued.toasts);
+
+    const activeToastID = queued.active_toast.id;
+    const existingHandle = actionToastTimers.get(activeToastID);
+    if (existingHandle !== undefined) {
+      window.clearTimeout(existingHandle);
+    }
+    const handle = window.setTimeout(() => {
+      dismissActionToast(activeToastID);
+    }, ACTION_TOAST_TTL_MS);
+    actionToastTimers.set(activeToastID, handle);
   }
 
   function clearEnvironmentActionNotices(keys: readonly string[] = []): void {
@@ -821,7 +882,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function resetMessages(): void {
-    setFeedback('');
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
@@ -831,7 +891,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function showConnectEnvironment(message = ''): void {
     setConnectionDialogState(null);
     setControlPlaneDialogState(null);
-    setFeedback(trimString(message));
+    if (trimString(message) !== '') {
+      showActionToast(message, 'info');
+    }
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
@@ -875,7 +937,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     setActiveCenterTab('environments');
-    setFeedback(trimString(message));
+    if (trimString(message) !== '') {
+      showActionToast(message, 'info');
+    }
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
@@ -950,7 +1014,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     setActiveCenterTab('control_planes');
     setConnectionDialogState(null);
-    setFeedback(trimString(message));
+    if (trimString(message) !== '') {
+      showActionToast(message, 'info');
+    }
     setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
@@ -1339,7 +1405,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, 'control_plane_dialog');
     if (result?.outcome === 'started_control_plane_connect') {
       closeControlPlaneDialog();
-      setFeedback('Continue in your browser to finish authorizing this Control Plane.');
+      showActionToast('Continue in your browser to finish authorizing this Control Plane.', 'info');
     }
   }
 
@@ -1349,7 +1415,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       provider_origin: controlPlane.provider.provider_origin,
     });
     if (result?.outcome === 'started_control_plane_connect') {
-      setFeedback(`Continue in your browser to reconnect ${controlPlane.provider.display_name}.`);
+      showActionToast(`Continue in your browser to reconnect ${controlPlane.provider.display_name}.`, 'info');
     }
   }
 
@@ -1360,7 +1426,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       provider_id: controlPlane.provider.provider_id,
     });
     if (result?.outcome === 'refreshed_control_plane') {
-      setFeedback(`Refreshed ${controlPlane.provider.display_name}.`);
+      showActionToast(`Refreshed ${controlPlane.provider.display_name}.`);
     }
   }
 
@@ -1379,7 +1445,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (managedEntry) {
       const opened = await openManagedEnvironment(managedEntry);
       if (opened) {
-        setFeedback('Control Plane environment opened.');
+        showActionToast('Control Plane environment opened.');
       }
       return opened;
     }
@@ -1398,7 +1464,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, 'connect', { noticeKeys });
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened) {
-      setFeedback('Control Plane environment opened.');
+      showActionToast('Control Plane environment opened.');
     }
     return opened;
   }
@@ -1501,7 +1567,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
       await refreshSnapshot();
-      setFeedback('Environment settings saved.');
+      showActionToast('Environment settings saved.');
     } catch (error) {
       setSettingsError(getErrorMessage(error));
     } finally {
@@ -1540,7 +1606,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         external_local_ui_url: normalizedTargetURL,
       });
       await refreshSnapshot();
-      setFeedback(request.successMessage);
+      showActionToast(request.successMessage);
       return true;
     } catch (error) {
       setErrorMessage(request.errorTarget, getErrorMessage(error));
@@ -1574,7 +1640,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         release_base_url: request.details.release_base_url,
       });
       await refreshSnapshot();
-      setFeedback(request.successMessage);
+      showActionToast(request.successMessage);
       return true;
     } catch (error) {
       setErrorMessage(request.errorTarget, getErrorMessage(error));
@@ -1773,7 +1839,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
       await refreshSnapshot();
       setDeleteTarget(null);
-      setFeedback('Connection removed from Environment Library.');
+      showActionToast('Connection removed from Environment Library.');
     } catch (error) {
       setConnectError(getErrorMessage(error));
     } finally {
@@ -1793,7 +1859,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     if (result?.outcome === 'deleted_control_plane') {
       setDeleteControlPlaneTarget(null);
-      setFeedback('Control Plane removed from Desktop.');
+      showActionToast('Control Plane removed from Desktop.');
     }
   }
 
@@ -1876,7 +1942,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <ConnectEnvironmentSurface
           snapshot={snapshot()}
           settingsSurface={settingsSurface()}
-          feedback={feedback()}
           error={connectError()}
           busyAction={busyAction()}
           activeTab={activeCenterTab()}
@@ -1909,10 +1974,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           deleteControlPlane={setDeleteControlPlaneTarget}
           copyDiagnostics={async () => {
             await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
-            setFeedback('Diagnostics copied to the clipboard.');
+            showActionToast('Diagnostics copied to the clipboard.');
           }}
         />
       </DesktopLauncherShell>
+
+      <DesktopActionToastViewport
+        toasts={actionToasts()}
+        dismissToast={dismissActionToast}
+      />
 
       <LocalEnvironmentSettingsDialog
         open={snapshot().surface === 'managed_environment_settings'}
@@ -2012,10 +2082,47 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   );
 }
 
+function DesktopActionToastViewport(props: Readonly<{
+  toasts: readonly DesktopActionToast[];
+  dismissToast: (toastID: number) => void;
+}>) {
+  return (
+    <Portal>
+      <Show when={props.toasts.length > 0}>
+        <div class="redeven-desktop-toast-viewport" aria-live="polite" aria-atomic="true">
+          <For each={props.toasts}>
+            {(toast) => (
+              <div class="redeven-desktop-toast" data-tone={toast.tone} role="status">
+                <div class="redeven-desktop-toast__icon" aria-hidden="true">
+                  {toast.tone === 'success'
+                    ? <Check class="h-3.5 w-3.5" />
+                    : <AlertCircle class="h-3.5 w-3.5" />}
+                </div>
+                <div class="min-w-0 flex-1">
+                  <div class="redeven-desktop-toast__title">
+                    {toast.tone === 'success' ? 'Updated' : 'Notice'}
+                  </div>
+                  <div class="redeven-desktop-toast__message">{toast.message}</div>
+                </div>
+                <button
+                  type="button"
+                  class="redeven-desktop-toast__dismiss"
+                  onClick={() => props.dismissToast(toast.id)}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </Portal>
+  );
+}
+
 function ConnectEnvironmentSurface(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
   settingsSurface: DesktopSettingsSurfaceSnapshot;
-  feedback: string;
   error: string;
   busyAction: BusyAction;
   activeTab: EnvironmentCenterTab;
@@ -2180,12 +2287,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
         </header>
 
         <div class="space-y-3">
-          <Show when={props.feedback}>
-            <div class="redeven-console-banner rounded-xl px-3.5 py-2.5 text-sm text-foreground">
-              {props.feedback}
-            </div>
-          </Show>
-
           <Show when={props.error}>
             <div role="alert" class="redeven-console-banner redeven-console-banner--error rounded-xl px-3.5 py-2.5 text-sm text-destructive">
               {props.error}
