@@ -330,10 +330,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<Pin class=');
     expect(styles).toContain('.redeven-card-fact-row');
     expect(styles).toContain('.redeven-card-fact-label');
+    expect(styles).toContain('.redeven-endpoints-section');
+    expect(styles).toContain('.redeven-endpoints-title');
     expect(styles).toContain('.redeven-card-endpoint-row');
     expect(styles).toContain('.redeven-card-endpoint-label');
     expect(styles).toContain('.redeven-card-endpoint-value');
     expect(styles).toContain('.redeven-card-endpoint-copy');
+    expect(styles).toContain('.redeven-status-indicator');
+    expect(appSrc).toContain('EnvironmentStatusIndicator');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {
