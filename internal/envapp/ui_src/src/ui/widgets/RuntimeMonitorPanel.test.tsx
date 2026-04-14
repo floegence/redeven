@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentMonitorPanel } from './AgentMonitorPanel';
+import { RuntimeMonitorPanel } from './RuntimeMonitorPanel';
 
 type deferred<T> = {
   promise: Promise<T>;
@@ -115,7 +115,7 @@ function makeSnapshot(timestampMs: number, processes: Array<Record<string, unkno
   };
 }
 
-describe('AgentMonitorPanel', () => {
+describe('RuntimeMonitorPanel', () => {
   let host: HTMLDivElement;
 
   beforeEach(() => {
@@ -154,7 +154,7 @@ describe('AgentMonitorPanel', () => {
       .mockReturnValueOnce(first.promise)
       .mockResolvedValue(makeSnapshot(2));
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(1);
@@ -192,7 +192,7 @@ describe('AgentMonitorPanel', () => {
       }],
     });
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     expect(host.textContent).toContain('Transport');
@@ -206,7 +206,7 @@ describe('AgentMonitorPanel', () => {
       ]),
     );
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -240,7 +240,7 @@ describe('AgentMonitorPanel', () => {
       ]),
     );
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     const processRows = Array.from(
@@ -276,7 +276,7 @@ describe('AgentMonitorPanel', () => {
       ]),
     );
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -310,7 +310,7 @@ describe('AgentMonitorPanel', () => {
       ]),
     );
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -356,7 +356,7 @@ describe('AgentMonitorPanel', () => {
       ]),
     );
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -409,7 +409,7 @@ describe('AgentMonitorPanel', () => {
       ]),
     );
 
-    render(() => <AgentMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="deck" />, host);
     await flushPanel();
 
     const getProcessRow = (name: string) => Array.from(host.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes(name)) as HTMLTableRowElement | undefined;

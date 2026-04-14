@@ -28,12 +28,12 @@ This document describes the public Electron desktop shell that ships with each `
 - Desktop-managed environments are the entries that own a real Redeven scope directory on this machine:
   - local environments map to `~/.redeven/scopes/local/<name>`
   - Control Plane environments map to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>`
-- Desktop and agent-only/CLI mode also share one canonical environment catalog under:
+- Desktop and standalone runtime / CLI mode also share one canonical environment catalog under:
   - `~/.redeven/catalog/environments/*.json`
   - `~/.redeven/catalog/connections/*.json`
   - `~/.redeven/catalog/providers/*.json`
 - Saved Redeven URL and SSH entries are connection records only. They do not own an additional Desktop-private runtime state directory.
-- Desktop and agent-only/CLI mode resolve the same scope directories. Desktop does not invent a second local-environment state root.
+- Desktop and standalone runtime / CLI mode resolve the same scope directories. Desktop does not invent a second local-environment state root.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
@@ -384,8 +384,8 @@ Desktop semantics:
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
 - Multiple local environments may coexist on one device. Their runtime ownership stays separate because each one resolves to a different `local/<name>` scope directory.
 - A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the provider-backed route is reconciled from provider sync plus shared runtime catalog identity instead of a manual dialog binding.
-- If Desktop attaches to a runtime that was started by agent-only or CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
-- Agent-only and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
+- If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
+- Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
 
 Target validation rules:
 
@@ -612,4 +612,4 @@ npm run start
 npm run package -- --mac dmg
 ```
 
-For release automation, the same preparation script can hydrate the bundle from a prebuilt CLI tarball by setting `REDEVEN_DESKTOP_AGENT_TARBALL`.
+For release automation, the same preparation script can hydrate the bundle from a prebuilt CLI tarball by setting `REDEVEN_DESKTOP_RUNTIME_TARBALL`.

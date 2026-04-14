@@ -58,6 +58,7 @@ jobs:
           sh -n scripts/generate_release_notes.sh
           bash -n scripts/test_generate_release_notes.sh
           bash -n scripts/lint_ui.sh
+          bash -n scripts/build_desktop_bundled_runtime.sh
           bash -n scripts/build_desktop_bundled_agent.sh
           bash -n scripts/check_desktop.sh
           bash -n scripts/ui_package_common.sh

@@ -21,14 +21,14 @@ export type ReconnectAvailability = Readonly<{
 
 export type ReconnectPhase = 'idle' | 'transport_retry' | 'waiting_for_runtime' | 'reconnecting';
 
-export type ReconnectFailureKind = 'agent_offline' | 'agent_unavailable' | 'transport' | 'fatal';
+export type ReconnectFailureKind = 'runtime_offline' | 'runtime_unavailable' | 'transport' | 'fatal';
 
 export type ReconnectFailure = Readonly<{
   kind: ReconnectFailureKind;
   message: string;
 }>;
 
-export type AgentReconnectController = Readonly<{
+export type RuntimeReconnectController = Readonly<{
   phase: Accessor<ReconnectPhase>;
   failure: Accessor<ReconnectFailure | null>;
   availabilityStatus: Accessor<ReconnectAvailabilityStatus | null>;
@@ -41,7 +41,7 @@ export type AgentReconnectController = Readonly<{
   requestReconnectNow: () => void;
 }>;
 
-type CreateAgentReconnectControllerArgs = Readonly<{
+type CreateRuntimeReconnectControllerArgs = Readonly<{
   enabled: Accessor<boolean>;
   probeAvailability: () => Promise<ReconnectAvailability>;
   reconnect: () => Promise<void>;
@@ -83,7 +83,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
     || lowerMessage.includes('agent is offline')
   ) {
     return {
-      kind: 'agent_offline',
+      kind: 'runtime_offline',
       message: 'The runtime is offline. Waiting for it to come back online.',
     };
   }
@@ -95,7 +95,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
     || lowerMessage.includes('agent unavailable')
   ) {
     return {
-      kind: 'agent_unavailable',
+      kind: 'runtime_unavailable',
       message: 'The runtime is restarting or not ready yet. Retrying automatically.',
     };
   }
@@ -128,7 +128,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
   };
 }
 
-export function createAgentReconnectController(args: CreateAgentReconnectControllerArgs): AgentReconnectController {
+export function createRuntimeReconnectController(args: CreateRuntimeReconnectControllerArgs): RuntimeReconnectController {
   const [phase, setPhase] = createSignal<ReconnectPhase>('idle');
   const [failure, setFailure] = createSignal<ReconnectFailure | null>(null);
   const [availabilityStatus, setAvailabilityStatus] = createSignal<ReconnectAvailabilityStatus | null>(null);

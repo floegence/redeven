@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type ResolveBundledAgentPathArgs = Readonly<{
+export type ResolveBundledRuntimePathArgs = Readonly<{
   isPackaged: boolean;
   resourcesPath: string;
   appPath: string;
@@ -14,11 +14,11 @@ export type ResolvePreloadPathArgs = Readonly<{
   appPath: string;
 }>;
 
-export function bundledAgentExecutableName(platform: NodeJS.Platform = process.platform): string {
+export function bundledRuntimeExecutableName(platform: NodeJS.Platform = process.platform): string {
   return platform === 'win32' ? 'redeven.exe' : 'redeven';
 }
 
-function bundledAgentBundleDirName(platform: NodeJS.Platform = process.platform, arch: string = process.arch): string {
+function bundledRuntimeBundleDirName(platform: NodeJS.Platform = process.platform, arch: string = process.arch): string {
   let goarch = '';
   switch (arch) {
     case 'x64':
@@ -28,7 +28,7 @@ function bundledAgentBundleDirName(platform: NodeJS.Platform = process.platform,
       goarch = 'arm64';
       break;
     default:
-      throw new Error(`Unsupported desktop agent architecture: ${arch}`);
+      throw new Error(`Unsupported desktop runtime architecture: ${arch}`);
   }
 
   switch (platform) {
@@ -36,18 +36,18 @@ function bundledAgentBundleDirName(platform: NodeJS.Platform = process.platform,
     case 'linux':
       return `${platform}-${goarch}`;
     default:
-      throw new Error(`Unsupported desktop agent platform: ${platform}`);
+      throw new Error(`Unsupported desktop runtime platform: ${platform}`);
   }
 }
 
-export function resolveBundledAgentPath(args: ResolveBundledAgentPathArgs): string {
-  const executableName = bundledAgentExecutableName(args.platform ?? process.platform);
+export function resolveBundledRuntimePath(args: ResolveBundledRuntimePathArgs): string {
+  const executableName = bundledRuntimeExecutableName(args.platform ?? process.platform);
   if (args.isPackaged) {
     return path.join(args.resourcesPath, 'bin', executableName);
   }
 
   const existsSync = args.existsSync ?? fs.existsSync;
-  const bundleDirName = bundledAgentBundleDirName(args.platform ?? process.platform, args.arch ?? process.arch);
+  const bundleDirName = bundledRuntimeBundleDirName(args.platform ?? process.platform, args.arch ?? process.arch);
   const candidateRoots = [
     args.appPath,
     path.resolve(args.appPath, '..'),

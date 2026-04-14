@@ -1,4 +1,4 @@
-import type { ManagedAgent } from './agentProcess';
+import type { ManagedRuntime } from './runtimeProcess';
 import type { StartupReport } from './startup';
 import type { DesktopManagedEnvironmentLocalOwner } from '../shared/desktopManagedEnvironment';
 
@@ -36,20 +36,20 @@ export function resolveManagedRuntimeLifecycleOwner(
   return options.persistedOwner === 'desktop' ? 'desktop' : 'external';
 }
 
-export function desktopSessionRuntimeHandleFromManagedAgent(
-  agent: ManagedAgent,
+export function desktopSessionRuntimeHandleFromManagedRuntime(
+  runtime: ManagedRuntime,
   options: Readonly<{
     persistedOwner?: DesktopManagedEnvironmentLocalOwner;
   }> = {},
 ): DesktopSessionRuntimeHandle {
-  const lifecycleOwner = resolveManagedRuntimeLifecycleOwner(agent.startup, {
-    attached: agent.attached,
+  const lifecycleOwner = resolveManagedRuntimeLifecycleOwner(runtime.startup, {
+    attached: runtime.attached,
     persistedOwner: options.persistedOwner,
   });
   return {
     runtime_kind: 'managed_environment',
     lifecycle_owner: lifecycleOwner,
-    launch_mode: agent.attached ? 'attached' : 'spawned',
-    stop: lifecycleOwner === 'desktop' ? agent.stop : noopStop,
+    launch_mode: runtime.attached ? 'attached' : 'spawned',
+    stop: lifecycleOwner === 'desktop' ? runtime.stop : noopStop,
   };
 }

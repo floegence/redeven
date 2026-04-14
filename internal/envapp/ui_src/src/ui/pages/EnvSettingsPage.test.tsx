@@ -39,7 +39,7 @@ const envContextMocks = vi.hoisted(() => ({
   bumpSettingsSeq: vi.fn(),
 }));
 
-const agentUpdateMocks = vi.hoisted(() => ({
+const runtimeUpdateMocks = vi.hoisted(() => ({
   version: {
     latestMeta: vi.fn(() => null),
     latestMetaLoading: vi.fn(() => false),
@@ -149,8 +149,8 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
   }),
 }));
 
-vi.mock('../maintenance/AgentUpdateContext', () => ({
-  useAgentUpdateContext: () => agentUpdateMocks,
+vi.mock('../maintenance/RuntimeUpdateContext', () => ({
+  useRuntimeUpdateContext: () => runtimeUpdateMocks,
 }));
 
 vi.mock('../maintenance/agentUpgradeState', () => ({

@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   classifyReconnectFailure,
-  createAgentReconnectController,
-  type AgentReconnectController,
-} from './createAgentReconnectController';
+  createRuntimeReconnectController,
+  type RuntimeReconnectController,
+} from './createRuntimeReconnectController';
 
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
@@ -18,10 +18,10 @@ async function flushAsync(): Promise<void> {
 describe('classifyReconnectFailure', () => {
   it('classifies explicit offline and unavailable control-plane errors', () => {
     expect(classifyReconnectFailure({ code: 'AGENT_OFFLINE', message: 'No agent connected' })).toMatchObject({
-      kind: 'agent_offline',
+      kind: 'runtime_offline',
     });
     expect(classifyReconnectFailure({ code: 'AGENT_UNAVAILABLE', message: 'Failed to deliver grant_server' })).toMatchObject({
-      kind: 'agent_unavailable',
+      kind: 'runtime_unavailable',
     });
   });
 
@@ -35,7 +35,7 @@ describe('classifyReconnectFailure', () => {
   });
 });
 
-describe('createAgentReconnectController', () => {
+describe('createRuntimeReconnectController', () => {
   afterEach(() => {
     vi.useRealTimers();
   });
@@ -48,9 +48,9 @@ describe('createAgentReconnectController', () => {
       .mockResolvedValueOnce({ status: 'online', access: 'ready' });
     const reconnect = vi.fn(async () => undefined);
 
-    let controller!: AgentReconnectController;
+    let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
-      controller = createAgentReconnectController({
+      controller = createRuntimeReconnectController({
         enabled: () => true,
         probeAvailability,
         reconnect,
@@ -58,7 +58,7 @@ describe('createAgentReconnectController', () => {
       return disposeRoot;
     });
 
-    controller.activateWaiting({ kind: 'agent_offline', message: 'The runtime is offline.' });
+    controller.activateWaiting({ kind: 'runtime_offline', message: 'The runtime is offline.' });
     expect(controller.phase()).toBe('waiting_for_runtime');
 
     await vi.advanceTimersByTimeAsync(2_000);
@@ -86,9 +86,9 @@ describe('createAgentReconnectController', () => {
     const probeAvailability = vi.fn().mockResolvedValue({ status: 'offline', access: 'unknown' });
     const reconnect = vi.fn(async () => undefined);
 
-    let controller!: AgentReconnectController;
+    let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
-      controller = createAgentReconnectController({
+      controller = createRuntimeReconnectController({
         enabled: () => true,
         probeAvailability,
         reconnect,
@@ -96,7 +96,7 @@ describe('createAgentReconnectController', () => {
       return disposeRoot;
     });
 
-    controller.activateWaiting({ kind: 'agent_offline', message: 'The runtime is offline.' });
+    controller.activateWaiting({ kind: 'runtime_offline', message: 'The runtime is offline.' });
     controller.requestReconnectNow();
     await flushAsync();
 

@@ -176,7 +176,7 @@ vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
-vi.mock('./widgets/AgentUpdateFloatingPrompt', () => ({ AgentUpdateFloatingPrompt: () => <div /> }));
+vi.mock('./widgets/RuntimeUpdateFloatingPrompt', () => ({ RuntimeUpdateFloatingPrompt: () => <div /> }));
 vi.mock('./widgets/DetachedSurfaceScene', () => ({ DetachedSurfaceScene: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
@@ -191,15 +191,15 @@ vi.mock('./widgets/AskFlowerComposerWindow', () => ({
     />
   ),
 }));
-vi.mock('./maintenance/AgentUpdateContext', () => ({ AgentUpdateContext: createContext({}) }));
+vi.mock('./maintenance/RuntimeUpdateContext', () => ({ RuntimeUpdateContext: createContext({}) }));
 vi.mock('./maintenance/createAgentMaintenanceController', () => ({
   createAgentMaintenanceController: () => ({
     maintaining: () => false,
     stage: () => null,
   }),
 }));
-vi.mock('./maintenance/createAgentUpdatePromptCoordinator', () => ({
-  createAgentUpdatePromptCoordinator: () => ({
+vi.mock('./maintenance/createRuntimeUpdatePromptCoordinator', () => ({
+  createRuntimeUpdatePromptCoordinator: () => ({
     visible: () => false,
     mode: () => 'recommended',
     currentVersion: () => '',

@@ -1,16 +1,16 @@
 import { compareReleaseVersionCore, isReleaseVersion } from './agentVersion';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 
-const AGENT_UPDATE_PROMPT_STORAGE_PREFIX = 'redeven_envapp_update_prompt_v1:';
+const RUNTIME_UPDATE_PROMPT_STORAGE_PREFIX = 'redeven_envapp_update_prompt_v1:';
 
-export type AgentUpdatePromptMemory = Readonly<{
+export type RuntimeUpdatePromptMemory = Readonly<{
   shown_on_date?: string;
   shown_target_version?: string;
   skipped_version?: string;
   updated_at_ms?: number;
 }>;
 
-export type AgentUpdatePromptDecisionInput = Readonly<{
+export type RuntimeUpdatePromptDecisionInput = Readonly<{
   accessGateVisible: boolean;
   isLocalMode: boolean;
   upgradePolicy?: string;
@@ -21,7 +21,7 @@ export type AgentUpdatePromptDecisionInput = Readonly<{
   currentVersion: string;
   preferredTargetVersion: string;
   latestStale: boolean;
-  promptMemory?: AgentUpdatePromptMemory | null;
+  promptMemory?: RuntimeUpdatePromptMemory | null;
   today: string;
 }>;
 
@@ -37,7 +37,7 @@ function normalizeStatus(raw: string | null | undefined): string {
   return String(raw ?? '').trim().toLowerCase();
 }
 
-function sanitizePromptMemory(input: unknown): AgentUpdatePromptMemory {
+function sanitizePromptMemory(input: unknown): RuntimeUpdatePromptMemory {
   if (!input || typeof input !== 'object') return {};
   const raw = input as Record<string, unknown>;
 
@@ -61,20 +61,20 @@ export function formatLocalDateStamp(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-export function agentUpdatePromptStorageKey(envId: string): string {
+export function runtimeUpdatePromptStorageKey(envId: string): string {
   const id = normalizeEnvId(envId);
   if (!id) return '';
-  return `${AGENT_UPDATE_PROMPT_STORAGE_PREFIX}${id}`;
+  return `${RUNTIME_UPDATE_PROMPT_STORAGE_PREFIX}${id}`;
 }
 
-export function readAgentUpdatePromptMemory(envId: string): AgentUpdatePromptMemory {
-  const key = agentUpdatePromptStorageKey(envId);
+export function readRuntimeUpdatePromptMemory(envId: string): RuntimeUpdatePromptMemory {
+  const key = runtimeUpdatePromptStorageKey(envId);
   if (!key) return {};
   return sanitizePromptMemory(readUIStorageJSON(key, null));
 }
 
-export function writeAgentUpdatePromptMemory(envId: string, next: AgentUpdatePromptMemory): AgentUpdatePromptMemory {
-  const key = agentUpdatePromptStorageKey(envId);
+export function writeRuntimeUpdatePromptMemory(envId: string, next: RuntimeUpdatePromptMemory): RuntimeUpdatePromptMemory {
+  const key = runtimeUpdatePromptStorageKey(envId);
   const sanitized = sanitizePromptMemory(next);
   if (!key) return sanitized;
   writeUIStorageJSON(key, sanitized);
@@ -82,27 +82,27 @@ export function writeAgentUpdatePromptMemory(envId: string, next: AgentUpdatePro
   return sanitized;
 }
 
-export function wasPromptShownTodayForTarget(record: AgentUpdatePromptMemory | null | undefined, targetVersion: string, today: string): boolean {
+export function wasPromptShownTodayForTarget(record: RuntimeUpdatePromptMemory | null | undefined, targetVersion: string, today: string): boolean {
   const target = normalizeVersion(targetVersion);
   if (!target) return false;
   const sanitized = sanitizePromptMemory(record);
   return sanitized.shown_on_date === String(today ?? '').trim() && sanitized.shown_target_version === target;
 }
 
-export function isVersionSkipped(record: AgentUpdatePromptMemory | null | undefined, targetVersion: string): boolean {
+export function isVersionSkipped(record: RuntimeUpdatePromptMemory | null | undefined, targetVersion: string): boolean {
   const target = normalizeVersion(targetVersion);
   if (!target) return false;
   return sanitizePromptMemory(record).skipped_version === target;
 }
 
-export function markAgentUpdatePromptShown(
+export function markRuntimeUpdatePromptShown(
   envId: string,
   targetVersion: string,
   today: string = formatLocalDateStamp(),
   nowMs: number = Date.now(),
-): AgentUpdatePromptMemory {
-  const current = readAgentUpdatePromptMemory(envId);
-  return writeAgentUpdatePromptMemory(envId, {
+): RuntimeUpdatePromptMemory {
+  const current = readRuntimeUpdatePromptMemory(envId);
+  return writeRuntimeUpdatePromptMemory(envId, {
     ...current,
     shown_on_date: String(today ?? '').trim() || undefined,
     shown_target_version: normalizeVersion(targetVersion) || undefined,
@@ -110,28 +110,28 @@ export function markAgentUpdatePromptShown(
   });
 }
 
-export function markAgentUpdateVersionSkipped(envId: string, targetVersion: string, nowMs: number = Date.now()): AgentUpdatePromptMemory {
-  const current = readAgentUpdatePromptMemory(envId);
-  return writeAgentUpdatePromptMemory(envId, {
+export function markRuntimeUpdateVersionSkipped(envId: string, targetVersion: string, nowMs: number = Date.now()): RuntimeUpdatePromptMemory {
+  const current = readRuntimeUpdatePromptMemory(envId);
+  return writeRuntimeUpdatePromptMemory(envId, {
     ...current,
     skipped_version: normalizeVersion(targetVersion) || undefined,
     updated_at_ms: Math.floor(nowMs),
   });
 }
 
-export function clearAgentUpdateSkippedVersionIfMatched(envId: string, targetVersion: string, nowMs: number = Date.now()): AgentUpdatePromptMemory {
-  const current = readAgentUpdatePromptMemory(envId);
+export function clearRuntimeUpdateSkippedVersionIfMatched(envId: string, targetVersion: string, nowMs: number = Date.now()): RuntimeUpdatePromptMemory {
+  const current = readRuntimeUpdatePromptMemory(envId);
   const target = normalizeVersion(targetVersion);
   if (!target || current.skipped_version !== target) return current;
 
-  return writeAgentUpdatePromptMemory(envId, {
+  return writeRuntimeUpdatePromptMemory(envId, {
     ...current,
     skipped_version: undefined,
     updated_at_ms: Math.floor(nowMs),
   });
 }
 
-export function shouldShowAgentUpdatePrompt(input: AgentUpdatePromptDecisionInput): boolean {
+export function shouldShowRuntimeUpdatePrompt(input: RuntimeUpdatePromptDecisionInput): boolean {
   if (input.accessGateVisible) return false;
   if (input.isLocalMode) return false;
   if (normalizeStatus(input.upgradePolicy) !== 'self_upgrade') return false;

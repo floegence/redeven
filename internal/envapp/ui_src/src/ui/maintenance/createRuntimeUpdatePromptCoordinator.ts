@@ -2,15 +2,15 @@ import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from
 
 import { compareReleaseVersionCore, isReleaseVersion } from './agentVersion';
 import {
-  agentUpdatePromptStorageKey,
-  clearAgentUpdateSkippedVersionIfMatched,
+  runtimeUpdatePromptStorageKey,
+  clearRuntimeUpdateSkippedVersionIfMatched,
   formatLocalDateStamp,
-  markAgentUpdatePromptShown,
-  markAgentUpdateVersionSkipped,
-  readAgentUpdatePromptMemory,
-  shouldShowAgentUpdatePrompt,
-  type AgentUpdatePromptMemory,
-} from './agentUpdatePromptState';
+  markRuntimeUpdatePromptShown,
+  markRuntimeUpdateVersionSkipped,
+  readRuntimeUpdatePromptMemory,
+  shouldShowRuntimeUpdatePrompt,
+  type RuntimeUpdatePromptMemory,
+} from './runtimeUpdatePromptState';
 import type { AgentMaintenanceController } from './createAgentMaintenanceController';
 import type { AgentVersionModel } from './createAgentVersionModel';
 
@@ -18,12 +18,12 @@ const MIN_REFRESH_DELAY_MS = 5 * 60 * 1000;
 const MAX_REFRESH_DELAY_MS = 30 * 60 * 1000;
 const DEFAULT_REFRESH_DELAY_MS = 10 * 60 * 1000;
 
-export type AgentUpdatePromptMode = 'available' | 'updating' | 'failed';
+export type RuntimeUpdatePromptMode = 'available' | 'updating' | 'failed';
 
-export type AgentUpdatePromptCoordinator = Readonly<{
+export type RuntimeUpdatePromptCoordinator = Readonly<{
   open: Accessor<boolean>;
   visible: Accessor<boolean>;
-  mode: Accessor<AgentUpdatePromptMode>;
+  mode: Accessor<RuntimeUpdatePromptMode>;
   targetVersion: Accessor<string>;
   currentVersion: Accessor<string>;
   latestMessage: Accessor<string>;
@@ -35,7 +35,7 @@ export type AgentUpdatePromptCoordinator = Readonly<{
   retry: () => Promise<void>;
 }>;
 
-type CreateAgentUpdatePromptCoordinatorArgs = Readonly<{
+type CreateRuntimeUpdatePromptCoordinatorArgs = Readonly<{
   envId: Accessor<string>;
   isLocalMode: Accessor<boolean>;
   accessGateVisible: Accessor<boolean>;
@@ -52,15 +52,15 @@ function clampRefreshDelay(cacheTtlMs: number | null | undefined): number {
   return Math.min(Math.max(Math.floor(ttl), MIN_REFRESH_DELAY_MS), MAX_REFRESH_DELAY_MS);
 }
 
-function loadPromptMemoryForEnv(envId: string): AgentUpdatePromptMemory {
+function loadPromptMemoryForEnv(envId: string): RuntimeUpdatePromptMemory {
   const id = String(envId ?? '').trim();
   if (!id) return {};
-  return readAgentUpdatePromptMemory(id);
+  return readRuntimeUpdatePromptMemory(id);
 }
 
-export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePromptCoordinatorArgs): AgentUpdatePromptCoordinator {
+export function createRuntimeUpdatePromptCoordinator(args: CreateRuntimeUpdatePromptCoordinatorArgs): RuntimeUpdatePromptCoordinator {
   const [open, setOpen] = createSignal(false);
-  const [promptMemory, setPromptMemory] = createSignal<AgentUpdatePromptMemory>({});
+  const [promptMemory, setPromptMemory] = createSignal<RuntimeUpdatePromptMemory>({});
   const [promptUpgradeRequested, setPromptUpgradeRequested] = createSignal(false);
   const [promptUpgradeStarted, setPromptUpgradeStarted] = createSignal(false);
   const [promptRequestedTargetVersion, setPromptRequestedTargetVersion] = createSignal('');
@@ -88,7 +88,7 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
     return true;
   });
 
-  const mode = createMemo<AgentUpdatePromptMode>(() => {
+  const mode = createMemo<RuntimeUpdatePromptMode>(() => {
     if (promptUpgradeRequested() && args.maintenance.error()) return 'failed';
     if (promptUpgradeRequested() && args.maintenance.maintaining()) return 'updating';
     return 'available';
@@ -167,7 +167,7 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
 
     const envId = String(args.envId() ?? '').trim();
     if (envId) {
-      setPromptMemory(clearAgentUpdateSkippedVersionIfMatched(envId, requestedTargetVersion));
+      setPromptMemory(clearRuntimeUpdateSkippedVersionIfMatched(envId, requestedTargetVersion));
     }
 
     setOpen(false);
@@ -183,7 +183,7 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
   });
 
   createEffect(() => {
-    const shouldOpen = shouldShowAgentUpdatePrompt({
+    const shouldOpen = shouldShowRuntimeUpdatePrompt({
       accessGateVisible: args.accessGateVisible(),
       isLocalMode: args.isLocalMode(),
       upgradePolicy: args.version.latestMeta()?.upgrade_policy,
@@ -204,7 +204,7 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
     const preferredTargetVersion = String(args.version.preferredTargetVersion() ?? '').trim();
     if (!envId || !preferredTargetVersion) return;
 
-    setPromptMemory(markAgentUpdatePromptShown(envId, preferredTargetVersion));
+    setPromptMemory(markRuntimeUpdatePromptShown(envId, preferredTargetVersion));
     setOpen(true);
   });
 
@@ -245,7 +245,7 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
     const envId = String(args.envId() ?? '').trim();
     if (!envId) return;
 
-    const expectedKey = agentUpdatePromptStorageKey(envId);
+    const expectedKey = runtimeUpdatePromptStorageKey(envId);
     if (!expectedKey) return;
 
     const onStorage = (event: StorageEvent) => {
@@ -272,7 +272,7 @@ export function createAgentUpdatePromptCoordinator(args: CreateAgentUpdatePrompt
     const envId = String(args.envId() ?? '').trim();
     const nextTargetVersion = targetVersion();
     if (envId && nextTargetVersion) {
-      setPromptMemory(markAgentUpdateVersionSkipped(envId, nextTargetVersion));
+      setPromptMemory(markRuntimeUpdateVersionSkipped(envId, nextTargetVersion));
     }
     setOpen(false);
     resetPromptUpgradeState();

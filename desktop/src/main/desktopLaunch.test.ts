@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BOOTSTRAP_TICKET_ENV_NAME,
-  buildDesktopAgentArgs,
-  buildDesktopAgentEnvironment,
-  buildDesktopAgentLaunchPlan,
-  buildDesktopAgentSpawnPlan,
+  buildDesktopRuntimeArgs,
+  buildDesktopRuntimeEnvironment,
+  buildDesktopRuntimeLaunchPlan,
+  buildDesktopRuntimeSpawnPlan,
   ENV_TOKEN_ENV_NAME,
 } from './desktopLaunch';
 import {
@@ -24,7 +24,7 @@ describe('desktopLaunch', () => {
       }),
     });
 
-    expect(buildDesktopAgentArgs(environment)).toEqual([
+    expect(buildDesktopRuntimeArgs(environment)).toEqual([
       'run',
       '--mode',
       'desktop',
@@ -48,7 +48,7 @@ describe('desktopLaunch', () => {
       },
     );
 
-    const plan = buildDesktopAgentSpawnPlan(
+    const plan = buildDesktopRuntimeSpawnPlan(
       '/tmp/startup.json',
       environment,
       { HOME: '/Users/tester' },
@@ -97,7 +97,7 @@ describe('desktopLaunch', () => {
       }),
     });
 
-    const env = buildDesktopAgentEnvironment(environment, {
+    const env = buildDesktopRuntimeEnvironment(environment, {
       HOME: '/Users/tester',
       [ENV_TOKEN_ENV_NAME]: 'old-token',
     }, {
@@ -120,7 +120,7 @@ describe('desktopLaunch', () => {
       }),
     });
 
-    const env = buildDesktopAgentEnvironment(environment, {
+    const env = buildDesktopRuntimeEnvironment(environment, {
       HOME: '/Users/tester',
       [ENV_TOKEN_ENV_NAME]: 'old-token',
       [BOOTSTRAP_TICKET_ENV_NAME]: 'old-ticket',
@@ -138,7 +138,7 @@ describe('desktopLaunch', () => {
       }),
     });
 
-    const plan = buildDesktopAgentLaunchPlan(environment, { HOME: '/Users/tester' });
+    const plan = buildDesktopRuntimeLaunchPlan(environment, { HOME: '/Users/tester' });
     expect(plan.args).toEqual([
       'run',
       '--mode',

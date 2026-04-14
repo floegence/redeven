@@ -184,7 +184,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.REDEVEN_DESKTOP_MAC_NOTARY_API_ISSUER }}
           REDEVEN_DESKTOP_BUNDLE_GOOS: ${{ matrix.goos }}
           REDEVEN_DESKTOP_BUNDLE_GOARCH: ${{ matrix.goarch }}
-          REDEVEN_DESKTOP_AGENT_TARBALL: ${{ github.workspace }}/dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          REDEVEN_DESKTOP_RUNTIME_TARBALL: ${{ github.workspace }}/dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           REDEVEN_DESKTOP_VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail

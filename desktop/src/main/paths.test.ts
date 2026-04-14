@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  bundledAgentExecutableName,
+  bundledRuntimeExecutableName,
   resolveBrowserPreloadPath,
-  resolveBundledAgentPath,
+  resolveBundledRuntimePath,
   resolveSettingsPreloadPath,
   resolveWelcomeRendererPath,
 } from './paths';
 
 describe('paths', () => {
   it('uses the packaged resources directory when the desktop app is bundled', () => {
-    expect(resolveBundledAgentPath({
+    expect(resolveBundledRuntimePath({
       isPackaged: true,
       resourcesPath: '/Applications/Redeven Desktop.app/Contents/Resources',
       appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
@@ -19,7 +19,7 @@ describe('paths', () => {
   });
 
   it('uses the prepared desktop bundle during local development', () => {
-    expect(resolveBundledAgentPath({
+    expect(resolveBundledRuntimePath({
       isPackaged: false,
       resourcesPath: '/tmp/resources',
       appPath: '/repo/desktop',
@@ -30,7 +30,7 @@ describe('paths', () => {
   });
 
   it('falls back to the parent desktop workspace bundle when appPath points to a nested build directory', () => {
-    expect(resolveBundledAgentPath({
+    expect(resolveBundledRuntimePath({
       isPackaged: false,
       resourcesPath: '/tmp/resources',
       appPath: '/repo/desktop/dist',
@@ -41,8 +41,8 @@ describe('paths', () => {
   });
 
   it('uses a platform-specific executable name', () => {
-    expect(bundledAgentExecutableName('linux')).toBe('redeven');
-    expect(bundledAgentExecutableName('win32')).toBe('redeven.exe');
+    expect(bundledRuntimeExecutableName('linux')).toBe('redeven');
+    expect(bundledRuntimeExecutableName('win32')).toBe('redeven.exe');
   });
 
   it('resolves the bundled settings preload script path', () => {

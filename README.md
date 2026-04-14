@@ -244,7 +244,7 @@ Derived control-plane scopes use isolated state per environment:
 
 Desktop-managed launches resolve one of those config paths explicitly before spawn and derive runtime-state plus diagnostics from the same state root, so they do not depend on the current working directory.
 
-The shared Desktop and agent-only catalog also lives under `~/.redeven/catalog/`:
+The shared Desktop and standalone runtime catalog also lives under `~/.redeven/catalog/`:
 
 - `~/.redeven/catalog/environments/*.json`
 - `~/.redeven/catalog/connections/*.json`

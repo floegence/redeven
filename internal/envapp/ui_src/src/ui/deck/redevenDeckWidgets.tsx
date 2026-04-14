@@ -1,7 +1,7 @@
 import type { WidgetDefinition, WidgetProps } from '@floegence/floe-webapp-core';
 import { Activity, Files, Terminal } from '@floegence/floe-webapp-core/icons';
 import { RemoteFileBrowser } from '../widgets/RemoteFileBrowser';
-import { AgentMonitorPanel } from '../widgets/AgentMonitorPanel';
+import { RuntimeMonitorPanel } from '../widgets/RuntimeMonitorPanel';
 import { TerminalPanel } from '../widgets/TerminalPanel';
 
 function FilesWidget(props: WidgetProps) {
@@ -17,7 +17,7 @@ function TerminalWidget(_props: WidgetProps) {
 }
 
 function MonitorWidget(_props: WidgetProps) {
-  return <AgentMonitorPanel variant="deck" />;
+  return <RuntimeMonitorPanel variant="deck" />;
 }
 
 // Deck widget definitions used by Deck layouts.

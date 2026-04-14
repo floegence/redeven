@@ -21,10 +21,10 @@ import { isPermissionDeniedError } from '../utils/permission';
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 
-export type AgentMonitorPanelVariant = 'page' | 'deck';
+export type RuntimeMonitorPanelVariant = 'page' | 'deck';
 
-export interface AgentMonitorPanelProps {
-  variant?: AgentMonitorPanelVariant;
+export interface RuntimeMonitorPanelProps {
+  variant?: RuntimeMonitorPanelVariant;
 }
 
 type chart_sample = {
@@ -104,7 +104,7 @@ function normalizeProcessPid(value: unknown): number | null {
 const PROCESS_CONTEXT_MENU_ACTION_COUNT = 4;
 const PROCESS_CONTEXT_MENU_SEPARATOR_COUNT = 1;
 
-export function AgentMonitorPanel(props: AgentMonitorPanelProps) {
+export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const ctx = useEnvContext();

@@ -30,14 +30,14 @@ function resolveTargetGoarch(arch = process.arch) {
   }
 }
 
-function resolveBundledAgentBinary() {
+function resolveBundledRuntimeBinary() {
   const goos = resolveTargetGoos();
   const goarch = resolveTargetGoarch();
   const executableName = goos === 'windows' ? 'redeven.exe' : 'redeven';
   const candidate = path.join(desktopDir, '.bundle', `${goos}-${goarch}`, executableName);
   if (!fs.existsSync(candidate)) {
     throw new Error(
-      `Bundled agent binary not found at ${candidate}. Run npm run prepare:bundled-agent or npm run package from the desktop workspace before invoking electron-builder directly.`,
+      `Bundled runtime binary not found at ${candidate}. Run npm run prepare:bundled-runtime or npm run package from the desktop workspace before invoking electron-builder directly.`,
     );
   }
   return candidate;
@@ -55,7 +55,7 @@ function loadReleaseArtifactHelpers() {
   }
 }
 
-const bundledAgentBinary = resolveBundledAgentBinary();
+const bundledRuntimeBinary = resolveBundledRuntimeBinary();
 const { normalizeLinuxDesktopArtifactPaths } = loadReleaseArtifactHelpers();
 
 export default {
@@ -85,7 +85,7 @@ export default {
   ],
   extraResources: [
     {
-      from: bundledAgentBinary,
+      from: bundledRuntimeBinary,
       to: 'bin/redeven',
     },
   ],
