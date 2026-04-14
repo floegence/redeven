@@ -2481,7 +2481,7 @@ function EnvironmentCardsPanel(props: Readonly<{
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
-          <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-2xl px-6 py-8 text-center">
+          <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
             <Search class="h-8 w-8 text-muted-foreground/50" />
             <div class="space-y-1">
               <div class="text-sm font-medium text-foreground">No matching environments</div>
@@ -2535,6 +2535,18 @@ function ConsoleStatusBadge(props: Readonly<{
   return (
     <span class="redeven-console-status" data-tone={props.tone}>
       <span class="redeven-console-status__dot" aria-hidden="true" />
+      {props.children}
+    </span>
+  );
+}
+
+function EnvironmentStatusIndicator(props: Readonly<{
+  tone: 'neutral' | 'primary' | 'success' | 'warning';
+  children: JSX.Element;
+}>) {
+  return (
+    <span class="redeven-status-indicator" data-tone={props.tone}>
+      <span class="redeven-status-indicator__dot" aria-hidden="true" />
       {props.children}
     </span>
   );
@@ -2622,29 +2634,32 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
   return (
-    <div class="space-y-0.5">
-      <For each={props.endpoints}>
-        {(endpoint) => (
-          <div
-            class="redeven-card-endpoint-row"
-            onClick={() => {
-              void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
-            }}
-            title={endpoint.copy_label}
-          >
-            <span class="redeven-card-endpoint-label">{endpoint.label}</span>
-            <span class={cn(
-              'redeven-card-endpoint-value',
-              endpoint.monospace && 'font-mono text-[11.5px]',
-            )}>
-              {endpoint.value}
-            </span>
-            <span class="redeven-card-endpoint-copy" aria-hidden="true">
-              <Copy class="h-3 w-3" />
-            </span>
-          </div>
-        )}
-      </For>
+    <div class="redeven-endpoints-section">
+      <div class="redeven-endpoints-title">Endpoints</div>
+      <div class="space-y-0.5">
+        <For each={props.endpoints}>
+          {(endpoint) => (
+            <div
+              class="redeven-card-endpoint-row"
+              onClick={() => {
+                void props.copyEnvironmentValue(endpoint.value, endpoint.copy_label);
+              }}
+              title={endpoint.copy_label}
+            >
+              <span class="redeven-card-endpoint-label">{endpoint.label}</span>
+              <span class={cn(
+                'redeven-card-endpoint-value',
+                endpoint.monospace && 'font-mono text-[11.5px]',
+              )}>
+                {endpoint.value}
+              </span>
+              <span class="redeven-card-endpoint-copy" aria-hidden="true">
+                <Copy class="h-3 w-3" />
+              </span>
+            </div>
+          )}
+        </For>
+      </div>
     </div>
   );
 }
@@ -2739,9 +2754,9 @@ function EnvironmentConnectionCard(props: Readonly<{
               <Tag variant={environmentKindTagVariant(props.environment.kind)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
                 {environmentKindLabel(props.environment.kind)}
               </Tag>
-              <ConsoleStatusBadge tone={card().status_tone}>
+              <EnvironmentStatusIndicator tone={card().status_tone}>
                 {card().status_label}
-              </ConsoleStatusBadge>
+              </EnvironmentStatusIndicator>
             </div>
             <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
               {props.environment.label}
@@ -2891,11 +2906,11 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
       onClick={() => props.openCreateConnectionDialog()}
     >
       <div class="flex h-full flex-col items-center justify-center gap-4 px-4 py-10">
-        <div class="flex h-12 w-12 items-center justify-center rounded-2xl border border-dashed border-border/70 bg-muted/20 text-muted-foreground transition-[border-color,background-color,color,transform] duration-200 group-hover:scale-110 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
+        <div class="flex h-12 w-12 items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/20 text-muted-foreground transition-[border-color,background-color,color,transform] duration-200 group-hover:scale-110 group-hover:border-primary/30 group-hover:bg-primary/10 group-hover:text-primary">
           <Plus class="h-6 w-6" />
         </div>
         <div class="space-y-1 text-center">
-          <div class="text-sm font-medium text-foreground">New Environment</div>
+          <div class="text-sm font-semibold text-foreground">New Environment</div>
           <div class="text-xs text-muted-foreground">Create a Local Environment, add a Redeven URL, or connect over SSH</div>
         </div>
         <div class="flex gap-2">
@@ -3017,112 +3032,117 @@ function ControlPlaneShelf(props: Readonly<{
 
   return (
     <section class="space-y-2.5">
-      <div class="redeven-provider-shelf rounded-[1.1rem] border border-border px-4 py-3 shadow-sm">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div class="flex min-w-0 items-center gap-3">
-            <ConsoleIconTile label="C" />
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-2">
-                <div class="truncate text-sm font-semibold tracking-tight text-foreground">{controlPlaneName(props.controlPlane)}</div>
-                <ConsoleStatusBadge tone={statusModel().tone}>
-                  {statusModel().label}
-                </ConsoleStatusBadge>
-                <ConsoleBadge>{props.controlPlane.provider.display_name}</ConsoleBadge>
-                <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
-                <Show when={stats().local_host_count > 0}>
-                  <ConsoleBadge>{stats().local_host_count} local hosts</ConsoleBadge>
-                </Show>
+      <div class="redeven-provider-shelf rounded-[0.625rem] border border-border">
+        <div class="px-4 py-3">
+          <div class="flex" style="flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:0.75rem">
+            <div class="flex min-w-0 items-center gap-3">
+              <ConsoleIconTile label="C" />
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <div class="truncate text-sm font-semibold tracking-tight text-foreground">{controlPlaneName(props.controlPlane)}</div>
+                  <ConsoleStatusBadge tone={statusModel().tone}>
+                    {statusModel().label}
+                  </ConsoleStatusBadge>
+                  <ConsoleBadge>{props.controlPlane.provider.display_name}</ConsoleBadge>
+                  <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
+                  <Show when={stats().local_host_count > 0}>
+                    <ConsoleBadge>{stats().local_host_count} local hosts</ConsoleBadge>
+                  </Show>
+                </div>
+                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  <span>{props.controlPlane.account.user_display_name}</span>
+                  <span class="font-mono text-[11px]">{props.controlPlane.provider.provider_origin}</span>
+                  <span>Synced {formatRelativeTimestamp(props.controlPlane.last_synced_at_ms)}</span>
+                </div>
               </div>
-              <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span>{props.controlPlane.account.user_display_name}</span>
-                <span class="font-mono text-[11px]">{props.controlPlane.provider.provider_origin}</span>
-                <span>Synced {formatRelativeTimestamp(props.controlPlane.last_synced_at_ms)}</span>
+            </div>
+          </div>
+          <Show when={statusModel().detail}>
+            <div class="redeven-status-detail mt-3">
+              {statusModel().detail}
+            </div>
+          </Show>
+          <div class="mt-3 grid gap-2 sm:grid-cols-3">
+            <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Published
+              </div>
+              <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                {props.controlPlane.environments.length}
               </div>
               <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                {statusModel().detail}
+                Environments currently visible from this provider account.
+              </div>
+            </div>
+            <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Unified Catalog
+              </div>
+              <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                {stats().catalog_count}
+              </div>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                Provider-backed entries already materialized into the Environment list.
+              </div>
+            </div>
+            <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Local Hosts
+              </div>
+              <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
+                {stats().local_host_count}
+              </div>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                {stats().open_count > 0
+                  ? `${stats().open_count} environment windows currently open from this provider.`
+                  : freshestEnvironment()
+                    ? `Latest provider signal: ${desktopProviderEnvironmentRuntimeLabel(
+                      freshestEnvironment()!.status,
+                      freshestEnvironment()!.lifecycle_status,
+                    )}.`
+                    : 'No published environments yet. Connect later to refresh the catalog.'}
               </div>
             </div>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() => props.viewControlPlaneEnvironments(props.controlPlane)}
-            >
-              View Environments
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={props.busyAction === 'start_control_plane_connect'}
-              onClick={() => {
-                void props.reconnectControlPlane(props.controlPlane);
-              }}
-            >
-              Reconnect
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={props.busyAction === 'refresh_control_plane'}
-              disabled={props.controlPlane.sync_state === 'syncing'}
-              onClick={() => {
-                void props.refreshControlPlane(props.controlPlane);
-              }}
-            >
-              Refresh
-            </Button>
-            <ConsoleActionIconButton
-              title="Delete Control Plane"
-              danger
-              onClick={() => props.deleteControlPlane(props.controlPlane)}
-              aria-label={`Delete ${controlPlaneName(props.controlPlane)}`}
-            >
-              <Trash class="h-4 w-4" />
-            </ConsoleActionIconButton>
-          </div>
         </div>
-        <div class="mt-3 grid gap-2 sm:grid-cols-3">
-          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-3">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Published
-            </div>
-            <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
-              {props.controlPlane.environments.length}
-            </div>
-            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-              Environments currently visible from this provider account.
-            </div>
-          </div>
-          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-3">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Unified Catalog
-            </div>
-            <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
-              {stats().catalog_count}
-            </div>
-            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-              Provider-backed entries already materialized into the Environment list.
-            </div>
-          </div>
-          <div class="rounded-lg border border-border/70 bg-muted/15 px-3 py-3">
-            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Local Hosts
-            </div>
-            <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
-              {stats().local_host_count}
-            </div>
-            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-              {stats().open_count > 0
-                ? `${stats().open_count} environment windows currently open from this provider.`
-                : freshestEnvironment()
-                  ? `Latest provider signal: ${desktopProviderEnvironmentRuntimeLabel(
-                    freshestEnvironment()!.status,
-                    freshestEnvironment()!.lifecycle_status,
-                  )}.`
-                  : 'No published environments yet. Connect later to refresh the catalog.'}
-            </div>
-          </div>
+        <div class="redeven-provider-shelf__actions">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => props.viewControlPlaneEnvironments(props.controlPlane)}
+          >
+            View Environments
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={props.busyAction === 'start_control_plane_connect'}
+            onClick={() => {
+              void props.reconnectControlPlane(props.controlPlane);
+            }}
+          >
+            Reconnect
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            loading={props.busyAction === 'refresh_control_plane'}
+            disabled={props.controlPlane.sync_state === 'syncing'}
+            onClick={() => {
+              void props.refreshControlPlane(props.controlPlane);
+            }}
+          >
+            Refresh
+          </Button>
+          <div class="flex-1" />
+          <ConsoleActionIconButton
+            title="Delete Control Plane"
+            danger
+            onClick={() => props.deleteControlPlane(props.controlPlane)}
+            aria-label={`Delete ${controlPlaneName(props.controlPlane)}`}
+          >
+            <Trash class="h-4 w-4" />
+          </ConsoleActionIconButton>
         </div>
       </div>
     </section>
