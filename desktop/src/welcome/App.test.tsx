@@ -273,7 +273,7 @@ describe('DesktopWelcomeShell', () => {
   it('uses a compact auto-fill environment grid so cards keep a stable desktop size', () => {
     const styles = readWelcomeStyles();
 
-    expect(styles).toContain('--redeven-environment-grid-min-column-size: 15rem;');
+    expect(styles).toContain('--redeven-environment-grid-min-column-size: 17rem;');
     expect(styles).toMatch(
       /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--redeven-environment-grid-min-column-size\)\),\s*1fr\)\);/,
     );
@@ -328,12 +328,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Pinned');
     expect(appSrc).toContain('copyEnvironmentValue');
     expect(appSrc).toContain('<Pin class=');
-    expect(styles).toContain('.redeven-environment-card__facts');
-    expect(styles).toContain('.redeven-environment-card__fact-row');
-    expect(styles).toContain('.redeven-environment-card__endpoints');
-    expect(styles).toContain('.redeven-environment-card__endpoint-row');
-    expect(styles).toContain('.redeven-environment-card__endpoint-label');
-    expect(styles).toContain('.redeven-environment-card__endpoint-copy');
+    expect(styles).toContain('.redeven-card-fact-row');
+    expect(styles).toContain('.redeven-card-fact-label');
+    expect(styles).toContain('.redeven-card-endpoint-row');
+    expect(styles).toContain('.redeven-card-endpoint-label');
+    expect(styles).toContain('.redeven-card-endpoint-value');
+    expect(styles).toContain('.redeven-card-endpoint-copy');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {
