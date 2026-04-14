@@ -5,6 +5,7 @@ import {
   buildExternalLocalUIDesktopTarget,
   buildSSHDesktopTarget,
 } from '../main/desktopTarget';
+import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
 import {
   testDesktopPreferences,
   testManagedControlPlaneEnvironment,
@@ -12,11 +13,11 @@ import {
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
 import {
-  buildControlPlaneEnvironmentFactsModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardEndpointsModel,
   buildEnvironmentCardFactsModel,
   buildProviderBackedEnvironmentActionModel,
+  filterEnvironmentLibrary,
   splitPinnedEnvironmentEntries,
 } from './viewModel';
 
@@ -407,16 +408,48 @@ describe('buildEnvironmentCardModel', () => {
 
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [remoteOnly, dualRoute],
+        managed_environments: [
+          remoteOnly,
+          dualRoute,
+          testManagedLocalEnvironment('default'),
+          testManagedControlPlaneEnvironment('https://cp.other.invalid', 'env_other', { localHosting: false }),
+        ],
         control_planes: [{
           provider,
           account,
           display_label: 'Demo Portal',
           environments,
           last_synced_at_ms: freshSyncAt,
+        }, {
+          provider: {
+            ...provider,
+            provider_origin: 'https://cp.other.invalid',
+          },
+          account: {
+            ...account,
+            provider_origin: 'https://cp.other.invalid',
+          },
+          display_label: 'Other Portal',
+          environments: [],
+          last_synced_at_ms: freshSyncAt,
         }],
       }),
-      controlPlanes: [controlPlaneSummary],
+      controlPlanes: [
+        controlPlaneSummary,
+        {
+          ...controlPlaneSummary,
+          provider: {
+            ...controlPlaneSummary.provider,
+            provider_origin: 'https://cp.other.invalid',
+          },
+          account: {
+            ...controlPlaneSummary.account,
+            provider_origin: 'https://cp.other.invalid',
+          },
+          display_label: 'Other Portal',
+          environments: [],
+        },
+      ],
     });
 
     const remoteOnlyEntry = snapshot.environments.find((environment) => environment.id === remoteOnly.id);
@@ -462,10 +495,14 @@ describe('buildEnvironmentCardModel', () => {
       { label: 'ACCESS', value: 'Local + Remote' },
       { label: 'CONTROL PLANE', value: 'Demo Portal' },
     ]);
-    expect(buildControlPlaneEnvironmentFactsModel(controlPlaneSummary, dualRouteEntry!)).toEqual([
-      { label: 'RUNS ON', value: 'This device' },
-      { label: 'ACCESS', value: 'Local + Remote' },
-      { label: 'CONTROL PLANE', value: 'Demo Portal' },
+    expect(filterEnvironmentLibrary(
+      snapshot,
+      'all',
+      '',
+      desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
+    ).map((environment) => environment.id)).toEqual([
+      remoteOnly.id,
+      dualRoute.id,
     ]);
   });
 

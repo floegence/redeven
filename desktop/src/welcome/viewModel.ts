@@ -4,9 +4,8 @@ import type {
   DesktopManagedEnvironmentRoute,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
-import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
-  desktopProviderRemoteRouteState,
   type DesktopControlPlaneSyncState,
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
@@ -85,6 +84,10 @@ export type ControlPlaneStatusModel = Readonly<{
 
 export function capabilityUnavailableMessage(label: string): string {
   return `Connect to an Environment first to open ${label}.`;
+}
+
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
 }
 
 export function surfaceTitle(surface: DesktopLauncherSurface): string {
@@ -256,24 +259,6 @@ export function buildEnvironmentCardFactsModel(
     { label: 'ACCESS', value: 'Redeven URL' },
     { label: 'CONNECTION', value: environmentConnectionStateLabel(environment) },
   ].filter((fact) => fact.value !== '');
-}
-
-export function buildControlPlaneEnvironmentFactsModel(
-  controlPlane: DesktopControlPlaneSummary,
-  managedEntry: DesktopEnvironmentEntry | null,
-): readonly EnvironmentCardFactModel[] {
-  if (managedEntry?.managed_has_local_hosting) {
-    return [
-      { label: 'RUNS ON', value: 'This device' },
-      { label: 'ACCESS', value: managedEntry.managed_has_remote_desktop ? 'Local + Remote' : 'Local' },
-      { label: 'CONTROL PLANE', value: controlPlane.display_label },
-    ];
-  }
-  return [
-    { label: 'RUNS ON', value: 'Control Plane' },
-    { label: 'ACCESS', value: 'Remote' },
-    { label: 'CONTROL PLANE', value: controlPlane.display_label },
-  ];
 }
 
 export function buildEnvironmentCardEndpointsModel(
@@ -554,56 +539,6 @@ export function buildProviderBackedEnvironmentActionModel(
   };
 }
 
-export function buildControlPlaneEnvironmentActionModel(
-  controlPlane: DesktopControlPlaneSummary,
-  environment: DesktopControlPlaneSummary['environments'][number],
-  managedEntry: DesktopEnvironmentEntry | null,
-  openWindow: { session_key: string } | null,
-): ProviderBackedEnvironmentActionModel {
-  const syntheticEntry: DesktopEnvironmentEntry = managedEntry ?? {
-    id: `${controlPlane.provider.provider_origin}|${controlPlane.provider.provider_id}|${environment.env_public_id}`,
-    kind: 'managed_environment',
-    label: environment.label,
-    local_ui_url: '',
-    secondary_text: `${controlPlane.provider.provider_origin} · ${environment.env_public_id}`,
-    managed_environment_kind: 'controlplane',
-    managed_has_local_hosting: false,
-    managed_has_remote_desktop: true,
-    managed_preferred_open_route: 'auto',
-    default_open_route: 'remote_desktop',
-    open_remote_session_key: openWindow?.session_key,
-    open_action_label: openWindow ? 'Focus' : 'Open',
-    provider_origin: controlPlane.provider.provider_origin,
-    provider_id: controlPlane.provider.provider_id,
-    env_public_id: environment.env_public_id,
-    provider_status: environment.status,
-    provider_lifecycle_status: environment.lifecycle_status,
-    provider_last_seen_at_unix_ms: environment.last_seen_at_unix_ms,
-    control_plane_sync_state: controlPlane.sync_state,
-    local_route_state: 'unavailable',
-    remote_route_state: desktopProviderRemoteRouteState({
-      syncState: controlPlane.sync_state,
-      environmentPresent: true,
-      providerStatus: environment.status,
-      providerLifecycleStatus: environment.lifecycle_status,
-      lastSyncedAtMS: controlPlane.last_synced_at_ms,
-    }),
-    remote_catalog_freshness: controlPlane.catalog_freshness,
-    remote_state_reason: '',
-    pinned: false,
-    control_plane_label: controlPlane.display_label,
-    tag: openWindow ? 'Open' : 'Managed',
-    category: 'managed',
-    is_open: Boolean(openWindow),
-    open_session_key: openWindow?.session_key ?? '',
-    can_edit: false,
-    can_delete: false,
-    can_save: false,
-    last_used_at_ms: 0,
-  };
-  return buildProviderBackedEnvironmentActionModel(syntheticEntry, controlPlane.sync_state);
-}
-
 export function buildControlPlaneStatusModel(
   controlPlane: DesktopControlPlaneSummary,
 ): ControlPlaneStatusModel {
@@ -826,20 +761,48 @@ export function environmentMatchesLibrarySearch(
   ].some((value) => value.toLowerCase().includes(clean));
 }
 
+export function environmentProviderFilterValue(environment: DesktopEnvironmentEntry): string {
+  const providerOrigin = compact(environment.provider_origin);
+  const providerID = compact(environment.provider_id);
+  if (providerOrigin === '' || providerID === '') {
+    return '';
+  }
+  try {
+    return desktopControlPlaneKey(providerOrigin, providerID);
+  } catch {
+    return '';
+  }
+}
+
+export function environmentMatchesProviderFilter(
+  environment: DesktopEnvironmentEntry,
+  providerFilter: string,
+): boolean {
+  const activeFilter = compact(providerFilter);
+  if (activeFilter === '') {
+    return true;
+  }
+  return environmentProviderFilterValue(environment) === activeFilter;
+}
+
 export function filterEnvironmentLibrary(
   snapshot: DesktopWelcomeSnapshot,
   filter: EnvironmentLibraryFilter,
   query = '',
+  providerFilter = '',
 ): readonly DesktopEnvironmentEntry[] {
   return snapshot.environments.filter((environment) => (
     environmentMatchesLibraryFilter(environment, filter)
     && environmentMatchesLibrarySearch(environment, query)
+    && environmentMatchesProviderFilter(environment, providerFilter)
   ));
 }
 
 export function environmentLibraryCount(
   snapshot: DesktopWelcomeSnapshot,
   filter: EnvironmentLibraryFilter,
+  query = '',
+  providerFilter = '',
 ): number {
-  return filterEnvironmentLibrary(snapshot, filter).length;
+  return filterEnvironmentLibrary(snapshot, filter, query, providerFilter).length;
 }

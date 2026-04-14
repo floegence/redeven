@@ -423,6 +423,7 @@ function buildManagedEnvironmentEntry(
         ? `${access.local_ui_bind} · ${providerOrigin} · ${envPublicID}`
         : `${providerOrigin} · ${envPublicID}`,
     managed_environment_kind: kind,
+    managed_local_scope_kind: environment.local_hosting?.scope.kind,
     managed_environment_name: managedEnvironmentLocalName(environment),
     managed_local_ui_bind: access.local_ui_bind,
     managed_local_ui_password_configured: access.local_ui_password_configured,

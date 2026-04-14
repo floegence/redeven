@@ -165,12 +165,12 @@ Visual hierarchy:
   - shell-wide open-window and card counts
   - add / close actions
 - `Environments` tab:
-  - desktop-managed environment cards for every saved local and Control Plane environment
-  - compact search + `All / Open / Recent / Saved` toolbar
+  - desktop-managed environment cards for every local, provider-backed, and dual-route managed environment
+  - compact search + provider filter + `All / Open / Recent / Saved` toolbar
   - the same shared grid also includes saved Redeven URL and SSH entries
 - `Control Planes` tab:
-  - provider action shelves
-  - provider environment card grids
+  - provider action shelves only
+  - provider counts, sync state, and provider-to-environment shortcuts
 - activity bar:
   - one item: `Connect Environment`
 
@@ -190,6 +190,8 @@ Interaction rules:
   - `Environment Name`
   - `Local UI Bind`
   - `Local UI Password`
+- Local mode does not ask the user to manually choose a Control Plane binding.
+- If a locally hosted runtime is also known to a connected provider, Desktop merges the local and provider routes into the same managed environment automatically through the shared catalog.
 - Creating a local environment can either:
   - save the managed environment card without opening it yet
   - connect immediately and start or attach to that managed scope
@@ -211,8 +213,9 @@ Interaction rules:
 - The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
 - `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
-- Local managed environments and managed Control Plane environments both render in the `Environments` tab, because both own a real scope on this machine.
-- Control Plane provider management still lives in the `Control Planes` tab, but opening one provider environment also materializes it in the shared managed-environment catalog.
+- Local managed environments, remote-only provider environments, and dual-route environments all render in the `Environments` tab.
+- Connecting or refreshing a Control Plane materializes every accessible provider environment into the shared managed-environment catalog immediately.
+- `Control Planes` stays provider-management-only. Each shelf offers `View Environments`, `Reconnect`, `Refresh`, and `Delete`.
 - Environment Library cards use one fixed-height layout:
   - header with label, relative timestamp, pin/unpin icon, and status badge
   - compact facts rows such as `RUNS ON`, `ACCESS`, and `CONTROL PLANE`
@@ -223,7 +226,7 @@ Interaction rules:
   - unpinned cards remain in the regular `Environments` section
   - pinning an open unsaved Redeven URL or SSH target implicitly promotes it into the saved Environment Library
 - Managed environment cards show the label, status, and the next bind or provider/environment identity that will be reused on the next open.
-- Managed environment cards and Control Plane environment cards normalize provider runtime into the same user-facing state model:
+- Managed environment cards normalize provider runtime into one user-facing state model:
   - `Open`
   - `Ready`
   - `Local Ready`
@@ -257,8 +260,8 @@ Interaction rules:
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
 - Saved SSH Environments render in that same card grid, with the SSH identity (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
-- Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and per-environment open/focus cards.
-- Control Plane shelves show the Desktop display label as the primary title while still surfacing the provider product name and origin in the secondary details.
+- Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested per-environment card grid.
+- Control Plane shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
 - Expected launcher failures no longer rely on raw IPC exception text:
@@ -348,6 +351,8 @@ Semantics:
 - Open Environment windows are runtime-only desktop session state.
 - `managed_environments` stores desktop-managed local and Control Plane environments with:
   - stable environment identity
+  - optional local-hosting route
+  - optional provider-binding route
   - user-visible label
   - per-environment Local UI bind/password configuration
   - pin and timestamp metadata
@@ -357,6 +362,11 @@ Semantics:
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
 - `control_planes` stores normalized provider discovery data, the desktop-owned display label, the desktop account snapshot, the cached environment list, and the last sync time.
+- Provider refresh reconciles `control_planes[*].environments` back into `managed_environments`:
+  - provider-backed environments are materialized as remote-only entries when no local route exists yet
+  - existing dual-route entries preserve their local-hosting metadata, pins, and preferred route
+  - remote-only entries are removed when the provider catalog no longer exposes them
+  - dual-route entries stay visible even when the provider route disappears, but their remote route degrades to `removed`
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 - Legacy single-local-environment settings migrate into the managed local environment with identity `local:default`.
 
@@ -373,7 +383,7 @@ Desktop semantics:
 - `Local only` and `Shared on your local network` share the same fixed default port baseline.
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
 - Multiple local environments may coexist on one device. Their runtime ownership stays separate because each one resolves to a different `local/<name>` scope directory.
-- A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the runtime still decides whether remote control is enabled for the same environment.
+- A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the provider-backed route is reconciled from provider sync plus shared runtime catalog identity instead of a manual dialog binding.
 - If Desktop attaches to a runtime that was started by agent-only or CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
 - Agent-only and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
 
@@ -420,15 +430,16 @@ The Control Plane flow is:
 3. The browser session mints a one-time `handoff_ticket` and deep-links back to Desktop.
 4. Desktop exchanges the `connect` handoff for a short-lived in-memory access token plus a long-lived revocable refresh token.
 5. Desktop loads `me` and `environments` with the access token.
-6. Desktop refreshes access tokens on demand with the stored refresh token.
-7. Desktop requests a unified per-environment open session only when it opens a specific environment.
-8. Desktop resolves the actual open route from the saved environment record:
+6. Desktop reconciles those provider environments into the shared managed-environment catalog as remote-only or dual-route entries.
+7. Desktop refreshes access tokens on demand with the stored refresh token.
+8. Desktop requests a unified per-environment open session only when it opens a specific environment.
+9. Desktop resolves the actual open route from the saved environment record:
    - explicit or default `preferred_open_route`
    - whether that environment is declared as locally hosted on this device
    - whether the provider returned `bootstrap_ticket`, `remote_session_url`, or both
-9. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.
-10. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
-11. Desktop never silently local-starts a Control Plane environment that is not declared as hosted on this device.
+10. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.
+11. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
+12. Desktop never silently local-starts a Control Plane environment that is not declared as hosted on this device.
 
 Browser handoff may also open Desktop through a custom protocol link:
 

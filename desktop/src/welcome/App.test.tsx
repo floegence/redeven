@@ -7,9 +7,11 @@ import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   buildExternalLocalUIDesktopTarget,
 } from '../main/desktopTarget';
+import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
 import {
   testDesktopPreferences,
   testManagedAccess,
+  testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
   testManagedSession,
 } from '../testSupport/desktopTestHelpers';
@@ -207,6 +209,36 @@ describe('DesktopWelcomeShell', () => {
     ]);
   });
 
+  it('can narrow the Environment Library to one provider-backed catalog', () => {
+    const providerBacked = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      localHosting: false,
+    });
+    const otherProvider = testManagedControlPlaneEnvironment('https://cp.other.invalid', 'env_other', {
+      localHosting: false,
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [
+          testManagedLocalEnvironment(),
+          providerBacked,
+          otherProvider,
+        ],
+      }),
+    });
+
+    expect(filterEnvironmentLibrary(
+      snapshot,
+      'all',
+      '',
+      desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
+    )).toEqual([
+      expect.objectContaining({
+        id: providerBacked.id,
+        env_public_id: 'env_demo',
+      }),
+    ]);
+  });
+
   it('uses Environment guidance copy when a capability is unavailable before connection', () => {
     expect(capabilityUnavailableMessage('Deck')).toBe('Connect to an Environment first to open Deck.');
   });
@@ -288,7 +320,7 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('buildEnvironmentCardFactsModel');
-    expect(appSrc).toContain('buildControlPlaneEnvironmentFactsModel');
+    expect(appSrc).not.toContain('buildControlPlaneEnvironmentFactsModel');
     expect(appSrc).toContain('buildEnvironmentCardEndpointsModel');
     expect(appSrc).toContain('splitPinnedEnvironmentEntries');
     expect(appSrc).toContain('function EnvironmentCardFactsBlock');
@@ -309,12 +341,15 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('Control Planes');
     expect(appSrc).toContain('Add Control Plane');
+    expect(appSrc).toContain('View Environments');
+    expect(appSrc).toContain('All Providers');
     expect(appSrc).toContain('control-plane-label');
     expect(appSrc).toContain('suggestControlPlaneDisplayLabel');
     expect(appSrc).toContain('Continue in Browser');
     expect(appSrc).toContain('revocable desktop authorization');
     expect(appSrc).toContain('Reconnect');
     expect(appSrc).toContain('Connect Provider');
+    expect(appSrc).not.toContain('Remote access through Control Plane');
   });
 
   it('routes environment-level launcher failures into card notices instead of only the top error banner', () => {
