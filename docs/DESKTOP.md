@@ -28,12 +28,17 @@ This document describes the public Electron desktop shell that ships with each `
 - Desktop-managed environments are the entries that own a real Redeven scope directory on this machine:
   - local environments map to `~/.redeven/scopes/local/<name>`
   - Control Plane environments map to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>`
+- Control Plane identity stays split on purpose:
+  - `provider_key` is the local scope/storage key derived from the provider origin and is only used in local paths plus scope metadata
+  - `provider_id` is the canonical discovery identity from `/.well-known/redeven-provider.json` and is used for provider protocol payloads, provider catalogs, and managed-environment provider bindings
 - Desktop and standalone runtime / CLI mode also share one canonical environment catalog under:
   - `~/.redeven/catalog/environments/*.json`
   - `~/.redeven/catalog/connections/*.json`
   - `~/.redeven/catalog/providers/*.json`
+- In the shared catalog, `identity.provider_id` and `provider_binding.provider_id` always mean the canonical discovery `provider_id`; they must not be rewritten to the local `provider_key`.
 - Saved Redeven URL and SSH entries are connection records only. They do not own an additional Desktop-private runtime state directory.
 - Desktop and standalone runtime / CLI mode resolve the same scope directories. Desktop does not invent a second local-environment state root.
+- The provider / control-plane model remains environment-first. Whether an environment is locally hosted on this machine is a local runtime/Desktop fact, not a provider-side device resource.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:

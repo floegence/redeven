@@ -28,8 +28,9 @@ func TestWriteEnvironmentCatalogRecordWritesNamedProviderHostedEnvironment(t *te
 	}
 
 	cfg := &Config{
-		ControlplaneBaseURL: "https://dev.redeven.test",
-		EnvironmentID:       "env_demo",
+		ControlplaneBaseURL:    "https://dev.redeven.test",
+		ControlplaneProviderID: "redeven_portal",
+		EnvironmentID:          "env_demo",
 	}
 	if err := WriteEnvironmentCatalogRecord(layout, cfg, "localhost:23998", true); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
@@ -64,11 +65,36 @@ func TestWriteEnvironmentCatalogRecordWritesNamedProviderHostedEnvironment(t *te
 	if record.ProviderBinding == nil {
 		t.Fatalf("ProviderBinding = nil")
 	}
-	if record.ProviderBinding.ProviderID != "https__dev.redeven.test" {
+	if record.ProviderBinding.ProviderID != "redeven_portal" {
 		t.Fatalf("ProviderBinding.ProviderID = %q", record.ProviderBinding.ProviderID)
 	}
 	if record.ProviderBinding.EnvPublicID != "env_demo" {
 		t.Fatalf("ProviderBinding.EnvPublicID = %q", record.ProviderBinding.EnvPublicID)
+	}
+}
+
+func TestWriteEnvironmentCatalogRecordFallsBackToProviderKeyWhenCanonicalProviderIDIsUnavailable(t *testing.T) {
+	stateRoot := t.TempDir()
+	layout, err := NamedStateLayout("dev-a", stateRoot)
+	if err != nil {
+		t.Fatalf("NamedStateLayout() error = %v", err)
+	}
+
+	cfg := &Config{
+		ControlplaneBaseURL: "https://dev.redeven.test",
+		EnvironmentID:       "env_demo",
+	}
+	if err := WriteEnvironmentCatalogRecord(layout, cfg, "localhost:23998", true); err != nil {
+		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
+	}
+
+	recordPath := filepath.Join(stateRoot, "catalog", "environments", sanitizeStateScopeID("named:dev-a")+".json")
+	record := readCatalogEnvironmentFile(t, recordPath)
+	if record.ProviderBinding == nil {
+		t.Fatalf("ProviderBinding = nil")
+	}
+	if record.ProviderBinding.ProviderID != "https__dev.redeven.test" {
+		t.Fatalf("ProviderBinding.ProviderID = %q", record.ProviderBinding.ProviderID)
 	}
 }
 

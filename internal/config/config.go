@@ -15,10 +15,11 @@ import (
 //
 // NOTE: This file contains secrets (PSK). Always keep it chmod 0600.
 type Config struct {
-	ControlplaneBaseURL string                      `json:"controlplane_base_url"`
-	EnvironmentID       string                      `json:"environment_id"`
-	AgentInstanceID     string                      `json:"agent_instance_id"`
-	Direct              *directv1.DirectConnectInfo `json:"direct"`
+	ControlplaneBaseURL    string                      `json:"controlplane_base_url"`
+	ControlplaneProviderID string                      `json:"controlplane_provider_id,omitempty"`
+	EnvironmentID          string                      `json:"environment_id"`
+	AgentInstanceID        string                      `json:"agent_instance_id"`
+	Direct                 *directv1.DirectConnectInfo `json:"direct"`
 
 	// AI config controls optional native AI assistant features.
 	AI *AIConfig `json:"ai,omitempty"`
