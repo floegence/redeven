@@ -353,7 +353,7 @@ describe('desktopPreferences', () => {
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
           id: 'local:default',
-          label: 'Local Environment',
+          label: 'Local Default Environment',
           identity: { kind: 'provisional_local', local_name: 'default' },
           local_hosting: expect.objectContaining({
             scope: { kind: 'local', name: 'default' },
@@ -384,7 +384,7 @@ describe('desktopPreferences', () => {
       expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
           id: 'local:default',
-          label: 'Local Environment',
+          label: 'Local Default Environment',
           identity: { kind: 'provisional_local', local_name: 'default' },
           local_hosting: expect.objectContaining({
             scope: { kind: 'local', name: 'default' },

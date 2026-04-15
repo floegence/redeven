@@ -123,7 +123,7 @@ describe('desktopWelcomeState', () => {
         session_key: 'env:local%3Adefault:local_host',
         target_kind: 'managed_environment',
         environment_id: 'local:default',
-        label: 'Local Environment',
+        label: 'Local Default Environment',
         local_ui_url: 'http://localhost:23998/',
       }),
       expect.objectContaining({
@@ -137,7 +137,7 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: 'local:default',
         kind: 'managed_environment',
-        label: 'Local Environment',
+        label: 'Local Default Environment',
         pinned: false,
         tag: 'Open',
         category: 'managed',
@@ -192,7 +192,7 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
-    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
   });
 
   it('keeps the default local environment protected while leaving other local environments deletable', () => {
@@ -334,8 +334,8 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.surface).toBe('managed_environment_settings');
     expect(snapshot.close_action_label).toBe('Quit');
-    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
-    expect(snapshot.settings_surface.save_label).toBe('Save Local Environment Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
+    expect(snapshot.settings_surface.save_label).toBe('Save Local Default Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('local_only');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({

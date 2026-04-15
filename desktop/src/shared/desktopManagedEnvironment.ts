@@ -163,7 +163,7 @@ export function defaultDesktopManagedEnvironmentAccess(): DesktopManagedEnvironm
 export function defaultLocalManagedEnvironmentLabel(name: string): string {
   const normalizedName = normalizeDesktopLocalEnvironmentName(name);
   if (normalizedName === DEFAULT_LOCAL_ENVIRONMENT_NAME) {
-    return 'Local Environment';
+    return 'Local Default Environment';
   }
   return titleizeSegments(normalizedName, 'Local Environment');
 }
