@@ -1283,6 +1283,16 @@ function localHostingForManagedEnvironment(
   stateRootOverride?: string,
 ): ReturnType<typeof createManagedEnvironmentLocalHosting> {
   if (providerBinding) {
+    const existingStateDir = (
+      existing?.local_hosting?.scope.kind === 'controlplane'
+      && existing.local_hosting.scope.provider_origin === providerBinding.provider_origin
+      && existing.local_hosting.scope.env_public_id === providerBinding.env_public_id
+    )
+      ? existing.local_hosting.state_dir
+      : resolveManagedEnvironmentStateDir({
+        providerOrigin: providerBinding.provider_origin,
+        envPublicID: providerBinding.env_public_id,
+      }, stateRootOverride);
     return createManagedEnvironmentLocalHosting(
       {
         kind: 'controlplane',
@@ -1293,21 +1303,24 @@ function localHostingForManagedEnvironment(
       {
         access,
         owner: existing?.local_hosting?.owner ?? 'desktop',
-        stateDir: resolveManagedEnvironmentStateDir({
-          providerOrigin: providerBinding.provider_origin,
-          envPublicID: providerBinding.env_public_id,
-        }, stateRootOverride),
+        stateDir: existingStateDir,
       },
     );
   }
 
   const name = normalizeDesktopLocalEnvironmentName(input.name);
+  const existingStateDir = (
+    existing?.local_hosting?.scope.kind === 'local'
+    && existing.local_hosting.scope.name === name
+  )
+    ? existing.local_hosting.state_dir
+    : resolveManagedEnvironmentStateDir({ name }, stateRootOverride);
   return createManagedEnvironmentLocalHosting(
     { kind: 'local', name },
     {
       access,
       owner: existing?.local_hosting?.owner ?? 'desktop',
-      stateDir: resolveManagedEnvironmentStateDir({ name }, stateRootOverride),
+      stateDir: existingStateDir,
     },
   );
 }

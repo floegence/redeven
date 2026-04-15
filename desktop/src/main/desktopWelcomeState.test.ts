@@ -144,7 +144,7 @@ describe('desktopWelcomeState', () => {
         is_open: true,
         open_action_label: 'Focus',
         can_edit: true,
-        can_delete: true,
+        can_delete: false,
         can_save: false,
         managed_environment_kind: 'local',
         managed_environment_name: 'default',
@@ -193,6 +193,28 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
     expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
+  });
+
+  it('keeps the default local environment protected while leaving other local environments deletable', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [
+          testManagedLocalEnvironment('default'),
+          testManagedLocalEnvironment('lab', { label: 'Lab' }),
+        ],
+      }),
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'local:default',
+        can_delete: false,
+      }),
+      expect.objectContaining({
+        id: 'local:lab',
+        can_delete: true,
+      }),
+    ]));
   });
 
   it('adds transient open remote environments when they are not yet saved', () => {

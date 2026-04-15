@@ -885,6 +885,36 @@ describe('desktopPreferences', () => {
     expect(next.managed_environments.some((environment) => environment.id === existingLocal.id)).toBe(false);
   });
 
+  it('keeps the existing local scope when editing a local-only environment label', () => {
+    const existing = testManagedLocalEnvironment('lab', {
+      label: 'Lab',
+      stateDir: '/tmp/redeven-lab',
+    });
+
+    const next = upsertManagedEnvironment(testDesktopPreferences({
+      managed_environments: [existing],
+    }), {
+      environment_id: existing.id,
+      name: 'lab',
+      label: 'Renamed Lab',
+      access: managedEnvironmentLocalAccess(existing),
+    });
+
+    expect(next.managed_environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: existing.id,
+        label: 'Renamed Lab',
+        local_hosting: expect.objectContaining({
+          scope: expect.objectContaining({
+            kind: 'local',
+            name: 'lab',
+          }),
+          state_dir: '/tmp/redeven-lab',
+        }),
+      }),
+    ]));
+  });
+
   it('deletes a local-only managed environment and returns its local state directory', () => {
     const removable = testManagedLocalEnvironment('lab');
 

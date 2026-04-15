@@ -412,6 +412,8 @@ describe('DesktopWelcomeShell', () => {
   it('includes SSH connection mode copy inside the connection dialog source', () => {
     const appSrc = readWelcomeSource();
 
+    expect(appSrc).toContain('Name</label>');
+    expect(appSrc).not.toContain('Environment Name');
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH'");
     expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
@@ -430,6 +432,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
     expect(appSrc).toContain('Keep the default remote cache or pin a custom absolute install directory.');
     expect(appSrc).toContain('Leave blank to use the default remote user cache:');
+  });
+
+  it('explains local scope behavior separately from the single visible Name field', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('Desktop will store local state under an automatic');
+    expect(appSrc).toContain('scope derived from Name.');
+    expect(appSrc).toContain('Next scope:');
+    expect(appSrc).toContain('Renaming this environment only changes how it appears in Desktop.');
+    expect(appSrc).toContain('Local state stays under');
   });
 
   it('explains Local UI Bind examples inside the managed environment form', () => {
@@ -469,6 +481,14 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('background: var(--error);');
     expect(styles).toContain('color: var(--error-foreground);');
     expect(dialogSrc).toContain('variant: "ghost-destructive"');
+  });
+
+  it('distinguishes managed-environment deletion copy from saved connection deletion copy', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("title={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}");
+    expect(appSrc).toContain("confirmText={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}");
+    expect(appSrc).toContain("title={props.environment.kind === 'managed_environment' ? 'Delete environment' : 'Delete connection'}");
   });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {

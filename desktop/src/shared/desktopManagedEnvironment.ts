@@ -508,6 +508,11 @@ export function managedEnvironmentKind(environment: DesktopManagedEnvironment): 
   return environment.provider_binding ? 'controlplane' : 'local';
 }
 
+export function isDefaultLocalManagedEnvironment(environment: DesktopManagedEnvironment | null | undefined): boolean {
+  const scope = environment?.local_hosting?.scope;
+  return scope?.kind === 'local' && scope.name === DEFAULT_LOCAL_ENVIRONMENT_NAME;
+}
+
 export function managedEnvironmentLocalName(environment: DesktopManagedEnvironment): string | undefined {
   const scope = environment.local_hosting?.scope;
   if (!scope || scope.kind === 'controlplane') {

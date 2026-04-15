@@ -56,6 +56,14 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("throw new Error('That environment window is no longer open.')");
   });
 
+  it('protects the default local environment from deletion and rejects duplicate auto-derived local names', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('Local Environment is always available in Desktop. Change its settings instead of deleting it.');
+    expect(mainSrc).toContain('An environment with this name already exists. Choose a different name.');
+    expect(mainSrc).toContain('protectedManagedEnvironmentDeleteFailure');
+  });
+
   it('broadcasts launcher snapshots per utility window and scopes Ask Flower handoff by sender ownership', () => {
     const mainSrc = readMainSource();
 

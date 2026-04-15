@@ -69,6 +69,7 @@ import type { StartupReport } from './startup';
 import { resolveManagedEnvironmentOpenTarget } from './managedEnvironmentOpen';
 import {
   desktopManagedLocalEnvironmentID,
+  isDefaultLocalManagedEnvironment,
   managedEnvironmentDefaultOpenRoute,
   managedEnvironmentKind,
   managedEnvironmentLocalAccess,
@@ -2816,13 +2817,22 @@ async function upsertManagedEnvironmentFromWelcome(
   const existing = request.environment_id ? findManagedEnvironmentByID(preferences, request.environment_id) : null;
   const existingAccess = existing ? managedEnvironmentLocalAccess(existing) : null;
   const providerSelection = selectedProviderEnvironmentFromWelcome(preferences, request);
+  const requestedEnvironmentName = compact(request.environment_name) || compact(options.label);
+  if (
+    !providerSelection
+    && !request.environment_id
+    && requestedEnvironmentName !== ''
+    && findManagedEnvironmentByID(preferences, desktopManagedLocalEnvironmentID(requestedEnvironmentName))
+  ) {
+    throw new Error('An environment with this name already exists. Choose a different name.');
+  }
   const access = validateDesktopSettingsDraft(draft, {
     currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
     currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
   });
   const next = upsertManagedEnvironment(preferences, {
     environment_id: request.environment_id,
-    name: request.environment_name,
+    name: requestedEnvironmentName,
     label: options.label,
     access,
     provider_origin: providerSelection?.provider_origin,
@@ -2839,7 +2849,7 @@ async function upsertManagedEnvironmentFromWelcome(
     )) ?? null
     : (
       (request.environment_id ? findManagedEnvironmentByID(next, request.environment_id) : null)
-      ?? findManagedEnvironmentByID(next, desktopManagedLocalEnvironmentID(request.environment_name ?? ''))
+      ?? findManagedEnvironmentByID(next, desktopManagedLocalEnvironmentID(requestedEnvironmentName))
     );
   if (!resolvedEnvironment) {
     throw new Error('Desktop could not save that managed environment.');
@@ -2970,6 +2980,24 @@ function hasLiveManagedEnvironmentSession(environmentID: string): boolean {
   return false;
 }
 
+async function protectedManagedEnvironmentDeleteFailure(
+  environmentID: string,
+): Promise<DesktopLauncherActionFailure | null> {
+  const preferences = await loadDesktopPreferencesCached();
+  const environment = findManagedEnvironmentByID(preferences, environmentID);
+  if (!environment || !isDefaultLocalManagedEnvironment(environment)) {
+    return null;
+  }
+  return launcherActionFailure(
+    'action_invalid',
+    'environment',
+    'Local Environment is always available in Desktop. Change its settings instead of deleting it.',
+    {
+      environmentID,
+    },
+  );
+}
+
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> {
   switch (request.kind) {
     case 'open_managed_environment':
@@ -3047,6 +3075,12 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       });
       return launcherActionSuccess('saved_environment');
     case 'delete_managed_environment':
+      {
+        const protectedFailure = await protectedManagedEnvironmentDeleteFailure(request.environment_id);
+        if (protectedFailure) {
+          return protectedFailure;
+        }
+      }
       if (hasLiveManagedEnvironmentSession(request.environment_id)) {
         return launcherActionFailure(
           'environment_in_use',
