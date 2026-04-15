@@ -50,14 +50,18 @@ function normalizeControlPlaneOrigin(rawURL: string): string {
   return `${parsed.protocol.toLowerCase()}//${parsed.host.toLowerCase()}`;
 }
 
+export function controlPlaneProviderKeyForOrigin(providerOrigin: string): string {
+  const normalizedOrigin = normalizeControlPlaneOrigin(String(providerOrigin ?? '').trim());
+  const parsed = new URL(normalizedOrigin);
+  return sanitizeStateScopeID(`${parsed.protocol.replace(/:$/u, '').toLowerCase()}__${parsed.host.toLowerCase()}`);
+}
+
 function controlPlaneProviderKey(scope: Extract<DesktopManagedScopeRef, { kind: 'controlplane' }>): string {
   const explicitProviderKey = sanitizeStateScopeID(String(scope.provider_key ?? '').trim());
   if (explicitProviderKey) {
     return explicitProviderKey;
   }
-  const normalizedOrigin = normalizeControlPlaneOrigin(String(scope.provider_origin ?? '').trim());
-  const parsed = new URL(normalizedOrigin);
-  return sanitizeStateScopeID(`${parsed.protocol.replace(/:$/u, '').toLowerCase()}__${parsed.host.toLowerCase()}`);
+  return controlPlaneProviderKeyForOrigin(String(scope.provider_origin ?? '').trim());
 }
 
 export function resolveStateRoot(

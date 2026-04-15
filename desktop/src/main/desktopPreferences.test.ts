@@ -4,7 +4,10 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
+import {
+  desktopControlPlaneKey,
+  normalizeDesktopControlPlaneProvider,
+} from '../shared/controlPlaneProvider';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import {
   testDesktopPreferences,
@@ -12,6 +15,10 @@ import {
   testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
 } from '../testSupport/desktopTestHelpers';
+import {
+  controlPlaneManagedStateLayout,
+  controlPlaneProviderKeyForOrigin,
+} from './statePaths';
 import {
   createPlaintextSecretCodec,
   type DesktopPreferences,
@@ -759,6 +766,54 @@ describe('desktopPreferences', () => {
     }));
   });
 
+  it('repairs a legacy provider-backed local environment during control-plane sync without duplicating it', () => {
+    const provider = buildTestControlPlaneProvider();
+    const legacyProviderID = controlPlaneProviderKeyForOrigin(provider.provider_origin);
+    const existing = testManagedControlPlaneEnvironment(provider.provider_origin, 'env_demo', {
+      providerID: legacyProviderID,
+      label: 'Desktop Label',
+      preferredOpenRoute: 'local_host',
+      access: {
+        local_ui_bind: '127.0.0.1:0',
+      },
+    });
+
+    const next = upsertSavedControlPlane(testDesktopPreferences({
+      managed_environments: [existing],
+    }), {
+      provider,
+      account: buildTestControlPlaneAccount(provider),
+      environments: [buildTestProviderEnvironment(provider)],
+      refresh_token: 'refresh-demo-token',
+      display_label: 'Demo Portal',
+      last_synced_at_ms: 456,
+    });
+
+    const repairedEntries = next.managed_environments.filter((environment) => (
+      environment.provider_binding?.provider_origin === provider.provider_origin
+      && environment.provider_binding?.env_public_id === 'env_demo'
+    ));
+
+    expect(repairedEntries).toHaveLength(1);
+    expect(repairedEntries[0]).toEqual(expect.objectContaining({
+      id: existing.id,
+      label: 'Desktop Label',
+      preferred_open_route: 'local_host',
+      local_hosting: existing.local_hosting,
+      provider_binding: expect.objectContaining({
+        provider_origin: provider.provider_origin,
+        provider_id: provider.provider_id,
+        env_public_id: 'env_demo',
+      }),
+      identity: {
+        kind: 'provider',
+        provider_origin: provider.provider_origin,
+        provider_id: provider.provider_id,
+        env_public_id: 'env_demo',
+      },
+    }));
+  });
+
   it('drops revoked remote-only entries during provider refresh while keeping local-hosted environments', () => {
     const provider = buildTestControlPlaneProvider();
     const remoteOnly = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_removed', {
@@ -807,6 +862,152 @@ describe('desktopPreferences', () => {
       'local:default',
       'cp:https%3A%2F%2Fcp.example.invalid:env:env_kept',
     ]));
+  });
+
+  it('canonicalizes legacy provider ids when loading catalog-backed preferences and rewrites the catalog', async () => {
+    await withTempPreferencesDir(async (root) => {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const provider = buildTestControlPlaneProvider();
+      const providerKey = controlPlaneProviderKeyForOrigin(provider.provider_origin);
+      const environmentID = 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo';
+      const layout = controlPlaneManagedStateLayout(
+        provider.provider_origin,
+        'env_demo',
+        process.env,
+        os.homedir,
+        paths.stateRoot,
+      );
+      const environmentsDir = path.join(paths.stateRoot, 'catalog', 'environments');
+      const providersDir = path.join(paths.stateRoot, 'catalog', 'providers');
+      const providerCatalogID = desktopControlPlaneKey(provider.provider_origin, provider.provider_id);
+
+      await fs.mkdir(environmentsDir, { recursive: true });
+      await fs.mkdir(providersDir, { recursive: true });
+      await fs.writeFile(paths.preferencesFile, `${JSON.stringify({ version: 10 }, null, 2)}\n`, 'utf8');
+      await fs.writeFile(paths.secretsFile, `${JSON.stringify({
+        version: 2,
+        control_planes: [{
+          provider_origin: provider.provider_origin,
+          provider_id: provider.provider_id,
+          refresh_token: {
+            encoding: 'plain',
+            data: 'refresh-demo-token',
+          },
+        }],
+      }, null, 2)}\n`, 'utf8');
+      await fs.writeFile(
+        path.join(providersDir, `${encodeURIComponent(providerCatalogID)}.json`),
+        `${JSON.stringify({
+          schema_version: 1,
+          record_kind: 'provider',
+          provider: {
+            protocol_version: provider.protocol_version,
+            provider_id: provider.provider_id,
+            display_name: provider.display_name,
+            provider_origin: provider.provider_origin,
+            documentation_url: provider.documentation_url,
+          },
+          account: {
+            user_public_id: 'user_demo',
+            user_display_name: 'Demo User',
+            authorization_expires_at_unix_ms: 1_770_000_000_000,
+          },
+          display_label: 'Demo Portal',
+          environments: [{
+            env_public_id: 'env_demo',
+            name: 'Demo Environment',
+            description: 'team sandbox',
+            namespace_public_id: 'ns_demo',
+            namespace_name: 'Demo Team',
+            status: 'online',
+            lifecycle_status: 'active',
+            last_seen_at_unix_ms: 123,
+          }],
+          last_synced_at_ms: 456,
+        }, null, 2)}\n`,
+        'utf8',
+      );
+      await fs.writeFile(
+        path.join(environmentsDir, `${encodeURIComponent(environmentID)}.json`),
+        `${JSON.stringify({
+          schema_version: 1,
+          record_kind: 'environment',
+          id: environmentID,
+          label: 'Desktop Label',
+          preferred_open_route: 'local_host',
+          created_at_ms: 100,
+          updated_at_ms: 200,
+          last_used_at_ms: 300,
+          identity: {
+            kind: 'provider',
+            provider_origin: provider.provider_origin,
+            provider_id: providerKey,
+            env_public_id: 'env_demo',
+          },
+          local_hosting: {
+            scope: {
+              kind: 'controlplane',
+              provider_origin: provider.provider_origin,
+              provider_key: providerKey,
+              env_public_id: 'env_demo',
+            },
+            scope_key: layout.scopeKey,
+            state_dir: layout.stateDir,
+            owner: 'desktop',
+            access: {
+              local_ui_bind: '127.0.0.1:0',
+              local_ui_password_configured: false,
+            },
+          },
+          provider_binding: {
+            provider_origin: provider.provider_origin,
+            provider_id: providerKey,
+            env_public_id: 'env_demo',
+            remote_web_supported: true,
+            remote_desktop_supported: true,
+          },
+        }, null, 2)}\n`,
+        'utf8',
+      );
+
+      const loaded = await loadDesktopPreferences(paths, codec);
+      const repaired = loaded.managed_environments.find((environment) => environment.id === environmentID);
+
+      expect(repaired).toEqual(expect.objectContaining({
+        id: environmentID,
+        label: 'Desktop Label',
+        preferred_open_route: 'local_host',
+        local_hosting: expect.objectContaining({
+          scope: expect.objectContaining({
+            kind: 'controlplane',
+            provider_origin: provider.provider_origin,
+            provider_key: providerKey,
+            env_public_id: 'env_demo',
+          }),
+        }),
+        provider_binding: expect.objectContaining({
+          provider_origin: provider.provider_origin,
+          provider_id: provider.provider_id,
+          env_public_id: 'env_demo',
+        }),
+        identity: {
+          kind: 'provider',
+          provider_origin: provider.provider_origin,
+          provider_id: provider.provider_id,
+          env_public_id: 'env_demo',
+        },
+      }));
+
+      const rewrittenEnvironmentCatalog = JSON.parse(
+        await fs.readFile(path.join(environmentsDir, `${encodeURIComponent(environmentID)}.json`), 'utf8'),
+      ) as {
+        identity?: { provider_id?: string };
+        provider_binding?: { provider_id?: string };
+      };
+      expect(rewrittenEnvironmentCatalog.identity?.provider_id).toBe(provider.provider_id);
+      expect(rewrittenEnvironmentCatalog.provider_binding?.provider_id).toBe(provider.provider_id);
+    });
   });
 
   it('serializes local-environment settings into a settings draft', () => {

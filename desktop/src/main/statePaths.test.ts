@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   controlPlaneManagedStateLayout,
+  controlPlaneProviderKeyForOrigin,
   defaultManagedStateLayout,
   namedManagedStateLayout,
   stateLayoutForConfigPath,
@@ -45,6 +46,10 @@ describe('statePaths', () => {
       stateDir: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_bad_id',
       runtimeStateFile: '/Users/tester/.redeven/scopes/controlplane/https__region.example.invalid/env_bad_id/runtime/local-ui.json',
     }));
+  });
+
+  it('derives the same provider key from a control-plane origin for catalog repair', () => {
+    expect(controlPlaneProviderKeyForOrigin('https://Region.Example.invalid/path')).toBe('https__region.example.invalid');
   });
 
   it('normalizes an explicit config path to an absolute layout', () => {

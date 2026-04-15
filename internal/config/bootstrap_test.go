@@ -2,8 +2,10 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,7 +13,12 @@ import (
 
 func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"provider_id":"redeven_portal"}`))
+			return
+		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer token-123" {
@@ -73,6 +80,9 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	if cfg.EnvironmentID != "env_123" {
 		t.Fatalf("EnvironmentID = %q, want %q", cfg.EnvironmentID, "env_123")
 	}
+	if cfg.ControlplaneProviderID != "redeven_portal" {
+		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "redeven_portal")
+	}
 	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_123" {
 		t.Fatalf("Direct = %#v", cfg.Direct)
 	}
@@ -80,7 +90,12 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 
 func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"provider_id":"redeven_portal"}`))
+			return
+		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
 		if r.URL.Path != "/api/rcpp/v1/runtime/bootstrap/exchange" {
@@ -122,8 +137,73 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	if cfg.ControlplaneProviderID != "redeven_portal" {
+		t.Fatalf("ControlplaneProviderID = %q, want %q", cfg.ControlplaneProviderID, "redeven_portal")
+	}
 	if cfg.Direct == nil || cfg.Direct.ChannelId != "ch_ticket" {
 		t.Fatalf("Direct = %#v", cfg.Direct)
+	}
+}
+
+func TestBootstrapConfigWritesScopeMetadataWithProviderIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"provider_id":"redeven_portal"}`))
+			return
+		case r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v1/runtime/bootstrap/exchange":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+  "direct": {
+    "ws_url": "wss://region.example.invalid/control/ws",
+    "channel_id": "ch_ticket",
+    "e2ee_psk_b64u": "cHNr",
+    "channel_init_expire_at_unix_s": 4102444800
+  }
+}`))
+			return
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	stateRoot := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cfgPath, err := BootstrapConfig(ctx, BootstrapArgs{
+		ControlplaneBaseURL: server.URL,
+		EnvironmentID:       "env_123",
+		BootstrapTicket:     "ticket-123",
+		StateRoot:           stateRoot,
+	})
+	if err != nil {
+		t.Fatalf("BootstrapConfig() error = %v", err)
+	}
+
+	layout, err := StateLayoutForConfigPath(cfgPath)
+	if err != nil {
+		t.Fatalf("StateLayoutForConfigPath() error = %v", err)
+	}
+
+	body, err := os.ReadFile(layout.ScopeMetadataPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", layout.ScopeMetadataPath, err)
+	}
+	var metadata ScopeMetadata
+	if err := json.Unmarshal(body, &metadata); err != nil {
+		t.Fatalf("json.Unmarshal(scope metadata) error = %v", err)
+	}
+	if metadata.BoundControlplaneBaseURL != server.URL {
+		t.Fatalf("BoundControlplaneBaseURL = %q, want %q", metadata.BoundControlplaneBaseURL, server.URL)
+	}
+	if metadata.BoundControlplaneProviderID != "redeven_portal" {
+		t.Fatalf("BoundControlplaneProviderID = %q, want %q", metadata.BoundControlplaneProviderID, "redeven_portal")
+	}
+	if metadata.BoundEnvironmentID != "env_123" {
+		t.Fatalf("BoundEnvironmentID = %q, want %q", metadata.BoundEnvironmentID, "env_123")
 	}
 }
 

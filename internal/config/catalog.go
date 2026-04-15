@@ -207,9 +207,13 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 	if err != nil {
 		return nil, err
 	}
+	providerID := strings.TrimSpace(cfg.ControlplaneProviderID)
+	if providerID == "" {
+		providerID = providerKey
+	}
 	return &catalogEnvironmentBinding{
 		ProviderOrigin: normalizedBaseURL,
-		ProviderID:     providerKey,
+		ProviderID:     providerID,
 		EnvPublicID:    envID,
 	}, nil
 }

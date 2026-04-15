@@ -19,10 +19,11 @@ import (
 )
 
 type BootstrapArgs struct {
-	ControlplaneBaseURL string
-	EnvironmentID       string
-	EnvironmentToken    string
-	BootstrapTicket     string
+	ControlplaneBaseURL    string
+	ControlplaneProviderID string
+	EnvironmentID          string
+	EnvironmentToken       string
+	BootstrapTicket        string
 
 	ConfigPath string
 	StateRoot  string
@@ -40,6 +41,10 @@ type BootstrapArgs struct {
 
 type bootstrapResponse struct {
 	Direct *directv1.DirectConnectInfo `json:"direct"`
+}
+
+type providerDiscoveryResponse struct {
+	ProviderID string `json:"provider_id"`
 }
 
 type bootstrapTicketExchangeRequest struct {
@@ -95,6 +100,18 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 		return "", errors.New("invalid bootstrap response: missing direct.ws_url")
 	}
 
+	providerID := strings.TrimSpace(args.ControlplaneProviderID)
+	if providerID == "" && prev != nil {
+		prevBaseURL, prevErr := normalizeControlplaneBaseURL(prev.ControlplaneBaseURL)
+		nextBaseURL, nextErr := normalizeControlplaneBaseURL(baseURL)
+		if prevErr == nil && nextErr == nil && prevBaseURL == nextBaseURL && strings.TrimSpace(prev.EnvironmentID) == envID {
+			providerID = strings.TrimSpace(prev.ControlplaneProviderID)
+		}
+	}
+	if discoveredProviderID, discoveryErr := fetchProviderDiscoveryID(ctx, baseURL); discoveryErr == nil {
+		providerID = discoveredProviderID
+	}
+
 	agentInstanceID := ""
 	if prev != nil {
 		agentInstanceID = strings.TrimSpace(prev.AgentInstanceID)
@@ -127,16 +144,17 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 	}
 
 	cfg := &Config{
-		ControlplaneBaseURL: baseURL,
-		EnvironmentID:       envID,
-		AgentInstanceID:     agentInstanceID,
-		Direct:              direct,
-		AI:                  nil,
-		PermissionPolicy:    nil,
-		AgentHomeDir:        agentHomeDir,
-		Shell:               shell,
-		LogFormat:           logFormat,
-		LogLevel:            logLevel,
+		ControlplaneBaseURL:    baseURL,
+		ControlplaneProviderID: providerID,
+		EnvironmentID:          envID,
+		AgentInstanceID:        agentInstanceID,
+		Direct:                 direct,
+		AI:                     nil,
+		PermissionPolicy:       nil,
+		AgentHomeDir:           agentHomeDir,
+		Shell:                  shell,
+		LogFormat:              logFormat,
+		LogLevel:               logLevel,
 	}
 
 	// Write permission_policy explicitly so users can audit what is enabled locally.
@@ -276,6 +294,47 @@ func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, 
 		return nil, errors.New("invalid bootstrap exchange response: missing direct")
 	}
 	return out.Direct, nil
+}
+
+func fetchProviderDiscoveryID(ctx context.Context, baseURL string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", fmt.Errorf("invalid controlplane url: %w", err)
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/.well-known/redeven-provider.json"
+	u.RawQuery = ""
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("provider discovery failed: status=%d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+
+	var discovery providerDiscoveryResponse
+	if err := json.Unmarshal(body, &discovery); err != nil {
+		return "", fmt.Errorf("invalid provider discovery json: %w", err)
+	}
+	providerID := strings.TrimSpace(discovery.ProviderID)
+	if providerID == "" {
+		return "", errors.New("invalid provider discovery: missing provider_id")
+	}
+	return providerID, nil
 }
 
 func newAgentInstanceID() (string, error) {
