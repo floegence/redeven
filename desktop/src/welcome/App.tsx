@@ -3555,25 +3555,117 @@ function controlPlaneManagedEnvironmentStats(
   };
 }
 
-function controlPlaneOnlineCountDescription(
+function ControlPlaneMetricTooltipContent(props: Readonly<{
+  title: string;
+  description: string;
+  status?: string;
+}>) {
+  const status = createMemo(() => trimString(props.status));
+
+  return (
+    <div class="max-w-[17rem] space-y-1.5">
+      <div class="text-xs font-semibold leading-4 text-foreground">{props.title}</div>
+      <div class="text-[11px] leading-5 text-muted-foreground">{props.description}</div>
+      <Show when={status()}>
+        <div class="rounded-md border border-border/70 bg-muted/35 px-2 py-1.5 text-[11px] leading-5 text-muted-foreground">
+          {status()}
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function controlPlanePublishedCountTooltipContent(
+  controlPlane: DesktopControlPlaneSummary,
+): JSX.Element {
+  return (
+    <ControlPlaneMetricTooltipContent
+      title="Every environment this provider account has published to Desktop."
+      description="Published includes everything listed in Desktop for this account, whether it is online, offline, or waiting for the next provider refresh."
+      status={controlPlane.environments.length === 0
+        ? 'Nothing from this provider is in the Desktop catalog yet.'
+        : undefined}
+    />
+  );
+}
+
+function controlPlaneOnlineCountTooltipContent(
   controlPlane: DesktopControlPlaneSummary,
   onlineCount: number,
-): string {
-  if (controlPlane.sync_state === 'syncing') {
-    return onlineCount > 0
-      ? 'Refreshing provider status. Count reflects the latest sync snapshot.'
-      : 'Refreshing provider status. No environments are currently marked online in the latest sync snapshot.';
-  }
+): JSX.Element {
+  const status = (() => {
+    if (controlPlane.sync_state === 'syncing') {
+      return 'A refresh is running now, so this number may change again in a moment.';
+    }
 
-  if (controlPlane.sync_state === 'ready' && controlPlane.catalog_freshness === 'fresh') {
-    return onlineCount > 0
-      ? 'Published environments currently reporting online status.'
-      : 'No published environments are currently reporting online status.';
-  }
+    if (controlPlane.sync_state === 'ready' && controlPlane.catalog_freshness === 'fresh') {
+      return onlineCount > 0
+        ? 'This number matches the latest provider sync.'
+        : 'The latest provider sync says none are online right now.';
+    }
 
-  return onlineCount > 0
-    ? 'Last synced published environments reporting online status.'
-    : 'The last synced provider snapshot did not report any environments online.';
+    return onlineCount > 0
+      ? 'This number comes from the last completed sync and may already be outdated.'
+      : 'The last completed sync did not report any online environments.';
+  })();
+
+  return (
+    <ControlPlaneMetricTooltipContent
+      title="Only published environments that are reachable right now."
+      description="Online Now counts environments from Published that currently report an online runtime signal."
+      status={status}
+    />
+  );
+}
+
+function controlPlaneLocalHostCountTooltipContent(
+  stats: Readonly<{
+    local_host_count: number;
+    open_count: number;
+  }>,
+  freshestEnvironment: DesktopControlPlaneSummary['environments'][number] | null,
+): JSX.Element {
+  const runtimeLabel = freshestEnvironment
+    ? desktopProviderEnvironmentRuntimeLabel(
+      freshestEnvironment.status,
+      freshestEnvironment.lifecycle_status,
+    )
+    : '';
+  const status = stats.open_count > 0
+    ? `${stats.open_count === 1 ? '1 local window is' : `${stats.open_count} local windows are`} already open right now.`
+    : runtimeLabel !== ''
+      ? `Most recent provider state received: ${runtimeLabel}.`
+      : 'No published environment from this provider has reported a runtime state yet.';
+
+  return (
+    <ControlPlaneMetricTooltipContent
+      title="Published environments that Desktop can host locally on this Mac."
+      description={stats.local_host_count > 0
+        ? 'Local Hosts counts environments from this provider that can open as local desktop hosts on this device.'
+        : 'This provider has not exposed any published environments for local hosting on this Mac yet.'}
+      status={status}
+    />
+  );
+}
+
+function ControlPlaneMetricTile(props: Readonly<{
+  label: string;
+  value: number;
+  help: JSX.Element;
+}>) {
+  return (
+    <div class="redeven-provider-shelf__metric redeven-tile rounded-md border border-border/70 px-3 py-3">
+      <div class="redeven-provider-shelf__metric-header">
+        <div class="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          {props.label}
+        </div>
+        <SettingsHelpBadge label={props.label} content={props.help} />
+      </div>
+      <div class="redeven-provider-shelf__metric-value">
+        {props.value}
+      </div>
+    </div>
+  );
 }
 
 function ControlPlaneShelf(props: Readonly<{
@@ -3629,46 +3721,21 @@ function ControlPlaneShelf(props: Readonly<{
             </div>
           </Show>
           <div class="redeven-provider-shelf__metrics mt-3">
-            <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Published
-              </div>
-              <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
-                {props.controlPlane.environments.length}
-              </div>
-              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                Environments currently visible from this provider account.
-              </div>
-            </div>
-            <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Online Now
-              </div>
-              <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
-                {stats().online_count}
-              </div>
-              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                {controlPlaneOnlineCountDescription(props.controlPlane, stats().online_count)}
-              </div>
-            </div>
-            <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Local Hosts
-              </div>
-              <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
-                {stats().local_host_count}
-              </div>
-              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                {stats().open_count > 0
-                  ? `${stats().open_count} environment windows currently open from this provider.`
-                  : freshestEnvironment()
-                    ? `Latest provider signal: ${desktopProviderEnvironmentRuntimeLabel(
-                      freshestEnvironment()!.status,
-                      freshestEnvironment()!.lifecycle_status,
-                    )}.`
-                    : 'No published environments yet. Connect later to refresh the catalog.'}
-              </div>
-            </div>
+            <ControlPlaneMetricTile
+              label="Published"
+              value={props.controlPlane.environments.length}
+              help={controlPlanePublishedCountTooltipContent(props.controlPlane)}
+            />
+            <ControlPlaneMetricTile
+              label="Online Now"
+              value={stats().online_count}
+              help={controlPlaneOnlineCountTooltipContent(props.controlPlane, stats().online_count)}
+            />
+            <ControlPlaneMetricTile
+              label="Local Hosts"
+              value={stats().local_host_count}
+              help={controlPlaneLocalHostCountTooltipContent(stats(), freshestEnvironment())}
+            />
           </div>
         </div>
         <div class="redeven-provider-shelf__actions">
@@ -3764,13 +3831,19 @@ function settingsProtectionCardHelp(accessMode: DesktopAccessMode): string {
 
 function SettingsHelpBadge(props: Readonly<{
   label: string;
-  content?: string;
+  content?: string | JSX.Element;
 }>) {
-  const tooltip = createMemo(() => trimString(props.content));
+  const tooltip = createMemo<JSX.Element | undefined>(() => {
+    if (typeof props.content === 'string') {
+      const content = trimString(props.content);
+      return content === '' ? undefined : <div class="max-w-xs">{content}</div>;
+    }
+    return props.content;
+  });
 
   return (
     <Show when={tooltip()}>
-      <DesktopTooltip content={<div class="max-w-xs">{tooltip()}</div>} placement="top" delay={0}>
+      <DesktopTooltip content={tooltip()!} placement="top" delay={0}>
         <span
           data-redeven-settings-help=""
           role="img"

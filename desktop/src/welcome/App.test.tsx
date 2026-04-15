@@ -225,12 +225,18 @@ describe('DesktopWelcomeShell', () => {
     ]);
   });
 
-  it('shows an online environment metric instead of the unified catalog count on Control Plane cards', () => {
+  it('shows compact Control Plane metrics with tooltip-based guidance instead of inline prose', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('Online Now');
-    expect(appSrc).toContain('controlPlaneOnlineCountDescription');
+    expect(appSrc).toContain('ControlPlaneMetricTile');
+    expect(appSrc).toContain('controlPlanePublishedCountTooltipContent');
+    expect(appSrc).toContain('controlPlaneOnlineCountTooltipContent');
+    expect(appSrc).toContain('controlPlaneLocalHostCountTooltipContent');
     expect(appSrc).toContain('desktopProviderOnlineEnvironmentCount(controlPlane.environments)');
+    expect(appSrc).not.toContain('Environments currently visible from this provider account.');
+    expect(appSrc).not.toContain('Published environments currently reporting online status.');
+    expect(appSrc).not.toContain('Latest provider signal:');
     expect(appSrc).not.toContain('Unified Catalog');
     expect(appSrc).not.toContain('Provider-backed entries already materialized into the Environment list.');
   });
@@ -418,8 +424,12 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-control-plane-grid');
     expect(styles).toContain('.redeven-control-plane-card');
     expect(appSrc).toContain('redeven-provider-shelf__metrics');
-    expect(styles).toContain('--redeven-provider-shelf-metric-min-size: 15rem;');
+    expect(styles).toContain('--redeven-provider-shelf-metric-min-size: 10.75rem;');
     expect(styles).toContain('.redeven-provider-shelf__metrics');
+    expect(styles).toContain('grid-template-columns: repeat(3, minmax(0, 1fr));');
+    expect(styles).toContain('.redeven-provider-shelf__metric');
+    expect(styles).toContain('.redeven-provider-shelf__metric-header');
+    expect(styles).toContain('@media (max-width: 36rem)');
     expect(appSrc).not.toContain('Remote access through Control Plane');
   });
 

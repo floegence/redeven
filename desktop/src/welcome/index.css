@@ -19,7 +19,7 @@
   --redeven-environment-grid-spacious-gap: 1.125rem;
   --redeven-control-plane-grid-column-size: 35rem;
   --redeven-control-plane-card-max-width: 44rem;
-  --redeven-provider-shelf-metric-min-size: 15rem;
+  --redeven-provider-shelf-metric-min-size: 10.75rem;
 }
 
 html,
@@ -791,7 +791,33 @@ body {
 .redeven-provider-shelf__metrics {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--redeven-provider-shelf-metric-min-size)), 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.redeven-provider-shelf__metric {
+  min-width: 0;
+}
+
+.redeven-provider-shelf__metric-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.redeven-provider-shelf__metric-value {
+  margin-top: 0.625rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+@media (max-width: 36rem) {
+  .redeven-provider-shelf__metrics {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--redeven-provider-shelf-metric-min-size)), 1fr));
+  }
 }
 
 .redeven-launcher-head::after,
