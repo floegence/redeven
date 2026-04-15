@@ -2274,11 +2274,21 @@ function ConnectEnvironmentSurface(props: Readonly<{
       )
     )
   ));
+  const useSpaciousControlPlaneLayout = createMemo(() => (
+    props.activeTab === 'control_planes' && props.controlPlanes.length > 0
+  ));
+  const useSpaciousWelcomeShell = createMemo(() => (
+    useSpaciousEnvironmentLibraryLayout() || useSpaciousControlPlaneLayout()
+  ));
 
   return (
     <div class="redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background">
       <main id="redeven-desktop-main" class="w-full px-4 py-5 sm:px-6 lg:px-8">
-        <div class="mx-auto w-full redeven-welcome-shell">
+        <div class={cn(
+          'mx-auto w-full redeven-welcome-shell',
+          useSpaciousWelcomeShell() && 'redeven-welcome-shell--spacious',
+        )}
+        >
           <header class="redeven-header-separator mb-5 space-y-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-1">
@@ -2414,13 +2424,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               </div>
             </div>
           </header>
-        </div>
 
-        <div class={cn(
-          'mx-auto w-full redeven-welcome-shell',
-          useSpaciousEnvironmentLibraryLayout() && 'redeven-welcome-shell--spacious',
-        )}
-        >
           <div class="space-y-3">
             <Show
               when={props.activeTab === 'environments'}
@@ -3528,7 +3532,7 @@ function ControlPlaneShelf(props: Readonly<{
               {statusModel().detail}
             </div>
           </Show>
-          <div class="mt-3 grid gap-2 sm:grid-cols-3">
+          <div class="redeven-provider-shelf__metrics mt-3">
             <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
               <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Published
