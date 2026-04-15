@@ -257,6 +257,11 @@ type ControlPlaneDialogState = Readonly<{
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
+const SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD = 4;
+
+function shouldUseSpaciousEnvironmentGrid(cardCount: number): boolean {
+  return cardCount >= SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD;
+}
 
 const EMPTY_SETTINGS_DRAFT: DesktopSettingsDraft = {
   local_ui_bind: '',
@@ -2255,180 +2260,198 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const controlPlaneEnvironmentCount = createMemo(() => (
     props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
   ));
+  const showQuickAddCards = createMemo(() => (
+    props.libraryFilter === 'all'
+    && trimString(props.libraryQuery) === ''
+    && trimString(props.libraryProviderFilter) === ''
+  ));
+  const groupedLibraryEntries = createMemo(() => splitPinnedEnvironmentEntries(props.libraryEntries));
+  const useSpaciousEnvironmentLibraryLayout = createMemo(() => (
+    props.activeTab === 'environments' && (
+      shouldUseSpaciousEnvironmentGrid(groupedLibraryEntries().pinned_entries.length)
+      || shouldUseSpaciousEnvironmentGrid(
+        groupedLibraryEntries().regular_entries.length + (showQuickAddCards() ? 1 : 0),
+      )
+    )
+  ));
 
   return (
     <div class="redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background">
-      <main id="redeven-desktop-main" class="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-        <header class="redeven-header-separator mb-5 space-y-4">
-          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div class="space-y-1">
-              <h1 class="text-lg font-semibold tracking-tight text-foreground">Environments</h1>
-              <p class="text-xs text-muted-foreground">
-                Manage local and remote environments. Connect, configure, and switch between workspaces.
-              </p>
-            </div>
-            <div class="flex items-center gap-2">
-              <Show when={props.activeTab === 'environments'}>
-                <div class="relative w-full sm:w-[14.5rem]">
-                  <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    value={props.libraryQuery}
-                    onInput={(event) => props.setLibraryQuery(event.currentTarget.value)}
-                    placeholder="Search environments..."
-                    size="sm"
-                    class="w-full pl-9"
-                  />
-                </div>
-              </Show>
-              <Show
-                when={props.activeTab === 'environments'}
-                fallback={(
-                  <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
-                    <Plus class="mr-1 h-3.5 w-3.5" />
-                    Connect Provider
-                  </Button>
-                )}
-              >
-                <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
-                  <Plus class="mr-1 h-3.5 w-3.5" />
-                  New
-                </Button>
-              </Show>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex flex-wrap items-center gap-1.5">
-              <For each={ENVIRONMENT_CENTER_TABS}>
-                {(tab) => (
-                  <button
-                    type="button"
-                    class="redeven-console-tab"
-                    data-active={props.activeTab === tab.value}
-                    aria-pressed={props.activeTab === tab.value}
-                    onClick={() => props.setActiveTab(tab.value)}
-                  >
-                    {tab.label}
-                  </button>
-                )}
-              </For>
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <Show
-                when={props.activeTab === 'environments'}
-                fallback={(
-                  <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{props.controlPlanes.length} providers</span>
-                    <span class="text-border">·</span>
-                    <span>{controlPlaneEnvironmentCount()} environments</span>
+      <main id="redeven-desktop-main" class="w-full px-4 py-5 sm:px-6 lg:px-8">
+        <div class="mx-auto w-full redeven-welcome-shell">
+          <header class="redeven-header-separator mb-5 space-y-4">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div class="space-y-1">
+                <h1 class="text-lg font-semibold tracking-tight text-foreground">Environments</h1>
+                <p class="text-xs text-muted-foreground">
+                  Manage local and remote environments. Connect, configure, and switch between workspaces.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <Show when={props.activeTab === 'environments'}>
+                  <div class="relative w-full sm:w-[14.5rem]">
+                    <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={props.libraryQuery}
+                      onInput={(event) => props.setLibraryQuery(event.currentTarget.value)}
+                      placeholder="Search environments..."
+                      size="sm"
+                      class="w-full pl-9"
+                    />
                   </div>
-                )}
-              >
-                <Show when={providerFilterOptions().length > 0}>
-                  <Show
-                    when={providerFilterOptions().length < 5}
-                    fallback={(
-                      <select
-                        class="redeven-native-select min-w-[12rem]"
-                        value={props.libraryProviderFilter}
-                        onChange={(event) => props.setLibraryProviderFilter(trimString(event.currentTarget.value))}
-                      >
-                        <option value="">All Providers</option>
-                        <For each={providerFilterOptions()}>
-                          {(option) => (
-                            <option value={option.value}>
-                              {option.label} ({option.count})
-                            </option>
-                          )}
-                        </For>
-                      </select>
-                    )}
-                  >
-                    <button
-                      type="button"
-                      class="redeven-provider-pill"
-                      data-active={props.libraryProviderFilter === ''}
-                      aria-pressed={props.libraryProviderFilter === ''}
-                      onClick={() => props.setLibraryProviderFilter('')}
-                    >
-                      All
-                    </button>
-                    <For each={providerFilterOptions()}>
-                      {(option) => (
-                        <button
-                          type="button"
-                          class="redeven-provider-pill"
-                          data-active={props.libraryProviderFilter === option.value}
-                          aria-pressed={props.libraryProviderFilter === option.value}
-                          onClick={() => props.setLibraryProviderFilter(option.value)}
-                        >
-                          {option.label}
-                        </button>
-                      )}
-                    </For>
-                  </Show>
                 </Show>
-                <For each={libraryFilterOptions()}>
-                  {(option) => (
+                <Show
+                  when={props.activeTab === 'environments'}
+                  fallback={(
+                    <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
+                      <Plus class="mr-1 h-3.5 w-3.5" />
+                      Connect Provider
+                    </Button>
+                  )}
+                >
+                  <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    New
+                  </Button>
+                </Show>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <For each={ENVIRONMENT_CENTER_TABS}>
+                  {(tab) => (
                     <button
                       type="button"
-                      class="redeven-console-filter"
-                      data-active={props.libraryFilter === option.value}
-                      aria-pressed={props.libraryFilter === option.value}
-                      onClick={() => props.setLibraryFilter(option.value as EnvironmentLibraryFilter)}
+                      class="redeven-console-tab"
+                      data-active={props.activeTab === tab.value}
+                      aria-pressed={props.activeTab === tab.value}
+                      onClick={() => props.setActiveTab(tab.value)}
                     >
-                      {option.label}
+                      {tab.label}
                     </button>
                   )}
                 </For>
-                <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-                  <span>{visibleEnvironmentCount()} shown</span>
-                  <span class="text-border">·</span>
-                  <Show when={activeProviderFilterLabel() !== ''}>
-                    <span>{activeProviderFilterLabel()}</span>
-                    <span class="text-border">·</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <Show
+                  when={props.activeTab === 'environments'}
+                  fallback={(
+                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>{props.controlPlanes.length} providers</span>
+                      <span class="text-border">·</span>
+                      <span>{controlPlaneEnvironmentCount()} environments</span>
+                    </div>
+                  )}
+                >
+                  <Show when={providerFilterOptions().length > 0}>
+                    <Show
+                      when={providerFilterOptions().length < 5}
+                      fallback={(
+                        <select
+                          class="redeven-native-select min-w-[12rem]"
+                          value={props.libraryProviderFilter}
+                          onChange={(event) => props.setLibraryProviderFilter(trimString(event.currentTarget.value))}
+                        >
+                          <option value="">All Providers</option>
+                          <For each={providerFilterOptions()}>
+                            {(option) => (
+                              <option value={option.value}>
+                                {option.label} ({option.count})
+                              </option>
+                            )}
+                          </For>
+                        </select>
+                      )}
+                    >
+                      <button
+                        type="button"
+                        class="redeven-provider-pill"
+                        data-active={props.libraryProviderFilter === ''}
+                        aria-pressed={props.libraryProviderFilter === ''}
+                        onClick={() => props.setLibraryProviderFilter('')}
+                      >
+                        All
+                      </button>
+                      <For each={providerFilterOptions()}>
+                        {(option) => (
+                          <button
+                            type="button"
+                            class="redeven-provider-pill"
+                            data-active={props.libraryProviderFilter === option.value}
+                            aria-pressed={props.libraryProviderFilter === option.value}
+                            onClick={() => props.setLibraryProviderFilter(option.value)}
+                          >
+                            {option.label}
+                          </button>
+                        )}
+                      </For>
+                    </Show>
                   </Show>
-                  <span>{props.snapshot.open_windows.length} live</span>
-                </div>
-              </Show>
+                  <For each={libraryFilterOptions()}>
+                    {(option) => (
+                      <button
+                        type="button"
+                        class="redeven-console-filter"
+                        data-active={props.libraryFilter === option.value}
+                        aria-pressed={props.libraryFilter === option.value}
+                        onClick={() => props.setLibraryFilter(option.value as EnvironmentLibraryFilter)}
+                      >
+                        {option.label}
+                      </button>
+                    )}
+                  </For>
+                  <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+                    <span>{visibleEnvironmentCount()} shown</span>
+                    <span class="text-border">·</span>
+                    <Show when={activeProviderFilterLabel() !== ''}>
+                      <span>{activeProviderFilterLabel()}</span>
+                      <span class="text-border">·</span>
+                    </Show>
+                    <span>{props.snapshot.open_windows.length} live</span>
+                  </div>
+                </Show>
+              </div>
             </div>
-          </div>
-        </header>
+          </header>
+        </div>
 
-        <div class="space-y-3">
-          <Show
-            when={props.activeTab === 'environments'}
-            fallback={(
-              <ControlPlanesPanel
-                controlPlanes={props.controlPlanes}
+        <div class={cn(
+          'mx-auto w-full redeven-welcome-shell',
+          useSpaciousEnvironmentLibraryLayout() && 'redeven-welcome-shell--spacious',
+        )}
+        >
+          <div class="space-y-3">
+            <Show
+              when={props.activeTab === 'environments'}
+              fallback={(
+                <ControlPlanesPanel
+                  controlPlanes={props.controlPlanes}
+                  busyAction={props.busyAction}
+                  openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
+                  environments={props.snapshot.environments}
+                  viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
+                  reconnectControlPlane={props.reconnectControlPlane}
+                  refreshControlPlane={props.refreshControlPlane}
+                  deleteControlPlane={props.deleteControlPlane}
+                />
+              )}
+            >
+              <EnvironmentCardsPanel
+                entries={props.libraryEntries}
+                showQuickAddCards={showQuickAddCards()}
                 busyAction={props.busyAction}
-                openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
-                environments={props.snapshot.environments}
-                viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
-                reconnectControlPlane={props.reconnectControlPlane}
-                refreshControlPlane={props.refreshControlPlane}
-                deleteControlPlane={props.deleteControlPlane}
+                openCreateConnectionDialog={props.openCreateConnectionDialog}
+                openEnvironment={props.openEnvironment}
+                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                copyEnvironmentValue={props.copyEnvironmentValue}
+                saveEnvironment={props.saveEnvironmentFromLibrary}
+                editEnvironment={props.editEnvironment}
+                deleteEnvironment={props.deleteEnvironment}
               />
-            )}
-          >
-            <EnvironmentCardsPanel
-              entries={props.libraryEntries}
-              showQuickAddCards={
-                props.libraryFilter === 'all'
-                && trimString(props.libraryQuery) === ''
-                && trimString(props.libraryProviderFilter) === ''
-              }
-              busyAction={props.busyAction}
-              openCreateConnectionDialog={props.openCreateConnectionDialog}
-              openEnvironment={props.openEnvironment}
-              runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-              toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-              copyEnvironmentValue={props.copyEnvironmentValue}
-              saveEnvironment={props.saveEnvironmentFromLibrary}
-              editEnvironment={props.editEnvironment}
-              deleteEnvironment={props.deleteEnvironment}
-            />
-          </Show>
+            </Show>
+          </div>
         </div>
       </main>
     </div>
@@ -2461,7 +2484,10 @@ function EnvironmentCardsPanel(props: Readonly<{
   return (
     <div class="space-y-3">
       <Show when={groupedEntries().pinned_entries.length > 0}>
-        <EnvironmentCardSection title="Pinned">
+        <EnvironmentCardSection
+          title="Pinned"
+          spacious={shouldUseSpaciousEnvironmentGrid(groupedEntries().pinned_entries.length)}
+        >
           <For each={groupedEntries().pinned_entries}>
             {(environment) => (
               <EnvironmentConnectionCard
@@ -2481,7 +2507,12 @@ function EnvironmentCardsPanel(props: Readonly<{
       </Show>
 
       <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
-        <EnvironmentCardSection title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}>
+        <EnvironmentCardSection
+          title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}
+          spacious={shouldUseSpaciousEnvironmentGrid(
+            groupedEntries().regular_entries.length + (props.showQuickAddCards ? 1 : 0),
+          )}
+        >
           <For each={groupedEntries().regular_entries}>
             {(environment) => (
               <EnvironmentConnectionCard
@@ -2529,6 +2560,7 @@ function EnvironmentCardsPanel(props: Readonly<{
 
 function EnvironmentCardSection(props: Readonly<{
   title?: string;
+  spacious?: boolean;
   children: JSX.Element;
 }>) {
   return (
@@ -2540,7 +2572,7 @@ function EnvironmentCardSection(props: Readonly<{
           </div>
         )}
       </Show>
-      <div class="redeven-environment-grid">
+      <div class={cn('redeven-environment-grid', props.spacious && 'redeven-environment-grid--spacious')}>
         {props.children}
       </div>
     </section>
