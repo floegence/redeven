@@ -32,7 +32,7 @@ describe('controlPlaneProviderClient', () => {
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://dev.redeven.test',
-      documentation_url: 'https://github.com/floegence/redeven-portal/blob/main/docs/architecture/provider-protocol.md',
+      documentation_url: 'https://redeven.test/docs/control-plane-providers',
     })));
 
     await expect(fetchProviderDiscovery('https://dev.redeven.test', { transport })).resolves.toEqual({
@@ -40,7 +40,7 @@ describe('controlPlaneProviderClient', () => {
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://dev.redeven.test',
-      documentation_url: 'https://github.com/floegence/redeven-portal/blob/main/docs/architecture/provider-protocol.md',
+      documentation_url: 'https://redeven.test/docs/control-plane-providers',
     });
     expect(transport).toHaveBeenCalledWith(expect.objectContaining({
       url: 'https://dev.redeven.test/.well-known/redeven-provider.json',
@@ -70,7 +70,7 @@ describe('controlPlaneProviderClient', () => {
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://dev.redeven.test',
-      documentation_url: 'https://github.com/floegence/redeven-portal/blob/main/docs/architecture/provider-protocol.md',
+      documentation_url: 'https://redeven.test/docs/control-plane-providers',
     });
     expect(provider).not.toBeNull();
 
@@ -96,7 +96,7 @@ describe('controlPlaneProviderClient', () => {
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://dev.redeven.test',
-      documentation_url: 'https://github.com/floegence/redeven-portal/blob/main/docs/architecture/provider-protocol.md',
+      documentation_url: 'https://redeven.test/docs/control-plane-providers',
     });
     expect(provider).not.toBeNull();
 
