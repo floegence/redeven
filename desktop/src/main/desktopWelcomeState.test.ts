@@ -29,7 +29,7 @@ const testProvider = normalizeDesktopControlPlaneProvider({
   provider_id: 'redeven_portal',
   display_name: 'Redeven Portal',
   provider_origin: 'https://cp.example.invalid',
-  documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+  documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
 });
 
 describe('desktopWelcomeState', () => {

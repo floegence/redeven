@@ -55,6 +55,8 @@ A secure endpoint should feel powerful, not heavy-handed. Redeven keeps the cont
 - Ship the same runtime as a CLI and as a desktop app, with versioned GitHub Release artifacts and verification steps.
 - Let compatible first-party or third-party control planes integrate through one fixed provider protocol instead of product-specific desktop adapters.
 
+Provider implementers should use the `redeven-portal` repository as the Control Plane contract source of truth: the end-user guide lives in Portal console docs, while the canonical files are the published [RCPP v1 spec](https://github.com/floegence/redeven-portal/blob/main/docs/protocol/rcpp-v1.md) and [OpenAPI](https://github.com/floegence/redeven-portal/blob/main/docs/openapi/rcpp-v1.yaml).
+
 ## Key technologies
 
 | Technology | Role in Redeven | Jump |
@@ -180,6 +182,7 @@ Pick the shortest path to what you need. 📚
 | Understand the Env App runtime and session flow | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | Run code-server over E2EE | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | Package or operate the desktop shell | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| Integrate a compatible Control Plane provider | [`redeven-portal` RCPP v1 spec](https://github.com/floegence/redeven-portal/blob/main/docs/protocol/rcpp-v1.md), [`redeven-portal` OpenAPI](https://github.com/floegence/redeven-portal/blob/main/docs/openapi/rcpp-v1.yaml) |
 | Configure Flower and its settings | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
 | Understand the optional Codex host-runtime integration | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
 | Refresh or audit the embedded knowledge bundle | [`docs/KNOWLEDGE.md`](docs/KNOWLEDGE.md) |

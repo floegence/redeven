@@ -42,20 +42,20 @@ describe('controlPlaneProvider', () => {
       provider_id: ' redeven_portal ',
       display_name: ' Redeven Portal ',
       provider_origin: 'https://cp.example.invalid/root/path',
-      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
     })).toEqual({
       protocol_version: 'rcpp-v1',
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
     });
     expect(normalizeDesktopControlPlaneProvider({
       protocol_version: 'unknown',
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
     })).toBeNull();
   });
 
@@ -65,7 +65,7 @@ describe('controlPlaneProvider', () => {
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
     });
     expect(provider).not.toBeNull();
 
@@ -91,7 +91,7 @@ describe('controlPlaneProvider', () => {
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
     });
     expect(provider).not.toBeNull();
 

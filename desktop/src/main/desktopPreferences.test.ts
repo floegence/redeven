@@ -66,7 +66,7 @@ function buildTestControlPlaneProvider(providerOrigin = 'https://cp.example.inva
     provider_id: 'redeven_portal',
     display_name: 'Redeven Portal',
     provider_origin: providerOrigin,
-    documentation_url: `${providerOrigin}/docs/provider-protocol`,
+    documentation_url: `${providerOrigin}/docs/control-plane-providers`,
   });
   if (!provider) {
     throw new Error('Expected test provider to normalize.');
@@ -221,7 +221,7 @@ describe('desktopPreferences', () => {
       provider_id: 'redeven_portal',
       display_name: 'Redeven Portal',
       provider_origin: 'https://region.example.invalid',
-      documentation_url: 'https://region.example.invalid/docs/provider-protocol',
+      documentation_url: 'https://region.example.invalid/docs/control-plane-providers',
     });
     expect(provider).not.toBeNull();
 
