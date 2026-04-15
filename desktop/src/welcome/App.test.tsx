@@ -271,6 +271,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-welcome-shell--spacious');
     expect(appSrc).toContain('useSpaciousWelcomeShell');
     expect(appSrc).toContain('shouldUseSpaciousEnvironmentGrid');
+    expect(appSrc).toContain('props.libraryEntries.length + (showQuickAddCards() ? 1 : 0)');
     expect(appSrc).toContain('useSpaciousControlPlaneLayout');
     expect(styles).toContain('--redeven-welcome-shell-max-width: 80rem;');
     expect(styles).toContain('--redeven-welcome-shell-spacious-max-width: 100rem;');
@@ -289,8 +290,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-grid');
   });
 
-  it('uses a compact default grid and a spacious auto-fit grid when a section reaches four cards', () => {
+  it('uses a compact default grid and keeps the spacious grid tied to the total visible environment cards', () => {
     const styles = readWelcomeStyles();
+    const appSrc = readWelcomeSource();
 
     expect(styles).toContain('--redeven-environment-grid-min-column-size: 17rem;');
     expect(styles).toContain('--redeven-environment-grid-spacious-column-size: 19rem;');
@@ -300,6 +302,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toMatch(
       /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*var\(--redeven-environment-grid-spacious-column-size\)\),\s*1fr\)\);/,
     );
+    expect(appSrc).toContain('props.entries.length + (props.showQuickAddCards ? 1 : 0)');
     expect(styles).not.toMatch(/@media\s*\(min-width:\s*640px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
     expect(styles).not.toMatch(/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
   });

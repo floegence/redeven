@@ -2265,14 +2265,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
     && trimString(props.libraryQuery) === ''
     && trimString(props.libraryProviderFilter) === ''
   ));
-  const groupedLibraryEntries = createMemo(() => splitPinnedEnvironmentEntries(props.libraryEntries));
+  const visibleEnvironmentCardCount = createMemo(() => (
+    props.libraryEntries.length + (showQuickAddCards() ? 1 : 0)
+  ));
   const useSpaciousEnvironmentLibraryLayout = createMemo(() => (
-    props.activeTab === 'environments' && (
-      shouldUseSpaciousEnvironmentGrid(groupedLibraryEntries().pinned_entries.length)
-      || shouldUseSpaciousEnvironmentGrid(
-        groupedLibraryEntries().regular_entries.length + (showQuickAddCards() ? 1 : 0),
-      )
-    )
+    props.activeTab === 'environments'
+    && shouldUseSpaciousEnvironmentGrid(visibleEnvironmentCardCount())
   ));
   const useSpaciousControlPlaneLayout = createMemo(() => (
     props.activeTab === 'control_planes' && props.controlPlanes.length > 0
@@ -2484,13 +2482,16 @@ function EnvironmentCardsPanel(props: Readonly<{
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
   const groupedEntries = createMemo(() => splitPinnedEnvironmentEntries(props.entries));
+  const useSpaciousGrid = createMemo(() => (
+    shouldUseSpaciousEnvironmentGrid(props.entries.length + (props.showQuickAddCards ? 1 : 0))
+  ));
 
   return (
     <div class="space-y-3">
       <Show when={groupedEntries().pinned_entries.length > 0}>
         <EnvironmentCardSection
           title="Pinned"
-          spacious={shouldUseSpaciousEnvironmentGrid(groupedEntries().pinned_entries.length)}
+          spacious={useSpaciousGrid()}
         >
           <For each={groupedEntries().pinned_entries}>
             {(environment) => (
@@ -2513,9 +2514,7 @@ function EnvironmentCardsPanel(props: Readonly<{
       <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
         <EnvironmentCardSection
           title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}
-          spacious={shouldUseSpaciousEnvironmentGrid(
-            groupedEntries().regular_entries.length + (props.showQuickAddCards ? 1 : 0),
-          )}
+          spacious={useSpaciousGrid()}
         >
           <For each={groupedEntries().regular_entries}>
             {(environment) => (
