@@ -4,6 +4,7 @@ import {
   DESKTOP_PROVIDER_CATALOG_STALE_AFTER_MS,
   desktopProviderCatalogFreshness,
   desktopProviderEnvironmentAvailability,
+  desktopProviderOnlineEnvironmentCount,
   desktopProviderRemoteRouteState,
 } from './providerEnvironmentState';
 
@@ -12,6 +13,27 @@ describe('providerEnvironmentState', () => {
     expect(desktopProviderEnvironmentAvailability('online', 'active')).toBe('online');
     expect(desktopProviderEnvironmentAvailability('offline', 'suspended')).toBe('offline');
     expect(desktopProviderEnvironmentAvailability('', '')).toBe('unknown');
+  });
+
+  it('counts provider environments that are currently online', () => {
+    expect(desktopProviderOnlineEnvironmentCount([
+      {
+        status: 'online',
+        lifecycle_status: 'active',
+      },
+      {
+        status: 'ready',
+        lifecycle_status: 'ready',
+      },
+      {
+        status: 'offline',
+        lifecycle_status: 'suspended',
+      },
+      {
+        status: '',
+        lifecycle_status: '',
+      },
+    ])).toBe(2);
   });
 
   it('marks provider catalogs as fresh, stale, or unknown', () => {
