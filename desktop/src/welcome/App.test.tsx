@@ -4,22 +4,19 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
-import {
-  buildExternalLocalUIDesktopTarget,
-} from '../main/desktopTarget';
 import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
 import {
   testDesktopPreferences,
   testManagedAccess,
   testManagedControlPlaneEnvironment,
   testManagedLocalEnvironment,
-  testManagedSession,
 } from '../testSupport/desktopTestHelpers';
 import {
   buildDesktopWelcomeShellViewModel,
   capabilityUnavailableMessage,
   environmentLibraryCount,
   filterEnvironmentLibrary,
+  LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   shellStatus,
 } from './viewModel';
 
@@ -138,11 +135,14 @@ describe('DesktopWelcomeShell', () => {
     ]));
   });
 
-  it('filters the Environment Library by open, recent, and saved connections', () => {
+  it('filters the Environment Library by local and control-plane sources', () => {
     const managedLocal = testManagedLocalEnvironment();
+    const providerBacked = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      localHosting: false,
+    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        managed_environments: [managedLocal, providerBacked],
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -167,46 +167,28 @@ describe('DesktopWelcomeShell', () => {
           'http://192.168.1.11:24000/',
         ],
       }),
-      openSessions: [
-        testManagedSession(managedLocal, 'http://localhost:23998/'),
-        {
-          session_key: 'url:http://192.168.1.12:24000/',
-          target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
-          lifecycle: 'open',
-          startup: {
-            local_ui_url: 'http://192.168.1.12:24000/',
-            local_ui_urls: ['http://192.168.1.12:24000/'],
-          },
-        },
-      ],
     });
 
-    expect(environmentLibraryCount(snapshot, 'all')).toBe(3);
-    expect(environmentLibraryCount(snapshot, 'open')).toBe(2);
-    expect(environmentLibraryCount(snapshot, 'recent')).toBe(1);
-    expect(environmentLibraryCount(snapshot, 'saved')).toBe(2);
+    expect(environmentLibraryCount(snapshot)).toBe(4);
+    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(3);
 
-    expect(filterEnvironmentLibrary(snapshot, 'open')).toEqual([
+    expect(filterEnvironmentLibrary(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
       expect.objectContaining({
         id: 'local:default',
         category: 'managed',
-        is_open: true,
-        open_action_label: 'Focus',
+        managed_environment_kind: 'local',
       }),
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         category: 'saved',
-        is_open: true,
-        open_action_label: 'Focus',
+        label: 'Staging',
       }),
-    ]);
-    expect(filterEnvironmentLibrary(snapshot, 'recent')).toEqual([
       expect.objectContaining({
         id: 'http://192.168.1.11:24000/',
         category: 'recent_auto',
       }),
     ]);
-    expect(filterEnvironmentLibrary(snapshot, 'saved', 'stag')).toEqual([
+    expect(filterEnvironmentLibrary(snapshot, 'stag', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         label: 'Staging',
@@ -233,7 +215,6 @@ describe('DesktopWelcomeShell', () => {
 
     expect(filterEnvironmentLibrary(
       snapshot,
-      'all',
       '',
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     )).toEqual([
@@ -302,7 +283,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('data-redeven-settings-help=""');
     expect(appSrc).not.toContain('title={tooltip()}');
     expect(appSrc).toContain('redeven-console-tab');
-    expect(appSrc).toContain('redeven-console-filter');
+    expect(appSrc).toContain('redeven-provider-pill');
     expect(appSrc).toContain('redeven-environment-card');
     expect(appSrc).toContain('redeven-environment-grid');
   });
@@ -315,8 +296,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('visibleCardCount={visibleEnvironmentCardCount()}');
     expect(appSrc).toContain("layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}");
     expect(appSrc).toContain("environmentLibraryCount(");
-    expect(appSrc).toContain("props.libraryFilter,");
-    expect(appSrc).toContain("'',");
+    expect(appSrc).toContain("props.librarySourceFilter");
+    expect(appSrc).toContain("LOCAL_ENVIRONMENT_LIBRARY_FILTER");
+    expect(appSrc).toContain("layoutReferenceEnvironmentCount() + 1");
     expect(appSrc).toContain('layout_reference_count: props.layoutReferenceCardCount');
     expect(appSrc).toContain("'--redeven-environment-grid-columns': String(layoutModel().column_count)");
     expect(appSrc).toContain('new ResizeObserver(() => updateLayoutMetrics())');
@@ -421,7 +403,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Control Planes');
     expect(appSrc).toContain('Add Control Plane');
     expect(appSrc).toContain('View Environments');
-    expect(appSrc).toContain('All Providers');
+    expect(appSrc).toContain('All Sources');
+    expect(appSrc).toContain('Local');
     expect(appSrc).toContain('control-plane-label');
     expect(appSrc).toContain('suggestControlPlaneDisplayLabel');
     expect(appSrc).toContain('Continue in Browser');

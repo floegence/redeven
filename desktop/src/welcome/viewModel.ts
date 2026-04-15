@@ -19,7 +19,6 @@ export type DesktopWelcomeShellViewModel = Readonly<{
   settings_save_label: string;
 }>;
 
-export type EnvironmentLibraryFilter = 'all' | 'open' | 'recent' | 'saved';
 export type EnvironmentCenterTab = 'environments' | 'control_planes';
 export type EnvironmentCardTone = 'neutral' | 'primary' | 'success' | 'warning';
 export type EnvironmentLibraryLayoutDensity = 'compact' | 'spacious';
@@ -126,6 +125,7 @@ export const COMPACT_ENVIRONMENT_GRID_MIN_COLUMN_REM = 17;
 export const SPACIOUS_ENVIRONMENT_GRID_MIN_COLUMN_REM = 19;
 export const COMPACT_ENVIRONMENT_GRID_GAP_REM = 1;
 export const SPACIOUS_ENVIRONMENT_GRID_GAP_REM = 1.125;
+export const LOCAL_ENVIRONMENT_LIBRARY_FILTER = '__local__';
 
 export function capabilityUnavailableMessage(label: string): string {
   return `Connect to an Environment first to open ${label}.`;
@@ -268,19 +268,6 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
       return 'Redeven URL';
     default:
       return 'Local';
-  }
-}
-
-export function libraryFilterLabel(filter: EnvironmentLibraryFilter): string {
-  switch (filter) {
-    case 'open':
-      return 'Open';
-    case 'recent':
-      return 'Recent';
-    case 'saved':
-      return 'Saved';
-    default:
-      return 'All';
   }
 }
 
@@ -1131,22 +1118,6 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
   };
 }
 
-export function environmentMatchesLibraryFilter(
-  environment: DesktopEnvironmentEntry,
-  filter: EnvironmentLibraryFilter,
-): boolean {
-  switch (filter) {
-    case 'open':
-      return environment.is_open;
-    case 'recent':
-      return environment.category === 'recent_auto';
-    case 'saved':
-      return environment.category === 'saved' || environment.category === 'managed';
-    default:
-      return true;
-  }
-}
-
 export function environmentMatchesLibrarySearch(
   environment: DesktopEnvironmentEntry,
   query: string,
@@ -1191,27 +1162,28 @@ export function environmentMatchesProviderFilter(
   if (activeFilter === '') {
     return true;
   }
-  return environmentProviderFilterValue(environment) === activeFilter;
+  const environmentFilter = environmentProviderFilterValue(environment);
+  if (activeFilter === LOCAL_ENVIRONMENT_LIBRARY_FILTER) {
+    return environmentFilter === '';
+  }
+  return environmentFilter === activeFilter;
 }
 
 export function filterEnvironmentLibrary(
   snapshot: DesktopWelcomeSnapshot,
-  filter: EnvironmentLibraryFilter,
   query = '',
   providerFilter = '',
 ): readonly DesktopEnvironmentEntry[] {
   return snapshot.environments.filter((environment) => (
-    environmentMatchesLibraryFilter(environment, filter)
-    && environmentMatchesLibrarySearch(environment, query)
+    environmentMatchesLibrarySearch(environment, query)
     && environmentMatchesProviderFilter(environment, providerFilter)
   ));
 }
 
 export function environmentLibraryCount(
   snapshot: DesktopWelcomeSnapshot,
-  filter: EnvironmentLibraryFilter,
   query = '',
   providerFilter = '',
 ): number {
-  return filterEnvironmentLibrary(snapshot, filter, query, providerFilter).length;
+  return filterEnvironmentLibrary(snapshot, query, providerFilter).length;
 }

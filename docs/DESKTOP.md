@@ -193,7 +193,7 @@ Visual hierarchy:
   - add / close actions
 - `Environments` tab:
   - desktop-managed environment cards for every local, provider-backed, and dual-route managed environment
-  - compact search + provider filter + `All / Open / Recent / Saved` toolbar
+  - compact search + source filter toolbar for `All`, `Local`, and connected Control Planes
   - the same shared grid also includes saved Redeven URL and SSH entries
   - when pinned entries exist, the launcher keeps explicit `Pinned` and `Environments` sections
   - those sections must still share one measured environment-library column model, so pinning only changes grouping order and never changes card width

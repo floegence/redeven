@@ -19,6 +19,7 @@ import {
   buildEnvironmentCardFactsModel,
   buildProviderBackedEnvironmentActionModel,
   filterEnvironmentLibrary,
+  LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   resolveDefaultDualRouteAction,
   splitPinnedEnvironmentEntries,
 } from './viewModel';
@@ -534,12 +535,18 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     expect(filterEnvironmentLibrary(
       snapshot,
-      'all',
       '',
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     ).map((environment) => environment.id)).toEqual([
       remoteOnly.id,
       dualRoute.id,
+    ]);
+    expect(filterEnvironmentLibrary(
+      snapshot,
+      '',
+      LOCAL_ENVIRONMENT_LIBRARY_FILTER,
+    ).map((environment) => environment.id)).toEqual([
+      'local:default',
     ]);
   });
 

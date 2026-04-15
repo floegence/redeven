@@ -89,15 +89,15 @@ import {
   buildProviderBackedEnvironmentActionModel,
   capabilityUnavailableMessage,
   environmentLibraryCount,
+  environmentProviderFilterValue,
   filterEnvironmentLibrary,
+  LOCAL_ENVIRONMENT_LIBRARY_FILTER,
   splitPinnedEnvironmentEntries,
   type EnvironmentActionModel,
   type EnvironmentActionPresentation,
   type EnvironmentCardEndpointModel,
   type EnvironmentCardFactModel,
   type EnvironmentCenterTab,
-  libraryFilterLabel,
-  type EnvironmentLibraryFilter,
   type EnvironmentSplitMenuActionModel,
   shouldUseSpaciousEnvironmentGrid,
   shellStatus,
@@ -343,7 +343,6 @@ function buildDesktopFloeConfig() {
   } as const;
 }
 
-const LIBRARY_FILTERS: readonly EnvironmentLibraryFilter[] = ['all', 'open', 'recent', 'saved'];
 const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; label: string }>[] = [
   { value: 'environments', label: 'Environments' },
   { value: 'control_planes', label: 'Control Planes' },
@@ -412,15 +411,6 @@ function controlPlaneFilterValue(controlPlane: DesktopControlPlaneSummary): stri
     controlPlane.provider.provider_origin,
     controlPlane.provider.provider_id,
   );
-}
-
-function environmentProviderFilterValue(environment: DesktopEnvironmentEntry): string {
-  const providerOrigin = trimString(environment.provider_origin);
-  const providerID = trimString(environment.provider_id);
-  if (providerOrigin === '' || providerID === '') {
-    return '';
-  }
-  return desktopControlPlaneKey(providerOrigin, providerID);
 }
 
 function formatTimestamp(unixMS: number): string {
@@ -752,8 +742,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
-  const [libraryFilter, setLibraryFilter] = createSignal<EnvironmentLibraryFilter>('all');
-  const [libraryProviderFilter, setLibraryProviderFilter] = createSignal('');
+  const [librarySourceFilter, setLibrarySourceFilter] = createSignal('');
   const [libraryQuery, setLibraryQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
   const actionToastTimers = new Map<number, number>();
@@ -772,6 +761,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     )) ?? snapshot().environments.find((environment) => environment.kind === 'managed_environment') ?? null
   ));
   const controlPlanes = createMemo(() => snapshot().control_planes);
+  const libraryLocalEntryCount = createMemo(() => (
+    environmentLibraryCount(snapshot(), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
+  ));
+  const availableLibrarySourceFilters = createMemo(() => {
+    const next = new Set(controlPlanes().map((controlPlane) => controlPlaneFilterValue(controlPlane)));
+    if (controlPlanes().length > 0 && libraryLocalEntryCount() > 0) {
+      next.add(LOCAL_ENVIRONMENT_LIBRARY_FILTER);
+    }
+    return next;
+  });
   const openWindowsSubtitle = createMemo(() => {
     const openWindows = snapshot().open_windows;
     if (openWindows.length <= 0) {
@@ -785,9 +784,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const libraryEntries = createMemo(() => (
     filterEnvironmentLibrary(
       snapshot(),
-      libraryFilter(),
       libraryQuery(),
-      libraryProviderFilter(),
+      librarySourceFilter(),
     )
   ));
   const managedBindingResolution = createMemo(() => {
@@ -804,12 +802,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
 
   createEffect(() => {
-    const activeProviderFilter = libraryProviderFilter();
-    if (activeProviderFilter === '') {
+    const activeSourceFilter = librarySourceFilter();
+    if (activeSourceFilter === '') {
       return;
     }
-    if (!controlPlanes().some((controlPlane) => controlPlaneFilterValue(controlPlane) === activeProviderFilter)) {
-      setLibraryProviderFilter('');
+    if (!availableLibrarySourceFilters().has(activeSourceFilter)) {
+      setLibrarySourceFilter('');
     }
   });
 
@@ -1001,7 +999,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     setActiveCenterTab('environments');
-    setLibraryProviderFilter('');
+    setLibrarySourceFilter('');
     if (trimString(message) !== '') {
       showActionToast(message, 'info');
     }
@@ -1086,9 +1084,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function focusProviderEnvironments(controlPlane: DesktopControlPlaneSummary): void {
     setActiveCenterTab('environments');
-    setLibraryFilter('all');
     setLibraryQuery('');
-    setLibraryProviderFilter(controlPlaneFilterValue(controlPlane));
+    setLibrarySourceFilter(controlPlaneFilterValue(controlPlane));
   }
 
   function closeControlPlaneDialog(): void {
@@ -2016,12 +2013,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           busyAction={busyAction()}
           activeTab={activeCenterTab()}
           setActiveTab={setActiveCenterTab}
-          libraryFilter={libraryFilter()}
-          libraryProviderFilter={libraryProviderFilter()}
+          librarySourceFilter={librarySourceFilter()}
           libraryQuery={libraryQuery()}
           libraryEntries={libraryEntries()}
-          setLibraryFilter={setLibraryFilter}
-          setLibraryProviderFilter={setLibraryProviderFilter}
+          setLibrarySourceFilter={setLibrarySourceFilter}
           setLibraryQuery={setLibraryQuery}
           openLocalEnvironment={openPrimaryManagedEnvironment}
           openSettingsSurface={openSettingsSurface}
@@ -2221,12 +2216,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
   busyAction: BusyAction;
   activeTab: EnvironmentCenterTab;
   setActiveTab: (value: EnvironmentCenterTab) => void;
-  libraryFilter: EnvironmentLibraryFilter;
-  libraryProviderFilter: string;
+  librarySourceFilter: string;
   libraryQuery: string;
   libraryEntries: readonly DesktopEnvironmentEntry[];
-  setLibraryFilter: (value: EnvironmentLibraryFilter) => void;
-  setLibraryProviderFilter: (value: string) => void;
+  setLibrarySourceFilter: (value: string) => void;
   setLibraryQuery: (value: string) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
@@ -2266,37 +2259,44 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const visibleEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
       props.snapshot,
-      props.libraryFilter,
       props.libraryQuery,
-      props.libraryProviderFilter,
+      props.librarySourceFilter,
     )
   ));
-  const libraryFilterOptions = createMemo(() => (
-    LIBRARY_FILTERS.map((filter) => ({
-      value: filter,
-      label: libraryFilterLabel(filter),
-    }))
+  const localSourceCount = createMemo(() => (
+    environmentLibraryCount(props.snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
   ));
-  const providerFilterOptions = createMemo(() => props.controlPlanes.map((controlPlane) => ({
-    value: controlPlaneFilterValue(controlPlane),
-    label: controlPlaneName(controlPlane),
-    count: controlPlane.environments.length,
-  })));
-  const activeProviderFilterLabel = createMemo(() => (
-    providerFilterOptions().find((option) => option.value === props.libraryProviderFilter)?.label ?? ''
+  const sourceFilterOptions = createMemo(() => {
+    const options: Array<Readonly<{ value: string; label: string; count: number }>> = [];
+    if (props.controlPlanes.length > 0 && localSourceCount() > 0) {
+      options.push({
+        value: LOCAL_ENVIRONMENT_LIBRARY_FILTER,
+        label: 'Local',
+        count: localSourceCount(),
+      });
+    }
+    return [
+      ...options,
+      ...props.controlPlanes.map((controlPlane) => ({
+        value: controlPlaneFilterValue(controlPlane),
+        label: controlPlaneName(controlPlane),
+        count: controlPlane.environments.length,
+      })),
+    ];
+  });
+  const activeSourceFilterLabel = createMemo(() => (
+    sourceFilterOptions().find((option) => option.value === props.librarySourceFilter)?.label ?? ''
   ));
   const controlPlaneEnvironmentCount = createMemo(() => (
     props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
   ));
   const showQuickAddCards = createMemo(() => (
-    props.libraryFilter === 'all'
-    && trimString(props.libraryQuery) === ''
-    && trimString(props.libraryProviderFilter) === ''
+    trimString(props.libraryQuery) === ''
+    && trimString(props.librarySourceFilter) === ''
   ));
   const layoutReferenceEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
       props.snapshot,
-      props.libraryFilter,
       '',
       '',
     )
@@ -2305,7 +2305,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     props.libraryEntries.length + (showQuickAddCards() ? 1 : 0)
   ));
   const layoutReferenceEnvironmentCardCount = createMemo(() => (
-    layoutReferenceEnvironmentCount() + (props.libraryFilter === 'all' ? 1 : 0)
+    layoutReferenceEnvironmentCount() + 1
   ));
   const useSpaciousEnvironmentLibraryLayout = createMemo(() => (
     props.activeTab === 'environments'
@@ -2391,17 +2391,17 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     </div>
                   )}
                 >
-                  <Show when={providerFilterOptions().length > 0}>
+                  <Show when={sourceFilterOptions().length > 0}>
                     <Show
-                      when={providerFilterOptions().length < 5}
+                      when={sourceFilterOptions().length < 5}
                       fallback={(
                         <select
                           class="redeven-native-select min-w-[12rem]"
-                          value={props.libraryProviderFilter}
-                          onChange={(event) => props.setLibraryProviderFilter(trimString(event.currentTarget.value))}
+                          value={props.librarySourceFilter}
+                          onChange={(event) => props.setLibrarySourceFilter(trimString(event.currentTarget.value))}
                         >
-                          <option value="">All Providers</option>
-                          <For each={providerFilterOptions()}>
+                          <option value="">All Sources</option>
+                          <For each={sourceFilterOptions()}>
                             {(option) => (
                               <option value={option.value}>
                                 {option.label} ({option.count})
@@ -2414,20 +2414,20 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       <button
                         type="button"
                         class="redeven-provider-pill"
-                        data-active={props.libraryProviderFilter === ''}
-                        aria-pressed={props.libraryProviderFilter === ''}
-                        onClick={() => props.setLibraryProviderFilter('')}
+                        data-active={props.librarySourceFilter === ''}
+                        aria-pressed={props.librarySourceFilter === ''}
+                        onClick={() => props.setLibrarySourceFilter('')}
                       >
                         All
                       </button>
-                      <For each={providerFilterOptions()}>
+                      <For each={sourceFilterOptions()}>
                         {(option) => (
                           <button
                             type="button"
                             class="redeven-provider-pill"
-                            data-active={props.libraryProviderFilter === option.value}
-                            aria-pressed={props.libraryProviderFilter === option.value}
-                            onClick={() => props.setLibraryProviderFilter(option.value)}
+                            data-active={props.librarySourceFilter === option.value}
+                            aria-pressed={props.librarySourceFilter === option.value}
+                            onClick={() => props.setLibrarySourceFilter(option.value)}
                           >
                             {option.label}
                           </button>
@@ -2435,24 +2435,11 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       </For>
                     </Show>
                   </Show>
-                  <For each={libraryFilterOptions()}>
-                    {(option) => (
-                      <button
-                        type="button"
-                        class="redeven-console-filter"
-                        data-active={props.libraryFilter === option.value}
-                        aria-pressed={props.libraryFilter === option.value}
-                        onClick={() => props.setLibraryFilter(option.value as EnvironmentLibraryFilter)}
-                      >
-                        {option.label}
-                      </button>
-                    )}
-                  </For>
                   <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
                     <span>{visibleEnvironmentCount()} shown</span>
                     <span class="text-border">·</span>
-                    <Show when={activeProviderFilterLabel() !== ''}>
-                      <span>{activeProviderFilterLabel()}</span>
+                    <Show when={activeSourceFilterLabel() !== ''}>
+                      <span>{activeSourceFilterLabel()}</span>
                       <span class="text-border">·</span>
                     </Show>
                     <span>{props.snapshot.open_windows.length} live</span>
