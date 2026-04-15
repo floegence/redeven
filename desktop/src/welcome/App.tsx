@@ -907,6 +907,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
     }
     if (presentation.message !== '') {
+      if (presentation.delivery === 'inline') {
+        setErrorMessage(errorTarget, presentation.message);
+        return;
+      }
       showActionToast(presentation.message, presentation.tone);
     }
   }
@@ -1092,9 +1096,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return {
           ...current,
           use_control_plane_binding: false,
-          environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)
-            ? deriveManagedEnvironmentScopeNameFromName(current.label)
-            : current.environment_name,
+          environment_name: trimString(current.environment_name) || deriveManagedEnvironmentScopeNameFromName(current.label),
           provider_origin: '',
           provider_id: '',
           env_public_id: '',
@@ -1689,7 +1691,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setErrorMessage(errorTarget, 'Choose a Control Plane environment.');
         return null;
       }
-    } else if (localEnvironmentName === '') {
+    } else if (localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')) {
       setErrorMessage(errorTarget, 'Name is required.');
       return null;
     }
@@ -1698,7 +1700,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       kind: 'upsert_managed_environment',
       environment_id: state.environment_id || undefined,
       mode: wantsControlPlaneBinding ? 'local_with_control_plane' : 'local_only',
-      environment_name: wantsControlPlaneBinding ? undefined : localEnvironmentName,
+      environment_name: wantsControlPlaneBinding ? undefined : (localEnvironmentName || undefined),
       label: displayName,
       local_ui_bind: state.local_ui_bind,
       local_ui_password: state.local_ui_password,

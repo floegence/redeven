@@ -6,12 +6,14 @@ import { pathToFileURL } from 'node:url';
 import { startManagedRuntime } from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
+  describeManagedEnvironmentLocalBindConflict,
   createSafeStorageSecretCodec,
   deleteManagedEnvironment,
   deleteSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedSSHEnvironment,
   defaultDesktopPreferencesPaths,
+  findManagedEnvironmentLocalBindConflict,
   findManagedEnvironmentByID,
   loadDesktopPreferences,
   rememberManagedEnvironmentUse,
@@ -3081,7 +3083,12 @@ async function upsertManagedEnvironmentFromWelcome(
   const existing = request.environment_id ? findManagedEnvironmentByID(preferences, request.environment_id) : null;
   const existingAccess = existing ? managedEnvironmentLocalAccess(existing) : null;
   const providerSelection = selectedProviderEnvironmentFromWelcome(preferences, request);
-  const requestedEnvironmentName = compact(request.environment_name) || compact(options.label);
+  const requestedEnvironmentName = compact(request.environment_name)
+    || (
+      !providerSelection && existing?.local_hosting?.scope.kind === 'local'
+        ? existing.local_hosting.scope.name
+        : compact(options.label)
+    );
   if (
     !providerSelection
     && !request.environment_id
@@ -3104,7 +3111,6 @@ async function upsertManagedEnvironmentFromWelcome(
     env_public_id: providerSelection?.env_public_id,
     last_used_at_ms: existing?.last_used_at_ms ?? 0,
   });
-  await persistDesktopPreferences(next);
   const resolvedEnvironment = providerSelection
     ? next.managed_environments.find((environment) => (
       managedEnvironmentProviderOrigin(environment) === providerSelection.provider_origin
@@ -3118,6 +3124,11 @@ async function upsertManagedEnvironmentFromWelcome(
   if (!resolvedEnvironment) {
     throw new Error('Desktop could not save that managed environment.');
   }
+  const bindConflict = findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id);
+  if (bindConflict) {
+    throw new Error(describeManagedEnvironmentLocalBindConflict(bindConflict));
+  }
+  await persistDesktopPreferences(next);
   return resolvedEnvironment;
 }
 
@@ -3312,20 +3323,28 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'delete_control_plane':
       return deleteControlPlaneFromLauncher(request);
     case 'upsert_managed_environment':
-      await upsertManagedEnvironmentFromWelcome({
-        environment_id: request.environment_id,
-        environment_name: request.environment_name,
-        provider_origin: request.provider_origin,
-        provider_id: request.provider_id,
-        env_public_id: request.env_public_id,
-      }, {
-        local_ui_bind: request.local_ui_bind,
-        local_ui_password: request.local_ui_password,
-        local_ui_password_mode: request.local_ui_password_mode,
-      }, {
-        label: request.label,
-      });
-      return launcherActionSuccess('saved_environment');
+      try {
+        await upsertManagedEnvironmentFromWelcome({
+          environment_id: request.environment_id,
+          environment_name: request.environment_name,
+          provider_origin: request.provider_origin,
+          provider_id: request.provider_id,
+          env_public_id: request.env_public_id,
+        }, {
+          local_ui_bind: request.local_ui_bind,
+          local_ui_password: request.local_ui_password,
+          local_ui_password_mode: request.local_ui_password_mode,
+        }, {
+          label: request.label,
+        });
+        return launcherActionSuccess('saved_environment');
+      } catch (error) {
+        return launcherActionFailure(
+          'action_invalid',
+          'dialog',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     case 'upsert_saved_environment':
       await upsertSavedEnvironmentFromWelcome(request.environment_id, request.label, request.external_local_ui_url);
       return launcherActionSuccess('saved_environment');
@@ -3689,6 +3708,10 @@ if (!app.requestSingleInstanceLock()) {
         currentLocalUIPasswordConfigured: access.local_ui_password_configured,
       });
       const next = updateManagedEnvironmentAccess(previous, environment.id, validated);
+      const bindConflict = findManagedEnvironmentLocalBindConflict(next, environment.id);
+      if (bindConflict) {
+        throw new Error(describeManagedEnvironmentLocalBindConflict(bindConflict));
+      }
       await persistDesktopPreferences(next);
       return { ok: true };
     } catch (error) {

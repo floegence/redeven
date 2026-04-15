@@ -2,7 +2,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { DEFAULT_DESKTOP_LOCAL_UI_BIND, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
+import {
+  DEFAULT_DESKTOP_LOCAL_UI_BIND,
+  isLoopbackOnlyBind,
+  localUIBindsConflict,
+  parseLocalUIBind,
+} from './localUIBind';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { DesktopSavedEnvironmentSource } from '../shared/desktopConnectionTypes';
 import { DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND } from '../shared/desktopAccessModel';
@@ -316,6 +321,15 @@ export type DeleteManagedEnvironmentResult = Readonly<{
   preferences: DesktopPreferences;
   deleted_environment: DesktopManagedEnvironment | null;
   deleted_state_dir: string;
+}>;
+
+export type DesktopManagedEnvironmentLocalBindConflict = Readonly<{
+  environment_id: string;
+  label: string;
+  local_ui_bind: string;
+  conflicting_environment_id: string;
+  conflicting_label: string;
+  conflicting_local_ui_bind: string;
 }>;
 
 export type UpsertDesktopSavedEnvironmentInput = Readonly<{
@@ -1275,6 +1289,47 @@ function findManagedEnvironmentByProviderBinding(
   )) ?? null;
 }
 
+export function findManagedEnvironmentLocalBindConflict(
+  preferences: DesktopPreferences,
+  environmentID: string,
+): DesktopManagedEnvironmentLocalBindConflict | null {
+  const target = findManagedEnvironmentByID(preferences, environmentID);
+  const targetBind = target?.local_hosting?.access.local_ui_bind ?? '';
+  if (!target || targetBind === '') {
+    return null;
+  }
+
+  for (const candidate of preferences.managed_environments) {
+    if (candidate.id === target.id) {
+      continue;
+    }
+    const candidateBind = candidate.local_hosting?.access.local_ui_bind ?? '';
+    if (candidateBind === '') {
+      continue;
+    }
+    if (!localUIBindsConflict(targetBind, candidateBind)) {
+      continue;
+    }
+    return {
+      environment_id: target.id,
+      label: target.label,
+      local_ui_bind: targetBind,
+      conflicting_environment_id: candidate.id,
+      conflicting_label: candidate.label,
+      conflicting_local_ui_bind: candidateBind,
+    };
+  }
+  return null;
+}
+
+export function describeManagedEnvironmentLocalBindConflict(
+  conflict: DesktopManagedEnvironmentLocalBindConflict,
+): string {
+  const targetLabel = compact(conflict.label) || compact(conflict.environment_id) || 'This environment';
+  const conflictingLabel = compact(conflict.conflicting_label) || compact(conflict.conflicting_environment_id) || 'another environment';
+  return `${targetLabel} cannot use ${conflict.local_ui_bind} because "${conflictingLabel}" is already configured for ${conflict.conflicting_local_ui_bind}. Choose a different Local UI bind or update that environment first.`;
+}
+
 function localHostingForManagedEnvironment(
   input: UpsertDesktopManagedEnvironmentInput,
   access: DesktopManagedEnvironmentAccess,
@@ -1308,7 +1363,10 @@ function localHostingForManagedEnvironment(
     );
   }
 
-  const name = normalizeDesktopLocalEnvironmentName(input.name);
+  const existingLocalName = existing?.local_hosting?.scope.kind === 'local'
+    ? existing.local_hosting.scope.name
+    : '';
+  const name = normalizeDesktopLocalEnvironmentName(input.name || existingLocalName);
   const existingStateDir = (
     existing?.local_hosting?.scope.kind === 'local'
     && existing.local_hosting.scope.name === name

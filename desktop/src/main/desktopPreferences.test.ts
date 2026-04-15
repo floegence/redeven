@@ -23,6 +23,7 @@ import {
 import {
   createPlaintextSecretCodec,
   deleteManagedEnvironment,
+  describeManagedEnvironmentLocalBindConflict,
   type DesktopPreferences,
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
@@ -33,6 +34,8 @@ import {
   deriveRecentExternalLocalUIURLs,
   desktopEnvironmentID,
   desktopPreferencesToDraft,
+  findManagedEnvironmentByID,
+  findManagedEnvironmentLocalBindConflict,
   loadDesktopPreferences,
   managedDesktopLaunchKey,
   normalizeRecentExternalLocalUIURLs,
@@ -141,6 +144,84 @@ describe('desktopPreferences', () => {
     expect(() => validateDesktopSettingsDraft(draft({
       local_ui_bind: '0.0.0.0:23998',
     }))).toThrow('Non-loopback Local UI binds require a Local UI password.');
+  });
+
+  it('detects local bind conflicts across managed environments', () => {
+    const primary = testManagedLocalEnvironment('default', {
+      label: 'Local Default Environment',
+      access: testManagedAccess({
+        local_ui_bind: 'localhost:23998',
+      }),
+    });
+    const lab = testManagedLocalEnvironment('lab', {
+      label: 'Lab',
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:23998',
+      }),
+    });
+    const preferences = testDesktopPreferences({
+      managed_environments: [primary, lab],
+    });
+
+    expect(findManagedEnvironmentLocalBindConflict(preferences, lab.id)).toEqual({
+      environment_id: lab.id,
+      label: 'Lab',
+      local_ui_bind: '127.0.0.1:23998',
+      conflicting_environment_id: primary.id,
+      conflicting_label: 'Local Default Environment',
+      conflicting_local_ui_bind: 'localhost:23998',
+    });
+    expect(describeManagedEnvironmentLocalBindConflict(findManagedEnvironmentLocalBindConflict(preferences, lab.id)!)).toBe(
+      'Lab cannot use 127.0.0.1:23998 because "Local Default Environment" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
+    );
+  });
+
+  it('does not treat dynamic local binds as conflicts', () => {
+    const primary = testManagedLocalEnvironment('default', {
+      access: testManagedAccess({
+        local_ui_bind: 'localhost:23998',
+      }),
+    });
+    const lab = testManagedLocalEnvironment('lab', {
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:0',
+      }),
+    });
+    const preferences = testDesktopPreferences({
+      managed_environments: [primary, lab],
+    });
+
+    expect(findManagedEnvironmentLocalBindConflict(preferences, lab.id)).toBeNull();
+  });
+
+  it('preserves the existing local scope name when editing a local-only environment without resending it', () => {
+    const existing = testManagedLocalEnvironment('lab', {
+      label: 'Lab',
+      access: testManagedAccess({
+        local_ui_bind: 'localhost:23998',
+      }),
+    });
+    const next = upsertManagedEnvironment(testDesktopPreferences({
+      managed_environments: [existing],
+    }), {
+      environment_id: existing.id,
+      label: 'Renamed Lab',
+      access: testManagedAccess({
+        local_ui_bind: 'localhost:24000',
+      }),
+    });
+    const updated = findManagedEnvironmentByID(next, existing.id);
+
+    expect(updated).toBeTruthy();
+    expect(updated).toEqual(expect.objectContaining({
+      id: existing.id,
+      label: 'Renamed Lab',
+    }));
+    expect(updated?.local_hosting?.scope).toEqual({
+      kind: 'local',
+      name: 'lab',
+    });
+    expect(updated?.local_hosting?.access.local_ui_bind).toBe('localhost:24000');
   });
 
   it('keeps or clears the stored password according to the write-only mode', () => {
