@@ -494,6 +494,12 @@ function buildManagedEnvironmentEntry(
       remoteCatalogFreshness: 'unknown' as DesktopProviderCatalogFreshness,
       remoteStateReason: '',
     };
+  const remoteEnvironmentURL = kind === 'controlplane'
+    ? String(remoteRoute.providerEnvironment?.environment_url ?? '').trim()
+    : '';
+  const providerIdentitySummary = kind === 'controlplane'
+    ? [providerOrigin, envPublicID].filter(Boolean).join(' / ')
+    : '';
   return {
     id: environment.id,
     kind: 'managed_environment',
@@ -502,8 +508,8 @@ function buildManagedEnvironmentEntry(
     secondary_text: kind === 'local'
       ? access.local_ui_bind
       : managedEnvironmentSupportsLocalHosting(environment)
-        ? `${access.local_ui_bind} · ${providerOrigin} · ${envPublicID}`
-        : `${providerOrigin} · ${envPublicID}`,
+        ? [access.local_ui_bind, remoteEnvironmentURL || providerIdentitySummary].filter(Boolean).join(' · ')
+        : (remoteEnvironmentURL || providerIdentitySummary),
     managed_environment_kind: kind,
     managed_local_scope_kind: environment.local_hosting?.scope.kind,
     managed_environment_name: managedEnvironmentLocalName(environment),
@@ -524,6 +530,7 @@ function buildManagedEnvironmentEntry(
     provider_origin: kind === 'controlplane' ? providerOrigin : undefined,
     provider_id: kind === 'controlplane' ? providerID : undefined,
     env_public_id: kind === 'controlplane' ? envPublicID : undefined,
+    remote_environment_url: kind === 'controlplane' ? (remoteEnvironmentURL || undefined) : undefined,
     provider_status: remoteRoute.providerEnvironment?.status,
     provider_lifecycle_status: remoteRoute.providerEnvironment?.lifecycle_status,
     provider_last_seen_at_unix_ms: remoteRoute.providerEnvironment?.last_seen_at_unix_ms,

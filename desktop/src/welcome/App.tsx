@@ -3311,10 +3311,12 @@ function EnvironmentConnectionCard(props: Readonly<{
       </CardHeader>
       <CardContent class="flex flex-1 flex-col gap-2.5 px-3.5 pb-2.5">
         <EnvironmentCardFactsBlock facts={facts()} />
-        <EnvironmentCardEndpointBlock
-          endpoints={endpoints()}
-          copyEnvironmentValue={props.copyEnvironmentValue}
-        />
+        <Show when={endpoints().length > 0}>
+          <EnvironmentCardEndpointBlock
+            endpoints={endpoints()}
+            copyEnvironmentValue={props.copyEnvironmentValue}
+          />
+        </Show>
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <Show

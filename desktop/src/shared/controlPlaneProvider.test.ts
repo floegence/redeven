@@ -100,6 +100,7 @@ describe('controlPlaneProvider', () => {
         {
           env_public_id: ' env_123 ',
           name: ' Staging ',
+          environment_url: ' https://cp.example.invalid/env/env_123 ',
           description: 'team sandbox',
           namespace_public_id: 'ns_demo',
           namespace_name: 'Demo Team',
@@ -120,6 +121,7 @@ describe('controlPlaneProvider', () => {
         provider_origin: 'https://cp.example.invalid',
         env_public_id: 'env_123',
         label: 'Staging',
+        environment_url: 'https://cp.example.invalid/env/env_123',
         description: 'team sandbox',
         namespace_public_id: 'ns_demo',
         namespace_name: 'Demo Team',

@@ -193,6 +193,7 @@ describe('buildEnvironmentCardModel', () => {
             provider_origin: 'https://cp.example.invalid',
             env_public_id: 'env_demo',
             label: 'Demo Environment',
+            environment_url: 'https://cp.example.invalid/env/env_demo',
             description: 'team sandbox',
             namespace_public_id: 'ns_demo',
             namespace_name: 'Demo Team',
@@ -212,6 +213,7 @@ describe('buildEnvironmentCardModel', () => {
           provider_origin: 'https://cp.example.invalid',
           env_public_id: 'env_demo',
           label: 'Demo Environment',
+          environment_url: 'https://cp.example.invalid/env/env_demo',
           description: 'team sandbox',
           namespace_public_id: 'ns_demo',
           namespace_name: 'Demo Team',
@@ -251,6 +253,7 @@ describe('buildEnvironmentCardModel', () => {
             provider_origin: 'https://cp.example.invalid',
             env_public_id: 'env_demo',
             label: 'Demo Environment',
+            environment_url: 'https://cp.example.invalid/env/env_demo',
             description: 'team sandbox',
             namespace_public_id: 'ns_demo',
             namespace_name: 'Demo Team',
@@ -270,6 +273,7 @@ describe('buildEnvironmentCardModel', () => {
           provider_origin: 'https://cp.example.invalid',
           env_public_id: 'env_demo',
           label: 'Demo Environment',
+          environment_url: 'https://cp.example.invalid/env/env_demo',
           description: 'team sandbox',
           namespace_public_id: 'ns_demo',
           namespace_name: 'Demo Team',
@@ -295,6 +299,71 @@ describe('buildEnvironmentCardModel', () => {
       status_label: 'Ready',
       status_tone: 'primary',
     }));
+  });
+
+  it('uses provider-supplied environment URLs for managed remote endpoint rows', () => {
+    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      localHosting: false,
+    });
+    const provider = {
+      protocol_version: 'rcpp-v1' as const,
+      provider_id: 'redeven_portal',
+      display_name: 'Redeven Portal',
+      provider_origin: 'https://cp.example.invalid',
+      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
+    };
+    const account = {
+      provider_id: 'redeven_portal',
+      provider_origin: 'https://cp.example.invalid',
+      display_name: 'Redeven Portal',
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      authorization_expires_at_unix_ms: Date.now() + 60_000,
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedControlPlane],
+      }),
+      controlPlanes: [{
+        provider,
+        account,
+        display_label: 'Demo Portal',
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          environment_url: 'https://cp.example.invalid/env/env_demo',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+        }],
+        last_synced_at_ms: Date.now(),
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: Date.now(),
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
+    });
+
+    const remoteEntry = snapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
+    ));
+
+    expect(remoteEntry).toBeTruthy();
+    expect(buildEnvironmentCardEndpointsModel(remoteEntry!)).toEqual([
+      {
+        label: 'REMOTE',
+        value: 'https://cp.example.invalid/env/env_demo',
+        monospace: true,
+        copy_label: 'Copy environment URL',
+      },
+    ]);
+    expect(remoteEntry!.secondary_text).toBe('https://cp.example.invalid/env/env_demo');
   });
 
   it('marks remote-only provider cards as stale when the provider catalog is outdated', () => {
@@ -329,6 +398,7 @@ describe('buildEnvironmentCardModel', () => {
             provider_origin: 'https://cp.example.invalid',
             env_public_id: 'env_demo',
             label: 'Demo Environment',
+            environment_url: 'https://cp.example.invalid/env/env_demo',
             description: 'team sandbox',
             namespace_public_id: 'ns_demo',
             namespace_name: 'Demo Team',
@@ -379,6 +449,7 @@ describe('buildEnvironmentCardModel', () => {
         provider_origin: 'https://cp.example.invalid',
         env_public_id: 'env_remote_only',
         label: 'Remote Only',
+        environment_url: 'https://cp.example.invalid/env/env_remote_only',
         description: 'remote only sandbox',
         namespace_public_id: 'ns_demo',
         namespace_name: 'Demo Team',
@@ -391,6 +462,7 @@ describe('buildEnvironmentCardModel', () => {
         provider_origin: 'https://cp.example.invalid',
         env_public_id: 'env_dual_route',
         label: 'Dual Route',
+        environment_url: 'https://cp.example.invalid/env/env_dual_route',
         description: 'dual-route sandbox',
         namespace_public_id: 'ns_demo',
         namespace_name: 'Demo Team',
@@ -581,6 +653,7 @@ describe('buildEnvironmentCardModel', () => {
           provider_origin: 'https://cp.example.invalid',
           env_public_id: 'env_dual_route',
           label: 'Dual Route',
+          environment_url: 'https://cp.example.invalid/env/env_dual_route',
           description: 'dual-route sandbox',
           namespace_public_id: 'ns_demo',
           namespace_name: 'Demo Team',

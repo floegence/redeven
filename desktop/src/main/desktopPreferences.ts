@@ -2408,6 +2408,7 @@ function serializeSavedControlPlaneCatalog(controlPlane: DesktopSavedControlPlan
     environments: controlPlane.environments.map((environment) => ({
       env_public_id: environment.env_public_id,
       name: environment.label,
+      environment_url: environment.environment_url,
       description: environment.description,
       namespace_public_id: environment.namespace_public_id,
       namespace_name: environment.namespace_name,
