@@ -3511,7 +3511,7 @@ function ControlPlaneShelf(props: Readonly<{
 
   return (
     <section class="redeven-control-plane-card space-y-2.5">
-      <div class="redeven-provider-shelf rounded-[0.625rem] border border-border bg-card">
+      <div class="redeven-provider-shelf rounded-lg border border-border bg-card">
         <div class="px-4 py-3">
           <div class="flex" style="flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:0.75rem">
             <div class="flex min-w-0 items-center gap-3">

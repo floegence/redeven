@@ -254,6 +254,13 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Provider-backed entries already materialized into the Environment list.');
   });
 
+  it('uses the same rounded-lg shell radius for Control Plane cards as Environment cards', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('redeven-provider-shelf rounded-lg border border-border bg-card');
+    expect(appSrc).not.toContain('redeven-provider-shelf rounded-[0.625rem]');
+  });
+
   it('uses Environment guidance copy when a capability is unavailable before connection', () => {
     expect(capabilityUnavailableMessage('Deck')).toBe('Connect to an Environment first to open Deck.');
   });
