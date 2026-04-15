@@ -397,6 +397,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('revocable desktop authorization');
     expect(appSrc).toContain('Reconnect');
     expect(appSrc).toContain('Connect Provider');
+    expect(appSrc).toContain('redeven-control-plane-grid');
+    expect(appSrc).toContain('redeven-control-plane-card');
+    expect(styles).toContain('--redeven-control-plane-grid-column-size: 35rem;');
+    expect(styles).toContain('--redeven-control-plane-card-max-width: 44rem;');
+    expect(styles).toContain('.redeven-control-plane-grid');
+    expect(styles).toContain('.redeven-control-plane-card');
     expect(appSrc).toContain('redeven-provider-shelf__metrics');
     expect(styles).toContain('--redeven-provider-shelf-metric-min-size: 15rem;');
     expect(styles).toContain('.redeven-provider-shelf__metrics');

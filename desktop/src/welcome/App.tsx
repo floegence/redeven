@@ -3429,18 +3429,20 @@ function ControlPlanesPanel(props: Readonly<{
       <Show
         when={props.controlPlanes.length > 0}
         fallback={(
-          <div class="redeven-environment-grid">
-            <QuickCreateConnectionCard
-              title="Add Control Plane"
-              badge="Provider"
-              detail="Authorize a compatible provider."
-              actionLabel="Connect Provider"
-              onClick={() => props.openCreateControlPlaneDialog()}
-            />
+          <div class="redeven-control-plane-grid">
+            <div class="redeven-control-plane-card">
+              <QuickCreateConnectionCard
+                title="Add Control Plane"
+                badge="Provider"
+                detail="Authorize a compatible provider."
+                actionLabel="Connect Provider"
+                onClick={() => props.openCreateControlPlaneDialog()}
+              />
+            </div>
           </div>
         )}
       >
-        <div class="space-y-3">
+        <div class="redeven-control-plane-grid">
           <For each={props.controlPlanes}>
             {(controlPlane) => (
               <ControlPlaneShelf
@@ -3501,7 +3503,7 @@ function ControlPlaneShelf(props: Readonly<{
   });
 
   return (
-    <section class="space-y-2.5">
+    <section class="redeven-control-plane-card space-y-2.5">
       <div class="redeven-provider-shelf rounded-[0.625rem] border border-border bg-card">
         <div class="px-4 py-3">
           <div class="flex" style="flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:0.75rem">
