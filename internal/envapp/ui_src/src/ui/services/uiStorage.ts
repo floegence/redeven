@@ -1,5 +1,6 @@
 import type { FloeStorageAdapter } from '@floegence/floe-webapp-core';
 import { desktopManagedEnvironmentStorageScopeID } from './desktopSessionContext';
+import { readDesktopHostBridge } from './desktopHostWindow';
 
 export interface DesktopStateStorageBridge {
   getItem: (key: string) => string | null;
@@ -66,19 +67,15 @@ function localStorageBridge(): DesktopStateStorageBridge | null {
 }
 
 function desktopBridge(): DesktopStateStorageBridge | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  const candidate = window.redevenDesktopStateStorage;
+  const candidate = readDesktopHostBridge('redevenDesktopStateStorage', (value): value is DesktopStateStorageBridge => (
+    !!value
+    && typeof value === 'object'
+    && typeof (value as DesktopStateStorageBridge).getItem === 'function'
+    && typeof (value as DesktopStateStorageBridge).setItem === 'function'
+    && typeof (value as DesktopStateStorageBridge).removeItem === 'function'
+    && typeof (value as DesktopStateStorageBridge).keys === 'function'
+  ));
   if (!candidate) {
-    return null;
-  }
-  if (
-    typeof candidate.getItem !== 'function'
-    || typeof candidate.setItem !== 'function'
-    || typeof candidate.removeItem !== 'function'
-    || typeof candidate.keys !== 'function'
-  ) {
     return null;
   }
   return candidate;

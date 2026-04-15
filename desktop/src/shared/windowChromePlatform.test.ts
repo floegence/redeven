@@ -5,6 +5,7 @@ import {
   desktopWindowChromeCSSVariables,
   desktopWindowTitleBarInsetCSSValue,
   resolveDesktopWindowChromeConfig,
+  resolveDesktopWindowChromeSnapshot,
   usesDesktopWindowThemeOverlay,
 } from './windowChromePlatform';
 
@@ -51,6 +52,16 @@ describe('windowChromePlatform', () => {
       '--redeven-desktop-titlebar-height': '40px',
       '--redeven-desktop-titlebar-start-inset': '84px',
       '--redeven-desktop-titlebar-end-inset': '16px',
+    });
+  });
+
+  it('projects a platform config into a renderer-friendly snapshot', () => {
+    expect(resolveDesktopWindowChromeSnapshot('darwin')).toEqual({
+      mode: 'hidden-inset',
+      controlsSide: 'left',
+      titleBarHeight: 40,
+      contentInsetStart: 84,
+      contentInsetEnd: 16,
     });
   });
 });

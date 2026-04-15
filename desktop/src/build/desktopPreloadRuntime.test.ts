@@ -174,6 +174,8 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopTheme?.getSnapshot === 'function'
       && typeof window.redevenDesktopTheme?.setSource === 'function'
       && typeof window.redevenDesktopTheme?.subscribe === 'function',
+    hasDesktopWindowChromeBridge: typeof window.redevenDesktopWindowChrome === 'object'
+      && typeof window.redevenDesktopWindowChrome?.getSnapshot === 'function',
   });
 }
 
@@ -221,6 +223,7 @@ app.whenReady().then(async () => {
         hasDesktopShellBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
+        hasDesktopWindowChromeBridge: boolean;
       };
       child: {
         hasAskFlowerBridge: boolean;
@@ -230,6 +233,7 @@ app.whenReady().then(async () => {
         hasDesktopShellBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
+        hasDesktopWindowChromeBridge: boolean;
       };
     };
 
@@ -263,6 +267,7 @@ app.whenReady().then(async () => {
     expect(utility.main.hasDesktopShellBridge).toBe(true);
     expect(utility.main.hasStateStorageBridge).toBe(true);
     expect(utility.main.hasDesktopThemeBridge).toBe(true);
+    expect(utility.main.hasDesktopWindowChromeBridge).toBe(true);
     expect(utility.child).toEqual(utility.main);
 
     const session = await runSnapshot(path.join(outDir, 'session.js'));
@@ -273,6 +278,7 @@ app.whenReady().then(async () => {
     expect(session.main.hasDesktopShellBridge).toBe(true);
     expect(session.main.hasStateStorageBridge).toBe(true);
     expect(session.main.hasDesktopThemeBridge).toBe(true);
+    expect(session.main.hasDesktopWindowChromeBridge).toBe(true);
     expect(session.child).toEqual(session.main);
   }, electronRuntimeIntegrationTimeoutMs);
 });

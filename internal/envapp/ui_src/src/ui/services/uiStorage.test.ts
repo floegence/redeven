@@ -13,6 +13,9 @@ import {
   writeEnvironmentOwnedUIStorageItem,
 } from './uiStorage';
 
+const originalParent = window.parent;
+const originalTop = window.top;
+
 function createStorageMock(): Storage {
   const data = new Map<string, string>();
   return {
@@ -53,6 +56,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
   delete window.redevenDesktopStateStorage;
   delete window.redevenDesktopSessionContext;
+  Object.defineProperty(window, 'parent', {
+    configurable: true,
+    value: originalParent,
+  });
+  Object.defineProperty(window, 'top', {
+    configurable: true,
+    value: originalTop,
+  });
 });
 
 describe('uiStorage', () => {
@@ -87,6 +98,41 @@ describe('uiStorage', () => {
     expect(readUIStorageItem('beta')).toBe('two');
     expect(adapterKeys()).toEqual(['beta']);
     expect(localStorageMock.getItem('beta')).toBe('local');
+    expect(isDesktopStateStorageAvailable()).toBe(true);
+  });
+
+  it('prefers a same-origin parent desktop bridge when embedded in a desktop boot frame', () => {
+    const localStorageMock = createStorageMock();
+    vi.stubGlobal('localStorage', localStorageMock);
+
+    const data = new Map<string, string>();
+    const parentWindow = {
+      location: { origin: window.location.origin },
+      redevenDesktopStateStorage: {
+        getItem: (key: string) => data.get(key) ?? null,
+        setItem: (key: string, value: string) => {
+          data.set(key, value);
+        },
+        removeItem: (key: string) => {
+          data.delete(key);
+        },
+        keys: () => Array.from(data.keys()),
+      },
+    } as unknown as Window;
+    Object.defineProperty(window, 'parent', {
+      configurable: true,
+      value: parentWindow,
+    });
+    Object.defineProperty(window, 'top', {
+      configurable: true,
+      value: parentWindow,
+    });
+
+    writeUIStorageItem('embedded', 'desktop');
+
+    expect(readUIStorageItem('embedded')).toBe('desktop');
+    expect(adapterKeys()).toEqual(['embedded']);
+    expect(localStorageMock.getItem('embedded')).toBeNull();
     expect(isDesktopStateStorageAvailable()).toBe(true);
   });
 

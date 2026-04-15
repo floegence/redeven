@@ -1,10 +1,52 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createDesktopThemeStorageAdapter } from './desktopTheme';
+import { createDesktopThemeStorageAdapter, desktopThemeBridge } from './desktopTheme';
+
+const originalParent = window.parent;
+const originalTop = window.top;
+
+function setWindowHierarchy(parent: Window, top: Window = parent): void {
+  Object.defineProperty(window, 'parent', {
+    configurable: true,
+    value: parent,
+  });
+  Object.defineProperty(window, 'top', {
+    configurable: true,
+    value: top,
+  });
+}
+
+afterEach(() => {
+  delete (window as Window & { redevenDesktopTheme?: unknown }).redevenDesktopTheme;
+  Object.defineProperty(window, 'parent', {
+    configurable: true,
+    value: originalParent,
+  });
+  Object.defineProperty(window, 'top', {
+    configurable: true,
+    value: originalTop,
+  });
+});
 
 describe('desktopTheme storage adapter', () => {
+  it('resolves the desktop theme bridge from a same-origin parent window', () => {
+    const bridge = {
+      getSnapshot: vi.fn(() => ({ source: 'dark', resolvedTheme: 'dark', window: { backgroundColor: '#000', symbolColor: '#fff' } })),
+      setSource: vi.fn(),
+      subscribe: vi.fn(),
+    };
+    const parentWindow = {
+      location: { origin: window.location.origin },
+      redevenDesktopTheme: bridge,
+    } as unknown as Window;
+
+    setWindowHierarchy(parentWindow);
+
+    expect(desktopThemeBridge()).toBe(bridge);
+  });
+
   it('routes theme persistence through the desktop shell bridge', () => {
     const base = {
       getItem: vi.fn((key: string) => (key === 'alpha' ? 'one' : null)),

@@ -1,3 +1,5 @@
+import { readDesktopHostBridge } from './desktopHostWindow';
+
 export interface DesktopSessionContextSnapshot {
   managed_environment_id: string;
   environment_storage_scope_id: string;
@@ -33,12 +35,17 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   };
 }
 
-export function readDesktopSessionContextSnapshot(): DesktopSessionContextSnapshot | null {
-  if (typeof window === 'undefined') {
-    return null;
+function isDesktopSessionContextBridge(candidate: unknown): candidate is DesktopSessionContextBridge {
+  if (!candidate || typeof candidate !== 'object') {
+    return false;
   }
-  const bridge = window.redevenDesktopSessionContext;
-  if (!bridge || typeof bridge.getSnapshot !== 'function') {
+  const bridge = candidate as Partial<DesktopSessionContextBridge>;
+  return typeof bridge.getSnapshot === 'function';
+}
+
+export function readDesktopSessionContextSnapshot(): DesktopSessionContextSnapshot | null {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  if (!bridge) {
     return null;
   }
   try {

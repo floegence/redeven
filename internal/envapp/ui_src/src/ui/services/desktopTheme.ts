@@ -1,4 +1,5 @@
 import type { FloeStorageAdapter } from '@floegence/floe-webapp-core';
+import { readDesktopHostBridge } from './desktopHostWindow';
 
 export type DesktopThemeSource = 'system' | 'light' | 'dark';
 export type DesktopResolvedTheme = 'light' | 'dark';
@@ -17,6 +18,16 @@ export type DesktopThemeBridge = Readonly<{
   setSource: (source: DesktopThemeSource) => DesktopThemeSnapshot;
   subscribe: (listener: (snapshot: DesktopThemeSnapshot) => void) => () => void;
 }>;
+
+function isDesktopThemeBridge(candidate: unknown): candidate is DesktopThemeBridge {
+  if (!candidate || typeof candidate !== 'object') {
+    return false;
+  }
+  const bridge = candidate as Partial<DesktopThemeBridge>;
+  return typeof bridge.getSnapshot === 'function'
+    && typeof bridge.setSource === 'function'
+    && typeof bridge.subscribe === 'function';
+}
 
 function normalizeDesktopThemeSource(value: unknown, fallback: DesktopThemeSource = 'system'): DesktopThemeSource {
   const candidate = String(value ?? '').trim();
@@ -39,16 +50,7 @@ function parseStoredThemeSource(value: string | null): DesktopThemeSource | '' {
 }
 
 export function desktopThemeBridge(): DesktopThemeBridge | null {
-  const candidate = (window as Window & { redevenDesktopTheme?: DesktopThemeBridge }).redevenDesktopTheme;
-  if (
-    !candidate
-    || typeof candidate.getSnapshot !== 'function'
-    || typeof candidate.setSource !== 'function'
-    || typeof candidate.subscribe !== 'function'
-  ) {
-    return null;
-  }
-  return candidate;
+  return readDesktopHostBridge('redevenDesktopTheme', isDesktopThemeBridge);
 }
 
 export function createDesktopThemeStorageAdapter(
