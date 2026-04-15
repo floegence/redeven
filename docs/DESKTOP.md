@@ -292,14 +292,18 @@ Interaction rules:
   - `Focus` only appears for a route whose session lifecycle is truly `open`
   - `Opening…` is disabled and does not imply the window is ready yet
   - closing or failed sessions stop contributing `Focus` immediately
+  - `Attach` appears for a local route when Desktop can tell that a compatible local runtime is already running and the next action will reuse it instead of starting a fresh one
 - Environment cards stay concise:
   - card bodies avoid explanatory helper prose under the actions
   - only concrete identifiers, runtime details, badges, and notices stay visible inside the card
 - Dual-route managed environments stay route-aware:
-  - the footer uses a split `Open` / `Focus` button instead of persistent side-by-side `Open Local` and `Open Remote` buttons
+  - the footer uses a split primary action instead of persistent side-by-side `Open Local` and `Open Remote` buttons
   - the primary segment executes the resolved default route immediately
   - the route menu keeps both the local route and the remote route or remote recovery action visible on the same card
+  - the local route may surface `Open`, `Attach`, or `Focus` depending on whether the runtime needs to be started, can be reused, or already has an open Desktop window
   - if this device can still host the environment locally, local open stays one click away even when the remote route is degraded
+  - managed cards surface a compact `LOCAL RUNTIME` fact so users can distinguish `Starts on open`, `Running in Desktop`, and `Running externally`
+  - when a local runtime is already running, cards also surface whether the Desktop window `Stops on close` or `Detaches on close`
 - Deleting a managed environment is a first-class action:
   - Desktop blocks deletion while a window for that managed environment is still open
   - the default local environment `local:default` is a protected Desktop entry and is not deletable from the launcher
@@ -440,6 +444,7 @@ Desktop semantics:
 - Multiple local environments may coexist on one device. Their runtime ownership stays separate because each one resolves to a different `local/<name>` scope directory.
 - A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the provider-backed route may come from either explicit create/edit binding or provider-sync reconciliation into the same shared managed-environment identity.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
+- Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while Desktop-owned runtimes surface as Desktop-managed local runtimes.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
 
 Target validation rules:

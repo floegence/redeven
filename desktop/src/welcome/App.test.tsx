@@ -460,6 +460,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Desktop opens a remote session through the Control Plane without starting a local runtime here.');
   });
 
+  it('describes managed environment actions as open-or-attach instead of implying a guaranteed local start', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('Open or attach the selected desktop-managed environment');
+    expect(appSrc).toContain("case 'attach':");
+    expect(appSrc).not.toContain('Open the selected desktop-managed environment on this machine');
+  });
+
   it('keeps transient action feedback out of page flow by using a toast viewport', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();

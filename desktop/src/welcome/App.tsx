@@ -651,7 +651,7 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.openLocalEnvironment',
         title: 'Open Environment',
-        description: 'Open the selected desktop-managed environment on this machine',
+        description: 'Open or attach the selected desktop-managed environment',
         category: 'Desktop',
         keybind: 'mod+enter',
         icon: Globe,
@@ -1429,6 +1429,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     switch (action.intent) {
       case 'open':
+      case 'attach':
       case 'focus':
         return openManagedEnvironment(environment, errorTarget, action.route ?? 'auto');
       case 'refresh_status':

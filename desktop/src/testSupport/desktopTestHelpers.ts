@@ -6,6 +6,10 @@ import {
   type DesktopSessionLifecycle,
   type DesktopSessionSummary,
 } from '../main/desktopTarget';
+import type {
+  DesktopSessionRuntimeLaunchMode,
+  DesktopSessionRuntimeLifecycleOwner,
+} from '../main/sessionRuntime';
 import type { StartupReport } from '../main/startup';
 import {
   createManagedControlPlaneEnvironment,
@@ -17,6 +21,7 @@ import {
   type DesktopManagedEnvironmentAccess,
   type DesktopManagedEnvironmentLocalOwner,
   type DesktopManagedEnvironmentPreferredOpenRoute,
+  type DesktopManagedEnvironmentRuntimeState,
   type DesktopManagedLocalEnvironment,
 } from '../shared/desktopManagedEnvironment';
 
@@ -29,6 +34,7 @@ type TestManagedLocalEnvironmentOptions = Readonly<{
   stateDir?: string;
   owner?: DesktopManagedEnvironmentLocalOwner;
   preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
+  currentRuntime?: Partial<DesktopManagedEnvironmentRuntimeState> | null;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -43,6 +49,7 @@ type TestManagedControlPlaneEnvironmentOptions = Readonly<{
   owner?: DesktopManagedEnvironmentLocalOwner;
   preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
   localHosting?: boolean;
+  currentRuntime?: Partial<DesktopManagedEnvironmentRuntimeState> | null;
   createdAtMS?: number;
   updatedAtMS?: number;
   lastUsedAtMS?: number;
@@ -71,6 +78,7 @@ export function testManagedLocalEnvironment(
     stateDir: options.stateDir ?? localManagedStateLayout(name).stateDir,
     owner: options.owner,
     preferredOpenRoute: options.preferredOpenRoute,
+    currentRuntime: options.currentRuntime,
     createdAtMS: options.createdAtMS,
     updatedAtMS: options.updatedAtMS,
     lastUsedAtMS: options.lastUsedAtMS,
@@ -106,6 +114,7 @@ export function testManagedControlPlaneEnvironment(
           access: testManagedAccess(options.access),
           owner: options.owner ?? 'desktop',
           stateDir: options.stateDir ?? layout.stateDir,
+          currentRuntime: options.currentRuntime,
         },
       ),
   });
@@ -127,6 +136,10 @@ export function testManagedSession(
   localUIURL: string,
   lifecycle: DesktopSessionLifecycle = 'open',
   startupOverrides: Partial<StartupReport> = {},
+  options: Readonly<{
+    runtimeLifecycleOwner?: DesktopSessionRuntimeLifecycleOwner;
+    runtimeLaunchMode?: DesktopSessionRuntimeLaunchMode;
+  }> = {},
 ): DesktopSessionSummary {
   const target = buildManagedEnvironmentDesktopTarget(environment);
   return {
@@ -139,5 +152,7 @@ export function testManagedSession(
       local_ui_urls: [localUIURL],
       ...startupOverrides,
     },
+    runtime_lifecycle_owner: options.runtimeLifecycleOwner,
+    runtime_launch_mode: options.runtimeLaunchMode,
   };
 }

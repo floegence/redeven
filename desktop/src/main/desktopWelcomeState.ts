@@ -13,6 +13,8 @@ import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherSurface,
+  DesktopManagedLocalCloseBehavior,
+  DesktopManagedLocalRuntimeState,
   DesktopManagedEnvironmentRoute,
   DesktopOpenEnvironmentWindow,
   DesktopWelcomeEntryReason,
@@ -329,6 +331,63 @@ function managedLocalRouteState(
   return managedEnvironmentSupportsLocalHosting(environment) ? 'ready' : 'unavailable';
 }
 
+function managedLocalRuntimeState(
+  environment: DesktopManagedEnvironment,
+  localSession: DesktopSessionSummary | null,
+): DesktopManagedLocalRuntimeState {
+  if (!managedEnvironmentSupportsLocalHosting(environment)) {
+    return 'not_running';
+  }
+  if (localSession?.target.kind === 'managed_environment' && localSession.target.route === 'local_host') {
+    return localSession.runtime_lifecycle_owner === 'external'
+      ? 'running_external'
+      : 'running_desktop';
+  }
+  const currentRuntime = environment.local_hosting?.current_runtime;
+  if (!currentRuntime?.local_ui_url) {
+    return 'not_running';
+  }
+  return currentRuntime.desktop_managed === true ? 'running_desktop' : 'running_external';
+}
+
+function managedLocalRuntimeURL(
+  environment: DesktopManagedEnvironment,
+  localSession: DesktopSessionSummary | null,
+): string {
+  if (localSession?.target.kind === 'managed_environment' && localSession.target.route === 'local_host') {
+    return compact(localSession.entry_url) || compact(localSession.startup?.local_ui_url);
+  }
+  return compact(environment.local_hosting?.current_runtime?.local_ui_url);
+}
+
+function managedLocalCloseBehavior(
+  environment: DesktopManagedEnvironment,
+  runtimeState: DesktopManagedLocalRuntimeState,
+): DesktopManagedLocalCloseBehavior {
+  if (!managedEnvironmentSupportsLocalHosting(environment)) {
+    return 'not_applicable';
+  }
+  return runtimeState === 'running_external' ? 'detaches' : 'stops_runtime';
+}
+
+function managedEnvironmentOpenActionLabel(input: Readonly<{
+  isOpen: boolean;
+  isOpening: boolean;
+  defaultRoute: DesktopManagedEnvironmentRoute;
+  localRuntimeState: DesktopManagedLocalRuntimeState;
+}>): DesktopEnvironmentEntry['open_action_label'] {
+  if (input.isOpen) {
+    return 'Focus';
+  }
+  if (input.isOpening) {
+    return 'Opening…';
+  }
+  if (input.defaultRoute === 'local_host' && input.localRuntimeState !== 'not_running') {
+    return 'Attach';
+  }
+  return 'Open';
+}
+
 function managedRemoteRouteDetails(
   environment: DesktopManagedEnvironment,
   controlPlanes: readonly DesktopControlPlaneSummary[],
@@ -420,6 +479,9 @@ function buildManagedEnvironmentEntry(
   const defaultRoute = managedEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
     ? 'remote_desktop'
     : 'local_host';
+  const localRuntimeState = managedLocalRuntimeState(environment, localSession);
+  const localRuntimeURL = managedLocalRuntimeURL(environment, localSession);
+  const localCloseBehavior = managedLocalCloseBehavior(environment, localRuntimeState);
   const defaultSession = defaultRoute === 'remote_desktop'
     ? (remoteSession ?? localSession)
     : (localSession ?? remoteSession);
@@ -436,7 +498,7 @@ function buildManagedEnvironmentEntry(
     id: environment.id,
     kind: 'managed_environment',
     label: environment.label,
-    local_ui_url: defaultSession?.entry_url ?? defaultSession?.startup?.local_ui_url ?? '',
+    local_ui_url: defaultSession?.entry_url ?? defaultSession?.startup?.local_ui_url ?? localRuntimeURL,
     secondary_text: kind === 'local'
       ? access.local_ui_bind
       : managedEnvironmentSupportsLocalHosting(environment)
@@ -448,6 +510,9 @@ function buildManagedEnvironmentEntry(
     managed_local_ui_bind: access.local_ui_bind,
     managed_local_ui_password_configured: access.local_ui_password_configured,
     managed_local_owner: environment.local_hosting?.owner,
+    managed_local_runtime_state: managedEnvironmentSupportsLocalHosting(environment) ? localRuntimeState : undefined,
+    managed_local_runtime_url: localRuntimeURL || undefined,
+    managed_local_close_behavior: localCloseBehavior,
     managed_has_local_hosting: managedEnvironmentSupportsLocalHosting(environment),
     managed_has_remote_desktop: managedEnvironmentSupportsRemoteDesktop(environment),
     managed_preferred_open_route: environment.preferred_open_route,
@@ -479,7 +544,12 @@ function buildManagedEnvironmentEntry(
     is_opening: isOpening,
     open_session_key: defaultSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(defaultSession),
-    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
+    open_action_label: managedEnvironmentOpenActionLabel({
+      isOpen,
+      isOpening,
+      defaultRoute,
+      localRuntimeState,
+    }),
     can_edit: managedEnvironmentSupportsLocalHosting(environment),
     can_delete: managedEnvironmentSupportsLocalHosting(environment)
       && !isDefaultLocalManagedEnvironment(environment),

@@ -1,6 +1,10 @@
 import { defaultSavedEnvironmentLabel, desktopEnvironmentID } from './desktopPreferences';
 import { normalizeLocalUIBaseURL } from './localUIURL';
 import type { StartupReport } from './startup';
+import type {
+  DesktopSessionRuntimeLaunchMode,
+  DesktopSessionRuntimeLifecycleOwner,
+} from './sessionRuntime';
 import {
   desktopManagedControlPlaneEnvironmentID,
   managedEnvironmentDefaultOpenRoute,
@@ -64,6 +68,8 @@ export type DesktopSessionSummary = Readonly<{
   lifecycle: DesktopSessionLifecycle;
   entry_url?: string;
   startup?: StartupReport;
+  runtime_lifecycle_owner?: DesktopSessionRuntimeLifecycleOwner;
+  runtime_launch_mode?: DesktopSessionRuntimeLaunchMode;
 }>;
 
 function compact(value: unknown): string {

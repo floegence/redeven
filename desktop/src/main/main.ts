@@ -58,6 +58,7 @@ import {
   buildRemoteConnectionIssue,
   type BuildDesktopWelcomeSnapshotArgs,
 } from './desktopWelcomeState';
+import { hydrateWelcomeManagedEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopThemeState } from './desktopThemeState';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
@@ -694,6 +695,8 @@ function openSessionSummaries(): readonly DesktopSessionSummary[] {
       lifecycle: session.lifecycle,
       entry_url: session.allowed_base_url,
       startup: session.startup,
+      runtime_lifecycle_owner: session.runtime_handle?.lifecycle_owner,
+      runtime_launch_mode: session.runtime_handle?.launch_mode,
     }));
 }
 
@@ -702,11 +705,13 @@ async function buildCurrentDesktopWelcomeSnapshot(
   overrides: Partial<Pick<BuildDesktopWelcomeSnapshotArgs, 'entryReason' | 'issue'>> = {},
 ) {
   const preferences = await loadDesktopPreferencesCached();
+  const openSessions = openSessionSummaries();
+  const welcomePreferences = await hydrateWelcomeManagedEnvironmentRuntimeState(preferences, openSessions);
   const state = currentUtilityWindowState(kind);
   return buildDesktopWelcomeSnapshot({
-    preferences,
+    preferences: welcomePreferences,
     controlPlanes: currentControlPlaneSummaries(preferences),
-    openSessions: openSessionSummaries(),
+    openSessions,
     surface: state.surface,
     entryReason: overrides.entryReason ?? state.entryReason,
     issue: overrides.issue ?? state.issue,
