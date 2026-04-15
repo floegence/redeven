@@ -263,13 +263,15 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background');
   });
 
-  it('keeps the header shell compact while letting dense environment grids widen the content shell', () => {
+  it('uses one shared welcome shell so dense environments and control planes stay aligned', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('redeven-welcome-shell');
     expect(appSrc).toContain('redeven-welcome-shell--spacious');
+    expect(appSrc).toContain('useSpaciousWelcomeShell');
     expect(appSrc).toContain('shouldUseSpaciousEnvironmentGrid');
+    expect(appSrc).toContain('useSpaciousControlPlaneLayout');
     expect(styles).toContain('--redeven-welcome-shell-max-width: 80rem;');
     expect(styles).toContain('--redeven-welcome-shell-spacious-max-width: 100rem;');
     expect(styles).toContain('.redeven-welcome-shell--spacious');
@@ -383,6 +385,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('includes Control Plane management copy inside the launcher source', () => {
     const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('Control Planes');
     expect(appSrc).toContain('Add Control Plane');
@@ -394,6 +397,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('revocable desktop authorization');
     expect(appSrc).toContain('Reconnect');
     expect(appSrc).toContain('Connect Provider');
+    expect(appSrc).toContain('redeven-provider-shelf__metrics');
+    expect(styles).toContain('--redeven-provider-shelf-metric-min-size: 15rem;');
+    expect(styles).toContain('.redeven-provider-shelf__metrics');
     expect(appSrc).not.toContain('Remote access through Control Plane');
   });
 
