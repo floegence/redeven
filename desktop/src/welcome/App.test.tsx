@@ -394,6 +394,10 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH'");
+    expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this machine.');
+    expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
+    expect(appSrc).toContain('This is not the Control Plane URL.');
+    expect(appSrc).toContain('Connect to another machine over SSH.');
     expect(appSrc).toContain('Desktop reuses only the exact Desktop-managed Redeven release, installs it on demand when needed, and tunnels its Local UI over SSH.');
     expect(appSrc).toContain('Bootstrap Delivery');
     expect(appSrc).toContain("label: 'Automatic'");
@@ -405,6 +409,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
     expect(appSrc).toContain('Keep the default remote cache or pin a custom absolute install directory.');
     expect(appSrc).toContain('Leave blank to use the default remote user cache:');
+  });
+
+  it('explains Local UI Bind examples inside the managed environment form', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('aria-label="Local UI Bind examples"');
+    expect(appSrc).toContain('Choose which address the Local UI listens on.');
+    expect(appSrc).toContain('localhost:23998');
+    expect(appSrc).toContain('127.0.0.1:23998');
+    expect(appSrc).toContain('192.168.1.24:23998');
+    expect(appSrc).toContain('0.0.0.0:23998');
+    expect(appSrc).toContain('Use a password if other devices can reach it.');
   });
 
   it('includes scope-first Local Environment Settings copy inside the source', () => {

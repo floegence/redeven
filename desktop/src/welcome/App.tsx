@@ -3657,6 +3657,23 @@ function ConnectionDialog(props: Readonly<{
         return 'Auto';
     }
   });
+  const connectionKindDescription = createMemo<JSX.Element>(() => {
+    switch (connectionKind()) {
+      case 'external_local_ui':
+        return (
+          <>
+            Connect straight to a Redeven runtime that already exposes its own Environment URL, such as a runtime on this machine or a host on your local network.
+            {' '}
+            <span class="font-medium text-foreground">This is not the Control Plane URL.</span>
+          </>
+        );
+      case 'ssh_environment':
+        return 'Connect to another machine over SSH. Desktop can install the matching Redeven release on demand and tunnel its Local UI back to this desktop.';
+      case 'managed_local':
+      default:
+        return 'Run a Desktop-managed Redeven environment on this machine. Use this when you want Desktop to start, store, and reopen the local runtime for you.';
+    }
+  });
 
   createEffect(() => {
     setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(
@@ -3719,6 +3736,9 @@ function ConnectionDialog(props: Readonly<{
               ]}
               size="sm"
             />
+            <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+              {connectionKindDescription()}
+            </div>
           </div>
         </Show>
 
@@ -3754,7 +3774,47 @@ function ConnectionDialog(props: Readonly<{
                 </div>
               </div>
               <div class="space-y-1.5">
-                <label for="environment-local-bind" class="block text-xs font-medium text-foreground">Local UI Bind</label>
+                <div class="flex items-center gap-1.5">
+                  <label for="environment-local-bind" class="block text-xs font-medium text-foreground">Local UI Bind</label>
+                  <DesktopTooltip
+                    placement="top"
+                    class="max-w-[min(28rem,calc(100vw-1rem))]"
+                    content={(
+                      <div class="space-y-2">
+                        <div class="font-medium text-popover-foreground">
+                          Choose which address the Local UI listens on.
+                        </div>
+                        <div>
+                          <span class="font-mono">localhost:23998</span>
+                          {' '}
+                          or
+                          {' '}
+                          <span class="font-mono">127.0.0.1:23998</span>
+                          {' '}
+                          keeps it available only on this machine.
+                        </div>
+                        <div>
+                          <span class="font-mono">192.168.1.24:23998</span>
+                          {' '}
+                          binds one specific local-network address so another device on that LAN can open it.
+                        </div>
+                        <div>
+                          <span class="font-mono">0.0.0.0:23998</span>
+                          {' '}
+                          binds every IPv4 interface on this machine. Use a password if other devices can reach it.
+                        </div>
+                      </div>
+                    )}
+                  >
+                    <button
+                      type="button"
+                      aria-label="Local UI Bind examples"
+                      class="inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background text-[10px] font-semibold leading-none text-muted-foreground transition hover:border-foreground/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                    >
+                      ?
+                    </button>
+                  </DesktopTooltip>
+                </div>
                 <Input
                   id="environment-local-bind"
                   value={props.state?.connection_kind === 'managed_local' ? props.state.local_ui_bind : ''}
