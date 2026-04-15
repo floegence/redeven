@@ -132,6 +132,7 @@ import {
   type DesktopActionToast,
   type DesktopActionToastTone,
 } from './actionToastModel';
+import { normalizeDesktopLocalEnvironmentName } from '../shared/desktopManagedEnvironment';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -324,6 +325,25 @@ function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function deriveManagedEnvironmentScopeNameFromName(value: string): string {
+  const clean = trimString(value);
+  return clean === '' ? '' : normalizeDesktopLocalEnvironmentName(clean);
+}
+
+function shouldAutoSyncManagedEnvironmentScopeName(state: ManagedEnvironmentConnectionDialogState): boolean {
+  return state.use_control_plane_binding !== true
+    && state.mode === 'create'
+    && trimString(state.environment_id) === '';
+}
+
+function managedEnvironmentScopePreview(state: ManagedEnvironmentConnectionDialogState | null | undefined): string {
+  if (!state || state.use_control_plane_binding === true) {
+    return '';
+  }
+  const scopeName = trimString(state.environment_name) || deriveManagedEnvironmentScopeNameFromName(state.label);
+  return scopeName === '' ? '' : `local/${scopeName}`;
+}
+
 function defaultLocalUIPasswordMode(configured: boolean): DesktopLocalUIPasswordMode {
   return configured ? 'keep' : 'replace';
 }
@@ -406,12 +426,20 @@ function createManagedEnvironmentConnectionDialogState(
   overrides: Partial<ManagedEnvironmentConnectionDialogState> = {},
 ): ManagedEnvironmentConnectionDialogState {
   const passwordConfigured = overrides.local_ui_password_configured === true;
+  const label = trimString(overrides.label);
+  const useControlPlaneBinding = overrides.use_control_plane_binding === true
+    || trimString(overrides.provider_origin) !== ''
+    || trimString(overrides.provider_id) !== ''
+    || trimString(overrides.env_public_id) !== '';
+  const environmentName = trimString(overrides.environment_name);
   return {
     mode,
     connection_kind: 'managed_environment',
     environment_id: trimString(overrides.environment_id),
-    label: trimString(overrides.label),
-    environment_name: trimString(overrides.environment_name),
+    label,
+    environment_name: environmentName !== ''
+      ? environmentName
+      : (!useControlPlaneBinding && mode === 'create' ? deriveManagedEnvironmentScopeNameFromName(label) : ''),
     local_ui_bind: trimString(overrides.local_ui_bind) || EMPTY_SETTINGS_DRAFT.local_ui_bind || 'localhost:23998',
     local_ui_password: trimString(overrides.local_ui_password),
     local_ui_password_mode: normalizeDesktopLocalUIPasswordMode(
@@ -419,10 +447,7 @@ function createManagedEnvironmentConnectionDialogState(
       passwordConfigured ? 'keep' : 'replace',
     ),
     local_ui_password_configured: passwordConfigured,
-    use_control_plane_binding: overrides.use_control_plane_binding === true
-      || trimString(overrides.provider_origin) !== ''
-      || trimString(overrides.provider_id) !== ''
-      || trimString(overrides.env_public_id) !== '',
+    use_control_plane_binding: useControlPlaneBinding,
     provider_origin: trimString(overrides.provider_origin),
     provider_id: trimString(overrides.provider_id),
     env_public_id: trimString(overrides.env_public_id),
@@ -1152,6 +1177,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return {
           ...current,
           use_control_plane_binding: false,
+          environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)
+            ? deriveManagedEnvironmentScopeNameFromName(current.label)
+            : current.environment_name,
           provider_origin: '',
           provider_id: '',
           env_public_id: '',
@@ -1255,6 +1283,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ...current,
           local_ui_password: value,
           local_ui_password_mode: passwordModeForInput(value, current.local_ui_password_configured),
+        };
+      }
+      if (name === 'label' && current.connection_kind === 'managed_environment') {
+        return {
+          ...current,
+          label: value,
+          environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)
+            ? deriveManagedEnvironmentScopeNameFromName(value)
+            : current.environment_name,
         };
       }
       return {
@@ -1721,6 +1758,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog',
   ): Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'upsert_managed_environment' }>> | null {
     const wantsControlPlaneBinding = state.use_control_plane_binding === true;
+    const displayName = trimString(state.label);
+    const localEnvironmentName = wantsControlPlaneBinding
+      ? ''
+      : (
+        trimString(state.environment_name)
+        || (shouldAutoSyncManagedEnvironmentScopeName(state)
+          ? deriveManagedEnvironmentScopeNameFromName(displayName)
+          : '')
+      );
+    if (displayName === '') {
+      setErrorMessage(errorTarget, 'Name is required.');
+      return null;
+    }
     if (wantsControlPlaneBinding) {
       if (trimString(state.provider_origin) === '' || trimString(state.provider_id) === '') {
         setErrorMessage(errorTarget, 'Connect a Control Plane first or turn off remote access for this environment.');
@@ -1730,8 +1780,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setErrorMessage(errorTarget, 'Choose a Control Plane environment.');
         return null;
       }
-    } else if (trimString(state.environment_name) === '') {
-      setErrorMessage(errorTarget, 'Environment name is required for a local-only managed environment.');
+    } else if (localEnvironmentName === '') {
+      setErrorMessage(errorTarget, 'Name is required.');
       return null;
     }
 
@@ -1739,8 +1789,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       kind: 'upsert_managed_environment',
       environment_id: state.environment_id || undefined,
       mode: wantsControlPlaneBinding ? 'local_with_control_plane' : 'local_only',
-      environment_name: wantsControlPlaneBinding ? undefined : state.environment_name,
-      label: state.label,
+      environment_name: wantsControlPlaneBinding ? undefined : localEnvironmentName,
+      label: displayName,
       local_ui_bind: state.local_ui_bind,
       local_ui_password: state.local_ui_password,
       local_ui_password_mode: state.local_ui_password_mode,
@@ -1822,7 +1872,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             state.use_control_plane_binding !== true
             && (
               (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
-              || environment.managed_environment_name === trimString(state.environment_name)
+              || environment.managed_environment_name === trimString(request.environment_name)
             )
           )
         )
@@ -2124,8 +2174,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteTarget(null);
           }
         }}
-        title="Delete Connection"
-        confirmText="Delete Connection"
+        title={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}
+        confirmText={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}
         variant="destructive"
         loading={busyAction() === 'delete_environment'}
         onConfirm={() => void deleteEnvironment()}
@@ -3440,7 +3490,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           <Show when={props.environment.can_delete}>
             <DesktopTooltip content="Delete" placement="top">
               <ConsoleActionIconButton
-                title="Delete connection"
+                title={props.environment.kind === 'managed_environment' ? 'Delete environment' : 'Delete connection'}
                 aria-label={`Delete ${props.environment.label}`}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}
@@ -4298,7 +4348,7 @@ function ConnectionDialog(props: Readonly<{
         </Show>
 
         <div class="space-y-1.5">
-          <label for="environment-label" class="block text-xs font-medium text-foreground">Label</label>
+          <label for="environment-label" class="block text-xs font-medium text-foreground">Name</label>
           <Input
             id="environment-label"
             value={props.state?.label ?? ''}
@@ -4306,6 +4356,7 @@ function ConnectionDialog(props: Readonly<{
             placeholder="My Environment"
             size="sm"
             class="w-full"
+            autofocus={connectionKind() === 'managed_environment' && props.state?.mode === 'create'}
           />
         </div>
 
@@ -4313,21 +4364,39 @@ function ConnectionDialog(props: Readonly<{
           <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="space-y-3">
               <Show when={!useControlPlaneBinding()}>
-                <div class="space-y-1.5">
-                  <label for="environment-name" class="block text-xs font-medium text-foreground">Environment Name</label>
-                  <Input
-                    id="environment-name"
-                    value={managedEnvironmentState()?.environment_name ?? ''}
-                    onInput={(event) => props.updateField('environment_name', event.currentTarget.value)}
-                    placeholder="dev-a"
-                    size="sm"
-                    class="w-full font-mono"
-                    spellcheck={false}
-                    autofocus={props.state?.mode === 'create'}
-                  />
-                  <div class="text-[11px] text-muted-foreground">
-                    Desktop stores this environment under `local/&lt;name&gt;` inside the shared Redeven state root.
-                  </div>
+                <div class="rounded-md border border-border/70 bg-background/80 px-3 py-2.5 text-[11px] leading-5 text-muted-foreground">
+                  <Show
+                    when={managedEnvironmentState()?.mode === 'edit'}
+                    fallback={(
+                      <>
+                        Desktop will store local state under an automatic
+                        {' '}
+                        <span class="font-mono text-foreground">local/&lt;name&gt;</span>
+                        {' '}
+                        scope derived from Name.
+                        <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
+                          <span>
+                            {' '}
+                            Next scope:
+                            {' '}
+                            <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
+                            .
+                          </span>
+                        </Show>
+                      </>
+                    )}
+                  >
+                    Renaming this environment only changes how it appears in Desktop.
+                    <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
+                      <span>
+                        {' '}
+                        Local state stays under
+                        {' '}
+                        <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
+                        .
+                      </span>
+                    </Show>
+                  </Show>
                 </div>
               </Show>
               <div class="space-y-1.5">

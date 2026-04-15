@@ -195,21 +195,21 @@ Interaction rules:
   - `Redeven URL`
   - `SSH`
 - Managed mode keeps the flow lightweight and explicit:
-  - `Label`
+  - `Name`
   - `Local UI Bind`
   - `Local UI Password`
 - optional `Connect To A Control Plane Environment`
   - pick one saved Control Plane
   - pick one provider environment from that Control Plane catalog
-- When the user leaves Control Plane binding off, the dialog also shows:
-  - `Environment Name`
+- When the user leaves Control Plane binding off, Desktop derives the internal local scope from `Name` automatically.
+- Editing a local-only managed environment changes only the visible `Name`; the existing local scope stays stable unless Desktop later grows an explicit scope-migration action.
 - Creating a managed environment can either:
   - save the managed environment card without opening it yet
   - connect immediately and start or attach to that managed scope
 - Creating or editing a managed environment may explicitly upgrade one local-only entry into a dual-route local-plus-Control-Plane environment.
 - Provider sync still reconciles runtime-discovered local hosting into the shared managed-environment catalog, but the create/edit flow no longer forces users to wait for that background reconciliation before binding local and remote access together.
 - SSH mode keeps the same compact launcher shell but adds:
-  - `Label`
+  - `Name`
   - `SSH Destination`
   - optional `Port`
   - `Bootstrap Delivery`
@@ -269,6 +269,7 @@ Interaction rules:
   - if this device can still host the environment locally, local open stays one click away even when the remote route is degraded
 - Deleting a managed environment is a first-class action:
   - Desktop blocks deletion while a window for that managed environment is still open
+  - the default local environment `local:default` is a protected Desktop entry and is not deletable from the launcher
   - deleting a local-only managed environment removes the managed entry and its Desktop-owned local scope state
   - deleting a dual-route managed environment removes only Desktop-owned local hosting and keeps the remote-only Control Plane entry in the catalog
 - Remote library entries distinguish:
@@ -372,7 +373,7 @@ Semantics:
   - stable environment identity
   - optional local-hosting route
   - optional provider-binding route
-  - user-visible label
+  - user-visible name/title (persisted internally as `label`)
   - per-environment Local UI bind/password configuration
   - pin and timestamp metadata
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
@@ -388,6 +389,7 @@ Semantics:
   - dual-route entries stay visible even when the provider route disappears, but their remote route degrades to `removed`
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 - Legacy single-local-environment settings migrate into the managed local environment with identity `local:default`.
+- `local:default` remains the always-available default local environment in Desktop; UI may rename its visible title, but ordinary editing does not remove the entry or migrate its scope.
 
 Desktop maps user-facing local-access decisions back onto the same runtime contract:
 

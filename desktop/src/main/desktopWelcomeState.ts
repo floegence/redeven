@@ -27,6 +27,7 @@ import {
 } from '../shared/desktopSSH';
 import {
   createManagedLocalEnvironment,
+  isDefaultLocalManagedEnvironment,
   managedEnvironmentKind,
   managedEnvironmentLocalAccess,
   managedEnvironmentLocalName,
@@ -456,7 +457,8 @@ function buildManagedEnvironmentEntry(
     open_session_key: defaultSession?.session_key ?? '',
     open_action_label: defaultSession ? 'Focus' : 'Open',
     can_edit: managedEnvironmentSupportsLocalHosting(environment),
-    can_delete: managedEnvironmentSupportsLocalHosting(environment),
+    can_delete: managedEnvironmentSupportsLocalHosting(environment)
+      && !isDefaultLocalManagedEnvironment(environment),
     can_save: false,
     last_used_at_ms: environment.last_used_at_ms,
   };
