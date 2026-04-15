@@ -89,6 +89,10 @@ body {
   align-items: stretch;
 }
 
+.redeven-environment-grid__section-title {
+  grid-column: 1 / -1;
+}
+
 .redeven-environment-grid--spacious {
   gap: 1.125rem;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--redeven-environment-grid-spacious-column-size)), 1fr));

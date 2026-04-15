@@ -2491,11 +2491,30 @@ function EnvironmentCardsPanel(props: Readonly<{
 
   return (
     <div class="space-y-3">
-      <Show when={groupedEntries().pinned_entries.length > 0}>
-        <EnvironmentCardSection
-          title="Pinned"
-          spacious={useSpaciousGrid()}
-        >
+      <Show
+        when={props.entries.length > 0 || props.showQuickAddCards}
+        fallback={(
+          <Motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
+              <Search class="h-8 w-8 text-muted-foreground/50" />
+              <div class="space-y-1">
+                <div class="text-sm font-medium text-foreground">No matching environments</div>
+                <div class="text-xs text-muted-foreground">
+                  No environment cards match the current search or filter.
+                </div>
+              </div>
+            </div>
+          </Motion.div>
+        )}
+      >
+        <div class={cn('redeven-environment-grid', useSpaciousGrid() && 'redeven-environment-grid--spacious')}>
+          <Show when={groupedEntries().pinned_entries.length > 0}>
+            <EnvironmentGridSectionTitle title="Pinned" />
+          </Show>
           <For each={groupedEntries().pinned_entries}>
             {(environment) => (
               <EnvironmentConnectionCard
@@ -2511,14 +2530,9 @@ function EnvironmentCardsPanel(props: Readonly<{
               />
             )}
           </For>
-        </EnvironmentCardSection>
-      </Show>
-
-      <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
-        <EnvironmentCardSection
-          title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}
-          spacious={useSpaciousGrid()}
-        >
+          <Show when={groupedEntries().pinned_entries.length > 0 && (groupedEntries().regular_entries.length > 0 || props.showQuickAddCards)}>
+            <EnvironmentGridSectionTitle title="Environments" />
+          </Show>
           <For each={groupedEntries().regular_entries}>
             {(environment) => (
               <EnvironmentConnectionCard
@@ -2534,54 +2548,24 @@ function EnvironmentCardsPanel(props: Readonly<{
               />
             )}
           </For>
-
           <Show when={props.showQuickAddCards}>
             <NewEnvironmentPlaceholderCard
               openCreateConnectionDialog={props.openCreateConnectionDialog}
             />
           </Show>
-        </EnvironmentCardSection>
-      </Show>
-
-      <Show when={props.entries.length === 0 && !props.showQuickAddCards}>
-        <Motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
-            <Search class="h-8 w-8 text-muted-foreground/50" />
-            <div class="space-y-1">
-              <div class="text-sm font-medium text-foreground">No matching environments</div>
-              <div class="text-xs text-muted-foreground">
-                No environment cards match the current search or filter.
-              </div>
-            </div>
-          </div>
-        </Motion.div>
+        </div>
       </Show>
     </div>
   );
 }
 
-function EnvironmentCardSection(props: Readonly<{
-  title?: string;
-  spacious?: boolean;
-  children: JSX.Element;
+function EnvironmentGridSectionTitle(props: Readonly<{
+  title: string;
 }>) {
   return (
-    <section class="space-y-2.5">
-      <Show when={props.title}>
-        {(title) => (
-          <div class="px-1">
-            <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title()}</h2>
-          </div>
-        )}
-      </Show>
-      <div class={cn('redeven-environment-grid', props.spacious && 'redeven-environment-grid--spacious')}>
-        {props.children}
-      </div>
-    </section>
+    <div class="redeven-environment-grid__section-title px-1">
+      <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.title}</h2>
+    </div>
   );
 }
 
