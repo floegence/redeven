@@ -218,6 +218,30 @@ type SSHConnectionDialogState = Readonly<{
   release_base_url: string;
 }>;
 
+const LOCAL_UI_BIND_TOOLTIP_PATTERNS: ReadonlyArray<{
+  title: string;
+  patterns: readonly string[];
+  description: string;
+  hint?: string;
+}> = [
+  {
+    title: 'Only this machine',
+    patterns: ['localhost:<port>', '127.0.0.1:<port>'],
+    description: 'Good for local-only access on this device.',
+  },
+  {
+    title: 'One local-network address',
+    patterns: ['<your-device-ip>:<port>'],
+    description: 'Use your machine\'s LAN IP if another device on the same network should connect.',
+    hint: 'For example, your device IP might look like 192.168.1.24 on a home or office network.',
+  },
+  {
+    title: 'All IPv4 addresses',
+    patterns: ['0.0.0.0:<port>'],
+    description: 'Listens on every IPv4 interface on this machine.',
+  },
+] as const;
+
 type ConnectionDialogState = LocalConnectionDialogState | ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
 
 type ControlPlaneDialogState = Readonly<{
@@ -3778,30 +3802,64 @@ function ConnectionDialog(props: Readonly<{
                   <label for="environment-local-bind" class="block text-xs font-medium text-foreground">Local UI Bind</label>
                   <DesktopTooltip
                     placement="top"
-                    class="max-w-[min(28rem,calc(100vw-1rem))]"
+                    class="max-w-[min(32rem,calc(100vw-1rem))] overflow-hidden p-0"
                     content={(
-                      <div class="space-y-2">
-                        <div class="font-medium text-popover-foreground">
-                          Choose which address the Local UI listens on.
+                      <div>
+                        <div class="border-b border-border/60 bg-muted/30 px-3 py-2.5">
+                          <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Format
+                          </div>
+                          <div class="mt-1 text-sm font-semibold text-popover-foreground">
+                            Choose where the Local UI listens
+                          </div>
+                          <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                            Enter a bind address in
+                            {' '}
+                            <span class="font-mono text-popover-foreground">host:port</span>
+                            {' '}
+                            format. These examples show patterns, not fixed values.
+                          </div>
                         </div>
-                        <div>
-                          <span class="font-mono">localhost:23998</span>
-                          {' '}
-                          or
-                          {' '}
-                          <span class="font-mono">127.0.0.1:23998</span>
-                          {' '}
-                          keeps it available only on this machine.
+                        <div class="grid gap-2 px-3 py-3">
+                          <For each={LOCAL_UI_BIND_TOOLTIP_PATTERNS}>
+                            {(item) => (
+                              <div class="rounded-md border border-border/60 bg-background/80 px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+                                <div class="text-[11px] font-medium text-popover-foreground">{item.title}</div>
+                                <div class="mt-1 flex flex-wrap gap-1.5">
+                                  <For each={item.patterns}>
+                                    {(pattern) => (
+                                      <span class="rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-popover-foreground">
+                                        {pattern}
+                                      </span>
+                                    )}
+                                  </For>
+                                </div>
+                                <div class="mt-1.5 text-[11px] leading-5 text-muted-foreground">
+                                  {item.description}
+                                </div>
+                                <Show when={item.hint}>
+                                  <div class="mt-1 text-[10px] leading-5 text-muted-foreground/90">
+                                    {item.hint}
+                                  </div>
+                                </Show>
+                              </div>
+                            )}
+                          </For>
                         </div>
-                        <div>
-                          <span class="font-mono">192.168.1.24:23998</span>
+                        <div class="border-t border-border/60 bg-background/60 px-3 py-2.5 text-[11px] leading-5 text-muted-foreground">
+                          Replace
                           {' '}
-                          binds one specific local-network address so another device on that LAN can open it.
-                        </div>
-                        <div>
-                          <span class="font-mono">0.0.0.0:23998</span>
+                          <span class="font-mono text-popover-foreground">&lt;your-device-ip&gt;</span>
                           {' '}
-                          binds every IPv4 interface on this machine. Use a password if other devices can reach it.
+                          and
+                          {' '}
+                          <span class="font-mono text-popover-foreground">&lt;port&gt;</span>
+                          {' '}
+                          with values for your machine. Only
+                          {' '}
+                          <span class="font-mono text-popover-foreground">localhost</span>
+                          {' '}
+                          or IP literals are supported here. Use a password if other devices can reach this address.
                         </div>
                       </div>
                     )}
@@ -3809,7 +3867,7 @@ function ConnectionDialog(props: Readonly<{
                     <button
                       type="button"
                       aria-label="Local UI Bind examples"
-                      class="inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background text-[10px] font-semibold leading-none text-muted-foreground transition hover:border-foreground/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      class="inline-flex h-[18px] w-[18px] cursor-pointer items-center justify-center rounded-full border border-border/70 bg-muted/45 text-[10px] font-semibold leading-none text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition hover:border-foreground/20 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                     >
                       ?
                     </button>

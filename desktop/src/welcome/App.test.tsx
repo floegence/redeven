@@ -415,12 +415,19 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('aria-label="Local UI Bind examples"');
-    expect(appSrc).toContain('Choose which address the Local UI listens on.');
-    expect(appSrc).toContain('localhost:23998');
-    expect(appSrc).toContain('127.0.0.1:23998');
-    expect(appSrc).toContain('192.168.1.24:23998');
-    expect(appSrc).toContain('0.0.0.0:23998');
-    expect(appSrc).toContain('Use a password if other devices can reach it.');
+    expect(appSrc).toContain('Choose where the Local UI listens');
+    expect(appSrc).toContain('These examples show patterns, not fixed values.');
+    expect(appSrc).toContain('Only this machine');
+    expect(appSrc).toContain('localhost:<port>');
+    expect(appSrc).toContain('127.0.0.1:<port>');
+    expect(appSrc).toContain('One local-network address');
+    expect(appSrc).toContain('<your-device-ip>:<port>');
+    expect(appSrc).toContain('For example, your device IP might look like 192.168.1.24 on a home or office network.');
+    expect(appSrc).toContain('All IPv4 addresses');
+    expect(appSrc).toContain('0.0.0.0:<port>');
+    expect(appSrc).toContain('Replace');
+    expect(appSrc).toContain('or IP literals are supported here.');
+    expect(appSrc).toContain('Use a password if other devices can reach this address.');
   });
 
   it('includes scope-first Local Environment Settings copy inside the source', () => {
