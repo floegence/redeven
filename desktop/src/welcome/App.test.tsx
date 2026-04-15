@@ -263,6 +263,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background');
   });
 
+  it('keeps the header shell compact while letting dense environment grids widen the content shell', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('redeven-welcome-shell');
+    expect(appSrc).toContain('redeven-welcome-shell--spacious');
+    expect(appSrc).toContain('shouldUseSpaciousEnvironmentGrid');
+    expect(styles).toContain('--redeven-welcome-shell-max-width: 80rem;');
+    expect(styles).toContain('--redeven-welcome-shell-spacious-max-width: 100rem;');
+    expect(styles).toContain('.redeven-welcome-shell--spacious');
+  });
+
   it('uses shared tooltip and compact card-grid helpers for desktop help affordances', () => {
     const appSrc = readWelcomeSource();
 
@@ -275,12 +287,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-grid');
   });
 
-  it('uses a compact auto-fill environment grid so cards keep a stable desktop size', () => {
+  it('uses a compact default grid and a spacious auto-fit grid when a section reaches four cards', () => {
     const styles = readWelcomeStyles();
 
     expect(styles).toContain('--redeven-environment-grid-min-column-size: 17rem;');
+    expect(styles).toContain('--redeven-environment-grid-spacious-column-size: 19rem;');
     expect(styles).toMatch(
       /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--redeven-environment-grid-min-column-size\)\),\s*1fr\)\);/,
+    );
+    expect(styles).toMatch(
+      /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*var\(--redeven-environment-grid-spacious-column-size\)\),\s*1fr\)\);/,
     );
     expect(styles).not.toMatch(/@media\s*\(min-width:\s*640px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
     expect(styles).not.toMatch(/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
