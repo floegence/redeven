@@ -61,6 +61,9 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('Local Environment is always available in Desktop. Change its settings instead of deleting it.');
     expect(mainSrc).toContain('An environment with this name already exists. Choose a different name.');
+    expect(mainSrc).toContain('findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id)');
+    expect(mainSrc).toContain("'action_invalid',");
+    expect(mainSrc).toContain("'dialog',");
     expect(mainSrc).toContain('protectedManagedEnvironmentDeleteFailure');
   });
 

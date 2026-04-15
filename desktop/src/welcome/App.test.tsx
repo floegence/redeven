@@ -456,6 +456,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Local state stays under');
   });
 
+  it('keeps managed edit saves from rejecting a filled display name just because the hidden local scope field is blank', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')");
+    expect(appSrc).toContain("environment_name: wantsControlPlaneBinding ? undefined : (localEnvironmentName || undefined)");
+    expect(appSrc).toContain("environment_name: trimString(current.environment_name) || deriveManagedEnvironmentScopeNameFromName(current.label)");
+  });
+
   it('shows explicit Control Plane binding-resolution guidance inside the managed environment dialog', () => {
     const appSrc = readWelcomeSource();
     const bindingResolutionSrc = readManagedEnvironmentBindingResolutionSource();

@@ -14,6 +14,7 @@ describe('launcherActionFeedback', () => {
       message: 'That window was already closed. Desktop refreshed the environment list.',
       tone: 'info',
       refresh_snapshot: true,
+      delivery: 'toast',
     });
   });
 
@@ -27,6 +28,7 @@ describe('launcherActionFeedback', () => {
       message: 'Desktop is still opening Demo Sandbox. Wait a moment, then try again.',
       tone: 'info',
       refresh_snapshot: false,
+      delivery: 'toast',
     });
   });
 
@@ -40,6 +42,7 @@ describe('launcherActionFeedback', () => {
       message: 'This Control Plane is no longer saved in Desktop.',
       tone: 'warning',
       refresh_snapshot: false,
+      delivery: 'toast',
     });
 
     expect(launcherActionFailurePresentation({
@@ -51,6 +54,21 @@ describe('launcherActionFeedback', () => {
       message: 'Desktop could not finish opening https://env.example.invalid: ERR_CONNECTION_REFUSED',
       tone: 'error',
       refresh_snapshot: false,
+      delivery: 'toast',
+    });
+  });
+
+  it('keeps dialog-scoped validation failures inline', () => {
+    expect(launcherActionFailurePresentation({
+      ok: false,
+      code: 'action_invalid',
+      scope: 'dialog',
+      message: 'Local Default Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
+    })).toEqual({
+      message: 'Local Default Environment cannot use localhost:23998 because "Lab" is already configured for localhost:23998. Choose a different Local UI bind or update that environment first.',
+      tone: 'error',
+      refresh_snapshot: false,
+      delivery: 'inline',
     });
   });
 });

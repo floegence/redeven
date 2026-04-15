@@ -5,48 +5,56 @@ export type LauncherActionFailurePresentation = Readonly<{
   message: string;
   tone: DesktopActionToastTone;
   refresh_snapshot: boolean;
+  delivery: 'toast' | 'inline';
 }>;
 
 export function launcherActionFailurePresentation(
   failure: DesktopLauncherActionFailure,
 ): LauncherActionFailurePresentation {
   const refreshSnapshot = failure.should_refresh_snapshot === true;
+  const delivery = failure.scope === 'dialog' ? 'inline' : 'toast';
   switch (failure.code) {
     case 'session_stale':
       return {
         message: 'That window was already closed. Desktop refreshed the environment list.',
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
     case 'environment_opening':
       return {
         message: failure.message,
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
     case 'environment_offline':
       return {
         message: 'This environment is currently offline in the provider.',
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
     case 'environment_status_stale':
       return {
         message: 'Remote status is stale. Refresh the provider to confirm the latest state.',
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
     case 'provider_sync_required':
       return {
         message: 'Desktop needs a fresh provider sync before opening this environment.',
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
     case 'provider_sync_in_progress':
       return {
         message: 'Desktop is already checking the latest provider status.',
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
     case 'environment_missing':
     case 'environment_in_use':
@@ -61,12 +69,14 @@ export function launcherActionFailurePresentation(
         message: failure.message,
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
     default:
       return {
         message: failure.message,
         tone: 'error',
         refresh_snapshot: refreshSnapshot,
+        delivery,
       };
   }
 }
