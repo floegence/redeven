@@ -460,9 +460,8 @@ Desktop shell preferences live under the Electron user data directory, not insid
 Desktop supports compatible first-party and third-party control planes through one fixed provider contract:
 
 - discovery: `GET /.well-known/redeven-provider.json`
-- browser handoff ticket: `POST /api/rcpp/v1/desktop/handoff-ticket`
+- browser authorization code: `POST /api/rcpp/v1/desktop/authorize`
 - desktop connect exchange: `POST /api/rcpp/v1/desktop/connect/exchange`
-- desktop open exchange: `POST /api/rcpp/v1/desktop/open/exchange`
 - desktop token refresh: `POST /api/rcpp/v1/desktop/token/refresh`
 - desktop token revoke: `POST /api/rcpp/v1/desktop/token/revoke`
 - desktop account lookup: `GET /api/rcpp/v1/me`
@@ -488,10 +487,11 @@ The Control Plane flow is:
 
 1. Desktop discovers the provider from its origin.
 2. Desktop opens the provider's browser bridge page at `/desktop/connect`.
-3. The browser session mints a one-time `handoff_ticket` and deep-links back to Desktop.
-4. Desktop exchanges the `connect` handoff for a short-lived in-memory access token plus a long-lived revocable refresh token.
-5. Desktop loads `me` and `environments` with the access token.
-6. Desktop reconciles those provider environments into the shared managed-environment catalog as remote-only or dual-route entries.
+3. Desktop generates a local PKCE `state + code_verifier + code_challenge`.
+4. The browser session requests a short-lived `authorization_code` and deep-links back to Desktop.
+5. Desktop exchanges `authorization_code + code_verifier` for a short-lived in-memory access token plus a long-lived revocable refresh token.
+6. Desktop loads `me` and `environments` with the access token.
+7. Desktop reconciles those provider environments into the shared managed-environment catalog as remote-only or dual-route entries.
 7. Desktop refreshes access tokens on demand with the stored refresh token.
 8. Desktop requests a unified per-environment open session only when it opens a specific environment.
 9. Desktop resolves the actual open route from the saved environment record:
@@ -503,14 +503,17 @@ The Control Plane flow is:
 11. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
 12. Desktop never silently local-starts a Control Plane environment that is not declared as hosted on this device.
 
-Browser handoff may also open Desktop through a custom protocol link:
+Browser pages may also open Desktop through a custom protocol link:
 
 - `redeven://control-plane/connect?...`
 - `redeven://control-plane/open?...`
+- `redeven://control-plane/authorized?...`
 
-For `connect`, the deep link carries a one-time `handoff_ticket`.
+For `connect`, the launch deep link carries only `provider_origin`. Desktop then opens the browser bridge again with PKCE query parameters.
 
-For `open`, the provider origin, target environment ID, and one-time `handoff_ticket` are sufficient. Desktop exchanges that handoff for a unified open-session response that may include a `bootstrap_ticket`, a `remote_session_url`, or both. `provider_id` is optional because Desktop can resolve it through discovery.
+For `authorized`, the browser returns `provider_origin`, `state`, and `authorization_code`. Desktop matches that state locally, validates the provider origin, and completes the connect exchange with its local `code_verifier`.
+
+For `open`, the provider origin and target environment ID are sufficient. If Desktop already has provider authorization, it directly requests a unified open-session response. Otherwise it first completes the same PKCE browser authorization flow and then requests open-session. `provider_id` remains optional because Desktop can resolve it through discovery.
 
 ## Shell-Owned Theme State
 

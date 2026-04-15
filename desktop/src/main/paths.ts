@@ -65,12 +65,12 @@ export function resolveBundledRuntimePath(args: ResolveBundledRuntimePathArgs): 
   throw new Error('Unable to locate the desktop bundled redeven binary. Run `npm run start` or `npm run package` from the desktop workspace first.');
 }
 
-export function resolveSettingsPreloadPath(args: ResolvePreloadPathArgs): string {
-  return path.join(args.appPath, 'dist', 'preload', 'settings.js');
+export function resolveUtilityPreloadPath(args: ResolvePreloadPathArgs): string {
+  return path.join(args.appPath, 'dist', 'preload', 'utility.js');
 }
 
-export function resolveBrowserPreloadPath(args: ResolvePreloadPathArgs): string {
-  return path.join(args.appPath, 'dist', 'preload', 'browser.js');
+export function resolveSessionPreloadPath(args: ResolvePreloadPathArgs): string {
+  return path.join(args.appPath, 'dist', 'preload', 'session.js');
 }
 
 export function resolveWelcomeRendererPath(args: ResolvePreloadPathArgs): string {

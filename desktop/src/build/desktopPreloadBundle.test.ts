@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 describe('buildDesktopPreloads', () => {
-  it('produces self-contained browser and settings preload bundles', async () => {
+  it('produces self-contained utility and session preload bundles', async () => {
     const outDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preloads-'));
     tempDirs.push(outDir);
 
@@ -26,18 +26,23 @@ describe('buildDesktopPreloads', () => {
       outDir,
     });
 
-    const browserOutput = await fs.readFile(path.join(outDir, 'browser.js'), 'utf8');
-    const settingsOutput = await fs.readFile(path.join(outDir, 'settings.js'), 'utf8');
+    const utilityOutput = await fs.readFile(path.join(outDir, 'utility.js'), 'utf8');
+    const sessionOutput = await fs.readFile(path.join(outDir, 'session.js'), 'utf8');
 
-    expect(browserOutput).toContain('redevenDesktopAskFlowerHandoff');
-    expect(browserOutput).toContain('redevenDesktopLauncher');
-    expect(browserOutput).toContain('redevenDesktopSessionContext');
-    expect(browserOutput).toContain('redevenDesktopSettings');
-    expect(browserOutput).toContain('redevenDesktopShell');
-    expect(browserOutput).toContain('redevenDesktopStateStorage');
-    expect(browserOutput).not.toMatch(/require\((['"])\.\//);
+    expect(utilityOutput).toContain('redevenDesktopLauncher');
+    expect(utilityOutput).toContain('redevenDesktopSettings');
+    expect(utilityOutput).toContain('redevenDesktopShell');
+    expect(utilityOutput).toContain('redevenDesktopStateStorage');
+    expect(utilityOutput).not.toContain('redevenDesktopAskFlowerHandoff');
+    expect(utilityOutput).not.toContain('redevenDesktopSessionContext');
+    expect(utilityOutput).not.toMatch(/require\((['"])\.\//);
 
-    expect(settingsOutput).toContain('redevenDesktopSettings');
-    expect(settingsOutput).not.toMatch(/require\((['"])\.\//);
+    expect(sessionOutput).toContain('redevenDesktopAskFlowerHandoff');
+    expect(sessionOutput).toContain('redevenDesktopSessionContext');
+    expect(sessionOutput).toContain('redevenDesktopShell');
+    expect(sessionOutput).toContain('redevenDesktopStateStorage');
+    expect(sessionOutput).not.toContain('redevenDesktopLauncher');
+    expect(sessionOutput).not.toContain('redevenDesktopSettings');
+    expect(sessionOutput).not.toMatch(/require\((['"])\.\//);
   });
 });

@@ -78,12 +78,14 @@ describe('main routing', () => {
     expect(mainSrc).toContain('queueSessionAskFlowerHandoff(sessionKey, payload);');
   });
 
-  it('parses Control Plane deep links through handoff tickets instead of pasted session tokens', () => {
+  it('parses Control Plane deep links through PKCE authorization state instead of bearer handoff tickets', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain("parsed.searchParams.get('handoff_ticket')");
-    expect(mainSrc).toContain('exchangeProviderDesktopOpenHandoff');
-    expect(mainSrc).toContain('exchangeProviderDesktopConnectHandoff');
+    expect(mainSrc).toContain("parsed.searchParams.get('authorization_code')");
+    expect(mainSrc).toContain("parsed.pathname === '/authorized'");
+    expect(mainSrc).toContain('createPendingControlPlaneAuthorization');
+    expect(mainSrc).toContain('exchangeProviderDesktopConnectAuthorization');
     expect(mainSrc).not.toContain("parsed.searchParams.get('session_token')");
+    expect(mainSrc).not.toContain("parsed.searchParams.get('handoff_ticket')");
   });
 });

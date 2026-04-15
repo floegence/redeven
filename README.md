@@ -127,7 +127,7 @@ redeven bootstrap \
 
 Bootstrap writes the control-plane scope config to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>/config.json` by default and applies the local permission cap preset `execute_read_write`.
 
-Desktop and browser handoff flows may use one-time `bootstrap_ticket` credentials instead of a long-lived `env_token`. The runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
+Desktop and browser-assisted bootstrap flows may use one-time `bootstrap_ticket` credentials instead of a long-lived `env_token`. The runtime exchange contract is described in [`docs/DESKTOP.md`](docs/DESKTOP.md).
 
 For provider-backed Desktop opens, the Control Plane may also return a `remote_session_url` so the same environment can be reopened remotely without starting a second local runtime on the current machine.
 

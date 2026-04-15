@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bundledRuntimeExecutableName,
-  resolveBrowserPreloadPath,
   resolveBundledRuntimePath,
-  resolveSettingsPreloadPath,
+  resolveSessionPreloadPath,
+  resolveUtilityPreloadPath,
   resolveWelcomeRendererPath,
 } from './paths';
 
@@ -45,16 +45,16 @@ describe('paths', () => {
     expect(bundledRuntimeExecutableName('win32')).toBe('redeven.exe');
   });
 
-  it('resolves the bundled settings preload script path', () => {
-    expect(resolveSettingsPreloadPath({
+  it('resolves the bundled utility preload script path', () => {
+    expect(resolveUtilityPreloadPath({
       appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
-    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/settings.js');
+    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/utility.js');
   });
 
-  it('resolves the bundled browser preload script path', () => {
-    expect(resolveBrowserPreloadPath({
+  it('resolves the bundled session preload script path', () => {
+    expect(resolveSessionPreloadPath({
       appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
-    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/browser.js');
+    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/preload/session.js');
   });
 
   it('resolves the bundled welcome renderer path', () => {

@@ -103,7 +103,7 @@ describe('desktop preload runtime', () => {
     ).toBe(payload);
   });
 
-  it('exposes desktop bridges in sandboxed main and detached child windows', async () => {
+  it('exposes the expected desktop bridges for utility and session preload surfaces', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-desktop-preload-runtime-'));
     tempDirs.push(tempDir);
 
@@ -152,11 +152,14 @@ ipcMain.on('redeven-desktop:theme-set-source', (event, nextSource) => {
   event.returnValue = buildThemeSnapshot();
 });
 
-  function snapshotBridgeState() {
+function snapshotBridgeState() {
   return JSON.stringify({
     hasAskFlowerBridge: typeof window.redevenDesktopAskFlowerHandoff === 'object'
       && typeof window.redevenDesktopAskFlowerHandoff?.requestMainWindowHandoff === 'function'
       && typeof window.redevenDesktopAskFlowerHandoff?.onMainWindowHandoff === 'function',
+    hasDesktopLauncherBridge: typeof window.redevenDesktopLauncher === 'object'
+      && typeof window.redevenDesktopLauncher?.performAction === 'function'
+      && typeof window.redevenDesktopLauncher?.getSnapshot === 'function',
     hasDesktopSettingsBridge: typeof window.redevenDesktopSettings === 'object'
       && typeof window.redevenDesktopSettings?.save === 'function'
       && typeof window.redevenDesktopSettings?.cancel === 'function',
@@ -209,27 +212,10 @@ app.whenReady().then(async () => {
 });
 `, 'utf8');
 
-    const electronRuntimeLaunch = getElectronRuntimeLaunch(
-      process.platform,
-      String(electronPath),
-      runtimeScript,
-      Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY),
-    );
-
-    const { stdout } = await execFileAsync(electronRuntimeLaunch.command, electronRuntimeLaunch.args, {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
-        [electronRuntimePreloadEnvName]: path.join(outDir, 'browser.js'),
-      },
-      timeout: electronRuntimeIntegrationTimeoutMs,
-      maxBuffer: 1024 * 1024,
-    });
-
-    const payload = JSON.parse(extractElectronRuntimePayload(stdout)) as {
+    type RuntimeBridgeSnapshot = {
       main: {
         hasAskFlowerBridge: boolean;
+        hasDesktopLauncherBridge: boolean;
         hasDesktopSettingsBridge: boolean;
         hasDesktopSessionContextBridge: boolean;
         hasDesktopShellBridge: boolean;
@@ -238,6 +224,7 @@ app.whenReady().then(async () => {
       };
       child: {
         hasAskFlowerBridge: boolean;
+        hasDesktopLauncherBridge: boolean;
         hasDesktopSettingsBridge: boolean;
         hasDesktopSessionContextBridge: boolean;
         hasDesktopShellBridge: boolean;
@@ -246,17 +233,46 @@ app.whenReady().then(async () => {
       };
     };
 
-    expect(payload.main.hasAskFlowerBridge).toBe(true);
-    expect(payload.main.hasDesktopSettingsBridge).toBe(true);
-    expect(payload.main.hasDesktopSessionContextBridge).toBe(true);
-    expect(payload.main.hasDesktopShellBridge).toBe(true);
-    expect(payload.main.hasStateStorageBridge).toBe(true);
-    expect(payload.main.hasDesktopThemeBridge).toBe(true);
-    expect(payload.child.hasAskFlowerBridge).toBe(true);
-    expect(payload.child.hasDesktopSettingsBridge).toBe(true);
-    expect(payload.child.hasDesktopSessionContextBridge).toBe(true);
-    expect(payload.child.hasDesktopShellBridge).toBe(true);
-    expect(payload.child.hasStateStorageBridge).toBe(true);
-    expect(payload.child.hasDesktopThemeBridge).toBe(true);
+    async function runSnapshot(preloadPath: string): Promise<RuntimeBridgeSnapshot> {
+      const electronRuntimeLaunch = getElectronRuntimeLaunch(
+        process.platform,
+        String(electronPath),
+        runtimeScript,
+        Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY),
+      );
+
+      const { stdout } = await execFileAsync(electronRuntimeLaunch.command, electronRuntimeLaunch.args, {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+          [electronRuntimePreloadEnvName]: preloadPath,
+        },
+        timeout: electronRuntimeIntegrationTimeoutMs,
+        maxBuffer: 1024 * 1024,
+      });
+
+      return JSON.parse(extractElectronRuntimePayload(stdout)) as RuntimeBridgeSnapshot;
+    }
+
+    const utility = await runSnapshot(path.join(outDir, 'utility.js'));
+    expect(utility.main.hasDesktopLauncherBridge).toBe(true);
+    expect(utility.main.hasDesktopSettingsBridge).toBe(true);
+    expect(utility.main.hasAskFlowerBridge).toBe(false);
+    expect(utility.main.hasDesktopSessionContextBridge).toBe(false);
+    expect(utility.main.hasDesktopShellBridge).toBe(true);
+    expect(utility.main.hasStateStorageBridge).toBe(true);
+    expect(utility.main.hasDesktopThemeBridge).toBe(true);
+    expect(utility.child).toEqual(utility.main);
+
+    const session = await runSnapshot(path.join(outDir, 'session.js'));
+    expect(session.main.hasDesktopLauncherBridge).toBe(false);
+    expect(session.main.hasDesktopSettingsBridge).toBe(false);
+    expect(session.main.hasAskFlowerBridge).toBe(true);
+    expect(session.main.hasDesktopSessionContextBridge).toBe(true);
+    expect(session.main.hasDesktopShellBridge).toBe(true);
+    expect(session.main.hasStateStorageBridge).toBe(true);
+    expect(session.main.hasDesktopThemeBridge).toBe(true);
+    expect(session.child).toEqual(session.main);
   }, electronRuntimeIntegrationTimeoutMs);
 });
