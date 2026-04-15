@@ -98,15 +98,17 @@ import {
   shellStatus,
 } from './viewModel';
 import {
-  dedupeNoticeKeys,
   launcherActionFailurePresentation,
-  noticeKeysForEnvironment,
-  type EnvironmentActionNotice,
 } from './launcherActionFeedback';
 import {
   syncSSHConnectionDialogAdvancedState,
   type SSHConnectionDialogAdvancedState,
 } from './sshConnectionDialogState';
+import {
+  describeManagedEnvironmentBindingResolution,
+  resolveManagedEnvironmentBindingResolution,
+  type ManagedEnvironmentBindingResolutionView,
+} from './managedEnvironmentBindingResolution';
 import {
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
@@ -114,7 +116,6 @@ import {
   describeNextStartAddress,
   describeRuntimeAddress,
   isRedundantSettingsFieldLabel,
-  compactSettingsActionLabel,
   plainTextFromHelpHTML,
 } from './welcomeCopy';
 import {
@@ -185,10 +186,6 @@ type BusyAction =
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
-
-type LauncherActionUIOptions = Readonly<{
-  noticeKeys?: readonly string[];
-}>;
 
 type ManagedEnvironmentConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
@@ -272,7 +269,6 @@ const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
 const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
 const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
-const ENVIRONMENT_ACTION_NOTICE_TTL_MS = 8_000;
 const ACTION_TOAST_TTL_MS = 4_000;
 
 function buildDesktopFloeConfig() {
@@ -357,6 +353,22 @@ function getErrorMessage(error: unknown): string {
     return trimString(error.message);
   }
   return trimString(error);
+}
+
+function formatIssueToastMessage(issue: DesktopWelcomeIssue): string {
+  const message = trimString(issue.message);
+  const title = trimString(issue.title);
+  if (message === '') {
+    return title;
+  }
+  return title !== '' && message !== title ? `${title}: ${message}` : message;
+}
+
+function issueToastTone(issue: DesktopWelcomeIssue): DesktopActionToastTone {
+  if (issue.scope === 'startup' || issue.code === 'state_dir_locked') {
+    return 'warning';
+  }
+  return 'error';
 }
 
 function controlPlaneName(controlPlane: DesktopControlPlaneSummary): string {
@@ -481,17 +493,6 @@ function createControlPlaneDialogState(
     display_label: displayLabel || suggestControlPlaneDisplayLabel(providerOrigin),
     display_label_touched: overrides.display_label_touched === true,
   };
-}
-
-function issueKicker(issue: DesktopWelcomeIssue): string {
-  switch (issue.scope) {
-    case 'remote_environment':
-      return 'Remote Environment';
-    case 'managed_environment':
-      return 'Environment';
-    default:
-      return 'Desktop startup';
-  }
 }
 
 function environmentKindLabel(kind: string): string {
@@ -710,7 +711,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const shellTheme = desktopThemeBridge();
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
   const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
-  const [connectError, setConnectError] = createSignal('');
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
   const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
@@ -724,11 +724,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [libraryProviderFilter, setLibraryProviderFilter] = createSignal('');
   const [libraryQuery, setLibraryQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
-  const [environmentActionNotices, setEnvironmentActionNotices] = createSignal<Readonly<Record<string, EnvironmentActionNotice>>>({});
   const actionToastTimers = new Map<number, number>();
-  const environmentNoticeTimers = new Map<string, number>();
   let nextActionToastID = 0;
-  let issueRef: HTMLElement | undefined;
   let settingsErrorRef: HTMLElement | undefined;
 
   const visibleSurface = createMemo<DesktopLauncherSurface>(() => snapshot().surface);
@@ -761,6 +758,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       libraryProviderFilter(),
     )
   ));
+  const managedBindingResolution = createMemo(() => {
+    const state = connectionDialogState();
+    if (!state || state.connection_kind !== 'managed_environment') {
+      return null;
+    }
+    return describeManagedEnvironmentBindingResolution(
+      resolveManagedEnvironmentBindingResolution(state, snapshot().environments),
+      {
+        isCreate: state.mode === 'create',
+      },
+    );
+  });
 
   createEffect(() => {
     const activeProviderFilter = libraryProviderFilter();
@@ -777,10 +786,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       window.clearTimeout(handle);
     }
     actionToastTimers.clear();
-    for (const handle of environmentNoticeTimers.values()) {
-      window.clearTimeout(handle);
-    }
-    environmentNoticeTimers.clear();
   });
 
   if (shellTheme) {
@@ -804,18 +809,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
 
   {
-    let prevIssueTitle = '';
+    let previousIssueKey = '';
     createEffect(() => {
       if (visibleSurface() !== 'connect_environment' || !snapshot().issue) {
-        prevIssueTitle = '';
+        previousIssueKey = '';
         return;
       }
-      const title = snapshot().issue!.title;
-      if (title === prevIssueTitle) {
+      const issue = snapshot().issue!;
+      const issueKey = `${issue.scope}:${issue.code}:${issue.message}`;
+      if (issueKey === previousIssueKey) {
         return;
       }
-      prevIssueTitle = title;
-      queueMicrotask(() => issueRef?.focus());
+      previousIssueKey = issueKey;
+      showActionToast(formatIssueToastMessage(issue), issueToastTone(issue));
     });
   }
 
@@ -887,91 +893,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     actionToastTimers.set(activeToastID, handle);
   }
 
-  function clearEnvironmentActionNotices(keys: readonly string[] = []): void {
-    const cleanKeys = dedupeNoticeKeys(keys);
-    if (cleanKeys.length <= 0) {
-      return;
-    }
-    for (const key of cleanKeys) {
-      const handle = environmentNoticeTimers.get(key);
-      if (handle !== undefined) {
-        window.clearTimeout(handle);
-        environmentNoticeTimers.delete(key);
-      }
-    }
-    setEnvironmentActionNotices((current) => {
-      const next = { ...current };
-      let changed = false;
-      for (const key of cleanKeys) {
-        if (next[key]) {
-          changed = true;
-          delete next[key];
-        }
-      }
-      return changed ? next : current;
-    });
-  }
-
-  function setEnvironmentActionNotice(
-    keys: readonly string[],
-    notice: Readonly<{
-      tone: EnvironmentActionNotice['tone'];
-      message: string;
-    }>,
-  ): void {
-    const cleanKeys = dedupeNoticeKeys(keys);
-    if (cleanKeys.length <= 0 || trimString(notice.message) === '') {
-      return;
-    }
-    const nextNotice: EnvironmentActionNotice = {
-      tone: notice.tone,
-      message: trimString(notice.message),
-      updated_at_ms: Date.now(),
-    };
-    setEnvironmentActionNotices((current) => {
-      const next = { ...current };
-      for (const key of cleanKeys) {
-        next[key] = nextNotice;
-      }
-      return next;
-    });
-    for (const key of cleanKeys) {
-      const existingHandle = environmentNoticeTimers.get(key);
-      if (existingHandle !== undefined) {
-        window.clearTimeout(existingHandle);
-      }
-      const handle = window.setTimeout(() => {
-        environmentNoticeTimers.delete(key);
-        setEnvironmentActionNotices((current) => {
-          if (!current[key]) {
-            return current;
-          }
-          const next = { ...current };
-          delete next[key];
-          return next;
-        });
-      }, ENVIRONMENT_ACTION_NOTICE_TTL_MS);
-      environmentNoticeTimers.set(key, handle);
-    }
-  }
-
-  function environmentNoticeForKeys(keys: readonly string[]): EnvironmentActionNotice | null {
-    for (const key of dedupeNoticeKeys(keys)) {
-      const notice = environmentActionNotices()[key];
-      if (notice) {
-        return notice;
-      }
-    }
-    return null;
-  }
-
   async function handleLauncherActionFailure(
     failure: Extract<DesktopLauncherActionResult, Readonly<{ ok: false }>>,
     errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog',
-    options: LauncherActionUIOptions = {},
   ): Promise<void> {
-    const noticeKeys = dedupeNoticeKeys(options.noticeKeys ?? []);
-    const presentation = launcherActionFailurePresentation(failure, noticeKeys);
+    const presentation = launcherActionFailurePresentation(failure);
     if (presentation.refresh_snapshot) {
       try {
         await refreshSnapshot();
@@ -980,20 +906,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
     }
-    if (presentation.notice_message !== '' && noticeKeys.length > 0) {
-      setEnvironmentActionNotice(noticeKeys, {
-        tone: presentation.notice_tone,
-        message: presentation.notice_message,
-      });
-      return;
-    }
-    if (presentation.global_message !== '') {
-      setErrorMessage(errorTarget, presentation.global_message);
+    if (presentation.message !== '') {
+      showActionToast(presentation.message, presentation.tone);
     }
   }
 
   function resetMessages(): void {
-    setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
     setControlPlaneDialogError('');
@@ -1005,7 +923,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (trimString(message) !== '') {
       showActionToast(message, 'info');
     }
-    setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
     setControlPlaneDialogError('');
@@ -1052,7 +969,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (trimString(message) !== '') {
       showActionToast(message, 'info');
     }
-    setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
     setControlPlaneDialogError('');
@@ -1126,7 +1042,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (trimString(message) !== '') {
       showActionToast(message, 'info');
     }
-    setConnectError('');
     setSettingsError('');
     setConnectionDialogError('');
     setControlPlaneDialogError('');
@@ -1314,6 +1229,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function setErrorMessage(target: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog', message: string): void {
+    if (target === 'connect') {
+      showActionToast(message, 'error');
+      return;
+    }
     if (target === 'settings') {
       setSettingsError(message);
       return;
@@ -1326,21 +1245,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setConnectionDialogError(message);
       return;
     }
-    setConnectError(message);
   }
 
   async function performLauncherAction(
     request: DesktopLauncherActionRequest,
     errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' = 'connect',
-    options: LauncherActionUIOptions = {},
   ): Promise<Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | null> {
     resetMessages();
-    clearEnvironmentActionNotices(options.noticeKeys ?? []);
     setBusyAction(busyActionForLauncherRequest(request));
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
-        await handleLauncherActionFailure(result, errorTarget, options);
+        await handleLauncherActionFailure(result, errorTarget);
         return null;
       }
       if (isDesktopLauncherActionSuccess(result)) {
@@ -1359,12 +1275,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function focusEnvironmentWindow(
     sessionKey: string,
     errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' = 'connect',
-    options: LauncherActionUIOptions = {},
   ): Promise<boolean> {
     const result = await performLauncherAction({
       kind: 'focus_environment_window',
       session_key: sessionKey,
-    }, errorTarget, options);
+    }, errorTarget);
     return result?.outcome === 'focused_environment_window';
   }
 
@@ -1373,23 +1288,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     route: 'auto' | DesktopManagedEnvironmentRoute = 'auto',
   ): Promise<boolean> {
-    const noticeKeys = noticeKeysForEnvironment(environment);
     if (environment.kind !== 'managed_environment') {
       return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
     }
     const preferredOpenSessionKey = route === 'remote_desktop'
       ? environment.open_remote_session_key
-        : route === 'local_host'
+      : route === 'local_host'
           ? environment.open_local_session_key
           : environment.open_session_key;
     if (preferredOpenSessionKey) {
-      return focusEnvironmentWindow(preferredOpenSessionKey, errorTarget, { noticeKeys });
+      return focusEnvironmentWindow(preferredOpenSessionKey, errorTarget);
     }
     const result = await performLauncherAction({
       kind: 'open_managed_environment',
       environment_id: environment.id,
       route,
-    }, errorTarget, { noticeKeys });
+    }, errorTarget);
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
 
@@ -1407,9 +1321,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' = 'connect',
     environment?: DesktopEnvironmentEntry,
   ): Promise<boolean> {
-    const noticeKeys = environment ? noticeKeysForEnvironment(environment) : [];
     if (environment?.is_open && environment.open_session_key) {
-      return focusEnvironmentWindow(environment.open_session_key, errorTarget, { noticeKeys });
+      return focusEnvironmentWindow(environment.open_session_key, errorTarget);
     }
     const normalizedTargetURL = trimString(targetURL);
     if (!normalizedTargetURL) {
@@ -1422,7 +1335,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       external_local_ui_url: normalizedTargetURL,
       environment_id: environment?.id,
       label: environment?.label,
-    }, errorTarget, { noticeKeys });
+    }, errorTarget);
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
       closeConnectionDialog();
@@ -1435,9 +1348,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' = 'connect',
     environment?: DesktopEnvironmentEntry,
   ): Promise<boolean> {
-    const noticeKeys = environment ? noticeKeysForEnvironment(environment) : [];
     if (environment?.is_open && environment.open_session_key) {
-      return focusEnvironmentWindow(environment.open_session_key, errorTarget, { noticeKeys });
+      return focusEnvironmentWindow(environment.open_session_key, errorTarget);
     }
 
     const result = await performLauncherAction({
@@ -1449,7 +1361,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
-    }, errorTarget, { noticeKeys });
+    }, errorTarget);
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
       closeConnectionDialog();
@@ -1516,11 +1428,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           await performLauncherAction({
             kind: 'start_control_plane_connect',
             provider_origin: environment.provider_origin,
-          }, errorTarget === 'settings' ? 'connect' : errorTarget, {
-            noticeKeys: noticeKeysForEnvironment(environment),
-          });
+          }, errorTarget === 'settings' ? 'connect' : errorTarget);
         }
         return false;
+      case 'opening':
       default:
         return false;
     }
@@ -1664,7 +1575,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
 
-    setConnectError('');
     setConnectionDialogError('');
     setBusyAction('save_environment');
     try {
@@ -1694,7 +1604,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       successMessage: string;
     }>,
   ): Promise<boolean> {
-    setConnectError('');
     setConnectionDialogError('');
     setBusyAction('save_environment');
     try {
@@ -1721,13 +1630,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function saveEnvironmentFromLibrary(environment: DesktopEnvironmentEntry): Promise<void> {
     if (environment.kind === 'managed_environment') {
-      setConnectError('Desktop-managed environments are already saved on this device.');
+      setErrorMessage('connect', 'Desktop-managed environments are already saved on this device.');
       return;
     }
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
       if (!details) {
-        setConnectError('SSH connection details are missing.');
+        setErrorMessage('connect', 'SSH connection details are missing.');
         return;
       }
       await upsertSavedSSHEnvironment({
@@ -1807,6 +1716,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     let saved = false;
     if (state.connection_kind === 'managed_environment') {
+      const bindingResolution = managedBindingResolution();
+      if (state.use_control_plane_binding === true && bindingResolution?.save_disabled) {
+        setConnectionDialogError(bindingResolution.description);
+        return;
+      }
       const managedRequest = buildManagedEnvironmentActionRequest(state, 'dialog');
       if (!managedRequest) {
         return;
@@ -1850,6 +1764,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     if (state.connection_kind === 'managed_environment') {
+      const bindingResolution = managedBindingResolution();
+      if (state.use_control_plane_binding === true && bindingResolution?.connect_disabled) {
+        setConnectionDialogError(bindingResolution.description);
+        return;
+      }
       const request = buildManagedEnvironmentActionRequest(state, 'dialog');
       if (!request) {
         return;
@@ -1910,9 +1829,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         kind: 'set_managed_environment_pinned',
         environment_id: environment.id,
         pinned: nextPinned,
-      }, 'connect', {
-        noticeKeys: noticeKeysForEnvironment(environment),
-      });
+      }, 'connect');
       if (result?.outcome === 'saved_environment') {
         showActionToast(successMessage);
       }
@@ -1921,7 +1838,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
       if (!details) {
-        setConnectError('SSH connection details are missing.');
+        setErrorMessage('connect', 'SSH connection details are missing.');
         return;
       }
       const result = await performLauncherAction({
@@ -1934,9 +1851,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: details.remote_install_dir,
         bootstrap_strategy: details.bootstrap_strategy,
         release_base_url: details.release_base_url,
-      }, 'connect', {
-        noticeKeys: noticeKeysForEnvironment(environment),
-      });
+      }, 'connect');
       if (result?.outcome === 'saved_environment') {
         showActionToast(successMessage);
       }
@@ -1948,9 +1863,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       label: environment.label,
       external_local_ui_url: environment.local_ui_url,
       pinned: nextPinned,
-    }, 'connect', {
-      noticeKeys: noticeKeysForEnvironment(environment),
-    });
+    }, 'connect');
     if (result?.outcome === 'saved_environment') {
       showActionToast(successMessage);
     }
@@ -1985,7 +1898,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           : 'Connection removed from Environment Library.',
       );
     } catch (error) {
-      setConnectError(getErrorMessage(error));
+      setErrorMessage('connect', getErrorMessage(error));
     } finally {
       setBusyAction('');
     }
@@ -2005,10 +1918,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setDeleteControlPlaneTarget(null);
       showActionToast('Control Plane removed from Desktop.');
     }
-  }
-
-  function environmentNoticeForEnvironment(environment: DesktopEnvironmentEntry): EnvironmentActionNotice | null {
-    return environmentNoticeForKeys(noticeKeysForEnvironment(environment));
   }
 
   return (
@@ -2069,8 +1978,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       >
         <ConnectEnvironmentSurface
           snapshot={snapshot()}
-          settingsSurface={settingsSurface()}
-          error={connectError()}
           busyAction={busyAction()}
           activeTab={activeCenterTab()}
           setActiveTab={setActiveCenterTab}
@@ -2081,10 +1988,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           setLibraryFilter={setLibraryFilter}
           setLibraryProviderFilter={setLibraryProviderFilter}
           setLibraryQuery={setLibraryQuery}
-          environmentNotice={environmentNoticeForEnvironment}
-          issueRef={(value) => {
-            issueRef = value;
-          }}
           openLocalEnvironment={openPrimaryManagedEnvironment}
           openSettingsSurface={openSettingsSurface}
           openCreateConnectionDialog={openCreateConnectionDialog}
@@ -2103,10 +2006,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           reconnectControlPlane={reconnectControlPlane}
           refreshControlPlane={refreshControlPlane}
           deleteControlPlane={setDeleteControlPlaneTarget}
-          copyDiagnostics={async () => {
-            await copyToClipboard(snapshot().issue?.diagnostics_copy ?? '');
-            showActionToast('Diagnostics copied to the clipboard.');
-          }}
         />
       </DesktopLauncherShell>
 
@@ -2138,6 +2037,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         error={connectionDialogError()}
         busyAction={busyAction()}
         controlPlanes={snapshot().control_planes}
+        bindingResolution={managedBindingResolution()}
         onOpenChange={(open) => {
           if (!open) {
             closeConnectionDialog();
@@ -2245,7 +2145,7 @@ function DesktopActionToastViewport(props: Readonly<{
                   exit={{ opacity: 0, x: 24 }}
                   transition={{ duration: 0.25 }}
                 >
-                  <div class="redeven-desktop-toast" data-tone={toast.tone} role="status">
+                  <div class="redeven-desktop-toast" data-tone={toast.tone} role={toast.tone === 'error' ? 'alert' : 'status'}>
                     <div class="redeven-desktop-toast__icon" aria-hidden="true">
                       {toast.tone === 'success'
                         ? <Check class="h-3.5 w-3.5" />
@@ -2253,7 +2153,13 @@ function DesktopActionToastViewport(props: Readonly<{
                     </div>
                     <div class="min-w-0 flex-1">
                       <div class="redeven-desktop-toast__title">
-                        {toast.tone === 'success' ? 'Updated' : 'Notice'}
+                        {toast.tone === 'success'
+                          ? 'Updated'
+                          : toast.tone === 'info'
+                            ? 'Notice'
+                            : toast.tone === 'warning'
+                              ? 'Attention'
+                              : 'Could Not Complete'}
                       </div>
                       <div class="redeven-desktop-toast__message">{toast.message}</div>
                     </div>
@@ -2277,8 +2183,6 @@ function DesktopActionToastViewport(props: Readonly<{
 
 function ConnectEnvironmentSurface(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
-  settingsSurface: DesktopSettingsSurfaceSnapshot;
-  error: string;
   busyAction: BusyAction;
   activeTab: EnvironmentCenterTab;
   setActiveTab: (value: EnvironmentCenterTab) => void;
@@ -2289,8 +2193,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   setLibraryFilter: (value: EnvironmentLibraryFilter) => void;
   setLibraryProviderFilter: (value: string) => void;
   setLibraryQuery: (value: string) => void;
-  environmentNotice: (environment: DesktopEnvironmentEntry) => EnvironmentActionNotice | null;
-  issueRef: (value: HTMLElement) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
@@ -2325,14 +2227,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
-  copyDiagnostics: () => Promise<void>;
 }>) {
-  const localEnvironmentIssue = createMemo(() => (
-    props.snapshot.issue?.scope === 'managed_environment' ? props.snapshot.issue : null
-  ));
-  const remoteEnvironmentIssue = createMemo(() => (
-    props.snapshot.issue?.scope === 'remote_environment' ? props.snapshot.issue : null
-  ));
   const visibleEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
       props.snapshot,
@@ -2499,79 +2394,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
         </header>
 
         <div class="space-y-3">
-          <Show when={props.error}>
-            <div role="alert" class="redeven-console-banner redeven-console-banner--error rounded-lg px-3.5 py-2.5 text-sm text-destructive">
-              {props.error}
-            </div>
-          </Show>
-
-          <Show when={localEnvironmentIssue()}>
-            {(issue) => (
-              <IssueCard
-                issue={issue()}
-                issueRef={props.issueRef}
-                primaryAction={(
-                  <Button
-                    size="sm"
-                    variant="default"
-                    aria-label="Open Local Environment"
-                    title="Open Local Environment"
-                    onClick={() => { void props.openLocalEnvironment(); }}
-                  >
-                    Open
-                  </Button>
-                )}
-                secondaryAction={(
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-label="Open Local Environment Settings"
-                    title="Open Local Environment Settings"
-                    onClick={() => props.openSettingsSurface()}
-                  >
-                    {compactSettingsActionLabel()}
-                  </Button>
-                )}
-                tertiaryAction={(
-                  <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
-                    <Copy class="mr-1 h-3.5 w-3.5" />
-                    Copy Diagnostics
-                  </Button>
-                )}
-              />
-            )}
-          </Show>
-
-          <Show when={remoteEnvironmentIssue()}>
-            {(issue) => (
-              <IssueCard
-                issue={issue()}
-                issueRef={props.issueRef}
-                primaryAction={(
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={() => {
-                      if (issue().ssh_details) {
-                        void props.openSSHEnvironment(issue().ssh_details!, 'connect');
-                        return;
-                      }
-                      void props.openRemoteEnvironment(issue().target_url);
-                    }}
-                  >
-                    Retry
-                  </Button>
-                )}
-                tertiaryAction={(
-                  <Button size="sm" variant="outline" onClick={() => { void props.copyDiagnostics(); }}>
-                    <Copy class="mr-1 h-3.5 w-3.5" />
-                    Copy Diagnostics
-                  </Button>
-                )}
-              />
-            )}
-          </Show>
-
           <Show
             when={props.activeTab === 'environments'}
             fallback={(
@@ -2595,7 +2417,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 && trimString(props.libraryProviderFilter) === ''
               }
               busyAction={props.busyAction}
-              environmentNotice={props.environmentNotice}
               openCreateConnectionDialog={props.openCreateConnectionDialog}
               openEnvironment={props.openEnvironment}
               runManagedEnvironmentAction={props.runManagedEnvironmentAction}
@@ -2612,26 +2433,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
   );
 }
 
-function AnimatedCard(props: Readonly<{
-  index: number;
-  children: JSX.Element;
-}>) {
-  return (
-    <Motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: props.index * 0.05 }}
-    >
-      {props.children}
-    </Motion.div>
-  );
-}
-
 function EnvironmentCardsPanel(props: Readonly<{
   entries: readonly DesktopEnvironmentEntry[];
   showQuickAddCards: boolean;
   busyAction: BusyAction;
-  environmentNotice: (environment: DesktopEnvironmentEntry) => EnvironmentActionNotice | null;
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
@@ -2656,21 +2461,18 @@ function EnvironmentCardsPanel(props: Readonly<{
       <Show when={groupedEntries().pinned_entries.length > 0}>
         <EnvironmentCardSection title="Pinned">
           <For each={groupedEntries().pinned_entries}>
-            {(environment, index) => (
-              <AnimatedCard index={index()}>
-                <EnvironmentConnectionCard
-                  environment={environment}
-                  busyAction={props.busyAction}
-                  notice={props.environmentNotice(environment)}
-                  openEnvironment={props.openEnvironment}
-                  runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-                  toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                  copyEnvironmentValue={props.copyEnvironmentValue}
-                  saveEnvironment={props.saveEnvironment}
-                  editEnvironment={props.editEnvironment}
-                  deleteEnvironment={props.deleteEnvironment}
-                />
-              </AnimatedCard>
+            {(environment) => (
+              <EnvironmentConnectionCard
+                environment={environment}
+                busyAction={props.busyAction}
+                openEnvironment={props.openEnvironment}
+                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                copyEnvironmentValue={props.copyEnvironmentValue}
+                saveEnvironment={props.saveEnvironment}
+                editEnvironment={props.editEnvironment}
+                deleteEnvironment={props.deleteEnvironment}
+              />
             )}
           </For>
         </EnvironmentCardSection>
@@ -2679,30 +2481,25 @@ function EnvironmentCardsPanel(props: Readonly<{
       <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
         <EnvironmentCardSection title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}>
           <For each={groupedEntries().regular_entries}>
-            {(environment, index) => (
-              <AnimatedCard index={index()}>
-                <EnvironmentConnectionCard
-                  environment={environment}
-                  busyAction={props.busyAction}
-                  notice={props.environmentNotice(environment)}
-                  openEnvironment={props.openEnvironment}
-                  runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-                  toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                  copyEnvironmentValue={props.copyEnvironmentValue}
-                  saveEnvironment={props.saveEnvironment}
-                  editEnvironment={props.editEnvironment}
-                  deleteEnvironment={props.deleteEnvironment}
-                />
-              </AnimatedCard>
+            {(environment) => (
+              <EnvironmentConnectionCard
+                environment={environment}
+                busyAction={props.busyAction}
+                openEnvironment={props.openEnvironment}
+                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                copyEnvironmentValue={props.copyEnvironmentValue}
+                saveEnvironment={props.saveEnvironment}
+                editEnvironment={props.editEnvironment}
+                deleteEnvironment={props.deleteEnvironment}
+              />
             )}
           </For>
 
           <Show when={props.showQuickAddCards}>
-            <AnimatedCard index={groupedEntries().regular_entries.length}>
-              <NewEnvironmentPlaceholderCard
-                openCreateConnectionDialog={props.openCreateConnectionDialog}
-              />
-            </AnimatedCard>
+            <NewEnvironmentPlaceholderCard
+              openCreateConnectionDialog={props.openCreateConnectionDialog}
+            />
           </Show>
         </EnvironmentCardSection>
       </Show>
@@ -2784,13 +2581,39 @@ function EnvironmentStatusIndicator(props: Readonly<{
   );
 }
 
-function EnvironmentInlineNotice(props: Readonly<{
-  notice: EnvironmentActionNotice;
+function ManagedEnvironmentBindingResolutionPanel(props: Readonly<{
+  resolution: ManagedEnvironmentBindingResolutionView;
 }>) {
   return (
-    <div class="redeven-environment-inline-notice" data-tone={props.notice.tone}>
-      <AlertCircle class="h-3.5 w-3.5 shrink-0" />
-      <span>{props.notice.message}</span>
+    <div
+      class="rounded-md border px-3 py-3"
+      classList={{
+        'border-border/70 bg-background/80': props.resolution.tone === 'neutral',
+        'border-primary/20 bg-primary/[0.06]': props.resolution.tone === 'primary',
+        'border-emerald-500/20 bg-emerald-500/[0.08]': props.resolution.tone === 'success',
+        'border-amber-500/20 bg-amber-500/[0.08]': props.resolution.tone === 'warning',
+      }}
+    >
+      <div class="flex items-start gap-3">
+        <div
+          class="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-current"
+          classList={{
+            'border-border/70 bg-muted/30 text-muted-foreground': props.resolution.tone === 'neutral',
+            'border-primary/20 bg-primary/10 text-primary': props.resolution.tone === 'primary',
+            'border-emerald-500/20 bg-emerald-500/10 text-emerald-700': props.resolution.tone === 'success',
+            'border-amber-500/20 bg-amber-500/10 text-amber-700': props.resolution.tone === 'warning',
+          }}
+        >
+          <AlertCircle class="h-4 w-4" />
+        </div>
+        <div class="min-w-0 flex-1 space-y-1">
+          <div class="text-xs font-medium text-foreground">{props.resolution.title}</div>
+          <div class="text-[11px] leading-5 text-muted-foreground">{props.resolution.description}</div>
+          <Show when={trimString(props.resolution.detail) !== ''}>
+            <div class="text-[11px] leading-5 text-muted-foreground/90">{props.resolution.detail}</div>
+          </Show>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3298,7 +3121,6 @@ function ManagedEnvironmentSplitActionButton(props: Readonly<{
 function EnvironmentConnectionCard(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
-  notice: EnvironmentActionNotice | null;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -3384,9 +3206,6 @@ function EnvironmentConnectionCard(props: Readonly<{
           endpoints={endpoints()}
           copyEnvironmentValue={props.copyEnvironmentValue}
         />
-        <Show when={props.notice}>
-          {(notice) => <EnvironmentInlineNotice notice={notice()} />}
-        </Show>
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <Show
@@ -3397,6 +3216,7 @@ function EnvironmentConnectionCard(props: Readonly<{
               variant="default"
               class="flex-1"
               loading={isEnvironmentActionBusy()}
+              disabled={props.environment.is_opening}
               onClick={() => {
                 void props.openEnvironment(props.environment, 'connect');
               }}
@@ -3867,42 +3687,6 @@ function SettingsSectionHeader(props: Readonly<{
   );
 }
 
-function IssueCard(props: Readonly<{
-  issue: DesktopWelcomeIssue;
-  issueRef: (value: HTMLElement) => void;
-  primaryAction?: JSX.Element;
-  secondaryAction?: JSX.Element;
-  tertiaryAction?: JSX.Element;
-}>) {
-  return (
-    <div ref={props.issueRef} tabIndex={-1} class="outline-none">
-      <div class="redeven-console-issue rounded-[1.05rem] border border-destructive/20 px-4 py-3 shadow-sm">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div class="flex min-w-0 items-start gap-3">
-            <div class="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-destructive/20 bg-destructive/10 text-destructive">
-              <AlertCircle class="h-4 w-4" />
-            </div>
-            <div class="min-w-0">
-              <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-destructive">{issueKicker(props.issue)}</div>
-              <div class="mt-1 text-sm font-semibold text-foreground">{props.issue.title}</div>
-              <div class="mt-1 text-xs leading-5 text-muted-foreground">{props.issue.message}</div>
-              <Show when={props.issue.diagnostics_copy}>
-                <div class="mt-2 text-[11px] text-muted-foreground">Diagnostics are ready if you want to copy them.</div>
-              </Show>
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            {props.primaryAction}
-            {props.secondaryAction}
-            {props.tertiaryAction}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
@@ -4205,6 +3989,7 @@ function ConnectionDialog(props: Readonly<{
   error: string;
   busyAction: BusyAction;
   controlPlanes: readonly DesktopControlPlaneSummary[];
+  bindingResolution: ManagedEnvironmentBindingResolutionView | null;
   onOpenChange: (open: boolean) => void;
   updateField: (
     name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
@@ -4226,6 +4011,11 @@ function ConnectionDialog(props: Readonly<{
     props.state?.connection_kind === 'managed_environment' ? props.state : null
   ));
   const useControlPlaneBinding = createMemo(() => managedEnvironmentState()?.use_control_plane_binding === true);
+  const bindingResolution = createMemo(() => (
+    connectionKind() === 'managed_environment' && useControlPlaneBinding()
+      ? props.bindingResolution
+      : null
+  ));
   const selectedControlPlaneKey = createMemo(() => {
     const state = managedEnvironmentState();
     if (!state || trimString(state.provider_origin) === '' || trimString(state.provider_id) === '') {
@@ -4279,6 +4069,10 @@ function ConnectionDialog(props: Readonly<{
         return 'Run a Desktop-managed Redeven environment on this device. You can keep it local-only or bind it to one saved Control Plane environment for unified local and remote access.';
     }
   });
+  const saveActionLabel = createMemo(() => bindingResolution()?.save_label ?? compactSaveActionLabel());
+  const connectActionLabel = createMemo(() => bindingResolution()?.connect_label ?? 'Connect');
+  const saveDisabled = createMemo(() => bindingResolution()?.save_disabled === true);
+  const connectDisabled = createMemo(() => bindingResolution()?.connect_disabled === true);
 
   createEffect(() => {
     setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(
@@ -4301,12 +4095,13 @@ function ConnectionDialog(props: Readonly<{
             size="sm"
             variant={isCreate() ? 'outline' : 'default'}
             loading={props.busyAction === 'save_environment'}
+            disabled={saveDisabled()}
             onClick={() => {
               void props.onSave();
             }}
           >
             <Save class="mr-1 h-3.5 w-3.5" />
-            {compactSaveActionLabel()}
+            {saveActionLabel()}
           </Button>
           <Show when={isCreate()}>
             <Button
@@ -4317,11 +4112,12 @@ function ConnectionDialog(props: Readonly<{
                 || props.busyAction === 'open_remote_environment'
                 || props.busyAction === 'open_ssh_environment'
               }
+              disabled={connectDisabled()}
               onClick={() => {
                 void props.onConnect();
               }}
             >
-              Connect
+              {connectActionLabel()}
             </Button>
           </Show>
         </div>
@@ -4567,6 +4363,11 @@ function ConnectionDialog(props: Readonly<{
                       <div class="text-[11px] text-muted-foreground">
                         Desktop stores local state under the selected Control Plane environment scope on this device.
                       </div>
+                      <Show when={bindingResolution()}>
+                        {(resolution) => (
+                          <ManagedEnvironmentBindingResolutionPanel resolution={resolution()} />
+                        )}
+                      </Show>
                     </Show>
                   </div>
                 </Show>

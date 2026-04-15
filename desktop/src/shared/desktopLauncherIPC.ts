@@ -22,6 +22,7 @@ export type DesktopEnvironmentEntryKind = 'managed_environment' | 'external_loca
 export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Managed' | '';
 export type DesktopEnvironmentEntryCategory = 'managed' | 'open_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopManagedEnvironmentRoute = 'local_host' | 'remote_desktop';
+export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
@@ -37,6 +38,7 @@ export type DesktopLauncherActionOutcome =
 export type DesktopLauncherActionFailureScope = 'environment' | 'control_plane' | 'dialog' | 'global';
 export type DesktopLauncherActionFailureCode =
   | 'session_stale'
+  | 'environment_opening'
   | 'environment_missing'
   | 'environment_in_use'
   | 'environment_route_unavailable'
@@ -88,6 +90,7 @@ export type DesktopOpenEnvironmentWindow = Readonly<{
   environment_id: string;
   label: string;
   local_ui_url: string;
+  lifecycle: Extract<DesktopLauncherSessionLifecycle, 'open'>;
 }>;
 
 export type DesktopEnvironmentEntry = Readonly<{
@@ -101,12 +104,15 @@ export type DesktopEnvironmentEntry = Readonly<{
   managed_environment_name?: string;
   managed_local_ui_bind?: string;
   managed_local_ui_password_configured?: boolean;
+  managed_local_owner?: 'desktop' | 'agent' | 'unknown';
   managed_has_local_hosting?: boolean;
   managed_has_remote_desktop?: boolean;
   managed_preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
   default_open_route?: DesktopManagedEnvironmentRoute;
   open_local_session_key?: string;
+  open_local_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_remote_session_key?: string;
+  open_remote_session_lifecycle?: DesktopLauncherSessionLifecycle;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -124,8 +130,10 @@ export type DesktopEnvironmentEntry = Readonly<{
   tag: DesktopEnvironmentEntryTag;
   category: DesktopEnvironmentEntryCategory;
   is_open: boolean;
+  is_opening: boolean;
   open_session_key: string;
-  open_action_label: 'Open' | 'Focus';
+  open_session_lifecycle?: DesktopLauncherSessionLifecycle;
+  open_action_label: 'Open' | 'Opening…' | 'Focus';
   can_edit: boolean;
   can_delete: boolean;
   can_save: boolean;

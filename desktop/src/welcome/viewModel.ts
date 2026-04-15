@@ -1,5 +1,6 @@
 import type {
   DesktopEnvironmentEntry,
+  DesktopLauncherSessionLifecycle,
   DesktopLauncherSurface,
   DesktopManagedEnvironmentRoute,
   DesktopWelcomeSnapshot,
@@ -55,6 +56,7 @@ export type EnvironmentCardModel = Readonly<{
 export type EnvironmentActionIntent =
   | 'open'
   | 'focus'
+  | 'opening'
   | 'refresh_status'
   | 'check_status'
   | 'reconnect_provider'
@@ -223,6 +225,9 @@ function sshBootstrapSummary(environment: DesktopEnvironmentEntry): string {
 }
 
 function environmentConnectionStateLabel(environment: DesktopEnvironmentEntry): string {
+  if (environment.is_opening) {
+    return 'Opening';
+  }
   if (environment.is_open) {
     return 'Open';
   }
@@ -339,9 +344,18 @@ export function splitPinnedEnvironmentEntries(
 }
 
 function localRouteActionModel(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
+  if (environment.open_local_session_lifecycle === 'opening') {
+    return {
+      intent: 'opening',
+      label: 'Opening…',
+      enabled: false,
+      variant: 'default',
+      route: 'local_host',
+    };
+  }
   return {
-    intent: environment.open_local_session_key ? 'focus' : 'open',
-    label: environment.open_local_session_key ? 'Focus Local' : 'Open Local',
+    intent: environment.open_local_session_lifecycle === 'open' ? 'focus' : 'open',
+    label: environment.open_local_session_lifecycle === 'open' ? 'Focus Local' : 'Open Local',
     enabled: true,
     variant: 'default',
     route: 'local_host',
@@ -350,9 +364,19 @@ function localRouteActionModel(environment: DesktopEnvironmentEntry): Environmen
 
 function remoteRouteActionModel(options: Readonly<{
   remoteRouteState: DesktopProviderRemoteRouteState | undefined;
-  remoteSessionOpen: boolean;
+  remoteSessionLifecycle?: DesktopLauncherSessionLifecycle;
 }>): EnvironmentActionModel {
-  if (options.remoteSessionOpen) {
+  if (options.remoteSessionLifecycle === 'opening') {
+    return {
+      intent: 'opening',
+      label: 'Opening…',
+      enabled: false,
+      variant: 'outline',
+      route: 'remote_desktop',
+    };
+  }
+
+  if (options.remoteSessionLifecycle === 'open') {
     return {
       intent: 'focus',
       label: 'Focus Remote',
@@ -581,6 +605,7 @@ function dualRouteSplitMenuActions(
 
 function providerBackedStatusModel(options: Readonly<{
   isOpen: boolean;
+  isOpening: boolean;
   hasLocalHosting: boolean;
   hasRemoteDesktop: boolean;
   localSessionOpen: boolean;
@@ -591,6 +616,12 @@ function providerBackedStatusModel(options: Readonly<{
   label: string;
   tone: EnvironmentCardTone;
 }> {
+  if (options.isOpening) {
+    return {
+      label: 'Opening',
+      tone: 'primary',
+    };
+  }
   if (options.isOpen) {
     return {
       label: 'Open',
@@ -674,10 +705,11 @@ export function buildProviderBackedEnvironmentActionModel(
 ): ProviderBackedEnvironmentActionModel {
   const hasLocalHosting = environment.managed_has_local_hosting === true;
   const hasRemoteDesktop = environment.managed_has_remote_desktop === true;
-  const localSessionOpen = Boolean(environment.open_local_session_key);
-  const remoteSessionOpen = Boolean(environment.open_remote_session_key);
+  const localSessionOpen = environment.open_local_session_lifecycle === 'open';
+  const remoteSessionOpen = environment.open_remote_session_lifecycle === 'open';
   const status = providerBackedStatusModel({
     isOpen: environment.is_open,
+    isOpening: environment.is_opening,
     hasLocalHosting,
     hasRemoteDesktop,
     localSessionOpen,
@@ -688,9 +720,26 @@ export function buildProviderBackedEnvironmentActionModel(
   const remoteAction = hasRemoteDesktop
     ? remoteRouteActionModel({
       remoteRouteState: environment.remote_route_state,
-      remoteSessionOpen,
+      remoteSessionLifecycle: environment.open_remote_session_lifecycle,
     })
     : null;
+
+  if (environment.is_opening) {
+    return {
+      status_label: status.label,
+      status_tone: status.tone,
+      action_presentation: {
+        kind: 'single_button',
+        action: {
+          intent: 'opening',
+          label: 'Opening…',
+          enabled: false,
+          variant: 'default',
+          route: environment.default_open_route ?? 'local_host',
+        },
+      },
+    };
+  }
 
   if (hasLocalHosting && hasRemoteDesktop) {
     const localAction = localRouteActionModel(environment);
@@ -720,8 +769,8 @@ export function buildProviderBackedEnvironmentActionModel(
       action_presentation: {
         kind: 'single_button',
         action: {
-          intent: environment.open_local_session_key ? 'focus' : 'open',
-          label: environment.open_local_session_key ? 'Focus' : 'Open',
+          intent: environment.open_local_session_lifecycle === 'open' ? 'focus' : 'open',
+          label: environment.open_local_session_lifecycle === 'open' ? 'Focus' : 'Open',
           enabled: true,
           variant: 'default',
           route: 'local_host',
@@ -795,6 +844,9 @@ export function buildControlPlaneStatusModel(
 }
 
 export function environmentStatusLabel(environment: DesktopEnvironmentEntry): string {
+  if (environment.is_opening) {
+    return 'Opening';
+  }
   if (environment.is_open) {
     return 'Open';
   }
@@ -811,6 +863,9 @@ export function environmentStatusLabel(environment: DesktopEnvironmentEntry): st
 }
 
 export function environmentStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
+  if (environment.is_opening) {
+    return 'primary';
+  }
   if (environment.is_open) {
     return 'success';
   }

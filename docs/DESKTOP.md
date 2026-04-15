@@ -161,6 +161,24 @@ The first stable blocked code is:
 
 That blocked payload includes lock owner metadata and relevant state paths so Desktop can show actionable diagnostics without guessing from stderr text.
 
+### Session Lifecycle And Window Visibility
+
+Desktop tracks each launcher-opened Environment session with an explicit lifecycle:
+
+- `opening`
+- `open`
+- `closing`
+
+Rules:
+
+- Electron main creates a new session window hidden while the session is still `opening`.
+- A session becomes `open` only after the first successful main-frame load completes.
+- Only `open` sessions contribute to launcher `open_windows`, `is_open`, and `Focus` affordances.
+- `opening` sessions surface as route-aware `Opening…` actions and block duplicate open attempts for that same session identity.
+- `closing` sessions are removed from launcher `Focus` state immediately, even before native teardown fully completes.
+- If the first main-frame load fails, times out, or the window closes before becoming ready, Desktop tears the session down and reports the failure without leaving a blank visible window behind.
+- Renderer action state must come from the lifecycle-aware session summary, never from saved entry metadata alone.
+
 ## Welcome Launcher
 
 `Connect Environment` is the primary shell-owned startup surface.
@@ -201,6 +219,13 @@ Interaction rules:
 - optional `Connect To A Control Plane Environment`
   - pick one saved Control Plane
   - pick one provider environment from that Control Plane catalog
+  - Desktop computes an explicit binding-resolution state before save/connect:
+    - create a new binding
+    - update the same existing binding
+    - reuse an existing managed entry
+    - focus an already open session
+    - wait for an already opening session
+    - block when another local host process already owns that environment on this device
 - When the user leaves Control Plane binding off, Desktop derives the internal local scope from `Name` automatically.
 - Editing a local-only managed environment changes only the visible `Name`; the existing local scope stays stable unless Desktop later grows an explicit scope-migration action.
 - Creating a managed environment can either:
@@ -259,6 +284,10 @@ Interaction rules:
   - stale remote state prefers `Refresh Status`
   - expired provider authorization prefers `Reconnect`
   - provider refresh failures prefer `Retry Sync`
+- Managed session action state is lifecycle-aware:
+  - `Focus` only appears for a route whose session lifecycle is truly `open`
+  - `Opening…` is disabled and does not imply the window is ready yet
+  - closing or failed sessions stop contributing `Focus` immediately
 - Environment cards stay concise:
   - card bodies avoid explanatory helper prose under the actions
   - only concrete identifiers, runtime details, badges, and notices stay visible inside the card
@@ -283,20 +312,20 @@ Interaction rules:
 - Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested per-environment card grid.
 - Control Plane shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
-- Validation errors render inline in the active launcher dialog, while startup failures render inline on the launcher.
+- Field-validation errors stay inline inside the active launcher dialog, while transient launcher/open failures render as toasts instead of entering page flow.
 - Expected launcher failures no longer rely on raw IPC exception text:
   - stale session focus returns a structured `session_stale` result
   - environment/control-plane missing states return structured launcher failures
   - remote provider failures return structured reconnect / refresh / retry states
-  - the renderer refreshes its snapshot and prefers inline card notices for environment-scoped failures
+  - the renderer refreshes its snapshot and maps transient environment-scoped failures to toast feedback
 - Environment-scoped recovery copy stays action-oriented instead of surfacing Electron IPC internals:
   - `That window was already closed. Desktop refreshed the environment list.`
   - `Remote status is stale. Refresh the provider to confirm the latest state.`
   - `This environment is currently offline in the provider.`
 - Transient operation confirmations stay out of page flow:
   - success and info feedback such as `Refreshed this Control Plane.` render as toast notifications
-  - Desktop does not insert a success/info banner into the launcher content area just to acknowledge an action
-- The top error banner is reserved for global or dialog-scoped failures that cannot be cleanly attached to a specific environment card.
+  - launcher/opening failures such as `Unable to open that Environment` also render as toasts
+  - Desktop does not insert transient success/info/error banners or card-inline notices into the launcher content area
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
 - The launcher close action means:
   - `Quit` when no environment is open yet
@@ -376,6 +405,7 @@ Semantics:
   - user-visible name/title (persisted internally as `label`)
   - per-environment Local UI bind/password configuration
   - pin and timestamp metadata
+  - provider-binding upsert semantics that prefer editing/reusing the existing managed entry for the same Control Plane environment instead of silently creating duplicates
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
 - `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
@@ -557,13 +587,13 @@ Non-goals:
 ## Error Recovery
 
 - Remote target unreachable
-  - launcher reloads with the failing URL preserved and an inline remote-environment issue
+  - Desktop tears down the failed opening session, keeps the launcher stable, and shows a toast with the preserved target context
 - SSH bootstrap failed
-  - launcher reloads with the SSH target preserved in diagnostics and an inline remote-environment issue
+  - Desktop tears down the failed opening session, preserves the SSH target in diagnostics, and reports the failure through toast feedback
 - Desktop-managed startup blocked
-  - launcher reloads with a `Local Environment` issue and diagnostics copy
+  - Desktop returns to the launcher with structured recovery state and toast feedback instead of opening a blank Environment window
 - Detached child windows and Ask Flower handoff stay session-scoped during recovery; only the owning Environment window receives those callbacks
-- Secondary compatibility surfaces such as the blocked page may still exist, but the normal product flow is launcher-first recovery through the launcher window and its dialogs
+- The normal product flow is launcher-first recovery through the launcher window, its dialogs, and toast feedback rather than page-inserted recovery banners
 
 ## Accessibility Behavior
 
@@ -581,9 +611,8 @@ The required contract is:
 
 Desktop-specific outcomes from this implementation:
 
-- The launcher focuses the surfaced issue region when a startup or connection problem is rendered.
 - Inline launcher validation errors are focusable and announced immediately.
-- The blocked page still focuses its summary alert on load for compatibility.
+- Toast notifications use live-region semantics without shifting focus away from the active launcher workflow.
 
 ## Env App Behavior
 

@@ -38,6 +38,7 @@ import {
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
   sshDesktopSessionKey,
+  type DesktopSessionLifecycle,
   type DesktopSessionKey,
   type DesktopSessionSummary,
   type DesktopSessionTarget,
@@ -190,6 +191,11 @@ type DesktopSessionRecord = {
   diagnostics: DesktopDiagnosticsRecorder;
   pending_handoffs: DesktopAskFlowerHandoffPayload[];
   runtime_handle: DesktopSessionRuntimeHandle | null;
+  lifecycle: DesktopSessionLifecycle;
+  initial_load_completion: Promise<void>;
+  resolve_initial_load: (() => void) | null;
+  reject_initial_load: ((error: Error) => void) | null;
+  initial_load_failure_message: string;
   closing: boolean;
 };
 
@@ -243,7 +249,15 @@ type CreateBrowserWindowArgs = Readonly<{
   onWindowOpen?: (url: string, parent: BrowserWindow, frameName: string) => void;
   onWillNavigate?: (url: string, event: Electron.Event) => void;
   onDidFinishLoad?: (win: BrowserWindow) => void;
+  onDidFailLoad?: (details: Readonly<{
+    win: BrowserWindow;
+    errorCode: number;
+    errorDescription: string;
+    validatedURL: string;
+    isMainFrame: boolean;
+  }>) => void;
   onClosed?: (win: BrowserWindow) => void;
+  presentOnReadyToShow?: boolean;
 }>;
 
 const utilityWindows = new Map<DesktopUtilityWindowKind, BrowserWindow>();
@@ -274,6 +288,7 @@ const desktopDevToolsEnabled = ['1', 'true', 'yes', 'on'].includes(
 const DESKTOP_PROTOCOL_SCHEME = 'redeven';
 const CONTROL_PLANE_ACCESS_TOKEN_EXPIRY_SKEW_MS = 15_000;
 const CONTROL_PLANE_SYNC_POLL_INTERVAL_MS = 15_000;
+const DESKTOP_SESSION_INITIAL_LOAD_TIMEOUT_MS = 15_000;
 const pendingDesktopDeepLinks: string[] = [];
 let controlPlaneSyncPollTimer: NodeJS.Timeout | null = null;
 
@@ -281,6 +296,24 @@ installStdioBrokenPipeGuards();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function createInitialLoadDeferred(): Readonly<{
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}> {
+  let resolve!: () => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<void>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = (error: Error) => innerReject(error);
+  });
+  return {
+    promise,
+    resolve,
+    reject,
+  };
 }
 
 function peekPendingControlPlaneDisplayLabel(providerOrigin: string): string {
@@ -642,11 +675,12 @@ function openSessionSummaries(): readonly DesktopSessionSummary[] {
   return [...sessionsByKey.values()]
     .filter((session) => !session.closing && !session.root_window.isDestroyed())
     .map((session) => ({
-    session_key: session.session_key,
-    target: session.target,
-    entry_url: session.allowed_base_url,
-    startup: session.startup,
-  }));
+      session_key: session.session_key,
+      target: session.target,
+      lifecycle: session.lifecycle,
+      entry_url: session.allowed_base_url,
+      startup: session.startup,
+    }));
 }
 
 async function buildCurrentDesktopWelcomeSnapshot(
@@ -677,7 +711,7 @@ function liveUtilityWindow(kind: DesktopUtilityWindowKind): BrowserWindow | null
 
 function liveSession(sessionKey: DesktopSessionKey): DesktopSessionRecord | null {
   const sessionRecord = sessionsByKey.get(sessionKey) ?? null;
-  if (!sessionRecord || sessionRecord.root_window.isDestroyed()) {
+  if (!sessionRecord || sessionRecord.root_window.isDestroyed() || sessionRecord.lifecycle === 'closing') {
     return null;
   }
   return sessionRecord;
@@ -694,7 +728,7 @@ function focusUtilityWindow(kind: DesktopUtilityWindowKind, options?: Readonly<{
 
 function focusEnvironmentSession(sessionKey: DesktopSessionKey, options?: Readonly<{ stealAppFocus?: boolean }>): boolean {
   const sessionRecord = liveSession(sessionKey);
-  if (!sessionRecord) {
+  if (!sessionRecord || sessionRecord.lifecycle !== 'open') {
     return false;
   }
   lastFocusedSessionKey = sessionKey;
@@ -813,6 +847,13 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
       error_code: errorCode,
       main_frame: isMainFrame,
     });
+    args.onDidFailLoad?.({
+      win,
+      errorCode,
+      errorDescription,
+      validatedURL,
+      isMainFrame,
+    });
   });
 
   if (desktopDevToolsEnabled && !args.parent) {
@@ -824,7 +865,9 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
   }
 
   win.once('ready-to-show', () => {
-    presentAppWindow(win, { stealAppFocus: args.stealAppFocus });
+    if (args.presentOnReadyToShow !== false) {
+      presentAppWindow(win, { stealAppFocus: args.stealAppFocus });
+    }
     recordWindowLifecycle(args.diagnostics, 'ready_to_show', 'browser window is ready to show', { role: args.role });
   });
   win.on('closed', () => {
@@ -929,11 +972,78 @@ async function handoffAskFlowerToOwningSession(senderWebContentsID: number, payl
   focusEnvironmentSession(sessionKey, { stealAppFocus: true });
 }
 
+function sessionOpenFailureMessage(targetURL: string, errorDescription: string): string {
+  const cleanDescription = compact(errorDescription);
+  if (cleanDescription !== '') {
+    return `Desktop could not finish opening ${targetURL}: ${cleanDescription}`;
+  }
+  return `Desktop could not finish opening ${targetURL}.`;
+}
+
+function resolveSessionInitialLoadSuccess(
+  sessionRecord: DesktopSessionRecord,
+  options: Readonly<{ stealAppFocus?: boolean }> = {},
+): void {
+  if (sessionRecord.lifecycle !== 'opening') {
+    return;
+  }
+  sessionRecord.lifecycle = 'open';
+  const resolve = sessionRecord.resolve_initial_load;
+  sessionRecord.resolve_initial_load = null;
+  sessionRecord.reject_initial_load = null;
+  sessionRecord.initial_load_failure_message = '';
+  resolve?.();
+  if (!sessionRecord.root_window.isDestroyed()) {
+    presentAppWindow(sessionRecord.root_window, { stealAppFocus: options.stealAppFocus });
+  }
+  broadcastDesktopWelcomeSnapshots();
+}
+
+async function failOpeningSession(
+  sessionRecord: DesktopSessionRecord,
+  message: string,
+): Promise<void> {
+  if (sessionRecord.lifecycle !== 'opening') {
+    return;
+  }
+  sessionRecord.initial_load_failure_message = compact(message) || 'Desktop could not open that environment window.';
+  const reject = sessionRecord.reject_initial_load;
+  sessionRecord.resolve_initial_load = null;
+  sessionRecord.reject_initial_load = null;
+  reject?.(new Error(sessionRecord.initial_load_failure_message));
+  await finalizeSessionClosure(sessionRecord.session_key);
+}
+
+async function waitForSessionInitialLoad(
+  sessionRecord: DesktopSessionRecord,
+): Promise<void> {
+  const timeoutMessage = `Desktop timed out while opening ${sessionRecord.target.label}.`;
+  const timeoutHandle = setTimeout(() => {
+    void failOpeningSession(sessionRecord, timeoutMessage);
+  }, DESKTOP_SESSION_INITIAL_LOAD_TIMEOUT_MS);
+  try {
+    await sessionRecord.initial_load_completion;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
 function createSessionRootWindow(
   sessionKey: DesktopSessionKey,
   targetURL: string,
   diagnostics: DesktopDiagnosticsRecorder,
-  options?: Readonly<{ stealAppFocus?: boolean }>,
+  options?: Readonly<{
+    stealAppFocus?: boolean;
+    presentOnReadyToShow?: boolean;
+    onDidFinishLoad?: (win: BrowserWindow) => void;
+    onDidFailLoad?: (details: Readonly<{
+      win: BrowserWindow;
+      errorCode: number;
+      errorDescription: string;
+      validatedURL: string;
+      isMainFrame: boolean;
+    }>) => void;
+  }>,
 ): BrowserWindow {
   return createBrowserWindow({
     targetURL,
@@ -941,6 +1051,9 @@ function createSessionRootWindow(
     role: 'session_root',
     diagnostics,
     stealAppFocus: options?.stealAppFocus,
+    presentOnReadyToShow: options?.presentOnReadyToShow,
+    onDidFinishLoad: options?.onDidFinishLoad,
+    onDidFailLoad: options?.onDidFailLoad,
     onWindowOpen: (nextURL, parent, frameName) => {
       if (isAllowedSessionNavigation(sessionKey, nextURL)) {
         openSessionChildWindow(sessionKey, nextURL, parent, frameName);
@@ -969,11 +1082,25 @@ async function createSessionRecord(
 ): Promise<DesktopSessionRecord> {
   const diagnostics = new DesktopDiagnosticsRecorder();
   await diagnostics.configureRuntime(startup, startup.local_ui_url);
-
+  const initialLoad = createInitialLoadDeferred();
+  let sessionRecord!: DesktopSessionRecord;
   const rootWindow = createSessionRootWindow(target.session_key, startup.local_ui_url, diagnostics, {
     stealAppFocus: options.stealAppFocus,
+    presentOnReadyToShow: false,
+    onDidFinishLoad: () => {
+      resolveSessionInitialLoadSuccess(sessionRecord, { stealAppFocus: options.stealAppFocus });
+    },
+    onDidFailLoad: (details) => {
+      if (!details.isMainFrame) {
+        return;
+      }
+      void failOpeningSession(
+        sessionRecord,
+        sessionOpenFailureMessage(details.validatedURL || startup.local_ui_url, details.errorDescription),
+      );
+    },
   });
-  const sessionRecord: DesktopSessionRecord = {
+  sessionRecord = {
     session_key: target.session_key,
     target,
     startup,
@@ -983,6 +1110,11 @@ async function createSessionRecord(
     diagnostics,
     pending_handoffs: [],
     runtime_handle: options.runtimeHandle ?? null,
+    lifecycle: 'opening',
+    initial_load_completion: initialLoad.promise,
+    resolve_initial_load: initialLoad.resolve,
+    reject_initial_load: initialLoad.reject,
+    initial_load_failure_message: '',
     closing: false,
   };
 
@@ -1044,7 +1176,18 @@ async function finalizeSessionClosure(
   }
 
   const task = (async () => {
+    const wasOpening = sessionRecord.lifecycle === 'opening';
     sessionRecord.closing = true;
+    sessionRecord.lifecycle = 'closing';
+    if (wasOpening && (sessionRecord.resolve_initial_load || sessionRecord.reject_initial_load)) {
+      const message = sessionRecord.initial_load_failure_message
+        || `Desktop closed ${sessionRecord.target.label} before it finished opening.`;
+      sessionRecord.initial_load_failure_message = message;
+      const reject = sessionRecord.reject_initial_load;
+      sessionRecord.resolve_initial_load = null;
+      sessionRecord.reject_initial_load = null;
+      reject?.(new Error(message));
+    }
     sessionsByKey.delete(sessionKey);
     if (lastFocusedSessionKey === sessionKey) {
       lastFocusedSessionKey = null;
@@ -1940,6 +2083,45 @@ function launcherActionFailureForRemoteRouteState(
   }
 }
 
+function launcherActionFailureForOpeningSession(
+  sessionRecord: DesktopSessionRecord,
+  options: Readonly<{
+    environmentID?: string;
+    providerOrigin?: string;
+    providerID?: string;
+    envPublicID?: string;
+  }> = {},
+): DesktopLauncherActionFailure {
+  return launcherActionFailure(
+    'environment_opening',
+    'environment',
+    `Desktop is still opening ${sessionRecord.target.label}. Wait a moment, then try again.`,
+    {
+      environmentID: options.environmentID ?? sessionRecord.target.environment_id,
+      providerOrigin: options.providerOrigin,
+      providerID: options.providerID,
+      envPublicID: options.envPublicID,
+    },
+  );
+}
+
+function launcherActionFailureFromSessionOpenError(
+  error: unknown,
+  options: Readonly<{
+    environmentID?: string;
+    providerOrigin?: string;
+    providerID?: string;
+    envPublicID?: string;
+  }> = {},
+): DesktopLauncherActionFailure {
+  return launcherActionFailure(
+    'action_invalid',
+    'environment',
+    error instanceof Error ? error.message : String(error) || 'Desktop could not open that environment.',
+    options,
+  );
+}
+
 async function openManagedEnvironmentRecord(
   preferences: DesktopPreferences,
   environment: DesktopManagedEnvironment,
@@ -1952,6 +2134,11 @@ async function openManagedEnvironmentRecord(
   const sessionKey = target.session_key;
   const existingSession = liveSession(sessionKey);
   if (existingSession) {
+    if (existingSession.lifecycle === 'opening') {
+      return launcherActionFailureForOpeningSession(existingSession, {
+        environmentID: environment.id,
+      });
+    }
     resetLauncherIssueState();
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: options.stealAppFocus !== false });
     if (findManagedEnvironmentByID(preferences, environment.id)) {
@@ -1975,13 +2162,27 @@ async function openManagedEnvironmentRecord(
     });
   }
 
-  await createSessionRecord(target, prepared.launch.managedRuntime.startup, {
-    runtimeHandle: desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
-      persistedOwner: environment.local_hosting?.owner,
-    }),
-    attached: prepared.launch.managedRuntime.attached,
-    stealAppFocus: options.stealAppFocus !== false,
-  });
+  let sessionRecord: DesktopSessionRecord | null = null;
+  try {
+    sessionRecord = await createSessionRecord(target, prepared.launch.managedRuntime.startup, {
+      runtimeHandle: desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
+        persistedOwner: environment.local_hosting?.owner,
+      }),
+      attached: prepared.launch.managedRuntime.attached,
+      stealAppFocus: options.stealAppFocus !== false,
+    });
+    await waitForSessionInitialLoad(sessionRecord);
+  } catch (error) {
+    if (!sessionRecord) {
+      await prepared.launch.managedRuntime.stop().catch(() => {});
+    }
+    return launcherActionFailureFromSessionOpenError(error, {
+      environmentID: environment.id,
+      providerOrigin: managedEnvironmentProviderOrigin(environment),
+      providerID: managedEnvironmentProviderID(environment),
+      envPublicID: managedEnvironmentPublicID(environment),
+    });
+  }
   resetLauncherIssueState();
   await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'local_host'));
   return launcherActionSuccess('opened_environment_window', {
@@ -2044,6 +2245,14 @@ async function openManagedRemoteEnvironmentRecord(
   const target = buildManagedEnvironmentDesktopTarget(environment, { route: 'remote_desktop' });
   const existingSession = liveSession(target.session_key);
   if (existingSession) {
+    if (existingSession.lifecycle === 'opening') {
+      return launcherActionFailureForOpeningSession(existingSession, {
+        environmentID: environment.id,
+        providerOrigin: managedEnvironmentProviderOrigin(environment),
+        providerID: managedEnvironmentProviderID(environment),
+        envPublicID: managedEnvironmentPublicID(environment),
+      });
+    }
     resetLauncherIssueState();
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: options.stealAppFocus !== false });
     await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'remote_desktop'));
@@ -2052,11 +2261,21 @@ async function openManagedRemoteEnvironmentRecord(
     });
   }
 
-  await createSessionRecord(
-    target,
-    remoteManagedSessionStartup(remoteSessionURL),
-    { stealAppFocus: options.stealAppFocus !== false },
-  );
+  try {
+    const sessionRecord = await createSessionRecord(
+      target,
+      remoteManagedSessionStartup(remoteSessionURL),
+      { stealAppFocus: options.stealAppFocus !== false },
+    );
+    await waitForSessionInitialLoad(sessionRecord);
+  } catch (error) {
+    return launcherActionFailureFromSessionOpenError(error, {
+      environmentID: environment.id,
+      providerOrigin: managedEnvironmentProviderOrigin(environment),
+      providerID: managedEnvironmentProviderID(environment),
+      envPublicID: managedEnvironmentPublicID(environment),
+    });
+  }
   resetLauncherIssueState();
   await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'remote_desktop'));
   return launcherActionSuccess('opened_environment_window', {
@@ -2234,6 +2453,11 @@ async function openRemoteEnvironmentFromLauncher(
   const optimisticSessionKey = externalLocalUIDesktopSessionKey(normalizedTargetURL);
   const optimisticSession = liveSession(optimisticSessionKey);
   if (optimisticSession) {
+    if (optimisticSession.lifecycle === 'opening') {
+      return launcherActionFailureForOpeningSession(optimisticSession, {
+        environmentID: request.environment_id,
+      });
+    }
     if (optimisticSession.target.kind === 'external_local_ui' && request.label) {
       optimisticSession.target = {
         ...optimisticSession.target,
@@ -2263,6 +2487,11 @@ async function openRemoteEnvironmentFromLauncher(
   });
   const existingSession = liveSession(target.session_key);
   if (existingSession) {
+    if (existingSession.lifecycle === 'opening') {
+      return launcherActionFailureForOpeningSession(existingSession, {
+        environmentID: request.environment_id,
+      });
+    }
     existingSession.target = target;
     resetLauncherIssueState();
     await rememberRecentExternalTarget(existingSession.startup.local_ui_url);
@@ -2273,7 +2502,14 @@ async function openRemoteEnvironmentFromLauncher(
     });
   }
 
-  await createSessionRecord(target, prepared.startup, { stealAppFocus: true });
+  try {
+    const sessionRecord = await createSessionRecord(target, prepared.startup, { stealAppFocus: true });
+    await waitForSessionInitialLoad(sessionRecord);
+  } catch (error) {
+    return launcherActionFailureFromSessionOpenError(error, {
+      environmentID: request.environment_id,
+    });
+  }
   resetLauncherIssueState();
   await rememberRecentExternalTarget(prepared.startup.local_ui_url);
   return launcherActionSuccess('opened_environment_window', {
@@ -2294,6 +2530,11 @@ async function openSSHEnvironmentFromLauncher(
   const optimisticSessionKey = sshDesktopSessionKey(sshDetails);
   const optimisticSession = liveSession(optimisticSessionKey);
   if (optimisticSession) {
+    if (optimisticSession.lifecycle === 'opening') {
+      return launcherActionFailureForOpeningSession(optimisticSession, {
+        environmentID: request.environment_id,
+      });
+    }
     if (optimisticSession.target.kind === 'ssh_environment' && request.label) {
       optimisticSession.target = {
         ...optimisticSession.target,
@@ -2347,6 +2588,12 @@ async function openSSHEnvironmentFromLauncher(
   });
   const existingSession = liveSession(target.session_key);
   if (existingSession) {
+    if (existingSession.lifecycle === 'opening') {
+      await managedSSHRuntime.stop();
+      return launcherActionFailureForOpeningSession(existingSession, {
+        environmentID: request.environment_id,
+      });
+    }
     existingSession.target = target;
     resetLauncherIssueState();
     await rememberRecentSSHTarget({
@@ -2362,10 +2609,21 @@ async function openSSHEnvironmentFromLauncher(
     });
   }
 
-  await createSessionRecord(target, managedSSHRuntime.startup, {
-    runtimeHandle: managedSSHRuntime.runtime_handle,
-    stealAppFocus: true,
-  });
+  let sessionRecord: DesktopSessionRecord | null = null;
+  try {
+    sessionRecord = await createSessionRecord(target, managedSSHRuntime.startup, {
+      runtimeHandle: managedSSHRuntime.runtime_handle,
+      stealAppFocus: true,
+    });
+    await waitForSessionInitialLoad(sessionRecord);
+  } catch (error) {
+    if (!sessionRecord) {
+      await managedSSHRuntime.stop().catch(() => {});
+    }
+    return launcherActionFailureFromSessionOpenError(error, {
+      environmentID: request.environment_id,
+    });
+  }
   resetLauncherIssueState();
   await rememberRecentSSHTarget({
     ...sshDetails,
@@ -2538,6 +2796,12 @@ async function openControlPlaneEnvironmentFromLauncher(
 
 async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLauncherActionResult> {
   const cleanSessionKey = String(sessionKey ?? '').trim() as DesktopSessionKey;
+  const sessionRecord = liveSession(cleanSessionKey);
+  if (sessionRecord?.lifecycle === 'opening') {
+    return launcherActionFailureForOpeningSession(sessionRecord, {
+      environmentID: sessionRecord.target.environment_id,
+    });
+  }
   if (!focusEnvironmentSession(cleanSessionKey, { stealAppFocus: true })) {
     return launcherActionFailure(
       'session_stale',

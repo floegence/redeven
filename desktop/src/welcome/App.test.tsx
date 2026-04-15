@@ -27,6 +27,10 @@ function readWelcomeSource(): string {
   return fs.readFileSync(path.join(__dirname, 'App.tsx'), 'utf8');
 }
 
+function readManagedEnvironmentBindingResolutionSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'managedEnvironmentBindingResolution.ts'), 'utf8');
+}
+
 function readDesktopTooltipSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopTooltip.tsx'), 'utf8');
 }
@@ -168,6 +172,7 @@ describe('DesktopWelcomeShell', () => {
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
+          lifecycle: 'open',
           startup: {
             local_ui_url: 'http://192.168.1.12:24000/',
             local_ui_urls: ['http://192.168.1.12:24000/'],
@@ -376,14 +381,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Remote access through Control Plane');
   });
 
-  it('routes environment-level launcher failures into card notices instead of only the top error banner', () => {
+  it('routes transient launcher failures through toasts instead of page-flow banners or issue cards', () => {
     const appSrc = readWelcomeSource();
-    const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('launcherActionFailurePresentation');
-    expect(appSrc).toContain('EnvironmentInlineNotice');
-    expect(appSrc).toContain('notice={props.environmentNotice(environment)}');
-    expect(styles).toContain('.redeven-environment-inline-notice');
+    expect(appSrc).toContain('showActionToast(presentation.message, presentation.tone);');
+    expect(appSrc).not.toContain('IssueCard');
+    expect(appSrc).not.toContain('EnvironmentInlineNotice');
+    expect(appSrc).not.toContain('redeven-console-banner--error');
   });
 
   it('keeps environment cards concise instead of rendering helper prose under the actions', () => {
@@ -407,6 +412,13 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.feedback');
     expect(styles).toContain('.redeven-desktop-toast-viewport');
     expect(styles).toContain('.redeven-desktop-toast');
+  });
+
+  it('keeps environment cards stable by rendering them directly instead of replaying entry animations', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).not.toContain('function AnimatedCard');
+    expect(appSrc).not.toContain('<AnimatedCard');
   });
 
   it('includes SSH connection mode copy inside the connection dialog source', () => {
@@ -442,6 +454,23 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Next scope:');
     expect(appSrc).toContain('Renaming this environment only changes how it appears in Desktop.');
     expect(appSrc).toContain('Local state stays under');
+  });
+
+  it('shows explicit Control Plane binding-resolution guidance inside the managed environment dialog', () => {
+    const appSrc = readWelcomeSource();
+    const bindingResolutionSrc = readManagedEnvironmentBindingResolutionSource();
+
+    expect(appSrc).toContain("import {\n  describeManagedEnvironmentBindingResolution,");
+    expect(appSrc).toContain('ManagedEnvironmentBindingResolutionPanel');
+    expect(appSrc).toContain('resolveManagedEnvironmentBindingResolution');
+    expect(appSrc).toContain('bindingResolution()');
+    expect(appSrc).toContain('saveActionLabel');
+    expect(appSrc).toContain('connectActionLabel');
+    expect(bindingResolutionSrc).toContain('Desktop will reuse that entry instead of creating a duplicate.');
+    expect(bindingResolutionSrc).toContain('Desktop already manages the local host for');
+    expect(bindingResolutionSrc).toContain('Another Redeven host process owns');
+    expect(bindingResolutionSrc).toContain('Save & Focus');
+    expect(bindingResolutionSrc).toContain('Already Opening');
   });
 
   it('explains Local UI Bind examples inside the managed environment form', () => {

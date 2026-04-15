@@ -59,6 +59,7 @@ describe('buildEnvironmentCardModel', () => {
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
+          lifecycle: 'open',
           startup: {
             local_ui_url: 'http://192.168.1.12:24000/',
             local_ui_urls: ['http://192.168.1.12:24000/'],
@@ -80,6 +81,7 @@ describe('buildEnvironmentCardModel', () => {
               forwardedLocalUIURL: 'http://127.0.0.1:24111/',
             },
           ),
+          lifecycle: 'open',
           startup: {
             local_ui_url: 'http://127.0.0.1:24111/',
             local_ui_urls: ['http://127.0.0.1:24111/'],
@@ -587,7 +589,9 @@ describe('buildEnvironmentCardModel', () => {
     expect(dualRouteEntry).toBeTruthy();
     const actionModel = buildProviderBackedEnvironmentActionModel({
       ...dualRouteEntry!,
+      is_open: true,
       open_local_session_key: 'managed:env_dual_route:local_host',
+      open_local_session_lifecycle: 'open',
     });
     expect(actionModel.action_presentation.kind).toBe('split_button');
     if (actionModel.action_presentation.kind !== 'split_button') {
@@ -678,10 +682,13 @@ describe('buildEnvironmentCardModel', () => {
     expect(baseEntry).toBeTruthy();
     const actionModel = buildProviderBackedEnvironmentActionModel({
       ...baseEntry!,
+      is_open: true,
       control_plane_label: 'Demo Portal',
       default_open_route: 'remote_desktop',
       open_local_session_key: 'managed:env_dual_route:local_host',
+      open_local_session_lifecycle: 'open',
       open_remote_session_key: 'managed:env_dual_route:remote_desktop',
+      open_remote_session_lifecycle: 'open',
     });
     expect(actionModel.action_presentation.kind).toBe('split_button');
     if (actionModel.action_presentation.kind !== 'split_button') {
@@ -729,6 +736,39 @@ describe('buildEnvironmentCardModel', () => {
     })).toEqual(expect.objectContaining({
       intent: 'focus',
       route: 'local_host',
+    }));
+  });
+
+  it('treats opening managed sessions as a disabled Opening state instead of Focus', () => {
+    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_opening');
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [dualRoute],
+      }),
+      openSessions: [
+        testManagedSession(dualRoute, 'http://localhost:23998/', 'opening'),
+      ],
+    });
+
+    const entry = snapshot.environments.find((environment) => environment.id === dualRoute.id);
+    expect(entry).toBeTruthy();
+    expect(entry).toEqual(expect.objectContaining({
+      is_open: false,
+      is_opening: true,
+      open_action_label: 'Opening…',
+    }));
+
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual(expect.objectContaining({
+      status_label: 'Opening',
+      status_tone: 'primary',
+      action_presentation: {
+        kind: 'single_button',
+        action: expect.objectContaining({
+          intent: 'opening',
+          label: 'Opening…',
+          enabled: false,
+        }),
+      },
     }));
   });
 

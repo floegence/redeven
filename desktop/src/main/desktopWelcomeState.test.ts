@@ -101,6 +101,7 @@ describe('desktopWelcomeState', () => {
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
+          lifecycle: 'open',
           startup: {
             local_ui_url: 'http://192.168.1.12:24000/',
             local_ui_urls: ['http://192.168.1.12:24000/'],
@@ -224,6 +225,7 @@ describe('desktopWelcomeState', () => {
         {
           session_key: 'url:http://192.168.1.77:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.77:24000/'),
+          lifecycle: 'open',
           startup: {
             local_ui_url: 'http://192.168.1.77:24000/',
             local_ui_urls: ['http://192.168.1.77:24000/'],
@@ -246,6 +248,37 @@ describe('desktopWelcomeState', () => {
       }),
     ]));
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.77:24000/');
+  });
+
+  it('keeps opening sessions out of Focus state until the first load completes', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      openSessions: [
+        {
+          session_key: 'url:http://192.168.1.88:24000/',
+          target: buildExternalLocalUIDesktopTarget('http://192.168.1.88:24000/', { label: 'Preview' }),
+          lifecycle: 'opening',
+          startup: {
+            local_ui_url: 'http://192.168.1.88:24000/',
+            local_ui_urls: ['http://192.168.1.88:24000/'],
+          },
+        },
+      ],
+    });
+
+    expect(snapshot.open_windows).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        session_key: 'url:http://192.168.1.88:24000/',
+      }),
+    ]));
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'http://192.168.1.88:24000/',
+        is_open: false,
+        is_opening: true,
+        open_action_label: 'Opening…',
+      }),
+    ]));
   });
 
   it('builds saved and open SSH environments without replacing them with forwarded localhost urls', () => {
@@ -277,6 +310,7 @@ describe('desktopWelcomeState', () => {
             label: 'SSH Lab',
             forwardedLocalUIURL: 'http://127.0.0.1:40111/',
           }),
+          lifecycle: 'open',
           startup: {
             local_ui_url: 'http://127.0.0.1:40111/',
             local_ui_urls: ['http://127.0.0.1:40111/'],
@@ -392,6 +426,7 @@ describe('desktopWelcomeState', () => {
         {
           session_key: localTarget.session_key,
           target: localTarget,
+          lifecycle: 'open',
           entry_url: 'http://localhost:23998/',
           startup: {
             local_ui_url: 'http://localhost:23998/',
@@ -401,6 +436,7 @@ describe('desktopWelcomeState', () => {
         {
           session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
           target: remoteTarget,
+          lifecycle: 'open',
           entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
           startup: {
             local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',

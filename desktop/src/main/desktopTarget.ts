@@ -18,6 +18,7 @@ import {
 export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopManagedEnvironmentSessionRoute = 'local_host' | 'remote_desktop';
 export type DesktopSessionKey = `env:${string}:${DesktopManagedEnvironmentSessionRoute}` | `url:${string}` | `ssh:${string}`;
+export type DesktopSessionLifecycle = 'opening' | 'open' | 'closing';
 
 export type ManagedEnvironmentDesktopTarget = Readonly<{
   kind: 'managed_environment';
@@ -60,6 +61,7 @@ export type DesktopSessionTarget = ManagedEnvironmentDesktopTarget | ExternalLoc
 export type DesktopSessionSummary = Readonly<{
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
+  lifecycle: DesktopSessionLifecycle;
   entry_url?: string;
   startup?: StartupReport;
 }>;

@@ -1,4 +1,4 @@
-export type DesktopActionToastTone = 'info' | 'success';
+export type DesktopActionToastTone = 'info' | 'success' | 'warning' | 'error';
 
 export type DesktopActionToast = Readonly<{
   id: number;

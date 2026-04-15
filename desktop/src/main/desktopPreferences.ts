@@ -1325,10 +1325,19 @@ function localHostingForManagedEnvironment(
   );
 }
 
-export function upsertManagedEnvironment(
+type ResolvedManagedEnvironmentUpsert = Readonly<{
+  existing_by_id: DesktopManagedEnvironment | null;
+  existing_by_provider: DesktopManagedEnvironment | null;
+  preferred_existing: DesktopManagedEnvironment | null;
+  requested_provider_binding: ReturnType<typeof createManagedEnvironmentProviderBinding> | null;
+  access: DesktopManagedEnvironmentAccess;
+  environment_id: string;
+}>;
+
+function resolveManagedEnvironmentUpsert(
   preferences: DesktopPreferences,
   input: UpsertDesktopManagedEnvironmentInput,
-): DesktopPreferences {
+): ResolvedManagedEnvironmentUpsert {
   const existingByID = compact(input.environment_id) === ''
     ? null
     : preferences.managed_environments.find((environment) => environment.id === compact(input.environment_id)) ?? null;
@@ -1336,40 +1345,64 @@ export function upsertManagedEnvironment(
   const existingByProvider = requestedProviderBinding
     ? findManagedEnvironmentByProviderBinding(preferences, requestedProviderBinding)
     : null;
-  const existing = existingByID?.local_hosting
+  const preferredExisting = existingByID?.local_hosting
     ? existingByID
     : existingByProvider?.local_hosting
       ? existingByProvider
       : existingByID
         ?? existingByProvider
         ?? null;
-  const access = input.access ?? (existing ? managedEnvironmentLocalAccess(existing) : defaultDesktopManagedEnvironmentAccess());
+  const access = input.access ?? (
+    preferredExisting
+      ? managedEnvironmentLocalAccess(preferredExisting)
+      : defaultDesktopManagedEnvironmentAccess()
+  );
   const environmentID = requestedProviderBinding
     ? existingByProvider?.id || desktopManagedControlPlaneEnvironmentID(
       requestedProviderBinding.provider_origin,
       requestedProviderBinding.env_public_id,
     )
     : existingByID?.id || desktopManagedLocalEnvironmentID(normalizeDesktopLocalEnvironmentName(input.name));
+  return {
+    existing_by_id: existingByID,
+    existing_by_provider: existingByProvider,
+    preferred_existing: preferredExisting,
+    requested_provider_binding: requestedProviderBinding,
+    access,
+    environment_id: environmentID,
+  };
+}
+
+export function upsertManagedEnvironment(
+  preferences: DesktopPreferences,
+  input: UpsertDesktopManagedEnvironmentInput,
+): DesktopPreferences {
+  const resolved = resolveManagedEnvironmentUpsert(preferences, input);
   const nextEnvironment = createManagedEnvironment({
-    environmentID,
+    environmentID: resolved.environment_id,
     label: compact(input.label)
-      || existingByID?.label
-      || existingByProvider?.label
-      || (requestedProviderBinding
-        ? requestedProviderBinding.env_public_id
+      || resolved.existing_by_id?.label
+      || resolved.existing_by_provider?.label
+      || (resolved.requested_provider_binding
+        ? resolved.requested_provider_binding.env_public_id
         : defaultLocalManagedEnvironmentLabel(normalizeDesktopLocalEnvironmentName(input.name))),
-    pinned: input.pinned ?? existingByID?.pinned ?? existingByProvider?.pinned ?? false,
-    preferredOpenRoute: existingByID?.preferred_open_route ?? existingByProvider?.preferred_open_route ?? 'auto',
-    localHosting: localHostingForManagedEnvironment(input, access, existing, requestedProviderBinding),
-    providerBinding: requestedProviderBinding ?? undefined,
-    createdAtMS: input.created_at_ms ?? existingByID?.created_at_ms ?? existingByProvider?.created_at_ms ?? Date.now(),
+    pinned: input.pinned ?? resolved.existing_by_id?.pinned ?? resolved.existing_by_provider?.pinned ?? false,
+    preferredOpenRoute: resolved.existing_by_id?.preferred_open_route ?? resolved.existing_by_provider?.preferred_open_route ?? 'auto',
+    localHosting: localHostingForManagedEnvironment(
+      input,
+      resolved.access,
+      resolved.preferred_existing,
+      resolved.requested_provider_binding,
+    ),
+    providerBinding: resolved.requested_provider_binding ?? undefined,
+    createdAtMS: input.created_at_ms ?? resolved.existing_by_id?.created_at_ms ?? resolved.existing_by_provider?.created_at_ms ?? Date.now(),
     updatedAtMS: input.updated_at_ms ?? Date.now(),
-    lastUsedAtMS: input.last_used_at_ms ?? existingByID?.last_used_at_ms ?? existingByProvider?.last_used_at_ms ?? 0,
+    lastUsedAtMS: input.last_used_at_ms ?? resolved.existing_by_id?.last_used_at_ms ?? resolved.existing_by_provider?.last_used_at_ms ?? 0,
   });
   const replacedIDs = new Set<string>([
-    environmentID,
-    existingByID?.id ?? '',
-    existingByProvider?.id ?? '',
+    resolved.environment_id,
+    resolved.existing_by_id?.id ?? '',
+    resolved.existing_by_provider?.id ?? '',
   ].filter((value) => value !== ''));
   return {
     ...preferences,
@@ -1378,12 +1411,12 @@ export function upsertManagedEnvironment(
       ...preferences.managed_environments.filter((environment) => (
         !replacedIDs.has(environment.id)
         && !(
-          requestedProviderBinding
+          resolved.requested_provider_binding
           && matchesProviderBinding(
             environment,
-            requestedProviderBinding.provider_origin,
-            requestedProviderBinding.provider_id,
-            requestedProviderBinding.env_public_id,
+            resolved.requested_provider_binding.provider_origin,
+            resolved.requested_provider_binding.provider_id,
+            resolved.requested_provider_binding.env_public_id,
           )
         )
       )),

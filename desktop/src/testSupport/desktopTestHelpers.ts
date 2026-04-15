@@ -3,6 +3,7 @@ import { defaultDesktopPreferences } from '../main/desktopPreferences';
 import { controlPlaneManagedStateLayout, localManagedStateLayout } from '../main/statePaths';
 import {
   buildManagedEnvironmentDesktopTarget,
+  type DesktopSessionLifecycle,
   type DesktopSessionSummary,
 } from '../main/desktopTarget';
 import type { StartupReport } from '../main/startup';
@@ -124,12 +125,14 @@ export function testDesktopPreferences(
 export function testManagedSession(
   environment: DesktopManagedEnvironment,
   localUIURL: string,
+  lifecycle: DesktopSessionLifecycle = 'open',
   startupOverrides: Partial<StartupReport> = {},
 ): DesktopSessionSummary {
   const target = buildManagedEnvironmentDesktopTarget(environment);
   return {
     session_key: target.session_key,
     target,
+    lifecycle,
     entry_url: localUIURL,
     startup: {
       local_ui_url: localUIURL,

@@ -8,7 +8,7 @@ import {
   defaultSavedEnvironmentLabel,
   desktopEnvironmentID,
 } from './desktopPreferences';
-import type { DesktopSessionSummary } from './desktopTarget';
+import type { DesktopSessionLifecycle, DesktopSessionSummary } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type {
   DesktopEnvironmentEntry,
@@ -199,15 +199,30 @@ function sortOpenSessions(
   });
 }
 
+function sessionLifecycle(session: DesktopSessionSummary | null | undefined): DesktopSessionLifecycle | undefined {
+  return session?.lifecycle;
+}
+
+function sessionIsOpen(session: DesktopSessionSummary | null | undefined): boolean {
+  return session?.lifecycle === 'open';
+}
+
+function sessionIsOpening(session: DesktopSessionSummary | null | undefined): boolean {
+  return session?.lifecycle === 'opening';
+}
+
 function buildOpenEnvironmentWindows(
   sessions: readonly DesktopSessionSummary[],
 ): readonly DesktopOpenEnvironmentWindow[] {
-  return sortOpenSessions(sessions).map((session) => ({
+  return sortOpenSessions(sessions)
+    .filter((session) => session.lifecycle === 'open')
+    .map((session) => ({
     session_key: session.session_key,
     target_kind: session.target.kind,
     environment_id: session.target.environment_id,
     label: session.target.label,
     local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
+    lifecycle: 'open',
   }));
 }
 
@@ -305,8 +320,11 @@ function managedLocalRouteState(
   environment: DesktopManagedEnvironment,
   localSession: DesktopSessionSummary | null,
 ): DesktopManagedLocalRouteState {
-  if (localSession) {
+  if (sessionIsOpen(localSession)) {
     return 'open';
+  }
+  if (sessionIsOpening(localSession)) {
+    return 'opening';
   }
   return managedEnvironmentSupportsLocalHosting(environment) ? 'ready' : 'unavailable';
 }
@@ -392,7 +410,8 @@ function buildManagedEnvironmentEntry(
 ): DesktopEnvironmentEntry {
   const localSession = openSessions.local_host ?? null;
   const remoteSession = openSessions.remote_desktop ?? null;
-  const isOpen = Boolean(localSession || remoteSession);
+  const isOpen = sessionIsOpen(localSession) || sessionIsOpen(remoteSession);
+  const isOpening = sessionIsOpening(localSession) || sessionIsOpening(remoteSession);
   const access = managedEnvironmentLocalAccess(environment);
   const kind = managedEnvironmentKind(environment);
   const providerOrigin = managedEnvironmentProviderOrigin(environment);
@@ -428,12 +447,15 @@ function buildManagedEnvironmentEntry(
     managed_environment_name: managedEnvironmentLocalName(environment),
     managed_local_ui_bind: access.local_ui_bind,
     managed_local_ui_password_configured: access.local_ui_password_configured,
+    managed_local_owner: environment.local_hosting?.owner,
     managed_has_local_hosting: managedEnvironmentSupportsLocalHosting(environment),
     managed_has_remote_desktop: managedEnvironmentSupportsRemoteDesktop(environment),
     managed_preferred_open_route: environment.preferred_open_route,
     default_open_route: defaultRoute,
     open_local_session_key: localSession?.session_key,
+    open_local_session_lifecycle: sessionLifecycle(localSession),
     open_remote_session_key: remoteSession?.session_key,
+    open_remote_session_lifecycle: sessionLifecycle(remoteSession),
     provider_origin: kind === 'controlplane' ? providerOrigin : undefined,
     provider_id: kind === 'controlplane' ? providerID : undefined,
     env_public_id: kind === 'controlplane' ? envPublicID : undefined,
@@ -454,8 +476,10 @@ function buildManagedEnvironmentEntry(
     tag: isOpen ? 'Open' : 'Managed',
     category: 'managed',
     is_open: isOpen,
+    is_opening: isOpening,
     open_session_key: defaultSession?.session_key ?? '',
-    open_action_label: defaultSession ? 'Focus' : 'Open',
+    open_session_lifecycle: sessionLifecycle(defaultSession),
+    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
     can_edit: managedEnvironmentSupportsLocalHosting(environment),
     can_delete: managedEnvironmentSupportsLocalHosting(environment)
       && !isDefaultLocalManagedEnvironment(environment),
@@ -496,6 +520,8 @@ function buildEnvironmentEntries(
     if (catalog.some((environment) => environment.local_ui_url === localUIURL)) {
       continue;
     }
+    const isOpen = session.lifecycle === 'open';
+    const isOpening = session.lifecycle === 'opening';
     entries.push({
       id: desktopEnvironmentID(localUIURL),
       kind: 'external_local_ui',
@@ -503,11 +529,13 @@ function buildEnvironmentEntries(
       local_ui_url: localUIURL,
       secondary_text: localUIURL,
       pinned: false,
-      tag: 'Open',
+      tag: isOpen ? 'Open' : '',
       category: 'open_unsaved',
-      is_open: true,
+      is_open: isOpen,
+      is_opening: isOpening,
       open_session_key: session.session_key,
-      open_action_label: 'Focus',
+      open_session_lifecycle: session.lifecycle,
+      open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
       can_edit: true,
       can_delete: false,
       can_save: true,
@@ -530,6 +558,8 @@ function buildEnvironmentEntries(
     ))) {
       continue;
     }
+    const isOpen = session.lifecycle === 'open';
+    const isOpening = session.lifecycle === 'opening';
     entries.push({
       id: desktopSSHEnvironmentID(target),
       kind: 'ssh_environment',
@@ -546,11 +576,13 @@ function buildEnvironmentEntries(
         release_base_url: target.release_base_url,
       },
       pinned: false,
-      tag: 'Open',
+      tag: isOpen ? 'Open' : '',
       category: 'open_unsaved',
-      is_open: true,
+      is_open: isOpen,
+      is_opening: isOpening,
       open_session_key: session.session_key,
-      open_action_label: 'Focus',
+      open_session_lifecycle: session.lifecycle,
+      open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
       can_edit: true,
       can_delete: false,
       can_save: true,
@@ -572,7 +604,8 @@ function buildSavedEnvironmentEntry(
   environment: DesktopSavedEnvironment,
   openSession: DesktopSessionSummary | null,
 ): DesktopEnvironmentEntry {
-  const isOpen = openSession !== null;
+  const isOpen = sessionIsOpen(openSession);
+  const isOpening = sessionIsOpening(openSession);
   return {
     id: environment.id,
     kind: 'external_local_ui',
@@ -583,8 +616,10 @@ function buildSavedEnvironmentEntry(
     tag: isOpen ? 'Open' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',
     category: environment.source,
     is_open: isOpen,
+    is_opening: isOpening,
     open_session_key: openSession?.session_key ?? '',
-    open_action_label: isOpen ? 'Focus' : 'Open',
+    open_session_lifecycle: sessionLifecycle(openSession),
+    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
     can_edit: true,
     can_delete: true,
     can_save: environment.source === 'recent_auto',
@@ -596,7 +631,8 @@ function buildSavedSSHEnvironmentEntry(
   environment: DesktopSavedSSHEnvironment,
   openSession: DesktopSessionSummary | null,
 ): DesktopEnvironmentEntry {
-  const isOpen = openSession !== null;
+  const isOpen = sessionIsOpen(openSession);
+  const isOpening = sessionIsOpening(openSession);
   return {
     id: environment.id,
     kind: 'ssh_environment',
@@ -616,8 +652,10 @@ function buildSavedSSHEnvironmentEntry(
     tag: isOpen ? 'Open' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',
     category: environment.source,
     is_open: isOpen,
+    is_opening: isOpening,
     open_session_key: openSession?.session_key ?? '',
-    open_action_label: isOpen ? 'Focus' : 'Open',
+    open_session_lifecycle: sessionLifecycle(openSession),
+    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
     can_edit: true,
     can_delete: true,
     can_save: environment.source === 'recent_auto',
