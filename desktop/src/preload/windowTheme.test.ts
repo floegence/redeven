@@ -4,13 +4,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   desktopWindowChromeCSSVariables,
-  resolveDesktopWindowChromeConfig,
+  resolveDesktopWindowChromeSnapshot,
 } from '../shared/windowChromePlatform';
 
 const exposeInMainWorld = vi.fn();
 const ipcRendererOn = vi.fn();
 const ipcRendererSendSync = vi.fn();
 let updatedListener: ((event: unknown, payload: unknown) => void) | null = null;
+
+function exposedBridge<T>(name: string): T {
+  const bridge = exposeInMainWorld.mock.calls.find(([bridgeName]) => bridgeName === name)?.[1];
+  if (!bridge) {
+    throw new Error(`Missing exposed bridge: ${name}`);
+  }
+  return bridge as T;
+}
 
 vi.mock('electron', () => ({
   contextBridge: {
@@ -72,7 +80,7 @@ describe('bootstrapDesktopThemeBridge', () => {
 
   it('exposes the desktop theme bridge and applies the initial snapshot to the document', async () => {
     const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
-    const windowChromeConfig = resolveDesktopWindowChromeConfig(process.platform);
+    const windowChromeSnapshot = resolveDesktopWindowChromeSnapshot(process.platform);
     const windowChromeVars = desktopWindowChromeCSSVariables(process.platform);
 
     bootstrapDesktopThemeBridge();
@@ -83,8 +91,8 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-symbol-color')).toBe('#f9fafb');
     expect(document.documentElement.style.getPropertyValue('background-color')).toBe('var(--background, #0e121b)');
     expect(document.body.style.getPropertyValue('background-color')).toBe('var(--background, #0e121b)');
-    expect(document.documentElement.dataset.redevenDesktopWindowChromeMode).toBe(windowChromeConfig.mode);
-    expect(document.documentElement.dataset.redevenDesktopWindowControlsSide).toBe(windowChromeConfig.controlsSide);
+    expect(document.documentElement.dataset.redevenDesktopWindowChromeMode).toBe(windowChromeSnapshot.mode);
+    expect(document.documentElement.dataset.redevenDesktopWindowControlsSide).toBe(windowChromeSnapshot.controlsSide);
 
     const style = document.getElementById('redeven-desktop-window-chrome');
     expect(style).toBeTruthy();
@@ -102,8 +110,11 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(style?.textContent).toContain("[data-redeven-desktop-window-titlebar-content='true']");
     expect(style?.textContent).toContain("[data-redeven-desktop-titlebar-no-drag='true']");
 
-    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
-    expect(bridge.getSnapshot()).toEqual(darkSnapshot());
+    const themeBridge = exposedBridge<{ getSnapshot: () => unknown }>('redevenDesktopTheme');
+    const windowChromeBridge = exposedBridge<{ getSnapshot: () => unknown }>('redevenDesktopWindowChrome');
+
+    expect(themeBridge.getSnapshot()).toEqual(darkSnapshot());
+    expect(windowChromeBridge.getSnapshot()).toEqual(windowChromeSnapshot);
   });
 
   it('updates the current document and subscribers when the main process broadcasts a new snapshot', async () => {
@@ -111,7 +122,7 @@ describe('bootstrapDesktopThemeBridge', () => {
 
     bootstrapDesktopThemeBridge();
 
-    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
+    const bridge = exposedBridge<{ subscribe: (listener: (snapshot: unknown) => void) => () => void }>('redevenDesktopTheme');
     const listener = vi.fn();
     const unsubscribe = bridge.subscribe(listener);
 
@@ -135,7 +146,7 @@ describe('bootstrapDesktopThemeBridge', () => {
 
     bootstrapDesktopThemeBridge();
 
-    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
+    const bridge = exposedBridge<{ setSource: (source: string) => unknown }>('redevenDesktopTheme');
     const snapshot = bridge.setSource('light');
 
     expect(ipcRendererSendSync).toHaveBeenCalledWith('redeven-desktop:theme-set-source', 'light');

@@ -509,6 +509,8 @@ The Control Plane flow is:
    - whether the provider returned `bootstrap_ticket`, `remote_session_url`, or both
 10. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.
 11. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
+    - The top-level remote session page may in turn host the Env App inside a same-origin boot iframe.
+    - Embedded same-origin Env App documents must still inherit the desktop shell bridges and window-chrome contract from the owning session window, so titlebar safe areas, theme state, and environment-scoped renderer storage stay identical to direct desktop-hosted sessions.
 12. Desktop never silently local-starts a Control Plane environment that is not declared as hosted on this device.
 
 Browser pages may also open Desktop through a custom protocol link:
@@ -562,6 +564,7 @@ Behavior:
 - Preload exposes `window.redevenDesktopTheme` with synchronous `getSnapshot()`, `setSource(...)`, and `subscribe(...)`.
 - Preload applies `html.light` / `html.dark` and `color-scheme` as soon as the document is available, then keeps the current document synchronized when theme updates arrive from Electron main.
 - Preload also applies an early document-level background and foreground fallback using the shell snapshot so close animations, blocked paints, and live resize reveal the same dark/light base color instead of the Electron default white surface.
+- Preload exposes `window.redevenDesktopWindowChrome` with a synchronous snapshot of the platform-aware titlebar contract so same-origin embedded renderer documents can consume the same safe-area data as the top-level session page.
 - Preload also publishes the desktop chrome contract through CSS custom properties:
   - `--redeven-desktop-titlebar-height`
   - `--redeven-desktop-titlebar-start-inset`
@@ -570,6 +573,7 @@ Behavior:
   - `[data-redeven-desktop-window-titlebar='true']`
   - `[data-redeven-desktop-window-titlebar-content='true']`
 - Floe shell top bars and desktop-owned launcher chrome both receive drag / no-drag semantics from preload so BrowserWindow movement keeps working after the app takes over the title bar area.
+- When a desktop-managed remote session renders Env App through a same-origin iframe, the embedded document resolves desktop theme, session context, state storage, and window chrome from its host session window instead of falling back to plain browser semantics.
 - Detached desktop child windows render through a shared chrome-safe frame in Env App, so title, subtitle, banner, footer, and scene body can evolve independently while native control reservations still come only from the shell contract.
 - Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
 - Welcome and Env App each keep an explicit entry-document background fallback (`html` / `body` / `#root`) so the first renderer frame matches the shell-owned native window background even before business UI mounts.

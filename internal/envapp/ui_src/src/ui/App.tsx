@@ -6,6 +6,7 @@ import { EnvAppShell } from './EnvAppShell';
 import { redevenV1Contract } from './protocol/redeven_v1';
 import { createUIStorageAdapter, isDesktopStateStorageAvailable } from './services/uiStorage';
 import { createDesktopThemeStorageAdapter, desktopThemeBridge } from './services/desktopTheme';
+import { installDesktopWindowChromeDocumentSync } from './services/desktopWindowChrome';
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
 import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
@@ -18,6 +19,8 @@ function readSessionStorage(key: string): string {
     return '';
   }
 }
+
+installDesktopWindowChromeDocumentSync();
 
 const envID = readSessionStorage('redeven_env_public_id');
 const persistenceBinding = resolveEnvAppStorageBinding({

@@ -1,8 +1,11 @@
+import {
+  desktopWindowChromeCSSVariables as desktopWindowChromeCSSVariablesFromSnapshot,
+  type DesktopWindowChromeMode,
+  type DesktopWindowControlsSide,
+  type DesktopWindowChromeSnapshot,
+} from './windowChromeContract';
+
 export const DESKTOP_TITLE_BAR_HEIGHT = 40;
-
-export type DesktopWindowChromeMode = 'hidden-inset' | 'overlay';
-
-export type DesktopWindowControlsSide = 'left' | 'right';
 
 export type DesktopTrafficLightPosition = Readonly<{
   x: number;
@@ -57,6 +60,19 @@ export function resolveDesktopWindowChromeConfig(
   }
 }
 
+export function resolveDesktopWindowChromeSnapshot(
+  platform: NodeJS.Platform = process.platform,
+): DesktopWindowChromeSnapshot {
+  const config = resolveDesktopWindowChromeConfig(platform);
+  return {
+    mode: config.mode,
+    controlsSide: config.controlsSide,
+    titleBarHeight: config.titleBarHeight,
+    contentInsetStart: config.contentInsetStart,
+    contentInsetEnd: config.contentInsetEnd,
+  };
+}
+
 export function usesDesktopWindowThemeOverlay(platform: NodeJS.Platform = process.platform): boolean {
   return resolveDesktopWindowChromeConfig(platform).mode === 'overlay';
 }
@@ -72,10 +88,5 @@ export function desktopWindowTitleBarInsetCSSValue(platform: NodeJS.Platform = p
 export function desktopWindowChromeCSSVariables(
   platform: NodeJS.Platform = process.platform,
 ): Readonly<Record<string, string>> {
-  const config = resolveDesktopWindowChromeConfig(platform);
-  return {
-    '--redeven-desktop-titlebar-height': `${config.titleBarHeight}px`,
-    '--redeven-desktop-titlebar-start-inset': `${config.contentInsetStart}px`,
-    '--redeven-desktop-titlebar-end-inset': `${config.contentInsetEnd}px`,
-  };
+  return desktopWindowChromeCSSVariablesFromSnapshot(resolveDesktopWindowChromeSnapshot(platform));
 }
