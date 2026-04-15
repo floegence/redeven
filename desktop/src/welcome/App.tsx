@@ -2292,12 +2292,23 @@ function ConnectEnvironmentSurface(props: Readonly<{
     && trimString(props.libraryQuery) === ''
     && trimString(props.libraryProviderFilter) === ''
   ));
+  const layoutReferenceEnvironmentCount = createMemo(() => (
+    environmentLibraryCount(
+      props.snapshot,
+      props.libraryFilter,
+      '',
+      '',
+    )
+  ));
   const visibleEnvironmentCardCount = createMemo(() => (
     props.libraryEntries.length + (showQuickAddCards() ? 1 : 0)
   ));
+  const layoutReferenceEnvironmentCardCount = createMemo(() => (
+    layoutReferenceEnvironmentCount() + (props.libraryFilter === 'all' ? 1 : 0)
+  ));
   const useSpaciousEnvironmentLibraryLayout = createMemo(() => (
     props.activeTab === 'environments'
-    && shouldUseSpaciousEnvironmentGrid(visibleEnvironmentCardCount())
+    && shouldUseSpaciousEnvironmentGrid(layoutReferenceEnvironmentCardCount())
   ));
   const useSpaciousControlPlaneLayout = createMemo(() => (
     props.activeTab === 'control_planes' && props.controlPlanes.length > 0
@@ -2470,6 +2481,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 entries={props.libraryEntries}
                 showQuickAddCards={showQuickAddCards()}
                 visibleCardCount={visibleEnvironmentCardCount()}
+                layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
                 busyAction={props.busyAction}
                 openCreateConnectionDialog={props.openCreateConnectionDialog}
                 openEnvironment={props.openEnvironment}
@@ -2492,6 +2504,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   entries: readonly DesktopEnvironmentEntry[];
   showQuickAddCards: boolean;
   visibleCardCount: number;
+  layoutReferenceCardCount: number;
   busyAction: BusyAction;
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (
@@ -2514,9 +2527,10 @@ function EnvironmentCardsPanel(props: Readonly<{
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
   const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
   const groupedEntries = createMemo(() => splitPinnedEnvironmentEntries(props.entries));
-  // Keep pinned and regular sections on one measured column system so pinning only changes grouping.
+  // Keep transient provider/search filters from collapsing the shared environment column system.
   const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
     visible_card_count: props.visibleCardCount,
+    layout_reference_count: props.layoutReferenceCardCount,
     container_width_px: environmentLibraryWidthPx(),
     root_font_size_px: rootFontSizePx(),
   }));

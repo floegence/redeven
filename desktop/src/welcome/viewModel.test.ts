@@ -803,10 +803,12 @@ describe('buildEnvironmentCardModel', () => {
   it('caps compact environment columns by the visible card count when the container is wide', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 3,
+      layout_reference_count: 3,
       container_width_px: 1200,
       root_font_size_px: 16,
     })).toEqual({
       visible_card_count: 3,
+      layout_reference_count: 3,
       density: 'compact',
       column_count: 3,
     });
@@ -815,10 +817,12 @@ describe('buildEnvironmentCardModel', () => {
   it('switches to spacious density at four visible cards and keeps the shared column count stable', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 4,
+      layout_reference_count: 4,
       container_width_px: 1600,
       root_font_size_px: 16,
     })).toEqual({
       visible_card_count: 4,
+      layout_reference_count: 4,
       density: 'spacious',
       column_count: 4,
     });
@@ -827,10 +831,12 @@ describe('buildEnvironmentCardModel', () => {
   it('reduces spacious environment columns when the measured width cannot fit every visible card', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 6,
+      layout_reference_count: 6,
       container_width_px: 1000,
       root_font_size_px: 16,
     })).toEqual({
       visible_card_count: 6,
+      layout_reference_count: 6,
       density: 'spacious',
       column_count: 3,
     });
@@ -839,12 +845,28 @@ describe('buildEnvironmentCardModel', () => {
   it('falls back to a single shared environment column before the library width is measured', () => {
     expect(buildEnvironmentLibraryLayoutModel({
       visible_card_count: 5,
+      layout_reference_count: 5,
       container_width_px: 0,
       root_font_size_px: 16,
     })).toEqual({
       visible_card_count: 5,
+      layout_reference_count: 5,
       density: 'spacious',
       column_count: 1,
+    });
+  });
+
+  it('keeps the environment grid density and shared columns anchored to the unfiltered library scope', () => {
+    expect(buildEnvironmentLibraryLayoutModel({
+      visible_card_count: 1,
+      layout_reference_count: 5,
+      container_width_px: 1600,
+      root_font_size_px: 16,
+    })).toEqual({
+      visible_card_count: 1,
+      layout_reference_count: 5,
+      density: 'spacious',
+      column_count: 5,
     });
   });
 });

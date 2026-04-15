@@ -26,6 +26,7 @@ export type EnvironmentLibraryLayoutDensity = 'compact' | 'spacious';
 
 export type EnvironmentLibraryLayoutModel = Readonly<{
   visible_card_count: number;
+  layout_reference_count: number;
   density: EnvironmentLibraryLayoutDensity;
   column_count: number;
 }>;
@@ -165,17 +166,20 @@ export function shouldUseSpaciousEnvironmentGrid(cardCount: number): boolean {
 
 export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
   visible_card_count: number;
+  layout_reference_count: number;
   container_width_px: number;
   root_font_size_px?: number;
 }>): EnvironmentLibraryLayoutModel {
   const visibleCardCount = normalizePositiveInteger(args.visible_card_count);
-  const density: EnvironmentLibraryLayoutDensity = shouldUseSpaciousEnvironmentGrid(visibleCardCount)
+  const layoutReferenceCount = normalizePositiveInteger(args.layout_reference_count);
+  const density: EnvironmentLibraryLayoutDensity = shouldUseSpaciousEnvironmentGrid(layoutReferenceCount)
     ? 'spacious'
     : 'compact';
 
-  if (visibleCardCount <= 0) {
+  if (layoutReferenceCount <= 0) {
     return {
-      visible_card_count: 0,
+      visible_card_count: visibleCardCount,
+      layout_reference_count: 0,
       density,
       column_count: 1,
     };
@@ -185,6 +189,7 @@ export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
   if (containerWidthPx <= 0) {
     return {
       visible_card_count: visibleCardCount,
+      layout_reference_count: layoutReferenceCount,
       density,
       column_count: 1,
     };
@@ -197,8 +202,9 @@ export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
 
   return {
     visible_card_count: visibleCardCount,
+    layout_reference_count: layoutReferenceCount,
     density,
-    column_count: Math.max(1, Math.min(visibleCardCount, fitColumnCount)),
+    column_count: Math.max(1, Math.min(layoutReferenceCount, fitColumnCount)),
   };
 }
 

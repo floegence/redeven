@@ -197,6 +197,7 @@ Visual hierarchy:
   - the same shared grid also includes saved Redeven URL and SSH entries
   - when pinned entries exist, the launcher keeps explicit `Pinned` and `Environments` sections
   - those sections must still share one measured environment-library column model, so pinning only changes grouping order and never changes card width
+  - provider filters and search only change which cards are shown; they must not collapse the underlying card-width system for the current library scope
 - `Control Planes` tab:
   - provider action shelves only
   - provider counts, sync state, and provider-to-environment shortcuts

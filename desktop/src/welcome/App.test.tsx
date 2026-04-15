@@ -313,6 +313,11 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('buildEnvironmentLibraryLayoutModel');
     expect(appSrc).toContain('visibleCardCount={visibleEnvironmentCardCount()}');
+    expect(appSrc).toContain("layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}");
+    expect(appSrc).toContain("environmentLibraryCount(");
+    expect(appSrc).toContain("props.libraryFilter,");
+    expect(appSrc).toContain("'',");
+    expect(appSrc).toContain('layout_reference_count: props.layoutReferenceCardCount');
     expect(appSrc).toContain("'--redeven-environment-grid-columns': String(layoutModel().column_count)");
     expect(appSrc).toContain('new ResizeObserver(() => updateLayoutMetrics())');
     expect(appSrc).toContain('function EnvironmentLibrarySection');
