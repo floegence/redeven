@@ -22,6 +22,13 @@ export type DesktopWelcomeShellViewModel = Readonly<{
 export type EnvironmentLibraryFilter = 'all' | 'open' | 'recent' | 'saved';
 export type EnvironmentCenterTab = 'environments' | 'control_planes';
 export type EnvironmentCardTone = 'neutral' | 'primary' | 'success' | 'warning';
+export type EnvironmentLibraryLayoutDensity = 'compact' | 'spacious';
+
+export type EnvironmentLibraryLayoutModel = Readonly<{
+  visible_card_count: number;
+  density: EnvironmentLibraryLayoutDensity;
+  column_count: number;
+}>;
 
 export type EnvironmentCardMetaItem = Readonly<{
   label: string;
@@ -112,12 +119,87 @@ export type ControlPlaneStatusModel = Readonly<{
   detail: string;
 }>;
 
+export const SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD = 4;
+export const COMPACT_ENVIRONMENT_GRID_MIN_COLUMN_REM = 17;
+export const SPACIOUS_ENVIRONMENT_GRID_MIN_COLUMN_REM = 19;
+export const COMPACT_ENVIRONMENT_GRID_GAP_REM = 1;
+export const SPACIOUS_ENVIRONMENT_GRID_GAP_REM = 1.125;
+
 export function capabilityUnavailableMessage(label: string): string {
   return `Connect to an Environment first to open ${label}.`;
 }
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizePositiveInteger(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function normalizePositivePixelValue(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, value);
+}
+
+function environmentGridMinimumColumnRem(density: EnvironmentLibraryLayoutDensity): number {
+  return density === 'spacious'
+    ? SPACIOUS_ENVIRONMENT_GRID_MIN_COLUMN_REM
+    : COMPACT_ENVIRONMENT_GRID_MIN_COLUMN_REM;
+}
+
+function environmentGridGapRem(density: EnvironmentLibraryLayoutDensity): number {
+  return density === 'spacious'
+    ? SPACIOUS_ENVIRONMENT_GRID_GAP_REM
+    : COMPACT_ENVIRONMENT_GRID_GAP_REM;
+}
+
+export function shouldUseSpaciousEnvironmentGrid(cardCount: number): boolean {
+  return normalizePositiveInteger(cardCount) >= SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD;
+}
+
+export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
+  visible_card_count: number;
+  container_width_px: number;
+  root_font_size_px?: number;
+}>): EnvironmentLibraryLayoutModel {
+  const visibleCardCount = normalizePositiveInteger(args.visible_card_count);
+  const density: EnvironmentLibraryLayoutDensity = shouldUseSpaciousEnvironmentGrid(visibleCardCount)
+    ? 'spacious'
+    : 'compact';
+
+  if (visibleCardCount <= 0) {
+    return {
+      visible_card_count: 0,
+      density,
+      column_count: 1,
+    };
+  }
+
+  const containerWidthPx = normalizePositivePixelValue(args.container_width_px);
+  if (containerWidthPx <= 0) {
+    return {
+      visible_card_count: visibleCardCount,
+      density,
+      column_count: 1,
+    };
+  }
+
+  const rootFontSizePx = normalizePositivePixelValue(args.root_font_size_px ?? 16) || 16;
+  const minColumnWidthPx = environmentGridMinimumColumnRem(density) * rootFontSizePx;
+  const gapPx = environmentGridGapRem(density) * rootFontSizePx;
+  const fitColumnCount = Math.floor((containerWidthPx + gapPx) / (minColumnWidthPx + gapPx));
+
+  return {
+    visible_card_count: visibleCardCount,
+    density,
+    column_count: Math.max(1, Math.min(visibleCardCount, fitColumnCount)),
+  };
 }
 
 export function surfaceTitle(surface: DesktopLauncherSurface): string {

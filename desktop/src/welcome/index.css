@@ -15,6 +15,8 @@
   --redeven-welcome-shell-spacious-max-width: 100rem;
   --redeven-environment-grid-min-column-size: 17rem;
   --redeven-environment-grid-spacious-column-size: 19rem;
+  --redeven-environment-grid-gap: 1rem;
+  --redeven-environment-grid-spacious-gap: 1.125rem;
   --redeven-control-plane-grid-column-size: 35rem;
   --redeven-control-plane-card-max-width: 44rem;
   --redeven-provider-shelf-metric-min-size: 15rem;
@@ -82,20 +84,20 @@ body {
 
 /* ── Environment card grid ── */
 
+.redeven-environment-library {
+  --redeven-environment-grid-columns: 1;
+  --redeven-environment-grid-current-gap: var(--redeven-environment-grid-gap);
+}
+
+.redeven-environment-library[data-density='spacious'] {
+  --redeven-environment-grid-current-gap: var(--redeven-environment-grid-spacious-gap);
+}
+
 .redeven-environment-grid {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--redeven-environment-grid-min-column-size)), 1fr));
+  gap: var(--redeven-environment-grid-current-gap);
+  grid-template-columns: repeat(var(--redeven-environment-grid-columns), minmax(0, 1fr));
   align-items: stretch;
-}
-
-.redeven-environment-grid__section-title {
-  grid-column: 1 / -1;
-}
-
-.redeven-environment-grid--spacious {
-  gap: 1.125rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--redeven-environment-grid-spacious-column-size)), 1fr));
 }
 
 /* ── Environment cards ── */

@@ -307,20 +307,24 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-grid');
   });
 
-  it('uses a compact default grid and keeps the spacious grid tied to the total visible environment cards', () => {
+  it('uses one measured shared column model across pinned and regular environment sections', () => {
     const styles = readWelcomeStyles();
     const appSrc = readWelcomeSource();
 
+    expect(appSrc).toContain('buildEnvironmentLibraryLayoutModel');
+    expect(appSrc).toContain('visibleCardCount={visibleEnvironmentCardCount()}');
+    expect(appSrc).toContain("'--redeven-environment-grid-columns': String(layoutModel().column_count)");
+    expect(appSrc).toContain('new ResizeObserver(() => updateLayoutMetrics())');
+    expect(appSrc).toContain('function EnvironmentLibrarySection');
+    expect(appSrc).toContain('data-density={layoutModel().density}');
+    expect(styles).toContain('.redeven-environment-library');
     expect(styles).toContain('--redeven-environment-grid-min-column-size: 17rem;');
     expect(styles).toContain('--redeven-environment-grid-spacious-column-size: 19rem;');
-    expect(styles).toMatch(
-      /grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*var\(--redeven-environment-grid-min-column-size\)\),\s*1fr\)\);/,
-    );
-    expect(styles).toMatch(
-      /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(min\(100%,\s*var\(--redeven-environment-grid-spacious-column-size\)\),\s*1fr\)\);/,
-    );
-    expect(appSrc).toContain('props.entries.length + (props.showQuickAddCards ? 1 : 0)');
-    expect(styles).toContain('.redeven-environment-grid__section-title');
+    expect(styles).toContain('--redeven-environment-grid-gap: 1rem;');
+    expect(styles).toContain('--redeven-environment-grid-spacious-gap: 1.125rem;');
+    expect(styles).toContain('grid-template-columns: repeat(var(--redeven-environment-grid-columns), minmax(0, 1fr));');
+    expect(styles).not.toContain('.redeven-environment-grid__section-title');
+    expect(styles).not.toContain('.redeven-environment-grid--spacious');
     expect(styles).not.toMatch(/@media\s*\(min-width:\s*640px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
     expect(styles).not.toMatch(/@media\s*\(min-width:\s*1024px\)\s*\{\s*\.redeven-environment-grid\s*\{/);
   });
@@ -367,8 +371,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('buildControlPlaneEnvironmentFactsModel');
     expect(appSrc).toContain('buildEnvironmentCardEndpointsModel');
     expect(appSrc).toContain('splitPinnedEnvironmentEntries');
-    expect(appSrc).toContain('function EnvironmentGridSectionTitle');
-    expect(appSrc).not.toContain('function EnvironmentCardSection');
+    expect(appSrc).toContain('function EnvironmentLibrarySection');
     expect(appSrc).toContain('function EnvironmentCardFactsBlock');
     expect(appSrc).toContain('function EnvironmentCardEndpointBlock');
     expect(appSrc).toContain('Pinned');
