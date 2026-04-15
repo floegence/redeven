@@ -18,6 +18,7 @@ import {
   buildEnvironmentCardFactsModel,
   buildProviderBackedEnvironmentActionModel,
   filterEnvironmentLibrary,
+  resolveDefaultDualRouteAction,
   splitPinnedEnvironmentEntries,
 } from './viewModel';
 
@@ -460,30 +461,60 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(buildProviderBackedEnvironmentActionModel(remoteOnlyEntry!)).toEqual(expect.objectContaining({
       status_label: 'Offline',
-      primary_action: expect.objectContaining({
-        intent: 'check_status',
-        label: 'Check Remote Status',
-        enabled: true,
-        route: 'remote_desktop',
-      }),
-      secondary_action: null,
+      action_presentation: {
+        kind: 'single_button',
+        action: expect.objectContaining({
+          intent: 'check_status',
+          label: 'Check Remote Status',
+          enabled: true,
+          route: 'remote_desktop',
+        }),
+      },
     }));
 
-    expect(buildProviderBackedEnvironmentActionModel(dualRouteEntry!)).toEqual(expect.objectContaining({
+    const dualRouteActionModel = buildProviderBackedEnvironmentActionModel(dualRouteEntry!);
+    expect(dualRouteActionModel).toEqual(expect.objectContaining({
       status_label: 'Local Ready',
-      primary_action: expect.objectContaining({
-        intent: 'open',
-        label: 'Open Local',
-        enabled: true,
-        route: 'local_host',
-      }),
-      secondary_action: expect.objectContaining({
-        intent: 'check_status',
-        label: 'Check Remote Status',
-        enabled: true,
-        route: 'remote_desktop',
+      action_presentation: expect.objectContaining({
+        kind: 'split_button',
+        default_action: expect.objectContaining({
+          intent: 'open',
+          label: 'Open',
+          enabled: true,
+          route: 'local_host',
+        }),
       }),
     }));
+    expect(dualRouteActionModel.action_presentation.kind).toBe('split_button');
+    if (dualRouteActionModel.action_presentation.kind !== 'split_button') {
+      throw new Error('Expected dual-route action presentation.');
+    }
+    expect(dualRouteActionModel.action_presentation.menu_actions).toEqual([
+      expect.objectContaining({
+        id: 'local_route',
+        section: 'local',
+        label: 'Open via Local Port',
+        disabled: false,
+        is_default: true,
+        action: expect.objectContaining({
+          intent: 'open',
+          label: 'Open Local',
+          route: 'local_host',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'remote_check_status',
+        section: 'remote',
+        label: 'Check Remote Status',
+        disabled: false,
+        is_default: false,
+        action: expect.objectContaining({
+          intent: 'check_status',
+          label: 'Check Remote Status',
+          route: 'remote_desktop',
+        }),
+      }),
+    ]);
 
     expect(buildEnvironmentCardFactsModel(remoteOnlyEntry!)).toEqual([
       { label: 'RUNS ON', value: 'Control Plane' },
@@ -504,6 +535,201 @@ describe('buildEnvironmentCardModel', () => {
       remoteOnly.id,
       dualRoute.id,
     ]);
+  });
+
+  it('prefers the already-open local route over a remote-ready route for the split-button default', () => {
+    const dualRouteEntry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [
+          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route', {
+            preferredOpenRoute: 'remote_desktop',
+          }),
+        ],
+      }),
+      controlPlanes: [{
+        provider: {
+          protocol_version: 'rcpp-v1',
+          provider_id: 'redeven_portal',
+          display_name: 'Redeven Portal',
+          provider_origin: 'https://cp.example.invalid',
+          documentation_url: 'https://cp.example.invalid/docs/provider-protocol',
+        },
+        account: {
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          display_name: 'Redeven Portal',
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: Date.now() + 60_000,
+        },
+        display_label: 'Demo Portal',
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_dual_route',
+          label: 'Dual Route',
+          description: 'dual-route sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+        }],
+        last_synced_at_ms: Date.now(),
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: Date.now(),
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
+    }).environments.find((environment) => environment.env_public_id === 'env_dual_route');
+
+    expect(dualRouteEntry).toBeTruthy();
+    const actionModel = buildProviderBackedEnvironmentActionModel({
+      ...dualRouteEntry!,
+      open_local_session_key: 'managed:env_dual_route:local_host',
+    });
+    expect(actionModel.action_presentation.kind).toBe('split_button');
+    if (actionModel.action_presentation.kind !== 'split_button') {
+      throw new Error('Expected split-button presentation.');
+    }
+    expect(actionModel.action_presentation.default_action).toEqual(expect.objectContaining({
+      intent: 'focus',
+      label: 'Focus',
+      route: 'local_host',
+    }));
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        section: 'local',
+        label: 'Focus Local Window',
+        is_default: true,
+      }),
+      expect.objectContaining({
+        section: 'remote',
+        label: 'Open via Control Plane',
+        is_default: false,
+      }),
+    ]));
+  });
+
+  it('keeps remote recovery actions in the split-button menu when the remote route is stale or needs reconnect', () => {
+    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route');
+    const baseEntry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [dualRoute],
+      }),
+    }).environments.find((environment) => environment.id === dualRoute.id);
+
+    expect(baseEntry).toBeTruthy();
+
+    const staleModel = buildProviderBackedEnvironmentActionModel({
+      ...baseEntry!,
+      control_plane_label: 'Demo Portal',
+      remote_route_state: 'stale',
+      remote_state_reason: 'Remote status is stale. Refresh the provider to confirm the current state.',
+    });
+    expect(staleModel.status_label).toBe('Local Ready');
+    expect(staleModel.action_presentation.kind).toBe('split_button');
+    if (staleModel.action_presentation.kind !== 'split_button') {
+      throw new Error('Expected split-button presentation.');
+    }
+    expect(staleModel.action_presentation.default_action).toEqual(expect.objectContaining({
+      route: 'local_host',
+      label: 'Open',
+    }));
+    expect(staleModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'remote_refresh',
+        label: 'Refresh Remote Status',
+        detail: 'Remote status is stale. Refresh the provider to confirm the current state.',
+      }),
+    ]));
+
+    const reconnectModel = buildProviderBackedEnvironmentActionModel({
+      ...baseEntry!,
+      control_plane_label: 'Demo Portal',
+      remote_route_state: 'auth_required',
+      remote_state_reason: 'Reconnect this Control Plane in your browser to restore access.',
+    });
+    expect(reconnectModel.status_label).toBe('Local Ready');
+    expect(reconnectModel.action_presentation.kind).toBe('split_button');
+    if (reconnectModel.action_presentation.kind !== 'split_button') {
+      throw new Error('Expected split-button presentation.');
+    }
+    expect(reconnectModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'remote_reconnect',
+        label: 'Reconnect Control Plane',
+        detail: 'Reconnect this Control Plane in your browser to restore access.',
+      }),
+    ]));
+  });
+
+  it('shows a Focus default and both focus routes when both managed routes are already open', () => {
+    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route', {
+      preferredOpenRoute: 'remote_desktop',
+    });
+    const baseEntry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [dualRoute],
+      }),
+    }).environments.find((environment) => environment.id === dualRoute.id);
+
+    expect(baseEntry).toBeTruthy();
+    const actionModel = buildProviderBackedEnvironmentActionModel({
+      ...baseEntry!,
+      control_plane_label: 'Demo Portal',
+      default_open_route: 'remote_desktop',
+      open_local_session_key: 'managed:env_dual_route:local_host',
+      open_remote_session_key: 'managed:env_dual_route:remote_desktop',
+    });
+    expect(actionModel.action_presentation.kind).toBe('split_button');
+    if (actionModel.action_presentation.kind !== 'split_button') {
+      throw new Error('Expected split-button presentation.');
+    }
+    expect(actionModel.action_presentation.default_action).toEqual(expect.objectContaining({
+      intent: 'focus',
+      label: 'Focus',
+      route: 'remote_desktop',
+    }));
+    expect(actionModel.action_presentation.menu_actions).toEqual([
+      expect.objectContaining({
+        section: 'local',
+        label: 'Focus Local Window',
+        is_default: false,
+      }),
+      expect.objectContaining({
+        section: 'remote',
+        label: 'Focus Remote Window',
+        is_default: true,
+      }),
+    ]);
+  });
+
+  it('resolves the default dual-route action from open-session state before preferences', () => {
+    expect(resolveDefaultDualRouteAction({
+      local_action: {
+        intent: 'focus',
+        label: 'Focus Local',
+        enabled: true,
+        variant: 'default',
+        route: 'local_host',
+      },
+      remote_action: {
+        intent: 'open',
+        label: 'Open Remote',
+        enabled: true,
+        variant: 'outline',
+        route: 'remote_desktop',
+      },
+      local_session_open: true,
+      remote_session_open: false,
+      managed_preferred_open_route: 'remote_desktop',
+      default_open_route: 'remote_desktop',
+    })).toEqual(expect.objectContaining({
+      intent: 'focus',
+      route: 'local_host',
+    }));
   });
 
   it('splits pinned entries ahead of the regular environment list', () => {

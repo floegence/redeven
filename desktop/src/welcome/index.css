@@ -123,6 +123,103 @@ body {
     0 16px 32px -8px color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
+/* ── Split environment action ── */
+
+.redeven-split-action {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: stretch;
+}
+
+.redeven-split-action__toggle {
+  width: 2rem;
+  min-width: 2rem;
+  border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.redeven-split-menu {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 0.7rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 92%, var(--card)), var(--card));
+  box-shadow:
+    0 18px 38px -18px color-mix(in srgb, var(--foreground) 30%, transparent),
+    0 18px 48px -24px color-mix(in srgb, var(--foreground) 18%, transparent);
+  padding: 0.45rem;
+}
+
+.redeven-split-menu-section + .redeven-split-menu-section {
+  margin-top: 0.3rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.redeven-split-menu-section__heading {
+  padding: 0.2rem 0.4rem 0.32rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.redeven-split-menu-section__items {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.redeven-split-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  background: transparent;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.redeven-split-menu-item:hover,
+.redeven-split-menu-item:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  outline: none;
+}
+
+.redeven-split-menu-item--disabled,
+.redeven-split-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.redeven-split-menu-item__label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.redeven-split-menu-item__detail {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+
+.redeven-split-menu-item__check {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
 /* ── Card body: flat fact rows ── */
 
 .redeven-card-fact-row {

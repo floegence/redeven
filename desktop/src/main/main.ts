@@ -1954,7 +1954,7 @@ async function openManagedEnvironmentRecord(
     resetLauncherIssueState();
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: options.stealAppFocus !== false });
     if (findManagedEnvironmentByID(preferences, environment.id)) {
-      await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
+      await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'local_host'));
     }
     return launcherActionSuccess('focused_environment_window', {
       sessionKey: existingSession.session_key,
@@ -1982,7 +1982,7 @@ async function openManagedEnvironmentRecord(
     stealAppFocus: options.stealAppFocus !== false,
   });
   resetLauncherIssueState();
-  await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
+  await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'local_host'));
   return launcherActionSuccess('opened_environment_window', {
     sessionKey: target.session_key,
   });
@@ -2045,7 +2045,7 @@ async function openManagedRemoteEnvironmentRecord(
   if (existingSession) {
     resetLauncherIssueState();
     focusEnvironmentSession(existingSession.session_key, { stealAppFocus: options.stealAppFocus !== false });
-    await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
+    await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'remote_desktop'));
     return launcherActionSuccess('focused_environment_window', {
       sessionKey: existingSession.session_key,
     });
@@ -2057,7 +2057,7 @@ async function openManagedRemoteEnvironmentRecord(
     { stealAppFocus: options.stealAppFocus !== false },
   );
   resetLauncherIssueState();
-  await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id));
+  await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'remote_desktop'));
   return launcherActionSuccess('opened_environment_window', {
     sessionKey: target.session_key,
   });
