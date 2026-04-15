@@ -160,6 +160,8 @@ ipcMain.on('redeven-desktop:theme-set-source', (event, nextSource) => {
     hasDesktopSettingsBridge: typeof window.redevenDesktopSettings === 'object'
       && typeof window.redevenDesktopSettings?.save === 'function'
       && typeof window.redevenDesktopSettings?.cancel === 'function',
+    hasDesktopSessionContextBridge: typeof window.redevenDesktopSessionContext === 'object'
+      && typeof window.redevenDesktopSessionContext?.getSnapshot === 'function',
     hasDesktopShellBridge: typeof window.redevenDesktopShell === 'object'
       && typeof window.redevenDesktopShell?.openConnectionCenter === 'function'
       && typeof window.redevenDesktopShell?.openAdvancedSettings === 'function'
@@ -229,6 +231,7 @@ app.whenReady().then(async () => {
       main: {
         hasAskFlowerBridge: boolean;
         hasDesktopSettingsBridge: boolean;
+        hasDesktopSessionContextBridge: boolean;
         hasDesktopShellBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
@@ -236,6 +239,7 @@ app.whenReady().then(async () => {
       child: {
         hasAskFlowerBridge: boolean;
         hasDesktopSettingsBridge: boolean;
+        hasDesktopSessionContextBridge: boolean;
         hasDesktopShellBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
@@ -244,11 +248,13 @@ app.whenReady().then(async () => {
 
     expect(payload.main.hasAskFlowerBridge).toBe(true);
     expect(payload.main.hasDesktopSettingsBridge).toBe(true);
+    expect(payload.main.hasDesktopSessionContextBridge).toBe(true);
     expect(payload.main.hasDesktopShellBridge).toBe(true);
     expect(payload.main.hasStateStorageBridge).toBe(true);
     expect(payload.main.hasDesktopThemeBridge).toBe(true);
     expect(payload.child.hasAskFlowerBridge).toBe(true);
     expect(payload.child.hasDesktopSettingsBridge).toBe(true);
+    expect(payload.child.hasDesktopSessionContextBridge).toBe(true);
     expect(payload.child.hasDesktopShellBridge).toBe(true);
     expect(payload.child.hasStateStorageBridge).toBe(true);
     expect(payload.child.hasDesktopThemeBridge).toBe(true);

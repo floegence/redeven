@@ -34,6 +34,7 @@ import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
 import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { resolveEnvironmentStorageScopeID } from '../services/desktopSessionContext';
 import {
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
@@ -475,7 +476,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const filePreview = useFilePreviewContext();
   const fileBrowserSurface = useFileBrowserSurfaceContext();
 
-  const envId = () => (ctx.env_id() ?? '').trim();
+  const envId = () => resolveEnvironmentStorageScopeID(ctx.env_id() ?? '');
   const useExternalMobileSidebarToggle = () => !props.widgetId;
   const browserStateScope = () => normalizeBrowserStateScope(props.stateScope);
   const initialPathOverride = () => normalizeAbsolutePath(props.initialPathOverride ?? '');

@@ -28,6 +28,10 @@ This document describes the public Electron desktop shell that ships with each `
 - Desktop-managed environments are the entries that own a real Redeven scope directory on this machine:
   - local environments map to `~/.redeven/scopes/local/<name>`
   - Control Plane environments map to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>`
+- Each desktop-managed Environment window also receives a Desktop-owned session context snapshot:
+  - `managed_environment_id`
+  - `environment_storage_scope_id`
+- Env App uses `environment_storage_scope_id` only for environment-owned persisted UI state such as File Browser history and active thread context. Intentionally global shell/UI preferences remain global.
 - Control Plane identity stays split on purpose:
   - `provider_key` is the local scope/storage key derived from the provider origin and is only used in local paths plus scope metadata
   - `provider_id` is the canonical discovery identity from `/.well-known/redeven-provider.json` and is used for provider protocol payloads, provider catalogs, and managed-environment provider bindings
@@ -187,19 +191,23 @@ Interaction rules:
 - `Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window for the selected managed environment.
 - The `Add` action opens a dialog that can either connect immediately or save a new Environment into the library.
 - `New Environment` is a three-mode dialog:
-  - `Local`
+  - `Managed`
   - `Redeven URL`
   - `SSH`
-- Local mode keeps the flow lightweight and explicit:
+- Managed mode keeps the flow lightweight and explicit:
   - `Label`
-  - `Environment Name`
   - `Local UI Bind`
   - `Local UI Password`
-- Local mode does not ask the user to manually choose a Control Plane binding.
-- If a locally hosted runtime is also known to a connected provider, Desktop merges the local and provider routes into the same managed environment automatically through the shared catalog.
-- Creating a local environment can either:
+- optional `Connect To A Control Plane Environment`
+  - pick one saved Control Plane
+  - pick one provider environment from that Control Plane catalog
+- When the user leaves Control Plane binding off, the dialog also shows:
+  - `Environment Name`
+- Creating a managed environment can either:
   - save the managed environment card without opening it yet
   - connect immediately and start or attach to that managed scope
+- Creating or editing a managed environment may explicitly upgrade one local-only entry into a dual-route local-plus-Control-Plane environment.
+- Provider sync still reconciles runtime-discovered local hosting into the shared managed-environment catalog, but the create/edit flow no longer forces users to wait for that background reconciliation before binding local and remote access together.
 - SSH mode keeps the same compact launcher shell but adds:
   - `Label`
   - `SSH Destination`
@@ -257,6 +265,10 @@ Interaction rules:
 - Dual-route managed environments stay route-aware:
   - if this device can still host the environment locally, `Open Local` remains available even when the remote route is degraded
   - remote recovery actions still stay visible as the secondary action on that same card
+- Deleting a managed environment is a first-class action:
+  - Desktop blocks deletion while a window for that managed environment is still open
+  - deleting a local-only managed environment removes the managed entry and its Desktop-owned local scope state
+  - deleting a dual-route managed environment removes only Desktop-owned local hosting and keeps the remote-only Control Plane entry in the catalog
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -388,7 +400,7 @@ Desktop semantics:
 - `Local only` and `Shared on your local network` share the same fixed default port baseline.
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
 - Multiple local environments may coexist on one device. Their runtime ownership stays separate because each one resolves to a different `local/<name>` scope directory.
-- A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the provider-backed route is reconciled from provider sync plus shared runtime catalog identity instead of a manual dialog binding.
+- A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the provider-backed route may come from either explicit create/edit binding or provider-sync reconciliation into the same shared managed-environment identity.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
 

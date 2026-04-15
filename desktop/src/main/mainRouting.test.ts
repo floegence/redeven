@@ -36,6 +36,8 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain("case 'start_control_plane_connect':");
     expect(mainSrc).toContain("case 'open_managed_environment_settings':");
+    expect(mainSrc).toContain("case 'upsert_managed_environment':");
+    expect(mainSrc).toContain("case 'delete_managed_environment':");
     expect(mainSrc).toContain("case 'focus_environment_window':");
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
     expect(mainSrc).not.toContain("case 'return_to_current_environment':");

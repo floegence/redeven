@@ -32,6 +32,7 @@ import {
   ConfirmDialog,
   Dialog,
   Input,
+  Select,
   SegmentedControl,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
@@ -177,7 +178,7 @@ type BusyAction =
   | 'set_saved_ssh_environment_pinned'
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
-  | 'upsert_managed_local_environment'
+  | 'upsert_managed_environment'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -186,9 +187,9 @@ type LauncherActionUIOptions = Readonly<{
   noticeKeys?: readonly string[];
 }>;
 
-type LocalConnectionDialogState = Readonly<{
+type ManagedEnvironmentConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
-  connection_kind: 'managed_local';
+  connection_kind: 'managed_environment';
   environment_id: string;
   label: string;
   environment_name: string;
@@ -196,6 +197,10 @@ type LocalConnectionDialogState = Readonly<{
   local_ui_password: string;
   local_ui_password_mode: DesktopLocalUIPasswordMode;
   local_ui_password_configured: boolean;
+  use_control_plane_binding: boolean;
+  provider_origin: string;
+  provider_id: string;
+  env_public_id: string;
 }>;
 
 type ExternalURLConnectionDialogState = Readonly<{
@@ -242,7 +247,7 @@ const LOCAL_UI_BIND_TOOLTIP_PATTERNS: ReadonlyArray<{
   },
 ] as const;
 
-type ConnectionDialogState = LocalConnectionDialogState | ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
+type ConnectionDialogState = ManagedEnvironmentConnectionDialogState | ExternalURLConnectionDialogState | SSHConnectionDialogState | null;
 
 type ControlPlaneDialogState = Readonly<{
   display_label: string;
@@ -394,14 +399,14 @@ function createExternalURLConnectionDialogState(
   };
 }
 
-function createLocalConnectionDialogState(
+function createManagedEnvironmentConnectionDialogState(
   mode: 'create' | 'edit',
-  overrides: Partial<LocalConnectionDialogState> = {},
-): LocalConnectionDialogState {
+  overrides: Partial<ManagedEnvironmentConnectionDialogState> = {},
+): ManagedEnvironmentConnectionDialogState {
   const passwordConfigured = overrides.local_ui_password_configured === true;
   return {
     mode,
-    connection_kind: 'managed_local',
+    connection_kind: 'managed_environment',
     environment_id: trimString(overrides.environment_id),
     label: trimString(overrides.label),
     environment_name: trimString(overrides.environment_name),
@@ -412,6 +417,13 @@ function createLocalConnectionDialogState(
       passwordConfigured ? 'keep' : 'replace',
     ),
     local_ui_password_configured: passwordConfigured,
+    use_control_plane_binding: overrides.use_control_plane_binding === true
+      || trimString(overrides.provider_origin) !== ''
+      || trimString(overrides.provider_id) !== ''
+      || trimString(overrides.env_public_id) !== '',
+    provider_origin: trimString(overrides.provider_origin),
+    provider_id: trimString(overrides.provider_id),
+    env_public_id: trimString(overrides.env_public_id),
   };
 }
 
@@ -481,9 +493,11 @@ function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'succe
 
 function busyActionForLauncherRequest(request: DesktopLauncherActionRequest): BusyAction {
   switch (request.kind) {
+    case 'upsert_managed_environment':
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
       return 'save_environment';
+    case 'delete_managed_environment':
     case 'delete_saved_environment':
     case 'delete_saved_ssh_environment':
       return 'delete_environment';
@@ -549,7 +563,7 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
 function DesktopCommandRegistrar(props: Readonly<{
   snapshot: () => DesktopWelcomeSnapshot;
   showConnectEnvironment: (message?: string) => void;
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openSettingsSurface: (environmentID?: string) => void;
   openLocalEnvironment: () => Promise<void>;
   openEnvironment: (
@@ -1000,7 +1014,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openCreateConnectionDialog(
     message = '',
-    preferredKind: 'managed_local' | 'external_local_ui' | 'ssh_environment' = 'managed_local',
+    preferredKind: 'managed_environment' | 'external_local_ui' | 'ssh_environment' = 'managed_environment',
   ): void {
     if (snapshot().surface !== 'connect_environment') {
       showConnectEnvironment(message || 'Open the launcher to add a connection.');
@@ -1017,8 +1031,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setControlPlaneDialogError('');
     setControlPlaneDialogState(null);
     setConnectionDialogState(
-      preferredKind === 'managed_local'
-        ? createLocalConnectionDialogState('create', {
+      preferredKind === 'managed_environment'
+        ? createManagedEnvironmentConnectionDialogState('create', {
           local_ui_bind: 'localhost:23998',
           local_ui_password_mode: 'replace',
         })
@@ -1033,18 +1047,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
-    if (
-      environment.kind === 'managed_environment'
-      && environment.managed_has_local_hosting
-      && environment.managed_local_scope_kind !== 'controlplane'
-    ) {
-      setConnectionDialogState(createLocalConnectionDialogState('edit', {
+    if (environment.kind === 'managed_environment' && environment.managed_has_local_hosting) {
+      setConnectionDialogState(createManagedEnvironmentConnectionDialogState('edit', {
         environment_id: environment.id,
         label: environment.label,
         environment_name: environment.managed_environment_name ?? '',
         local_ui_bind: environment.managed_local_ui_bind ?? 'localhost:23998',
         local_ui_password_mode: environment.managed_local_ui_password_configured ? 'keep' : 'replace',
         local_ui_password_configured: environment.managed_local_ui_password_configured === true,
+        use_control_plane_binding: trimString(environment.provider_origin) !== '',
+        provider_origin: environment.provider_origin ?? '',
+        provider_id: environment.provider_id ?? '',
+        env_public_id: environment.env_public_id ?? '',
       }));
     } else if (environment.kind === 'managed_environment') {
       openSettingsSurface(environment.id);
@@ -1127,13 +1141,86 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function switchConnectionDialogKind(kind: 'managed_local' | 'external_local_ui' | 'ssh_environment'): void {
+  function toggleManagedEnvironmentControlPlaneBinding(enabled: boolean): void {
+    setConnectionDialogState((current) => {
+      if (!current || current.connection_kind !== 'managed_environment') {
+        return current;
+      }
+      if (!enabled) {
+        return {
+          ...current,
+          use_control_plane_binding: false,
+          provider_origin: '',
+          provider_id: '',
+          env_public_id: '',
+        };
+      }
+      const firstControlPlane = snapshot().control_planes[0] ?? null;
+      if (!firstControlPlane) {
+        return current;
+      }
+      const currentMatchesFirstControlPlane = (
+        current.provider_origin === firstControlPlane.provider.provider_origin
+        && current.provider_id === firstControlPlane.provider.provider_id
+      );
+      return {
+        ...current,
+        use_control_plane_binding: true,
+        provider_origin: firstControlPlane.provider.provider_origin,
+        provider_id: firstControlPlane.provider.provider_id,
+        env_public_id: currentMatchesFirstControlPlane ? current.env_public_id : '',
+      };
+    });
+  }
+
+  function selectManagedEnvironmentControlPlane(controlPlaneKey: string): void {
+    setConnectionDialogState((current) => {
+      if (!current || current.connection_kind !== 'managed_environment') {
+        return current;
+      }
+      const controlPlane = snapshot().control_planes.find((entry) => controlPlaneFilterValue(entry) === controlPlaneKey) ?? null;
+      if (!controlPlane) {
+        return {
+          ...current,
+          use_control_plane_binding: current.use_control_plane_binding,
+          provider_origin: '',
+          provider_id: '',
+          env_public_id: '',
+        };
+      }
+      const currentEnvironmentStillAvailable = (
+        current.provider_origin === controlPlane.provider.provider_origin
+        && current.provider_id === controlPlane.provider.provider_id
+        && controlPlane.environments.some((environment) => environment.env_public_id === current.env_public_id)
+      );
+      return {
+        ...current,
+        provider_origin: controlPlane.provider.provider_origin,
+        provider_id: controlPlane.provider.provider_id,
+        env_public_id: currentEnvironmentStillAvailable ? current.env_public_id : '',
+      };
+    });
+  }
+
+  function selectManagedEnvironmentProviderEnvironment(envPublicID: string): void {
+    setConnectionDialogState((current) => {
+      if (!current || current.connection_kind !== 'managed_environment') {
+        return current;
+      }
+      return {
+        ...current,
+        env_public_id: trimString(envPublicID),
+      };
+    });
+  }
+
+  function switchConnectionDialogKind(kind: 'managed_environment' | 'external_local_ui' | 'ssh_environment'): void {
     setConnectionDialogState((current) => {
       if (!current || current.mode !== 'create' || current.connection_kind === kind) {
         return current;
       }
-      if (kind === 'managed_local') {
-        return createLocalConnectionDialogState('create', {
+      if (kind === 'managed_environment') {
+        return createManagedEnvironmentConnectionDialogState('create', {
           label: current.label,
           local_ui_bind: 'localhost:23998',
         });
@@ -1161,7 +1248,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!current) {
         return current;
       }
-      if (name === 'local_ui_password' && current.connection_kind === 'managed_local') {
+      if (name === 'local_ui_password' && current.connection_kind === 'managed_environment') {
         return {
           ...current,
           local_ui_password: value,
@@ -1627,23 +1714,54 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
+  function buildManagedEnvironmentActionRequest(
+    state: ManagedEnvironmentConnectionDialogState,
+    errorTarget: 'connect' | 'dialog',
+  ): Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'upsert_managed_environment' }>> | null {
+    const wantsControlPlaneBinding = state.use_control_plane_binding === true;
+    if (wantsControlPlaneBinding) {
+      if (trimString(state.provider_origin) === '' || trimString(state.provider_id) === '') {
+        setErrorMessage(errorTarget, 'Connect a Control Plane first or turn off remote access for this environment.');
+        return null;
+      }
+      if (trimString(state.env_public_id) === '') {
+        setErrorMessage(errorTarget, 'Choose a Control Plane environment.');
+        return null;
+      }
+    } else if (trimString(state.environment_name) === '') {
+      setErrorMessage(errorTarget, 'Environment name is required for a local-only managed environment.');
+      return null;
+    }
+
+    return {
+      kind: 'upsert_managed_environment',
+      environment_id: state.environment_id || undefined,
+      mode: wantsControlPlaneBinding ? 'local_with_control_plane' : 'local_only',
+      environment_name: wantsControlPlaneBinding ? undefined : state.environment_name,
+      label: state.label,
+      local_ui_bind: state.local_ui_bind,
+      local_ui_password: state.local_ui_password,
+      local_ui_password_mode: state.local_ui_password_mode,
+      provider_origin: wantsControlPlaneBinding ? state.provider_origin : undefined,
+      provider_id: wantsControlPlaneBinding ? state.provider_id : undefined,
+      env_public_id: wantsControlPlaneBinding ? state.env_public_id : undefined,
+    };
+  }
+
   async function saveConnectionFromDialog(): Promise<void> {
     const state = connectionDialogState();
     if (!state) {
       return;
     }
-    const saved = state.connection_kind === 'managed_local'
-      ? await performLauncherAction({
-        kind: 'upsert_managed_local_environment',
-        environment_id: state.environment_id || undefined,
-        environment_name: state.environment_name,
-        label: state.label,
-        local_ui_bind: state.local_ui_bind,
-        local_ui_password: state.local_ui_password,
-        local_ui_password_mode: state.local_ui_password_mode,
-      }, 'dialog')
-      : state.connection_kind === 'ssh_environment'
-      ? await upsertSavedSSHEnvironment({
+    let saved = false;
+    if (state.connection_kind === 'managed_environment') {
+      const managedRequest = buildManagedEnvironmentActionRequest(state, 'dialog');
+      if (!managedRequest) {
+        return;
+      }
+      saved = (await performLauncherAction(managedRequest, 'dialog')) !== null;
+    } else if (state.connection_kind === 'ssh_environment') {
+      saved = await upsertSavedSSHEnvironment({
         environment_id: state.environment_id,
         label: state.label,
         details: {
@@ -1657,8 +1775,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         successMessage: state.mode === 'edit'
           ? 'Connection updated.'
           : 'Connection saved to Environment Library.',
-      })
-      : await upsertSavedEnvironment({
+      });
+    } else {
+      saved = await upsertSavedEnvironment({
         environment_id: state.environment_id,
         label: state.label,
         external_local_ui_url: state.external_local_ui_url,
@@ -1667,6 +1786,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ? 'Connection updated.'
           : 'Connection saved to Environment Library.',
       });
+    }
     if (saved) {
       closeConnectionDialog();
     }
@@ -1677,16 +1797,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!state) {
       return;
     }
-    if (state.connection_kind === 'managed_local') {
-      const saved = await performLauncherAction({
-        kind: 'upsert_managed_local_environment',
-        environment_id: state.environment_id || undefined,
-        environment_name: state.environment_name,
-        label: state.label,
-        local_ui_bind: state.local_ui_bind,
-        local_ui_password: state.local_ui_password,
-        local_ui_password_mode: state.local_ui_password_mode,
-      }, 'dialog');
+    if (state.connection_kind === 'managed_environment') {
+      const request = buildManagedEnvironmentActionRequest(state, 'dialog');
+      if (!request) {
+        return;
+      }
+      const saved = await performLauncherAction(request, 'dialog');
       if (!saved) {
         return;
       }
@@ -1694,12 +1810,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       const managedEntry = snapshot().environments.find((environment) => (
         environment.kind === 'managed_environment'
         && (
-          (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
-          || environment.managed_environment_name === trimString(state.environment_name)
+          (
+            state.use_control_plane_binding === true
+            && environment.provider_origin === trimString(state.provider_origin)
+            && environment.provider_id === trimString(state.provider_id)
+            && environment.env_public_id === trimString(state.env_public_id)
+          )
+          || (
+            state.use_control_plane_binding !== true
+            && (
+              (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
+              || environment.managed_environment_name === trimString(state.environment_name)
+            )
+          )
         )
       )) ?? null;
       if (!managedEntry) {
-        setConnectionDialogError('Desktop saved the Local Environment, but could not reopen it yet.');
+        setConnectionDialogError('Desktop saved the managed environment, but could not reopen it yet.');
         return;
       }
       const opened = await openManagedEnvironment(managedEntry, 'dialog');
@@ -1791,12 +1918,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setBusyAction('delete_environment');
     try {
       await props.runtime.launcher.performAction({
-        kind: target.kind === 'ssh_environment' ? 'delete_saved_ssh_environment' : 'delete_saved_environment',
+        kind: target.kind === 'managed_environment'
+          ? 'delete_managed_environment'
+          : target.kind === 'ssh_environment'
+            ? 'delete_saved_ssh_environment'
+            : 'delete_saved_environment',
         environment_id: target.id,
       });
       await refreshSnapshot();
       setDeleteTarget(null);
-      showActionToast('Connection removed from Environment Library.');
+      showActionToast(
+        target.kind === 'managed_environment'
+          ? 'Environment removed from this device.'
+          : 'Connection removed from Environment Library.',
+      );
     } catch (error) {
       setConnectError(getErrorMessage(error));
     } finally {
@@ -1950,6 +2085,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         state={connectionDialogState()}
         error={connectionDialogError()}
         busyAction={busyAction()}
+        controlPlanes={snapshot().control_planes}
         onOpenChange={(open) => {
           if (!open) {
             closeConnectionDialog();
@@ -1957,6 +2093,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }}
         updateField={updateConnectionDialogField}
         switchKind={switchConnectionDialogKind}
+        toggleManagedEnvironmentControlPlaneBinding={toggleManagedEnvironmentControlPlaneBinding}
+        selectManagedEnvironmentControlPlane={selectManagedEnvironmentControlPlane}
+        selectManagedEnvironmentProviderEnvironment={selectManagedEnvironmentProviderEnvironment}
+        openCreateControlPlaneDialog={openCreateControlPlaneDialog}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
         onConnect={connectFromDialog}
         onSave={saveConnectionFromDialog}
@@ -1990,9 +2130,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
+            <Show
+              when={deleteTarget()?.kind === 'managed_environment'}
+              fallback={(
+                <>
+                  Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
+                </>
+              )}
+            >
+              Delete <span class="font-semibold">{deleteTarget()?.label}</span> from this device?
+            </Show>
           </p>
-          <p class="text-xs text-muted-foreground">This only removes the saved Desktop entry. It does not stop the remote Environment.</p>
+          <p class="text-xs text-muted-foreground">
+            <Show
+              when={deleteTarget()?.kind === 'managed_environment'}
+              fallback={'This only removes the saved Desktop entry. It does not stop the remote Environment.'}
+            >
+              Desktop will remove the local managed state for this device. If this environment is bound to a Control Plane, the remote environment will remain available there.
+            </Show>
+          </p>
         </div>
       </ConfirmDialog>
 
@@ -2085,7 +2241,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   issueRef: (value: HTMLElement) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openCreateControlPlaneDialog: (message?: string) => void;
   openRemoteEnvironment: (
     targetURL: string,
@@ -2424,7 +2580,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   showQuickAddCards: boolean;
   busyAction: BusyAction;
   environmentNotice: (environment: DesktopEnvironmentEntry) => EnvironmentActionNotice | null;
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -2945,7 +3101,7 @@ function EnvironmentConnectionCard(props: Readonly<{
 }
 
 function NewEnvironmentPlaceholderCard(props: Readonly<{
-  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
+  openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
 }>) {
   return (
     <Card class={cn(
@@ -2968,7 +3124,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
           <ConsoleChipActionButton
             onClick={(event) => {
               event.stopPropagation();
-              props.openCreateConnectionDialog('', 'managed_local');
+              props.openCreateConnectionDialog('', 'managed_environment');
             }}
           >
             Local
@@ -3643,19 +3799,39 @@ function ConnectionDialog(props: Readonly<{
   state: ConnectionDialogState;
   error: string;
   busyAction: BusyAction;
+  controlPlanes: readonly DesktopControlPlaneSummary[];
   onOpenChange: (open: boolean) => void;
   updateField: (
     name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
     value: string,
   ) => void;
-  switchKind: (kind: 'managed_local' | 'external_local_ui' | 'ssh_environment') => void;
+  switchKind: (kind: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
+  toggleManagedEnvironmentControlPlaneBinding: (enabled: boolean) => void;
+  selectManagedEnvironmentControlPlane: (controlPlaneKey: string) => void;
+  selectManagedEnvironmentProviderEnvironment: (envPublicID: string) => void;
+  openCreateControlPlaneDialog: (message?: string) => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
 }>) {
   const isOpen = createMemo(() => props.state !== null);
   const isCreate = createMemo(() => props.state?.mode === 'create');
-  const connectionKind = createMemo(() => props.state?.connection_kind ?? 'managed_local');
+  const connectionKind = createMemo(() => props.state?.connection_kind ?? 'managed_environment');
+  const managedEnvironmentState = createMemo(() => (
+    props.state?.connection_kind === 'managed_environment' ? props.state : null
+  ));
+  const useControlPlaneBinding = createMemo(() => managedEnvironmentState()?.use_control_plane_binding === true);
+  const selectedControlPlaneKey = createMemo(() => {
+    const state = managedEnvironmentState();
+    if (!state || trimString(state.provider_origin) === '' || trimString(state.provider_id) === '') {
+      return '';
+    }
+    return desktopControlPlaneKey(state.provider_origin, state.provider_id);
+  });
+  const selectedControlPlane = createMemo(() => (
+    props.controlPlanes.find((entry) => controlPlaneFilterValue(entry) === selectedControlPlaneKey()) ?? null
+  ));
+  const providerEnvironmentOptions = createMemo(() => selectedControlPlane()?.environments ?? []);
   const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
     open: false,
     initialized_for_state_key: 'closed',
@@ -3693,16 +3869,16 @@ function ConnectionDialog(props: Readonly<{
         );
       case 'ssh_environment':
         return 'Connect to another machine over SSH. Desktop can install the matching Redeven release on demand and tunnel its Local UI back to this desktop.';
-      case 'managed_local':
+      case 'managed_environment':
       default:
-        return 'Run a Desktop-managed Redeven environment on this machine. Use this when you want Desktop to start, store, and reopen the local runtime for you.';
+        return 'Run a Desktop-managed Redeven environment on this device. You can keep it local-only or bind it to one saved Control Plane environment for unified local and remote access.';
     }
   });
 
   createEffect(() => {
     setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(
       current,
-      props.state?.connection_kind === 'managed_local' ? null : props.state,
+      props.state?.connection_kind === 'managed_environment' ? null : props.state,
     ));
   });
 
@@ -3752,9 +3928,9 @@ function ConnectionDialog(props: Readonly<{
             <label class="block text-xs font-medium text-foreground">Environment Type</label>
             <SegmentedControl
               value={connectionKind()}
-              onChange={(value) => props.switchKind(value as 'managed_local' | 'external_local_ui' | 'ssh_environment')}
+              onChange={(value) => props.switchKind(value as 'managed_environment' | 'external_local_ui' | 'ssh_environment')}
               options={[
-                { value: 'managed_local', label: 'Local' },
+                { value: 'managed_environment', label: 'Managed' },
                 { value: 'external_local_ui', label: 'Redeven URL' },
                 { value: 'ssh_environment', label: 'SSH' },
               ]}
@@ -3778,25 +3954,27 @@ function ConnectionDialog(props: Readonly<{
           />
         </div>
 
-        <Show when={connectionKind() === 'managed_local'}>
+        <Show when={connectionKind() === 'managed_environment'}>
           <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="space-y-3">
-              <div class="space-y-1.5">
-                <label for="environment-name" class="block text-xs font-medium text-foreground">Environment Name</label>
-                <Input
-                  id="environment-name"
-                  value={props.state?.connection_kind === 'managed_local' ? props.state.environment_name : ''}
-                  onInput={(event) => props.updateField('environment_name', event.currentTarget.value)}
-                  placeholder="dev-a"
-                  size="sm"
-                  class="w-full font-mono"
-                  spellcheck={false}
-                  autofocus={props.state?.mode === 'create'}
-                />
-                <div class="text-[11px] text-muted-foreground">
-                  Desktop stores this environment under `local/&lt;name&gt;` inside the shared Redeven state root.
+              <Show when={!useControlPlaneBinding()}>
+                <div class="space-y-1.5">
+                  <label for="environment-name" class="block text-xs font-medium text-foreground">Environment Name</label>
+                  <Input
+                    id="environment-name"
+                    value={managedEnvironmentState()?.environment_name ?? ''}
+                    onInput={(event) => props.updateField('environment_name', event.currentTarget.value)}
+                    placeholder="dev-a"
+                    size="sm"
+                    class="w-full font-mono"
+                    spellcheck={false}
+                    autofocus={props.state?.mode === 'create'}
+                  />
+                  <div class="text-[11px] text-muted-foreground">
+                    Desktop stores this environment under `local/&lt;name&gt;` inside the shared Redeven state root.
+                  </div>
                 </div>
-              </div>
+              </Show>
               <div class="space-y-1.5">
                 <div class="flex items-center gap-1.5">
                   <label for="environment-local-bind" class="block text-xs font-medium text-foreground">Local UI Bind</label>
@@ -3875,7 +4053,7 @@ function ConnectionDialog(props: Readonly<{
                 </div>
                 <Input
                   id="environment-local-bind"
-                  value={props.state?.connection_kind === 'managed_local' ? props.state.local_ui_bind : ''}
+                  value={managedEnvironmentState()?.local_ui_bind ?? ''}
                   onInput={(event) => props.updateField('local_ui_bind', event.currentTarget.value)}
                   placeholder="localhost:23998"
                   size="sm"
@@ -3887,9 +4065,9 @@ function ConnectionDialog(props: Readonly<{
                 <label for="environment-local-password" class="block text-xs font-medium text-foreground">Local UI Password</label>
                 <Input
                   id="environment-local-password"
-                  value={props.state?.connection_kind === 'managed_local' ? props.state.local_ui_password : ''}
+                  value={managedEnvironmentState()?.local_ui_password ?? ''}
                   onInput={(event) => props.updateField('local_ui_password', event.currentTarget.value)}
-                  placeholder={props.state?.connection_kind === 'managed_local' && props.state.local_ui_password_configured
+                  placeholder={managedEnvironmentState()?.local_ui_password_configured
                     ? 'Leave blank to keep the stored password'
                     : 'Optional on loopback binds'}
                   type="password"
@@ -3900,6 +4078,74 @@ function ConnectionDialog(props: Readonly<{
                 <div class="text-[11px] text-muted-foreground">
                   Use a password for non-loopback binds. Leave this blank to keep the stored password when editing.
                 </div>
+              </div>
+              <div class="rounded-md border border-border/70 bg-background/80 px-3 py-3">
+                <div class="flex items-start gap-3">
+                  <Checkbox
+                    checked={useControlPlaneBinding()}
+                    onChange={(value) => props.toggleManagedEnvironmentControlPlaneBinding(value === true)}
+                  />
+                  <div class="min-w-0 flex-1 space-y-1">
+                    <div class="text-xs font-medium text-foreground">Connect To A Control Plane Environment</div>
+                    <div class="text-[11px] leading-5 text-muted-foreground">
+                      Keep one Desktop-managed entry for local hosting on this device and remote access through a saved Control Plane.
+                    </div>
+                  </div>
+                </div>
+
+                <Show when={useControlPlaneBinding()}>
+                  <div class="mt-3 space-y-3">
+                    <Show
+                      when={props.controlPlanes.length > 0}
+                      fallback={(
+                        <div class="rounded-md border border-dashed border-border/70 bg-muted/20 px-3 py-3 text-[11px] leading-5 text-muted-foreground">
+                          <div>No Control Plane is connected in Desktop yet.</div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            class="mt-3"
+                            onClick={() => props.openCreateControlPlaneDialog('Connect a Control Plane, then finish creating this environment.')}
+                          >
+                            Connect Control Plane
+                          </Button>
+                        </div>
+                      )}
+                    >
+                      <div class="space-y-1.5">
+                        <label for="managed-control-plane" class="block text-xs font-medium text-foreground">Control Plane</label>
+                        <Select
+                          value={selectedControlPlaneKey()}
+                          onChange={(value) => props.selectManagedEnvironmentControlPlane(String(value ?? ''))}
+                          options={props.controlPlanes.map((controlPlane) => ({
+                            value: controlPlaneFilterValue(controlPlane),
+                            label: controlPlaneName(controlPlane),
+                          }))}
+                          class="w-full"
+                        />
+                      </div>
+                      <div class="space-y-1.5">
+                        <label for="managed-control-plane-environment" class="block text-xs font-medium text-foreground">Control Plane Environment</label>
+                        <Select
+                          value={managedEnvironmentState()?.env_public_id ?? ''}
+                          onChange={(value) => props.selectManagedEnvironmentProviderEnvironment(String(value ?? ''))}
+                          options={providerEnvironmentOptions().map((environment) => ({
+                            value: environment.env_public_id,
+                            label: `${environment.label} (${desktopProviderEnvironmentRuntimeLabel(environment.status, environment.lifecycle_status)})`,
+                          }))}
+                          class="w-full"
+                        />
+                        <Show when={selectedControlPlane() && providerEnvironmentOptions().length <= 0}>
+                          <div class="text-[11px] text-muted-foreground">
+                            Desktop does not have any environments in the current catalog for this Control Plane. Refresh or reconnect it first.
+                          </div>
+                        </Show>
+                      </div>
+                      <div class="text-[11px] text-muted-foreground">
+                        Desktop stores local state under the selected Control Plane environment scope on this device.
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
               </div>
             </div>
           </div>

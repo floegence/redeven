@@ -132,7 +132,7 @@ import {
 } from './services/detachedSurface';
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
-import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
+import { readUIStorageItem, writeEnvironmentOwnedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 
 const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
@@ -226,7 +226,7 @@ function readPersistedExecutionMode(): 'act' | 'plan' {
 function persistActiveThreadId(threadId: string): void {
   const value = String(threadId ?? '').trim();
   if (!value) return;
-  writeUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, value);
+  writeEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, value);
 }
 
 function readPersistedActiveTab(): EnvNavTab | null {

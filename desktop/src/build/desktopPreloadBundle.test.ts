@@ -31,6 +31,7 @@ describe('buildDesktopPreloads', () => {
 
     expect(browserOutput).toContain('redevenDesktopAskFlowerHandoff');
     expect(browserOutput).toContain('redevenDesktopLauncher');
+    expect(browserOutput).toContain('redevenDesktopSessionContext');
     expect(browserOutput).toContain('redevenDesktopSettings');
     expect(browserOutput).toContain('redevenDesktopShell');
     expect(browserOutput).toContain('redevenDesktopStateStorage');
