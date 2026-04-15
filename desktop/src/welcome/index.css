@@ -247,8 +247,13 @@ body {
 
 /* ── Card body: flat fact rows ── */
 
+.redeven-card-facts-block {
+  --redeven-card-fact-row-min-height: 1.95rem;
+}
+
 .redeven-card-fact-row {
   display: flex;
+  min-height: var(--redeven-card-fact-row-min-height);
   align-items: center;
   justify-content: space-between;
   padding: 0.35rem 0;
@@ -276,6 +281,11 @@ body {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--foreground);
+}
+
+.redeven-card-fact-value--placeholder {
+  font-weight: 500;
+  color: var(--muted-foreground);
 }
 
 /* ── Card body: endpoints section ── */

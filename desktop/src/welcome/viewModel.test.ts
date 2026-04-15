@@ -24,6 +24,22 @@ import {
   splitPinnedEnvironmentEntries,
 } from './viewModel';
 
+function defaultFact(label: string, value: string) {
+  return {
+    label,
+    value,
+    value_tone: 'default' as const,
+  };
+}
+
+function placeholderFact(label: string, value = 'None') {
+  return {
+    label,
+    value,
+    value_tone: 'placeholder' as const,
+  };
+}
+
 describe('buildEnvironmentCardModel', () => {
   it('builds local, URL, and SSH card metadata from desktop snapshot entries', () => {
     const managedLocal = testManagedLocalEnvironment();
@@ -131,19 +147,22 @@ describe('buildEnvironmentCardModel', () => {
     ]));
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
-      { label: 'RUNS ON', value: 'This device' },
-      { label: 'ACCESS', value: 'Local' },
-      { label: 'LOCAL RUNTIME', value: 'Running in Desktop' },
-      { label: 'WINDOW', value: 'Stops on close' },
+      defaultFact('RUNS ON', 'This device'),
+      defaultFact('ACCESS', 'Local'),
+      defaultFact('LOCAL RUNTIME', 'Running in Desktop'),
+      defaultFact('WINDOW', 'Stops on close'),
+      placeholderFact('CONTROL PLANE'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
-      { label: 'ACCESS', value: 'Redeven URL' },
-      { label: 'CONNECTION', value: 'Open' },
+      defaultFact('ACCESS', 'Redeven URL'),
+      defaultFact('CONNECTION', 'Open'),
+      placeholderFact('CONTROL PLANE'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
-      { label: 'ACCESS', value: 'SSH' },
-      { label: 'CONNECTION', value: 'Open' },
-      { label: 'BOOTSTRAP', value: 'Desktop upload' },
+      defaultFact('ACCESS', 'SSH'),
+      defaultFact('CONNECTION', 'Open'),
+      defaultFact('BOOTSTRAP', 'Desktop upload'),
+      placeholderFact('CONTROL PLANE'),
     ]);
     expect(buildEnvironmentCardEndpointsModel(sshEntry!)).toEqual([
       {
@@ -595,15 +614,16 @@ describe('buildEnvironmentCardModel', () => {
     ]);
 
     expect(buildEnvironmentCardFactsModel(remoteOnlyEntry!)).toEqual([
-      { label: 'RUNS ON', value: 'Control Plane' },
-      { label: 'ACCESS', value: 'Remote' },
-      { label: 'CONTROL PLANE', value: 'Demo Portal' },
+      defaultFact('RUNS ON', 'Control Plane'),
+      defaultFact('ACCESS', 'Remote'),
+      placeholderFact('LOCAL RUNTIME'),
+      defaultFact('CONTROL PLANE', 'Demo Portal'),
     ]);
     expect(buildEnvironmentCardFactsModel(dualRouteEntry!)).toEqual([
-      { label: 'RUNS ON', value: 'This device' },
-      { label: 'ACCESS', value: 'Local + Remote' },
-      { label: 'LOCAL RUNTIME', value: 'Starts on open' },
-      { label: 'CONTROL PLANE', value: 'Demo Portal' },
+      defaultFact('RUNS ON', 'This device'),
+      defaultFact('ACCESS', 'Local + Remote'),
+      defaultFact('LOCAL RUNTIME', 'Starts on open'),
+      defaultFact('CONTROL PLANE', 'Demo Portal'),
     ]);
     expect(filterEnvironmentLibrary(
       snapshot,
@@ -743,11 +763,11 @@ describe('buildEnvironmentCardModel', () => {
       }),
     ]));
     expect(buildEnvironmentCardFactsModel(attachableEntry!)).toEqual([
-      { label: 'RUNS ON', value: 'This device' },
-      { label: 'ACCESS', value: 'Local + Remote' },
-      { label: 'LOCAL RUNTIME', value: 'Running externally' },
-      { label: 'WINDOW', value: 'Detaches on close' },
-      { label: 'CONTROL PLANE', value: 'https://cp.example.invalid' },
+      defaultFact('RUNS ON', 'This device'),
+      defaultFact('ACCESS', 'Local + Remote'),
+      defaultFact('LOCAL RUNTIME', 'Running externally'),
+      defaultFact('WINDOW', 'Detaches on close'),
+      defaultFact('CONTROL PLANE', 'https://cp.example.invalid'),
     ]);
   });
 

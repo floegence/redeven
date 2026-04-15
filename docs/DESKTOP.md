@@ -260,6 +260,7 @@ Interaction rules:
 - Environment Library cards use one fixed-height layout:
   - header with label, relative timestamp, pin/unpin icon, and status badge
   - compact facts rows such as `RUNS ON`, `ACCESS`, and `CONTROL PLANE`
+  - missing key facts render explicit placeholders such as `None` instead of silently dropping the row
   - an `Endpoint` block with readonly inputs plus `Copy`
   - pinned and regular sections align to the same card columns whenever both are visible
   - footer actions aligned vertically across card types
@@ -295,7 +296,7 @@ Interaction rules:
   - `Attach` appears for a local route when Desktop can tell that a compatible local runtime is already running and the next action will reuse it instead of starting a fresh one
 - Environment cards stay concise:
   - card bodies avoid explanatory helper prose under the actions
-  - only concrete identifiers, runtime details, badges, and notices stay visible inside the card
+  - only concrete identifiers, runtime details, badges, explicit `None` placeholders, and notices stay visible inside the card
 - Dual-route managed environments stay route-aware:
   - the footer uses a split primary action instead of persistent side-by-side `Open Local` and `Open Remote` buttons
   - the primary segment executes the resolved default route immediately
@@ -303,7 +304,9 @@ Interaction rules:
   - the local route may surface `Open`, `Attach`, or `Focus` depending on whether the runtime needs to be started, can be reused, or already has an open Desktop window
   - if this device can still host the environment locally, local open stays one click away even when the remote route is degraded
   - managed cards surface a compact `LOCAL RUNTIME` fact so users can distinguish `Starts on open`, `Running in Desktop`, and `Running externally`
+  - managed cards keep `LOCAL RUNTIME` and `CONTROL PLANE` visible even when one side is unavailable, using `None` as the explicit placeholder value
   - when a local runtime is already running, cards also surface whether the Desktop window `Stops on close` or `Detaches on close`
+- Direct Redeven URL and SSH cards still keep their type-specific facts, but also show `CONTROL PLANE = None` so the absence of a provider link is explicit.
 - Deleting a managed environment is a first-class action:
   - Desktop blocks deletion while a window for that managed environment is still open
   - the default local environment `local:default` is a protected Desktop entry and is not deletable from the launcher

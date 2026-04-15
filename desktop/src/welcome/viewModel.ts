@@ -39,6 +39,7 @@ export type EnvironmentCardMetaItem = Readonly<{
 export type EnvironmentCardFactModel = Readonly<{
   label: string;
   value: string;
+  value_tone: 'default' | 'placeholder';
 }>;
 
 export type EnvironmentCardEndpointModel = Readonly<{
@@ -357,6 +358,25 @@ function managedEnvironmentLocalCloseLabel(environment: DesktopEnvironmentEntry)
     : 'Stops on close';
 }
 
+function buildEnvironmentCardFact(label: string, value: string): EnvironmentCardFactModel {
+  return {
+    label,
+    value,
+    value_tone: 'default',
+  };
+}
+
+function buildPlaceholderEnvironmentCardFact(
+  label: string,
+  value = 'None',
+): EnvironmentCardFactModel {
+  return {
+    label,
+    value,
+    value_tone: 'placeholder',
+  };
+}
+
 function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string {
   return environment.control_plane_label || environment.provider_origin || '';
 }
@@ -366,49 +386,48 @@ export function buildEnvironmentCardFactsModel(
 ): readonly EnvironmentCardFactModel[] {
   if (environment.kind === 'managed_environment') {
     const facts: EnvironmentCardFactModel[] = [
-      {
-        label: 'RUNS ON',
-        value: environment.managed_has_local_hosting ? 'This device' : 'Control Plane',
-      },
-      {
-        label: 'ACCESS',
-        value: managedEnvironmentAccessLabel(environment),
-      },
+      buildEnvironmentCardFact(
+        'RUNS ON',
+        environment.managed_has_local_hosting ? 'This device' : 'Control Plane',
+      ),
+      buildEnvironmentCardFact('ACCESS', managedEnvironmentAccessLabel(environment)),
+      environment.managed_has_local_hosting
+        ? buildEnvironmentCardFact('LOCAL RUNTIME', managedEnvironmentLocalRuntimeLabel(environment))
+        : buildPlaceholderEnvironmentCardFact('LOCAL RUNTIME'),
     ];
-    if (environment.managed_has_local_hosting) {
-      facts.push({
-        label: 'LOCAL RUNTIME',
-        value: managedEnvironmentLocalRuntimeLabel(environment),
-      });
-      if (environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external') {
-        facts.push({
-          label: 'WINDOW',
-          value: managedEnvironmentLocalCloseLabel(environment),
-        });
-      }
+    if (
+      environment.managed_local_runtime_state === 'running_desktop'
+      || environment.managed_local_runtime_state === 'running_external'
+    ) {
+      facts.push(buildEnvironmentCardFact('WINDOW', managedEnvironmentLocalCloseLabel(environment)));
     }
     const controlPlaneLabel = controlPlaneDisplayLabel(environment);
-    if (controlPlaneLabel !== '') {
-      facts.push({
-        label: 'CONTROL PLANE',
-        value: controlPlaneLabel,
-      });
-    }
+    facts.push(
+      controlPlaneLabel !== ''
+        ? buildEnvironmentCardFact('CONTROL PLANE', controlPlaneLabel)
+        : buildPlaceholderEnvironmentCardFact('CONTROL PLANE'),
+    );
     return facts;
   }
 
   if (environment.kind === 'ssh_environment') {
-    return [
-      { label: 'ACCESS', value: 'SSH' },
-      { label: 'CONNECTION', value: environmentConnectionStateLabel(environment) },
-      { label: 'BOOTSTRAP', value: sshBootstrapSummary(environment) },
-    ].filter((fact) => fact.value !== '');
+    const facts: EnvironmentCardFactModel[] = [
+      buildEnvironmentCardFact('ACCESS', 'SSH'),
+      buildEnvironmentCardFact('CONNECTION', environmentConnectionStateLabel(environment)),
+    ];
+    const bootstrapSummary = sshBootstrapSummary(environment);
+    if (bootstrapSummary !== '') {
+      facts.push(buildEnvironmentCardFact('BOOTSTRAP', bootstrapSummary));
+    }
+    facts.push(buildPlaceholderEnvironmentCardFact('CONTROL PLANE'));
+    return facts;
   }
 
   return [
-    { label: 'ACCESS', value: 'Redeven URL' },
-    { label: 'CONNECTION', value: environmentConnectionStateLabel(environment) },
-  ].filter((fact) => fact.value !== '');
+    buildEnvironmentCardFact('ACCESS', 'Redeven URL'),
+    buildEnvironmentCardFact('CONNECTION', environmentConnectionStateLabel(environment)),
+    buildPlaceholderEnvironmentCardFact('CONTROL PLANE'),
+  ];
 }
 
 export function buildEnvironmentCardEndpointsModel(

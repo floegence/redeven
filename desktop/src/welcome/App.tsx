@@ -2775,13 +2775,21 @@ function EnvironmentCardFactsBlock(props: Readonly<{
   minRows?: number;
 }>) {
   return (
-    <div class="space-y-0">
+    <div
+      class="space-y-0 redeven-card-facts-block"
+      style={props.minRows && props.minRows > 0
+        ? { 'min-height': `calc(${props.minRows} * var(--redeven-card-fact-row-min-height))` }
+        : undefined}
+    >
       <For each={props.facts}>
         {(fact) => (
           <div class="redeven-card-fact-row">
             <div class="redeven-card-fact-label">{fact.label}</div>
             <div
-              class="redeven-card-fact-value"
+              class={cn(
+                'redeven-card-fact-value',
+                fact.value_tone === 'placeholder' && 'redeven-card-fact-value--placeholder',
+              )}
               title={fact.value}
             >
               {fact.value}
@@ -3310,7 +3318,7 @@ function EnvironmentConnectionCard(props: Readonly<{
         </div>
       </CardHeader>
       <CardContent class="flex flex-1 flex-col gap-2.5 px-3.5 pb-2.5">
-        <EnvironmentCardFactsBlock facts={facts()} />
+        <EnvironmentCardFactsBlock facts={facts()} minRows={4} />
         <Show when={endpoints().length > 0}>
           <EnvironmentCardEndpointBlock
             endpoints={endpoints()}
