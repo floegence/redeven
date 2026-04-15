@@ -62,7 +62,7 @@ import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateS
 import { DesktopThemeState } from './desktopThemeState';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { isAllowedAppNavigation } from './navigation';
-import { resolveBrowserPreloadPath, resolveBundledRuntimePath, resolveWelcomeRendererPath } from './paths';
+import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
 import { desktopSessionRuntimeHandleFromManagedRuntime, type DesktopSessionRuntimeHandle } from './sessionRuntime';
 import { startManagedSSHRuntime } from './sshRuntime';
@@ -82,8 +82,7 @@ import {
   type DesktopManagedEnvironment,
 } from '../shared/desktopManagedEnvironment';
 import {
-  exchangeProviderDesktopConnectHandoff,
-  exchangeProviderDesktopOpenHandoff,
+  exchangeProviderDesktopConnectAuthorization,
   fetchProviderAccount,
   fetchProviderDiscovery,
   fetchProviderEnvironments,
@@ -91,6 +90,12 @@ import {
   revokeProviderDesktopAuthorization,
   requestDesktopOpenSession,
 } from './controlPlaneProviderClient';
+import {
+  buildControlPlaneAuthorizationBrowserURL,
+  createPendingControlPlaneAuthorization,
+  isPendingControlPlaneAuthorizationExpired,
+  type PendingControlPlaneAuthorization,
+} from './controlPlaneAuthorization';
 import { DesktopProviderRequestError } from './controlPlaneProviderTransport';
 import {
   applyRestoredWindowState,
@@ -174,6 +179,7 @@ type OpenDesktopWelcomeOptions = Readonly<{
   stealAppFocus?: boolean;
 }>;
 
+type DesktopWindowSurface = 'utility' | 'session';
 type DesktopUtilityWindowKind = 'launcher';
 
 type DesktopUtilityWindowState = Readonly<{
@@ -279,7 +285,7 @@ let desktopStateStoreCache: DesktopStateStore | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
 const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessState>();
 const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
-const pendingControlPlaneDisplayLabelByOrigin = new Map<string, string>();
+const pendingControlPlaneAuthorizationsByState = new Map<string, PendingControlPlaneAuthorization>();
 const controlPlaneSyncTaskByKey = new Map<string, Promise<Readonly<{
   preferences: DesktopPreferences;
   controlPlane: DesktopSavedControlPlane;
@@ -318,34 +324,40 @@ function createInitialLoadDeferred(): Readonly<{
   };
 }
 
-function peekPendingControlPlaneDisplayLabel(providerOrigin: string): string {
-  try {
-    return String(pendingControlPlaneDisplayLabelByOrigin.get(normalizeControlPlaneOrigin(providerOrigin)) ?? '');
-  } catch {
-    return '';
-  }
-}
-
-function rememberPendingControlPlaneDisplayLabel(providerOrigin: string, displayLabel?: string): void {
-  try {
-    const key = normalizeControlPlaneOrigin(providerOrigin);
-    const cleanLabel = compact(displayLabel);
-    if (cleanLabel === '') {
-      pendingControlPlaneDisplayLabelByOrigin.delete(key);
-      return;
+function clearExpiredPendingControlPlaneAuthorizations(now = Date.now()): void {
+  for (const [state, pendingAuthorization] of pendingControlPlaneAuthorizationsByState) {
+    if (!isPendingControlPlaneAuthorizationExpired(pendingAuthorization, now)) {
+      continue;
     }
-    pendingControlPlaneDisplayLabelByOrigin.set(key, cleanLabel);
-  } catch {
-    // Ignore invalid origins while the launcher is still validating input.
+    pendingControlPlaneAuthorizationsByState.delete(state);
   }
 }
 
-function clearPendingControlPlaneDisplayLabel(providerOrigin: string): void {
-  try {
-    pendingControlPlaneDisplayLabelByOrigin.delete(normalizeControlPlaneOrigin(providerOrigin));
-  } catch {
-    // Ignore invalid origins during best-effort cleanup.
+function rememberPendingControlPlaneAuthorization(pendingAuthorization: PendingControlPlaneAuthorization): void {
+  clearExpiredPendingControlPlaneAuthorizations(pendingAuthorization.created_at_unix_ms);
+  for (const [state, existing] of pendingControlPlaneAuthorizationsByState) {
+    if (existing.provider_origin === pendingAuthorization.provider_origin) {
+      pendingControlPlaneAuthorizationsByState.delete(state);
+    }
   }
+  pendingControlPlaneAuthorizationsByState.set(pendingAuthorization.state, pendingAuthorization);
+}
+
+function consumePendingControlPlaneAuthorization(state: string): PendingControlPlaneAuthorization | null {
+  const cleanState = compact(state);
+  if (cleanState === '') {
+    return null;
+  }
+  clearExpiredPendingControlPlaneAuthorizations();
+  const pendingAuthorization = pendingControlPlaneAuthorizationsByState.get(cleanState) ?? null;
+  if (!pendingAuthorization) {
+    return null;
+  }
+  pendingControlPlaneAuthorizationsByState.delete(cleanState);
+  if (isPendingControlPlaneAuthorizationExpired(pendingAuthorization)) {
+    return null;
+  }
+  return pendingAuthorization;
 }
 
 function launcherActionSuccess(
@@ -785,11 +797,18 @@ function recordWindowLifecycle(
   void diagnostics.recordLifecycle(kind, message, detail);
 }
 
+function windowSurfaceForRole(role: CreateBrowserWindowArgs['role']): DesktopWindowSurface {
+  return role === 'launcher' ? 'utility' : 'session';
+}
+
 function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
   const spec = resolveDesktopWindowSpec(args.targetURL, Boolean(args.parent));
   const attachToParent = Boolean(args.parent) && spec.attachToParent !== false;
   const actualParent = attachToParent ? args.parent : undefined;
-  const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });
+  const surface = windowSurfaceForRole(args.role);
+  const preloadPath = surface === 'utility'
+    ? resolveUtilityPreloadPath({ appPath: app.getAppPath() })
+    : resolveSessionPreloadPath({ appPath: app.getAppPath() });
   const themeSnapshot = desktopThemeState().getSnapshot();
   const restoredState = desktopStateStore().getWindowState(args.stateKey);
   const restoredBounds = restoreBrowserWindowBounds(spec, desktopStateStore(), args.stateKey);
@@ -807,7 +826,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
     ...buildDesktopWindowChromeOptions(process.platform, themeSnapshot.window),
     parent: actualParent,
     webPreferences: {
-      preload: browserPreloadPath,
+      preload: preloadPath,
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -818,7 +837,10 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
   desktopThemeState().registerWindow(win);
   applyRestoredWindowState(win, restoredState);
   registerWindowStatePersistence(win, args.stateKey);
-  recordWindowLifecycle(args.diagnostics, 'window_created', 'browser window created', { role: args.role });
+  recordWindowLifecycle(args.diagnostics, 'window_created', 'browser window created', {
+    role: args.role,
+    surface,
+  });
 
   if (args.onWindowOpen) {
     win.webContents.setWindowOpenHandler(({ url, frameName }) => {
@@ -1487,6 +1509,20 @@ function savedControlPlaneByIdentity(
   )) ?? null;
 }
 
+function savedControlPlaneByOrigin(
+  preferences: DesktopPreferences,
+  providerOrigin: string,
+): DesktopSavedControlPlane | null {
+  try {
+    const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
+    return preferences.control_planes.find((controlPlane) => (
+      controlPlane.provider.provider_origin === normalizedOrigin
+    )) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function controlPlaneRefreshToken(
   preferences: DesktopPreferences,
   providerOrigin: string,
@@ -1714,15 +1750,44 @@ async function syncVisibleControlPlanesIfNeeded(options: Readonly<{ force?: bool
   await Promise.all(tasks);
 }
 
-function providerDesktopConnectPageURL(providerOrigin: string): string {
-  return new URL('/desktop/connect', normalizeControlPlaneOrigin(providerOrigin)).toString();
+function controlPlaneAuthorizationNeedsReconnect(error: unknown): boolean {
+  if (error instanceof DesktopProviderRequestError && (error.status === 401 || error.status === 403)) {
+    return true;
+  }
+  return error instanceof Error
+    && error.message === 'Desktop authorization is missing. Reconnect this Control Plane in your browser.';
 }
 
-async function saveConnectedControlPlane(
+async function startControlPlaneAuthorization(args: Readonly<{
+  providerOrigin: string;
+  expectedProviderID?: string;
+  requestedEnvPublicID?: string;
+  label?: string;
+  displayLabel?: string;
+}>): Promise<PendingControlPlaneAuthorization> {
+  const provider = await fetchProviderDiscovery(args.providerOrigin);
+  const expectedProviderID = compact(args.expectedProviderID);
+  if (expectedProviderID !== '' && provider.provider_id !== expectedProviderID) {
+    throw new Error(`Provider ID mismatch: expected ${expectedProviderID}, got ${provider.provider_id}.`);
+  }
+  const pendingAuthorization = createPendingControlPlaneAuthorization({
+    providerOrigin: provider.provider_origin,
+    providerID: provider.provider_id,
+    requestedEnvPublicID: args.requestedEnvPublicID,
+    label: args.label,
+    displayLabel: args.displayLabel,
+  });
+  rememberPendingControlPlaneAuthorization(pendingAuthorization);
+  await openExternalURL(buildControlPlaneAuthorizationBrowserURL(provider.provider_origin, pendingAuthorization));
+  return pendingAuthorization;
+}
+
+async function saveAuthorizedControlPlane(
   preferences: DesktopPreferences,
   providerOrigin: string,
   expectedProviderID: string | undefined,
-  handoffTicket: string,
+  authorizationCode: string,
+  codeVerifier: string,
   displayLabel?: string,
 ): Promise<Readonly<{
   preferences: DesktopPreferences;
@@ -1733,7 +1798,10 @@ async function saveConnectedControlPlane(
   if (cleanExpectedProviderID !== '' && provider.provider_id !== cleanExpectedProviderID) {
     throw new Error(`Provider ID mismatch: expected ${cleanExpectedProviderID}, got ${provider.provider_id}.`);
   }
-  const exchange = await exchangeProviderDesktopConnectHandoff(provider, handoffTicket);
+  const exchange = await exchangeProviderDesktopConnectAuthorization(provider, {
+    authorization_code: authorizationCode,
+    code_verifier: codeVerifier,
+  });
   rememberControlPlaneAccessState(
     provider.provider_origin,
     provider.provider_id,
@@ -1741,12 +1809,11 @@ async function saveConnectedControlPlane(
     exchange.access_expires_at_unix_ms,
     exchange.authorization_expires_at_unix_ms,
   );
-  const resolvedDisplayLabel = compact(displayLabel) || peekPendingControlPlaneDisplayLabel(provider.provider_origin);
   const nextPreferences = upsertSavedControlPlane(preferences, {
     provider,
     account: exchange.account,
     environments: exchange.environments,
-    display_label: resolvedDisplayLabel || undefined,
+    display_label: compact(displayLabel) || undefined,
     last_synced_at_ms: Date.now(),
     refresh_token: exchange.refresh_token,
   });
@@ -1755,7 +1822,6 @@ async function saveConnectedControlPlane(
     throw new Error('Desktop failed to save the Control Plane account.');
   }
   await persistDesktopPreferences(nextPreferences);
-  clearPendingControlPlaneDisplayLabel(provider.provider_origin);
   setControlPlaneSyncRecord(provider.provider_origin, provider.provider_id, {
     sync_state: 'ready',
     last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
@@ -2640,9 +2706,10 @@ async function openSSHEnvironmentFromLauncher(
 async function startControlPlaneConnectFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'start_control_plane_connect' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  const provider = await fetchProviderDiscovery(request.provider_origin);
-  rememberPendingControlPlaneDisplayLabel(provider.provider_origin, request.display_label);
-  await openExternalURL(providerDesktopConnectPageURL(provider.provider_origin));
+  await startControlPlaneAuthorization({
+    providerOrigin: request.provider_origin,
+    displayLabel: request.display_label,
+  });
   resetLauncherIssueState();
   broadcastDesktopWelcomeSnapshots();
   return launcherActionSuccess('started_control_plane_connect', {
@@ -3483,15 +3550,20 @@ type DesktopDeepLinkRequest =
   | Readonly<{
       kind: 'connect_control_plane';
       provider_origin: string;
-      handoff_ticket: string;
+      provider_id?: string;
     }>
   | Readonly<{
       kind: 'open_control_plane_environment';
       provider_origin: string;
       provider_id?: string;
       env_public_id: string;
-      handoff_ticket: string;
       label?: string;
+    }>
+  | Readonly<{
+      kind: 'authorized_control_plane';
+      provider_origin: string;
+      state: string;
+      authorization_code: string;
     }>;
 
 function detectDesktopDeepLink(argv: readonly string[]): string | null {
@@ -3507,23 +3579,21 @@ function parseDesktopDeepLink(rawURL: string): DesktopDeepLinkRequest | null {
 
     if (parsed.hostname === 'control-plane' && parsed.pathname === '/connect') {
       const providerOrigin = String(parsed.searchParams.get('provider_origin') ?? '').trim();
-      const handoffTicket = String(parsed.searchParams.get('handoff_ticket') ?? '').trim();
-      if (providerOrigin === '' || handoffTicket === '') {
+      if (providerOrigin === '') {
         return null;
       }
       return {
         kind: 'connect_control_plane',
         provider_origin: providerOrigin,
-        handoff_ticket: handoffTicket,
+        provider_id: String(parsed.searchParams.get('provider_id') ?? '').trim() || undefined,
       };
     }
 
     if (parsed.hostname === 'control-plane' && parsed.pathname === '/open') {
       const providerOrigin = String(parsed.searchParams.get('provider_origin') ?? '').trim();
       const envPublicID = String(parsed.searchParams.get('env_public_id') ?? '').trim();
-      const handoffTicket = String(parsed.searchParams.get('handoff_ticket') ?? '').trim();
       const label = String(parsed.searchParams.get('label') ?? '').trim();
-      if (providerOrigin === '' || envPublicID === '' || handoffTicket === '') {
+      if (providerOrigin === '' || envPublicID === '') {
         return null;
       }
       return {
@@ -3531,8 +3601,22 @@ function parseDesktopDeepLink(rawURL: string): DesktopDeepLinkRequest | null {
         provider_origin: providerOrigin,
         provider_id: String(parsed.searchParams.get('provider_id') ?? '').trim() || undefined,
         env_public_id: envPublicID,
-        handoff_ticket: handoffTicket,
         label: label || undefined,
+      };
+    }
+
+    if (parsed.hostname === 'control-plane' && parsed.pathname === '/authorized') {
+      const providerOrigin = String(parsed.searchParams.get('provider_origin') ?? '').trim();
+      const state = String(parsed.searchParams.get('state') ?? '').trim();
+      const authorizationCode = String(parsed.searchParams.get('authorization_code') ?? '').trim();
+      if (providerOrigin === '' || state === '' || authorizationCode === '') {
+        return null;
+      }
+      return {
+        kind: 'authorized_control_plane',
+        provider_origin: providerOrigin,
+        state,
+        authorization_code: authorizationCode,
       };
     }
   } catch {
@@ -3545,32 +3629,115 @@ function parseDesktopDeepLink(rawURL: string): DesktopDeepLinkRequest | null {
 async function connectControlPlaneFromDeepLink(
   request: Extract<DesktopDeepLinkRequest, Readonly<{ kind: 'connect_control_plane' }>>,
 ): Promise<void> {
-  const preferences = await loadDesktopPreferencesCached();
-  await saveConnectedControlPlane(
-    preferences,
-    request.provider_origin,
-    undefined,
-    request.handoff_ticket,
-    undefined,
-  );
+  await startControlPlaneAuthorization({
+    providerOrigin: request.provider_origin,
+    expectedProviderID: request.provider_id,
+  });
   resetLauncherIssueState();
+  broadcastDesktopWelcomeSnapshots();
 }
 
 async function openControlPlaneEnvironmentFromDeepLink(
   request: Extract<DesktopDeepLinkRequest, Readonly<{ kind: 'open_control_plane_environment' }>>,
-): Promise<DesktopLauncherActionResult> {
-  const openSession = await exchangeProviderDesktopOpenHandoff(
-    request.provider_origin,
-    request.handoff_ticket,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const controlPlane = request.provider_id
+    ? savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id)
+    : savedControlPlaneByOrigin(preferences, request.provider_origin);
+  if (!controlPlane) {
+    await startControlPlaneAuthorization({
+      providerOrigin: request.provider_origin,
+      expectedProviderID: request.provider_id,
+      requestedEnvPublicID: request.env_public_id,
+      label: request.label,
+    });
+    resetLauncherIssueState();
+    broadcastDesktopWelcomeSnapshots();
+    return;
+  }
+
+  try {
+    const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
+    const openSession = await requestDesktopOpenSession(
+      authorized.controlPlane.provider,
+      authorized.accessToken,
+      request.env_public_id,
+    );
+    const result = await openControlPlaneEnvironmentWithOpenSession({
+      providerOrigin: authorized.controlPlane.provider.provider_origin,
+      providerID: authorized.controlPlane.provider.provider_id,
+      envPublicID: request.env_public_id,
+      bootstrapTicket: openSession.bootstrap_ticket,
+      remoteSessionURL: openSession.remote_session_url,
+      label: request.label,
+    });
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+    resetLauncherIssueState();
+  } catch (error) {
+    if (!controlPlaneAuthorizationNeedsReconnect(error)) {
+      throw error;
+    }
+    await startControlPlaneAuthorization({
+      providerOrigin: controlPlane.provider.provider_origin,
+      expectedProviderID: controlPlane.provider.provider_id,
+      requestedEnvPublicID: request.env_public_id,
+      label: request.label,
+      displayLabel: controlPlane.display_label,
+    });
+    resetLauncherIssueState();
+    broadcastDesktopWelcomeSnapshots();
+  }
+}
+
+async function completeControlPlaneAuthorizationFromDeepLink(
+  request: Extract<DesktopDeepLinkRequest, Readonly<{ kind: 'authorized_control_plane' }>>,
+): Promise<void> {
+  const pendingAuthorization = consumePendingControlPlaneAuthorization(request.state);
+  if (!pendingAuthorization) {
+    throw new Error('Desktop failed to match the Control Plane authorization state.');
+  }
+  if (normalizeControlPlaneOrigin(request.provider_origin) !== pendingAuthorization.provider_origin) {
+    throw new Error('Desktop failed to match the Control Plane authorization provider.');
+  }
+
+  const preferences = await loadDesktopPreferencesCached();
+  const connected = await saveAuthorizedControlPlane(
+    preferences,
+    pendingAuthorization.provider_origin,
+    pendingAuthorization.provider_id,
+    request.authorization_code,
+    pendingAuthorization.code_verifier,
+    pendingAuthorization.display_label,
   );
-  return openControlPlaneEnvironmentWithOpenSession({
-    providerOrigin: request.provider_origin,
-    providerID: request.provider_id,
-    envPublicID: request.env_public_id,
+  resetLauncherIssueState();
+
+  if (!pendingAuthorization.requested_env_public_id) {
+    await openDesktopWelcomeWindow({
+      entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
+      stealAppFocus: true,
+    });
+    return;
+  }
+
+  const authorized = await ensureControlPlaneAccessToken(connected.preferences, connected.controlPlane);
+  const openSession = await requestDesktopOpenSession(
+    authorized.controlPlane.provider,
+    authorized.accessToken,
+    pendingAuthorization.requested_env_public_id,
+  );
+  const result = await openControlPlaneEnvironmentWithOpenSession({
+    providerOrigin: authorized.controlPlane.provider.provider_origin,
+    providerID: authorized.controlPlane.provider.provider_id,
+    envPublicID: pendingAuthorization.requested_env_public_id,
     bootstrapTicket: openSession.bootstrap_ticket,
     remoteSessionURL: openSession.remote_session_url,
-    label: request.label,
+    label: pendingAuthorization.label,
   });
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
 }
 
 async function handleDesktopDeepLink(rawURL: string): Promise<void> {
@@ -3587,10 +3754,11 @@ async function handleDesktopDeepLink(rawURL: string): Promise<void> {
   try {
     if (request.kind === 'connect_control_plane') {
       await connectControlPlaneFromDeepLink(request);
-      await openDesktopWelcomeWindow({
-        entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
-        stealAppFocus: true,
-      });
+      return;
+    }
+
+    if (request.kind === 'authorized_control_plane') {
+      await completeControlPlaneAuthorizationFromDeepLink(request);
       return;
     }
 

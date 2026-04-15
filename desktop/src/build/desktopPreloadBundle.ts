@@ -23,12 +23,12 @@ function resolveDesktopPreloadEntries(options: DesktopPreloadBuildOptions = {}):
 
   return [
     {
-      entryPoint: path.join(desktopRoot, 'src', 'preload', 'browser.ts'),
-      outfile: path.join(outDir, 'browser.js'),
+      entryPoint: path.join(desktopRoot, 'src', 'preload', 'utility.ts'),
+      outfile: path.join(outDir, 'utility.js'),
     },
     {
-      entryPoint: path.join(desktopRoot, 'src', 'preload', 'settings.ts'),
-      outfile: path.join(outDir, 'settings.js'),
+      entryPoint: path.join(desktopRoot, 'src', 'preload', 'session.ts'),
+      outfile: path.join(outDir, 'session.js'),
     },
   ];
 }

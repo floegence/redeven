@@ -8,21 +8,31 @@ function readDesktopFile(relPath: string): string {
 }
 
 describe('desktop persistence wiring', () => {
-  it('keeps the preload state bridge enabled for desktop browser windows', () => {
-    const preloadSrc = readDesktopFile('../preload/browser.ts');
+  it('splits utility and session preload surfaces by bridge responsibility', () => {
+    const utilityPreloadSrc = readDesktopFile('../preload/utility.ts');
+    const sessionPreloadSrc = readDesktopFile('../preload/session.ts');
 
-    expect(preloadSrc).toContain("import { bootstrapDesktopAskFlowerHandoffBridge } from './askFlowerHandoff';");
-    expect(preloadSrc).toContain('bootstrapDesktopAskFlowerHandoffBridge();');
-    expect(preloadSrc).toContain("import { bootstrapDesktopLauncherBridge } from './desktopLauncher';");
-    expect(preloadSrc).toContain('bootstrapDesktopLauncherBridge();');
-    expect(preloadSrc).toContain("import { bootstrapDesktopSessionContextBridge } from './desktopSessionContext';");
-    expect(preloadSrc).toContain('bootstrapDesktopSessionContextBridge();');
-    expect(preloadSrc).toContain("import { bootstrapDesktopSettingsBridge } from './desktopSettingsBridge';");
-    expect(preloadSrc).toContain('bootstrapDesktopSettingsBridge();');
-    expect(preloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
-    expect(preloadSrc).toContain('bootstrapDesktopShellBridge();');
-    expect(preloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
-    expect(preloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
+    expect(utilityPreloadSrc).toContain("import { bootstrapDesktopLauncherBridge } from './desktopLauncher';");
+    expect(utilityPreloadSrc).toContain('bootstrapDesktopLauncherBridge();');
+    expect(utilityPreloadSrc).toContain("import { bootstrapDesktopSettingsBridge } from './desktopSettingsBridge';");
+    expect(utilityPreloadSrc).toContain('bootstrapDesktopSettingsBridge();');
+    expect(utilityPreloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
+    expect(utilityPreloadSrc).toContain('bootstrapDesktopShellBridge();');
+    expect(utilityPreloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
+    expect(utilityPreloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
+    expect(utilityPreloadSrc).not.toContain('bootstrapDesktopAskFlowerHandoffBridge');
+    expect(utilityPreloadSrc).not.toContain('bootstrapDesktopSessionContextBridge');
+
+    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopAskFlowerHandoffBridge } from './askFlowerHandoff';");
+    expect(sessionPreloadSrc).toContain('bootstrapDesktopAskFlowerHandoffBridge();');
+    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopSessionContextBridge } from './desktopSessionContext';");
+    expect(sessionPreloadSrc).toContain('bootstrapDesktopSessionContextBridge();');
+    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
+    expect(sessionPreloadSrc).toContain('bootstrapDesktopShellBridge();');
+    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
+    expect(sessionPreloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
+    expect(sessionPreloadSrc).not.toContain('bootstrapDesktopLauncherBridge');
+    expect(sessionPreloadSrc).not.toContain('bootstrapDesktopSettingsBridge');
   });
 
   it('keeps electron main wired to the desktop state store, utility windows, and session-scoped ownership maps', () => {
@@ -54,8 +64,12 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();');
     expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain('const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();');
-    expect(mainSrc).toContain("const browserPreloadPath = resolveBrowserPreloadPath({ appPath: app.getAppPath() });");
-    expect(mainSrc).toContain('preload: browserPreloadPath,');
+    expect(mainSrc).toContain("function windowSurfaceForRole(role: CreateBrowserWindowArgs['role']): DesktopWindowSurface {");
+    expect(mainSrc).toContain("return role === 'launcher' ? 'utility' : 'session';");
+    expect(mainSrc).toContain("const preloadPath = surface === 'utility'");
+    expect(mainSrc).toContain("resolveUtilityPreloadPath({ appPath: app.getAppPath() })");
+    expect(mainSrc).toContain("resolveSessionPreloadPath({ appPath: app.getAppPath() })");
+    expect(mainSrc).toContain('preload: preloadPath,');
     expect(mainSrc).toContain("stateKey: utilityWindowStateKey()");
     expect(mainSrc).toContain("stateKey: sessionWindowStateKey(sessionKey)");
     expect(mainSrc).toContain('sessionChildWindowStateKey(sessionKey, childKey)');

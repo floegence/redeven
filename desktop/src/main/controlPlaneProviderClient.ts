@@ -18,7 +18,6 @@ const PROVIDER_DISCOVERY_PATH = '/.well-known/redeven-provider.json';
 const PROVIDER_ME_PATH = '/api/rcpp/v1/me';
 const PROVIDER_ENVIRONMENTS_PATH = '/api/rcpp/v1/environments';
 const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v1/desktop/connect/exchange';
-const PROVIDER_DESKTOP_OPEN_EXCHANGE_PATH = '/api/rcpp/v1/desktop/open/exchange';
 const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v1/desktop/token/refresh';
 const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v1/desktop/token/revoke';
 const PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX = '/desktop/open-session';
@@ -38,6 +37,11 @@ export type ProviderDesktopConnectExchangeResult = Readonly<{
   authorization_expires_at_unix_ms: number;
   account: DesktopControlPlaneAccount;
   environments: readonly DesktopProviderEnvironment[];
+}>;
+
+export type ProviderDesktopConnectAuthorization = Readonly<{
+  authorization_code: string;
+  code_verifier: string;
 }>;
 
 export type ProviderDesktopTokenRefreshResult = Readonly<{
@@ -313,42 +317,24 @@ export async function fetchProviderDiscovery(
   return provider;
 }
 
-export async function exchangeProviderDesktopConnectHandoff(
+export async function exchangeProviderDesktopConnectAuthorization(
   provider: DesktopControlPlaneProvider,
-  handoffTicket: string,
+  authorization: ProviderDesktopConnectAuthorization,
   requestOptions: ProviderClientRequestOptions = {},
 ): Promise<ProviderDesktopConnectExchangeResult> {
   const body = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH),
     {
       method: 'POST',
-      bearerToken: handoffTicket,
+      body: {
+        authorization_code: compact(authorization.authorization_code),
+        code_verifier: compact(authorization.code_verifier),
+      },
       operationLabel: 'the desktop connect exchange',
       transport: requestOptions.transport,
     },
   );
   return normalizeProviderDesktopConnectExchangeResponse(provider, body);
-}
-
-export async function exchangeProviderDesktopOpenHandoff(
-  providerOrigin: string,
-  handoffTicket: string,
-  requestOptions: ProviderClientRequestOptions = {},
-): Promise<ProviderDesktopOpenSession> {
-  const body = await fetchProviderJSON(
-    providerRequestURL(providerOrigin, PROVIDER_DESKTOP_OPEN_EXCHANGE_PATH),
-    {
-      method: 'POST',
-      bearerToken: handoffTicket,
-      operationLabel: 'the desktop open exchange',
-      transport: requestOptions.transport,
-    },
-  );
-  return normalizeProviderOpenSessionResponse(
-    normalizeControlPlaneOrigin(providerOrigin),
-    body,
-    'The Control Plane desktop open exchange response is invalid.',
-  );
 }
 
 export async function refreshProviderDesktopAccessToken(
