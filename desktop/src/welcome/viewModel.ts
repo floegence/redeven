@@ -135,6 +135,18 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function looksLikeAbsoluteURL(value: string): boolean {
+  return value.startsWith('http://') || value.startsWith('https://');
+}
+
+function shouldUseMonospaceEndpoint(value: string): boolean {
+  const clean = compact(value);
+  if (clean === '') {
+    return false;
+  }
+  return looksLikeAbsoluteURL(clean) || clean.includes(':') || clean.includes('/');
+}
+
 function normalizePositiveInteger(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -402,19 +414,40 @@ export function buildEnvironmentCardFactsModel(
 export function buildEnvironmentCardEndpointsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardEndpointModel[] {
+  if (environment.kind === 'managed_environment') {
+    const localEndpoint = compact(environment.local_ui_url) || compact(environment.managed_local_ui_bind) || compact(environment.managed_environment_name);
+    const remoteEndpoint = compact(environment.remote_environment_url);
+    return [
+      environment.managed_has_local_hosting && localEndpoint !== ''
+        ? {
+            label: looksLikeAbsoluteURL(localEndpoint) ? 'URL' : 'LOCAL',
+            value: localEndpoint,
+            monospace: shouldUseMonospaceEndpoint(localEndpoint),
+            copy_label: 'Copy local endpoint',
+          }
+        : null,
+      remoteEndpoint !== ''
+        ? {
+            label: 'REMOTE',
+            value: remoteEndpoint,
+            monospace: shouldUseMonospaceEndpoint(remoteEndpoint),
+            copy_label: 'Copy environment URL',
+          }
+        : null,
+    ].filter((item): item is EnvironmentCardEndpointModel => item !== null);
+  }
+
   const card = buildEnvironmentCardModel(environment);
   const primaryLabel = environment.kind === 'ssh_environment'
     ? 'SSH'
     : environment.kind === 'external_local_ui'
       ? 'URL'
       : environment.managed_has_local_hosting
-        ? (card.target_primary.startsWith('http://') || card.target_primary.startsWith('https://') ? 'URL' : 'LOCAL')
+        ? (looksLikeAbsoluteURL(card.target_primary) ? 'URL' : 'LOCAL')
         : 'REMOTE';
   const secondaryLabel = environment.kind === 'ssh_environment'
     ? 'URL'
-    : environment.kind === 'managed_environment'
-      ? 'REMOTE'
-      : 'DETAIL';
+    : 'DETAIL';
   return [
     card.target_primary !== ''
       ? {
@@ -1069,14 +1102,13 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   if (environment.kind === 'managed_environment') {
     const hasLocalHosting = environment.managed_has_local_hosting === true;
-    const providerSummary = [environment.provider_origin, environment.env_public_id].filter(Boolean).join(' · ');
-    const hostSummary = environment.managed_local_ui_bind || environment.managed_environment_name || environment.secondary_text;
-    const targetPrimary = environment.local_ui_url
-      || (hasLocalHosting
-        ? hostSummary
-        : providerSummary || environment.secondary_text || 'Provider-backed environment');
-    const targetSecondary = providerSummary !== '' && providerSummary !== targetPrimary
-      ? providerSummary
+    const localEndpoint = compact(environment.local_ui_url) || compact(environment.managed_local_ui_bind) || compact(environment.managed_environment_name);
+    const remoteEndpoint = compact(environment.remote_environment_url);
+    const targetPrimary = hasLocalHosting
+      ? (localEndpoint || remoteEndpoint || environment.secondary_text || 'Local environment')
+      : (remoteEndpoint || environment.secondary_text || localEndpoint || 'Provider-backed environment');
+    const targetSecondary = hasLocalHosting && remoteEndpoint !== '' && remoteEndpoint !== targetPrimary
+      ? remoteEndpoint
       : '';
     return {
       kind_label: environmentKindLabel(environment),
@@ -1085,8 +1117,8 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       source_label: 'Desktop-managed',
       target_primary: targetPrimary,
       target_secondary: targetSecondary,
-      target_primary_monospace: true,
-      target_secondary_monospace: false,
+      target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
+      target_secondary_monospace: shouldUseMonospaceEndpoint(targetSecondary),
       meta: environmentCardMeta(environment),
     };
   }

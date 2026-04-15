@@ -27,6 +27,7 @@ export type DesktopProviderEnvironment = Readonly<{
   provider_origin: string;
   env_public_id: string;
   label: string;
+  environment_url?: string;
   description: string;
   namespace_public_id: string;
   namespace_name: string;
@@ -128,6 +129,22 @@ function normalizeUnixMS(value: unknown): number {
   return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0;
 }
 
+function normalizeEnvironmentURL(value: unknown): string {
+  const clean = compact(value);
+  if (clean === '') {
+    return '';
+  }
+  try {
+    const parsed = new URL(clean);
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || compact(parsed.host) === '') {
+      return '';
+    }
+    return parsed.toString();
+  } catch {
+    return '';
+  }
+}
+
 export function normalizeDesktopControlPlaneProvider(value: unknown): DesktopControlPlaneProvider | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -207,6 +224,7 @@ export function normalizeDesktopProviderEnvironment(
   const candidate = value as Record<string, unknown>;
   const envPublicID = compact(candidate.env_public_id);
   const label = compact(candidate.name);
+  const environmentURL = normalizeEnvironmentURL(candidate.environment_url);
   if (envPublicID === '' || label === '') {
     return null;
   }
@@ -216,6 +234,7 @@ export function normalizeDesktopProviderEnvironment(
     provider_origin: options.provider.provider_origin,
     env_public_id: envPublicID,
     label,
+    environment_url: environmentURL || undefined,
     description: compact(candidate.description),
     namespace_public_id: compact(candidate.namespace_public_id),
     namespace_name: compact(candidate.namespace_name),

@@ -121,6 +121,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  remote_environment_url?: string;
   provider_status?: string;
   provider_lifecycle_status?: string;
   provider_last_seen_at_unix_ms?: number;
