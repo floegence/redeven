@@ -80,6 +80,7 @@ import {
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
+  buildEnvironmentLibraryLayoutModel,
   buildDesktopWelcomeShellViewModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardEndpointsModel,
@@ -98,6 +99,7 @@ import {
   libraryFilterLabel,
   type EnvironmentLibraryFilter,
   type EnvironmentSplitMenuActionModel,
+  shouldUseSpaciousEnvironmentGrid,
   shellStatus,
 } from './viewModel';
 import {
@@ -260,11 +262,6 @@ type ControlPlaneDialogState = Readonly<{
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
-const SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD = 4;
-
-function shouldUseSpaciousEnvironmentGrid(cardCount: number): boolean {
-  return cardCount >= SPACIOUS_ENVIRONMENT_GRID_CARD_THRESHOLD;
-}
 
 const EMPTY_SETTINGS_DRAFT: DesktopSettingsDraft = {
   local_ui_bind: '',
@@ -278,6 +275,33 @@ const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
 const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
 const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
 const ACTION_TOAST_TTL_MS = 4_000;
+
+function normalizePixelMeasurement(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.round(value));
+}
+
+function readMeasuredElementWidth(element: HTMLElement | undefined): number {
+  if (!element) {
+    return 0;
+  }
+  return normalizePixelMeasurement(
+    element.getBoundingClientRect().width || element.clientWidth || element.offsetWidth,
+  );
+}
+
+function readDocumentRootFontSizePx(): number {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return 16;
+  }
+  const value = Number.parseFloat(window.getComputedStyle(document.documentElement).fontSize);
+  if (!Number.isFinite(value) || value <= 0) {
+    return 16;
+  }
+  return value;
+}
 
 function buildDesktopFloeConfig() {
   const themeBridge = desktopThemeBridge();
@@ -2445,6 +2469,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               <EnvironmentCardsPanel
                 entries={props.libraryEntries}
                 showQuickAddCards={showQuickAddCards()}
+                visibleCardCount={visibleEnvironmentCardCount()}
                 busyAction={props.busyAction}
                 openCreateConnectionDialog={props.openCreateConnectionDialog}
                 openEnvironment={props.openEnvironment}
@@ -2466,6 +2491,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
 function EnvironmentCardsPanel(props: Readonly<{
   entries: readonly DesktopEnvironmentEntry[];
   showQuickAddCards: boolean;
+  visibleCardCount: number;
   busyAction: BusyAction;
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (
@@ -2484,10 +2510,48 @@ function EnvironmentCardsPanel(props: Readonly<{
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
   deleteEnvironment: (environment: DesktopEnvironmentEntry) => void;
 }>) {
+  const [environmentLibraryElement, setEnvironmentLibraryElement] = createSignal<HTMLDivElement>();
+  const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
+  const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
   const groupedEntries = createMemo(() => splitPinnedEnvironmentEntries(props.entries));
-  const useSpaciousGrid = createMemo(() => (
-    shouldUseSpaciousEnvironmentGrid(props.entries.length + (props.showQuickAddCards ? 1 : 0))
-  ));
+  // Keep pinned and regular sections on one measured column system so pinning only changes grouping.
+  const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
+    visible_card_count: props.visibleCardCount,
+    container_width_px: environmentLibraryWidthPx(),
+    root_font_size_px: rootFontSizePx(),
+  }));
+  const environmentGridStyle = createMemo<JSX.CSSProperties>(() => ({
+    '--redeven-environment-grid-columns': String(layoutModel().column_count),
+  }));
+
+  createEffect(() => {
+    const element = environmentLibraryElement();
+    if (!element) {
+      return;
+    }
+
+    const updateLayoutMetrics = () => {
+      setEnvironmentLibraryWidthPx(readMeasuredElementWidth(element));
+      setRootFontSizePx(readDocumentRootFontSizePx());
+    };
+
+    updateLayoutMetrics();
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => updateLayoutMetrics());
+    resizeObserver?.observe(element);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', updateLayoutMetrics);
+    }
+
+    onCleanup(() => {
+      resizeObserver?.disconnect();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', updateLayoutMetrics);
+      }
+    });
+  });
 
   return (
     <div class="space-y-3">
@@ -2511,47 +2575,56 @@ function EnvironmentCardsPanel(props: Readonly<{
           </Motion.div>
         )}
       >
-        <div class={cn('redeven-environment-grid', useSpaciousGrid() && 'redeven-environment-grid--spacious')}>
+        <div
+          ref={setEnvironmentLibraryElement}
+          class="redeven-environment-library space-y-3"
+          data-density={layoutModel().density}
+          style={environmentGridStyle()}
+        >
           <Show when={groupedEntries().pinned_entries.length > 0}>
-            <EnvironmentGridSectionTitle title="Pinned" />
+            <EnvironmentLibrarySection title="Pinned">
+              <For each={groupedEntries().pinned_entries}>
+                {(environment) => (
+                  <EnvironmentConnectionCard
+                    environment={environment}
+                    busyAction={props.busyAction}
+                    openEnvironment={props.openEnvironment}
+                    runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                    toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                    copyEnvironmentValue={props.copyEnvironmentValue}
+                    saveEnvironment={props.saveEnvironment}
+                    editEnvironment={props.editEnvironment}
+                    deleteEnvironment={props.deleteEnvironment}
+                  />
+                )}
+              </For>
+            </EnvironmentLibrarySection>
           </Show>
-          <For each={groupedEntries().pinned_entries}>
-            {(environment) => (
-              <EnvironmentConnectionCard
-                environment={environment}
-                busyAction={props.busyAction}
-                openEnvironment={props.openEnvironment}
-                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                copyEnvironmentValue={props.copyEnvironmentValue}
-                saveEnvironment={props.saveEnvironment}
-                editEnvironment={props.editEnvironment}
-                deleteEnvironment={props.deleteEnvironment}
-              />
-            )}
-          </For>
-          <Show when={groupedEntries().pinned_entries.length > 0 && (groupedEntries().regular_entries.length > 0 || props.showQuickAddCards)}>
-            <EnvironmentGridSectionTitle title="Environments" />
-          </Show>
-          <For each={groupedEntries().regular_entries}>
-            {(environment) => (
-              <EnvironmentConnectionCard
-                environment={environment}
-                busyAction={props.busyAction}
-                openEnvironment={props.openEnvironment}
-                runManagedEnvironmentAction={props.runManagedEnvironmentAction}
-                toggleEnvironmentPinned={props.toggleEnvironmentPinned}
-                copyEnvironmentValue={props.copyEnvironmentValue}
-                saveEnvironment={props.saveEnvironment}
-                editEnvironment={props.editEnvironment}
-                deleteEnvironment={props.deleteEnvironment}
-              />
-            )}
-          </For>
-          <Show when={props.showQuickAddCards}>
-            <NewEnvironmentPlaceholderCard
-              openCreateConnectionDialog={props.openCreateConnectionDialog}
-            />
+          <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
+            <EnvironmentLibrarySection
+              title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}
+            >
+              <For each={groupedEntries().regular_entries}>
+                {(environment) => (
+                  <EnvironmentConnectionCard
+                    environment={environment}
+                    busyAction={props.busyAction}
+                    openEnvironment={props.openEnvironment}
+                    runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                    toggleEnvironmentPinned={props.toggleEnvironmentPinned}
+                    copyEnvironmentValue={props.copyEnvironmentValue}
+                    saveEnvironment={props.saveEnvironment}
+                    editEnvironment={props.editEnvironment}
+                    deleteEnvironment={props.deleteEnvironment}
+                  />
+                )}
+              </For>
+              <Show when={props.showQuickAddCards}>
+                <NewEnvironmentPlaceholderCard
+                  openCreateConnectionDialog={props.openCreateConnectionDialog}
+                />
+              </Show>
+            </EnvironmentLibrarySection>
           </Show>
         </div>
       </Show>
@@ -2559,13 +2632,23 @@ function EnvironmentCardsPanel(props: Readonly<{
   );
 }
 
-function EnvironmentGridSectionTitle(props: Readonly<{
-  title: string;
+function EnvironmentLibrarySection(props: Readonly<{
+  title?: string;
+  children: JSX.Element;
 }>) {
   return (
-    <div class="redeven-environment-grid__section-title px-1">
-      <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.title}</h2>
-    </div>
+    <section class="space-y-2.5">
+      <Show when={props.title}>
+        {(title) => (
+          <div class="px-1">
+            <h2 class="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title()}</h2>
+          </div>
+        )}
+      </Show>
+      <div class="redeven-environment-grid">
+        {props.children}
+      </div>
+    </section>
   );
 }
 

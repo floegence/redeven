@@ -195,6 +195,8 @@ Visual hierarchy:
   - desktop-managed environment cards for every local, provider-backed, and dual-route managed environment
   - compact search + provider filter + `All / Open / Recent / Saved` toolbar
   - the same shared grid also includes saved Redeven URL and SSH entries
+  - when pinned entries exist, the launcher keeps explicit `Pinned` and `Environments` sections
+  - those sections must still share one measured environment-library column model, so pinning only changes grouping order and never changes card width
 - `Control Planes` tab:
   - provider action shelves only
   - provider counts, sync state, and provider-to-environment shortcuts
@@ -258,6 +260,7 @@ Interaction rules:
   - header with label, relative timestamp, pin/unpin icon, and status badge
   - compact facts rows such as `RUNS ON`, `ACCESS`, and `CONTROL PLANE`
   - an `Endpoint` block with readonly inputs plus `Copy`
+  - pinned and regular sections align to the same card columns whenever both are visible
   - footer actions aligned vertically across card types
 - Environment Library pinning is first-class:
   - pinned cards render once inside a dedicated `Pinned` section
