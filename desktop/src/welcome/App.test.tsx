@@ -340,6 +340,26 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('EnvironmentStatusIndicator');
   });
 
+  it('renders dual-route managed actions through a split button with a route menu', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('function ManagedEnvironmentSplitActionButton');
+    expect(appSrc).toContain('data-redeven-split-action=""');
+    expect(appSrc).toContain('data-redeven-split-action-menu=""');
+    expect(appSrc).toContain('props.presentation.menu_button_label');
+    expect(appSrc).toContain('heading="Local route"');
+    expect(appSrc).toContain('heading="Remote route"');
+    expect(appSrc).toContain("window.addEventListener('pointerdown', handlePointerDown);");
+    expect(appSrc).toContain("window.addEventListener('scroll', handleLayout, true);");
+    expect(appSrc).toContain("closeMenu({ focusToggle: true });");
+    expect(styles).toContain('.redeven-split-action');
+    expect(styles).toContain('.redeven-split-menu');
+    expect(styles).toContain('.redeven-split-menu-item');
+    expect(styles).toContain('.redeven-split-menu-item--disabled');
+    expect(styles).toContain('cursor: not-allowed;');
+  });
+
   it('includes Control Plane management copy inside the launcher source', () => {
     const appSrc = readWelcomeSource();
 

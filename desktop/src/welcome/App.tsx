@@ -88,11 +88,13 @@ import {
   filterEnvironmentLibrary,
   splitPinnedEnvironmentEntries,
   type EnvironmentActionModel,
+  type EnvironmentActionPresentation,
   type EnvironmentCardEndpointModel,
   type EnvironmentCardFactModel,
   type EnvironmentCenterTab,
   libraryFilterLabel,
   type EnvironmentLibraryFilter,
+  type EnvironmentSplitMenuActionModel,
   shellStatus,
 } from './viewModel';
 import {
@@ -2899,6 +2901,350 @@ function QuickCreateConnectionCard(props: Readonly<{
   );
 }
 
+function SplitActionChevronIcon(props: Readonly<{ open: boolean }>) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      class={cn('h-3.5 w-3.5 transition-transform duration-150', props.open && 'rotate-180')}
+      fill="none"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="1.5"
+    >
+      <path d="M4.5 6.5 8 10l3.5-3.5" />
+    </svg>
+  );
+}
+
+function SplitActionMenuSection(props: Readonly<{
+  heading: string;
+  actions: readonly EnvironmentSplitMenuActionModel[];
+  assignItemRef: (index: number, element: HTMLButtonElement) => void;
+  onSelect: (action: EnvironmentActionModel) => void;
+  onNavigate: (direction: 1 | -1) => void;
+  onClose: () => void;
+}>) {
+  return (
+    <Show when={props.actions.length > 0}>
+      <div class="redeven-split-menu-section">
+        <div class="redeven-split-menu-section__heading">{props.heading}</div>
+        <div class="redeven-split-menu-section__items">
+          <For each={props.actions}>
+            {(item, index) => (
+              <button
+                ref={(element) => {
+                  props.assignItemRef(index(), element);
+                }}
+                type="button"
+                role="menuitem"
+                class={cn(
+                  'redeven-split-menu-item',
+                  item.disabled && 'redeven-split-menu-item--disabled',
+                )}
+                disabled={item.disabled}
+                aria-disabled={item.disabled ? 'true' : undefined}
+                onClick={() => {
+                  if (item.disabled) {
+                    return;
+                  }
+                  props.onSelect(item.action);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    props.onNavigate(1);
+                    return;
+                  }
+                  if (event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    props.onNavigate(-1);
+                    return;
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    props.onClose();
+                  }
+                }}
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="redeven-split-menu-item__label">{item.label}</span>
+                  <span class="redeven-split-menu-item__detail">{item.detail}</span>
+                </span>
+                <Show when={item.is_default}>
+                  <span class="redeven-split-menu-item__check" aria-hidden="true">
+                    <Check class="h-3.5 w-3.5" />
+                  </span>
+                </Show>
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+    </Show>
+  );
+}
+
+function ManagedEnvironmentSplitActionButton(props: Readonly<{
+  environmentLabel: string;
+  busy: boolean;
+  presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
+  onAction: (action: EnvironmentActionModel) => void;
+}>) {
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const [menuPlacement, setMenuPlacement] = createSignal<'bottom-end' | 'top-end'>('bottom-end');
+  const [menuFrame, setMenuFrame] = createSignal<Readonly<{
+    left: number;
+    width: number;
+    top?: number;
+    bottom?: number;
+  }> | null>(null);
+  let anchorRef: HTMLDivElement | undefined;
+  let toggleRef: HTMLButtonElement | undefined;
+  let menuRef: HTMLDivElement | undefined;
+  const menuItemRefs: Array<HTMLButtonElement | undefined> = [];
+  const menuActions = createMemo(() => props.presentation.menu_actions);
+  const localActions = createMemo(() => menuActions().filter((action) => action.section === 'local'));
+  const remoteActions = createMemo(() => menuActions().filter((action) => action.section === 'remote'));
+
+  function enabledMenuIndices(): number[] {
+    return menuActions().flatMap((action, index) => (action.disabled ? [] : [index]));
+  }
+
+  function focusMenuItem(index: number): void {
+    queueMicrotask(() => {
+      menuItemRefs[index]?.focus();
+    });
+  }
+
+  function focusBoundaryMenuItem(target: 'first' | 'last'): void {
+    const indices = enabledMenuIndices();
+    if (indices.length === 0) {
+      return;
+    }
+    focusMenuItem(target === 'last' ? indices[indices.length - 1]! : indices[0]!);
+  }
+
+  function moveMenuFocus(direction: 1 | -1): void {
+    const indices = enabledMenuIndices();
+    if (indices.length === 0) {
+      return;
+    }
+    const activeIndex = menuItemRefs.findIndex((element) => element === document.activeElement);
+    const currentPosition = indices.findIndex((index) => index === activeIndex);
+    const nextPosition = currentPosition === -1
+      ? (direction === 1 ? 0 : indices.length - 1)
+      : (currentPosition + direction + indices.length) % indices.length;
+    const nextIndex = indices[nextPosition];
+    if (nextIndex !== undefined) {
+      focusMenuItem(nextIndex);
+    }
+  }
+
+  function updateMenuLayout(): void {
+    if (!anchorRef || typeof window === 'undefined') {
+      return;
+    }
+    const rect = anchorRef.getBoundingClientRect();
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const estimatedHeight = Math.max(156, menuActions().length * 62 + 48);
+    const menuWidth = Math.max(296, Math.ceil(rect.width));
+    const margin = 8;
+    const left = Math.min(
+      Math.max(margin, rect.right - menuWidth),
+      Math.max(margin, viewportWidth - menuWidth - margin),
+    );
+    const openUp = viewportHeight - rect.bottom < estimatedHeight + margin && rect.top > estimatedHeight + margin;
+    setMenuPlacement(openUp ? 'top-end' : 'bottom-end');
+    setMenuFrame(openUp
+      ? {
+        left,
+        width: menuWidth,
+        bottom: Math.max(margin, viewportHeight - rect.top + 8),
+      }
+      : {
+        left,
+        width: menuWidth,
+        top: Math.min(viewportHeight - margin, rect.bottom + 8),
+      });
+  }
+
+  function closeMenu(options: Readonly<{ focusToggle?: boolean }> = {}): void {
+    setMenuOpen(false);
+    if (options.focusToggle) {
+      queueMicrotask(() => {
+        toggleRef?.focus();
+      });
+    }
+  }
+
+  function openMenu(focusTarget: 'first' | 'last' | 'none' = 'first'): void {
+    updateMenuLayout();
+    setMenuOpen(true);
+    if (focusTarget === 'first' || focusTarget === 'last') {
+      focusBoundaryMenuItem(focusTarget);
+    }
+  }
+
+  createEffect(() => {
+    if (!menuOpen()) {
+      return;
+    }
+    updateMenuLayout();
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (anchorRef?.contains(target) || menuRef?.contains(target)) {
+        return;
+      }
+      closeMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMenu({ focusToggle: true });
+      }
+    };
+    const handleLayout = () => {
+      updateMenuLayout();
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleLayout);
+    window.addEventListener('scroll', handleLayout, true);
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleLayout);
+      window.removeEventListener('scroll', handleLayout, true);
+    });
+  });
+
+  return (
+    <div ref={anchorRef} class="redeven-split-action" data-redeven-split-action="">
+      <Button
+        size="sm"
+        variant={props.presentation.default_action.variant}
+        class="min-w-0 flex-1 rounded-r-none"
+        loading={props.busy}
+        disabled={!props.presentation.default_action.enabled}
+        onClick={() => {
+          closeMenu();
+          props.onAction(props.presentation.default_action);
+        }}
+      >
+        {props.presentation.default_action.label}
+      </Button>
+      <Button
+        ref={toggleRef}
+        size="sm"
+        variant={props.presentation.default_action.variant}
+        class="redeven-split-action__toggle rounded-l-none px-0"
+        disabled={props.busy}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen() ? 'true' : 'false'}
+        aria-label={`${props.presentation.menu_button_label} for ${props.environmentLabel}`}
+        title={props.presentation.menu_button_label}
+        onClick={() => {
+          if (menuOpen()) {
+            closeMenu();
+            return;
+          }
+          openMenu('first');
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            openMenu('first');
+            return;
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            openMenu('last');
+            return;
+          }
+          if (event.key === 'Escape' && menuOpen()) {
+            event.preventDefault();
+            closeMenu({ focusToggle: true });
+          }
+        }}
+      >
+        <SplitActionChevronIcon open={menuOpen()} />
+      </Button>
+      <Show when={menuOpen() && menuFrame()}>
+        {(frame) => (
+          <Portal>
+            <div
+              ref={menuRef}
+              role="menu"
+              aria-label={`${props.presentation.menu_button_label} for ${props.environmentLabel}`}
+              data-redeven-split-action-menu=""
+              class={cn(
+                'redeven-split-menu fixed z-[210]',
+                menuPlacement() === 'top-end' ? 'redeven-split-menu--top' : 'redeven-split-menu--bottom',
+              )}
+              style={{
+                left: `${frame().left}px`,
+                'min-width': `${frame().width}px`,
+                top: frame().top !== undefined ? `${frame().top}px` : undefined,
+                bottom: frame().bottom !== undefined ? `${frame().bottom}px` : undefined,
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Home') {
+                  event.preventDefault();
+                  focusBoundaryMenuItem('first');
+                  return;
+                }
+                if (event.key === 'End') {
+                  event.preventDefault();
+                  focusBoundaryMenuItem('last');
+                }
+              }}
+            >
+              <SplitActionMenuSection
+                heading="Local route"
+                actions={localActions()}
+                assignItemRef={(index, element) => {
+                  const localIndex = index;
+                  menuItemRefs[localIndex] = element;
+                }}
+                onSelect={(action) => {
+                  closeMenu();
+                  props.onAction(action);
+                }}
+                onNavigate={moveMenuFocus}
+                onClose={() => {
+                  closeMenu({ focusToggle: true });
+                }}
+              />
+              <SplitActionMenuSection
+                heading="Remote route"
+                actions={remoteActions()}
+                assignItemRef={(index, element) => {
+                  const remoteOffset = localActions().length;
+                  menuItemRefs[remoteOffset + index] = element;
+                }}
+                onSelect={(action) => {
+                  closeMenu();
+                  props.onAction(action);
+                }}
+                onNavigate={moveMenuFocus}
+                onClose={() => {
+                  closeMenu({ focusToggle: true });
+                }}
+              />
+            </div>
+          </Portal>
+        )}
+      </Show>
+    </div>
+  );
+}
+
 function EnvironmentConnectionCard(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
@@ -2927,6 +3273,11 @@ function EnvironmentConnectionCard(props: Readonly<{
       ? buildProviderBackedEnvironmentActionModel(props.environment)
       : null
   ));
+  const managedActionPresentation = createMemo(() => managedActionModel()?.action_presentation ?? null);
+  const singleButtonManagedAction = createMemo(() => {
+    const presentation = managedActionPresentation();
+    return presentation?.kind === 'single_button' ? presentation.action : null;
+  });
   const isEnvironmentActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
     || props.busyAction === 'open_remote_environment'
@@ -3004,37 +3355,41 @@ function EnvironmentConnectionCard(props: Readonly<{
             </Button>
           )}
         >
-          {(actionModel) => (
-            <div class="flex flex-1 items-center gap-2">
+          <Show
+            when={managedActionPresentation()?.kind === 'split_button' && managedActionPresentation()}
+            fallback={(
               <Button
                 size="sm"
-                variant={actionModel().primary_action.variant}
+                variant={singleButtonManagedAction()?.variant ?? 'default'}
                 class="flex-1"
                 loading={isEnvironmentActionBusy()}
-                disabled={!actionModel().primary_action.enabled}
+                disabled={!singleButtonManagedAction()?.enabled}
                 onClick={() => {
-                  void props.runManagedEnvironmentAction(props.environment, actionModel().primary_action, 'connect');
+                  if (!singleButtonManagedAction()) {
+                    return;
+                  }
+                  void props.runManagedEnvironmentAction(
+                    props.environment,
+                    singleButtonManagedAction()!,
+                    'connect',
+                  );
                 }}
               >
-                {actionModel().primary_action.label}
+                {singleButtonManagedAction()?.label ?? 'Open'}
               </Button>
-              <Show when={actionModel().secondary_action}>
-                {(secondaryAction) => (
-                  <Button
-                    size="sm"
-                    variant={secondaryAction().variant}
-                    loading={isEnvironmentActionBusy()}
-                    disabled={!secondaryAction().enabled}
-                    onClick={() => {
-                      void props.runManagedEnvironmentAction(props.environment, secondaryAction(), 'connect');
-                    }}
-                  >
-                    {secondaryAction().label}
-                  </Button>
-                )}
-              </Show>
-            </div>
-          )}
+            )}
+          >
+            {(presentation) => (
+              <ManagedEnvironmentSplitActionButton
+                environmentLabel={props.environment.label}
+                busy={isEnvironmentActionBusy()}
+                presentation={presentation() as Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>}
+                onAction={(action) => {
+                  void props.runManagedEnvironmentAction(props.environment, action, 'connect');
+                }}
+              />
+            )}
+          </Show>
         </Show>
         <div class="flex items-center gap-0.5">
           <DesktopTooltip

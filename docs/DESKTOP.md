@@ -263,8 +263,10 @@ Interaction rules:
   - card bodies avoid explanatory helper prose under the actions
   - only concrete identifiers, runtime details, badges, and notices stay visible inside the card
 - Dual-route managed environments stay route-aware:
-  - if this device can still host the environment locally, `Open Local` remains available even when the remote route is degraded
-  - remote recovery actions still stay visible as the secondary action on that same card
+  - the footer uses a split `Open` / `Focus` button instead of persistent side-by-side `Open Local` and `Open Remote` buttons
+  - the primary segment executes the resolved default route immediately
+  - the route menu keeps both the local route and the remote route or remote recovery action visible on the same card
+  - if this device can still host the environment locally, local open stays one click away even when the remote route is degraded
 - Deleting a managed environment is a first-class action:
   - Desktop blocks deletion while a window for that managed environment is still open
   - deleting a local-only managed environment removes the managed entry and its Desktop-owned local scope state
@@ -452,6 +454,7 @@ The Control Plane flow is:
 8. Desktop requests a unified per-environment open session only when it opens a specific environment.
 9. Desktop resolves the actual open route from the saved environment record:
    - explicit or default `preferred_open_route`
+   - the last explicit local-vs-remote route the user chose from the launcher split-button menu
    - whether that environment is declared as locally hosted on this device
    - whether the provider returned `bootstrap_ticket`, `remote_session_url`, or both
 10. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.

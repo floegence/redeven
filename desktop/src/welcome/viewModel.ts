@@ -69,11 +69,39 @@ export type EnvironmentActionModel = Readonly<{
   route?: DesktopManagedEnvironmentRoute;
 }>;
 
+export type EnvironmentSplitMenuActionModel = Readonly<{
+  id:
+    | 'local_route'
+    | 'remote_route'
+    | 'remote_refresh'
+    | 'remote_reconnect'
+    | 'remote_retry_sync'
+    | 'remote_check_status'
+    | 'remote_unavailable';
+  section: 'local' | 'remote';
+  label: string;
+  detail: string;
+  action: EnvironmentActionModel;
+  disabled: boolean;
+  is_default: boolean;
+}>;
+
+export type EnvironmentActionPresentation =
+  | Readonly<{
+      kind: 'single_button';
+      action: EnvironmentActionModel;
+    }>
+  | Readonly<{
+      kind: 'split_button';
+      default_action: EnvironmentActionModel;
+      menu_actions: readonly EnvironmentSplitMenuActionModel[];
+      menu_button_label: 'Choose environment route';
+    }>;
+
 export type ProviderBackedEnvironmentActionModel = Readonly<{
   status_label: string;
   status_tone: EnvironmentCardTone;
-  primary_action: EnvironmentActionModel;
-  secondary_action: EnvironmentActionModel | null;
+  action_presentation: EnvironmentActionPresentation;
 }>;
 
 export type ControlPlaneStatusModel = Readonly<{
@@ -391,6 +419,166 @@ function remoteRouteActionModel(options: Readonly<{
   }
 }
 
+function isImmediateRouteAction(action: EnvironmentActionModel | null): boolean {
+  return action?.intent === 'open' || action?.intent === 'focus';
+}
+
+function preferredRouteCandidate(input: Readonly<{
+  defaultOpenRoute?: DesktopManagedEnvironmentRoute;
+  managedPreferredOpenRoute?: 'auto' | DesktopManagedEnvironmentRoute;
+}>): DesktopManagedEnvironmentRoute | null {
+  if (input.defaultOpenRoute === 'local_host' || input.defaultOpenRoute === 'remote_desktop') {
+    return input.defaultOpenRoute;
+  }
+  if (
+    input.managedPreferredOpenRoute === 'local_host'
+    || input.managedPreferredOpenRoute === 'remote_desktop'
+  ) {
+    return input.managedPreferredOpenRoute;
+  }
+  return null;
+}
+
+export function resolveDefaultDualRouteAction(input: Readonly<{
+  local_action: EnvironmentActionModel;
+  remote_action: EnvironmentActionModel | null;
+  local_session_open: boolean;
+  remote_session_open: boolean;
+  managed_preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
+  default_open_route?: DesktopManagedEnvironmentRoute;
+}>): EnvironmentActionModel {
+  const localAction = input.local_action;
+  const remoteAction = input.remote_action;
+  if (!remoteAction) {
+    return localAction;
+  }
+  if (input.local_session_open && !input.remote_session_open && isImmediateRouteAction(localAction)) {
+    return localAction;
+  }
+  if (input.remote_session_open && !input.local_session_open && isImmediateRouteAction(remoteAction)) {
+    return remoteAction;
+  }
+
+  const preferredRoute = preferredRouteCandidate({
+    defaultOpenRoute: input.default_open_route,
+    managedPreferredOpenRoute: input.managed_preferred_open_route,
+  });
+  if (preferredRoute === 'remote_desktop' && isImmediateRouteAction(remoteAction)) {
+    return remoteAction;
+  }
+  if (preferredRoute === 'local_host' && isImmediateRouteAction(localAction)) {
+    return localAction;
+  }
+  if (isImmediateRouteAction(localAction)) {
+    return localAction;
+  }
+  if (isImmediateRouteAction(remoteAction)) {
+    return remoteAction;
+  }
+  if (localAction.enabled) {
+    return localAction;
+  }
+  if (remoteAction.enabled) {
+    return remoteAction;
+  }
+  return localAction;
+}
+
+function splitButtonPrimaryAction(action: EnvironmentActionModel): EnvironmentActionModel {
+  return {
+    ...action,
+    label: action.intent === 'focus'
+      ? 'Focus'
+      : action.intent === 'open'
+        ? 'Open'
+        : action.label,
+    variant: 'default',
+  };
+}
+
+function localSplitMenuActionLabel(action: EnvironmentActionModel): string {
+  return action.intent === 'focus' ? 'Focus Local Window' : 'Open via Local Port';
+}
+
+function localSplitMenuActionDetail(environment: DesktopEnvironmentEntry): string {
+  return compact(environment.managed_local_ui_bind) || 'Hosted on this device.';
+}
+
+function remoteSplitMenuActionID(action: EnvironmentActionModel): EnvironmentSplitMenuActionModel['id'] {
+  switch (action.intent) {
+    case 'refresh_status':
+      return 'remote_refresh';
+    case 'reconnect_provider':
+      return 'remote_reconnect';
+    case 'retry_sync':
+      return 'remote_retry_sync';
+    case 'check_status':
+      return 'remote_check_status';
+    case 'unavailable':
+      return 'remote_unavailable';
+    default:
+      return 'remote_route';
+  }
+}
+
+function remoteSplitMenuActionLabel(action: EnvironmentActionModel): string {
+  switch (action.intent) {
+    case 'focus':
+      return 'Focus Remote Window';
+    case 'open':
+      return 'Open via Control Plane';
+    case 'refresh_status':
+      return 'Refresh Remote Status';
+    case 'reconnect_provider':
+      return 'Reconnect Control Plane';
+    case 'retry_sync':
+      return 'Retry Control Plane Sync';
+    case 'unavailable':
+      return 'Remote route unavailable';
+    default:
+      return 'Check Remote Status';
+  }
+}
+
+function remoteSplitMenuActionDetail(
+  environment: DesktopEnvironmentEntry,
+  action: EnvironmentActionModel,
+): string {
+  const routeSummary = [controlPlaneDisplayLabel(environment), compact(environment.env_public_id)].filter(Boolean).join(' / ');
+  if (!isImmediateRouteAction(action)) {
+    return compact(environment.remote_state_reason) || routeSummary || 'Remote status is not currently available.';
+  }
+  return routeSummary || compact(environment.remote_state_reason) || 'Open through the connected Control Plane.';
+}
+
+function dualRouteSplitMenuActions(
+  environment: DesktopEnvironmentEntry,
+  localAction: EnvironmentActionModel,
+  remoteAction: EnvironmentActionModel,
+  defaultAction: EnvironmentActionModel,
+): readonly EnvironmentSplitMenuActionModel[] {
+  return [
+    {
+      id: 'local_route',
+      section: 'local',
+      label: localSplitMenuActionLabel(localAction),
+      detail: localSplitMenuActionDetail(environment),
+      action: localAction,
+      disabled: !localAction.enabled,
+      is_default: defaultAction.route === 'local_host',
+    },
+    {
+      id: remoteSplitMenuActionID(remoteAction),
+      section: 'remote',
+      label: remoteSplitMenuActionLabel(remoteAction),
+      detail: remoteSplitMenuActionDetail(environment, remoteAction),
+      action: remoteAction,
+      disabled: !remoteAction.enabled,
+      is_default: defaultAction.route === 'remote_desktop',
+    },
+  ];
+}
+
 function providerBackedStatusModel(options: Readonly<{
   isOpen: boolean;
   hasLocalHosting: boolean;
@@ -505,37 +693,54 @@ export function buildProviderBackedEnvironmentActionModel(
     : null;
 
   if (hasLocalHosting && hasRemoteDesktop) {
+    const localAction = localRouteActionModel(environment);
+    const resolvedDefaultAction = resolveDefaultDualRouteAction({
+      local_action: localAction,
+      remote_action: remoteAction,
+      local_session_open: localSessionOpen,
+      remote_session_open: remoteSessionOpen,
+      managed_preferred_open_route: environment.managed_preferred_open_route,
+      default_open_route: environment.default_open_route,
+    });
     return {
       status_label: status.label,
       status_tone: status.tone,
-      primary_action: localRouteActionModel(environment),
-      secondary_action: remoteAction,
+      action_presentation: {
+        kind: 'split_button',
+        default_action: splitButtonPrimaryAction(resolvedDefaultAction),
+        menu_actions: dualRouteSplitMenuActions(environment, localAction, remoteAction!, resolvedDefaultAction),
+        menu_button_label: 'Choose environment route',
+      },
     };
   }
   if (hasLocalHosting) {
     return {
       status_label: status.label,
       status_tone: status.tone,
-      primary_action: {
-        intent: environment.open_local_session_key ? 'focus' : 'open',
-        label: environment.open_local_session_key ? 'Focus' : 'Open',
-        enabled: true,
-        variant: 'default',
-        route: 'local_host',
+      action_presentation: {
+        kind: 'single_button',
+        action: {
+          intent: environment.open_local_session_key ? 'focus' : 'open',
+          label: environment.open_local_session_key ? 'Focus' : 'Open',
+          enabled: true,
+          variant: 'default',
+          route: 'local_host',
+        },
       },
-      secondary_action: null,
     };
   }
   return {
     status_label: status.label,
     status_tone: status.tone,
-    primary_action: remoteAction ?? {
-      intent: 'refresh_status',
-      label: 'Refresh Status',
-      enabled: true,
-      variant: 'default',
+    action_presentation: {
+      kind: 'single_button',
+      action: remoteAction ?? {
+        intent: 'refresh_status',
+        label: 'Refresh Status',
+        enabled: true,
+        variant: 'default',
+      },
     },
-    secondary_action: null,
   };
 }
 

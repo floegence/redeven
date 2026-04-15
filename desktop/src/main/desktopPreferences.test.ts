@@ -37,6 +37,7 @@ import {
   managedDesktopLaunchKey,
   normalizeRecentExternalLocalUIURLs,
   normalizeSavedEnvironments,
+  rememberManagedEnvironmentUse,
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
@@ -649,6 +650,22 @@ describe('desktopPreferences', () => {
     expect(sshPinned.managed_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
     expect(sshPinned.saved_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
     expect(sshPinned.saved_ssh_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
+  });
+
+  it('remembers the last-used managed route when a user opens a specific managed path', () => {
+    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      preferredOpenRoute: 'local_host',
+    });
+    const remembered = rememberManagedEnvironmentUse(testDesktopPreferences({
+      managed_environments: [dualRoute],
+    }), dualRoute.id, 'remote_desktop');
+
+    expect(remembered.managed_environments.find((environment) => environment.id === dualRoute.id)).toEqual(
+      expect.objectContaining({
+        preferred_open_route: 'remote_desktop',
+        last_used_at_ms: expect.any(Number),
+      }),
+    );
   });
 
   it('normalizes recent URLs and derives them from saved environments ordered by last use', () => {

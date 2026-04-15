@@ -60,6 +60,7 @@ import {
   normalizeDesktopProviderEnvironmentID,
   type DesktopManagedEnvironment,
   type DesktopManagedEnvironmentAccess,
+  type DesktopManagedEnvironmentPreferredOpenRoute,
 } from '../shared/desktopManagedEnvironment';
 
 export type DesktopSavedEnvironment = Readonly<{
@@ -1465,6 +1466,7 @@ export function updateManagedEnvironmentAccess(
 export function rememberManagedEnvironmentUse(
   preferences: DesktopPreferences,
   environmentID: string,
+  route?: DesktopManagedEnvironmentPreferredOpenRoute,
 ): DesktopPreferences {
   const cleanEnvironmentID = compact(environmentID);
   return {
@@ -1475,6 +1477,9 @@ export function rememberManagedEnvironmentUse(
           ? {
               ...environment,
               last_used_at_ms: Date.now(),
+              preferred_open_route: route === 'local_host' || route === 'remote_desktop'
+                ? route
+                : environment.preferred_open_route,
               updated_at_ms: Date.now(),
             }
           : environment
