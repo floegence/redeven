@@ -753,7 +753,7 @@ describe('buildEnvironmentCardModel', () => {
     const grouped = splitPinnedEnvironmentEntries(snapshot.environments);
 
     expect(grouped.pinned_entries.map((environment) => environment.label)).toEqual([
-      'Local Environment',
+      'Local Default Environment',
       'Staging',
     ]);
     expect(grouped.regular_entries.map((environment) => environment.id)).toContain('local:lab');

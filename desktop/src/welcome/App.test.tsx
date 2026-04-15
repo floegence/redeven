@@ -84,7 +84,7 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Connect Environment',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Environment Settings',
+      settings_save_label: 'Save Local Default Environment Settings',
     });
     expect(shellStatus(snapshot)).toEqual({
       tone: 'disconnected',
@@ -113,9 +113,9 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Environment Settings',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Environment Settings',
+      settings_save_label: 'Save Local Default Environment Settings',
     });
-    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
+    expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
     expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
     expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
     expect(snapshot.settings_surface.draft.local_ui_password).toBe('');

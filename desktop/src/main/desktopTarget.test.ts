@@ -20,7 +20,7 @@ describe('desktopTarget', () => {
       kind: 'managed_environment',
       session_key: 'env:local%3Adefault:local_host',
       environment_id: 'local:default',
-      label: 'Local Environment',
+      label: 'Local Default Environment',
       route: 'local_host',
       managed_environment_kind: 'local',
       local_environment_name: 'default',
