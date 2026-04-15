@@ -922,6 +922,7 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
 }
 
 beforeEach(() => {
+  delete window.redevenDesktopSessionContext;
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -1166,6 +1167,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete window.redevenDesktopSessionContext;
   document.body.innerHTML = '';
   vi.clearAllMocks();
 });
@@ -1194,6 +1196,57 @@ describe('RemoteFileBrowser persistence', () => {
       expect(filesWorkspace?.parentElement?.style.display).toBe('none');
       expect(mockRpc.fs.list).not.toHaveBeenCalled();
       expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/src' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('uses the desktop-managed environment scope id instead of the runtime env id for persisted paths', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    window.redevenDesktopSessionContext = {
+      getSnapshot: () => ({
+        managed_environment_id: 'local:dev-b',
+        environment_storage_scope_id: 'local:dev-b',
+      }),
+    };
+    widgetStateStore.values = {
+      'widget-1': {
+        browserSidebarWidth: 312,
+        lastPathByEnv: {
+          env_local: '/workspace/repo/shared-collision',
+          'local:dev-b': '/workspace/repo/dev-b',
+        },
+        showHiddenByEnv: {
+          env_local: false,
+          'local:dev-b': false,
+        },
+        pageModeByEnv: {
+          env_local: 'files',
+          'local:dev-b': 'git',
+        },
+        gitSubviewByEnv: {
+          env_local: 'changes',
+          'local:dev-b': 'history',
+        },
+      },
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContextWithIdAccessor(() => 'env_local')}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+
+      expect(gitWorkspace?.textContent).toContain('git:git:history:/workspace/repo/dev-b:312');
+      expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/dev-b' });
+      expect(mockRpc.git.resolveRepo).not.toHaveBeenCalledWith({ path: '/workspace/repo/shared-collision' });
     } finally {
       dispose();
     }

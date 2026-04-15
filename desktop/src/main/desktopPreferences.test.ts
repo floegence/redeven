@@ -9,6 +9,7 @@ import {
   normalizeDesktopControlPlaneProvider,
 } from '../shared/controlPlaneProvider';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
+import { managedEnvironmentLocalAccess } from '../shared/desktopManagedEnvironment';
 import {
   testDesktopPreferences,
   testManagedAccess,
@@ -21,6 +22,7 @@ import {
 } from './statePaths';
 import {
   createPlaintextSecretCodec,
+  deleteManagedEnvironment,
   type DesktopPreferences,
   defaultDesktopPreferences,
   defaultDesktopPreferencesPaths,
@@ -41,6 +43,7 @@ import {
   setManagedEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedSSHEnvironmentPinned,
+  upsertManagedEnvironment,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -764,6 +767,149 @@ describe('desktopPreferences', () => {
         env_public_id: 'env_demo',
       }),
     }));
+  });
+
+  it('upserts one managed environment with both local hosting and provider binding', () => {
+    const next = upsertManagedEnvironment(testDesktopPreferences(), {
+      name: 'dev-a',
+      label: 'Desktop Demo',
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:24001',
+        local_ui_password: 'secret',
+        local_ui_password_configured: true,
+      }),
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'redeven_portal',
+      env_public_id: 'env_demo',
+    });
+
+    const managed = next.managed_environments.find((environment) => (
+      environment.provider_binding?.provider_origin === 'https://cp.example.invalid'
+      && environment.provider_binding?.env_public_id === 'env_demo'
+    ));
+
+    expect(managed).toEqual(expect.objectContaining({
+      id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      label: 'Desktop Demo',
+      identity: expect.objectContaining({
+        kind: 'provider',
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'redeven_portal',
+        env_public_id: 'env_demo',
+      }),
+      local_hosting: expect.objectContaining({
+        scope: expect.objectContaining({
+          kind: 'controlplane',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+        }),
+        access: expect.objectContaining({
+          local_ui_bind: '127.0.0.1:24001',
+          local_ui_password: 'secret',
+          local_ui_password_configured: true,
+        }),
+      }),
+      provider_binding: expect.objectContaining({
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'redeven_portal',
+        env_public_id: 'env_demo',
+      }),
+    }));
+  });
+
+  it('promotes a local-only managed environment into a canonical control-plane identity without duplicates', () => {
+    const existingLocal = testManagedLocalEnvironment('lab', {
+      label: 'Local Lab',
+      access: {
+        local_ui_bind: '0.0.0.0:24000',
+        local_ui_password: 'secret',
+        local_ui_password_configured: true,
+      },
+    });
+    const existingRemoteOnly = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_lab', {
+      localHosting: false,
+      label: 'Remote Lab',
+    });
+
+    const next = upsertManagedEnvironment(testDesktopPreferences({
+      managed_environments: [existingLocal, existingRemoteOnly],
+    }), {
+      environment_id: existingLocal.id,
+      name: 'lab',
+      label: 'Unified Lab',
+      access: managedEnvironmentLocalAccess(existingLocal),
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'redeven_portal',
+      env_public_id: 'env_lab',
+    });
+
+    const providerEntries = next.managed_environments.filter((environment) => (
+      environment.provider_binding?.provider_origin === 'https://cp.example.invalid'
+      && environment.provider_binding?.env_public_id === 'env_lab'
+    ));
+
+    expect(providerEntries).toHaveLength(1);
+    expect(providerEntries[0]).toEqual(expect.objectContaining({
+      id: existingRemoteOnly.id,
+      label: 'Unified Lab',
+      local_hosting: expect.objectContaining({
+        scope: expect.objectContaining({
+          kind: 'controlplane',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_lab',
+        }),
+        access: expect.objectContaining({
+          local_ui_bind: '0.0.0.0:24000',
+          local_ui_password: 'secret',
+          local_ui_password_configured: true,
+        }),
+      }),
+    }));
+    expect(next.managed_environments.some((environment) => environment.id === existingLocal.id)).toBe(false);
+  });
+
+  it('deletes a local-only managed environment and returns its local state directory', () => {
+    const removable = testManagedLocalEnvironment('lab');
+
+    const result = deleteManagedEnvironment(testDesktopPreferences({
+      managed_environments: [
+        testManagedLocalEnvironment('default'),
+        removable,
+      ],
+    }), removable.id);
+
+    expect(result.deleted_environment?.id).toBe(removable.id);
+    expect(result.deleted_state_dir).toBe(removable.local_hosting?.state_dir);
+    expect(result.preferences.managed_environments.some((environment) => environment.id === removable.id)).toBe(false);
+  });
+
+  it('deleting a dual-route managed environment keeps the remote control-plane entry while removing local hosting', () => {
+    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route', {
+      access: {
+        local_ui_bind: '127.0.0.1:24000',
+      },
+    });
+
+    const result = deleteManagedEnvironment(testDesktopPreferences({
+      managed_environments: [dualRoute],
+    }), dualRoute.id);
+
+    const retained = result.preferences.managed_environments.find((environment) => (
+      environment.provider_binding?.provider_origin === 'https://cp.example.invalid'
+      && environment.provider_binding?.env_public_id === 'env_dual_route'
+    ));
+
+    expect(result.deleted_environment?.id).toBe(dualRoute.id);
+    expect(result.deleted_state_dir).toBe(dualRoute.local_hosting?.state_dir);
+    expect(retained).toEqual(expect.objectContaining({
+      id: dualRoute.id,
+      label: dualRoute.label,
+      provider_binding: expect.objectContaining({
+        provider_origin: 'https://cp.example.invalid',
+        env_public_id: 'env_dual_route',
+      }),
+    }));
+    expect(retained?.local_hosting).toBeUndefined();
   });
 
   it('repairs a legacy provider-backed local environment during control-plane sync without duplicating it', () => {

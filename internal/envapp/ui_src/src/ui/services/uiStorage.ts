@@ -1,4 +1,5 @@
 import type { FloeStorageAdapter } from '@floegence/floe-webapp-core';
+import { desktopManagedEnvironmentStorageScopeID } from './desktopSessionContext';
 
 export interface DesktopStateStorageBridge {
   getItem: (key: string) => string | null;
@@ -175,4 +176,36 @@ export function readUIStorageJSON<T>(key: string, fallback: T): T {
 
 export function writeUIStorageJSON(key: string, value: unknown): void {
   writeUIStorageItem(key, JSON.stringify(value));
+}
+
+export function environmentOwnedUIStorageKey(key: string): string {
+  const cleanKey = String(key ?? '').trim();
+  if (cleanKey === '') {
+    return '';
+  }
+  const environmentScopeID = desktopManagedEnvironmentStorageScopeID();
+  if (environmentScopeID === '') {
+    return cleanKey;
+  }
+  return `${cleanKey}:${environmentScopeID}`;
+}
+
+export function readEnvironmentOwnedUIStorageItem(key: string): string | null {
+  return readUIStorageItem(environmentOwnedUIStorageKey(key));
+}
+
+export function writeEnvironmentOwnedUIStorageItem(key: string, value: string): void {
+  writeUIStorageItem(environmentOwnedUIStorageKey(key), value);
+}
+
+export function removeEnvironmentOwnedUIStorageItem(key: string): void {
+  removeUIStorageItem(environmentOwnedUIStorageKey(key));
+}
+
+export function readEnvironmentOwnedUIStorageJSON<T>(key: string, fallback: T): T {
+  return readUIStorageJSON(environmentOwnedUIStorageKey(key), fallback);
+}
+
+export function writeEnvironmentOwnedUIStorageJSON(key: string, value: unknown): void {
+  writeUIStorageJSON(environmentOwnedUIStorageKey(key), value);
 }

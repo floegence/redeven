@@ -14,7 +14,11 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type AIRealtimeEvent } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
-import { readUIStorageItem, removeUIStorageItem, writeUIStorageItem } from '../services/uiStorage';
+import {
+  readEnvironmentOwnedUIStorageItem,
+  removeEnvironmentOwnedUIStorageItem,
+  writeEnvironmentOwnedUIStorageItem,
+} from '../services/uiStorage';
 import { hasRWXPermissions } from './aiPermissions';
 import {
   normalizeAskUserDraft,
@@ -116,30 +120,30 @@ const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const DRAFT_WORKING_DIR_STORAGE_KEY = 'redeven_ai_draft_working_dir';
 
 function readPersistedActiveThreadId(): string | null {
-  const v = String(readUIStorageItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
+  const v = String(readEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY) ?? '').trim();
   return v || null;
 }
 
 function persistActiveThreadId(threadId: string): void {
-  writeUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
+  writeEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, threadId);
 }
 
 function clearPersistedActiveThreadId(): void {
-  removeUIStorageItem(ACTIVE_THREAD_STORAGE_KEY);
+  removeEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY);
 }
 
 function readPersistedDraftWorkingDir(): string | null {
-  const v = String(readUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY) ?? '').trim();
+  const v = String(readEnvironmentOwnedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY) ?? '').trim();
   return v || null;
 }
 
 function persistDraftWorkingDir(path: string): void {
   const v = String(path ?? '').trim();
   if (!v) {
-    removeUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY);
+    removeEnvironmentOwnedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY);
     return;
   }
-  writeUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY, v);
+  writeEnvironmentOwnedUIStorageItem(DRAFT_WORKING_DIR_STORAGE_KEY, v);
 }
 
 function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStatus {

@@ -394,7 +394,8 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH'");
-    expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this machine.');
+    expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
+    expect(appSrc).toContain('You can keep it local-only or bind it to one saved Control Plane environment for unified local and remote access.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Control Plane URL.');
     expect(appSrc).toContain('Connect to another machine over SSH.');

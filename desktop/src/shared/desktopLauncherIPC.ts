@@ -38,6 +38,7 @@ export type DesktopLauncherActionFailureScope = 'environment' | 'control_plane' 
 export type DesktopLauncherActionFailureCode =
   | 'session_stale'
   | 'environment_missing'
+  | 'environment_in_use'
   | 'environment_route_unavailable'
   | 'environment_offline'
   | 'environment_status_stale'
@@ -63,9 +64,10 @@ export type DesktopLauncherActionKind =
   | 'open_control_plane_environment'
   | 'refresh_control_plane'
   | 'delete_control_plane'
-  | 'upsert_managed_local_environment'
+  | 'upsert_managed_environment'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
+  | 'delete_managed_environment'
   | 'delete_saved_environment'
   | 'delete_saved_ssh_environment'
   | 'close_launcher_or_quit';
@@ -208,13 +210,17 @@ export type DesktopLauncherActionRequest = Readonly<
       provider_id: string;
     }
   | {
-      kind: 'upsert_managed_local_environment';
+      kind: 'upsert_managed_environment';
       environment_id?: string;
-      environment_name: string;
+      mode: 'local_only' | 'local_with_control_plane';
+      environment_name?: string;
       label: string;
       local_ui_bind: string;
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
+      provider_origin?: string;
+      provider_id?: string;
+      env_public_id?: string;
     }
   | {
       kind: 'upsert_saved_environment';
@@ -227,6 +233,10 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
       label: string;
     } & DesktopSSHEnvironmentDetails)
+  | {
+      kind: 'delete_managed_environment';
+      environment_id: string;
+    }
   | {
       kind: 'delete_saved_environment';
       environment_id: string;
@@ -393,11 +403,44 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
         };
       }
-    case 'upsert_managed_local_environment':
+    case 'upsert_managed_environment': {
+      const mode = compact((candidate as { mode?: unknown }).mode) === 'local_with_control_plane'
+        ? 'local_with_control_plane'
+        : 'local_only';
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id) || undefined;
+      const environmentName = compact((candidate as { environment_name?: unknown }).environment_name) || undefined;
+      const providerOriginRaw = compact((candidate as { provider_origin?: unknown }).provider_origin);
+      const providerID = compact((candidate as { provider_id?: unknown }).provider_id) || undefined;
+      const envPublicID = compact((candidate as { env_public_id?: unknown }).env_public_id) || undefined;
+      if (mode === 'local_with_control_plane') {
+        if (providerOriginRaw === '' || !providerID || !envPublicID) {
+          return null;
+        }
+        try {
+          return {
+            kind,
+            environment_id: environmentID,
+            mode,
+            environment_name: environmentName,
+            label: compact((candidate as { label?: unknown }).label),
+            local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
+            local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
+            local_ui_password_mode: compact(
+              (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
+            ) as 'keep' | 'replace' | 'clear',
+            provider_origin: normalizeControlPlaneOrigin(providerOriginRaw),
+            provider_id: providerID,
+            env_public_id: envPublicID,
+          };
+        } catch {
+          return null;
+        }
+      }
       return {
         kind,
-        environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
-        environment_name: compact((candidate as { environment_name?: unknown }).environment_name),
+        environment_id: environmentID,
+        mode,
+        environment_name: environmentName,
         label: compact((candidate as { label?: unknown }).label),
         local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
         local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
@@ -405,6 +448,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
         ) as 'keep' | 'replace' | 'clear',
       };
+    }
     case 'focus_environment_window': {
       const sessionKey = compact((candidate as { session_key?: unknown }).session_key);
       if (sessionKey === '') {
@@ -464,6 +508,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
       };
       }
+    case 'delete_managed_environment':
     case 'delete_saved_environment': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {

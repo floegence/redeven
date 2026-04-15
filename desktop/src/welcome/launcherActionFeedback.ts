@@ -102,6 +102,7 @@ export function launcherActionFailurePresentation(
         refresh_snapshot: refreshSnapshot,
       };
     case 'environment_missing':
+    case 'environment_in_use':
     case 'environment_route_unavailable':
     case 'control_plane_missing':
     case 'control_plane_environment_missing':

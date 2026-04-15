@@ -15,6 +15,8 @@ describe('desktop persistence wiring', () => {
     expect(preloadSrc).toContain('bootstrapDesktopAskFlowerHandoffBridge();');
     expect(preloadSrc).toContain("import { bootstrapDesktopLauncherBridge } from './desktopLauncher';");
     expect(preloadSrc).toContain('bootstrapDesktopLauncherBridge();');
+    expect(preloadSrc).toContain("import { bootstrapDesktopSessionContextBridge } from './desktopSessionContext';");
+    expect(preloadSrc).toContain('bootstrapDesktopSessionContextBridge();');
     expect(preloadSrc).toContain("import { bootstrapDesktopSettingsBridge } from './desktopSettingsBridge';");
     expect(preloadSrc).toContain('bootstrapDesktopSettingsBridge();');
     expect(preloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");
@@ -37,6 +39,7 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_SET_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_REMOVE_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_KEYS_CHANNEL');
+    expect(mainSrc).toContain('ipcMain.on(DESKTOP_SESSION_CONTEXT_GET_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopAskFlowerHandoffPayload');

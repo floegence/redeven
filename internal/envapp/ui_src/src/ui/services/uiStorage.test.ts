@@ -4,10 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createUIStorageAdapter,
+  environmentOwnedUIStorageKey,
   isDesktopStateStorageAvailable,
   removeUIStorageItem,
   readUIStorageItem,
+  readEnvironmentOwnedUIStorageItem,
   writeUIStorageItem,
+  writeEnvironmentOwnedUIStorageItem,
 } from './uiStorage';
 
 function createStorageMock(): Storage {
@@ -49,6 +52,7 @@ afterEach(() => {
   }
   vi.unstubAllGlobals();
   delete window.redevenDesktopStateStorage;
+  delete window.redevenDesktopSessionContext;
 });
 
 describe('uiStorage', () => {
@@ -98,5 +102,22 @@ describe('uiStorage', () => {
     expect(warn).toHaveBeenCalledWith(
       'Redeven Desktop state storage bridge is unavailable; falling back to browser storage. UI preferences may not persist across full restarts.'
     );
+  });
+
+  it('prefixes environment-owned keys with the managed environment scope when available', () => {
+    vi.stubGlobal('localStorage', createStorageMock());
+    window.redevenDesktopSessionContext = {
+      getSnapshot: () => ({
+        managed_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        environment_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      }),
+    };
+
+    writeEnvironmentOwnedUIStorageItem('files:lastPath', '/workspace/demo');
+
+    expect(environmentOwnedUIStorageKey('files:lastPath')).toBe(
+      'files:lastPath:cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+    );
+    expect(readEnvironmentOwnedUIStorageItem('files:lastPath')).toBe('/workspace/demo');
   });
 });
