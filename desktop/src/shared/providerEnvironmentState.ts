@@ -36,6 +36,11 @@ export type DesktopProviderRemoteRouteStateOptions = Readonly<{
   staleAfterMS?: number;
 }>;
 
+type DesktopProviderEnvironmentRuntimeLike = Readonly<{
+  status?: string | null;
+  lifecycle_status?: string | null;
+}>;
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -76,6 +81,14 @@ export function desktopProviderEnvironmentAvailability(
   }
 
   return 'unknown';
+}
+
+export function desktopProviderOnlineEnvironmentCount(
+  environments: readonly DesktopProviderEnvironmentRuntimeLike[],
+): number {
+  return environments.filter((environment) => (
+    desktopProviderEnvironmentAvailability(environment.status, environment.lifecycle_status) === 'online'
+  )).length;
 }
 
 export function desktopProviderCatalogFreshness(

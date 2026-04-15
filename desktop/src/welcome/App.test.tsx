@@ -244,6 +244,16 @@ describe('DesktopWelcomeShell', () => {
     ]);
   });
 
+  it('shows an online environment metric instead of the unified catalog count on Control Plane cards', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('Online Now');
+    expect(appSrc).toContain('controlPlaneOnlineCountDescription');
+    expect(appSrc).toContain('desktopProviderOnlineEnvironmentCount(controlPlane.environments)');
+    expect(appSrc).not.toContain('Unified Catalog');
+    expect(appSrc).not.toContain('Provider-backed entries already materialized into the Environment list.');
+  });
+
   it('uses Environment guidance copy when a capability is unavailable before connection', () => {
     expect(capabilityUnavailableMessage('Deck')).toBe('Connect to an Environment first to open Deck.');
   });

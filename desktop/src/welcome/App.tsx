@@ -55,7 +55,10 @@ import {
   isDesktopLauncherActionSuccess,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
-import { desktopProviderEnvironmentRuntimeLabel } from '../shared/providerEnvironmentState';
+import {
+  desktopProviderEnvironmentRuntimeLabel,
+  desktopProviderOnlineEnvironmentCount,
+} from '../shared/providerEnvironmentState';
 import {
   normalizeDesktopLocalUIPasswordMode,
   type DesktopLocalUIPasswordMode,
@@ -3465,7 +3468,7 @@ function controlPlaneManagedEnvironmentStats(
   controlPlane: DesktopControlPlaneSummary,
   environments: readonly DesktopEnvironmentEntry[],
 ): Readonly<{
-  catalog_count: number;
+  online_count: number;
   local_host_count: number;
   open_count: number;
 }> {
@@ -3475,10 +3478,31 @@ function controlPlaneManagedEnvironmentStats(
     && environmentProviderFilterValue(environment) === providerFilter
   ));
   return {
-    catalog_count: matchedEntries.length,
+    online_count: desktopProviderOnlineEnvironmentCount(controlPlane.environments),
     local_host_count: matchedEntries.filter((environment) => environment.managed_has_local_hosting === true).length,
     open_count: matchedEntries.filter((environment) => environment.is_open).length,
   };
+}
+
+function controlPlaneOnlineCountDescription(
+  controlPlane: DesktopControlPlaneSummary,
+  onlineCount: number,
+): string {
+  if (controlPlane.sync_state === 'syncing') {
+    return onlineCount > 0
+      ? 'Refreshing provider status. Count reflects the latest sync snapshot.'
+      : 'Refreshing provider status. No environments are currently marked online in the latest sync snapshot.';
+  }
+
+  if (controlPlane.sync_state === 'ready' && controlPlane.catalog_freshness === 'fresh') {
+    return onlineCount > 0
+      ? 'Published environments currently reporting online status.'
+      : 'No published environments are currently reporting online status.';
+  }
+
+  return onlineCount > 0
+    ? 'Last synced published environments reporting online status.'
+    : 'The last synced provider snapshot did not report any environments online.';
 }
 
 function ControlPlaneShelf(props: Readonly<{
@@ -3547,13 +3571,13 @@ function ControlPlaneShelf(props: Readonly<{
             </div>
             <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
               <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Unified Catalog
+                Online Now
               </div>
               <div class="mt-1 text-lg font-semibold tracking-tight text-foreground">
-                {stats().catalog_count}
+                {stats().online_count}
               </div>
               <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                Provider-backed entries already materialized into the Environment list.
+                {controlPlaneOnlineCountDescription(props.controlPlane, stats().online_count)}
               </div>
             </div>
             <div class="redeven-tile rounded-md border border-border/70 px-3 py-3">
