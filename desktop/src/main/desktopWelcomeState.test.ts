@@ -150,6 +150,9 @@ describe('desktopWelcomeState', () => {
         managed_environment_kind: 'local',
         managed_environment_name: 'default',
         managed_local_ui_bind: '0.0.0.0:24000',
+        managed_local_runtime_state: 'running_desktop',
+        managed_local_runtime_url: 'http://localhost:23998/',
+        managed_local_close_behavior: 'stops_runtime',
       }),
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
@@ -214,6 +217,33 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: 'local:lab',
         can_delete: true,
+      }),
+    ]));
+  });
+
+  it('marks a discovered external local runtime as attachable before a Desktop session is open', () => {
+    const managedLocal = testManagedLocalEnvironment('default', {
+      currentRuntime: {
+        local_ui_url: 'http://127.0.0.1:24001/',
+        desktop_managed: false,
+        effective_run_mode: 'local',
+      },
+    });
+
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [managedLocal],
+      }),
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'local:default',
+        local_ui_url: 'http://127.0.0.1:24001/',
+        managed_local_runtime_state: 'running_external',
+        managed_local_runtime_url: 'http://127.0.0.1:24001/',
+        managed_local_close_behavior: 'detaches',
+        open_action_label: 'Attach',
       }),
     ]));
   });

@@ -132,6 +132,8 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       { label: 'RUNS ON', value: 'This device' },
       { label: 'ACCESS', value: 'Local' },
+      { label: 'LOCAL RUNTIME', value: 'Running in Desktop' },
+      { label: 'WINDOW', value: 'Stops on close' },
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       { label: 'ACCESS', value: 'Redeven URL' },
@@ -527,6 +529,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(dualRouteEntry!)).toEqual([
       { label: 'RUNS ON', value: 'This device' },
       { label: 'ACCESS', value: 'Local + Remote' },
+      { label: 'LOCAL RUNTIME', value: 'Starts on open' },
       { label: 'CONTROL PLANE', value: 'Demo Portal' },
     ]);
     expect(filterEnvironmentLibrary(
@@ -615,6 +618,57 @@ describe('buildEnvironmentCardModel', () => {
         is_default: false,
       }),
     ]));
+  });
+
+  it('surfaces Attach as the local action when a runtime is already running without an open Desktop session', () => {
+    const attachableEntry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [
+          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_attachable', {
+            currentRuntime: {
+              local_ui_url: 'http://127.0.0.1:24001/',
+              desktop_managed: false,
+            },
+          }),
+        ],
+      }),
+    }).environments.find((environment) => environment.env_public_id === 'env_attachable');
+
+    expect(attachableEntry).toBeTruthy();
+    expect(attachableEntry).toEqual(expect.objectContaining({
+      managed_local_runtime_state: 'running_external',
+      open_action_label: 'Attach',
+    }));
+
+    const actionModel = buildProviderBackedEnvironmentActionModel(attachableEntry!);
+    expect(actionModel.action_presentation.kind).toBe('split_button');
+    if (actionModel.action_presentation.kind !== 'split_button') {
+      throw new Error('Expected split-button presentation.');
+    }
+    expect(actionModel.action_presentation.default_action).toEqual(expect.objectContaining({
+      intent: 'attach',
+      label: 'Attach',
+      route: 'local_host',
+    }));
+    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        section: 'local',
+        label: 'Attach via Local Port',
+        detail: 'http://127.0.0.1:24001/',
+        action: expect.objectContaining({
+          intent: 'attach',
+          label: 'Attach Local',
+          route: 'local_host',
+        }),
+      }),
+    ]));
+    expect(buildEnvironmentCardFactsModel(attachableEntry!)).toEqual([
+      { label: 'RUNS ON', value: 'This device' },
+      { label: 'ACCESS', value: 'Local + Remote' },
+      { label: 'LOCAL RUNTIME', value: 'Running externally' },
+      { label: 'WINDOW', value: 'Detaches on close' },
+      { label: 'CONTROL PLANE', value: 'https://cp.example.invalid' },
+    ]);
   });
 
   it('keeps remote recovery actions in the split-button menu when the remote route is stale or needs reconnect', () => {

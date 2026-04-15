@@ -63,6 +63,7 @@ export type EnvironmentCardModel = Readonly<{
 
 export type EnvironmentActionIntent =
   | 'open'
+  | 'attach'
   | 'focus'
   | 'opening'
   | 'refresh_status'
@@ -340,6 +341,23 @@ function managedEnvironmentAccessLabel(environment: DesktopEnvironmentEntry): st
   return 'Local';
 }
 
+function managedEnvironmentLocalRuntimeLabel(environment: DesktopEnvironmentEntry): string {
+  switch (environment.managed_local_runtime_state) {
+    case 'running_desktop':
+      return 'Running in Desktop';
+    case 'running_external':
+      return 'Running externally';
+    default:
+      return 'Starts on open';
+  }
+}
+
+function managedEnvironmentLocalCloseLabel(environment: DesktopEnvironmentEntry): string {
+  return environment.managed_local_close_behavior === 'detaches'
+    ? 'Detaches on close'
+    : 'Stops on close';
+}
+
 function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string {
   return environment.control_plane_label || environment.provider_origin || '';
 }
@@ -358,6 +376,18 @@ export function buildEnvironmentCardFactsModel(
         value: managedEnvironmentAccessLabel(environment),
       },
     ];
+    if (environment.managed_has_local_hosting) {
+      facts.push({
+        label: 'LOCAL RUNTIME',
+        value: managedEnvironmentLocalRuntimeLabel(environment),
+      });
+      if (environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external') {
+        facts.push({
+          label: 'WINDOW',
+          value: managedEnvironmentLocalCloseLabel(environment),
+        });
+      }
+    }
     const controlPlaneLabel = controlPlaneDisplayLabel(environment);
     if (controlPlaneLabel !== '') {
       facts.push({
@@ -442,8 +472,16 @@ function localRouteActionModel(environment: DesktopEnvironmentEntry): Environmen
     };
   }
   return {
-    intent: environment.open_local_session_lifecycle === 'open' ? 'focus' : 'open',
-    label: environment.open_local_session_lifecycle === 'open' ? 'Focus Local' : 'Open Local',
+    intent: environment.open_local_session_lifecycle === 'open'
+      ? 'focus'
+      : environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external'
+        ? 'attach'
+        : 'open',
+    label: environment.open_local_session_lifecycle === 'open'
+      ? 'Focus Local'
+      : environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external'
+        ? 'Attach Local'
+        : 'Open Local',
     enabled: true,
     variant: 'default',
     route: 'local_host',
@@ -532,7 +570,7 @@ function remoteRouteActionModel(options: Readonly<{
 }
 
 function isImmediateRouteAction(action: EnvironmentActionModel | null): boolean {
-  return action?.intent === 'open' || action?.intent === 'focus';
+  return action?.intent === 'open' || action?.intent === 'attach' || action?.intent === 'focus';
 }
 
 function preferredRouteCandidate(input: Readonly<{
@@ -601,6 +639,8 @@ function splitButtonPrimaryAction(action: EnvironmentActionModel): EnvironmentAc
     ...action,
     label: action.intent === 'focus'
       ? 'Focus'
+      : action.intent === 'attach'
+        ? 'Attach'
       : action.intent === 'open'
         ? 'Open'
         : action.label,
@@ -609,10 +649,23 @@ function splitButtonPrimaryAction(action: EnvironmentActionModel): EnvironmentAc
 }
 
 function localSplitMenuActionLabel(action: EnvironmentActionModel): string {
-  return action.intent === 'focus' ? 'Focus Local Window' : 'Open via Local Port';
+  if (action.intent === 'focus') {
+    return 'Focus Local Window';
+  }
+  if (action.intent === 'attach') {
+    return 'Attach via Local Port';
+  }
+  return 'Open via Local Port';
 }
 
 function localSplitMenuActionDetail(environment: DesktopEnvironmentEntry): string {
+  const runtimeURL = compact(environment.managed_local_runtime_url);
+  if (environment.managed_local_runtime_state === 'running_external') {
+    return runtimeURL || 'Running outside Desktop. Closing the window detaches only.';
+  }
+  if (environment.managed_local_runtime_state === 'running_desktop') {
+    return runtimeURL || 'Already running in Desktop.';
+  }
   return compact(environment.managed_local_ui_bind) || 'Hosted on this device.';
 }
 
@@ -857,8 +910,16 @@ export function buildProviderBackedEnvironmentActionModel(
       action_presentation: {
         kind: 'single_button',
         action: {
-          intent: environment.open_local_session_lifecycle === 'open' ? 'focus' : 'open',
-          label: environment.open_local_session_lifecycle === 'open' ? 'Focus' : 'Open',
+          intent: environment.open_local_session_lifecycle === 'open'
+            ? 'focus'
+            : environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external'
+              ? 'attach'
+              : 'open',
+          label: environment.open_local_session_lifecycle === 'open'
+            ? 'Focus'
+            : environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external'
+              ? 'Attach'
+              : 'Open',
           enabled: true,
           variant: 'default',
           route: 'local_host',

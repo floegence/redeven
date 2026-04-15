@@ -22,6 +22,8 @@ export type DesktopEnvironmentEntryKind = 'managed_environment' | 'external_loca
 export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Managed' | '';
 export type DesktopEnvironmentEntryCategory = 'managed' | 'open_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopManagedEnvironmentRoute = 'local_host' | 'remote_desktop';
+export type DesktopManagedLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
+export type DesktopManagedLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
@@ -105,6 +107,9 @@ export type DesktopEnvironmentEntry = Readonly<{
   managed_local_ui_bind?: string;
   managed_local_ui_password_configured?: boolean;
   managed_local_owner?: 'desktop' | 'agent' | 'unknown';
+  managed_local_runtime_state?: DesktopManagedLocalRuntimeState;
+  managed_local_runtime_url?: string;
+  managed_local_close_behavior?: DesktopManagedLocalCloseBehavior;
   managed_has_local_hosting?: boolean;
   managed_has_remote_desktop?: boolean;
   managed_preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
@@ -133,7 +138,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   is_opening: boolean;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
-  open_action_label: 'Open' | 'Opening…' | 'Focus';
+  open_action_label: 'Open' | 'Attach' | 'Opening…' | 'Focus';
   can_edit: boolean;
   can_delete: boolean;
   can_save: boolean;
