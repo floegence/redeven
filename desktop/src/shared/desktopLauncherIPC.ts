@@ -395,6 +395,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
+        environment_instance_id: compact((candidate as { environment_instance_id?: unknown }).environment_instance_id),
       };
       }
     case 'start_control_plane_connect':
@@ -475,6 +476,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
           bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
           release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
+          environment_instance_id: compact((candidate as { environment_instance_id?: unknown }).environment_instance_id),
         };
       }
     case 'upsert_managed_environment': {
@@ -572,6 +574,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         remote_install_dir: compact((candidate as { remote_install_dir?: unknown }).remote_install_dir),
         bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
         release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
+        environment_instance_id: compact((candidate as { environment_instance_id?: unknown }).environment_instance_id),
       };
       }
     case 'delete_managed_environment':

@@ -128,6 +128,7 @@ describe('buildEnvironmentCardModel', () => {
             remote_install_dir: '/opt/redeven-desktop/runtime',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: '',
+            environment_instance_id: 'envinst_demo001',
             source: 'saved',
             pinned: false,
             last_used_at_ms: 30,
@@ -149,7 +150,7 @@ describe('buildEnvironmentCardModel', () => {
           },
         },
         {
-          session_key: 'ssh:ops@example.internal:2222:/opt/redeven-desktop/runtime',
+          session_key: 'ssh:ops@example.internal:2222:/opt/redeven-desktop/runtime:envinst_demo001',
           target: buildSSHDesktopTarget(
             {
               ssh_destination: 'ops@example.internal',
@@ -157,6 +158,7 @@ describe('buildEnvironmentCardModel', () => {
               remote_install_dir: '/opt/redeven-desktop/runtime',
               bootstrap_strategy: 'desktop_upload',
               release_base_url: '',
+              environment_instance_id: 'envinst_demo001',
             },
             {
               environmentID: 'ssh_saved',
@@ -213,7 +215,7 @@ describe('buildEnvironmentCardModel', () => {
       source_label: 'Saved',
     }));
     expect(buildEnvironmentCardModel(sshEntry!)).toEqual(expect.objectContaining({
-      kind_label: 'SSH',
+      kind_label: 'SSH Host',
       status_label: 'Open',
       target_primary: 'ops@example.internal:2222',
       target_secondary: 'http://127.0.0.1:24111/',
@@ -241,9 +243,9 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('NETWORK', 'LAN host'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
-      defaultFact('SOURCE', 'Saved'),
+      defaultFact('HOST', 'ops@example.internal:2222'),
+      defaultFact('INSTANCE', 'envinst_demo001'),
       defaultFact('BOOTSTRAP', 'Desktop upload'),
-      defaultFact('INSTALL ROOT', '/opt/redeven-desktop/runtime'),
     ]);
 
     expect(buildEnvironmentCardEndpointsModel(localServeEntry!)).toEqual([
@@ -276,13 +278,13 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     expect(buildEnvironmentCardEndpointsModel(sshEntry!)).toEqual([
       {
-        label: 'SSH',
+        label: 'SSH HOST',
         value: 'ops@example.internal:2222',
         monospace: true,
-        copy_label: 'Copy SSH target',
+        copy_label: 'Copy SSH host',
       },
       {
-        label: 'URL',
+        label: 'FORWARDED URL',
         value: 'http://127.0.0.1:24111/',
         monospace: true,
         copy_label: 'Copy forwarded URL',
@@ -315,6 +317,7 @@ describe('buildEnvironmentCardModel', () => {
           remote_install_dir: '/opt/redeven-desktop/runtime',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: '',
+          environment_instance_id: 'envinst_demo001',
           source: 'saved',
           pinned: false,
           last_used_at_ms: 30,

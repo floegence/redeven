@@ -211,10 +211,10 @@ function buildRemoteInstallRootShell(): string {
 function buildManagedSSHRuntimePathShell(): string {
   return [
     'release_tag="$2"',
-    'version_root="${install_root%/}/${release_tag}"',
-    'bin_dir="${version_root}/bin"',
+    'release_root="${install_root%/}/releases/${release_tag}"',
+    'bin_dir="${release_root}/bin"',
     'binary="${bin_dir}/redeven"',
-    `stamp_path="\${version_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
+    `stamp_path="\${release_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
   ].join('\n');
 }
 
@@ -307,7 +307,7 @@ function buildManagedSSHRuntimeStampShell(): string {
   return [
     'write_runtime_stamp() {',
     '  install_strategy="$1"',
-    '  mkdir -p "$version_root"',
+    '  mkdir -p "$release_root"',
     '  temp_stamp="${stamp_path}.tmp.$$"',
     '  {',
     `    printf 'schema_version=${MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION}\\n'`,
@@ -345,7 +345,7 @@ export function buildManagedSSHRemoteInstallScript(): string {
     buildManagedSSHRuntimeProbeShell(),
     buildManagedSSHRuntimeStampShell(),
     'install_runtime() {',
-    '  script_path="${version_root}/install.sh.$$"',
+    '  script_path="${release_root}/install.sh.$$"',
     '  mkdir -p "$bin_dir"',
     '  curl -fsSL "$install_script_url" -o "$script_path"',
     '  if ! REDEVEN_INSTALL_MODE=upgrade REDEVEN_VERSION="$release_tag" REDEVEN_INSTALL_DIR="$bin_dir" sh "$script_path"; then',
@@ -397,13 +397,15 @@ export function buildManagedSSHStartScript(): string {
     'set -eu',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
-    'state_root="${version_root}/state"',
-    'session_token="$3"',
-    'session_dir="${version_root}/sessions/${session_token}"',
+    'instance_id="$3"',
+    'instance_root="${install_root%/}/instances/${instance_id}"',
+    'state_root="${instance_root}/state"',
+    'session_token="$4"',
+    'session_dir="${instance_root}/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
     'cleanup() { rm -rf "$session_dir"; }',
     'trap cleanup EXIT INT TERM',
-    'mkdir -p "$session_dir"',
+    'mkdir -p "$state_root" "$session_dir"',
     'if [ ! -x "$binary" ]; then',
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
@@ -416,9 +418,9 @@ export function buildManagedSSHReportReadScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    'release_tag="$2"',
+    'instance_id="$2"',
     'session_token="$3"',
-    'report_path="${install_root%/}/${release_tag}/sessions/${session_token}/startup-report.json"',
+    'report_path="${install_root%/}/instances/${instance_id}/sessions/${session_token}/startup-report.json"',
     'if [ ! -f "$report_path" ]; then',
     '  exit 1',
     'fi',
@@ -1036,7 +1038,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
   target: DesktopSSHEnvironmentDetails;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
-  runtimeReleaseTag: string;
+  environmentInstanceID: string;
   sessionToken: string;
   startupTimeoutMs: number;
   logs: MutableRecentLogs;
@@ -1061,7 +1063,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
         ...sshTargetArgs(args.target),
         'sh', '-lc', script, 'redeven-ssh-read-report',
         args.target.remote_install_dir,
-        args.runtimeReleaseTag,
+        args.environmentInstanceID,
         args.sessionToken,
       ],
       args.logs,
@@ -1168,6 +1170,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       'sh', '-lc', buildManagedSSHStartScript(), 'redeven-ssh-start',
       target.remote_install_dir,
       runtimeReleaseTag,
+      target.environment_instance_id,
       sessionToken,
     ], {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1187,7 +1190,7 @@ export async function startManagedSSHRuntime(args: StartManagedSSHRuntimeArgs): 
       target,
       controlSocketPath,
       connectTimeoutSeconds,
-      runtimeReleaseTag,
+      environmentInstanceID: target.environment_instance_id,
       sessionToken,
       startupTimeoutMs,
       logs,

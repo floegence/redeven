@@ -164,6 +164,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: ' /opt/redeven ',
       bootstrap_strategy: ' desktop_upload ',
       release_base_url: ' https://mirror.example.invalid/releases/ ',
+      environment_instance_id: ' envinst_demo001 ',
     })).toEqual({
       kind: 'open_ssh_environment',
       environment_id: 'ssh-1',
@@ -173,6 +174,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
+      environment_instance_id: 'envinst_demo001',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_saved_ssh_environment',
@@ -183,6 +185,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: ' ',
       bootstrap_strategy: ' ',
       release_base_url: ' ',
+      environment_instance_id: ' envinst_demo002 ',
     })).toEqual({
       kind: 'upsert_saved_ssh_environment',
       environment_id: 'ssh-1',
@@ -192,6 +195,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '',
       bootstrap_strategy: '',
       release_base_url: '',
+      environment_instance_id: 'envinst_demo002',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'delete_saved_ssh_environment',
@@ -210,6 +214,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: ' /opt/redeven ',
       bootstrap_strategy: ' desktop_upload ',
       release_base_url: ' https://mirror.example.invalid/releases/ ',
+      environment_instance_id: ' envinst_demo001 ',
     })).toEqual({
       kind: 'set_saved_ssh_environment_pinned',
       environment_id: 'ssh-1',
@@ -220,6 +225,7 @@ describe('desktopLauncherIPC', () => {
       remote_install_dir: '/opt/redeven',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases/',
+      environment_instance_id: 'envinst_demo001',
     });
   });
 

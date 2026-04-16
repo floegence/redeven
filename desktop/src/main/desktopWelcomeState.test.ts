@@ -325,13 +325,14 @@ describe('desktopWelcomeState', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
-          id: 'ssh:devbox:2222:remote_default',
+          id: 'ssh:devbox:2222:remote_default:envinst_demo001',
           label: 'SSH Lab',
           ssh_destination: 'devbox',
           ssh_port: 2222,
           remote_install_dir: 'remote_default',
           bootstrap_strategy: 'desktop_upload',
           release_base_url: 'https://mirror.example.invalid/releases',
+          environment_instance_id: 'envinst_demo001',
           source: 'saved',
           pinned: true,
           last_used_at_ms: 100,
@@ -339,13 +340,14 @@ describe('desktopWelcomeState', () => {
       }),
       openSessions: [
         {
-          session_key: 'ssh:devbox:2222:remote_default',
+          session_key: 'ssh:devbox:2222:remote_default:envinst_demo001',
           target: buildSSHDesktopTarget({
             ssh_destination: 'devbox',
             ssh_port: 2222,
             remote_install_dir: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
+            environment_instance_id: 'envinst_demo001',
           }, {
             label: 'SSH Lab',
             forwardedLocalUIURL: 'http://127.0.0.1:40111/',
@@ -363,12 +365,13 @@ describe('desktopWelcomeState', () => {
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
+        environment_instance_id: 'envinst_demo001',
       }, 'ssh_target_unreachable', 'Desktop could not reach that SSH target.'),
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'ssh:devbox:2222:remote_default',
+        id: 'ssh:devbox:2222:remote_default:envinst_demo001',
         kind: 'ssh_environment',
         label: 'SSH Lab',
         secondary_text: 'devbox:2222',
@@ -386,6 +389,7 @@ describe('desktopWelcomeState', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
+      environment_instance_id: 'envinst_demo001',
     });
   });
 

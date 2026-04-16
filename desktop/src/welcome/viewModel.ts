@@ -50,7 +50,7 @@ export type EnvironmentCardEndpointModel = Readonly<{
 }>;
 
 export type EnvironmentCardModel = Readonly<{
-  kind_label: 'Local' | 'Local Serve' | 'Provider' | 'Redeven URL' | 'SSH';
+  kind_label: 'Local' | 'Local Serve' | 'Provider' | 'Redeven URL' | 'SSH Host';
   status_label: string;
   status_tone: EnvironmentCardTone;
   source_label: string;
@@ -266,7 +266,7 @@ export function isRemoteEnvironmentEntry(environment: DesktopEnvironmentEntry): 
 export function environmentKindLabel(environment: DesktopEnvironmentEntry): EnvironmentCardModel['kind_label'] {
   switch (environment.kind) {
     case 'ssh_environment':
-      return 'SSH';
+      return 'SSH Host';
     case 'provider_environment':
       return 'Provider';
     case 'managed_environment':
@@ -483,9 +483,9 @@ export function buildEnvironmentCardFactsModel(
 
   if (environment.kind === 'ssh_environment') {
     return [
-      buildEnvironmentCardFact('SOURCE', environmentSourceLabel(environment)),
+      buildEnvironmentCardFact('HOST', environment.secondary_text || 'Unknown'),
+      buildEnvironmentCardFact('INSTANCE', environment.ssh_details?.environment_instance_id ?? 'Unknown'),
       buildEnvironmentCardFact('BOOTSTRAP', sshBootstrapSummary(environment) || 'Automatic bootstrap'),
-      buildEnvironmentCardFact('INSTALL ROOT', environment.ssh_details?.remote_install_dir ?? 'Unknown'),
     ];
   }
 
@@ -545,15 +545,15 @@ export function buildEnvironmentCardEndpointsModel(
   }
 
   const card = buildEnvironmentCardModel(environment);
-  const primaryLabel = environment.kind === 'ssh_environment' ? 'SSH' : 'URL';
-  const secondaryLabel = environment.kind === 'ssh_environment' ? 'URL' : 'DETAIL';
+  const primaryLabel = environment.kind === 'ssh_environment' ? 'SSH HOST' : 'URL';
+  const secondaryLabel = environment.kind === 'ssh_environment' ? 'FORWARDED URL' : 'DETAIL';
   return [
     card.target_primary !== ''
       ? {
           label: primaryLabel,
           value: card.target_primary,
           monospace: card.target_primary_monospace,
-          copy_label: environment.kind === 'ssh_environment' ? 'Copy SSH target' : 'Copy endpoint',
+          copy_label: environment.kind === 'ssh_environment' ? 'Copy SSH host' : 'Copy endpoint',
         }
       : null,
     card.target_secondary !== ''
@@ -1092,17 +1092,22 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
   if (environment.kind === 'ssh_environment') {
     return [
       {
+        label: 'Instance ID',
+        value: environment.ssh_details?.environment_instance_id ?? '',
+        monospace: true,
+      },
+      {
+        label: 'Install root',
+        value: environment.ssh_details?.remote_install_dir ?? '',
+        monospace: true,
+      },
+      {
         label: 'Bootstrap',
         value: environment.ssh_details?.bootstrap_strategy === 'desktop_upload'
           ? 'Desktop upload'
           : environment.ssh_details?.bootstrap_strategy === 'remote_install'
             ? 'Remote install'
             : 'Automatic',
-      },
-      {
-        label: 'Install root',
-        value: environment.ssh_details?.remote_install_dir ?? '',
-        monospace: true,
       },
     ].filter((item) => item.value !== '');
   }
@@ -1162,7 +1167,7 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
 
   if (environment.kind === 'ssh_environment') {
     return {
-      kind_label: 'SSH',
+      kind_label: 'SSH Host',
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
       source_label: environmentSourceLabel(environment),
@@ -1207,6 +1212,7 @@ export function environmentMatchesLibrarySearch(
     environment.ssh_details?.remote_install_dir ?? '',
     environment.ssh_details?.release_base_url ?? '',
     environment.ssh_details?.bootstrap_strategy ?? '',
+    environment.ssh_details?.environment_instance_id ?? '',
   ].some((value) => value.toLowerCase().includes(clean));
 }
 

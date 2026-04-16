@@ -104,6 +104,7 @@ export function buildSSHConnectionIssue(
       `message: ${message}`,
       `ssh destination: ${details.ssh_destination}`,
       `ssh port: ${details.ssh_port ?? 'default'}`,
+      `environment instance id: ${details.environment_instance_id}`,
       `remote install dir: ${details.remote_install_dir}`,
       `bootstrap strategy: ${details.bootstrap_strategy}`,
       `release base url: ${details.release_base_url || 'default'}`,
@@ -254,6 +255,7 @@ function openSessionBySSHEnvironment(
         session.target.ssh_destination === environment.ssh_destination
         && session.target.ssh_port === environment.ssh_port
         && session.target.remote_install_dir === environment.remote_install_dir
+        && session.target.environment_instance_id === environment.environment_instance_id
       )
     )
   )) ?? null;
@@ -783,6 +785,7 @@ function buildEnvironmentEntries(
         environment.ssh_destination === target.ssh_destination
         && environment.ssh_port === target.ssh_port
         && environment.remote_install_dir === target.remote_install_dir
+        && environment.environment_instance_id === target.environment_instance_id
       )
     ))) {
       continue;
@@ -803,6 +806,7 @@ function buildEnvironmentEntries(
         remote_install_dir: target.remote_install_dir,
         bootstrap_strategy: target.bootstrap_strategy,
         release_base_url: target.release_base_url,
+        environment_instance_id: target.environment_instance_id,
       },
       pinned: false,
       tag: isOpen ? 'Open' : '',
@@ -876,6 +880,7 @@ function buildSavedSSHEnvironmentEntry(
       remote_install_dir: environment.remote_install_dir,
       bootstrap_strategy: environment.bootstrap_strategy,
       release_base_url: environment.release_base_url,
+      environment_instance_id: environment.environment_instance_id,
     },
     pinned: environment.pinned,
     tag: isOpen ? 'Open' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',

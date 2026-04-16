@@ -171,7 +171,10 @@ import {
   normalizeControlPlaneOrigin,
   type DesktopControlPlaneSummary,
 } from '../shared/controlPlaneProvider';
-import type { DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
+import {
+  normalizeDesktopSSHEnvironmentDetails,
+  type DesktopSSHEnvironmentDetails,
+} from '../shared/desktopSSH';
 import {
   desktopProviderCatalogFreshness,
   desktopProviderRemoteRouteState,
@@ -1505,6 +1508,7 @@ async function rememberRecentSSHTarget(
     remote_install_dir: input.remote_install_dir,
     bootstrap_strategy: input.bootstrap_strategy,
     release_base_url: input.release_base_url,
+    environment_instance_id: input.environment_instance_id,
     label: input.label,
     environment_id: input.environmentID,
   }));
@@ -2608,13 +2612,14 @@ async function openRemoteEnvironmentFromLauncher(
 async function openSSHEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_ssh_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  const sshDetails: DesktopSSHEnvironmentDetails = {
+  const sshDetails = normalizeDesktopSSHEnvironmentDetails({
     ssh_destination: request.ssh_destination,
     ssh_port: request.ssh_port,
     remote_install_dir: request.remote_install_dir,
     bootstrap_strategy: request.bootstrap_strategy,
     release_base_url: request.release_base_url,
-  };
+    environment_instance_id: request.environment_instance_id,
+  });
   const optimisticSessionKey = sshDesktopSessionKey(sshDetails);
   const optimisticSession = liveSession(optimisticSessionKey);
   if (optimisticSession) {
@@ -3266,6 +3271,7 @@ async function upsertSavedSSHEnvironmentFromWelcome(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
+    environment_instance_id: details.environment_instance_id,
     source: 'saved',
     last_used_at_ms: existing?.last_used_at_ms ?? Date.now(),
   });
@@ -3327,6 +3333,7 @@ async function setSavedSSHEnvironmentPinnedFromWelcome(
     remote_install_dir: details.remote_install_dir,
     bootstrap_strategy: details.bootstrap_strategy,
     release_base_url: details.release_base_url,
+    environment_instance_id: details.environment_instance_id,
   }));
 }
 
@@ -3501,6 +3508,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
           remote_install_dir: request.remote_install_dir,
           bootstrap_strategy: request.bootstrap_strategy,
           release_base_url: request.release_base_url,
+          environment_instance_id: request.environment_instance_id,
         },
         request.pinned,
       );
@@ -3571,6 +3579,7 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         remote_install_dir: request.remote_install_dir,
         bootstrap_strategy: request.bootstrap_strategy,
         release_base_url: request.release_base_url,
+        environment_instance_id: request.environment_instance_id,
       });
       return launcherActionSuccess('saved_environment');
     case 'delete_managed_environment':

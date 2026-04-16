@@ -7,7 +7,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Keep `redeven` as the single runtime authority for endpoint behavior.
 - Ship a desktop installer that bundles the matching `redeven` binary.
 - Reuse Redeven Local UI instead of introducing a second app runtime.
-- Let Desktop bootstrap a remote Redeven runtime over SSH without requiring a manual preinstall on the target machine.
+- Let Desktop bootstrap a remote Redeven environment instance on a reachable host over SSH without requiring a manual preinstall on the target machine.
 - Make environment choice explicit on every cold desktop launch.
 - Keep launcher, recovery, diagnostics, and per-environment startup configuration aligned around a launcher-window plus session-window model.
 
@@ -24,7 +24,7 @@ This document describes the public Electron desktop shell that ships with each `
   - `env:<environment_id>:local_host` for a locally hosted managed environment window
   - `env:<environment_id>:remote_desktop` for a remote desktop window opened through a Control Plane provider
   - `url:<normalized-local-ui-origin>` for remote Local UI targets
-  - `ssh:<normalized-ssh-identity>` for SSH-bootstrap targets
+  - `ssh:<normalized-ssh-environment-id>` for SSH-hosted environment instances
 - Desktop-managed environments are the entries that own a real Redeven scope directory on this machine:
   - local environments map to `~/.redeven/scopes/local/<name>`
   - Control Plane environments map to `~/.redeven/scopes/controlplane/<provider_key>/<env_public_id>`
@@ -40,7 +40,7 @@ This document describes the public Electron desktop shell that ships with each `
   - `~/.redeven/catalog/connections/*.json`
   - `~/.redeven/catalog/providers/*.json`
 - In the shared catalog, `identity.provider_id` and `provider_binding.provider_id` always mean the canonical discovery `provider_id`; they must not be rewritten to the local `provider_key`.
-- Saved Redeven URL and SSH entries are connection records only. They do not own an additional Desktop-private runtime state directory.
+- Saved Redeven URL and SSH Host entries are connection records only. SSH Host entries persist host-access details plus an explicit remote environment-instance identity. They do not own an additional Desktop-private runtime state directory on this machine.
 - Desktop and standalone runtime / CLI mode resolve the same scope directories. Desktop does not invent a second local-environment state root.
 - The provider / control-plane model remains environment-first. Whether an environment is locally hosted on this machine is a local runtime/Desktop fact, not a provider-side device resource.
 - The shell keeps `Top Bar`, `Activity Bar`, and `Bottom Bar` visible before an environment is opened, so startup and active-session flows share the same frame.
@@ -50,7 +50,7 @@ This document describes the public Electron desktop shell that ships with each `
   - any known desktop-managed Control Plane environment
   - a remembered recent Environment
   - a saved Redeven Local UI URL
-  - a saved SSH target that Desktop bootstraps on demand
+  - a saved SSH Host entry that Desktop bootstraps on demand
 - Reopening the launcher from an active session does not disconnect anything. Existing Environment windows stay live until the user closes those specific session windows.
 - Common startup failures return to the launcher with inline context instead of bouncing users to a separate blocked-first flow.
 - Electron only allows session-owned navigation to the exact reported Local UI origin for that session and opens all other URLs in the system browser.
@@ -104,31 +104,38 @@ Behavior:
 When the selected target is `Remote Environment`, Desktop does not start the bundled binary.
 Instead it validates and probes the configured Local UI base URL, then opens that exact origin in the shell.
 
-When the selected target is `SSH Environment`, Desktop still keeps Redeven Local UI as the only runtime contract.
+When the selected target is `SSH Host Environment`, Desktop still keeps Redeven Local UI as the only runtime contract.
 It does not introduce a second SSH-native file or terminal protocol. Instead, Electron main:
 
-1. Validates the SSH target fields.
+1. Validates the SSH host-access fields and the `environment_instance_id`.
 2. Uses the host `ssh` client in non-interactive batch mode.
 3. Opens a shared SSH control socket.
-4. Probes whether a compatible Desktop-managed copy of the exact Redeven release is already installed remotely.
+4. Probes whether a compatible Desktop-managed copy of the exact Redeven release is already installed remotely under `releases/<release_tag>/`.
 5. If installation is needed, uses one of three bootstrap strategies:
    - `desktop_upload`
    - `remote_install`
    - `auto`
-6. Starts `redeven run --mode local --local-ui-bind 127.0.0.1:0` remotely.
-7. Waits for the remote startup report.
+6. Starts `redeven run --mode local --local-ui-bind 127.0.0.1:0` remotely with its mutable runtime state rooted at `instances/<environment_instance_id>/state/`.
+7. Waits for the remote startup report under `instances/<environment_instance_id>/sessions/<session_token>/startup-report.json`.
 8. Creates a local SSH port forward to that remote Local UI port.
 9. Opens the forwarded `127.0.0.1:<port>` origin as a normal Desktop session.
 
-### SSH Bootstrap Environment
+### SSH Host Environment
 
 SSH bootstrap is intentionally transport-light and runtime-heavy:
 
 - Desktop does not introduce a second SSH-native runtime protocol.
 - Desktop pins the remote install to the same Redeven release tag as the running desktop build.
-- Desktop only reuses a remote runtime when the binary reports that exact release tag and a Desktop-managed runtime stamp in the same version root is valid.
+- The remote install layout intentionally separates shared release artifacts from mutable environment state:
+  - `<install_root>/releases/<release_tag>/bin/redeven`
+  - `<install_root>/releases/<release_tag>/desktop-runtime.stamp`
+  - `<install_root>/instances/<environment_instance_id>/state/`
+  - `<install_root>/instances/<environment_instance_id>/sessions/<session_token>/startup-report.json`
+- Desktop only reuses a remote runtime when the binary reports that exact release tag and a Desktop-managed runtime stamp in the same release root is valid.
 - Each managed version root contains `desktop-runtime.stamp`, which records the stamp schema, the owning shell (`redeven-desktop`), the exact release tag, and the install strategy.
 - Desktop intentionally does not adopt arbitrary user-installed `redeven` binaries outside that managed version root, so SSH bootstrap stays side-by-side with direct CLI installs instead of mutating them.
+- Mutable runtime state is isolated by `environment_instance_id`, so multiple Desktop users or devices can share one SSH-reachable host without silently colliding on the same remote environment state.
+- Desktop must not silently reuse someone else's remote environment state. Intentional reuse across devices is still supported by explicitly entering the same `environment_instance_id`.
 - The remote install path defaults to the remote user's cache and can be overridden with an absolute path.
 - Desktop can probe the remote OS/architecture (`linux` / `darwin`, `amd64` / `arm64` / `arm` / `386`) and choose the matching release package for desktop-managed upload.
 - `desktop_upload` first resolves `SHA256SUMS`, `SHA256SUMS.sig`, and `SHA256SUMS.pem`, verifies that signed manifest against the pinned Sigstore Fulcio chain plus the Redeven GitHub Actions release-workflow identity policy, and only then trusts the per-asset checksums used for the tarball download.
@@ -143,7 +150,7 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - `auto` prefers desktop upload for restricted networks, then falls back to the remote installer path only when desktop-side asset preparation fails before upload/install begins.
 - After Desktop starts uploading or installing the tarball over SSH, later failures stay first-class errors instead of silently degrading into `remote_install`.
 - The forwarded localhost URL is session-ephemeral and only used as the live session origin.
-- Session identity is derived from SSH destination, SSH port, and remote install directory so reconnecting does not create duplicates just because the forwarded local port changed.
+- Session identity is derived from SSH destination, SSH port, remote install directory, and `environment_instance_id` so reconnecting does not create duplicates just because the forwarded local port changed.
 - Closing the Desktop session tears down the local forward and the SSH-owned remote runtime together.
 - SSH bootstrap still assumes non-interactive SSH authentication (`BatchMode=yes`), so missing keys or host-key trust issues surface as actionable launcher errors instead of prompting through Desktop UI.
 
@@ -197,8 +204,8 @@ Visual hierarchy:
     - provider environment cards projected directly from `control_planes[*].environments`
     - provider local serves stored in `managed_environments`
     - saved Redeven URL connections
-    - saved SSH connections
-  - compact search + source filter toolbar for `All`, `Local`, `Provider`, `Redeven URL`, `SSH`, plus connected-Control-Plane filters
+    - saved SSH Host connections
+  - compact search + source filter toolbar for `All`, `Local`, `Provider`, `Redeven URL`, `SSH Host`, plus connected-Control-Plane filters
   - when pinned entries exist, the launcher keeps explicit `Pinned` and `Environments` sections
   - those sections must still share one measured environment-library column model, so pinning only changes grouping order and never changes card width
   - provider filters and search only change which cards are shown; they must not collapse the underlying card-width system for the current library scope
@@ -218,7 +225,7 @@ Interaction rules:
 - `New Environment` is a three-mode dialog:
   - `Local Environment`
   - `Redeven URL`
-  - `SSH`
+  - `SSH Host`
 - Local Environment mode keeps the flow lightweight and explicit:
   - `Name`
   - `Local UI Bind`
@@ -240,17 +247,18 @@ Interaction rules:
     - focus an already open local serve
     - wait for an already opening local serve
     - block when another local host process already owns that provider-linked scope on this device
-- SSH mode keeps the same compact launcher shell but adds:
+- SSH Host mode keeps the same compact launcher shell but adds:
   - `Name`
   - `SSH Destination`
   - optional `Port`
   - `Bootstrap Delivery`
   - compact `Advanced` section for:
+    - `Environment Instance ID`
     - `Remote Install Directory`
     - `Release Base URL`
-- The SSH `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Release Base URL` or `Remote Install Directory` does not auto-collapse the section.
-- SSH mode explains the actual behavior inline:
-  - Desktop reuses only the exact Desktop-managed release, installs it on demand when needed, and tunnels its Local UI over SSH.
+- The SSH Host `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Environment Instance ID`, `Release Base URL`, or `Remote Install Directory` does not auto-collapse the section.
+- SSH Host mode explains the actual behavior inline:
+  - Desktop reuses shared release artifacts for the exact Desktop-managed version, creates an isolated remote environment instance by default, and only shares mutable state when the same `Environment Instance ID` is entered on purpose.
 - `Add Control Plane` opens a separate dialog that accepts:
   - a user-owned local `Name`
   - a `Provider URL`
@@ -258,7 +266,7 @@ Interaction rules:
 - The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
 - `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
-- Local environments, provider environments, provider local serves, Redeven URLs, and SSH targets all render in the `Environments` tab.
+- Local environments, provider environments, provider local serves, Redeven URLs, and SSH Host entries all render in the `Environments` tab.
 - Connecting or refreshing a Control Plane updates the provider catalog immediately but does not materialize remote-only provider environments into `managed_environments`.
 - `Control Planes` stays provider-management-only. Each shelf offers `View Environments`, `Reconnect`, `Refresh`, and `Delete`.
 - Environment Library cards use one fixed-height layout:
@@ -270,7 +278,7 @@ Interaction rules:
 - Environment Library pinning is first-class:
   - pinned cards render once inside a dedicated `Pinned` section
   - unpinned cards remain in the regular `Environments` section
-  - pinning an open unsaved Redeven URL or SSH target implicitly promotes it into the saved Environment Library
+  - pinning an open unsaved Redeven URL or SSH Host entry implicitly promotes it into the saved Environment Library
 - Local environment cards surface:
   - `RUNS ON`
   - `LOCAL RUNTIME`
@@ -287,10 +295,10 @@ Interaction rules:
 - Redeven URL cards surface:
   - `SOURCE`
   - `NETWORK`
-- SSH cards surface:
-  - `SOURCE`
+- SSH Host cards surface:
+  - `HOST`
+  - `INSTANCE`
   - `BOOTSTRAP`
-  - `INSTALL ROOT`
 - Control Plane shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
 - Provider-backed state is freshness-aware instead of being treated as timeless cache:
   - Desktop marks provider catalogs as `fresh`, `stale`, or `unknown`
@@ -313,7 +321,7 @@ Interaction rules:
   - only concrete identifiers, runtime details, badges, explicit `None` placeholders, and notices stay visible inside the card
 - Provider local serves remain local-first even when the source provider environment is offline or later removed.
 - Direct Redeven URL cards surface whether the target is a saved record, a recent record, or an open window, and whether it points at this device, a LAN host, or a remote host.
-- Direct SSH cards keep their type-specific bootstrap/install facts and forwarded endpoints visible.
+- Direct SSH Host cards keep their type-specific bootstrap/instance facts and forwarded endpoints visible.
 - Deleting a managed environment is a first-class action:
   - Desktop blocks deletion while a window for that managed environment is still open
   - the default local environment `local:default` is a protected Desktop entry and is not deletable from the launcher
@@ -326,7 +334,7 @@ Interaction rules:
 - Open launcher entries switch their primary action from `Open` to `Focus`.
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
-- Saved SSH Environments render in that same card grid, with the SSH identity (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
+- Saved SSH Host environments render in that same card grid, with the SSH host (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
 - Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested per-environment card grid.
 - Control Plane shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
@@ -431,7 +439,8 @@ Semantics:
   - `last_used_at_ms`
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
-- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
+- `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, the `environment_instance_id`, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
+- Legacy SSH entries without an `environment_instance_id` are migrated on load to a newly generated isolated instance id so older Desktop builds do not leave future opens on a shared mutable state root.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
 - `control_planes` stores normalized provider discovery data, the desktop-owned display label, the desktop account snapshot, the cached environment list, and the last sync time.
@@ -463,8 +472,9 @@ Target validation rules:
 - External targets must use an absolute `http://` or `https://` URL.
 - The host must be `localhost` or an IP literal.
 - The shell normalizes the configured target to the Local UI origin root.
-- SSH targets accept `[user@]host` or SSH config host aliases.
+- SSH Host destinations accept `[user@]host` or SSH config host aliases.
 - SSH ports must be valid TCP ports when present.
+- SSH environment instance IDs must use 6-64 lowercase letters, numbers, `_`, or `-`.
 - SSH remote install directories must either use the default remote cache behavior or an absolute path.
 - SSH bootstrap delivery must be one of `auto`, `desktop_upload`, or `remote_install`.
 - SSH release base URLs must be blank or absolute `http://` / `https://` URLs.
@@ -618,7 +628,7 @@ Non-goals:
 - Remote target unreachable
   - Desktop tears down the failed opening session, keeps the launcher stable, and shows a toast with the preserved target context
 - SSH bootstrap failed
-  - Desktop tears down the failed opening session, preserves the SSH target in diagnostics, and reports the failure through toast feedback
+  - Desktop tears down the failed opening session, preserves the SSH Host entry and instance context in diagnostics, and reports the failure through toast feedback
 - Desktop-managed startup blocked
   - Desktop returns to the launcher with structured recovery state and toast feedback instead of opening a blank Environment window
 - Detached child windows and Ask Flower handoff stay session-scoped during recovery; only the owning Environment window receives those callbacks
@@ -653,7 +663,7 @@ Desktop-specific outcomes from this implementation:
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - Desktop resolves update impact before continuing:
   - Desktop-managed local and Control Plane environments may require a Desktop restart and reopen flow
-  - SSH-managed environments only affect that one SSH target
+  - SSH-hosted environment instances only affect that one SSH Host entry + `environment_instance_id`
   - external Redeven URL targets stay externally managed and do not offer a Desktop-side runtime update action
 - Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.
 

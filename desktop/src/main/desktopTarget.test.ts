@@ -92,7 +92,8 @@ describe('desktopTarget', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'auto',
       release_base_url: '',
-    })).toBe('ssh:devbox:2222:remote_default');
+      environment_instance_id: 'envinst_demo001',
+    })).toBe('ssh:devbox:2222:remote_default:envinst_demo001');
 
     expect(buildSSHDesktopTarget({
       ssh_destination: 'devbox',
@@ -100,19 +101,21 @@ describe('desktopTarget', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
+      environment_instance_id: 'envinst_demo001',
     }, {
       forwardedLocalUIURL: 'http://127.0.0.1:41111/',
       label: 'SSH Lab',
     })).toEqual({
       kind: 'ssh_environment',
-      session_key: 'ssh:devbox:2222:remote_default',
-      environment_id: 'ssh:devbox:2222:remote_default',
+      session_key: 'ssh:devbox:2222:remote_default:envinst_demo001',
+      environment_id: 'ssh:devbox:2222:remote_default:envinst_demo001',
       label: 'SSH Lab',
       ssh_destination: 'devbox',
       ssh_port: 2222,
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
+      environment_instance_id: 'envinst_demo001',
       forwarded_local_ui_url: 'http://127.0.0.1:41111/',
     });
   });

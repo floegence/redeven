@@ -279,13 +279,14 @@ describe('desktopPreferences', () => {
         ],
         saved_ssh_environments: [
           {
-            id: 'ssh:devbox:2222:remote_default',
+            id: 'ssh:devbox:2222:remote_default:envinst_demo001',
             label: 'SSH Lab',
             ssh_destination: 'devbox',
             ssh_port: 2222,
             remote_install_dir: 'remote_default',
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
+            environment_instance_id: 'envinst_demo001',
             source: 'saved',
             pinned: false,
             last_used_at_ms: 90,
@@ -296,6 +297,56 @@ describe('desktopPreferences', () => {
 
       await saveDesktopPreferences(paths, preferences, codec);
       await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual(preferences);
+    });
+  });
+
+  it('migrates legacy SSH catalog records onto isolated environment instance ids', async () => {
+    await withTempPreferencesDir(async (root) => {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const connectionsDir = path.join(paths.stateRoot, 'catalog', 'connections');
+      const legacyID = 'ssh:devbox:2222:remote_default';
+
+      await fs.mkdir(connectionsDir, { recursive: true });
+      await fs.writeFile(
+        path.join(connectionsDir, `${encodeURIComponent(legacyID)}.json`),
+        `${JSON.stringify({
+          schema_version: 1,
+          record_kind: 'connection',
+          kind: 'ssh',
+          id: legacyID,
+          label: 'SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          remote_install_dir: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: 'https://mirror.example.invalid/releases',
+          source: 'saved',
+          pinned: false,
+          last_used_at_ms: 90,
+        }, null, 2)}\n`,
+      );
+
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(loaded.saved_ssh_environments).toHaveLength(1);
+      expect(loaded.saved_ssh_environments[0]).toEqual(expect.objectContaining({
+        label: 'SSH Lab',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        remote_install_dir: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: 'https://mirror.example.invalid/releases',
+        source: 'saved',
+        pinned: false,
+      }));
+      expect(loaded.saved_ssh_environments[0].environment_instance_id).toMatch(/^envinst_[a-f0-9]{20}$/u);
+      expect(loaded.saved_ssh_environments[0].id).toBe(
+        `ssh:devbox:2222:remote_default:${loaded.saved_ssh_environments[0].environment_instance_id}`,
+      );
+
+      const rewrittenFiles = await fs.readdir(connectionsDir);
+      expect(rewrittenFiles).toHaveLength(1);
+      expect(rewrittenFiles[0]).toContain(encodeURIComponent(loaded.saved_ssh_environments[0].id));
     });
   });
 
@@ -642,18 +693,20 @@ describe('desktopPreferences', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'auto',
       release_base_url: '',
+      environment_instance_id: 'envinst_demo001',
       label: 'Lab',
     });
 
     expect(remembered.saved_ssh_environments).toEqual([
       {
-        id: 'ssh:devbox:2222:remote_default',
+        id: 'ssh:devbox:2222:remote_default:envinst_demo001',
         label: 'Lab',
         ssh_destination: 'devbox',
         ssh_port: 2222,
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'auto',
         release_base_url: '',
+        environment_instance_id: 'envinst_demo001',
         source: 'recent_auto',
         pinned: false,
         last_used_at_ms: expect.any(Number),
@@ -668,11 +721,12 @@ describe('desktopPreferences', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example.invalid/releases',
+      environment_instance_id: 'envinst_demo001',
       source: 'saved',
       last_used_at_ms: 500,
     });
 
-    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:remote_default').saved_ssh_environments).toEqual([]);
+    expect(deleteSavedSSHEnvironment(saved, 'ssh:devbox:2222:remote_default:envinst_demo001').saved_ssh_environments).toEqual([]);
   });
 
   it('persists pin state for managed, URL, and SSH environments', () => {
@@ -687,13 +741,14 @@ describe('desktopPreferences', () => {
         last_used_at_ms: 20,
       }],
       saved_ssh_environments: [{
-        id: 'ssh:devbox:2222:remote_default',
+        id: 'ssh:devbox:2222:remote_default:envinst_demo001',
         label: 'SSH Lab',
         ssh_destination: 'devbox',
         ssh_port: 2222,
         remote_install_dir: 'remote_default',
         bootstrap_strategy: 'desktop_upload',
         release_base_url: '',
+        environment_instance_id: 'envinst_demo001',
         source: 'saved',
         pinned: false,
         last_used_at_ms: 10,
@@ -708,7 +763,7 @@ describe('desktopPreferences', () => {
       pinned: true,
     });
     const sshPinned = setSavedSSHEnvironmentPinned(urlPinned, {
-      environment_id: 'ssh:devbox:2222:remote_default',
+      environment_id: 'ssh:devbox:2222:remote_default:envinst_demo001',
       label: 'SSH Lab',
       pinned: true,
       ssh_destination: 'devbox',
@@ -716,6 +771,7 @@ describe('desktopPreferences', () => {
       remote_install_dir: 'remote_default',
       bootstrap_strategy: 'desktop_upload',
       release_base_url: '',
+      environment_instance_id: 'envinst_demo001',
     });
 
     expect(sshPinned.managed_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
