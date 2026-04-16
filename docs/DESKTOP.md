@@ -306,7 +306,8 @@ Interaction rules:
   - managed cards surface a compact `LOCAL RUNTIME` fact so users can distinguish `Starts on open`, `Running in Desktop`, and `Running externally`
   - managed cards keep `LOCAL RUNTIME` and `CONTROL PLANE` visible even when one side is unavailable, using `None` as the explicit placeholder value
   - when a local runtime is already running, cards also surface whether the Desktop window `Stops on close` or `Detaches on close`
-- Direct Redeven URL and SSH cards still keep their type-specific facts, but also show `CONTROL PLANE = None` so the absence of a provider link is explicit.
+- Direct Redeven URL cards surface `SOURCE`, `NETWORK`, and `CONTROL PLANE = None` so users can quickly tell whether the target is a saved record, a recent record, or an open window, and whether it points at this device, a LAN host, or a remote host.
+- Direct SSH cards still keep their type-specific facts and also show `CONTROL PLANE = None` so the absence of a provider link is explicit.
 - Deleting a managed environment is a first-class action:
   - Desktop blocks deletion while a window for that managed environment is still open
   - the default local environment `local:default` is a protected Desktop entry and is not deletable from the launcher

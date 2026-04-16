@@ -155,7 +155,8 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('ACCESS', 'Redeven URL'),
-      defaultFact('CONNECTION', 'Open'),
+      defaultFact('SOURCE', 'Saved'),
+      defaultFact('NETWORK', 'LAN host'),
       placeholderFact('CONTROL PLANE'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
@@ -383,6 +384,52 @@ describe('buildEnvironmentCardModel', () => {
       },
     ]);
     expect(remoteEntry!.secondary_text).toBe('https://cp.example.invalid/env/env_demo');
+  });
+
+  it('describes URL cards with source and local-network context', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_environments: [
+          {
+            id: 'https://203.0.113.15:24000/',
+            label: 'Public Relay',
+            local_ui_url: 'https://203.0.113.15:24000/',
+            source: 'recent_auto',
+            pinned: false,
+            last_used_at_ms: 120,
+          },
+        ],
+        recent_external_local_ui_urls: ['https://203.0.113.15:24000/'],
+      }),
+      openSessions: [{
+        session_key: 'url:http://127.0.0.1:24000/',
+        target: buildExternalLocalUIDesktopTarget('http://127.0.0.1:24000/', { label: 'Loopback UI' }),
+        lifecycle: 'open',
+        startup: {
+          local_ui_url: 'http://127.0.0.1:24000/',
+          local_ui_urls: ['http://127.0.0.1:24000/'],
+        },
+      }],
+    });
+
+    const loopbackEntry = snapshot.environments.find((environment) => environment.id === 'http://127.0.0.1:24000/');
+    const publicEntry = snapshot.environments.find((environment) => environment.id === 'https://203.0.113.15:24000/');
+
+    expect(loopbackEntry).toBeTruthy();
+    expect(publicEntry).toBeTruthy();
+
+    expect(buildEnvironmentCardFactsModel(loopbackEntry!)).toEqual([
+      defaultFact('ACCESS', 'Redeven URL'),
+      defaultFact('SOURCE', 'Open window'),
+      defaultFact('NETWORK', 'This device'),
+      placeholderFact('CONTROL PLANE'),
+    ]);
+    expect(buildEnvironmentCardFactsModel(publicEntry!)).toEqual([
+      defaultFact('ACCESS', 'Redeven URL'),
+      defaultFact('SOURCE', 'Recent'),
+      defaultFact('NETWORK', 'Remote host'),
+      placeholderFact('CONTROL PLANE'),
+    ]);
   });
 
   it('marks remote-only provider cards as stale when the provider catalog is outdated', () => {
