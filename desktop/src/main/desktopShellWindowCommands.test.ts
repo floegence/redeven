@@ -13,6 +13,7 @@ class FakeWindow {
   minimizable = true;
   maximizable = true;
   fullScreenable = true;
+  closable = true;
 
   minimize = vi.fn(() => {
     this.minimized = true;
@@ -28,6 +29,10 @@ class FakeWindow {
 
   setFullScreen = vi.fn((value: boolean) => {
     this.fullScreen = value;
+  });
+
+  close = vi.fn(() => {
+    this.destroyed = true;
   });
 
   isDestroyed() {
@@ -57,6 +62,10 @@ class FakeWindow {
   isFullScreenable() {
     return this.fullScreenable;
   }
+
+  isClosable() {
+    return this.closable;
+  }
 }
 
 describe('desktopShellWindowCommands', () => {
@@ -71,6 +80,7 @@ describe('desktopShellWindowCommands', () => {
       minimizable: true,
       maximizable: true,
       full_screenable: true,
+      closable: true,
     });
   });
 
@@ -87,9 +97,20 @@ describe('desktopShellWindowCommands', () => {
         minimizable: true,
         maximizable: true,
         full_screenable: true,
+        closable: true,
       },
     });
     expect(win.minimize).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a closable window explicitly', () => {
+    const win = new FakeWindow();
+
+    const response = performDesktopShellWindowCommand(win as never, 'close');
+    expect(response.ok).toBe(true);
+    expect(response.performed).toBe(true);
+    expect(response.state).toBeNull();
+    expect(win.close).toHaveBeenCalledTimes(1);
   });
 
   it('toggles maximized state when supported', () => {
@@ -136,9 +157,31 @@ describe('desktopShellWindowCommands', () => {
         minimizable: false,
         maximizable: true,
         full_screenable: true,
+        closable: true,
       },
       message: 'Desktop cannot minimize this window.',
     });
     expect(win.minimize).not.toHaveBeenCalled();
+  });
+
+  it('reports close as unsupported when the window is not closable', () => {
+    const win = new FakeWindow();
+    win.closable = false;
+
+    expect(performDesktopShellWindowCommand(win as never, 'close')).toEqual({
+      ok: false,
+      performed: false,
+      state: {
+        minimized: false,
+        maximized: false,
+        full_screen: false,
+        minimizable: true,
+        maximizable: true,
+        full_screenable: true,
+        closable: false,
+      },
+      message: 'Desktop cannot close this window.',
+    });
+    expect(win.close).not.toHaveBeenCalled();
   });
 });

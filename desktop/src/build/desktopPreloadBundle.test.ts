@@ -38,6 +38,7 @@ describe('buildDesktopPreloads', () => {
     expect(utilityOutput).not.toMatch(/require\((['"])\.\//);
 
     expect(sessionOutput).toContain('redevenDesktopAskFlowerHandoff');
+    expect(sessionOutput).toContain('redevenDesktopEmbeddedDragRegions');
     expect(sessionOutput).toContain('redevenDesktopSessionContext');
     expect(sessionOutput).toContain('redevenDesktopShell');
     expect(sessionOutput).toContain('redevenDesktopStateStorage');

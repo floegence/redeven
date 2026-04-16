@@ -1,6 +1,6 @@
 export const DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL = 'redeven-desktop:shell-window-command';
 
-export type DesktopShellWindowCommand = 'minimize' | 'toggle_maximize' | 'toggle_full_screen';
+export type DesktopShellWindowCommand = 'minimize' | 'toggle_maximize' | 'toggle_full_screen' | 'close';
 
 export type DesktopShellWindowCommandRequest = Readonly<{
   command: DesktopShellWindowCommand;
@@ -13,6 +13,7 @@ export type DesktopShellWindowState = Readonly<{
   minimizable: boolean;
   maximizable: boolean;
   full_screenable: boolean;
+  closable: boolean;
 }>;
 
 export type DesktopShellWindowCommandResponse = Readonly<{
@@ -41,6 +42,9 @@ export function normalizeDesktopShellWindowCommand(value: unknown): DesktopShell
     || command === 'fullscreen'
   ) {
     return 'toggle_full_screen';
+  }
+  if (command === 'close' || command === 'close_window' || command === 'close-window') {
+    return 'close';
   }
   return '';
 }
@@ -72,6 +76,7 @@ export function normalizeDesktopShellWindowState(value: unknown): DesktopShellWi
     minimizable: candidate.minimizable === true,
     maximizable: candidate.maximizable === true,
     full_screenable: candidate.full_screenable === true,
+    closable: candidate.closable !== false,
   };
 }
 

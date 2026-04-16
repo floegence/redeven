@@ -10,10 +10,11 @@ describe('agentUpgradeState', () => {
       release_page_url: 'https://example.test/releases/v1.2.3',
     })).toEqual({
       policy: 'desktop_release',
-      allowsUpgradeAction: false,
+      allowsUpgradeAction: true,
       automaticPromptAllowed: false,
       message: 'Managed by Redeven Desktop. Update from the desktop release instead of self-upgrade.',
       releasePageURL: 'https://example.test/releases/v1.2.3',
+      actionLabel: 'Manage in Desktop',
     });
   });
 
@@ -30,6 +31,7 @@ describe('agentUpgradeState', () => {
       automaticPromptAllowed: true,
       message: '',
       releasePageURL: '',
+      actionLabel: 'Update Redeven',
     });
   });
 
@@ -43,6 +45,7 @@ describe('agentUpgradeState', () => {
       automaticPromptAllowed: false,
       message: 'Offline: latest version check is unavailable in local mode.',
       releasePageURL: '',
+      actionLabel: 'Update Redeven',
     });
   });
 });

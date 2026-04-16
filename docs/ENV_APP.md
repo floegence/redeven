@@ -229,7 +229,7 @@ Browser side:
 - The bootstrap then loads the Env App UI via a same-origin iframe:
   - `/_redeven_proxy/env/`
 - This same-origin iframe pattern is specific to the trusted Env App origin.
-  - When that iframe is hosted inside Redeven Desktop remote sessions, Env App publishes desktop drag-region rectangles for its header, while the top-level bootstrap host owns the actual native drag overlays.
+  - When that iframe is hosted inside Redeven Desktop remote sessions, Env App publishes desktop drag-region rectangles for its header, while the Desktop session preload in the top-level document owns the actual native drag overlays.
   - Codespace and port-forward windows opened from Env App use a different path:
     `cs-*` / `pf-*` trusted launcher -> `rt-*` controller origin -> `app-*` untrusted app origin.
   - The untrusted app never runs on the same origin as the Env App runtime/controller window.

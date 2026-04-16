@@ -14,6 +14,7 @@ import {
   requestDesktopAskFlowerMainWindowHandoff,
   shouldRequireDesktopAskFlowerMainWindowHandoff,
 } from '../services/desktopAskFlowerBridge';
+import { closeDesktopWindow } from '../services/desktopShellBridge';
 import { createDebugConsoleController } from '../debugConsole/createDebugConsoleController';
 import { DebugConsoleFooter, DebugConsolePanel } from '../debugConsole/DebugConsoleWindow';
 import { DesktopDetachedWindowFrame } from './DesktopDetachedWindowFrame';
@@ -179,6 +180,14 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     env.openAskFlowerComposer(result.intent);
   };
 
+  const handleDetachedWindowClose = async () => {
+    const response = await closeDesktopWindow();
+    if (response?.ok) {
+      return;
+    }
+    window.close();
+  };
+
   const previewHeaderActions = () => (
     <>
       <button
@@ -299,7 +308,9 @@ export function DetachedSurfaceScene(props: DetachedSurfaceSceneProps) {
     <div class="h-full min-h-0 overflow-hidden bg-background">
       <DebugConsolePanel
         controller={debugConsole!}
-        onClose={() => window.close()}
+        onClose={() => {
+          void handleDetachedWindowClose();
+        }}
         closeLabel="Close Window"
         showMinimize={false}
       />

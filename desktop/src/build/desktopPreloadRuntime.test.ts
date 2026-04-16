@@ -165,9 +165,13 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopSettings?.cancel === 'function',
     hasDesktopSessionContextBridge: typeof window.redevenDesktopSessionContext === 'object'
       && typeof window.redevenDesktopSessionContext?.getSnapshot === 'function',
+    hasDesktopEmbeddedDragBridge: typeof window.redevenDesktopEmbeddedDragRegions === 'object'
+      && typeof window.redevenDesktopEmbeddedDragRegions?.setSnapshot === 'function'
+      && typeof window.redevenDesktopEmbeddedDragRegions?.clear === 'function',
     hasDesktopShellBridge: typeof window.redevenDesktopShell === 'object'
       && typeof window.redevenDesktopShell?.openConnectionCenter === 'function'
       && typeof window.redevenDesktopShell?.openAdvancedSettings === 'function'
+      && typeof window.redevenDesktopShell?.closeWindow === 'function'
       && typeof window.redevenDesktopShell?.minimizeWindow === 'function'
       && typeof window.redevenDesktopShell?.toggleFullScreenWindow === 'function'
       && typeof window.redevenDesktopShell?.restartManagedRuntime === 'function',
@@ -222,6 +226,7 @@ app.whenReady().then(async () => {
         hasDesktopLauncherBridge: boolean;
         hasDesktopSettingsBridge: boolean;
         hasDesktopSessionContextBridge: boolean;
+        hasDesktopEmbeddedDragBridge: boolean;
         hasDesktopShellBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
@@ -232,6 +237,7 @@ app.whenReady().then(async () => {
         hasDesktopLauncherBridge: boolean;
         hasDesktopSettingsBridge: boolean;
         hasDesktopSessionContextBridge: boolean;
+        hasDesktopEmbeddedDragBridge: boolean;
         hasDesktopShellBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
@@ -266,6 +272,7 @@ app.whenReady().then(async () => {
     expect(utility.main.hasDesktopSettingsBridge).toBe(true);
     expect(utility.main.hasAskFlowerBridge).toBe(false);
     expect(utility.main.hasDesktopSessionContextBridge).toBe(false);
+    expect(utility.main.hasDesktopEmbeddedDragBridge).toBe(false);
     expect(utility.main.hasDesktopShellBridge).toBe(true);
     expect(utility.main.hasStateStorageBridge).toBe(true);
     expect(utility.main.hasDesktopThemeBridge).toBe(true);
@@ -277,6 +284,7 @@ app.whenReady().then(async () => {
     expect(session.main.hasDesktopSettingsBridge).toBe(false);
     expect(session.main.hasAskFlowerBridge).toBe(true);
     expect(session.main.hasDesktopSessionContextBridge).toBe(true);
+    expect(session.main.hasDesktopEmbeddedDragBridge).toBe(true);
     expect(session.main.hasDesktopShellBridge).toBe(true);
     expect(session.main.hasStateStorageBridge).toBe(true);
     expect(session.main.hasDesktopThemeBridge).toBe(true);

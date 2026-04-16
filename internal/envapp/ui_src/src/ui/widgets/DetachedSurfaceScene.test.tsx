@@ -7,6 +7,7 @@ import { DetachedSurfaceScene } from './DetachedSurfaceScene';
 const openAskFlowerComposer = vi.fn();
 const requestDesktopAskFlowerMainWindowHandoff = vi.hoisted(() => vi.fn(() => false));
 const shouldRequireDesktopAskFlowerMainWindowHandoff = vi.hoisted(() => vi.fn(() => false));
+const closeDesktopWindow = vi.hoisted(() => vi.fn<() => Promise<unknown>>(async () => null));
 const notificationError = vi.hoisted(() => vi.fn());
 const openPreview = vi.fn(async () => undefined);
 const closePreview = vi.fn();
@@ -133,6 +134,10 @@ vi.mock('../services/desktopAskFlowerBridge', () => ({
   shouldRequireDesktopAskFlowerMainWindowHandoff,
 }));
 
+vi.mock('../services/desktopShellBridge', () => ({
+  closeDesktopWindow,
+}));
+
 vi.mock('../utils/clipboard', () => ({
   writeTextToClipboard,
 }));
@@ -160,6 +165,7 @@ vi.mock('../debugConsole/DebugConsoleWindow', () => ({
   DebugConsolePanel: (props: any) => (
     <div data-testid="detached-debug-console-panel" data-close-label={props.closeLabel ?? ''}>
       debug console panel
+      <button type="button" onClick={props.onClose}>Close</button>
     </div>
   ),
   DebugConsoleFooter: () => <div data-testid="detached-debug-console-footer">debug console footer</div>,
@@ -235,6 +241,8 @@ afterEach(() => {
   requestDesktopAskFlowerMainWindowHandoff.mockReturnValue(false);
   shouldRequireDesktopAskFlowerMainWindowHandoff.mockReset();
   shouldRequireDesktopAskFlowerMainWindowHandoff.mockReturnValue(false);
+  closeDesktopWindow.mockReset();
+  closeDesktopWindow.mockResolvedValue(null);
   notificationError.mockReset();
   openPreview.mockClear();
   closePreview.mockClear();
@@ -458,5 +466,56 @@ describe('DetachedSurfaceScene', () => {
     expect(host.querySelector('[data-testid="detached-debug-console-panel"]')?.getAttribute('data-close-label')).toBe('Close Window');
     expect(host.querySelector('[data-testid="detached-debug-console-footer"]')).toBeTruthy();
     expect(document.title).toBe('Debug Console');
+  });
+
+  it('prefers the desktop shell close bridge for detached debug console windows', async () => {
+    closeDesktopWindow.mockResolvedValue({
+      ok: true,
+      performed: true,
+      state: null,
+      message: undefined,
+    });
+    const windowClose = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <DetachedSurfaceScene
+        surface={{ kind: 'debug_console' }}
+        accessGateVisible={false}
+        accessGatePanel={<div>gate</div>}
+      />
+    ), host);
+
+    const closeButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Close');
+    closeButton?.click();
+    await Promise.resolve();
+
+    expect(closeDesktopWindow).toHaveBeenCalledTimes(1);
+    expect(windowClose).not.toHaveBeenCalled();
+  });
+
+  it('falls back to window.close when the desktop shell close bridge is unavailable', async () => {
+    closeDesktopWindow.mockResolvedValue(null);
+    const windowClose = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <DetachedSurfaceScene
+        surface={{ kind: 'debug_console' }}
+        accessGateVisible={false}
+        accessGatePanel={<div>gate</div>}
+      />
+    ), host);
+
+    const closeButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Close');
+    closeButton?.click();
+    await Promise.resolve();
+
+    expect(closeDesktopWindow).toHaveBeenCalledTimes(1);
+    expect(windowClose).toHaveBeenCalledTimes(1);
   });
 });
