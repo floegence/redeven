@@ -66,6 +66,10 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopShellOpenExternalURLRequest');
     expect(mainSrc).toContain('const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();');
+    expect(mainSrc).toContain("from './windowRecord';");
+    expect(mainSrc).toContain('DesktopTrackedWindow');
+    expect(mainSrc).toContain('trackBrowserWindow');
+    expect(mainSrc).toContain('liveTrackedBrowserWindow');
     expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain('const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();');
     expect(mainSrc).toContain("function windowSurfaceForRole(role: CreateBrowserWindowArgs['role']): DesktopWindowSurface {");
