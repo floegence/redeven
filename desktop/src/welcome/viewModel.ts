@@ -329,6 +329,66 @@ function environmentConnectionStateLabel(environment: DesktopEnvironmentEntry): 
   return 'Saved';
 }
 
+function externalLocalUISourceLabel(environment: DesktopEnvironmentEntry): string {
+  return environmentSourceLabel(environment);
+}
+
+function normalizeIPAddressHost(value: string): string {
+  return value.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
+}
+
+function isLoopbackIPAddressHost(value: string): boolean {
+  const host = normalizeIPAddressHost(value);
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function isPrivateIPv4Host(value: string): boolean {
+  const host = normalizeIPAddressHost(value);
+  const segments = host.split('.');
+  if (segments.length !== 4 || segments.some((segment) => segment === '')) {
+    return false;
+  }
+  const octets = segments.map((segment) => Number(segment));
+  if (octets.some((segment) => !Number.isInteger(segment) || segment < 0 || segment > 255)) {
+    return false;
+  }
+  if (octets[0] === 10) {
+    return true;
+  }
+  if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) {
+    return true;
+  }
+  if (octets[0] === 192 && octets[1] === 168) {
+    return true;
+  }
+  return octets[0] === 169 && octets[1] === 254;
+}
+
+function isLocalIPv6Host(value: string): boolean {
+  const host = normalizeIPAddressHost(value);
+  return /^fc/i.test(host) || /^fd/i.test(host) || /^fe[89ab]/i.test(host);
+}
+
+function externalLocalUINetworkLabel(environment: DesktopEnvironmentEntry): string {
+  const targetURL = compact(environment.local_ui_url) || compact(environment.secondary_text);
+  if (targetURL === '') {
+    return 'Unknown host';
+  }
+  try {
+    const parsed = new URL(targetURL);
+    const host = parsed.hostname;
+    if (isLoopbackIPAddressHost(host)) {
+      return 'This device';
+    }
+    if (isPrivateIPv4Host(host) || isLocalIPv6Host(host)) {
+      return 'LAN host';
+    }
+    return 'Remote host';
+  } catch {
+    return 'Unknown host';
+  }
+}
+
 function managedEnvironmentAccessLabel(environment: DesktopEnvironmentEntry): string {
   const hasLocalHosting = environment.managed_has_local_hosting === true;
   const hasRemoteDesktop = environment.managed_has_remote_desktop === true;
@@ -425,7 +485,8 @@ export function buildEnvironmentCardFactsModel(
 
   return [
     buildEnvironmentCardFact('ACCESS', 'Redeven URL'),
-    buildEnvironmentCardFact('CONNECTION', environmentConnectionStateLabel(environment)),
+    buildEnvironmentCardFact('SOURCE', externalLocalUISourceLabel(environment)),
+    buildEnvironmentCardFact('NETWORK', externalLocalUINetworkLabel(environment)),
     buildPlaceholderEnvironmentCardFact('CONTROL PLANE'),
   ];
 }
