@@ -53,6 +53,7 @@ describe('windowChromeContract', () => {
     expect(styleText).toContain("[data-floe-shell-slot='top-bar']");
     expect(styleText).toContain("[data-redeven-desktop-window-titlebar='true']");
     expect(styleText).toContain("[data-redeven-desktop-titlebar-no-drag='true']");
-    expect(styleText).toContain("grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);");
+    expect(styleText).toContain("grid-template-columns: minmax(0, 1fr) 4.5rem minmax(0, 24rem) 4.5rem minmax(0, 1fr);");
+    expect(styleText).toContain("grid-column: 3;");
   });
 });
