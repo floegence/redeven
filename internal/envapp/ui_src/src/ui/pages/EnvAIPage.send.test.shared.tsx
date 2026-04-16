@@ -272,7 +272,7 @@ function applyMockRealtimeEvent(event: any): void {
 }
 
 const aiContextValue = new Proxy({
-  settings: { error: null },
+  settings: { loading: false, error: null },
   models: { loading: false, error: null },
   threads: { loading: false, error: null },
   aiEnabled: () => true,
@@ -577,7 +577,11 @@ vi.mock('../services/gatewayApi', () => ({
 }));
 
 vi.mock('./aiPermissions', () => ({
-  hasRWXPermissions: () => true,
+  hasRWXPermissions: (env: { permissions?: { can_read?: boolean; can_write?: boolean; can_execute?: boolean } } | null | undefined) => Boolean(
+    env?.permissions?.can_read
+    && env?.permissions?.can_write
+    && env?.permissions?.can_execute,
+  ),
 }));
 
 vi.mock('../widgets/ChatFileBrowserFAB', () => ({
@@ -598,6 +602,16 @@ function resetScenario() {
   fetchGatewayJSONMock.mockImplementation(defaultFetchGatewayJSON);
   uploadGatewayFileMock.mockImplementation(async (_file: File) => '/_redeven_proxy/api/ai/uploads/upl_test');
   prepareGatewayRequestInitMock.mockImplementation(async (init: RequestInit = {}) => init);
+  envResource.latest.permissions.can_read = true;
+  envResource.latest.permissions.can_write = true;
+  envResource.latest.permissions.can_execute = true;
+  envResource.latest.permissions.can_admin = true;
+  envResource.latest.permissions.is_owner = true;
+  aiContextValue.settings = { loading: false, error: null };
+  aiContextValue.models = { loading: false, error: null };
+  aiContextValue.threads = { loading: false, error: null };
+  aiContextValue.aiEnabled = () => true;
+  aiContextValue.modelsReady = () => true;
   aiContextValue.selectedDefaultModel = () => 'model-test';
   aiContextValue.selectDefaultModel = vi.fn();
   aiContextValue.selectedThreadModel = () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test';
@@ -954,6 +968,45 @@ export function registerEnvAIPageSendTests() {
     vi.unstubAllGlobals();
     document.body.innerHTML = '';
     lastDirectoryPickerProps = null;
+  });
+
+  describe('EnvAIPage empty states', () => {
+    it('uses a circular flower badge when Flower is not configured', async () => {
+      aiContextValue.aiEnabled = () => false;
+      aiContextValue.settings = { loading: false, error: null };
+
+      const { host, dispose } = await renderPage();
+      try {
+        expect(host.textContent).toContain('Flower is not configured');
+
+        const badge = host.querySelector('[data-testid="flower-not-configured-badge-shell"]') as HTMLDivElement | null;
+
+        expect(badge).toBeTruthy();
+        expect(badge?.className).toContain('rounded-full');
+        expect(badge?.className).toContain('border');
+        expect(badge?.className).not.toContain('rounded-2xl');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('uses a circular flower badge when Flower is disabled by permissions', async () => {
+      envResource.latest.permissions.can_execute = false;
+
+      const { host, dispose } = await renderPage();
+      try {
+        expect(host.textContent).toContain('Flower is disabled');
+
+        const badge = host.querySelector('[data-testid="flower-disabled-badge-shell"]') as HTMLDivElement | null;
+
+        expect(badge).toBeTruthy();
+        expect(badge?.className).toContain('rounded-full');
+        expect(badge?.className).toContain('border');
+        expect(badge?.className).not.toContain('rounded-2xl');
+      } finally {
+        dispose();
+      }
+    });
   });
 
   describe('EnvAIPage header model controls', () => {

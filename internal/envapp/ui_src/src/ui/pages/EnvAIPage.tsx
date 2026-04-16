@@ -1217,6 +1217,32 @@ interface EmptyChatProps {
   disabled?: boolean;
 }
 
+interface FlowerHeroBadgeProps {
+  pulseClass?: string;
+  wrapperClass?: string;
+  shellClass?: string;
+  iconClass?: string;
+  testId?: string;
+}
+
+const FLOWER_HERO_BADGE_SHELL_CLASS = 'flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-primary/15 to-amber-500/10 shadow-sm';
+
+const FlowerHeroBadge: Component<FlowerHeroBadgeProps> = (props) => (
+  <div class="relative inline-flex items-center justify-center mb-6">
+    {props.pulseClass ? (
+      <div class={cn('absolute -inset-2 rounded-full bg-primary/8', props.pulseClass)} />
+    ) : null}
+    <div class={cn('relative h-16 w-16 rounded-full', props.wrapperClass)}>
+      <div
+        data-testid={props.testId}
+        class={cn(FLOWER_HERO_BADGE_SHELL_CLASS, props.shellClass)}
+      >
+        <FlowerIcon class={cn('h-9 w-9 text-primary', props.iconClass)} />
+      </div>
+    </div>
+  </div>
+);
+
 const EmptyChat: Component<EmptyChatProps> = (props) => {
   return (
     <div class="flower-empty-chat-state">
@@ -1228,14 +1254,12 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
         transition={{ duration: 0.5, easing: 'ease-out' }}
       >
         {/* Animated flower icon */}
-        <div class="relative inline-flex items-center justify-center mb-6">
-          <div class="absolute -inset-2 rounded-full bg-primary/8 animate-[pulse_3s_ease-in-out_1.35s_infinite] motion-reduce:animate-none" />
-          <div class="relative w-16 h-16 redeven-flower-icon-breathe">
-            <div class="w-full h-full rounded-full bg-gradient-to-br from-primary/15 to-amber-500/10 flex items-center justify-center shadow-sm redeven-flower-icon-spin">
-              <FlowerIcon class="w-9 h-9 text-primary" />
-            </div>
-          </div>
-        </div>
+        <FlowerHeroBadge
+          pulseClass="animate-[pulse_3s_ease-in-out_1.35s_infinite] motion-reduce:animate-none"
+          wrapperClass="redeven-flower-icon-breathe"
+          shellClass="redeven-flower-icon-spin"
+          testId="flower-new-chat-badge-shell"
+        />
 
         <h2 class="text-xl font-semibold text-foreground mb-3">
           Hello! I'm Flower
@@ -3510,12 +3534,11 @@ export function EnvAIPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.4, easing: 'ease-out' }}
               >
-                <div class="relative inline-flex items-center justify-center mb-6">
-                  <div class="absolute -inset-2 rounded-2xl bg-primary/8 animate-[pulse_3s_ease-in-out_infinite]" />
-                  <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/15 to-amber-500/10 flex items-center justify-center border border-primary/20 shadow-sm">
-                    <FlowerIcon class="w-9 h-9 text-primary" />
-                  </div>
-                </div>
+                <FlowerHeroBadge
+                  pulseClass="animate-[pulse_3s_ease-in-out_infinite]"
+                  shellClass="border border-primary/20"
+                  testId="flower-disabled-badge-shell"
+                />
                 <div class="text-lg font-semibold text-foreground mb-2">Flower is disabled</div>
                 <div class="text-sm text-muted-foreground mb-6 max-w-[360px]">
                   Read/write/execute permission required to use Flower.
@@ -3539,12 +3562,11 @@ export function EnvAIPage() {
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ duration: 0.4, easing: 'ease-out' }}
                     >
-                      <div class="relative inline-flex items-center justify-center mb-6">
-                        <div class="absolute -inset-2 rounded-2xl bg-primary/8 animate-[pulse_3s_ease-in-out_infinite]" />
-                        <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/15 to-amber-500/10 flex items-center justify-center border border-primary/20 shadow-sm">
-                          <FlowerIcon class="w-9 h-9 text-primary" />
-                        </div>
-                      </div>
+                      <FlowerHeroBadge
+                        pulseClass="animate-[pulse_3s_ease-in-out_infinite]"
+                        shellClass="border border-primary/20"
+                        testId="flower-not-configured-badge-shell"
+                      />
                       <div class="text-lg font-semibold text-foreground mb-2">Flower is not configured</div>
                       <div class="text-sm text-muted-foreground mb-6 max-w-[320px]">
                         Configure an AI provider in Runtime Settings to start using Flower.
