@@ -43,11 +43,14 @@ import {
   rememberManagedEnvironmentUse,
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
+  rememberProviderEnvironmentUse,
   saveDesktopPreferences,
   setManagedEnvironmentPinned,
+  setProviderEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedSSHEnvironmentPinned,
   upsertManagedEnvironment,
+  upsertProviderLocalServe,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -367,7 +370,7 @@ describe('desktopPreferences', () => {
         control_plane_refresh_tokens: preferences.control_plane_refresh_tokens,
         control_planes: preferences.control_planes,
       }));
-      expect(loaded.managed_environments).toEqual(expect.arrayContaining([
+      expect(loaded.managed_environments).toEqual([
         expect.objectContaining({
           id: 'local:default',
           identity: { kind: 'provisional_local', local_name: 'default' },
@@ -375,21 +378,8 @@ describe('desktopPreferences', () => {
             scope: { kind: 'local', name: 'default' },
           }),
         }),
-        expect.objectContaining({
-          id: 'cp:https%3A%2F%2Fregion.example.invalid:env:env_demo',
-          identity: {
-            kind: 'provider',
-            provider_origin: 'https://region.example.invalid',
-            provider_id: 'redeven_portal',
-            env_public_id: 'env_demo',
-          },
-          provider_binding: expect.objectContaining({
-            provider_origin: 'https://region.example.invalid',
-            provider_id: 'redeven_portal',
-            env_public_id: 'env_demo',
-          }),
-        }),
-      ]));
+      ]);
+      expect(loaded.provider_environment_preferences).toEqual([]);
     });
   });
 
@@ -797,7 +787,7 @@ describe('desktopPreferences', () => {
     ]);
   });
 
-  it('materializes provider environments into the managed catalog on control-plane sync', () => {
+  it('keeps provider environments in the control-plane catalog instead of materializing managed records', () => {
     const provider = buildTestControlPlaneProvider();
     const next = upsertSavedControlPlane(testDesktopPreferences(), {
       provider,
@@ -808,23 +798,20 @@ describe('desktopPreferences', () => {
       last_synced_at_ms: 456,
     });
 
-    const providerEntry = next.managed_environments.find((environment) => environment.id !== 'local:default');
-
-    expect(providerEntry).toEqual(expect.objectContaining({
-      label: 'Demo Environment',
-      identity: {
-        kind: 'provider',
-        provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
-        env_public_id: 'env_demo',
-      },
-      provider_binding: expect.objectContaining({
-        provider_origin: 'https://cp.example.invalid',
-        provider_id: 'redeven_portal',
-        env_public_id: 'env_demo',
+    expect(next.managed_environments).toEqual([
+      expect.objectContaining({
+        id: 'local:default',
       }),
-    }));
-    expect(providerEntry?.local_hosting).toBeUndefined();
+    ]);
+    expect(next.provider_environment_preferences).toEqual([]);
+    expect(next.control_planes[0]?.environments).toEqual([
+      expect.objectContaining({
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'redeven_portal',
+        env_public_id: 'env_demo',
+        label: 'Demo Environment',
+      }),
+    ]);
   });
 
   it('merges provider refresh data into an existing dual-route environment without dropping local state', () => {
@@ -1011,33 +998,32 @@ describe('desktopPreferences', () => {
     expect(result.preferences.managed_environments.some((environment) => environment.id === removable.id)).toBe(false);
   });
 
-  it('deleting a dual-route managed environment keeps the remote control-plane entry while removing local hosting', () => {
-    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route', {
+  it('deleting a provider local serve removes only the local record', () => {
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route', {
       access: {
         local_ui_bind: '127.0.0.1:24000',
       },
     });
 
     const result = deleteManagedEnvironment(testDesktopPreferences({
-      managed_environments: [dualRoute],
-    }), dualRoute.id);
+      managed_environments: [localServe],
+      control_planes: [{
+        provider: buildTestControlPlaneProvider(),
+        account: buildTestControlPlaneAccount(),
+        environments: [buildTestProviderEnvironment(buildTestControlPlaneProvider(), 'env_dual_route')],
+        display_label: 'Demo Portal',
+        last_synced_at_ms: 456,
+      }],
+    }), localServe.id);
 
-    const retained = result.preferences.managed_environments.find((environment) => (
-      environment.provider_binding?.provider_origin === 'https://cp.example.invalid'
-      && environment.provider_binding?.env_public_id === 'env_dual_route'
-    ));
-
-    expect(result.deleted_environment?.id).toBe(dualRoute.id);
-    expect(result.deleted_state_dir).toBe(dualRoute.local_hosting?.state_dir);
-    expect(retained).toEqual(expect.objectContaining({
-      id: dualRoute.id,
-      label: dualRoute.label,
-      provider_binding: expect.objectContaining({
-        provider_origin: 'https://cp.example.invalid',
+    expect(result.deleted_environment?.id).toBe(localServe.id);
+    expect(result.deleted_state_dir).toBe(localServe.local_hosting?.state_dir);
+    expect(result.preferences.managed_environments.map((environment) => environment.id)).toEqual(['local:default']);
+    expect(result.preferences.control_planes[0]?.environments).toEqual([
+      expect.objectContaining({
         env_public_id: 'env_dual_route',
       }),
-    }));
-    expect(retained?.local_hosting).toBeUndefined();
+    ]);
   });
 
   it('repairs a legacy provider-backed local environment during control-plane sync without duplicating it', () => {
@@ -1107,35 +1093,117 @@ describe('desktopPreferences', () => {
     });
 
     expect(next.managed_environments.some((environment) => environment.id === remoteOnly.id)).toBe(false);
-    expect(next.managed_environments.find((environment) => environment.id === dualRoute.id)).toEqual(dualRoute);
+    expect(next.managed_environments.find((environment) => environment.id === dualRoute.id)).toEqual(expect.objectContaining({
+      id: dualRoute.id,
+      preferred_open_route: 'local_host',
+      provider_binding: expect.objectContaining({
+        provider_origin: 'https://cp.example.invalid',
+        env_public_id: 'env_kept',
+      }),
+    }));
   });
 
-  it('deleting a control plane removes remote-only catalog entries and keeps dual-route local hosts', () => {
-    const preferences = testDesktopPreferences({
-      managed_environments: [
-        testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_removed', { localHosting: false }),
-        testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_kept'),
-      ],
-      control_plane_refresh_tokens: {
-        'https://cp.example.invalid|redeven_portal': 'refresh-demo-token',
+  it('deleting a control plane removes provider-card preferences and keeps provider local serves', () => {
+    const provider = buildTestControlPlaneProvider();
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_kept');
+    const preferencesWithProviderState = setProviderEnvironmentPinned(
+      rememberProviderEnvironmentUse(testDesktopPreferences({
+        managed_environments: [
+          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_removed', { localHosting: false }),
+          localServe,
+        ],
+        control_plane_refresh_tokens: {
+          'https://cp.example.invalid|redeven_portal': 'refresh-demo-token',
+        },
+        control_planes: [{
+          provider,
+          account: buildTestControlPlaneAccount(provider),
+          environments: [buildTestProviderEnvironment(provider)],
+          display_label: 'Demo Portal',
+          last_synced_at_ms: 456,
+        }],
+      }), {
+        provider_origin: provider.provider_origin,
+        provider_id: provider.provider_id,
+        env_public_id: 'env_kept',
+      }),
+      {
+        provider_origin: provider.provider_origin,
+        provider_id: provider.provider_id,
+        env_public_id: 'env_kept',
+        pinned: true,
       },
-      control_planes: [{
-        provider: buildTestControlPlaneProvider(),
-        account: buildTestControlPlaneAccount(),
-        environments: [buildTestProviderEnvironment()],
-        display_label: 'Demo Portal',
-        last_synced_at_ms: 456,
-      }],
-    });
-
-    const next = deleteSavedControlPlane(preferences, 'https://cp.example.invalid', 'redeven_portal');
+    );
+    const next = deleteSavedControlPlane(preferencesWithProviderState, 'https://cp.example.invalid', 'redeven_portal');
 
     expect(next.control_planes).toEqual([]);
     expect(next.control_plane_refresh_tokens).toEqual({});
-    expect(next.managed_environments.map((environment) => environment.id)).toEqual(expect.arrayContaining([
-      'local:default',
+    expect(next.provider_environment_preferences).toEqual([]);
+    expect(next.managed_environments.map((environment) => environment.id)).toEqual([
       'cp:https%3A%2F%2Fcp.example.invalid:env:env_kept',
-    ]));
+      'local:default',
+    ]);
+  });
+
+  it('tracks provider-card pin and last-used metadata separately from managed environments', () => {
+    const provider = buildTestControlPlaneProvider();
+    const used = rememberProviderEnvironmentUse(testDesktopPreferences(), {
+      provider_origin: provider.provider_origin,
+      provider_id: provider.provider_id,
+      env_public_id: 'env_demo',
+    });
+    const pinned = setProviderEnvironmentPinned(
+      used,
+      {
+        provider_origin: provider.provider_origin,
+        provider_id: provider.provider_id,
+        env_public_id: 'env_demo',
+        pinned: true,
+      },
+    );
+
+    expect(pinned.managed_environments).toEqual([
+      expect.objectContaining({
+        id: 'local:default',
+      }),
+    ]);
+    expect(pinned.provider_environment_preferences).toEqual([
+      expect.objectContaining({
+        provider_origin: provider.provider_origin,
+        provider_id: provider.provider_id,
+        env_public_id: 'env_demo',
+        pinned: true,
+        last_used_at_ms: expect.any(Number),
+      }),
+    ]);
+  });
+
+  it('upserts provider local serves through the managed-environment catalog without creating duplicate local cards', () => {
+    const next = upsertProviderLocalServe(testDesktopPreferences(), {
+      label: 'Demo Local Serve',
+      access: testManagedAccess({
+        local_ui_bind: '127.0.0.1:24001',
+        local_ui_password: 'secret',
+        local_ui_password_configured: true,
+      }),
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'redeven_portal',
+      env_public_id: 'env_demo',
+    });
+
+    expect(next.managed_environments.filter((environment) => environment.id === 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo')).toEqual([
+      expect.objectContaining({
+        label: 'Demo Local Serve',
+        preferred_open_route: 'local_host',
+        local_hosting: expect.objectContaining({
+          scope: expect.objectContaining({
+            kind: 'controlplane',
+            provider_origin: 'https://cp.example.invalid',
+            env_public_id: 'env_demo',
+          }),
+        }),
+      }),
+    ]);
   });
 
   it('canonicalizes legacy provider ids when loading catalog-backed preferences and rewrites the catalog', async () => {

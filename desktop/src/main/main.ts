@@ -17,15 +17,17 @@ import {
   findManagedEnvironmentByID,
   loadDesktopPreferences,
   rememberManagedEnvironmentUse,
+  rememberProviderEnvironmentUse,
   rememberRecentExternalLocalUITarget,
   rememberRecentSSHEnvironmentTarget,
   saveDesktopPreferences,
   setManagedEnvironmentPinned,
+  setProviderEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedSSHEnvironmentPinned,
   updateManagedEnvironmentAccess,
-  upsertManagedControlPlaneEnvironment,
   upsertManagedEnvironment,
+  upsertProviderLocalServe,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedSSHEnvironment,
@@ -70,11 +72,10 @@ import { startManagedSSHRuntime } from './sshRuntime';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
-import { resolveManagedEnvironmentOpenTarget } from './managedEnvironmentOpen';
 import {
+  createManagedControlPlaneEnvironment,
   desktopManagedLocalEnvironmentID,
   isDefaultLocalManagedEnvironment,
-  managedEnvironmentDefaultOpenRoute,
   managedEnvironmentKind,
   managedEnvironmentLocalAccess,
   managedEnvironmentProviderID,
@@ -2292,49 +2293,41 @@ function controlPlaneBootstrap(
   };
 }
 
-async function openManagedControlPlaneEnvironmentRecord(
+async function openProviderRemoteEnvironmentRecord(
   preferences: DesktopPreferences,
-  environment: DesktopManagedEnvironment,
-  providerOrigin: string,
-  envPublicID: string,
-  openSession: Readonly<{
-    bootstrap_ticket?: string;
-    remote_session_url?: string;
+  args: Readonly<{
+    providerOrigin: string;
+    providerID: string;
+    envPublicID: string;
+    label: string;
+    remoteSessionURL: string;
+    stealAppFocus?: boolean;
   }>,
-  requestedRoute: 'auto' | 'local_host' | 'remote_desktop' = 'auto',
 ): Promise<DesktopLauncherActionResult> {
-  const resolvedTarget = resolveManagedEnvironmentOpenTarget(environment, openSession, requestedRoute);
-  if (resolvedTarget.route === 'remote_desktop') {
-    return openManagedRemoteEnvironmentRecord(preferences, environment, resolvedTarget.remote_session_url, {
-      stealAppFocus: true,
-    });
-  }
-  return openManagedEnvironmentRecord(preferences, environment, {
-    bootstrap: controlPlaneBootstrap(providerOrigin, envPublicID, resolvedTarget.bootstrap_ticket),
-    stealAppFocus: true,
+  const environment = createManagedControlPlaneEnvironment(args.providerOrigin, args.envPublicID, {
+    providerID: args.providerID,
+    label: args.label,
+    remoteDesktopSupported: true,
+    remoteWebSupported: true,
   });
-}
-
-async function openManagedRemoteEnvironmentRecord(
-  preferences: DesktopPreferences,
-  environment: DesktopManagedEnvironment,
-  remoteSessionURL: string,
-  options: Readonly<{ stealAppFocus?: boolean }> = {},
-): Promise<DesktopLauncherActionResult> {
   const target = buildManagedEnvironmentDesktopTarget(environment, { route: 'remote_desktop' });
   const existingSession = liveSession(target.session_key);
   if (existingSession) {
     if (existingSession.lifecycle === 'opening') {
       return launcherActionFailureForOpeningSession(existingSession, {
         environmentID: environment.id,
-        providerOrigin: managedEnvironmentProviderOrigin(environment),
-        providerID: managedEnvironmentProviderID(environment),
-        envPublicID: managedEnvironmentPublicID(environment),
+        providerOrigin: args.providerOrigin,
+        providerID: args.providerID,
+        envPublicID: args.envPublicID,
       });
     }
     resetLauncherIssueState();
-    focusEnvironmentSession(existingSession.session_key, { stealAppFocus: options.stealAppFocus !== false });
-    await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'remote_desktop'));
+    focusEnvironmentSession(existingSession.session_key, { stealAppFocus: args.stealAppFocus !== false });
+    await persistDesktopPreferences(rememberProviderEnvironmentUse(preferences, {
+      provider_origin: args.providerOrigin,
+      provider_id: args.providerID,
+      env_public_id: args.envPublicID,
+    }));
     return launcherActionSuccess('focused_environment_window', {
       sessionKey: existingSession.session_key,
     });
@@ -2343,20 +2336,24 @@ async function openManagedRemoteEnvironmentRecord(
   try {
     const sessionRecord = await createSessionRecord(
       target,
-      remoteManagedSessionStartup(remoteSessionURL),
-      { stealAppFocus: options.stealAppFocus !== false },
+      remoteManagedSessionStartup(args.remoteSessionURL),
+      { stealAppFocus: args.stealAppFocus !== false },
     );
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
     return launcherActionFailureFromSessionOpenError(error, {
       environmentID: environment.id,
-      providerOrigin: managedEnvironmentProviderOrigin(environment),
-      providerID: managedEnvironmentProviderID(environment),
-      envPublicID: managedEnvironmentPublicID(environment),
+      providerOrigin: args.providerOrigin,
+      providerID: args.providerID,
+      envPublicID: args.envPublicID,
     });
   }
   resetLauncherIssueState();
-  await persistDesktopPreferences(rememberManagedEnvironmentUse(preferences, environment.id, 'remote_desktop'));
+  await persistDesktopPreferences(rememberProviderEnvironmentUse(preferences, {
+    provider_origin: args.providerOrigin,
+    provider_id: args.providerID,
+    env_public_id: args.envPublicID,
+  }));
   return launcherActionSuccess('opened_environment_window', {
     sessionKey: target.session_key,
   });
@@ -2388,29 +2385,18 @@ async function openControlPlaneEnvironmentWithOpenSession(args: Readonly<{
   if (providerID === '') {
     throw new Error('Desktop could not resolve the Control Plane provider ID.');
   }
-  const nextPreferences = upsertManagedControlPlaneEnvironment(preferences, {
-    provider_origin: providerOrigin,
-    provider_id: providerID,
-    env_public_id: args.envPublicID,
-    label: controlPlaneEnvironmentLabel(controlPlane, args.envPublicID, args.label),
-  });
-  const environment = nextPreferences.managed_environments.find((entry) => (
-    managedEnvironmentProviderOrigin(entry) === providerOrigin
-    && managedEnvironmentPublicID(entry) === args.envPublicID
-  )) ?? null;
-  if (!environment) {
-    throw new Error('Desktop could not register that Control Plane environment.');
+  const remoteSessionURL = compact(args.remoteSessionURL);
+  if (remoteSessionURL === '') {
+    throw new Error('Desktop could not obtain a remote session URL for that provider environment.');
   }
-  return openManagedControlPlaneEnvironmentRecord(
-    nextPreferences,
-    environment,
+  return openProviderRemoteEnvironmentRecord(preferences, {
     providerOrigin,
-    args.envPublicID,
-    {
-      bootstrap_ticket: compact(args.bootstrapTicket) || undefined,
-      remote_session_url: compact(args.remoteSessionURL) || undefined,
-    },
-  );
+    providerID,
+    envPublicID: args.envPublicID,
+    label: controlPlaneEnvironmentLabel(controlPlane, args.envPublicID, args.label),
+    remoteSessionURL,
+    stealAppFocus: true,
+  });
 }
 
 async function openManagedEnvironmentFromLauncher(
@@ -2433,9 +2419,25 @@ async function openManagedEnvironmentFromLauncher(
     ? request.route
     : 'auto';
   if (managedEnvironmentKind(environment) === 'controlplane') {
+    if (requestedRoute === 'remote_desktop') {
+      return launcherActionFailure(
+        'environment_route_unavailable',
+        'environment',
+        'Open the separate provider environment card for remote access. This local serve card only opens the runtime on this device.',
+        {
+          environmentID: environment.id,
+          providerOrigin: managedEnvironmentProviderOrigin(environment),
+          providerID: managedEnvironmentProviderID(environment),
+          envPublicID: managedEnvironmentPublicID(environment),
+        },
+      );
+    }
     const providerOrigin = managedEnvironmentProviderOrigin(environment);
     const providerID = managedEnvironmentProviderID(environment);
     const envPublicID = managedEnvironmentPublicID(environment);
+    if (environment.local_hosting?.current_runtime?.local_ui_url) {
+      return openManagedEnvironmentRecord(preferences, environment, { stealAppFocus: true });
+    }
     const controlPlaneState = controlPlaneRouteSnapshot(
       preferences,
       providerOrigin,
@@ -2461,11 +2463,7 @@ async function openManagedEnvironmentFromLauncher(
         preferences,
         controlPlane: controlPlaneState.controlPlane,
       };
-      const targetRoute = requestedRoute === 'local_host' || requestedRoute === 'remote_desktop'
-        ? requestedRoute
-        : managedEnvironmentDefaultOpenRoute(environment);
-      const requiresRemoteRoute = targetRoute === 'remote_desktop';
-      if (requiresRemoteRoute && controlPlaneState.summary?.catalog_freshness !== 'fresh') {
+      if (controlPlaneState.summary?.catalog_freshness !== 'fresh') {
         synchronized = await syncSavedControlPlaneAccountWithState(providerOrigin, providerID, { force: true });
       }
       const latestState = controlPlaneRouteSnapshot(
@@ -2474,16 +2472,14 @@ async function openManagedEnvironmentFromLauncher(
         providerID,
         envPublicID,
       );
-      if (requiresRemoteRoute) {
-        const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
-          environmentID: environment.id,
-          providerOrigin,
-          providerID,
-          envPublicID,
-        });
-        if (routeFailure) {
-          return routeFailure;
-        }
+      const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
+        environmentID: environment.id,
+        providerOrigin,
+        providerID,
+        envPublicID,
+      });
+      if (routeFailure) {
+        return routeFailure;
       }
       const authorized = await ensureControlPlaneAccessToken(synchronized.preferences, synchronized.controlPlane);
       const openSession = await requestDesktopOpenSession(
@@ -2491,14 +2487,27 @@ async function openManagedEnvironmentFromLauncher(
         authorized.accessToken,
         envPublicID,
       );
-      return openManagedControlPlaneEnvironmentRecord(
-        authorized.preferences,
-        environment,
-        authorized.controlPlane.provider.provider_origin,
-        envPublicID,
-        openSession,
-        requestedRoute,
-      );
+      if (!openSession.bootstrap_ticket) {
+        return launcherActionFailure(
+          'provider_invalid_response',
+          'control_plane',
+          'Desktop could not obtain a local runtime bootstrap ticket for this environment.',
+          {
+            environmentID: environment.id,
+            providerOrigin,
+            providerID,
+            envPublicID,
+          },
+        );
+      }
+      return openManagedEnvironmentRecord(authorized.preferences, environment, {
+        bootstrap: controlPlaneBootstrap(
+          authorized.controlPlane.provider.provider_origin,
+          envPublicID,
+          openSession.bootstrap_ticket,
+        ),
+        stealAppFocus: true,
+      });
     } catch (error) {
       return launcherActionFailureFromProviderAuthError(error, {
         environmentID: environment.id,
@@ -3148,9 +3157,6 @@ async function upsertManagedEnvironmentFromWelcome(
   request: Readonly<{
     environment_id?: string;
     environment_name?: string;
-    provider_origin?: string;
-    provider_id?: string;
-    env_public_id?: string;
   }>,
   draft: DesktopSettingsDraft,
   options: Readonly<{
@@ -3160,16 +3166,12 @@ async function upsertManagedEnvironmentFromWelcome(
   const preferences = await loadDesktopPreferencesCached();
   const existing = request.environment_id ? findManagedEnvironmentByID(preferences, request.environment_id) : null;
   const existingAccess = existing ? managedEnvironmentLocalAccess(existing) : null;
-  const providerSelection = selectedProviderEnvironmentFromWelcome(preferences, request);
   const requestedEnvironmentName = compact(request.environment_name)
-    || (
-      !providerSelection && existing?.local_hosting?.scope.kind === 'local'
-        ? existing.local_hosting.scope.name
-        : compact(options.label)
-    );
+    || (existing?.local_hosting?.scope.kind === 'local'
+      ? existing.local_hosting.scope.name
+      : compact(options.label));
   if (
-    !providerSelection
-    && !request.environment_id
+    !request.environment_id
     && requestedEnvironmentName !== ''
     && findManagedEnvironmentByID(preferences, desktopManagedLocalEnvironmentID(requestedEnvironmentName))
   ) {
@@ -3184,23 +3186,62 @@ async function upsertManagedEnvironmentFromWelcome(
     name: requestedEnvironmentName,
     label: options.label,
     access,
-    provider_origin: providerSelection?.provider_origin,
-    provider_id: providerSelection?.provider_id,
-    env_public_id: providerSelection?.env_public_id,
     last_used_at_ms: existing?.last_used_at_ms ?? 0,
   });
-  const resolvedEnvironment = providerSelection
-    ? next.managed_environments.find((environment) => (
-      managedEnvironmentProviderOrigin(environment) === providerSelection.provider_origin
-      && managedEnvironmentProviderID(environment) === providerSelection.provider_id
-      && managedEnvironmentPublicID(environment) === providerSelection.env_public_id
-    )) ?? null
-    : (
-      (request.environment_id ? findManagedEnvironmentByID(next, request.environment_id) : null)
-      ?? findManagedEnvironmentByID(next, desktopManagedLocalEnvironmentID(requestedEnvironmentName))
-    );
+  const resolvedEnvironment = (
+    (request.environment_id ? findManagedEnvironmentByID(next, request.environment_id) : null)
+    ?? findManagedEnvironmentByID(next, desktopManagedLocalEnvironmentID(requestedEnvironmentName))
+  );
   if (!resolvedEnvironment) {
     throw new Error('Desktop could not save that managed environment.');
+  }
+  const bindConflict = findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id);
+  if (bindConflict) {
+    throw new Error(describeManagedEnvironmentLocalBindConflict(bindConflict));
+  }
+  await persistDesktopPreferences(next);
+  return resolvedEnvironment;
+}
+
+async function upsertProviderLocalServeFromWelcome(
+  request: Readonly<{
+    environment_id?: string;
+    provider_origin: string;
+    provider_id: string;
+    env_public_id: string;
+  }>,
+  draft: DesktopSettingsDraft,
+  options: Readonly<{
+    label: string;
+  }>,
+): Promise<DesktopManagedEnvironment> {
+  const preferences = await loadDesktopPreferencesCached();
+  const existing = request.environment_id ? findManagedEnvironmentByID(preferences, request.environment_id) : null;
+  const existingAccess = existing ? managedEnvironmentLocalAccess(existing) : null;
+  const providerSelection = selectedProviderEnvironmentFromWelcome(preferences, request);
+  if (!providerSelection) {
+    throw new Error('Choose a provider environment before saving this local serve.');
+  }
+  const access = validateDesktopSettingsDraft(draft, {
+    currentLocalUIPassword: existingAccess?.local_ui_password ?? '',
+    currentLocalUIPasswordConfigured: existingAccess?.local_ui_password_configured === true,
+  });
+  const next = upsertProviderLocalServe(preferences, {
+    environment_id: request.environment_id,
+    provider_origin: providerSelection.provider_origin,
+    provider_id: providerSelection.provider_id,
+    env_public_id: providerSelection.env_public_id,
+    label: options.label,
+    access,
+    last_used_at_ms: existing?.last_used_at_ms ?? 0,
+  });
+  const resolvedEnvironment = next.managed_environments.find((environment) => (
+    managedEnvironmentProviderOrigin(environment) === providerSelection.provider_origin
+    && managedEnvironmentProviderID(environment) === providerSelection.provider_id
+    && managedEnvironmentPublicID(environment) === providerSelection.env_public_id
+  )) ?? null;
+  if (!resolvedEnvironment) {
+    throw new Error('Desktop could not save that provider local serve.');
   }
   const bindConflict = findManagedEnvironmentLocalBindConflict(next, resolvedEnvironment.id);
   if (bindConflict) {
@@ -3237,6 +3278,18 @@ async function setManagedEnvironmentPinnedFromWelcome(
 ): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await persistDesktopPreferences(setManagedEnvironmentPinned(preferences, environmentID, pinned));
+}
+
+async function setProviderEnvironmentPinnedFromWelcome(
+  input: Readonly<{
+    provider_origin: string;
+    provider_id: string;
+    env_public_id: string;
+    pinned: boolean;
+  }>,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  await persistDesktopPreferences(setProviderEnvironmentPinned(preferences, input));
 }
 
 async function setSavedEnvironmentPinnedFromWelcome(
@@ -3364,6 +3417,14 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'set_managed_environment_pinned':
       await setManagedEnvironmentPinnedFromWelcome(request.environment_id, request.pinned);
       return launcherActionSuccess('saved_environment');
+    case 'set_provider_environment_pinned':
+      await setProviderEnvironmentPinnedFromWelcome({
+        provider_origin: request.provider_origin,
+        provider_id: request.provider_id,
+        env_public_id: request.env_public_id,
+        pinned: request.pinned,
+      });
+      return launcherActionSuccess('saved_environment');
     case 'set_saved_environment_pinned':
       await setSavedEnvironmentPinnedFromWelcome(
         request.environment_id,
@@ -3405,6 +3466,25 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         await upsertManagedEnvironmentFromWelcome({
           environment_id: request.environment_id,
           environment_name: request.environment_name,
+        }, {
+          local_ui_bind: request.local_ui_bind,
+          local_ui_password: request.local_ui_password,
+          local_ui_password_mode: request.local_ui_password_mode,
+        }, {
+          label: request.label,
+        });
+        return launcherActionSuccess('saved_environment');
+      } catch (error) {
+        return launcherActionFailure(
+          'action_invalid',
+          'dialog',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    case 'upsert_provider_local_serve':
+      try {
+        await upsertProviderLocalServeFromWelcome({
+          environment_id: request.environment_id,
           provider_origin: request.provider_origin,
           provider_id: request.provider_id,
           env_public_id: request.env_public_id,

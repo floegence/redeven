@@ -17,6 +17,7 @@ import {
   environmentLibraryCount,
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
+  PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
   shellStatus,
 } from './viewModel';
 
@@ -135,14 +136,14 @@ describe('DesktopWelcomeShell', () => {
     ]));
   });
 
-  it('filters the Environment Library by local and control-plane sources', () => {
+  it('filters the Environment Library by local and provider sources', () => {
     const managedLocal = testManagedLocalEnvironment();
-    const providerBacked = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal, providerBacked],
+        managed_environments: [managedLocal, localServe],
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -167,10 +168,48 @@ describe('DesktopWelcomeShell', () => {
           'http://192.168.1.11:24000/',
         ],
       }),
+      controlPlanes: [{
+        provider: {
+          protocol_version: 'rcpp-v1',
+          provider_id: 'redeven_portal',
+          display_name: 'Redeven Portal',
+          provider_origin: 'https://cp.example.invalid',
+          documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
+        },
+        account: {
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          display_name: 'Redeven Portal',
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: Date.now() + 60_000,
+        },
+        display_label: 'Demo Portal',
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          environment_url: 'https://cp.example.invalid/env/env_demo',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+        }],
+        last_synced_at_ms: Date.now(),
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: Date.now(),
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(4);
-    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(3);
+    expect(environmentLibraryCount(snapshot)).toBe(5);
+    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
+    expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
     expect(filterEnvironmentLibrary(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
       expect.objectContaining({
@@ -179,16 +218,12 @@ describe('DesktopWelcomeShell', () => {
         managed_environment_kind: 'local',
       }),
       expect.objectContaining({
-        id: 'http://192.168.1.12:24000/',
-        category: 'saved',
-        label: 'Staging',
-      }),
-      expect.objectContaining({
-        id: 'http://192.168.1.11:24000/',
-        category: 'recent_auto',
+        id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        category: 'managed',
+        managed_environment_kind: 'controlplane',
       }),
     ]);
-    expect(filterEnvironmentLibrary(snapshot, 'stag', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
+    expect(filterEnvironmentLibrary(snapshot, 'stag')).toEqual([
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
         label: 'Staging',
@@ -197,20 +232,89 @@ describe('DesktopWelcomeShell', () => {
   });
 
   it('can narrow the Environment Library to one provider-backed catalog', () => {
-    const providerBacked = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
-    });
-    const otherProvider = testManagedControlPlaneEnvironment('https://cp.other.invalid', 'env_other', {
-      localHosting: false,
+    const providerLocalServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [
           testManagedLocalEnvironment(),
-          providerBacked,
-          otherProvider,
+          providerLocalServe,
         ],
       }),
+      controlPlanes: [{
+        provider: {
+          protocol_version: 'rcpp-v1',
+          provider_id: 'redeven_portal',
+          display_name: 'Redeven Portal',
+          provider_origin: 'https://cp.example.invalid',
+          documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
+        },
+        account: {
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          display_name: 'Redeven Portal',
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: Date.now() + 60_000,
+        },
+        display_label: 'Demo Portal',
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          environment_url: 'https://cp.example.invalid/env/env_demo',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+        }],
+        last_synced_at_ms: Date.now(),
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: Date.now(),
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }, {
+        provider: {
+          protocol_version: 'rcpp-v1',
+          provider_id: 'redeven_portal',
+          display_name: 'Redeven Portal',
+          provider_origin: 'https://cp.other.invalid',
+          documentation_url: 'https://cp.other.invalid/docs/control-plane-providers',
+        },
+        account: {
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.other.invalid',
+          display_name: 'Redeven Portal',
+          user_public_id: 'user_other',
+          user_display_name: 'Other User',
+          authorization_expires_at_unix_ms: Date.now() + 60_000,
+        },
+        display_label: 'Other Portal',
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.other.invalid',
+          env_public_id: 'env_other',
+          label: 'Other Environment',
+          environment_url: 'https://cp.other.invalid/env/env_other',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_other',
+          namespace_name: 'Other Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+        }],
+        last_synced_at_ms: Date.now(),
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: Date.now(),
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
     });
 
     expect(filterEnvironmentLibrary(
@@ -219,7 +323,12 @@ describe('DesktopWelcomeShell', () => {
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     )).toEqual([
       expect.objectContaining({
-        id: providerBacked.id,
+        id: providerLocalServe.id,
+        env_public_id: 'env_demo',
+      }),
+      expect.objectContaining({
+        id: providerLocalServe.id,
+        kind: 'provider_environment',
         env_public_id: 'env_demo',
       }),
     ]);
@@ -382,24 +491,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('EnvironmentStatusIndicator');
   });
 
-  it('renders dual-route managed actions through a split button with a route menu', () => {
+  it('renders one primary managed action button instead of a split route menu', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('function ManagedEnvironmentSplitActionButton');
-    expect(appSrc).toContain('data-redeven-split-action=""');
-    expect(appSrc).toContain('data-redeven-split-action-menu=""');
-    expect(appSrc).toContain('props.presentation.menu_button_label');
-    expect(appSrc).toContain('heading="Local route"');
-    expect(appSrc).toContain('heading="Remote route"');
-    expect(appSrc).toContain("window.addEventListener('pointerdown', handlePointerDown);");
-    expect(appSrc).toContain("window.addEventListener('scroll', handleLayout, true);");
-    expect(appSrc).toContain("closeMenu({ focusToggle: true });");
-    expect(styles).toContain('.redeven-split-action');
-    expect(styles).toContain('.redeven-split-menu');
-    expect(styles).toContain('.redeven-split-menu-item');
-    expect(styles).toContain('.redeven-split-menu-item--disabled');
-    expect(styles).toContain('cursor: not-allowed;');
+    expect(appSrc).toContain('managedPrimaryAction');
+    expect(appSrc).not.toContain('function ManagedEnvironmentSplitActionButton');
+    expect(appSrc).not.toContain('data-redeven-split-action=""');
+    expect(appSrc).not.toContain('data-redeven-split-action-menu=""');
+    expect(appSrc).not.toContain('props.presentation.menu_button_label');
+    expect(styles).not.toContain('.redeven-split-action');
+    expect(styles).not.toContain('.redeven-split-menu');
+    expect(styles).not.toContain('.redeven-split-menu-item');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {
@@ -489,7 +592,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: 'Redeven URL'");
     expect(appSrc).toContain("label: 'SSH'");
     expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
-    expect(appSrc).toContain('You can keep it local-only or bind it to one saved Control Plane environment for unified local and remote access.');
+    expect(appSrc).toContain('Local environments are created independently and are not bound directly to a provider environment.');
+    expect(appSrc).toContain('Create a local serve runtime for this provider environment on this Mac.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Control Plane URL.');
     expect(appSrc).toContain('Connect to another machine over SSH.');
@@ -520,7 +624,7 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')");
-    expect(appSrc).toContain("environment_name: wantsControlPlaneBinding ? undefined : (localEnvironmentName || undefined)");
+    expect(appSrc).toContain("environment_name: localEnvironmentName || undefined");
     expect(appSrc).toContain("environment_name: trimString(current.environment_name) || deriveManagedEnvironmentScopeNameFromName(current.label)");
   });
 
@@ -534,9 +638,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('bindingResolution()');
     expect(appSrc).toContain('saveActionLabel');
     expect(appSrc).toContain('connectActionLabel');
-    expect(bindingResolutionSrc).toContain('Desktop will reuse that entry instead of creating a duplicate.');
-    expect(bindingResolutionSrc).toContain('Desktop already manages the local host for');
-    expect(bindingResolutionSrc).toContain('Another Redeven host process owns');
+    expect(bindingResolutionSrc).toContain('Desktop will save a separate Local Serve card for the selected provider environment.');
+    expect(bindingResolutionSrc).toContain('Desktop already manages a Local Serve for');
+    expect(bindingResolutionSrc).toContain('Desktop cannot take over that Local Serve host from this launcher session.');
     expect(bindingResolutionSrc).toContain('Save & Focus');
     expect(bindingResolutionSrc).toContain('Already Opening');
   });

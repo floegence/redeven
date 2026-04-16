@@ -74,7 +74,7 @@ describe('managedEnvironmentBindingResolution', () => {
     }));
 
     expect(describeManagedEnvironmentBindingResolution(resolution, { isCreate: true })).toEqual(expect.objectContaining({
-      title: 'Desktop already manages the local host for "Demo Sandbox".',
+      title: 'Desktop already manages a Local Serve for "Demo Sandbox".',
       save_label: 'Save & Reuse',
       connect_label: 'Save & Connect',
       save_disabled: false,
@@ -100,6 +100,7 @@ describe('managedEnvironmentBindingResolution', () => {
 
     expect(resolution?.kind).toBe('focus_existing_open_session');
     expect(describeManagedEnvironmentBindingResolution(resolution, { isCreate: true })).toEqual(expect.objectContaining({
+      title: 'This provider Local Serve is already open as "Demo Sandbox".',
       connect_label: 'Save & Focus',
       connect_disabled: false,
     }));
@@ -121,6 +122,7 @@ describe('managedEnvironmentBindingResolution', () => {
 
     expect(resolution?.kind).toBe('blocked_by_external_local_owner');
     expect(describeManagedEnvironmentBindingResolution(resolution, { isCreate: true })).toEqual(expect.objectContaining({
+      description: 'Desktop cannot take over that Local Serve host from this launcher session.',
       save_disabled: true,
       connect_disabled: true,
       connect_label: 'Blocked',

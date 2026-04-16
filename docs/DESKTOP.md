@@ -192,9 +192,13 @@ Visual hierarchy:
   - shell-wide open-window and card counts
   - add / close actions
 - `Environments` tab:
-  - desktop-managed environment cards for every local, provider-backed, and dual-route managed environment
-  - compact search + source filter toolbar for `All`, `Local`, and connected Control Planes
-  - the same shared grid also includes saved Redeven URL and SSH entries
+  - one shared card grid for:
+    - desktop-managed local environments
+    - provider environment cards projected directly from `control_planes[*].environments`
+    - provider local serves stored in `managed_environments`
+    - saved Redeven URL connections
+    - saved SSH connections
+  - compact search + source filter toolbar for `All`, `Local`, `Provider`, `Redeven URL`, `SSH`, plus connected-Control-Plane filters
   - when pinned entries exist, the launcher keeps explicit `Pinned` and `Environments` sections
   - those sections must still share one measured environment-library column model, so pinning only changes grouping order and never changes card width
   - provider filters and search only change which cards are shown; they must not collapse the underlying card-width system for the current library scope
@@ -212,30 +216,30 @@ Interaction rules:
 - `Environment Settings` opens or focuses the launcher, then presents a modal dialog inside that same window for the selected managed environment.
 - The `Add` action opens a dialog that can either connect immediately or save a new Environment into the library.
 - `New Environment` is a three-mode dialog:
-  - `Managed`
+  - `Local Environment`
   - `Redeven URL`
   - `SSH`
-- Managed mode keeps the flow lightweight and explicit:
+- Local Environment mode keeps the flow lightweight and explicit:
   - `Name`
   - `Local UI Bind`
   - `Local UI Password`
-- optional `Connect To A Control Plane Environment`
-  - pick one saved Control Plane
-  - pick one provider environment from that Control Plane catalog
-  - Desktop computes an explicit binding-resolution state before save/connect:
-    - create a new binding
-    - update the same existing binding
-    - reuse an existing managed entry
-    - focus an already open session
-    - wait for an already opening session
-    - block when another local host process already owns that environment on this device
 - When the user leaves Control Plane binding off, Desktop derives the internal local scope from `Name` automatically.
 - Editing a local-only managed environment changes only the visible `Name`; the existing local scope stays stable unless Desktop later grows an explicit scope-migration action.
-- Creating a managed environment can either:
+- Creating a local environment can either:
   - save the managed environment card without opening it yet
   - connect immediately and start or attach to that managed scope
-- Creating or editing a managed environment may explicitly upgrade one local-only entry into a dual-route local-plus-Control-Plane environment.
-- Provider sync still reconciles runtime-discovered local hosting into the shared managed-environment catalog, but the create/edit flow no longer forces users to wait for that background reconciliation before binding local and remote access together.
+- Creating a local environment never binds it directly to a Control Plane environment.
+- Provider environments use a separate `Serve Runtime` dialog:
+  - read-only `Control Plane` + `Environment` summary
+  - `Local Serve Name`
+  - `Local UI Bind`
+  - `Local UI Password`
+  - Desktop computes a local-serve reuse state before save/connect:
+    - create a new local serve
+    - reuse an existing local serve
+    - focus an already open local serve
+    - wait for an already opening local serve
+    - block when another local host process already owns that provider-linked scope on this device
 - SSH mode keeps the same compact launcher shell but adds:
   - `Name`
   - `SSH Destination`
@@ -254,13 +258,12 @@ Interaction rules:
 - The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
 - `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
-- Local managed environments, remote-only provider environments, and dual-route environments all render in the `Environments` tab.
-- Connecting or refreshing a Control Plane materializes every accessible provider environment into the shared managed-environment catalog immediately.
+- Local environments, provider environments, provider local serves, Redeven URLs, and SSH targets all render in the `Environments` tab.
+- Connecting or refreshing a Control Plane updates the provider catalog immediately but does not materialize remote-only provider environments into `managed_environments`.
 - `Control Planes` stays provider-management-only. Each shelf offers `View Environments`, `Reconnect`, `Refresh`, and `Delete`.
 - Environment Library cards use one fixed-height layout:
   - header with label, relative timestamp, pin/unpin icon, and status badge
-  - compact facts rows such as `RUNS ON`, `ACCESS`, and `CONTROL PLANE`
-  - missing key facts render explicit placeholders such as `None` instead of silently dropping the row
+  - compact facts rows tailored to the card family
   - an `Endpoint` block with readonly inputs plus `Copy`
   - pinned and regular sections align to the same card columns whenever both are visible
   - footer actions aligned vertically across card types
@@ -268,27 +271,38 @@ Interaction rules:
   - pinned cards render once inside a dedicated `Pinned` section
   - unpinned cards remain in the regular `Environments` section
   - pinning an open unsaved Redeven URL or SSH target implicitly promotes it into the saved Environment Library
-- Managed environment cards show the label, status, and the next bind or provider/environment identity that will be reused on the next open.
-- Managed environment cards normalize provider runtime into one user-facing state model:
-  - `Open`
-  - `Ready`
-  - `Local Ready`
-  - `Checking`
-  - `Offline`
-  - `Status stale`
-  - `Reconnect required`
-  - `Sync needed`
-  - `Unavailable`
+- Local environment cards surface:
+  - `RUNS ON`
+  - `LOCAL RUNTIME`
+  - `WINDOW` when applicable
+- Provider environment cards surface:
+  - `CONTROL PLANE`
+  - `STATUS`
+  - `LOCAL SERVE`
+- Provider local serve cards surface:
+  - `SOURCE ENV`
+  - `CONTROL PLANE`
+  - `LOCAL RUNTIME`
+  - `WINDOW` when applicable
+- Redeven URL cards surface:
+  - `SOURCE`
+  - `NETWORK`
+- SSH cards surface:
+  - `SOURCE`
+  - `BOOTSTRAP`
+  - `INSTALL ROOT`
 - Control Plane shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
 - Provider-backed state is freshness-aware instead of being treated as timeless cache:
   - Desktop marks provider catalogs as `fresh`, `stale`, or `unknown`
   - opening the launcher, refocusing it, and waking the machine all trigger best-effort provider refresh
   - while the launcher stays visible, Desktop also polls stale providers in the background
-- Card CTA and badge now come from the same normalized route model:
-  - Desktop never shows a normal clickable `Open` for a remote route that is already known `Offline`
-  - stale remote state prefers `Refresh Status`
+- Card CTA stays single-primary-action:
+  - local environments and provider local serves use `Open Local`, `Attach Local`, or `Focus Local`
+  - ready provider environments use `Open Remote` / `Focus Remote`
+  - stale provider environments prefer `Refresh Status`
   - expired provider authorization prefers `Reconnect`
   - provider refresh failures prefer `Retry Sync`
+  - offline or removed provider environments prefer `Serve Runtime`, `Open Local Serve`, or `Focus Local Serve`
 - Managed session action state is lifecycle-aware:
   - `Focus` only appears for a route whose session lifecycle is truly `open`
   - `Opening…` is disabled and does not imply the window is ready yet
@@ -297,22 +311,14 @@ Interaction rules:
 - Environment cards stay concise:
   - card bodies avoid explanatory helper prose under the actions
   - only concrete identifiers, runtime details, badges, explicit `None` placeholders, and notices stay visible inside the card
-- Dual-route managed environments stay route-aware:
-  - the footer uses a split primary action instead of persistent side-by-side `Open Local` and `Open Remote` buttons
-  - the primary segment executes the resolved default route immediately
-  - the route menu keeps both the local route and the remote route or remote recovery action visible on the same card
-  - the local route may surface `Open`, `Attach`, or `Focus` depending on whether the runtime needs to be started, can be reused, or already has an open Desktop window
-  - if this device can still host the environment locally, local open stays one click away even when the remote route is degraded
-  - managed cards surface a compact `LOCAL RUNTIME` fact so users can distinguish `Starts on open`, `Running in Desktop`, and `Running externally`
-  - managed cards keep `LOCAL RUNTIME` and `CONTROL PLANE` visible even when one side is unavailable, using `None` as the explicit placeholder value
-  - when a local runtime is already running, cards also surface whether the Desktop window `Stops on close` or `Detaches on close`
-- Direct Redeven URL cards surface `SOURCE`, `NETWORK`, and `CONTROL PLANE = None` so users can quickly tell whether the target is a saved record, a recent record, or an open window, and whether it points at this device, a LAN host, or a remote host.
-- Direct SSH cards still keep their type-specific facts and also show `CONTROL PLANE = None` so the absence of a provider link is explicit.
+- Provider local serves remain local-first even when the source provider environment is offline or later removed.
+- Direct Redeven URL cards surface whether the target is a saved record, a recent record, or an open window, and whether it points at this device, a LAN host, or a remote host.
+- Direct SSH cards keep their type-specific bootstrap/install facts and forwarded endpoints visible.
 - Deleting a managed environment is a first-class action:
   - Desktop blocks deletion while a window for that managed environment is still open
   - the default local environment `local:default` is a protected Desktop entry and is not deletable from the launcher
   - deleting a local-only managed environment removes the managed entry and its Desktop-owned local scope state
-  - deleting a dual-route managed environment removes only Desktop-owned local hosting and keeps the remote-only Control Plane entry in the catalog
+  - deleting a provider local serve removes only the local record; the provider card remains if the Control Plane still publishes that environment
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -400,6 +406,7 @@ Rules:
 Desktop keeps one persisted preference model for desktop-managed environments and saved remote connections:
 
 - `managed_environments`
+- `provider_environment_preferences`
 - `saved_environments`
 - `saved_ssh_environments`
 - `recent_external_local_ui_urls`
@@ -410,25 +417,25 @@ Semantics:
 
 - Desktop does not persist a remembered current target for the next launch.
 - Open Environment windows are runtime-only desktop session state.
-- `managed_environments` stores desktop-managed local and Control Plane environments with:
+- `managed_environments` stores only records that own real local scope state on this device:
+  - local environments
+  - provider local serves
   - stable environment identity
-  - optional local-hosting route
-  - optional provider-binding route
+  - local-hosting scope + access configuration
+  - optional provider binding only for provider local serves
   - user-visible name/title (persisted internally as `label`)
-  - per-environment Local UI bind/password configuration
   - pin and timestamp metadata
-  - provider-binding upsert semantics that prefer editing/reusing the existing managed entry for the same Control Plane environment instead of silently creating duplicates
+- `provider_environment_preferences` stores launcher-only metadata for remote provider cards:
+  - `{ provider_origin, provider_id, env_public_id }`
+  - `pinned`
+  - `last_used_at_ms`
 - Desktop never sends the stored Local UI password plaintext back to the renderer. The shell UI edits only a write-only replacement draft plus explicit keep/replace/remove intent.
 - `saved_environments` stores user-visible labels, normalized Local UI URLs, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
 - `saved_ssh_environments` stores user-visible labels, normalized SSH destination data, the remote install directory, the SSH bootstrap delivery mode, the optional release mirror base URL, an origin marker (`saved` vs `recent_auto`), pin state, and `last_used_at_ms`.
 - `recent_external_local_ui_urls` remains a normalized compatibility bridge derived from `saved_environments`.
 - `control_plane_refresh_tokens` stores per-provider opaque refresh tokens in the local secrets file, separate from visible provider/account metadata.
 - `control_planes` stores normalized provider discovery data, the desktop-owned display label, the desktop account snapshot, the cached environment list, and the last sync time.
-- Provider refresh reconciles `control_planes[*].environments` back into `managed_environments`:
-  - provider-backed environments are materialized as remote-only entries when no local route exists yet
-  - existing dual-route entries preserve their local-hosting metadata, pins, and preferred route
-  - remote-only entries are removed when the provider catalog no longer exposes them
-  - dual-route entries stay visible even when the provider route disappears, but their remote route degrades to `removed`
+- Provider refresh reconciles canonical provider identity across provider-linked local serves and provider-card preferences, but does not materialize remote-only provider environments into `managed_environments`.
 - Secrets are stored in Desktop’s local settings files and use Electron `safeStorage` encryption when the host platform provides it; otherwise the files remain local-only user data owned by the current account.
 - Legacy single-local-environment settings migrate into the managed local environment with identity `local:default`.
 - `local:default` remains the always-available default local environment in Desktop; UI may rename its visible title, but ordinary editing does not remove the entry or migrate its scope.
@@ -446,7 +453,7 @@ Desktop semantics:
 - `Local only` and `Shared on your local network` share the same fixed default port baseline.
 - The saved configuration applies to the next managed start; the currently running managed URL is displayed separately when available.
 - Multiple local environments may coexist on one device. Their runtime ownership stays separate because each one resolves to a different `local/<name>` scope directory.
-- A single managed environment may be used both locally and remotely. Desktop owns the local Local UI exposure for that scope, while the provider-backed route may come from either explicit create/edit binding or provider-sync reconciliation into the same shared managed-environment identity.
+- A provider environment may also have one separate provider local serve on this device. Desktop owns the local Local UI exposure for that local-serve record, while the remote provider card remains an independent remote-first launcher entry.
 - If Desktop attaches to a runtime that was started by standalone runtime / CLI mode, that attached runtime stays externally owned: closing the Desktop session only detaches, and restart/update stay delegated to the host process that owns that runtime.
 - Launcher runtime ownership is explicit on the environment card: externally owned runtimes surface as attachable local runtimes, while Desktop-owned runtimes surface as Desktop-managed local runtimes.
 - Standalone runtime / CLI and Desktop sessions stay interoperable because both read and write the same scope-first runtime layout.
@@ -500,19 +507,14 @@ The Control Plane flow is:
 4. The browser session requests a short-lived `authorization_code` and deep-links back to Desktop.
 5. Desktop exchanges `authorization_code + code_verifier` for a short-lived in-memory access token plus a long-lived revocable refresh token.
 6. Desktop loads `me` and `environments` with the access token.
-7. Desktop reconciles those provider environments into the shared managed-environment catalog as remote-only or dual-route entries.
-7. Desktop refreshes access tokens on demand with the stored refresh token.
-8. Desktop requests a unified per-environment open session only when it opens a specific environment.
-9. Desktop resolves the actual open route from the saved environment record:
-   - explicit or default `preferred_open_route`
-   - the last explicit local-vs-remote route the user chose from the launcher split-button menu
-   - whether that environment is declared as locally hosted on this device
-   - whether the provider returned `bootstrap_ticket`, `remote_session_url`, or both
-10. For a locally hosted route, Desktop uses the returned `bootstrap_ticket` and the managed runtime exchanges it for direct connect info.
-11. For a remote desktop route, Desktop opens the returned `remote_session_url` directly without starting a local bundled runtime.
+7. Desktop stores the provider catalog in `control_planes[*].environments` and projects provider cards directly from that catalog.
+8. Desktop refreshes access tokens on demand with the stored refresh token.
+9. Desktop requests a per-environment open session only when it opens a specific provider environment or needs bootstrap data for a provider local serve.
+10. For a remote provider card, Desktop opens the returned `remote_session_url` directly without persisting a remote-only managed environment first.
     - The top-level remote session page may in turn host the Env App inside a same-origin boot iframe.
     - Embedded same-origin Env App documents must still inherit the desktop shell bridges and window-chrome contract from the owning session window, so titlebar safe areas, theme state, and environment-scoped renderer storage stay identical to direct desktop-hosted sessions.
-12. Desktop never silently local-starts a Control Plane environment that is not declared as hosted on this device.
+11. For a provider local serve, Desktop persists a separate local-scope-owning managed environment and uses the returned `bootstrap_ticket` to start the bundled runtime on this device.
+12. Desktop never silently converts a provider environment into a local environment; local serve is always an explicit separate launcher action.
 
 Browser pages may also open Desktop through a custom protocol link:
 

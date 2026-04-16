@@ -32,7 +32,6 @@ import {
   ConfirmDialog,
   Dialog,
   Input,
-  Select,
   SegmentedControl,
   Tag,
 } from '@floegence/floe-webapp-core/ui';
@@ -92,13 +91,14 @@ import {
   environmentProviderFilterValue,
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
+  PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
+  SSH_ENVIRONMENT_LIBRARY_FILTER,
+  URL_ENVIRONMENT_LIBRARY_FILTER,
   splitPinnedEnvironmentEntries,
   type EnvironmentActionModel,
-  type EnvironmentActionPresentation,
   type EnvironmentCardEndpointModel,
   type EnvironmentCardFactModel,
   type EnvironmentCenterTab,
-  type EnvironmentSplitMenuActionModel,
   shouldUseSpaciousEnvironmentGrid,
   shellStatus,
 } from './viewModel';
@@ -183,11 +183,13 @@ type BusyAction =
   | 'open_control_plane_environment'
   | 'refresh_control_plane'
   | 'set_managed_environment_pinned'
+  | 'set_provider_environment_pinned'
   | 'set_saved_environment_pinned'
   | 'set_saved_ssh_environment_pinned'
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
   | 'upsert_managed_environment'
+  | 'upsert_provider_local_serve'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -195,6 +197,7 @@ type BusyAction =
 type ManagedEnvironmentConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
   connection_kind: 'managed_environment';
+  managed_environment_variant: 'local_environment' | 'provider_local_serve';
   environment_id: string;
   label: string;
   environment_name: string;
@@ -461,6 +464,9 @@ function createManagedEnvironmentConnectionDialogState(
 ): ManagedEnvironmentConnectionDialogState {
   const passwordConfigured = overrides.local_ui_password_configured === true;
   const label = trimString(overrides.label);
+  const variant = overrides.managed_environment_variant === 'provider_local_serve'
+    ? 'provider_local_serve'
+    : 'local_environment';
   const useControlPlaneBinding = overrides.use_control_plane_binding === true
     || trimString(overrides.provider_origin) !== ''
     || trimString(overrides.provider_id) !== ''
@@ -469,11 +475,14 @@ function createManagedEnvironmentConnectionDialogState(
   return {
     mode,
     connection_kind: 'managed_environment',
+    managed_environment_variant: variant,
     environment_id: trimString(overrides.environment_id),
     label,
     environment_name: environmentName !== ''
       ? environmentName
-      : (!useControlPlaneBinding && mode === 'create' ? deriveManagedEnvironmentScopeNameFromName(label) : ''),
+      : (!useControlPlaneBinding && variant === 'local_environment' && mode === 'create'
+        ? deriveManagedEnvironmentScopeNameFromName(label)
+        : ''),
     local_ui_bind: trimString(overrides.local_ui_bind) || EMPTY_SETTINGS_DRAFT.local_ui_bind || 'localhost:23998',
     local_ui_password: trimString(overrides.local_ui_password),
     local_ui_password_mode: normalizeDesktopLocalUIPasswordMode(
@@ -517,23 +526,12 @@ function createControlPlaneDialogState(
   };
 }
 
-function environmentKindLabel(kind: string): string {
-  switch (kind) {
-    case 'managed_environment':
-      return 'Local';
-    case 'external_local_ui':
-      return 'URL';
-    case 'ssh_environment':
-      return 'SSH';
-    default:
-      return 'Environment';
-  }
-}
-
 function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'success' {
   switch (kind) {
     case 'managed_environment':
       return 'primary';
+    case 'provider_environment':
+      return 'neutral';
     case 'ssh_environment':
       return 'success';
     default:
@@ -544,6 +542,7 @@ function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'succe
 function busyActionForLauncherRequest(request: DesktopLauncherActionRequest): BusyAction {
   switch (request.kind) {
     case 'upsert_managed_environment':
+    case 'upsert_provider_local_serve':
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
       return 'save_environment';
@@ -765,9 +764,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environmentLibraryCount(snapshot(), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const availableLibrarySourceFilters = createMemo(() => {
-    const next = new Set(controlPlanes().map((controlPlane) => controlPlaneFilterValue(controlPlane)));
-    if (controlPlanes().length > 0 && libraryLocalEntryCount() > 0) {
+    const next = new Set<string>();
+    if (libraryLocalEntryCount() > 0) {
       next.add(LOCAL_ENVIRONMENT_LIBRARY_FILTER);
+    }
+    if (environmentLibraryCount(snapshot(), '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+      next.add(PROVIDER_ENVIRONMENT_LIBRARY_FILTER);
+    }
+    if (environmentLibraryCount(snapshot(), '', URL_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+      next.add(URL_ENVIRONMENT_LIBRARY_FILTER);
+    }
+    if (environmentLibraryCount(snapshot(), '', SSH_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+      next.add(SSH_ENVIRONMENT_LIBRARY_FILTER);
+    }
+    for (const controlPlane of controlPlanes()) {
+      next.add(controlPlaneFilterValue(controlPlane));
     }
     return next;
   });
@@ -1010,6 +1021,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogState(
       preferredKind === 'managed_environment'
         ? createManagedEnvironmentConnectionDialogState('create', {
+          managed_environment_variant: 'local_environment',
           local_ui_bind: 'localhost:23998',
           local_ui_password_mode: 'replace',
         })
@@ -1023,21 +1035,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     );
   }
 
+  function openProviderLocalServeDialog(environment: DesktopEnvironmentEntry): void {
+    if (environment.kind !== 'provider_environment' || !environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
+      setErrorMessage('connect', 'Desktop could not resolve that provider environment.');
+      return;
+    }
+    setConnectionDialogError('');
+    setConnectionDialogState(createManagedEnvironmentConnectionDialogState('create', {
+      managed_environment_variant: 'provider_local_serve',
+      label: environment.label,
+      local_ui_bind: 'localhost:23998',
+      local_ui_password_mode: 'replace',
+      use_control_plane_binding: true,
+      provider_origin: environment.provider_origin,
+      provider_id: environment.provider_id,
+      env_public_id: environment.env_public_id,
+    }));
+  }
+
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
-    if (environment.kind === 'managed_environment' && environment.managed_has_local_hosting) {
-      setConnectionDialogState(createManagedEnvironmentConnectionDialogState('edit', {
-        environment_id: environment.id,
-        label: environment.label,
-        environment_name: environment.managed_environment_name ?? '',
-        local_ui_bind: environment.managed_local_ui_bind ?? 'localhost:23998',
-        local_ui_password_mode: environment.managed_local_ui_password_configured ? 'keep' : 'replace',
-        local_ui_password_configured: environment.managed_local_ui_password_configured === true,
-        use_control_plane_binding: trimString(environment.provider_origin) !== '',
-        provider_origin: environment.provider_origin ?? '',
-        provider_id: environment.provider_id ?? '',
-        env_public_id: environment.env_public_id ?? '',
-      }));
-    } else if (environment.kind === 'managed_environment') {
+    if (environment.kind === 'managed_environment') {
       openSettingsSurface(environment.id);
     } else if (environment.kind === 'ssh_environment') {
       setConnectionDialogState(createSSHConnectionDialogState('edit', {
@@ -1374,6 +1391,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return opened;
   }
 
+  async function openProviderEnvironment(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind !== 'provider_environment') {
+      return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
+    }
+    if (environment.open_remote_session_key) {
+      return focusEnvironmentWindow(environment.open_remote_session_key, errorTarget);
+    }
+    if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that provider environment.');
+      return false;
+    }
+    const result = await performLauncherAction({
+      kind: 'open_control_plane_environment',
+      provider_origin: environment.provider_origin,
+      provider_id: environment.provider_id,
+      env_public_id: environment.env_public_id,
+    }, errorTarget);
+    return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+  }
+
   async function openSSHEnvironment(
     details: DesktopSSHEnvironmentDetails,
     errorTarget: 'connect' | 'dialog' = 'connect',
@@ -1408,6 +1448,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environment.kind === 'managed_environment') {
       return openManagedEnvironment(environment, errorTarget, route);
     }
+    if (environment.kind === 'provider_environment') {
+      return openProviderEnvironment(environment, errorTarget);
+    }
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
       if (!details) {
@@ -1428,7 +1471,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'open':
       case 'attach':
       case 'focus':
-        return openManagedEnvironment(environment, errorTarget, action.route ?? 'auto');
+        return environment.kind === 'provider_environment'
+          ? openProviderEnvironment(environment, errorTarget)
+          : openManagedEnvironment(environment, errorTarget, action.route ?? 'auto');
+      case 'serve_runtime':
+        if (environment.kind === 'provider_environment') {
+          if (environment.provider_local_serve_environment_id) {
+            const localServe = snapshot().environments.find((entry) => (
+              entry.kind === 'managed_environment' && entry.id === environment.provider_local_serve_environment_id
+            )) ?? null;
+            if (localServe) {
+              return openManagedEnvironment(localServe, errorTarget, 'local_host');
+            }
+          }
+          openProviderLocalServeDialog(environment);
+          return false;
+        }
+        return false;
       case 'refresh_status':
       case 'check_status':
       case 'retry_sync': {
@@ -1697,7 +1756,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function buildManagedEnvironmentActionRequest(
     state: ManagedEnvironmentConnectionDialogState,
     errorTarget: 'connect' | 'dialog',
-  ): Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'upsert_managed_environment' }>> | null {
+  ): Extract<
+    DesktopLauncherActionRequest,
+    Readonly<{ kind: 'upsert_managed_environment' | 'upsert_provider_local_serve' }>
+  > | null {
     const wantsControlPlaneBinding = state.use_control_plane_binding === true;
     const displayName = trimString(state.label);
     const localEnvironmentName = wantsControlPlaneBinding
@@ -1726,18 +1788,28 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return null;
     }
 
+    if (wantsControlPlaneBinding) {
+      return {
+        kind: 'upsert_provider_local_serve',
+        environment_id: state.environment_id || undefined,
+        label: displayName,
+        local_ui_bind: state.local_ui_bind,
+        local_ui_password: state.local_ui_password,
+        local_ui_password_mode: state.local_ui_password_mode,
+        provider_origin: state.provider_origin,
+        provider_id: state.provider_id,
+        env_public_id: state.env_public_id,
+      };
+    }
+
     return {
       kind: 'upsert_managed_environment',
       environment_id: state.environment_id || undefined,
-      mode: wantsControlPlaneBinding ? 'local_with_control_plane' : 'local_only',
-      environment_name: wantsControlPlaneBinding ? undefined : (localEnvironmentName || undefined),
+      environment_name: localEnvironmentName || undefined,
       label: displayName,
       local_ui_bind: state.local_ui_bind,
       local_ui_password: state.local_ui_password,
       local_ui_password_mode: state.local_ui_password_mode,
-      provider_origin: wantsControlPlaneBinding ? state.provider_origin : undefined,
-      provider_id: wantsControlPlaneBinding ? state.provider_id : undefined,
-      env_public_id: wantsControlPlaneBinding ? state.env_public_id : undefined,
     };
   }
 
@@ -1805,6 +1877,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!request) {
         return;
       }
+      const requestedEnvironmentName = request.kind === 'upsert_managed_environment'
+        ? trimString(request.environment_name)
+        : '';
       const saved = await performLauncherAction(request, 'dialog');
       if (!saved) {
         return;
@@ -1823,7 +1898,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             state.use_control_plane_binding !== true
             && (
               (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
-              || environment.managed_environment_name === trimString(request.environment_name)
+              || (requestedEnvironmentName !== '' && environment.managed_environment_name === requestedEnvironmentName)
             )
           )
         )
@@ -1860,6 +1935,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       const result = await performLauncherAction({
         kind: 'set_managed_environment_pinned',
         environment_id: environment.id,
+        pinned: nextPinned,
+      }, 'connect');
+      if (result?.outcome === 'saved_environment') {
+        showActionToast(successMessage);
+      }
+      return;
+    }
+    if (environment.kind === 'provider_environment') {
+      if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
+        setErrorMessage('connect', 'Desktop could not resolve that provider environment.');
+        return;
+      }
+      const result = await performLauncherAction({
+        kind: 'set_provider_environment_pinned',
+        provider_origin: environment.provider_origin,
+        provider_id: environment.provider_id,
+        env_public_id: environment.env_public_id,
         pinned: nextPinned,
       }, 'connect');
       if (result?.outcome === 'saved_environment') {
@@ -2266,26 +2358,51 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const localSourceCount = createMemo(() => (
     environmentLibraryCount(props.snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
   ));
+  const providerSourceCount = createMemo(() => (
+    environmentLibraryCount(props.snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)
+  ));
+  const urlSourceCount = createMemo(() => (
+    environmentLibraryCount(props.snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)
+  ));
+  const sshSourceCount = createMemo(() => (
+    environmentLibraryCount(props.snapshot, '', SSH_ENVIRONMENT_LIBRARY_FILTER)
+  ));
   const sourceFilterOptions = createMemo(() => {
     const options: Array<Readonly<{ value: string; label: string; count: number }>> = [];
-    if (props.controlPlanes.length > 0 && localSourceCount() > 0) {
+    if (localSourceCount() > 0) {
       options.push({
         value: LOCAL_ENVIRONMENT_LIBRARY_FILTER,
         label: 'Local',
         count: localSourceCount(),
       });
     }
-    return [
-      ...options,
-      ...props.controlPlanes.map((controlPlane) => ({
-        value: controlPlaneFilterValue(controlPlane),
-        label: controlPlaneName(controlPlane),
-        count: controlPlane.environments.length,
-      })),
-    ];
+    if (providerSourceCount() > 0) {
+      options.push({
+        value: PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
+        label: 'Provider',
+        count: providerSourceCount(),
+      });
+    }
+    if (urlSourceCount() > 0) {
+      options.push({
+        value: URL_ENVIRONMENT_LIBRARY_FILTER,
+        label: 'Redeven URL',
+        count: urlSourceCount(),
+      });
+    }
+    if (sshSourceCount() > 0) {
+      options.push({
+        value: SSH_ENVIRONMENT_LIBRARY_FILTER,
+        label: 'SSH',
+        count: sshSourceCount(),
+      });
+    }
+    return options;
   });
   const activeSourceFilterLabel = createMemo(() => (
-    sourceFilterOptions().find((option) => option.value === props.librarySourceFilter)?.label ?? ''
+    sourceFilterOptions().find((option) => option.value === props.librarySourceFilter)?.label
+    ?? props.controlPlanes.find((controlPlane) => controlPlaneFilterValue(controlPlane) === props.librarySourceFilter)?.display_label
+    ?? ''
   ));
   const controlPlaneEnvironmentCount = createMemo(() => (
     props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
@@ -2891,350 +3008,6 @@ function QuickCreateConnectionCard(props: Readonly<{
   );
 }
 
-function SplitActionChevronIcon(props: Readonly<{ open: boolean }>) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      class={cn('h-3.5 w-3.5 transition-transform duration-150', props.open && 'rotate-180')}
-      fill="none"
-      stroke="currentColor"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      stroke-width="1.5"
-    >
-      <path d="M4.5 6.5 8 10l3.5-3.5" />
-    </svg>
-  );
-}
-
-function SplitActionMenuSection(props: Readonly<{
-  heading: string;
-  actions: readonly EnvironmentSplitMenuActionModel[];
-  assignItemRef: (index: number, element: HTMLButtonElement) => void;
-  onSelect: (action: EnvironmentActionModel) => void;
-  onNavigate: (direction: 1 | -1) => void;
-  onClose: () => void;
-}>) {
-  return (
-    <Show when={props.actions.length > 0}>
-      <div class="redeven-split-menu-section">
-        <div class="redeven-split-menu-section__heading">{props.heading}</div>
-        <div class="redeven-split-menu-section__items">
-          <For each={props.actions}>
-            {(item, index) => (
-              <button
-                ref={(element) => {
-                  props.assignItemRef(index(), element);
-                }}
-                type="button"
-                role="menuitem"
-                class={cn(
-                  'redeven-split-menu-item',
-                  item.disabled && 'redeven-split-menu-item--disabled',
-                )}
-                disabled={item.disabled}
-                aria-disabled={item.disabled ? 'true' : undefined}
-                onClick={() => {
-                  if (item.disabled) {
-                    return;
-                  }
-                  props.onSelect(item.action);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    props.onNavigate(1);
-                    return;
-                  }
-                  if (event.key === 'ArrowUp') {
-                    event.preventDefault();
-                    props.onNavigate(-1);
-                    return;
-                  }
-                  if (event.key === 'Escape') {
-                    event.preventDefault();
-                    props.onClose();
-                  }
-                }}
-              >
-                <span class="min-w-0 flex-1">
-                  <span class="redeven-split-menu-item__label">{item.label}</span>
-                  <span class="redeven-split-menu-item__detail">{item.detail}</span>
-                </span>
-                <Show when={item.is_default}>
-                  <span class="redeven-split-menu-item__check" aria-hidden="true">
-                    <Check class="h-3.5 w-3.5" />
-                  </span>
-                </Show>
-              </button>
-            )}
-          </For>
-        </div>
-      </div>
-    </Show>
-  );
-}
-
-function ManagedEnvironmentSplitActionButton(props: Readonly<{
-  environmentLabel: string;
-  busy: boolean;
-  presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
-  onAction: (action: EnvironmentActionModel) => void;
-}>) {
-  const [menuOpen, setMenuOpen] = createSignal(false);
-  const [menuPlacement, setMenuPlacement] = createSignal<'bottom-end' | 'top-end'>('bottom-end');
-  const [menuFrame, setMenuFrame] = createSignal<Readonly<{
-    left: number;
-    width: number;
-    top?: number;
-    bottom?: number;
-  }> | null>(null);
-  let anchorRef: HTMLDivElement | undefined;
-  let toggleRef: HTMLButtonElement | undefined;
-  let menuRef: HTMLDivElement | undefined;
-  const menuItemRefs: Array<HTMLButtonElement | undefined> = [];
-  const menuActions = createMemo(() => props.presentation.menu_actions);
-  const localActions = createMemo(() => menuActions().filter((action) => action.section === 'local'));
-  const remoteActions = createMemo(() => menuActions().filter((action) => action.section === 'remote'));
-
-  function enabledMenuIndices(): number[] {
-    return menuActions().flatMap((action, index) => (action.disabled ? [] : [index]));
-  }
-
-  function focusMenuItem(index: number): void {
-    queueMicrotask(() => {
-      menuItemRefs[index]?.focus();
-    });
-  }
-
-  function focusBoundaryMenuItem(target: 'first' | 'last'): void {
-    const indices = enabledMenuIndices();
-    if (indices.length === 0) {
-      return;
-    }
-    focusMenuItem(target === 'last' ? indices[indices.length - 1]! : indices[0]!);
-  }
-
-  function moveMenuFocus(direction: 1 | -1): void {
-    const indices = enabledMenuIndices();
-    if (indices.length === 0) {
-      return;
-    }
-    const activeIndex = menuItemRefs.findIndex((element) => element === document.activeElement);
-    const currentPosition = indices.findIndex((index) => index === activeIndex);
-    const nextPosition = currentPosition === -1
-      ? (direction === 1 ? 0 : indices.length - 1)
-      : (currentPosition + direction + indices.length) % indices.length;
-    const nextIndex = indices[nextPosition];
-    if (nextIndex !== undefined) {
-      focusMenuItem(nextIndex);
-    }
-  }
-
-  function updateMenuLayout(): void {
-    if (!anchorRef || typeof window === 'undefined') {
-      return;
-    }
-    const rect = anchorRef.getBoundingClientRect();
-    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-    const estimatedHeight = Math.max(156, menuActions().length * 62 + 48);
-    const menuWidth = Math.max(296, Math.ceil(rect.width));
-    const margin = 8;
-    const left = Math.min(
-      Math.max(margin, rect.right - menuWidth),
-      Math.max(margin, viewportWidth - menuWidth - margin),
-    );
-    const openUp = viewportHeight - rect.bottom < estimatedHeight + margin && rect.top > estimatedHeight + margin;
-    setMenuPlacement(openUp ? 'top-end' : 'bottom-end');
-    setMenuFrame(openUp
-      ? {
-        left,
-        width: menuWidth,
-        bottom: Math.max(margin, viewportHeight - rect.top + 8),
-      }
-      : {
-        left,
-        width: menuWidth,
-        top: Math.min(viewportHeight - margin, rect.bottom + 8),
-      });
-  }
-
-  function closeMenu(options: Readonly<{ focusToggle?: boolean }> = {}): void {
-    setMenuOpen(false);
-    if (options.focusToggle) {
-      queueMicrotask(() => {
-        toggleRef?.focus();
-      });
-    }
-  }
-
-  function openMenu(focusTarget: 'first' | 'last' | 'none' = 'first'): void {
-    updateMenuLayout();
-    setMenuOpen(true);
-    if (focusTarget === 'first' || focusTarget === 'last') {
-      focusBoundaryMenuItem(focusTarget);
-    }
-  }
-
-  createEffect(() => {
-    if (!menuOpen()) {
-      return;
-    }
-    updateMenuLayout();
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (anchorRef?.contains(target) || menuRef?.contains(target)) {
-        return;
-      }
-      closeMenu();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMenu({ focusToggle: true });
-      }
-    };
-    const handleLayout = () => {
-      updateMenuLayout();
-    };
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', handleLayout);
-    window.addEventListener('scroll', handleLayout, true);
-    onCleanup(() => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', handleLayout);
-      window.removeEventListener('scroll', handleLayout, true);
-    });
-  });
-
-  return (
-    <div ref={anchorRef} class="redeven-split-action" data-redeven-split-action="">
-      <Button
-        size="sm"
-        variant={props.presentation.default_action.variant}
-        class="min-w-0 flex-1 rounded-r-none"
-        loading={props.busy}
-        disabled={!props.presentation.default_action.enabled}
-        onClick={() => {
-          closeMenu();
-          props.onAction(props.presentation.default_action);
-        }}
-      >
-        {props.presentation.default_action.label}
-      </Button>
-      <Button
-        ref={toggleRef}
-        size="sm"
-        variant={props.presentation.default_action.variant}
-        class="redeven-split-action__toggle rounded-l-none px-0"
-        disabled={props.busy}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen() ? 'true' : 'false'}
-        aria-label={`${props.presentation.menu_button_label} for ${props.environmentLabel}`}
-        title={props.presentation.menu_button_label}
-        onClick={() => {
-          if (menuOpen()) {
-            closeMenu();
-            return;
-          }
-          openMenu('first');
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            openMenu('first');
-            return;
-          }
-          if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            openMenu('last');
-            return;
-          }
-          if (event.key === 'Escape' && menuOpen()) {
-            event.preventDefault();
-            closeMenu({ focusToggle: true });
-          }
-        }}
-      >
-        <SplitActionChevronIcon open={menuOpen()} />
-      </Button>
-      <Show when={menuOpen() && menuFrame()}>
-        {(frame) => (
-          <Portal>
-            <div
-              ref={menuRef}
-              role="menu"
-              aria-label={`${props.presentation.menu_button_label} for ${props.environmentLabel}`}
-              data-redeven-split-action-menu=""
-              class={cn(
-                'redeven-split-menu fixed z-[210]',
-                menuPlacement() === 'top-end' ? 'redeven-split-menu--top' : 'redeven-split-menu--bottom',
-              )}
-              style={{
-                left: `${frame().left}px`,
-                'min-width': `${frame().width}px`,
-                top: frame().top !== undefined ? `${frame().top}px` : undefined,
-                bottom: frame().bottom !== undefined ? `${frame().bottom}px` : undefined,
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Home') {
-                  event.preventDefault();
-                  focusBoundaryMenuItem('first');
-                  return;
-                }
-                if (event.key === 'End') {
-                  event.preventDefault();
-                  focusBoundaryMenuItem('last');
-                }
-              }}
-            >
-              <SplitActionMenuSection
-                heading="Local route"
-                actions={localActions()}
-                assignItemRef={(index, element) => {
-                  const localIndex = index;
-                  menuItemRefs[localIndex] = element;
-                }}
-                onSelect={(action) => {
-                  closeMenu();
-                  props.onAction(action);
-                }}
-                onNavigate={moveMenuFocus}
-                onClose={() => {
-                  closeMenu({ focusToggle: true });
-                }}
-              />
-              <SplitActionMenuSection
-                heading="Remote route"
-                actions={remoteActions()}
-                assignItemRef={(index, element) => {
-                  const remoteOffset = localActions().length;
-                  menuItemRefs[remoteOffset + index] = element;
-                }}
-                onSelect={(action) => {
-                  closeMenu();
-                  props.onAction(action);
-                }}
-                onNavigate={moveMenuFocus}
-                onClose={() => {
-                  closeMenu({ focusToggle: true });
-                }}
-              />
-            </div>
-          </Portal>
-        )}
-      </Show>
-    </div>
-  );
-}
-
 function EnvironmentConnectionCard(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
@@ -3258,15 +3031,11 @@ function EnvironmentConnectionCard(props: Readonly<{
   const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment));
   const endpoints = createMemo(() => buildEnvironmentCardEndpointsModel(props.environment));
   const managedActionModel = createMemo(() => (
-    props.environment.kind === 'managed_environment'
+    props.environment.kind === 'managed_environment' || props.environment.kind === 'provider_environment'
       ? buildProviderBackedEnvironmentActionModel(props.environment)
       : null
   ));
-  const managedActionPresentation = createMemo(() => managedActionModel()?.action_presentation ?? null);
-  const singleButtonManagedAction = createMemo(() => {
-    const presentation = managedActionPresentation();
-    return presentation?.kind === 'single_button' ? presentation.action : null;
-  });
+  const managedPrimaryAction = createMemo(() => managedActionModel()?.action_presentation.action ?? null);
   const isEnvironmentActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
     || props.busyAction === 'open_remote_environment'
@@ -3277,6 +3046,7 @@ function EnvironmentConnectionCard(props: Readonly<{
   ));
   const isPinBusy = createMemo(() => (
     props.busyAction === 'set_managed_environment_pinned'
+    || props.busyAction === 'set_provider_environment_pinned'
     || props.busyAction === 'set_saved_environment_pinned'
     || props.busyAction === 'set_saved_ssh_environment_pinned'
   ));
@@ -3294,7 +3064,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           <div class="min-w-0 flex-1">
             <div class="mb-1.5 flex items-center gap-1.5">
               <Tag variant={environmentKindTagVariant(props.environment.kind)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                {environmentKindLabel(props.environment.kind)}
+                {card().kind_label}
               </Tag>
               <EnvironmentStatusIndicator tone={card().status_tone}>
                 {card().status_label}
@@ -3328,7 +3098,7 @@ function EnvironmentConnectionCard(props: Readonly<{
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <Show
-          when={props.environment.kind === 'managed_environment' && managedActionModel()}
+          when={(props.environment.kind === 'managed_environment' || props.environment.kind === 'provider_environment') && managedActionModel()}
           fallback={(
             <Button
               size="sm"
@@ -3344,41 +3114,25 @@ function EnvironmentConnectionCard(props: Readonly<{
             </Button>
           )}
         >
-          <Show
-            when={managedActionPresentation()?.kind === 'split_button' && managedActionPresentation()}
-            fallback={(
-              <Button
-                size="sm"
-                variant={singleButtonManagedAction()?.variant ?? 'default'}
-                class="flex-1"
-                loading={isEnvironmentActionBusy()}
-                disabled={!singleButtonManagedAction()?.enabled}
-                onClick={() => {
-                  if (!singleButtonManagedAction()) {
-                    return;
-                  }
-                  void props.runManagedEnvironmentAction(
-                    props.environment,
-                    singleButtonManagedAction()!,
-                    'connect',
-                  );
-                }}
-              >
-                {singleButtonManagedAction()?.label ?? 'Open'}
-              </Button>
-            )}
+          <Button
+            size="sm"
+            variant={managedPrimaryAction()?.variant ?? 'default'}
+            class="flex-1"
+            loading={isEnvironmentActionBusy()}
+            disabled={!managedPrimaryAction()?.enabled}
+            onClick={() => {
+              if (!managedPrimaryAction()) {
+                return;
+              }
+              void props.runManagedEnvironmentAction(
+                props.environment,
+                managedPrimaryAction()!,
+                'connect',
+              );
+            }}
           >
-            {(presentation) => (
-              <ManagedEnvironmentSplitActionButton
-                environmentLabel={props.environment.label}
-                busy={isEnvironmentActionBusy()}
-                presentation={presentation() as Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>}
-                onAction={(action) => {
-                  void props.runManagedEnvironmentAction(props.environment, action, 'connect');
-                }}
-              />
-            )}
-          </Show>
+            {managedPrimaryAction()?.label ?? 'Open'}
+          </Button>
         </Show>
         <div class="flex items-center gap-0.5">
           <DesktopTooltip
@@ -4227,6 +3981,9 @@ function ConnectionDialog(props: Readonly<{
   const managedEnvironmentState = createMemo(() => (
     props.state?.connection_kind === 'managed_environment' ? props.state : null
   ));
+  const managedEnvironmentVariant = createMemo(() => (
+    managedEnvironmentState()?.managed_environment_variant ?? 'local_environment'
+  ));
   const useControlPlaneBinding = createMemo(() => managedEnvironmentState()?.use_control_plane_binding === true);
   const bindingResolution = createMemo(() => (
     connectionKind() === 'managed_environment' && useControlPlaneBinding()
@@ -4243,7 +4000,6 @@ function ConnectionDialog(props: Readonly<{
   const selectedControlPlane = createMemo(() => (
     props.controlPlanes.find((entry) => controlPlaneFilterValue(entry) === selectedControlPlaneKey()) ?? null
   ));
-  const providerEnvironmentOptions = createMemo(() => selectedControlPlane()?.environments ?? []);
   const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
     open: false,
     initialized_for_state_key: 'closed',
@@ -4283,11 +4039,21 @@ function ConnectionDialog(props: Readonly<{
         return 'Connect to another machine over SSH. Desktop can install the matching Redeven release on demand and tunnel its Local UI back to this desktop.';
       case 'managed_environment':
       default:
-        return 'Run a Desktop-managed Redeven environment on this device. You can keep it local-only or bind it to one saved Control Plane environment for unified local and remote access.';
+        return managedEnvironmentVariant() === 'provider_local_serve'
+          ? 'Create a local serve runtime for this provider environment on this Mac. The provider card stays remote-first, and this local serve becomes its own separate Desktop card.'
+          : 'Run a Desktop-managed Redeven environment on this device. Local environments are created independently and are not bound directly to a provider environment.';
     }
   });
-  const saveActionLabel = createMemo(() => bindingResolution()?.save_label ?? compactSaveActionLabel());
-  const connectActionLabel = createMemo(() => bindingResolution()?.connect_label ?? 'Connect');
+  const saveActionLabel = createMemo(() => (
+    managedEnvironmentVariant() === 'provider_local_serve'
+      ? 'Save Local Serve'
+      : (bindingResolution()?.save_label ?? compactSaveActionLabel())
+  ));
+  const connectActionLabel = createMemo(() => (
+    managedEnvironmentVariant() === 'provider_local_serve'
+      ? 'Serve Now'
+      : (bindingResolution()?.connect_label ?? 'Connect')
+  ));
   const saveDisabled = createMemo(() => bindingResolution()?.save_disabled === true);
   const connectDisabled = createMemo(() => bindingResolution()?.connect_disabled === true);
 
@@ -4302,7 +4068,9 @@ function ConnectionDialog(props: Readonly<{
     <Dialog
       open={isOpen()}
       onOpenChange={props.onOpenChange}
-      title={isCreate() ? 'New Environment' : 'Edit Environment'}
+      title={isCreate()
+        ? (managedEnvironmentVariant() === 'provider_local_serve' ? 'Serve Runtime' : 'New Environment')
+        : 'Edit Environment'}
       class={CONNECTION_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
@@ -4342,7 +4110,7 @@ function ConnectionDialog(props: Readonly<{
       )}
     >
       <div class="space-y-4">
-        <Show when={isCreate()}>
+        <Show when={isCreate() && managedEnvironmentVariant() !== 'provider_local_serve'}>
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-foreground">Environment Type</label>
             <SegmentedControl
@@ -4362,7 +4130,9 @@ function ConnectionDialog(props: Readonly<{
         </Show>
 
         <div class="space-y-1.5">
-          <label for="environment-label" class="block text-xs font-medium text-foreground">Name</label>
+          <label for="environment-label" class="block text-xs font-medium text-foreground">
+            {managedEnvironmentVariant() === 'provider_local_serve' ? 'Local Serve Name' : 'Name'}
+          </label>
           <Input
             id="environment-label"
             value={props.state?.label ?? ''}
@@ -4517,79 +4287,36 @@ function ConnectionDialog(props: Readonly<{
                   Use a password for non-loopback binds. Leave this blank to keep the stored password when editing.
                 </div>
               </div>
-              <div class="rounded-md border border-border/70 bg-background/80 px-3 py-3">
-                <div class="flex items-start gap-3">
-                  <Checkbox
-                    checked={useControlPlaneBinding()}
-                    onChange={(value) => props.toggleManagedEnvironmentControlPlaneBinding(value === true)}
-                  />
-                  <div class="min-w-0 flex-1 space-y-1">
-                    <div class="text-xs font-medium text-foreground">Connect To A Control Plane Environment</div>
+              <Show when={useControlPlaneBinding()}>
+                <div class="rounded-md border border-border/70 bg-background/80 px-3 py-3">
+                  <div class="space-y-1">
+                    <div class="text-xs font-medium text-foreground">Provider Environment</div>
                     <div class="text-[11px] leading-5 text-muted-foreground">
-                      Keep one Desktop-managed entry for local hosting on this device and remote access through a saved Control Plane.
+                      This local serve will stay separate from the remote provider card and use the provider environment only as its runtime source.
                     </div>
                   </div>
-                </div>
-
-                <Show when={useControlPlaneBinding()}>
-                  <div class="mt-3 space-y-3">
-                    <Show
-                      when={props.controlPlanes.length > 0}
-                      fallback={(
-                        <div class="rounded-md border border-dashed border-border/70 bg-muted/20 px-3 py-3 text-[11px] leading-5 text-muted-foreground">
-                          <div>No Control Plane is connected in Desktop yet.</div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            class="mt-3"
-                            onClick={() => props.openCreateControlPlaneDialog('Connect a Control Plane, then finish creating this environment.')}
-                          >
-                            Connect Control Plane
-                          </Button>
-                        </div>
-                      )}
-                    >
-                      <div class="space-y-1.5">
-                        <label for="managed-control-plane" class="block text-xs font-medium text-foreground">Control Plane</label>
-                        <Select
-                          value={selectedControlPlaneKey()}
-                          onChange={(value) => props.selectManagedEnvironmentControlPlane(String(value ?? ''))}
-                          options={props.controlPlanes.map((controlPlane) => ({
-                            value: controlPlaneFilterValue(controlPlane),
-                            label: controlPlaneName(controlPlane),
-                          }))}
-                          class="w-full"
-                        />
-                      </div>
-                      <div class="space-y-1.5">
-                        <label for="managed-control-plane-environment" class="block text-xs font-medium text-foreground">Control Plane Environment</label>
-                        <Select
-                          value={managedEnvironmentState()?.env_public_id ?? ''}
-                          onChange={(value) => props.selectManagedEnvironmentProviderEnvironment(String(value ?? ''))}
-                          options={providerEnvironmentOptions().map((environment) => ({
-                            value: environment.env_public_id,
-                            label: `${environment.label} (${desktopProviderEnvironmentRuntimeLabel(environment.status, environment.lifecycle_status)})`,
-                          }))}
-                          class="w-full"
-                        />
-                        <Show when={selectedControlPlane() && providerEnvironmentOptions().length <= 0}>
-                          <div class="text-[11px] text-muted-foreground">
-                            Desktop does not have any environments in the current catalog for this Control Plane. Refresh or reconnect it first.
-                          </div>
-                        </Show>
-                      </div>
-                      <div class="text-[11px] text-muted-foreground">
-                        Desktop stores local state under the selected Control Plane environment scope on this device.
-                      </div>
-                      <Show when={bindingResolution()}>
-                        {(resolution) => (
-                          <ManagedEnvironmentBindingResolutionPanel resolution={resolution()} />
-                        )}
-                      </Show>
-                    </Show>
+                  <div class="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div class="rounded-md border border-border/60 bg-muted/15 px-3 py-2">
+                      <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Control Plane</div>
+                      <div class="mt-1 text-sm text-foreground">{selectedControlPlane()?.display_label ?? managedEnvironmentState()?.provider_origin ?? 'Unavailable'}</div>
+                    </div>
+                    <div class="rounded-md border border-border/60 bg-muted/15 px-3 py-2">
+                      <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Environment</div>
+                      <div class="mt-1 text-sm text-foreground">{managedEnvironmentState()?.env_public_id ?? 'Unavailable'}</div>
+                    </div>
                   </div>
-                </Show>
-              </div>
+                  <div class="mt-3 text-[11px] text-muted-foreground">
+                    Desktop stores the local runtime state under this provider environment scope on this device.
+                  </div>
+                  <Show when={bindingResolution()}>
+                    {(resolution) => (
+                      <div class="mt-3">
+                        <ManagedEnvironmentBindingResolutionPanel resolution={resolution()} />
+                      </div>
+                    )}
+                  </Show>
+                </div>
+              </Show>
             </div>
           </div>
         </Show>

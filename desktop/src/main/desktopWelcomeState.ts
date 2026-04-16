@@ -29,6 +29,7 @@ import {
 } from '../shared/desktopSSH';
 import {
   createManagedLocalEnvironment,
+  desktopManagedControlPlaneEnvironmentID,
   isDefaultLocalManagedEnvironment,
   managedEnvironmentKind,
   managedEnvironmentLocalAccess,
@@ -272,6 +273,32 @@ function openSessionsByManagedEnvironment(
   return out;
 }
 
+function openSessionByProviderEnvironment(
+  sessions: readonly DesktopSessionSummary[],
+  providerOrigin: string,
+  envPublicID: string,
+): DesktopSessionSummary | null {
+  const environmentID = desktopManagedControlPlaneEnvironmentID(providerOrigin, envPublicID);
+  return sessions.find((session) => (
+    session.target.kind === 'managed_environment'
+    && session.target.route === 'remote_desktop'
+    && session.target.environment_id === environmentID
+  )) ?? null;
+}
+
+function providerEnvironmentPreference(
+  preferences: DesktopPreferences,
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): DesktopPreferences['provider_environment_preferences'][number] | null {
+  return preferences.provider_environment_preferences.find((preference) => (
+    preference.provider_origin === providerOrigin
+    && preference.provider_id === providerID
+    && preference.env_public_id === envPublicID
+  )) ?? null;
+}
+
 function fallbackControlPlaneSummaries(
   controlPlanes: DesktopPreferences['control_planes'],
 ): readonly DesktopControlPlaneSummary[] {
@@ -468,23 +495,16 @@ function buildManagedEnvironmentEntry(
   controlPlanes: readonly DesktopControlPlaneSummary[],
 ): DesktopEnvironmentEntry {
   const localSession = openSessions.local_host ?? null;
-  const remoteSession = openSessions.remote_desktop ?? null;
-  const isOpen = sessionIsOpen(localSession) || sessionIsOpen(remoteSession);
-  const isOpening = sessionIsOpening(localSession) || sessionIsOpening(remoteSession);
+  const isOpen = sessionIsOpen(localSession);
+  const isOpening = sessionIsOpening(localSession);
   const access = managedEnvironmentLocalAccess(environment);
   const kind = managedEnvironmentKind(environment);
   const providerOrigin = managedEnvironmentProviderOrigin(environment);
   const providerID = managedEnvironmentProviderID(environment);
   const envPublicID = managedEnvironmentPublicID(environment);
-  const defaultRoute = managedEnvironmentDefaultOpenRoute(environment) === 'remote_desktop'
-    ? 'remote_desktop'
-    : 'local_host';
   const localRuntimeState = managedLocalRuntimeState(environment, localSession);
   const localRuntimeURL = managedLocalRuntimeURL(environment, localSession);
   const localCloseBehavior = managedLocalCloseBehavior(environment, localRuntimeState);
-  const defaultSession = defaultRoute === 'remote_desktop'
-    ? (remoteSession ?? localSession)
-    : (localSession ?? remoteSession);
   const localRouteState = managedLocalRouteState(environment, localSession);
   const remoteRoute = kind === 'controlplane'
     ? managedRemoteRouteDetails(environment, controlPlanes)
@@ -504,29 +524,25 @@ function buildManagedEnvironmentEntry(
     id: environment.id,
     kind: 'managed_environment',
     label: environment.label,
-    local_ui_url: defaultSession?.entry_url ?? defaultSession?.startup?.local_ui_url ?? localRuntimeURL,
+    local_ui_url: localSession?.entry_url ?? localSession?.startup?.local_ui_url ?? localRuntimeURL,
     secondary_text: kind === 'local'
       ? access.local_ui_bind
-      : managedEnvironmentSupportsLocalHosting(environment)
-        ? [access.local_ui_bind, remoteEnvironmentURL || providerIdentitySummary].filter(Boolean).join(' · ')
-        : (remoteEnvironmentURL || providerIdentitySummary),
+      : [access.local_ui_bind, remoteEnvironmentURL || providerIdentitySummary].filter(Boolean).join(' · '),
     managed_environment_kind: kind,
     managed_local_scope_kind: environment.local_hosting?.scope.kind,
     managed_environment_name: managedEnvironmentLocalName(environment),
     managed_local_ui_bind: access.local_ui_bind,
     managed_local_ui_password_configured: access.local_ui_password_configured,
     managed_local_owner: environment.local_hosting?.owner,
-    managed_local_runtime_state: managedEnvironmentSupportsLocalHosting(environment) ? localRuntimeState : undefined,
+    managed_local_runtime_state: localRuntimeState,
     managed_local_runtime_url: localRuntimeURL || undefined,
     managed_local_close_behavior: localCloseBehavior,
-    managed_has_local_hosting: managedEnvironmentSupportsLocalHosting(environment),
-    managed_has_remote_desktop: managedEnvironmentSupportsRemoteDesktop(environment),
-    managed_preferred_open_route: environment.preferred_open_route,
-    default_open_route: defaultRoute,
+    managed_has_local_hosting: true,
+    managed_has_remote_desktop: false,
+    managed_preferred_open_route: 'local_host',
+    default_open_route: 'local_host',
     open_local_session_key: localSession?.session_key,
     open_local_session_lifecycle: sessionLifecycle(localSession),
-    open_remote_session_key: remoteSession?.session_key,
-    open_remote_session_lifecycle: sessionLifecycle(remoteSession),
     provider_origin: kind === 'controlplane' ? providerOrigin : undefined,
     provider_id: kind === 'controlplane' ? providerID : undefined,
     env_public_id: kind === 'controlplane' ? envPublicID : undefined,
@@ -549,19 +565,121 @@ function buildManagedEnvironmentEntry(
     category: 'managed',
     is_open: isOpen,
     is_opening: isOpening,
-    open_session_key: defaultSession?.session_key ?? '',
-    open_session_lifecycle: sessionLifecycle(defaultSession),
+    open_session_key: localSession?.session_key ?? '',
+    open_session_lifecycle: sessionLifecycle(localSession),
     open_action_label: managedEnvironmentOpenActionLabel({
       isOpen,
       isOpening,
-      defaultRoute,
+      defaultRoute: 'local_host',
       localRuntimeState,
     }),
-    can_edit: managedEnvironmentSupportsLocalHosting(environment),
-    can_delete: managedEnvironmentSupportsLocalHosting(environment)
-      && !isDefaultLocalManagedEnvironment(environment),
+    can_edit: true,
+    can_delete: !isDefaultLocalManagedEnvironment(environment),
     can_save: false,
     last_used_at_ms: environment.last_used_at_ms,
+  };
+}
+
+function buildProviderEnvironmentEntry(
+  preferences: DesktopPreferences,
+  controlPlane: DesktopControlPlaneSummary,
+  providerEnvironment: DesktopControlPlaneSummary['environments'][number],
+  openSessions: readonly DesktopSessionSummary[],
+): DesktopEnvironmentEntry {
+  const remoteSession = openSessionByProviderEnvironment(
+    openSessions,
+    controlPlane.provider.provider_origin,
+    providerEnvironment.env_public_id,
+  );
+  const localServeEnvironment = preferences.managed_environments.find((environment) => (
+    managedEnvironmentProviderOrigin(environment) === controlPlane.provider.provider_origin
+    && managedEnvironmentProviderID(environment) === controlPlane.provider.provider_id
+    && managedEnvironmentPublicID(environment) === providerEnvironment.env_public_id
+  )) ?? null;
+  const preference = providerEnvironmentPreference(
+    preferences,
+    controlPlane.provider.provider_origin,
+    controlPlane.provider.provider_id,
+    providerEnvironment.env_public_id,
+  );
+  const remoteRouteState = desktopProviderRemoteRouteState({
+    syncState: controlPlane.sync_state,
+    environmentPresent: true,
+    providerStatus: providerEnvironment.status,
+    providerLifecycleStatus: providerEnvironment.lifecycle_status,
+    lastSyncedAtMS: controlPlane.last_synced_at_ms,
+  });
+  const remoteStateReason = (() => {
+    switch (remoteRouteState) {
+      case 'ready':
+        return 'Remote Desktop is ready.';
+      case 'offline':
+        return 'The provider currently reports this environment as offline.';
+      case 'stale':
+        return 'Remote status is stale. Refresh the provider to confirm the current state.';
+      case 'removed':
+        return 'This environment is no longer published by the provider.';
+      case 'auth_required':
+        return 'Reconnect this Control Plane in your browser to restore access.';
+      case 'provider_unreachable':
+        return 'Desktop could not refresh this provider from the current machine.';
+      case 'provider_invalid':
+        return 'The provider returned an invalid response while Desktop refreshed status.';
+      default:
+        return 'Remote status is not yet confirmed.';
+    }
+  })();
+  const localServeSessions: Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>> = localServeEnvironment
+    ? openSessionsByManagedEnvironment(openSessions, localServeEnvironment)
+    : {};
+  return {
+    id: desktopManagedControlPlaneEnvironmentID(
+      controlPlane.provider.provider_origin,
+      providerEnvironment.env_public_id,
+    ),
+    kind: 'provider_environment',
+    label: providerEnvironment.label,
+    local_ui_url: remoteSession?.entry_url ?? remoteSession?.startup?.local_ui_url ?? providerEnvironment.environment_url ?? '',
+    secondary_text: providerEnvironment.environment_url
+      || [controlPlane.display_label, providerEnvironment.env_public_id].filter(Boolean).join(' / '),
+    provider_origin: controlPlane.provider.provider_origin,
+    provider_id: controlPlane.provider.provider_id,
+    env_public_id: providerEnvironment.env_public_id,
+    remote_environment_url: providerEnvironment.environment_url,
+    provider_status: providerEnvironment.status,
+    provider_lifecycle_status: providerEnvironment.lifecycle_status,
+    provider_last_seen_at_unix_ms: providerEnvironment.last_seen_at_unix_ms,
+    control_plane_sync_state: controlPlane.sync_state,
+    remote_route_state: remoteRouteState,
+    remote_catalog_freshness: controlPlane.catalog_freshness,
+    remote_state_reason: remoteStateReason,
+    provider_local_serve_environment_id: localServeEnvironment?.id,
+    provider_local_serve_state: localServeEnvironment
+      ? sessionIsOpen(localServeSessions.local_host ?? null)
+        ? 'open'
+        : sessionIsOpening(localServeSessions.local_host ?? null)
+          ? 'opening'
+          : 'saved'
+      : 'absent',
+    pinned: preference?.pinned ?? false,
+    control_plane_label: controlPlane.display_label,
+    tag: sessionIsOpen(remoteSession) ? 'Open' : 'Managed',
+    category: 'provider',
+    is_open: sessionIsOpen(remoteSession),
+    is_opening: sessionIsOpening(remoteSession),
+    open_remote_session_key: remoteSession?.session_key,
+    open_remote_session_lifecycle: sessionLifecycle(remoteSession),
+    open_session_key: remoteSession?.session_key ?? '',
+    open_session_lifecycle: sessionLifecycle(remoteSession),
+    open_action_label: sessionIsOpen(remoteSession)
+      ? 'Focus'
+      : sessionIsOpening(remoteSession)
+        ? 'Opening…'
+        : 'Open',
+    can_edit: false,
+    can_delete: false,
+    can_save: false,
+    last_used_at_ms: preference?.last_used_at_ms ?? 0,
   };
 }
 
@@ -572,13 +690,18 @@ function buildEnvironmentEntries(
 ): readonly DesktopEnvironmentEntry[] {
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
-  const entries: DesktopEnvironmentEntry[] = preferences.managed_environments.map((environment) => (
-    buildManagedEnvironmentEntry(
-      environment,
-      openSessionsByManagedEnvironment(openSessions, environment),
-      controlPlanes,
-    )
-  ));
+  const entries: DesktopEnvironmentEntry[] = [
+    ...preferences.managed_environments.map((environment) => (
+      buildManagedEnvironmentEntry(
+        environment,
+        openSessionsByManagedEnvironment(openSessions, environment),
+        controlPlanes,
+      )
+    )),
+    ...controlPlanes.flatMap((controlPlane) => controlPlane.environments.map((providerEnvironment) => (
+      buildProviderEnvironmentEntry(preferences, controlPlane, providerEnvironment, openSessions)
+    ))),
+  ];
 
   const catalog = preferences.saved_environments;
   const sshCatalog = preferences.saved_ssh_environments;

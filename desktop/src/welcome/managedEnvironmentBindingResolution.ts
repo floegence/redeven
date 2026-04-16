@@ -148,9 +148,9 @@ export function describeManagedEnvironmentBindingResolution(
     case 'available_new_binding':
       return {
         tone: 'primary',
-        title: 'This Control Plane environment is available.',
-        description: 'Desktop will bind this entry to the selected Control Plane environment and keep one shared identity for local and remote access.',
-        detail: 'Local state will be stored under the selected Control Plane environment scope on this device.',
+        title: 'This provider environment is ready for local serve.',
+        description: 'Desktop will save a separate Local Serve card for the selected provider environment.',
+        detail: 'The remote provider card stays remote-first, and this local serve owns only the on-device runtime state.',
         save_label: defaultSaveLabel,
         connect_label: defaultConnectLabel,
         save_disabled: false,
@@ -159,11 +159,11 @@ export function describeManagedEnvironmentBindingResolution(
     case 'editing_same_binding':
       return {
         tone: 'success',
-        title: 'This entry is already connected to the selected Control Plane environment.',
+        title: 'This Local Serve already points at the selected provider environment.',
         description: `Desktop will keep using "${existingLabel}" and update its local hosting settings in place.`,
         detail: resolution.existing_entry?.is_open
-          ? 'That environment is already open, so connect will focus the existing window after saving.'
-          : 'Desktop will keep one stable managed entry instead of creating a duplicate.',
+          ? 'That local serve is already open, so Serve Now will focus the existing window after saving.'
+          : 'Desktop will keep one stable local-serve card instead of creating a duplicate.',
         save_label: options.isCreate ? 'Save' : 'Update',
         connect_label: resolution.existing_entry?.is_open ? 'Save & Focus' : defaultConnectLabel,
         save_disabled: false,
@@ -172,9 +172,9 @@ export function describeManagedEnvironmentBindingResolution(
     case 'focus_existing_open_session':
       return {
         tone: 'success',
-        title: `This Control Plane environment is already open as "${existingLabel}".`,
-        description: 'Desktop will reuse that existing managed entry instead of creating a duplicate.',
-        detail: 'Connect will focus the existing window after saving.',
+        title: `This provider Local Serve is already open as "${existingLabel}".`,
+        description: 'Desktop will reuse that existing local-serve card instead of creating a duplicate.',
+        detail: 'Serve Now will focus the existing window after saving.',
         save_label: 'Save & Reuse',
         connect_label: 'Save & Focus',
         save_disabled: false,
@@ -184,8 +184,8 @@ export function describeManagedEnvironmentBindingResolution(
       return {
         tone: 'warning',
         title: `Desktop is already opening "${existingLabel}".`,
-        description: 'Wait for that opening attempt to finish before saving another binding to the same Control Plane environment.',
-        detail: 'This avoids racing two launcher actions into the same managed entry.',
+        description: 'Wait for that local serve to finish opening before saving another one for the same provider environment.',
+        detail: 'This avoids racing two launcher actions into the same local-serve card.',
         save_label: 'Already Opening',
         connect_label: 'Already Opening',
         save_disabled: true,
@@ -194,9 +194,9 @@ export function describeManagedEnvironmentBindingResolution(
     case 'attachable_existing_local_host':
       return {
         tone: 'success',
-        title: `Desktop already manages the local host for "${existingLabel}".`,
-        description: 'Saving here will reuse that existing managed entry and keep one shared local host for this Control Plane environment.',
-        detail: 'Desktop will not create a second local host on this device for the same Control Plane environment.',
+        title: `Desktop already manages a Local Serve for "${existingLabel}".`,
+        description: 'Saving here will reuse that existing local-serve card instead of creating a second one.',
+        detail: 'Desktop will not create another local host on this device for the same provider environment.',
         save_label: 'Save & Reuse',
         connect_label: defaultConnectLabel,
         save_disabled: false,
@@ -206,7 +206,7 @@ export function describeManagedEnvironmentBindingResolution(
       return {
         tone: 'warning',
         title: `Another Redeven host process owns "${existingLabel}".`,
-        description: 'Desktop cannot take over that local host from this launcher session.',
+        description: 'Desktop cannot take over that Local Serve host from this launcher session.',
         detail: 'Use the existing host process instead, or stop it first and then try again here.',
         save_label: 'Blocked',
         connect_label: 'Blocked',
@@ -217,9 +217,9 @@ export function describeManagedEnvironmentBindingResolution(
     default:
       return {
         tone: 'success',
-        title: `This Control Plane environment is already connected as "${existingLabel}".`,
-        description: 'Desktop will reuse that entry instead of creating a duplicate.',
-        detail: 'Saving here will keep one stable managed identity for this Control Plane environment.',
+        title: `This provider environment already has a Local Serve named "${existingLabel}".`,
+        description: 'Desktop will reuse that local-serve card instead of creating a duplicate.',
+        detail: 'Saving here keeps one stable on-device local serve for this provider environment.',
         save_label: 'Save & Reuse',
         connect_label: defaultConnectLabel,
         save_disabled: false,

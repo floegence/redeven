@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
   buildExternalLocalUIDesktopTarget,
+  buildManagedEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
 } from '../main/desktopTarget';
 import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
@@ -18,9 +19,12 @@ import {
   buildEnvironmentCardEndpointsModel,
   buildEnvironmentCardFactsModel,
   buildProviderBackedEnvironmentActionModel,
+  environmentLibraryCount,
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
-  resolveDefaultDualRouteAction,
+  PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
+  SSH_ENVIRONMENT_LIBRARY_FILTER,
+  URL_ENVIRONMENT_LIBRARY_FILTER,
   splitPinnedEnvironmentEntries,
 } from './viewModel';
 
@@ -40,12 +44,71 @@ function placeholderFact(label: string, value = 'None') {
   };
 }
 
+function buildProvider(providerOrigin = 'https://cp.example.invalid') {
+  return {
+    protocol_version: 'rcpp-v1' as const,
+    provider_id: 'redeven_portal',
+    display_name: 'Redeven Portal',
+    provider_origin: providerOrigin,
+    documentation_url: `${providerOrigin}/docs/control-plane-providers`,
+  };
+}
+
+function buildControlPlaneSummary(options: Readonly<{
+  providerOrigin?: string;
+  displayLabel?: string;
+  status?: string;
+  lifecycleStatus?: string;
+  envPublicID?: string;
+  environmentURL?: string;
+  syncState?: 'idle' | 'syncing' | 'ready' | 'auth_required' | 'provider_unreachable' | 'provider_invalid' | 'sync_error';
+  catalogFreshness?: 'unknown' | 'fresh' | 'stale';
+}>) {
+  const provider = buildProvider(options.providerOrigin);
+  const now = Date.now();
+  return {
+    provider,
+    account: {
+      provider_id: provider.provider_id,
+      provider_origin: provider.provider_origin,
+      display_name: provider.display_name,
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      authorization_expires_at_unix_ms: now + 60_000,
+    },
+    display_label: options.displayLabel ?? 'Demo Portal',
+    environments: [{
+      provider_id: provider.provider_id,
+      provider_origin: provider.provider_origin,
+      env_public_id: options.envPublicID ?? 'env_demo',
+      label: 'Demo Environment',
+      environment_url: options.environmentURL ?? `${provider.provider_origin}/env/${options.envPublicID ?? 'env_demo'}`,
+      description: 'team sandbox',
+      namespace_public_id: 'ns_demo',
+      namespace_name: 'Demo Team',
+      status: options.status ?? 'online',
+      lifecycle_status: options.lifecycleStatus ?? 'active',
+      last_seen_at_unix_ms: now,
+    }],
+    last_synced_at_ms: now,
+    sync_state: options.syncState ?? 'ready',
+    last_sync_attempt_at_ms: now,
+    last_sync_error_code: '',
+    last_sync_error_message: '',
+    catalog_freshness: options.catalogFreshness ?? 'fresh',
+  };
+}
+
 describe('buildEnvironmentCardModel', () => {
-  it('builds local, URL, and SSH card metadata from desktop snapshot entries', () => {
-    const managedLocal = testManagedLocalEnvironment();
+  it('builds local, local-serve, provider, URL, and SSH cards from separated launcher entries', () => {
+    const managedLocal = testManagedLocalEnvironment('default');
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
+    });
+    const controlPlane = buildControlPlaneSummary({});
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedLocal],
+        managed_environments: [managedLocal, localServe],
         saved_environments: [
           {
             id: 'http://192.168.1.12:24000/',
@@ -72,12 +135,14 @@ describe('buildEnvironmentCardModel', () => {
         ],
         recent_external_local_ui_urls: ['http://192.168.1.12:24000/'],
       }),
+      controlPlanes: [controlPlane],
       openSessions: [
         testManagedSession(managedLocal, 'http://localhost:23998/'),
+        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
         {
           session_key: 'url:http://192.168.1.12:24000/',
           target: buildExternalLocalUIDesktopTarget('http://192.168.1.12:24000/', { label: 'Staging' }),
-          lifecycle: 'open',
+          lifecycle: 'open' as const,
           startup: {
             local_ui_url: 'http://192.168.1.12:24000/',
             local_ui_urls: ['http://192.168.1.12:24000/'],
@@ -99,7 +164,7 @@ describe('buildEnvironmentCardModel', () => {
               forwardedLocalUIURL: 'http://127.0.0.1:24111/',
             },
           ),
-          lifecycle: 'open',
+          lifecycle: 'open' as const,
           startup: {
             local_ui_url: 'http://127.0.0.1:24111/',
             local_ui_urls: ['http://127.0.0.1:24111/'],
@@ -111,59 +176,96 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = snapshot.environments.find((environment) => (
       environment.kind === 'managed_environment' && environment.managed_environment_kind === 'local'
     ));
+    const localServeEntry = snapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
+    ));
+    const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const urlEntry = snapshot.environments.find((environment) => environment.kind === 'external_local_ui');
     const sshEntry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
 
     expect(localEntry).toBeTruthy();
+    expect(localServeEntry).toBeTruthy();
+    expect(providerEntry).toBeTruthy();
     expect(urlEntry).toBeTruthy();
     expect(sshEntry).toBeTruthy();
 
-    const localCard = buildEnvironmentCardModel(localEntry!);
-    expect(localCard.kind_label).toBe('Local');
-    expect(localCard.status_label).toBe('Open');
-    expect(localCard.target_primary).toBe('http://localhost:23998/');
-
-    const urlCard = buildEnvironmentCardModel(urlEntry!);
-    expect(urlCard.kind_label).toBe('Redeven URL');
-    expect(urlCard.status_label).toBe('Open');
-    expect(urlCard.source_label).toBe('Saved');
-    expect(urlCard.target_primary).toBe('http://192.168.1.12:24000/');
-    expect(urlCard.target_secondary).toBe('');
-
-    const sshCard = buildEnvironmentCardModel(sshEntry!);
-    expect(sshCard.kind_label).toBe('SSH');
-    expect(sshCard.status_label).toBe('Open');
-    expect(sshCard.target_primary).toBe('ops@example.internal:2222');
-    expect(sshCard.target_secondary).toBe('http://127.0.0.1:24111/');
-    expect(sshCard.meta).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        label: 'Bootstrap',
-        value: 'Desktop upload',
-      }),
-      expect.objectContaining({
-        label: 'Install root',
-        value: '/opt/redeven-desktop/runtime',
-      }),
-    ]));
+    expect(buildEnvironmentCardModel(localEntry!)).toEqual(expect.objectContaining({
+      kind_label: 'Local',
+      status_label: 'Open',
+      target_primary: 'http://localhost:23998/',
+    }));
+    expect(buildEnvironmentCardModel(localServeEntry!)).toEqual(expect.objectContaining({
+      kind_label: 'Local Serve',
+      status_label: 'Open',
+      target_primary: 'http://127.0.0.1:24001/',
+      target_secondary: 'https://cp.example.invalid/env/env_demo',
+    }));
+    expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
+      kind_label: 'Provider',
+      status_label: 'Ready',
+      source_label: 'Control Plane',
+      target_primary: 'https://cp.example.invalid/env/env_demo',
+    }));
+    expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
+      kind_label: 'Redeven URL',
+      status_label: 'Open',
+      source_label: 'Saved',
+    }));
+    expect(buildEnvironmentCardModel(sshEntry!)).toEqual(expect.objectContaining({
+      kind_label: 'SSH',
+      status_label: 'Open',
+      target_primary: 'ops@example.internal:2222',
+      target_secondary: 'http://127.0.0.1:24111/',
+    }));
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
-      defaultFact('ACCESS', 'Local'),
       defaultFact('LOCAL RUNTIME', 'Running in Desktop'),
       defaultFact('WINDOW', 'Stops on close'),
       placeholderFact('CONTROL PLANE'),
     ]);
+    expect(buildEnvironmentCardFactsModel(localServeEntry!)).toEqual([
+      defaultFact('SOURCE ENV', 'env_demo'),
+      defaultFact('CONTROL PLANE', 'Demo Portal'),
+      defaultFact('LOCAL RUNTIME', 'Running in Desktop'),
+      defaultFact('WINDOW', 'Stops on close'),
+    ]);
+    expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
+      defaultFact('CONTROL PLANE', 'Demo Portal'),
+      defaultFact('STATUS', 'online · active'),
+      defaultFact('LOCAL SERVE', 'Open in Desktop'),
+    ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
-      defaultFact('ACCESS', 'Redeven URL'),
       defaultFact('SOURCE', 'Saved'),
       defaultFact('NETWORK', 'LAN host'),
-      placeholderFact('CONTROL PLANE'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
-      defaultFact('ACCESS', 'SSH'),
-      defaultFact('CONNECTION', 'Open'),
+      defaultFact('SOURCE', 'Saved'),
       defaultFact('BOOTSTRAP', 'Desktop upload'),
-      placeholderFact('CONTROL PLANE'),
+      defaultFact('INSTALL ROOT', '/opt/redeven-desktop/runtime'),
+    ]);
+
+    expect(buildEnvironmentCardEndpointsModel(localServeEntry!)).toEqual([
+      {
+        label: 'URL',
+        value: 'http://127.0.0.1:24001/',
+        monospace: true,
+        copy_label: 'Copy local endpoint',
+      },
+      {
+        label: 'SOURCE',
+        value: 'https://cp.example.invalid/env/env_demo',
+        monospace: true,
+        copy_label: 'Copy provider URL',
+      },
+    ]);
+    expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
+      {
+        label: 'REMOTE',
+        value: 'https://cp.example.invalid/env/env_demo',
+        monospace: true,
+        copy_label: 'Copy environment URL',
+      },
     ]);
     expect(buildEnvironmentCardEndpointsModel(sshEntry!)).toEqual([
       {
@@ -181,597 +283,184 @@ describe('buildEnvironmentCardModel', () => {
     ]);
   });
 
-  it('maps provider-backed environments to unified Ready and Offline badges', () => {
-    const freshSyncAt = Date.now();
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
+  it('filters the environment library by local, provider, URL, SSH, and provider-specific scopes', () => {
+    const managedLocal = testManagedLocalEnvironment('default');
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
     });
-    const provider = {
-      protocol_version: 'rcpp-v1' as const,
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
-      provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-    };
-    const account = {
-      provider_id: 'redeven_portal',
-      provider_origin: 'https://cp.example.invalid',
-      display_name: 'Redeven Portal',
-      user_public_id: 'user_demo',
-      user_display_name: 'Demo User',
-      authorization_expires_at_unix_ms: 1_000,
-    };
+    const controlPlane = buildControlPlaneSummary({});
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
-        control_planes: [{
-          provider,
-          account,
-          display_label: 'cp.example.invalid',
-          environments: [{
-            provider_id: 'redeven_portal',
-            provider_origin: 'https://cp.example.invalid',
-            env_public_id: 'env_demo',
-            label: 'Demo Environment',
-            environment_url: 'https://cp.example.invalid/env/env_demo',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'offline',
-            lifecycle_status: 'suspended',
-            last_seen_at_unix_ms: 123,
-          }],
-          last_synced_at_ms: 500,
+        managed_environments: [managedLocal, localServe],
+        saved_environments: [{
+          id: 'http://192.168.1.12:24000/',
+          label: 'Staging',
+          local_ui_url: 'http://192.168.1.12:24000/',
+          source: 'saved',
+          pinned: false,
+          last_used_at_ms: 20,
+        }],
+        saved_ssh_environments: [{
+          id: 'ssh_saved',
+          label: 'Prod SSH',
+          ssh_destination: 'ops@example.internal',
+          ssh_port: 2222,
+          remote_install_dir: '/opt/redeven-desktop/runtime',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          source: 'saved',
+          pinned: false,
+          last_used_at_ms: 30,
         }],
       }),
-      controlPlanes: [{
-        provider,
-        account,
-        display_label: 'cp.example.invalid',
-        environments: [{
-          provider_id: 'redeven_portal',
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_demo',
-          label: 'Demo Environment',
-          environment_url: 'https://cp.example.invalid/env/env_demo',
-          description: 'team sandbox',
-          namespace_public_id: 'ns_demo',
-          namespace_name: 'Demo Team',
-          status: 'offline',
-          lifecycle_status: 'suspended',
-          last_seen_at_unix_ms: 123,
-        }],
-        last_synced_at_ms: freshSyncAt,
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: freshSyncAt,
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
+      controlPlanes: [controlPlane],
     });
 
-    const offlineEntry = snapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
-    ));
+    expect(environmentLibraryCount(snapshot)).toBe(5);
+    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
+    expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
+    expect(environmentLibraryCount(snapshot, '', SSH_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
-    expect(offlineEntry).toBeTruthy();
-    expect(buildEnvironmentCardModel(offlineEntry!)).toEqual(expect.objectContaining({
-      kind_label: 'Remote Environment',
-      status_label: 'Offline',
-      status_tone: 'warning',
-    }));
-
-    const openSnapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
-        control_planes: [{
-          provider,
-          account,
-          display_label: 'cp.example.invalid',
-          environments: [{
-            provider_id: 'redeven_portal',
-            provider_origin: 'https://cp.example.invalid',
-            env_public_id: 'env_demo',
-            label: 'Demo Environment',
-            environment_url: 'https://cp.example.invalid/env/env_demo',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'online',
-            lifecycle_status: 'active',
-            last_seen_at_unix_ms: 456,
-          }],
-          last_synced_at_ms: 600,
-        }],
-      }),
-      controlPlanes: [{
-        provider,
-        account,
-        display_label: 'cp.example.invalid',
-        environments: [{
-          provider_id: 'redeven_portal',
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_demo',
-          label: 'Demo Environment',
-          environment_url: 'https://cp.example.invalid/env/env_demo',
-          description: 'team sandbox',
-          namespace_public_id: 'ns_demo',
-          namespace_name: 'Demo Team',
-          status: 'online',
-          lifecycle_status: 'active',
-          last_seen_at_unix_ms: 456,
-        }],
-        last_synced_at_ms: freshSyncAt,
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: freshSyncAt,
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
-    });
-
-    const readyEntry = openSnapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
-    ));
-
-    expect(readyEntry).toBeTruthy();
-    expect(buildEnvironmentCardModel(readyEntry!)).toEqual(expect.objectContaining({
-      status_label: 'Ready',
-      status_tone: 'primary',
-    }));
-  });
-
-  it('uses provider-supplied environment URLs for managed remote endpoint rows', () => {
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
-    });
-    const provider = {
-      protocol_version: 'rcpp-v1' as const,
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
-      provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-    };
-    const account = {
-      provider_id: 'redeven_portal',
-      provider_origin: 'https://cp.example.invalid',
-      display_name: 'Redeven Portal',
-      user_public_id: 'user_demo',
-      user_display_name: 'Demo User',
-      authorization_expires_at_unix_ms: Date.now() + 60_000,
-    };
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
-      }),
-      controlPlanes: [{
-        provider,
-        account,
-        display_label: 'Demo Portal',
-        environments: [{
-          provider_id: 'redeven_portal',
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_demo',
-          label: 'Demo Environment',
-          environment_url: 'https://cp.example.invalid/env/env_demo',
-          description: 'team sandbox',
-          namespace_public_id: 'ns_demo',
-          namespace_name: 'Demo Team',
-          status: 'online',
-          lifecycle_status: 'active',
-          last_seen_at_unix_ms: 456,
-        }],
-        last_synced_at_ms: Date.now(),
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: Date.now(),
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
-    });
-
-    const remoteEntry = snapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
-    ));
-
-    expect(remoteEntry).toBeTruthy();
-    expect(buildEnvironmentCardEndpointsModel(remoteEntry!)).toEqual([
-      {
-        label: 'REMOTE',
-        value: 'https://cp.example.invalid/env/env_demo',
-        monospace: true,
-        copy_label: 'Copy environment URL',
-      },
-    ]);
-    expect(remoteEntry!.secondary_text).toBe('https://cp.example.invalid/env/env_demo');
-  });
-
-  it('describes URL cards with source and local-network context', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_environments: [
-          {
-            id: 'https://203.0.113.15:24000/',
-            label: 'Public Relay',
-            local_ui_url: 'https://203.0.113.15:24000/',
-            source: 'recent_auto',
-            pinned: false,
-            last_used_at_ms: 120,
-          },
-        ],
-        recent_external_local_ui_urls: ['https://203.0.113.15:24000/'],
-      }),
-      openSessions: [{
-        session_key: 'url:http://127.0.0.1:24000/',
-        target: buildExternalLocalUIDesktopTarget('http://127.0.0.1:24000/', { label: 'Loopback UI' }),
-        lifecycle: 'open',
-        startup: {
-          local_ui_url: 'http://127.0.0.1:24000/',
-          local_ui_urls: ['http://127.0.0.1:24000/'],
-        },
-      }],
-    });
-
-    const loopbackEntry = snapshot.environments.find((environment) => environment.id === 'http://127.0.0.1:24000/');
-    const publicEntry = snapshot.environments.find((environment) => environment.id === 'https://203.0.113.15:24000/');
-
-    expect(loopbackEntry).toBeTruthy();
-    expect(publicEntry).toBeTruthy();
-
-    expect(buildEnvironmentCardFactsModel(loopbackEntry!)).toEqual([
-      defaultFact('ACCESS', 'Redeven URL'),
-      defaultFact('SOURCE', 'Open window'),
-      defaultFact('NETWORK', 'This device'),
-      placeholderFact('CONTROL PLANE'),
-    ]);
-    expect(buildEnvironmentCardFactsModel(publicEntry!)).toEqual([
-      defaultFact('ACCESS', 'Redeven URL'),
-      defaultFact('SOURCE', 'Recent'),
-      defaultFact('NETWORK', 'Remote host'),
-      placeholderFact('CONTROL PLANE'),
-    ]);
-  });
-
-  it('marks remote-only provider cards as stale when the provider catalog is outdated', () => {
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      localHosting: false,
-    });
-    const provider = {
-      protocol_version: 'rcpp-v1' as const,
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
-      provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-    };
-    const account = {
-      provider_id: 'redeven_portal',
-      provider_origin: 'https://cp.example.invalid',
-      display_name: 'Redeven Portal',
-      user_public_id: 'user_demo',
-      user_display_name: 'Demo User',
-      authorization_expires_at_unix_ms: Date.now() + 60_000,
-    };
-
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        managed_environments: [managedControlPlane],
-        control_planes: [{
-          provider,
-          account,
-          display_label: 'cp.example.invalid',
-          environments: [{
-            provider_id: 'redeven_portal',
-            provider_origin: 'https://cp.example.invalid',
-            env_public_id: 'env_demo',
-            label: 'Demo Environment',
-            environment_url: 'https://cp.example.invalid/env/env_demo',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'online',
-            lifecycle_status: 'active',
-            last_seen_at_unix_ms: 456,
-          }],
-          last_synced_at_ms: 600,
-        }],
-      }),
-    });
-
-    const staleEntry = snapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.env_public_id === 'env_demo'
-    ));
-
-    expect(staleEntry).toBeTruthy();
-    expect(buildEnvironmentCardModel(staleEntry!)).toEqual(expect.objectContaining({
-      status_label: 'Status stale',
-      status_tone: 'warning',
-    }));
-  });
-
-  it('derives offline remote-only and dual-route action models from the same provider state', () => {
-    const freshSyncAt = Date.now();
-    const remoteOnly = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_remote_only', {
-      localHosting: false,
-    });
-    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route');
-    const provider = {
-      protocol_version: 'rcpp-v1' as const,
-      provider_id: 'redeven_portal',
-      display_name: 'Redeven Portal',
-      provider_origin: 'https://cp.example.invalid',
-      documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-    };
-    const account = {
-      provider_id: 'redeven_portal',
-      provider_origin: 'https://cp.example.invalid',
-      display_name: 'Redeven Portal',
-      user_public_id: 'user_demo',
-      user_display_name: 'Demo User',
-      authorization_expires_at_unix_ms: Date.now() + 60_000,
-    };
-    const environments = [
-      {
-        provider_id: 'redeven_portal',
-        provider_origin: 'https://cp.example.invalid',
-        env_public_id: 'env_remote_only',
-        label: 'Remote Only',
-        environment_url: 'https://cp.example.invalid/env/env_remote_only',
-        description: 'remote only sandbox',
-        namespace_public_id: 'ns_demo',
-        namespace_name: 'Demo Team',
-        status: 'offline',
-        lifecycle_status: 'suspended',
-        last_seen_at_unix_ms: 123,
-      },
-      {
-        provider_id: 'redeven_portal',
-        provider_origin: 'https://cp.example.invalid',
-        env_public_id: 'env_dual_route',
-        label: 'Dual Route',
-        environment_url: 'https://cp.example.invalid/env/env_dual_route',
-        description: 'dual-route sandbox',
-        namespace_public_id: 'ns_demo',
-        namespace_name: 'Demo Team',
-        status: 'offline',
-        lifecycle_status: 'suspended',
-        last_seen_at_unix_ms: 456,
-      },
-    ];
-
-    const controlPlaneSummary = {
-      provider,
-      account,
-      display_label: 'Demo Portal',
-      environments,
-      last_synced_at_ms: freshSyncAt,
-      sync_state: 'ready' as const,
-      last_sync_attempt_at_ms: freshSyncAt,
-      last_sync_error_code: '',
-      last_sync_error_message: '',
-      catalog_freshness: 'fresh' as const,
-    };
-
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        managed_environments: [
-          remoteOnly,
-          dualRoute,
-          testManagedLocalEnvironment('default'),
-          testManagedControlPlaneEnvironment('https://cp.other.invalid', 'env_other', { localHosting: false }),
-        ],
-        control_planes: [{
-          provider,
-          account,
-          display_label: 'Demo Portal',
-          environments,
-          last_synced_at_ms: freshSyncAt,
-        }, {
-          provider: {
-            ...provider,
-            provider_origin: 'https://cp.other.invalid',
-          },
-          account: {
-            ...account,
-            provider_origin: 'https://cp.other.invalid',
-          },
-          display_label: 'Other Portal',
-          environments: [],
-          last_synced_at_ms: freshSyncAt,
-        }],
-      }),
-      controlPlanes: [
-        controlPlaneSummary,
-        {
-          ...controlPlaneSummary,
-          provider: {
-            ...controlPlaneSummary.provider,
-            provider_origin: 'https://cp.other.invalid',
-          },
-          account: {
-            ...controlPlaneSummary.account,
-            provider_origin: 'https://cp.other.invalid',
-          },
-          display_label: 'Other Portal',
-          environments: [],
-        },
-      ],
-    });
-
-    const remoteOnlyEntry = snapshot.environments.find((environment) => environment.id === remoteOnly.id);
-    const dualRouteEntry = snapshot.environments.find((environment) => environment.id === dualRoute.id);
-
-    expect(remoteOnlyEntry).toBeTruthy();
-    expect(dualRouteEntry).toBeTruthy();
-
-    expect(buildProviderBackedEnvironmentActionModel(remoteOnlyEntry!)).toEqual(expect.objectContaining({
-      status_label: 'Offline',
-      action_presentation: {
-        kind: 'single_button',
-        action: expect.objectContaining({
-          intent: 'check_status',
-          label: 'Check Remote Status',
-          enabled: true,
-          route: 'remote_desktop',
-        }),
-      },
-    }));
-
-    const dualRouteActionModel = buildProviderBackedEnvironmentActionModel(dualRouteEntry!);
-    expect(dualRouteActionModel).toEqual(expect.objectContaining({
-      status_label: 'Local Ready',
-      action_presentation: expect.objectContaining({
-        kind: 'split_button',
-        default_action: expect.objectContaining({
-          intent: 'open',
-          label: 'Open',
-          enabled: true,
-          route: 'local_host',
-        }),
-      }),
-    }));
-    expect(dualRouteActionModel.action_presentation.kind).toBe('split_button');
-    if (dualRouteActionModel.action_presentation.kind !== 'split_button') {
-      throw new Error('Expected dual-route action presentation.');
-    }
-    expect(dualRouteActionModel.action_presentation.menu_actions).toEqual([
-      expect.objectContaining({
-        id: 'local_route',
-        section: 'local',
-        label: 'Open via Local Port',
-        disabled: false,
-        is_default: true,
-        action: expect.objectContaining({
-          intent: 'open',
-          label: 'Open Local',
-          route: 'local_host',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'remote_check_status',
-        section: 'remote',
-        label: 'Check Remote Status',
-        disabled: false,
-        is_default: false,
-        action: expect.objectContaining({
-          intent: 'check_status',
-          label: 'Check Remote Status',
-          route: 'remote_desktop',
-        }),
-      }),
-    ]);
-
-    expect(buildEnvironmentCardFactsModel(remoteOnlyEntry!)).toEqual([
-      defaultFact('RUNS ON', 'Control Plane'),
-      defaultFact('ACCESS', 'Remote'),
-      placeholderFact('LOCAL RUNTIME'),
-      defaultFact('CONTROL PLANE', 'Demo Portal'),
-    ]);
-    expect(buildEnvironmentCardFactsModel(dualRouteEntry!)).toEqual([
-      defaultFact('RUNS ON', 'This device'),
-      defaultFact('ACCESS', 'Local + Remote'),
-      defaultFact('LOCAL RUNTIME', 'Starts on open'),
-      defaultFact('CONTROL PLANE', 'Demo Portal'),
-    ]);
     expect(filterEnvironmentLibrary(
       snapshot,
       '',
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     ).map((environment) => environment.id)).toEqual([
-      remoteOnly.id,
-      dualRoute.id,
-    ]);
-    expect(filterEnvironmentLibrary(
-      snapshot,
-      '',
-      LOCAL_ENVIRONMENT_LIBRARY_FILTER,
-    ).map((environment) => environment.id)).toEqual([
-      'local:default',
+      localServe.id,
+      'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
     ]);
   });
 
-  it('prefers the already-open local route over a remote-ready route for the split-button default', () => {
-    const dualRouteEntry = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        managed_environments: [
-          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route', {
-            preferredOpenRoute: 'remote_desktop',
-          }),
-        ],
-      }),
-      controlPlanes: [{
-        provider: {
-          protocol_version: 'rcpp-v1',
-          provider_id: 'redeven_portal',
-          display_name: 'Redeven Portal',
-          provider_origin: 'https://cp.example.invalid',
-          documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-        },
-        account: {
-          provider_id: 'redeven_portal',
-          provider_origin: 'https://cp.example.invalid',
-          display_name: 'Redeven Portal',
-          user_public_id: 'user_demo',
-          user_display_name: 'Demo User',
-          authorization_expires_at_unix_ms: Date.now() + 60_000,
-        },
-        display_label: 'Demo Portal',
-        environments: [{
-          provider_id: 'redeven_portal',
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_dual_route',
-          label: 'Dual Route',
-          environment_url: 'https://cp.example.invalid/env/env_dual_route',
-          description: 'dual-route sandbox',
-          namespace_public_id: 'ns_demo',
-          namespace_name: 'Demo Team',
-          status: 'online',
-          lifecycle_status: 'active',
-          last_seen_at_unix_ms: 456,
-        }],
-        last_synced_at_ms: Date.now(),
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: Date.now(),
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
-    }).environments.find((environment) => environment.env_public_id === 'env_dual_route');
-
-    expect(dualRouteEntry).toBeTruthy();
-    const actionModel = buildProviderBackedEnvironmentActionModel({
-      ...dualRouteEntry!,
-      is_open: true,
-      open_local_session_key: 'managed:env_dual_route:local_host',
-      open_local_session_lifecycle: 'open',
+  it('builds provider-card actions around remote state and local-serve availability', () => {
+    const controlPlane = buildControlPlaneSummary({
+      status: 'offline',
+      lifecycleStatus: 'suspended',
     });
-    expect(actionModel.action_presentation.kind).toBe('split_button');
-    if (actionModel.action_presentation.kind !== 'split_button') {
-      throw new Error('Expected split-button presentation.');
-    }
-    expect(actionModel.action_presentation.default_action).toEqual(expect.objectContaining({
-      intent: 'focus',
-      label: 'Focus',
-      route: 'local_host',
-    }));
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        section: 'local',
-        label: 'Focus Local Window',
-        is_default: true,
+    const providerOnlySnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [testManagedLocalEnvironment('default')],
       }),
-      expect.objectContaining({
-        section: 'remote',
-        label: 'Open via Control Plane',
-        is_default: false,
+      controlPlanes: [controlPlane],
+    });
+    const providerOnlyEntry = providerOnlySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+
+    expect(providerOnlyEntry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!)).toEqual({
+      status_label: 'Offline',
+      status_tone: 'warning',
+      action_presentation: {
+        kind: 'single_button',
+        action: {
+          intent: 'serve_runtime',
+          label: 'Serve Runtime',
+          enabled: true,
+          variant: 'default',
+        },
+      },
+    });
+
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
+      label: 'Demo Local Serve',
+    });
+    const savedLocalServeSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [testManagedLocalEnvironment('default'), localServe],
       }),
-    ]));
+      controlPlanes: [controlPlane],
+    });
+    const savedLocalServeProviderEntry = savedLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    expect(savedLocalServeProviderEntry?.provider_local_serve_state).toBe('saved');
+    expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual({
+      status_label: 'Offline',
+      status_tone: 'warning',
+      action_presentation: {
+        kind: 'single_button',
+        action: {
+          intent: 'serve_runtime',
+          label: 'Open Local Serve',
+          enabled: true,
+          variant: 'default',
+        },
+      },
+    });
+
+    const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [testManagedLocalEnvironment('default'), localServe],
+      }),
+      controlPlanes: [controlPlane],
+      openSessions: [
+        testManagedSession(localServe, 'http://127.0.0.1:24001/'),
+      ],
+    });
+    const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    expect(openLocalServeProviderEntry?.provider_local_serve_state).toBe('open');
+    expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
+      status_label: 'Offline',
+      status_tone: 'warning',
+      action_presentation: {
+        kind: 'single_button',
+        action: {
+          intent: 'serve_runtime',
+          label: 'Focus Local Serve',
+          enabled: true,
+          variant: 'default',
+        },
+      },
+    });
+
+    const readyControlPlane = buildControlPlaneSummary({
+      status: 'online',
+      lifecycleStatus: 'active',
+    });
+    const readySnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [testManagedLocalEnvironment('default')],
+      }),
+      controlPlanes: [readyControlPlane],
+    });
+    const readyEntry = readySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    expect(buildProviderBackedEnvironmentActionModel(readyEntry!)).toEqual({
+      status_label: 'Ready',
+      status_tone: 'primary',
+      action_presentation: {
+        kind: 'single_button',
+        action: {
+          intent: 'open',
+          label: 'Open Remote',
+          enabled: true,
+          variant: 'outline',
+          route: 'remote_desktop',
+        },
+      },
+    });
+
+    expect(buildProviderBackedEnvironmentActionModel({
+      ...readyEntry!,
+      remote_route_state: 'stale',
+    }).action_presentation.action).toEqual({
+      intent: 'refresh_status',
+      label: 'Refresh Status',
+      enabled: true,
+      variant: 'outline',
+    });
+    expect(buildProviderBackedEnvironmentActionModel({
+      ...readyEntry!,
+      remote_route_state: 'auth_required',
+    }).action_presentation.action).toEqual({
+      intent: 'reconnect_provider',
+      label: 'Reconnect',
+      enabled: true,
+      variant: 'outline',
+    });
   });
 
-  it('surfaces Attach as the local action when a runtime is already running without an open Desktop session', () => {
-    const attachableEntry = buildDesktopWelcomeSnapshot({
+  it('builds local and local-serve cards around local runtime actions rather than remote route menus', () => {
+    const attachableLocalServe = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [
-          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_attachable', {
+          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
             currentRuntime: {
               local_ui_url: 'http://127.0.0.1:24001/',
               desktop_managed: false,
@@ -779,180 +468,76 @@ describe('buildEnvironmentCardModel', () => {
           }),
         ],
       }),
-    }).environments.find((environment) => environment.env_public_id === 'env_attachable');
+      controlPlanes: [buildControlPlaneSummary({
+        status: 'offline',
+        lifecycleStatus: 'suspended',
+      })],
+    }).environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
+    ));
 
-    expect(attachableEntry).toBeTruthy();
-    expect(attachableEntry).toEqual(expect.objectContaining({
-      managed_local_runtime_state: 'running_external',
-      open_action_label: 'Attach',
-    }));
-
-    const actionModel = buildProviderBackedEnvironmentActionModel(attachableEntry!);
-    expect(actionModel.action_presentation.kind).toBe('split_button');
-    if (actionModel.action_presentation.kind !== 'split_button') {
-      throw new Error('Expected split-button presentation.');
-    }
-    expect(actionModel.action_presentation.default_action).toEqual(expect.objectContaining({
-      intent: 'attach',
-      label: 'Attach',
-      route: 'local_host',
-    }));
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        section: 'local',
-        label: 'Attach via Local Port',
-        detail: 'http://127.0.0.1:24001/',
-        action: expect.objectContaining({
+    expect(attachableLocalServe).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(attachableLocalServe!)).toEqual({
+      status_label: 'Ready',
+      status_tone: 'primary',
+      action_presentation: {
+        kind: 'single_button',
+        action: {
           intent: 'attach',
           label: 'Attach Local',
+          enabled: true,
+          variant: 'default',
           route: 'local_host',
-        }),
-      }),
-    ]));
-    expect(buildEnvironmentCardFactsModel(attachableEntry!)).toEqual([
-      defaultFact('RUNS ON', 'This device'),
-      defaultFact('ACCESS', 'Local + Remote'),
-      defaultFact('LOCAL RUNTIME', 'Running externally'),
-      defaultFact('WINDOW', 'Detaches on close'),
-      defaultFact('CONTROL PLANE', 'https://cp.example.invalid'),
-    ]);
-  });
-
-  it('keeps remote recovery actions in the split-button menu when the remote route is stale or needs reconnect', () => {
-    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route');
-    const baseEntry = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        managed_environments: [dualRoute],
-      }),
-    }).environments.find((environment) => environment.id === dualRoute.id);
-
-    expect(baseEntry).toBeTruthy();
-
-    const staleModel = buildProviderBackedEnvironmentActionModel({
-      ...baseEntry!,
-      control_plane_label: 'Demo Portal',
-      remote_route_state: 'stale',
-      remote_state_reason: 'Remote status is stale. Refresh the provider to confirm the current state.',
-    });
-    expect(staleModel.status_label).toBe('Local Ready');
-    expect(staleModel.action_presentation.kind).toBe('split_button');
-    if (staleModel.action_presentation.kind !== 'split_button') {
-      throw new Error('Expected split-button presentation.');
-    }
-    expect(staleModel.action_presentation.default_action).toEqual(expect.objectContaining({
-      route: 'local_host',
-      label: 'Open',
-    }));
-    expect(staleModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'remote_refresh',
-        label: 'Refresh Remote Status',
-        detail: 'Remote status is stale. Refresh the provider to confirm the current state.',
-      }),
-    ]));
-
-    const reconnectModel = buildProviderBackedEnvironmentActionModel({
-      ...baseEntry!,
-      control_plane_label: 'Demo Portal',
-      remote_route_state: 'auth_required',
-      remote_state_reason: 'Reconnect this Control Plane in your browser to restore access.',
-    });
-    expect(reconnectModel.status_label).toBe('Local Ready');
-    expect(reconnectModel.action_presentation.kind).toBe('split_button');
-    if (reconnectModel.action_presentation.kind !== 'split_button') {
-      throw new Error('Expected split-button presentation.');
-    }
-    expect(reconnectModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'remote_reconnect',
-        label: 'Reconnect Control Plane',
-        detail: 'Reconnect this Control Plane in your browser to restore access.',
-      }),
-    ]));
-  });
-
-  it('shows a Focus default and both focus routes when both managed routes are already open', () => {
-    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_dual_route', {
-      preferredOpenRoute: 'remote_desktop',
-    });
-    const baseEntry = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        managed_environments: [dualRoute],
-      }),
-    }).environments.find((environment) => environment.id === dualRoute.id);
-
-    expect(baseEntry).toBeTruthy();
-    const actionModel = buildProviderBackedEnvironmentActionModel({
-      ...baseEntry!,
-      is_open: true,
-      control_plane_label: 'Demo Portal',
-      default_open_route: 'remote_desktop',
-      open_local_session_key: 'managed:env_dual_route:local_host',
-      open_local_session_lifecycle: 'open',
-      open_remote_session_key: 'managed:env_dual_route:remote_desktop',
-      open_remote_session_lifecycle: 'open',
-    });
-    expect(actionModel.action_presentation.kind).toBe('split_button');
-    if (actionModel.action_presentation.kind !== 'split_button') {
-      throw new Error('Expected split-button presentation.');
-    }
-    expect(actionModel.action_presentation.default_action).toEqual(expect.objectContaining({
-      intent: 'focus',
-      label: 'Focus',
-      route: 'remote_desktop',
-    }));
-    expect(actionModel.action_presentation.menu_actions).toEqual([
-      expect.objectContaining({
-        section: 'local',
-        label: 'Focus Local Window',
-        is_default: false,
-      }),
-      expect.objectContaining({
-        section: 'remote',
-        label: 'Focus Remote Window',
-        is_default: true,
-      }),
-    ]);
-  });
-
-  it('resolves the default dual-route action from open-session state before preferences', () => {
-    expect(resolveDefaultDualRouteAction({
-      local_action: {
-        intent: 'focus',
-        label: 'Focus Local',
-        enabled: true,
-        variant: 'default',
-        route: 'local_host',
+        },
       },
-      remote_action: {
-        intent: 'open',
-        label: 'Open Remote',
-        enabled: true,
-        variant: 'outline',
-        route: 'remote_desktop',
+    });
+
+    const focusableLocalServe = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [
+          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo'),
+        ],
+      }),
+      controlPlanes: [buildControlPlaneSummary({})],
+      openSessions: [
+        testManagedSession(
+          testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo'),
+          'http://127.0.0.1:24001/',
+        ),
+      ],
+    }).environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
+    ));
+
+    expect(focusableLocalServe).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(focusableLocalServe!)).toEqual({
+      status_label: 'Open',
+      status_tone: 'success',
+      action_presentation: {
+        kind: 'single_button',
+        action: {
+          intent: 'focus',
+          label: 'Focus Local',
+          enabled: true,
+          variant: 'default',
+          route: 'local_host',
+        },
       },
-      local_session_open: true,
-      remote_session_open: false,
-      managed_preferred_open_route: 'remote_desktop',
-      default_open_route: 'remote_desktop',
-    })).toEqual(expect.objectContaining({
-      intent: 'focus',
-      route: 'local_host',
-    }));
+    });
   });
 
   it('treats opening managed sessions as a disabled Opening state instead of Focus', () => {
-    const dualRoute = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_opening');
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_opening');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        managed_environments: [dualRoute],
+        managed_environments: [localServe],
       }),
       openSessions: [
-        testManagedSession(dualRoute, 'http://localhost:23998/', 'opening'),
+        testManagedSession(localServe, 'http://localhost:23998/', 'opening'),
       ],
     });
 
-    const entry = snapshot.environments.find((environment) => environment.id === dualRoute.id);
+    const entry = snapshot.environments.find((environment) => environment.id === localServe.id);
     expect(entry).toBeTruthy();
     expect(entry).toEqual(expect.objectContaining({
       is_open: false,
@@ -960,17 +545,61 @@ describe('buildEnvironmentCardModel', () => {
       open_action_label: 'Opening…',
     }));
 
-    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual(expect.objectContaining({
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
       status_label: 'Opening',
       status_tone: 'primary',
       action_presentation: {
         kind: 'single_button',
-        action: expect.objectContaining({
+        action: {
           intent: 'opening',
           label: 'Opening…',
           enabled: false,
-        }),
+          variant: 'default',
+          route: 'local_host',
+        },
       },
+    });
+  });
+
+  it('projects provider remote sessions onto the separate provider card', () => {
+    const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
+    const remoteTarget = buildManagedEnvironmentDesktopTarget(localServe, { route: 'remote_desktop' });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        managed_environments: [localServe],
+      }),
+      controlPlanes: [buildControlPlaneSummary({})],
+      openSessions: [
+        {
+          session_key: remoteTarget.session_key,
+          target: remoteTarget,
+          lifecycle: 'open',
+          entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+          startup: {
+            local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+            local_ui_urls: ['https://env.example.invalid/_redeven_boot/#redeven=abc'],
+            effective_run_mode: 'remote_desktop',
+          },
+        },
+      ],
+    });
+
+    const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const localServeEntry = snapshot.environments.find((environment) => (
+      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
+    ));
+
+    expect(providerEntry).toEqual(expect.objectContaining({
+      is_open: true,
+      open_remote_session_key: remoteTarget.session_key,
+      open_session_key: remoteTarget.session_key,
+      local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+      open_action_label: 'Focus',
+    }));
+    expect(localServeEntry).toEqual(expect.objectContaining({
+      is_open: false,
+      open_local_session_key: undefined,
+      open_action_label: 'Open',
     }));
   });
 
@@ -979,7 +608,7 @@ describe('buildEnvironmentCardModel', () => {
       preferences: testDesktopPreferences({
         managed_environments: [
           testManagedLocalEnvironment('default', { pinned: true }),
-          testManagedLocalEnvironment('lab', { pinned: false }),
+          testManagedLocalEnvironment('lab'),
         ],
         saved_environments: [{
           id: 'http://192.168.1.12:24000/',
@@ -992,13 +621,15 @@ describe('buildEnvironmentCardModel', () => {
       }),
     });
 
-    const grouped = splitPinnedEnvironmentEntries(snapshot.environments);
-
-    expect(grouped.pinned_entries.map((environment) => environment.label)).toEqual([
-      'Local Default Environment',
-      'Staging',
-    ]);
-    expect(grouped.regular_entries.map((environment) => environment.id)).toContain('local:lab');
+    expect(splitPinnedEnvironmentEntries(snapshot.environments)).toEqual({
+      pinned_entries: expect.arrayContaining([
+        expect.objectContaining({ id: 'local:default' }),
+        expect.objectContaining({ id: 'http://192.168.1.12:24000/' }),
+      ]),
+      regular_entries: expect.arrayContaining([
+        expect.objectContaining({ id: 'local:lab' }),
+      ]),
+    });
   });
 
   it('caps compact environment columns by the visible card count when the container is wide', () => {

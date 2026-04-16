@@ -134,7 +134,7 @@ describe('desktopWelcomeState', () => {
         local_ui_url: 'http://192.168.1.12:24000/',
       }),
     ]);
-    expect(snapshot.environments).toEqual([
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'local:default',
         kind: 'managed_environment',
@@ -153,6 +153,16 @@ describe('desktopWelcomeState', () => {
         managed_local_runtime_state: 'running_desktop',
         managed_local_runtime_url: 'http://localhost:23998/',
         managed_local_close_behavior: 'stops_runtime',
+      }),
+      expect.objectContaining({
+        id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        kind: 'provider_environment',
+        label: 'Demo Environment',
+        category: 'provider',
+        is_open: false,
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'redeven_portal',
+        env_public_id: 'env_demo',
       }),
       expect.objectContaining({
         id: 'http://192.168.1.12:24000/',
@@ -182,7 +192,7 @@ describe('desktopWelcomeState', () => {
         can_delete: true,
         can_save: true,
       }),
-    ]);
+    ]));
     expect(snapshot.control_planes).toEqual([
       expect.objectContaining({
         provider: expect.objectContaining({
@@ -442,10 +452,8 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 
-  it('prefers the remote managed session in launcher snapshots when a control-plane environment defaults to remote desktop', () => {
-    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
-      preferredOpenRoute: 'remote_desktop',
-    });
+  it('projects local and remote sessions onto separate local-serve and provider cards', () => {
+    const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
     const localTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'local_host' });
     const remoteTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'remote_desktop' });
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -475,13 +483,57 @@ describe('desktopWelcomeState', () => {
           },
         },
       ],
+      controlPlanes: [{
+        provider: {
+          protocol_version: 'rcpp-v1',
+          provider_id: 'redeven_portal',
+          display_name: 'Redeven Portal',
+          provider_origin: 'https://cp.example.invalid',
+          documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
+        },
+        account: {
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          display_name: 'Redeven Portal',
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: Date.now() + 60_000,
+        },
+        display_label: 'Demo Portal',
+        environments: [{
+          provider_id: 'redeven_portal',
+          provider_origin: 'https://cp.example.invalid',
+          env_public_id: 'env_demo',
+          label: 'Demo Environment',
+          environment_url: 'https://cp.example.invalid/env/env_demo',
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'online',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+        }],
+        last_synced_at_ms: Date.now(),
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: Date.now(),
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: managedControlPlane.id,
-        default_open_route: 'remote_desktop',
+        kind: 'managed_environment',
+        default_open_route: 'local_host',
         open_local_session_key: localTarget.session_key,
+        open_session_key: localTarget.session_key,
+        local_ui_url: 'http://localhost:23998/',
+      }),
+      expect.objectContaining({
+        id: managedControlPlane.id,
+        kind: 'provider_environment',
         open_remote_session_key: remoteTarget.session_key,
         open_session_key: remoteTarget.session_key,
         local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
@@ -538,7 +590,7 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
-  it('keeps a repaired legacy dual-route environment as a single launcher entry after control-plane connect', () => {
+  it('splits a repaired legacy dual-route environment into local-serve and provider launcher entries after control-plane connect', () => {
     expect(testProvider).toBeTruthy();
     if (!testProvider) {
       throw new Error('Expected normalized test provider.');
@@ -581,20 +633,31 @@ describe('desktopWelcomeState', () => {
       preferences,
     });
 
-    const matchingEntries = snapshot.environments.filter((entry) => (
+    const localServeEntry = snapshot.environments.find((entry) => (
       entry.kind === 'managed_environment'
       && entry.provider_origin === testProvider.provider_origin
       && entry.env_public_id === 'env_demo'
     ));
+    const providerEntry = snapshot.environments.find((entry) => (
+      entry.kind === 'provider_environment'
+      && entry.provider_origin === testProvider.provider_origin
+      && entry.env_public_id === 'env_demo'
+    ));
 
-    expect(matchingEntries).toHaveLength(1);
-    expect(matchingEntries[0]).toEqual(expect.objectContaining({
+    expect(localServeEntry).toEqual(expect.objectContaining({
       id: legacyEnvironment.id,
       label: 'Desktop Label',
       provider_id: testProvider.provider_id,
       managed_has_local_hosting: true,
-      managed_has_remote_desktop: true,
+      managed_has_remote_desktop: false,
       category: 'managed',
+    }));
+    expect(providerEntry).toEqual(expect.objectContaining({
+      id: legacyEnvironment.id,
+      label: 'Demo Environment',
+      provider_id: testProvider.provider_id,
+      category: 'provider',
+      provider_local_serve_environment_id: legacyEnvironment.id,
     }));
   });
 
