@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  attachDesktopWindowChromeBroadcast,
   applyDesktopWindowTheme,
   buildDesktopWindowChromeOptions,
+  desktopWindowChromeSnapshotForWindow,
   defaultDesktopWindowThemeSnapshot,
 } from './windowChrome';
 
@@ -68,5 +70,54 @@ describe('windowChrome', () => {
 
     expect(win.setBackgroundColor).toHaveBeenCalledWith('#f0eeea');
     expect(win.setTitleBarOverlay).not.toHaveBeenCalled();
+  });
+
+  it('removes the traffic-light inset when a macOS window enters fullscreen', () => {
+    const win = {
+      isDestroyed: () => false,
+      isFullScreen: () => true,
+    };
+
+    expect(desktopWindowChromeSnapshotForWindow(win, 'darwin')).toEqual({
+      mode: 'hidden-inset',
+      controlsSide: 'left',
+      titleBarHeight: 40,
+      contentInsetStart: 16,
+      contentInsetEnd: 16,
+    });
+  });
+
+  it('broadcasts window chrome changes when fullscreen state flips', () => {
+    const listeners = new Map<string, () => void>();
+    let fullScreen = false;
+    const win = {
+      isDestroyed: () => false,
+      isFullScreen: () => fullScreen,
+      on: vi.fn((event: string, listener: () => void) => {
+        listeners.set(event, listener);
+      }),
+      removeListener: vi.fn((event: string) => {
+        listeners.delete(event);
+      }),
+      webContents: {
+        send: vi.fn(),
+      },
+    };
+
+    const dispose = attachDesktopWindowChromeBroadcast(win as never, 'darwin');
+    fullScreen = true;
+    listeners.get('enter-full-screen')?.();
+
+    expect(win.webContents.send).toHaveBeenCalledWith('redeven-desktop:window-chrome-updated', {
+      mode: 'hidden-inset',
+      controlsSide: 'left',
+      titleBarHeight: 40,
+      contentInsetStart: 16,
+      contentInsetEnd: 16,
+    });
+
+    dispose();
+    expect(win.removeListener).toHaveBeenCalledWith('enter-full-screen', expect.any(Function));
+    expect(win.removeListener).toHaveBeenCalledWith('leave-full-screen', expect.any(Function));
   });
 });

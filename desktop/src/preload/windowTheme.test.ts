@@ -11,6 +11,7 @@ const exposeInMainWorld = vi.fn();
 const ipcRendererOn = vi.fn();
 const ipcRendererSendSync = vi.fn();
 let updatedListener: ((event: unknown, payload: unknown) => void) | null = null;
+let windowChromeUpdatedListener: ((event: unknown, payload: unknown) => void) | null = null;
 
 function exposedBridge<T>(name: string): T {
   const bridge = exposeInMainWorld.mock.calls.find(([bridgeName]) => bridgeName === name)?.[1];
@@ -62,14 +63,21 @@ describe('bootstrapDesktopThemeBridge', () => {
     ipcRendererOn.mockReset();
     ipcRendererSendSync.mockReset();
     updatedListener = null;
+    windowChromeUpdatedListener = null;
     ipcRendererOn.mockImplementation((channel: string, listener: (event: unknown, payload: unknown) => void) => {
       if (channel === 'redeven-desktop:theme-updated') {
         updatedListener = listener;
+      }
+      if (channel === 'redeven-desktop:window-chrome-updated') {
+        windowChromeUpdatedListener = listener;
       }
     });
     ipcRendererSendSync.mockImplementation((channel: string, payload?: unknown) => {
       if (channel === 'redeven-desktop:theme-get-snapshot') {
         return darkSnapshot();
+      }
+      if (channel === 'redeven-desktop:window-chrome-get-snapshot') {
+        return resolveDesktopWindowChromeSnapshot(process.platform);
       }
       if (channel === 'redeven-desktop:theme-set-source') {
         return payload === 'light' ? lightSnapshot() : darkSnapshot();
@@ -111,10 +119,14 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(style?.textContent).toContain("[data-redeven-desktop-titlebar-no-drag='true']");
 
     const themeBridge = exposedBridge<{ getSnapshot: () => unknown }>('redevenDesktopTheme');
-    const windowChromeBridge = exposedBridge<{ getSnapshot: () => unknown }>('redevenDesktopWindowChrome');
+    const windowChromeBridge = exposedBridge<{ getSnapshot: () => unknown; subscribe: (listener: (snapshot: unknown) => void) => () => void }>('redevenDesktopWindowChrome');
 
     expect(themeBridge.getSnapshot()).toEqual(darkSnapshot());
     expect(windowChromeBridge.getSnapshot()).toEqual(windowChromeSnapshot);
+    const windowChromeListener = vi.fn();
+    const unsubscribe = windowChromeBridge.subscribe(windowChromeListener);
+    expect(windowChromeListener).toHaveBeenCalledWith(windowChromeSnapshot);
+    unsubscribe();
   });
 
   it('updates the current document and subscribers when the main process broadcasts a new snapshot', async () => {
@@ -153,5 +165,27 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(snapshot).toEqual(lightSnapshot());
     expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#f0eeea');
+  });
+
+  it('updates the current document when the main process broadcasts a new window chrome snapshot', async () => {
+    const { bootstrapDesktopThemeBridge } = await import('./windowTheme');
+
+    bootstrapDesktopThemeBridge();
+
+    windowChromeUpdatedListener?.({}, {
+      mode: 'hidden-inset',
+      controlsSide: 'left',
+      titleBarHeight: 40,
+      contentInsetStart: 16,
+      contentInsetEnd: 16,
+    });
+
+    expect(document.documentElement.dataset.redevenDesktopWindowChromeMode).toBe('hidden-inset');
+    expect(document.getElementById('redeven-desktop-window-chrome')?.textContent).toContain(
+      '--redeven-desktop-titlebar-start-inset: 16px;',
+    );
+    expect(document.getElementById('redeven-desktop-window-chrome')?.textContent).toContain(
+      '--redeven-desktop-titlebar-balance-inset: 16px;',
+    );
   });
 });

@@ -152,6 +152,16 @@ ipcMain.on('redeven-desktop:theme-set-source', (event, nextSource) => {
   event.returnValue = buildThemeSnapshot();
 });
 
+ipcMain.on('redeven-desktop:window-chrome-get-snapshot', (event) => {
+  event.returnValue = {
+    mode: 'hidden-inset',
+    controlsSide: 'left',
+    titleBarHeight: 40,
+    contentInsetStart: 84,
+    contentInsetEnd: 16,
+  };
+});
+
 function snapshotBridgeState() {
   return JSON.stringify({
     hasAskFlowerBridge: typeof window.redevenDesktopAskFlowerHandoff === 'object'
@@ -181,7 +191,8 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopTheme?.setSource === 'function'
       && typeof window.redevenDesktopTheme?.subscribe === 'function',
     hasDesktopWindowChromeBridge: typeof window.redevenDesktopWindowChrome === 'object'
-      && typeof window.redevenDesktopWindowChrome?.getSnapshot === 'function',
+      && typeof window.redevenDesktopWindowChrome?.getSnapshot === 'function'
+      && typeof window.redevenDesktopWindowChrome?.subscribe === 'function',
   });
 }
 

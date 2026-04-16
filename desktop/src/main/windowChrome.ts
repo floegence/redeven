@@ -4,8 +4,10 @@ import { desktopTheme } from './desktopTheme';
 import type { DesktopWindowThemeSnapshot } from '../shared/desktopTheme';
 import {
   resolveDesktopWindowChromeConfig,
+  resolveDesktopWindowChromeSnapshot,
   usesDesktopWindowThemeOverlay,
 } from '../shared/windowChromePlatform';
+import { DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL } from '../shared/windowChromeIPC';
 
 export function defaultDesktopWindowThemeSnapshot(): DesktopWindowThemeSnapshot {
   return {
@@ -54,4 +56,38 @@ export function applyDesktopWindowTheme(
       height: chrome.titleBarHeight,
     });
   }
+}
+
+type DesktopWindowChromeSnapshotTarget = Pick<BrowserWindow, 'isDestroyed' | 'isFullScreen'>;
+type DesktopWindowChromeBroadcastTarget = Pick<BrowserWindow, 'isDestroyed' | 'isFullScreen' | 'on' | 'removeListener' | 'webContents'>;
+
+export function desktopWindowChromeSnapshotForWindow(
+  win: DesktopWindowChromeSnapshotTarget | null | undefined,
+  platform: NodeJS.Platform = process.platform,
+) {
+  const fullScreen = Boolean(win && !win.isDestroyed() && win.isFullScreen());
+  return resolveDesktopWindowChromeSnapshot(platform, { fullScreen });
+}
+
+export function attachDesktopWindowChromeBroadcast(
+  win: DesktopWindowChromeBroadcastTarget,
+  platform: NodeJS.Platform = process.platform,
+): () => void {
+  const broadcast = () => {
+    if (win.isDestroyed()) {
+      return;
+    }
+    win.webContents.send(
+      DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL,
+      desktopWindowChromeSnapshotForWindow(win, platform),
+    );
+  };
+
+  win.on('enter-full-screen', broadcast);
+  win.on('leave-full-screen', broadcast);
+
+  return () => {
+    win.removeListener('enter-full-screen', broadcast);
+    win.removeListener('leave-full-screen', broadcast);
+  };
 }

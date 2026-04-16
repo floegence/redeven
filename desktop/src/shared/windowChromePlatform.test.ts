@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DESKTOP_TITLE_BAR_HEIGHT,
+  DESKTOP_WINDOW_EDGE_INSET,
   desktopWindowChromeCSSVariables,
   desktopWindowTitleBarInsetCSSValue,
   resolveDesktopWindowChromeConfig,
@@ -17,6 +18,14 @@ describe('windowChromePlatform', () => {
       titleBarHeight: DESKTOP_TITLE_BAR_HEIGHT,
       contentInsetStart: 84,
       contentInsetEnd: 16,
+      trafficLightPosition: { x: 14, y: 12 },
+    });
+    expect(resolveDesktopWindowChromeConfig('darwin', { fullScreen: true })).toEqual({
+      mode: 'hidden-inset',
+      controlsSide: 'left',
+      titleBarHeight: DESKTOP_TITLE_BAR_HEIGHT,
+      contentInsetStart: DESKTOP_WINDOW_EDGE_INSET,
+      contentInsetEnd: DESKTOP_WINDOW_EDGE_INSET,
       trafficLightPosition: { x: 14, y: 12 },
     });
     expect(resolveDesktopWindowChromeConfig('win32')).toEqual({
@@ -52,6 +61,7 @@ describe('windowChromePlatform', () => {
       '--redeven-desktop-titlebar-height': '40px',
       '--redeven-desktop-titlebar-start-inset': '84px',
       '--redeven-desktop-titlebar-end-inset': '16px',
+      '--redeven-desktop-titlebar-balance-inset': '84px',
     });
   });
 
@@ -62,6 +72,13 @@ describe('windowChromePlatform', () => {
       titleBarHeight: 40,
       contentInsetStart: 84,
       contentInsetEnd: 16,
+    });
+    expect(resolveDesktopWindowChromeSnapshot('darwin', { fullScreen: true })).toEqual({
+      mode: 'hidden-inset',
+      controlsSide: 'left',
+      titleBarHeight: 40,
+      contentInsetStart: DESKTOP_WINDOW_EDGE_INSET,
+      contentInsetEnd: DESKTOP_WINDOW_EDGE_INSET,
     });
   });
 });

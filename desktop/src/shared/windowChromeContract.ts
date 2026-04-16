@@ -67,10 +67,12 @@ export function normalizeDesktopWindowChromeSnapshot(value: unknown): DesktopWin
 export function desktopWindowChromeCSSVariables(
   snapshot: DesktopWindowChromeSnapshot,
 ): Readonly<Record<string, string>> {
+  const balanceInset = Math.max(snapshot.contentInsetStart, snapshot.contentInsetEnd);
   return {
     '--redeven-desktop-titlebar-height': `${snapshot.titleBarHeight}px`,
     '--redeven-desktop-titlebar-start-inset': `${snapshot.contentInsetStart}px`,
     '--redeven-desktop-titlebar-end-inset': `${snapshot.contentInsetEnd}px`,
+    '--redeven-desktop-titlebar-balance-inset': `${balanceInset}px`,
   };
 }
 
@@ -103,6 +105,30 @@ ${topBarDragSelector} {
 ${topBarDragSelector} > div:first-child {
   padding-inline-start: calc(0.75rem + var(--redeven-desktop-titlebar-start-inset));
   padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset));
+}
+
+:root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  padding-inline-start: calc(0.75rem + var(--redeven-desktop-titlebar-balance-inset));
+  padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-balance-inset));
+}
+
+:root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child > :first-child {
+  min-width: 0;
+  justify-self: start;
+}
+
+:root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child > button:nth-child(2) {
+  width: min(100%, 24rem);
+  max-width: 100%;
+  justify-self: center;
+}
+
+:root[data-redeven-desktop-window-chrome-mode='hidden-inset'][data-redeven-desktop-window-controls-side='left'] ${topBarDragSelector} > div:first-child > :last-child {
+  min-width: 0;
+  justify-self: end;
 }
 
 [data-redeven-desktop-window-titlebar='true'] {

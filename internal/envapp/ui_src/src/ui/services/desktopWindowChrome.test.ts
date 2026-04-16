@@ -31,6 +31,8 @@ function chromeSnapshot() {
   };
 }
 
+type ChromeSnapshot = ReturnType<typeof chromeSnapshot>;
+
 afterEach(() => {
   delete window.redevenDesktopWindowChrome;
   document.head.innerHTML = '';
@@ -50,6 +52,7 @@ describe('desktopWindowChrome', () => {
   it('reads and applies desktop window chrome from the current window', () => {
     window.redevenDesktopWindowChrome = {
       getSnapshot: () => chromeSnapshot(),
+      subscribe: () => () => undefined,
     };
 
     expect(readDesktopWindowChromeSnapshot()).toEqual(chromeSnapshot());
@@ -66,6 +69,7 @@ describe('desktopWindowChrome', () => {
       location: { origin: window.location.origin },
       redevenDesktopWindowChrome: {
         getSnapshot: () => chromeSnapshot(),
+        subscribe: () => () => undefined,
       },
     } as unknown as Window;
     setWindowHierarchy(parentWindow);
@@ -78,6 +82,33 @@ describe('desktopWindowChrome', () => {
     );
     expect(document.getElementById('redeven-desktop-window-chrome')?.textContent).toContain(
       "[data-redeven-desktop-titlebar-no-drag='true']",
+    );
+  });
+
+  it('updates the document when the host window broadcasts a new chrome snapshot', () => {
+    let listener: ((snapshot: ChromeSnapshot) => void) | null = null;
+    const doc = document.implementation.createHTMLDocument('window-chrome-sync');
+    window.redevenDesktopWindowChrome = {
+      getSnapshot: () => chromeSnapshot(),
+      subscribe: (nextListener: (snapshot: ChromeSnapshot) => void) => {
+        listener = nextListener;
+        return () => {
+          listener = null;
+        };
+      },
+    };
+
+    installDesktopWindowChromeDocumentSync(doc);
+    const currentListener = listener as ((snapshot: ChromeSnapshot) => void) | null;
+    expect(typeof currentListener).toBe('function');
+    currentListener?.({
+      ...chromeSnapshot(),
+      contentInsetStart: 16,
+      contentInsetEnd: 16,
+    });
+
+    expect(doc.getElementById('redeven-desktop-window-chrome')?.textContent).toContain(
+      '--redeven-desktop-titlebar-balance-inset: 16px;',
     );
   });
 });

@@ -6,6 +6,7 @@ import {
 } from './windowChromeContract';
 
 export const DESKTOP_TITLE_BAR_HEIGHT = 40;
+export const DESKTOP_WINDOW_EDGE_INSET = 16;
 
 export type DesktopTrafficLightPosition = Readonly<{
   x: number;
@@ -21,12 +22,25 @@ export type DesktopWindowChromeConfig = Readonly<{
   trafficLightPosition?: DesktopTrafficLightPosition;
 }>;
 
+export type DesktopWindowChromeState = Readonly<{
+  fullScreen?: boolean;
+}>;
+
 const DARWIN_CHROME_CONFIG: DesktopWindowChromeConfig = {
   mode: 'hidden-inset',
   controlsSide: 'left',
   titleBarHeight: DESKTOP_TITLE_BAR_HEIGHT,
   contentInsetStart: 84,
-  contentInsetEnd: 16,
+  contentInsetEnd: DESKTOP_WINDOW_EDGE_INSET,
+  trafficLightPosition: { x: 14, y: 12 },
+};
+
+const DARWIN_FULLSCREEN_CHROME_CONFIG: DesktopWindowChromeConfig = {
+  mode: 'hidden-inset',
+  controlsSide: 'left',
+  titleBarHeight: DESKTOP_TITLE_BAR_HEIGHT,
+  contentInsetStart: DESKTOP_WINDOW_EDGE_INSET,
+  contentInsetEnd: DESKTOP_WINDOW_EDGE_INSET,
   trafficLightPosition: { x: 14, y: 12 },
 };
 
@@ -48,10 +62,11 @@ const LINUX_CHROME_CONFIG: DesktopWindowChromeConfig = {
 
 export function resolveDesktopWindowChromeConfig(
   platform: NodeJS.Platform = process.platform,
+  state: DesktopWindowChromeState = {},
 ): DesktopWindowChromeConfig {
   switch (platform) {
     case 'darwin':
-      return DARWIN_CHROME_CONFIG;
+      return state.fullScreen === true ? DARWIN_FULLSCREEN_CHROME_CONFIG : DARWIN_CHROME_CONFIG;
     case 'win32':
       return WIN32_CHROME_CONFIG;
     case 'linux':
@@ -62,8 +77,9 @@ export function resolveDesktopWindowChromeConfig(
 
 export function resolveDesktopWindowChromeSnapshot(
   platform: NodeJS.Platform = process.platform,
+  state: DesktopWindowChromeState = {},
 ): DesktopWindowChromeSnapshot {
-  const config = resolveDesktopWindowChromeConfig(platform);
+  const config = resolveDesktopWindowChromeConfig(platform, state);
   return {
     mode: config.mode,
     controlsSide: config.controlsSide,
@@ -87,6 +103,7 @@ export function desktopWindowTitleBarInsetCSSValue(platform: NodeJS.Platform = p
 
 export function desktopWindowChromeCSSVariables(
   platform: NodeJS.Platform = process.platform,
+  state: DesktopWindowChromeState = {},
 ): Readonly<Record<string, string>> {
-  return desktopWindowChromeCSSVariablesFromSnapshot(resolveDesktopWindowChromeSnapshot(platform));
+  return desktopWindowChromeCSSVariablesFromSnapshot(resolveDesktopWindowChromeSnapshot(platform, state));
 }

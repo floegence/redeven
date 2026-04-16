@@ -105,7 +105,11 @@ import {
   restoreBrowserWindowBounds,
 } from './windowState';
 import { resolveDesktopWindowSpec } from './windowSpec';
-import { buildDesktopWindowChromeOptions } from './windowChrome';
+import {
+  attachDesktopWindowChromeBroadcast,
+  buildDesktopWindowChromeOptions,
+  desktopWindowChromeSnapshotForWindow,
+} from './windowChrome';
 import { performDesktopShellWindowCommand } from './desktopShellWindowCommands';
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
@@ -125,6 +129,7 @@ import {
   DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
   DESKTOP_THEME_SET_SOURCE_CHANNEL,
 } from '../shared/desktopThemeIPC';
+import { DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL } from '../shared/windowChromeIPC';
 import {
   DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL,
   DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL,
@@ -850,6 +855,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
   });
 
   desktopThemeState().registerWindow(win);
+  const disposeWindowChromeBroadcast = attachDesktopWindowChromeBroadcast(win, process.platform);
   applyRestoredWindowState(win, restoredState);
   registerWindowStatePersistence(win, args.stateKey);
   recordWindowLifecycle(args.diagnostics, 'window_created', 'browser window created', {
@@ -910,6 +916,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
     recordWindowLifecycle(args.diagnostics, 'ready_to_show', 'browser window is ready to show', { role: args.role });
   });
   win.on('closed', () => {
+    disposeWindowChromeBroadcast();
     cleanupWindowStatePersistence(win);
     recordWindowLifecycle(args.diagnostics, 'window_closed', 'browser window closed', { role: args.role });
     args.onClosed?.(win);
@@ -4018,6 +4025,10 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.on(DESKTOP_THEME_SET_SOURCE_CHANNEL, (event, source) => {
     event.returnValue = desktopThemeState().setSource(source);
+  });
+  ipcMain.on(DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    event.returnValue = desktopWindowChromeSnapshotForWindow(win, process.platform);
   });
 
   ipcMain.handle(SAVE_DESKTOP_SETTINGS_CHANNEL, async (_event, draft: DesktopSettingsDraft): Promise<SaveDesktopSettingsResult> => {

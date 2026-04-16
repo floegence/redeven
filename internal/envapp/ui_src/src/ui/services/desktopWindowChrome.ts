@@ -8,6 +8,7 @@ import { readDesktopHostBridge } from './desktopHostWindow';
 
 export interface DesktopWindowChromeBridge {
   getSnapshot: () => DesktopWindowChromeSnapshot;
+  subscribe?: (listener: (snapshot: DesktopWindowChromeSnapshot) => void) => () => void;
 }
 
 declare global {
@@ -71,19 +72,33 @@ export function installDesktopWindowChromeDocumentSync(doc: Document = document)
     return null;
   }
 
+  const bridge = desktopWindowChromeBridge();
   const snapshot = readDesktopWindowChromeSnapshot();
   if (!snapshot) {
     return null;
   }
 
-  const applySnapshot = () => {
-    applyDesktopWindowChromeSnapshotToDocument(snapshot, doc);
+  const applySnapshot = (nextSnapshot: DesktopWindowChromeSnapshot) => {
+    applyDesktopWindowChromeSnapshotToDocument(nextSnapshot, doc);
   };
 
-  applySnapshot();
+  applySnapshot(snapshot);
   if (!subscribedDocuments.has(doc)) {
-    doc.addEventListener('readystatechange', applySnapshot);
-    doc.defaultView?.addEventListener('DOMContentLoaded', applySnapshot, { once: true });
+    doc.addEventListener('readystatechange', () => {
+      const nextSnapshot = readDesktopWindowChromeSnapshot();
+      if (nextSnapshot) {
+        applySnapshot(nextSnapshot);
+      }
+    });
+    doc.defaultView?.addEventListener('DOMContentLoaded', () => {
+      const nextSnapshot = readDesktopWindowChromeSnapshot();
+      if (nextSnapshot) {
+        applySnapshot(nextSnapshot);
+      }
+    }, { once: true });
+    bridge?.subscribe?.((nextSnapshot) => {
+      applyDesktopWindowChromeSnapshotToDocument(nextSnapshot, doc);
+    });
     subscribedDocuments.add(doc);
   }
   return snapshot;

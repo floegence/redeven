@@ -16,11 +16,16 @@ import {
 import {
   buildDesktopWindowChromeStyleText,
   DESKTOP_WINDOW_CHROME_STYLE_ID,
+  normalizeDesktopWindowChromeSnapshot,
   type DesktopWindowChromeSnapshot,
 } from '../shared/windowChromeContract';
 import {
   resolveDesktopWindowChromeSnapshot,
 } from '../shared/windowChromePlatform';
+import {
+  DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL,
+} from '../shared/windowChromeIPC';
 
 declare global {
   interface Window {
@@ -37,11 +42,13 @@ export interface DesktopThemeBridge {
 
 export interface DesktopWindowChromeBridge {
   getSnapshot: () => DesktopWindowChromeSnapshot;
+  subscribe: (listener: (snapshot: DesktopWindowChromeSnapshot) => void) => () => void;
 }
 
 const listeners = new Set<(snapshot: DesktopThemeSnapshot) => void>();
+const windowChromeListeners = new Set<(snapshot: DesktopWindowChromeSnapshot) => void>();
 let currentSnapshot = readDesktopThemeSnapshot();
-const currentWindowChromeSnapshot = resolveDesktopWindowChromeSnapshot(process.platform);
+let currentWindowChromeSnapshot = readDesktopWindowChromeSnapshot();
 
 function fallbackDesktopThemeSnapshot(): DesktopThemeSnapshot {
   return {
@@ -57,6 +64,11 @@ function fallbackDesktopThemeSnapshot(): DesktopThemeSnapshot {
 function readDesktopThemeSnapshot(): DesktopThemeSnapshot {
   const snapshot = normalizeDesktopThemeSnapshot(ipcRenderer.sendSync(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL));
   return snapshot ?? fallbackDesktopThemeSnapshot();
+}
+
+function readDesktopWindowChromeSnapshot(): DesktopWindowChromeSnapshot {
+  const snapshot = normalizeDesktopWindowChromeSnapshot(ipcRenderer.sendSync(DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL));
+  return snapshot ?? resolveDesktopWindowChromeSnapshot(process.platform);
 }
 
 function applyDesktopThemeToDocument(snapshot: DesktopThemeSnapshot): void {
@@ -88,39 +100,51 @@ function applyDesktopDocumentFallbackColors(snapshot: DesktopThemeSnapshot): voi
   }
 }
 
-function applyDesktopWindowChromeToDocument(): void {
+function applyDesktopWindowChromeToDocument(snapshot: DesktopWindowChromeSnapshot): void {
   const root = document.documentElement;
   if (!root) {
     return;
   }
-  root.dataset.redevenDesktopWindowChromeMode = currentWindowChromeSnapshot.mode;
-  root.dataset.redevenDesktopWindowControlsSide = currentWindowChromeSnapshot.controlsSide;
+  root.dataset.redevenDesktopWindowChromeMode = snapshot.mode;
+  root.dataset.redevenDesktopWindowControlsSide = snapshot.controlsSide;
 }
 
-function ensureWindowChromeStyle(): void {
-  if (!document.head || document.getElementById(DESKTOP_WINDOW_CHROME_STYLE_ID)) {
+function ensureWindowChromeStyle(snapshot: DesktopWindowChromeSnapshot): void {
+  if (!document.head) {
     return;
   }
-  const style = document.createElement('style');
-  style.id = DESKTOP_WINDOW_CHROME_STYLE_ID;
-  style.textContent = buildDesktopWindowChromeStyleText(currentWindowChromeSnapshot);
-  document.head.appendChild(style);
+  let style = document.getElementById(DESKTOP_WINDOW_CHROME_STYLE_ID) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement('style');
+    style.id = DESKTOP_WINDOW_CHROME_STYLE_ID;
+    document.head.appendChild(style);
+  }
+  style.textContent = buildDesktopWindowChromeStyleText(snapshot);
 }
 
-function syncCurrentDocument(snapshot: DesktopThemeSnapshot): void {
+function syncCurrentDocument(snapshot: DesktopThemeSnapshot, windowChromeSnapshot: DesktopWindowChromeSnapshot): void {
   applyDesktopThemeToDocument(snapshot);
   applyDesktopDocumentFallbackColors(snapshot);
-  applyDesktopWindowChromeToDocument();
-  ensureWindowChromeStyle();
+  applyDesktopWindowChromeToDocument(windowChromeSnapshot);
+  ensureWindowChromeStyle(windowChromeSnapshot);
 }
 
 function updateDesktopThemeSnapshot(snapshot: DesktopThemeSnapshot): DesktopThemeSnapshot {
   currentSnapshot = snapshot;
-  syncCurrentDocument(snapshot);
+  syncCurrentDocument(snapshot, currentWindowChromeSnapshot);
   for (const listener of Array.from(listeners)) {
     listener(snapshot);
   }
   return currentSnapshot;
+}
+
+function updateDesktopWindowChromeSnapshot(snapshot: DesktopWindowChromeSnapshot): DesktopWindowChromeSnapshot {
+  currentWindowChromeSnapshot = snapshot;
+  syncCurrentDocument(currentSnapshot, snapshot);
+  for (const listener of Array.from(windowChromeListeners)) {
+    listener(snapshot);
+  }
+  return currentWindowChromeSnapshot;
 }
 
 function setDesktopThemeSource(source: unknown): DesktopThemeSnapshot {
@@ -141,12 +165,20 @@ function installDesktopThemeEventBridge(): void {
     updateDesktopThemeSnapshot(snapshot);
   });
 
-  syncCurrentDocument(currentSnapshot);
+  ipcRenderer.on(DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL, (_event, payload) => {
+    const snapshot = normalizeDesktopWindowChromeSnapshot(payload);
+    if (!snapshot) {
+      return;
+    }
+    updateDesktopWindowChromeSnapshot(snapshot);
+  });
+
+  syncCurrentDocument(currentSnapshot, currentWindowChromeSnapshot);
   document.addEventListener('readystatechange', () => {
-    syncCurrentDocument(currentSnapshot);
+    syncCurrentDocument(currentSnapshot, currentWindowChromeSnapshot);
   });
   window.addEventListener('DOMContentLoaded', () => {
-    syncCurrentDocument(currentSnapshot);
+    syncCurrentDocument(currentSnapshot, currentWindowChromeSnapshot);
   }, { once: true });
 }
 
@@ -171,5 +203,15 @@ export function bootstrapDesktopThemeBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopTheme', bridge);
   contextBridge.exposeInMainWorld('redevenDesktopWindowChrome', {
     getSnapshot: () => currentWindowChromeSnapshot,
+    subscribe: (listener) => {
+      if (typeof listener !== 'function') {
+        return () => undefined;
+      }
+      windowChromeListeners.add(listener);
+      listener(currentWindowChromeSnapshot);
+      return () => {
+        windowChromeListeners.delete(listener);
+      };
+    },
   } satisfies DesktopWindowChromeBridge);
 }
