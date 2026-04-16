@@ -12,7 +12,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("type DesktopUtilityWindowKind = 'launcher';");
-    expect(mainSrc).toContain('const utilityWindows = new Map<DesktopUtilityWindowKind, BrowserWindow>();');
+    expect(mainSrc).toContain('const utilityWindows = new Map<DesktopUtilityWindowKind, DesktopTrackedWindow>();');
     expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain("surface: 'connect_environment'");
     expect(mainSrc).toContain("surface: 'managed_environment_settings'");
@@ -29,6 +29,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain('function sessionChildWindowStateKey(sessionKey: DesktopSessionKey, childKey: string): string {');
     expect(mainSrc).toContain('function openSessionChildWindow(');
     expect(mainSrc).toContain('if (isAllowedSessionNavigation(sessionKey, nextURL)) {');
+    expect(mainSrc).toContain('child_windows: Map<string, DesktopTrackedWindow>;');
+    expect(mainSrc).toContain('sessionKeyByWebContentsID.delete(closedWindow.webContentsID);');
+    expect(mainSrc).not.toContain('sessionKeyByWebContentsID.delete(childWindow.webContents.id);');
   });
 
   it('routes launcher and shell actions into the multi-window desktop flow', () => {

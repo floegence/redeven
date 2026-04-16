@@ -370,6 +370,7 @@ Rules:
 
 - Detached tools stay owned by the current Environment session instead of becoming shell-global utility windows.
 - Focusing or reopening a detached tool reuses the same session child window identity instead of spawning duplicates.
+- Desktop captures a stable window ownership record when each detached child window is created, so close/restart cleanup can remove session routing state without touching destroyed Electron objects.
 - Ordinary page dialogs in the main Env App window do not cover detached tools, because Electron manages them as separate native windows.
 - Debug Console therefore remains available while the main Env App shows ordinary page-level dialogs or floating-window-local confirmation flows.
 
@@ -666,6 +667,7 @@ Desktop-specific outcomes from this implementation:
   - SSH-hosted environment instances only affect that one SSH Host entry + `environment_instance_id`
   - external Redeven URL targets stay externally managed and do not offer a Desktop-side runtime update action
 - Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.
+- Shell-owned utility windows and session-owned detached child windows both clear their routing ownership from the same stable window record, so normal close actions stay silent instead of surfacing Electron lifecycle errors.
 
 ## Release Assets
 

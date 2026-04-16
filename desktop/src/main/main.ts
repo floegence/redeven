@@ -104,6 +104,7 @@ import {
   attachDesktopWindowStatePersistence,
   restoreBrowserWindowBounds,
 } from './windowState';
+import { liveTrackedBrowserWindow, trackBrowserWindow, type DesktopTrackedWindow } from './windowRecord';
 import { resolveDesktopWindowSpec } from './windowSpec';
 import {
   attachDesktopWindowChromeBroadcast,
@@ -210,8 +211,8 @@ type DesktopSessionRecord = {
   target: DesktopSessionTarget;
   startup: StartupReport;
   allowed_base_url: string;
-  root_window: BrowserWindow;
-  child_windows: Map<string, BrowserWindow>;
+  root_window: DesktopTrackedWindow;
+  child_windows: Map<string, DesktopTrackedWindow>;
   diagnostics: DesktopDiagnosticsRecorder;
   pending_handoffs: DesktopAskFlowerHandoffPayload[];
   runtime_handle: DesktopSessionRuntimeHandle | null;
@@ -280,11 +281,11 @@ type CreateBrowserWindowArgs = Readonly<{
     validatedURL: string;
     isMainFrame: boolean;
   }>) => void;
-  onClosed?: (win: BrowserWindow) => void;
+  onClosed?: (win: DesktopTrackedWindow) => void;
   presentOnReadyToShow?: boolean;
 }>;
 
-const utilityWindows = new Map<DesktopUtilityWindowKind, BrowserWindow>();
+const utilityWindows = new Map<DesktopUtilityWindowKind, DesktopTrackedWindow>();
 const utilityWindowState = new Map<DesktopUtilityWindowKind, DesktopUtilityWindowState>([
   ['launcher', { surface: 'connect_environment', entryReason: 'app_launch', issue: null, selectedManagedEnvironmentID: '' }],
 ]);
@@ -313,6 +314,7 @@ const DESKTOP_PROTOCOL_SCHEME = 'redeven';
 const CONTROL_PLANE_ACCESS_TOKEN_EXPIRY_SKEW_MS = 15_000;
 const CONTROL_PLANE_SYNC_POLL_INTERVAL_MS = 15_000;
 const DESKTOP_SESSION_INITIAL_LOAD_TIMEOUT_MS = 15_000;
+const DESKTOP_STALE_WINDOW_MESSAGE = 'That window was already closed. Desktop refreshed the environment list.';
 const pendingDesktopDeepLinks: string[] = [];
 let controlPlaneSyncPollTimer: NodeJS.Timeout | null = null;
 
@@ -626,18 +628,20 @@ function currentParentWindow(): BrowserWindow | undefined {
     return focused;
   }
   for (const kind of UTILITY_WINDOW_KINDS) {
-    const utilityWindow = utilityWindows.get(kind);
-    if (utilityWindow && !utilityWindow.isDestroyed()) {
+    const utilityWindow = liveUtilityWindow(kind);
+    if (utilityWindow) {
       return utilityWindow;
     }
   }
   const focusedSession = lastFocusedSessionKey ? sessionsByKey.get(lastFocusedSessionKey) ?? null : null;
-  if (focusedSession && !focusedSession.root_window.isDestroyed()) {
-    return focusedSession.root_window;
+  const focusedSessionWindow = focusedSession ? liveTrackedBrowserWindow(focusedSession.root_window) : null;
+  if (focusedSessionWindow) {
+    return focusedSessionWindow;
   }
   const firstSession = sessionsByKey.values().next().value as DesktopSessionRecord | undefined;
-  if (firstSession && !firstSession.root_window.isDestroyed()) {
-    return firstSession.root_window;
+  const firstSessionWindow = firstSession ? liveTrackedBrowserWindow(firstSession.root_window) : null;
+  if (firstSessionWindow) {
+    return firstSessionWindow;
   }
   return undefined;
 }
@@ -703,7 +707,7 @@ function sessionChildWindowStateKey(sessionKey: DesktopSessionKey, childKey: str
 
 function openSessionSummaries(): readonly DesktopSessionSummary[] {
   return [...sessionsByKey.values()]
-    .filter((session) => !session.closing && !session.root_window.isDestroyed())
+    .filter((session) => !session.closing && Boolean(liveTrackedBrowserWindow(session.root_window)))
     .map((session) => ({
       session_key: session.session_key,
       target: session.target,
@@ -735,8 +739,12 @@ async function buildCurrentDesktopWelcomeSnapshot(
 }
 
 function liveUtilityWindow(kind: DesktopUtilityWindowKind): BrowserWindow | null {
-  const win = utilityWindows.get(kind) ?? null;
-  if (!win || win.isDestroyed()) {
+  const windowRecord = utilityWindows.get(kind) ?? null;
+  const win = liveTrackedBrowserWindow(windowRecord);
+  if (!windowRecord || !win) {
+    if (windowRecord) {
+      utilityWindowKindByWebContentsID.delete(windowRecord.webContentsID);
+    }
     utilityWindows.delete(kind);
     return null;
   }
@@ -745,7 +753,7 @@ function liveUtilityWindow(kind: DesktopUtilityWindowKind): BrowserWindow | null
 
 function liveSession(sessionKey: DesktopSessionKey): DesktopSessionRecord | null {
   const sessionRecord = sessionsByKey.get(sessionKey) ?? null;
-  if (!sessionRecord || sessionRecord.root_window.isDestroyed() || sessionRecord.lifecycle === 'closing') {
+  if (!sessionRecord || !liveTrackedBrowserWindow(sessionRecord.root_window) || sessionRecord.lifecycle === 'closing') {
     return null;
   }
   return sessionRecord;
@@ -765,8 +773,12 @@ function focusEnvironmentSession(sessionKey: DesktopSessionKey, options?: Readon
   if (!sessionRecord || sessionRecord.lifecycle !== 'open') {
     return false;
   }
+  const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
+  if (!rootWindow) {
+    return false;
+  }
   lastFocusedSessionKey = sessionKey;
-  presentAppWindow(sessionRecord.root_window, options);
+  presentAppWindow(rootWindow, options);
   return true;
 }
 
@@ -821,7 +833,7 @@ function windowSurfaceForRole(role: CreateBrowserWindowArgs['role']): DesktopWin
   return role === 'launcher' ? 'utility' : 'session';
 }
 
-function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
+function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindow {
   const spec = resolveDesktopWindowSpec(args.targetURL, Boolean(args.parent));
   const attachToParent = Boolean(args.parent) && spec.attachToParent !== false;
   const actualParent = attachToParent ? args.parent : undefined;
@@ -853,6 +865,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
       spellcheck: false,
     },
   });
+  const trackedWindow = trackBrowserWindow(win);
 
   desktopThemeState().registerWindow(win);
   const disposeWindowChromeBroadcast = attachDesktopWindowChromeBroadcast(win, process.platform);
@@ -919,11 +932,11 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): BrowserWindow {
     disposeWindowChromeBroadcast();
     cleanupWindowStatePersistence(win);
     recordWindowLifecycle(args.diagnostics, 'window_closed', 'browser window closed', { role: args.role });
-    args.onClosed?.(win);
+    args.onClosed?.(trackedWindow);
   });
 
   void win.loadURL(args.targetURL);
-  return win;
+  return trackedWindow;
 }
 
 function isAllowedSessionNavigation(sessionKey: DesktopSessionKey, targetURL: string): boolean {
@@ -947,10 +960,15 @@ function openSessionChildWindow(
 
   const childKey = childWindowIdentity(frameName, targetURL);
   const existing = sessionRecord.child_windows.get(childKey);
-  if (existing && !existing.isDestroyed()) {
-    void existing.loadURL(targetURL);
-    presentAppWindow(existing);
-    return existing;
+  const existingWindow = liveTrackedBrowserWindow(existing);
+  if (existing && existingWindow) {
+    void existingWindow.loadURL(targetURL);
+    presentAppWindow(existingWindow);
+    return existingWindow;
+  }
+  if (existing) {
+    sessionRecord.child_windows.delete(childKey);
+    sessionKeyByWebContentsID.delete(existing.webContentsID);
   }
 
   const childWindow = createBrowserWindow({
@@ -974,29 +992,30 @@ function openSessionChildWindow(
       event.preventDefault();
       openExternal(nextURL);
     },
-    onClosed: () => {
+    onClosed: (closedWindow) => {
       sessionRecord.child_windows.delete(childKey);
-      sessionKeyByWebContentsID.delete(childWindow.webContents.id);
+      sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
     },
   });
 
   sessionRecord.child_windows.set(childKey, childWindow);
-  sessionKeyByWebContentsID.set(childWindow.webContents.id, sessionKey);
-  return childWindow;
+  sessionKeyByWebContentsID.set(childWindow.webContentsID, sessionKey);
+  return childWindow.browserWindow;
 }
 
 function flushPendingSessionAskFlowerHandoffs(sessionKey: DesktopSessionKey): void {
   const sessionRecord = sessionsByKey.get(sessionKey);
-  if (!sessionRecord || sessionRecord.root_window.isDestroyed()) {
+  const rootWindow = sessionRecord ? liveTrackedBrowserWindow(sessionRecord.root_window) : null;
+  if (!sessionRecord || !rootWindow) {
     return;
   }
-  if (sessionRecord.root_window.webContents.isLoadingMainFrame() || sessionRecord.pending_handoffs.length <= 0) {
+  if (rootWindow.webContents.isLoadingMainFrame() || sessionRecord.pending_handoffs.length <= 0) {
     return;
   }
 
   const queue = sessionRecord.pending_handoffs.splice(0, sessionRecord.pending_handoffs.length);
   for (const payload of queue) {
-    sessionRecord.root_window.webContents.send(DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL, payload);
+    rootWindow.webContents.send(DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL, payload);
   }
 }
 
@@ -1039,8 +1058,9 @@ function resolveSessionInitialLoadSuccess(
   sessionRecord.reject_initial_load = null;
   sessionRecord.initial_load_failure_message = '';
   resolve?.();
-  if (!sessionRecord.root_window.isDestroyed()) {
-    presentAppWindow(sessionRecord.root_window, { stealAppFocus: options.stealAppFocus });
+  const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
+  if (rootWindow) {
+    presentAppWindow(rootWindow, { stealAppFocus: options.stealAppFocus });
   }
   broadcastDesktopWelcomeSnapshots();
 }
@@ -1090,7 +1110,7 @@ function createSessionRootWindow(
       isMainFrame: boolean;
     }>) => void;
   }>,
-): BrowserWindow {
+): DesktopTrackedWindow {
   return createBrowserWindow({
     targetURL,
     stateKey: sessionWindowStateKey(sessionKey),
@@ -1165,15 +1185,15 @@ async function createSessionRecord(
   };
 
   sessionsByKey.set(target.session_key, sessionRecord);
-  sessionKeyByWebContentsID.set(rootWindow.webContents.id, target.session_key);
-  rootWindow.on('focus', () => {
+  sessionKeyByWebContentsID.set(rootWindow.webContentsID, target.session_key);
+  rootWindow.browserWindow.on('focus', () => {
     lastFocusedSessionKey = target.session_key;
   });
-  rootWindow.on('closed', () => {
-    sessionKeyByWebContentsID.delete(rootWindow.webContents.id);
+  rootWindow.browserWindow.on('closed', () => {
+    sessionKeyByWebContentsID.delete(rootWindow.webContentsID);
     void finalizeSessionClosure(target.session_key);
   });
-  rootWindow.webContents.on('did-finish-load', () => {
+  rootWindow.browserWindow.webContents.on('did-finish-load', () => {
     flushPendingSessionAskFlowerHandoffs(target.session_key);
   });
 
@@ -1239,17 +1259,19 @@ async function finalizeSessionClosure(
       lastFocusedSessionKey = null;
     }
 
-    sessionKeyByWebContentsID.delete(sessionRecord.root_window.webContents.id);
+    sessionKeyByWebContentsID.delete(sessionRecord.root_window.webContentsID);
     for (const childWindow of sessionRecord.child_windows.values()) {
-      sessionKeyByWebContentsID.delete(childWindow.webContents.id);
-      if (options.closeWindows !== false && !childWindow.isDestroyed()) {
-        childWindow.destroy();
+      sessionKeyByWebContentsID.delete(childWindow.webContentsID);
+      const browserWindow = liveTrackedBrowserWindow(childWindow);
+      if (options.closeWindows !== false && browserWindow) {
+        browserWindow.destroy();
       }
     }
     sessionRecord.child_windows.clear();
 
-    if (options.closeWindows !== false && !sessionRecord.root_window.isDestroyed()) {
-      sessionRecord.root_window.destroy();
+    const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
+    if (options.closeWindows !== false && rootWindow) {
+      rootWindow.destroy();
     }
 
     broadcastDesktopWelcomeSnapshots();
@@ -1278,12 +1300,17 @@ async function finalizeSessionClosure(
 }
 
 async function closeUtilityWindow(kind: DesktopUtilityWindowKind): Promise<void> {
-  const win = liveUtilityWindow(kind);
-  if (!win) {
+  const windowRecord = utilityWindows.get(kind) ?? null;
+  const win = liveTrackedBrowserWindow(windowRecord);
+  if (!windowRecord || !win) {
+    if (windowRecord) {
+      utilityWindowKindByWebContentsID.delete(windowRecord.webContentsID);
+    }
+    utilityWindows.delete(kind);
     return;
   }
   utilityWindows.delete(kind);
-  utilityWindowKindByWebContentsID.delete(win.webContents.id);
+  utilityWindowKindByWebContentsID.delete(windowRecord.webContentsID);
   if (!win.isDestroyed()) {
     win.close();
   }
@@ -1313,17 +1340,17 @@ async function openUtilityWindow(
     stateKey: utilityWindowStateKey(),
     role: 'launcher',
     stealAppFocus: options.stealAppFocus,
-    onClosed: () => {
+    onClosed: (closedWindow) => {
       utilityWindows.delete(kind);
-      utilityWindowKindByWebContentsID.delete(win.webContents.id);
+      utilityWindowKindByWebContentsID.delete(closedWindow.webContentsID);
       updateControlPlaneSyncPoller();
     },
   });
 
   utilityWindows.set(kind, win);
-  utilityWindowKindByWebContentsID.set(win.webContents.id, kind);
+  utilityWindowKindByWebContentsID.set(win.webContentsID, kind);
   if (kind === 'launcher') {
-    win.on('focus', () => {
+    win.browserWindow.on('focus', () => {
       void syncVisibleControlPlanesIfNeeded();
     });
   }
@@ -2907,7 +2934,7 @@ async function focusEnvironmentWindow(sessionKey: string): Promise<DesktopLaunch
     return launcherActionFailure(
       'session_stale',
       'environment',
-      'That window was already closed. Desktop refreshed the environment list.',
+      DESKTOP_STALE_WINDOW_MESSAGE,
       {
         shouldRefreshSnapshot: true,
       },
@@ -2984,9 +3011,10 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
   }
 
   for (const childWindow of sessionRecord.child_windows.values()) {
-    sessionKeyByWebContentsID.delete(childWindow.webContents.id);
-    if (!childWindow.isDestroyed()) {
-      childWindow.close();
+    sessionKeyByWebContentsID.delete(childWindow.webContentsID);
+    const browserWindow = liveTrackedBrowserWindow(childWindow);
+    if (browserWindow) {
+      browserWindow.close();
     }
   }
   sessionRecord.child_windows.clear();
@@ -3048,7 +3076,15 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
       effective_run_mode: prepared.launch.managedRuntime.startup.effective_run_mode ?? '',
     },
   );
-  await sessionRecord.root_window.loadURL(sessionRecord.allowed_base_url);
+  const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
+  if (!rootWindow) {
+    return {
+      ok: false,
+      started: false,
+      message: DESKTOP_STALE_WINDOW_MESSAGE,
+    };
+  }
+  await rootWindow.loadURL(sessionRecord.allowed_base_url);
   focusEnvironmentSession(sessionRecord.session_key, { stealAppFocus: true });
   broadcastDesktopWelcomeSnapshots();
 
@@ -3697,12 +3733,17 @@ async function restoreBestAvailableWindow(options?: Readonly<{ stealAppFocus?: b
 async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   const sessionClosePromises = [...sessionsByKey.keys()].map((sessionKey) => finalizeSessionClosure(sessionKey));
   for (const kind of UTILITY_WINDOW_KINDS) {
-    const win = liveUtilityWindow(kind);
-    if (!win) {
+    const windowRecord = utilityWindows.get(kind) ?? null;
+    const win = liveTrackedBrowserWindow(windowRecord);
+    if (!windowRecord || !win) {
+      if (windowRecord) {
+        utilityWindowKindByWebContentsID.delete(windowRecord.webContentsID);
+      }
+      utilityWindows.delete(kind);
       continue;
     }
     utilityWindows.delete(kind);
-    utilityWindowKindByWebContentsID.delete(win.webContents.id);
+    utilityWindowKindByWebContentsID.delete(windowRecord.webContentsID);
     if (!win.isDestroyed()) {
       win.destroy();
     }
