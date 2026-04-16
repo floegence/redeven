@@ -1,5 +1,20 @@
 export const DESKTOP_WINDOW_CHROME_STYLE_ID = 'redeven-desktop-window-chrome';
 
+export const DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS = [
+  "[data-floe-shell-slot='top-bar']",
+  "[data-redeven-desktop-titlebar-drag-region='true']",
+] as const;
+
+export const DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS = [
+  'button',
+  'a',
+  'input',
+  'textarea',
+  'select',
+  "[role='button']",
+  "[data-redeven-desktop-titlebar-no-drag='true']",
+] as const;
+
 export type DesktopWindowChromeMode = 'hidden-inset' | 'overlay';
 
 export type DesktopWindowControlsSide = 'left' | 'right';
@@ -66,18 +81,26 @@ export function buildDesktopWindowChromeStyleText(
   const declarations = Object.entries(chromeVars)
     .map(([name, value]) => `  ${name}: ${value};`)
     .join('\n');
+  const topBarDragSelector = DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS[0];
+  const noDragSelectors = DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS
+    .map((selector) => (
+      selector.startsWith('[')
+        ? selector
+        : `${topBarDragSelector} ${selector}`
+    ))
+    .join(',\n');
 
   return `
 :root {
 ${declarations}
 }
 
-[data-floe-shell-slot='top-bar'] {
+${topBarDragSelector} {
   app-region: drag;
   user-select: none;
 }
 
-[data-floe-shell-slot='top-bar'] > div:first-child {
+${topBarDragSelector} > div:first-child {
   padding-inline-start: calc(0.75rem + var(--redeven-desktop-titlebar-start-inset));
   padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset));
 }
@@ -92,13 +115,7 @@ ${declarations}
   padding-inline-end: calc(0.75rem + var(--redeven-desktop-titlebar-end-inset));
 }
 
-[data-floe-shell-slot='top-bar'] button,
-[data-floe-shell-slot='top-bar'] a,
-[data-floe-shell-slot='top-bar'] input,
-[data-floe-shell-slot='top-bar'] textarea,
-[data-floe-shell-slot='top-bar'] select,
-[data-floe-shell-slot='top-bar'] [role='button'],
-[data-redeven-desktop-titlebar-no-drag='true'] {
+${noDragSelectors} {
   app-region: no-drag;
   user-select: auto;
 }

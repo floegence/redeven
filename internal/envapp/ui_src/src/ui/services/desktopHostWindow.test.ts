@@ -6,6 +6,7 @@ type FakeWindow = Window & {
   location: { origin: string };
   parent: Window;
   top: Window;
+  redevenDesktopEmbeddedDragRegions?: unknown;
   redevenDesktopTheme?: unknown;
   redevenDesktopSessionContext?: unknown;
   redevenDesktopStateStorage?: unknown;

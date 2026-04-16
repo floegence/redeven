@@ -575,6 +575,10 @@ Behavior:
   - `[data-redeven-desktop-window-titlebar-content='true']`
 - Floe shell top bars and desktop-owned launcher chrome both receive drag / no-drag semantics from preload so BrowserWindow movement keeps working after the app takes over the title bar area.
 - When a desktop-managed remote session renders Env App through a same-origin iframe, the embedded document resolves desktop theme, session context, state storage, and window chrome from its host session window instead of falling back to plain browser semantics.
+- In that same-origin iframe case, safe-area styling and native drag ownership are intentionally split:
+  - the embedded Env App computes the final draggable rectangles from the shared desktop titlebar drag/no-drag hooks;
+  - the top-level `/_redeven_boot/` host turns those rectangles into transparent top-level `app-region: drag` overlays;
+  - Electron window movement always stays owned by the top-level session document, never by iframe DOM alone.
 - Detached desktop child windows render through a shared chrome-safe frame in Env App, so title, subtitle, banner, footer, and scene body can evolve independently while native control reservations still come only from the shell contract.
 - Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
 - Welcome and Env App each keep an explicit entry-document background fallback (`html` / `body` / `#root`) so the first renderer frame matches the shell-owned native window background even before business UI mounts.
