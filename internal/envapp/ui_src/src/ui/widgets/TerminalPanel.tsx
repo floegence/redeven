@@ -72,6 +72,7 @@ export interface TerminalPanelProps {
     requestId: string;
     workingDir: string;
     preferredName?: string;
+    targetMode?: 'tab' | 'deck';
   } | null;
   onOpenSessionRequestHandled?: (requestId: string) => void;
 }
@@ -1450,6 +1451,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const requestId = String(request?.requestId ?? '').trim();
     if (!requestId || requestId === lastHandledOpenSessionRequestId) return;
     if (!connected()) return;
+    const targetMode = request?.targetMode ?? 'tab';
+    if (targetMode !== (isInDeckWidget ? 'deck' : 'tab')) return;
 
     const workingDir = normalizeAskFlowerAbsolutePath(String(request?.workingDir ?? '').trim());
     if (!workingDir) {

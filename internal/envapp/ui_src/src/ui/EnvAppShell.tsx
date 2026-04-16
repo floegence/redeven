@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
-import { deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme, useWidgetRegistry } from '@floegence/floe-webapp-core';
+import { deferAfterPaint, type FloeComponent, useCommand, useDeck, useLayout, useNotification, useTheme, useWidgetRegistry } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
@@ -34,7 +34,7 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import {
   EnvContext,
   type AskFlowerComposerAnchor,
-  type EnvNavTab,
+  type EnvDeckSurfaceActivationRequest,
   type EnvSettingsSection,
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
@@ -51,6 +51,7 @@ import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
 import { AIChatContext, createAIChatContextValue, type ModelsResponse } from './pages/AIChatContext';
 import { AIChatSidebar } from './pages/AIChatSidebar';
+import { EnvInfiniteMapPage } from './pages/EnvInfiniteMapPage';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
@@ -71,6 +72,8 @@ import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { RuntimeUpdateFloatingPrompt } from './widgets/RuntimeUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
+import { EnvTopBarModeSwitcher } from './EnvTopBarModeSwitcher';
+import { EnvTopBarOverflowMenu } from './EnvTopBarOverflowMenu';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
@@ -134,8 +137,18 @@ import {
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeEnvironmentOwnedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
+import {
+  ENV_DEFAULT_SURFACE_ID,
+  envDeckWidgetTypeForSurface,
+  isEnvSurfaceId,
+  isEnvViewMode,
+  type EnvOpenSurfaceOptions,
+  type EnvSurfaceId,
+  type EnvViewMode,
+} from './envViewMode';
 
-const ACTIVE_TAB_STORAGE_KEY = 'redeven_envapp_active_tab';
+const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
+const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
 const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
 const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
@@ -230,27 +243,33 @@ function persistActiveThreadId(threadId: string): void {
   writeEnvironmentOwnedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, value);
 }
 
-function readPersistedActiveTab(): EnvNavTab | null {
-  const v = String(readUIStorageItem(ACTIVE_TAB_STORAGE_KEY) ?? '').trim();
-  // Backward compat: the "market" tab was removed; redirect old preferences.
-  if (v === 'market') return 'codespaces';
-  if (
-    v === 'deck' ||
-    v === 'terminal' ||
-    v === 'monitor' ||
-    v === 'files' ||
-    v === 'codespaces' ||
-    v === 'ports' ||
-    v === 'ai' ||
-    v === 'codex'
-  ) {
-    return v;
+function readPersistedDesktopViewMode(): EnvViewMode | null {
+  const explicit = String(readUIStorageItem(DESKTOP_VIEW_MODE_STORAGE_KEY) ?? '').trim();
+  if (isEnvViewMode(explicit)) {
+    return explicit;
+  }
+
+  const legacySurface = String(readUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY) ?? '').trim();
+  if (legacySurface === 'deck') {
+    return 'deck';
   }
   return null;
 }
 
-function persistActiveTab(tab: EnvNavTab): void {
-  writeUIStorageItem(ACTIVE_TAB_STORAGE_KEY, tab);
+function persistDesktopViewMode(mode: EnvViewMode): void {
+  writeUIStorageItem(DESKTOP_VIEW_MODE_STORAGE_KEY, mode);
+}
+
+function readPersistedActiveSurface(): EnvSurfaceId | null {
+  const v = String(readUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY) ?? '').trim();
+  // Backward compat: the "market" tab was removed; redirect old preferences.
+  if (v === 'market') return 'codespaces';
+  if (isEnvSurfaceId(v)) return v;
+  return null;
+}
+
+function persistActiveSurface(surfaceId: EnvSurfaceId): void {
+  writeUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY, surfaceId);
 }
 
 // Bridge: provides AIChatContext to Shell and its children (requires EnvContext above).
@@ -267,6 +286,7 @@ export function EnvAppShell() {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const cmd = useCommand();
+  const deck = useDeck();
   const notify = useNotification();
   const filePreviewController = createFilePreviewController({
     client: () => protocol.client(),
@@ -480,11 +500,17 @@ export function EnvAppShell() {
 
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
+  const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('deck');
+  const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'tab' : desktopViewMode()));
+  const [lastTabSurface, setLastTabSurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
+  const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
+  const [deckSurfaceActivationSeq, setDeckSurfaceActivationSeq] = createSignal(0);
+  const [deckSurfaceActivation, setDeckSurfaceActivation] = createSignal<EnvDeckSurfaceActivationRequest | null>(null);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
   const [sidebarVisibilityMotion, setSidebarVisibilityMotion] = createSignal<EnvSidebarVisibilityMotion>('animated');
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
   let sidebarVisibilityMotionRevision = 0;
-  let initialTab: EnvNavTab | null = null;
+  let initialTabSurface: EnvSurfaceId | null = null;
 
   const [askFlowerIntentSeq, setAskFlowerIntentSeq] = createSignal(0);
   const [askFlowerIntent, setAskFlowerIntent] = createSignal<AskFlowerIntent | null>(null);
@@ -501,6 +527,13 @@ export function EnvAppShell() {
   const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
   let pendingMainWindowAskFlowerComposerIntent: AskFlowerIntent | null = null;
+  const activeSurface = createMemo<EnvSurfaceId>(() => {
+    if (viewMode() === 'tab') {
+      const activeTab = layout.sidebarActiveTab();
+      return isEnvSurfaceId(activeTab) ? activeTab : lastTabSurface();
+    }
+    return lastRequestedSurface();
+  });
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
@@ -539,6 +572,7 @@ export function EnvAppShell() {
       setSettingsFocusSection(section);
       setSettingsFocusSeq((n) => n + 1);
     }
+    setViewMode('tab');
     activateEnvTab('settings', { persist: false });
   };
 
@@ -581,6 +615,16 @@ export function EnvAppShell() {
     });
   };
 
+  const consumeDeckSurfaceActivation = (requestId: string) => {
+    const normalizedRequestId = String(requestId ?? '').trim();
+    if (!normalizedRequestId) return;
+
+    setDeckSurfaceActivation((current) => {
+      if (!current) return current;
+      return current.requestId === normalizedRequestId ? null : current;
+    });
+  };
+
   const focusAIThread = (threadId: string) => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
@@ -606,13 +650,15 @@ export function EnvAppShell() {
     }
 
     const preferredName = String(options?.preferredName ?? '').trim();
+    const targetMode = viewMode() === 'deck' ? 'deck' : 'tab';
     setOpenTerminalInDirectoryRequest({
       requestId: createClientId(),
       workingDir: normalizedWorkingDir,
       preferredName: preferredName || basenameFromAbsolutePath(normalizedWorkingDir),
+      targetMode,
     });
     setOpenTerminalInDirectoryRequestSeq((n) => n + 1);
-    goTab('terminal');
+    openSurface('terminal', { reason: 'handoff_open_terminal', focus: true, ensureVisible: true });
   };
 
   const closeAskFlowerComposer = () => {
@@ -784,7 +830,7 @@ export function EnvAppShell() {
       persistActiveThreadId(threadId);
       focusAIThread(threadId);
       closeAskFlowerComposer();
-      goTab('ai');
+      openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error('Failed to send to Flower', msg || 'Request failed.');
@@ -1452,30 +1498,26 @@ export function EnvAppShell() {
         setEnvId(getEnvPublicIDFromSession());
       }
 
-      let preferred = readPersistedActiveTab();
-      if (rt && preferred === 'ports') preferred = 'codespaces';
-      if (preferred === 'ai') {
+      let preferredSurface = readPersistedActiveSurface();
+      const preferredDesktopViewMode = readPersistedDesktopViewMode() ?? 'deck';
+      if (rt && preferredSurface === 'ports') preferredSurface = 'codespaces';
+      if (preferredSurface === 'ai') {
         // Defer opening Flower until permissions are loaded (and only if RWX is granted).
-        preferred = null;
+        preferredSurface = null;
         setPendingAutoOpenAI(true);
       }
-      if (preferred === 'codex') {
+      if (preferredSurface === 'codex') {
         // Defer opening Codex until permissions are loaded (and only if RWX is granted).
-        preferred = null;
+        preferredSurface = null;
         setPendingAutoOpenCodex(true);
       }
 
-      const initial = (() => {
-        if (preferred) {
-          if (layout.isMobile() && preferred === 'deck') return 'terminal';
-          return preferred;
-        }
-        return layout.isMobile() ? 'terminal' : 'deck';
-      })();
-      // Mobile downgrade: keep "deck" as the persisted preference while opening "terminal".
-      if (layout.isMobile() && preferred === 'deck' && initial === 'terminal') skipPersistOnce = true;
-      layout.setSidebarActiveTab(initial, { openSidebar: false });
-      initialTab = initial;
+      const initialSurface = preferredSurface ?? ENV_DEFAULT_SURFACE_ID;
+      setDesktopViewMode(preferredDesktopViewMode);
+      setLastTabSurface(initialSurface);
+      setLastRequestedSurface(initialSurface);
+      layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
+      initialTabSurface = initialSurface;
       setPersistReady(true);
 
       if (accessLocked()) {
@@ -1574,27 +1616,21 @@ export function EnvAppShell() {
 
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
-      { id: 'deck', name: 'Deck', icon: LayoutDashboard, component: EnvDeckPage, sidebar: { order: 1, fullScreen: true } },
-      { id: 'terminal', name: 'Terminal', icon: Terminal, component: EnvTerminalPage, sidebar: { order: 2, fullScreen: true } },
-      { id: 'monitor', name: 'Monitoring', icon: Activity, component: EnvMonitorPage, sidebar: { order: 3, fullScreen: true } },
-      { id: 'files', name: 'File Browser', icon: Files, component: EnvFileBrowserPage, sidebar: { order: 4, fullScreen: true } },
-      { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 5, fullScreen: true } },
+      { id: 'terminal', name: 'Terminal', icon: Terminal, component: EnvTerminalPage, sidebar: { order: 1, fullScreen: true } },
+      { id: 'monitor', name: 'Monitoring', icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
+      { id: 'files', name: 'File Browser', icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
+      { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
     ];
-    // Local UI mode disables port forwarding entirely.
     if (!isLocalMode()) {
-      list.push({ id: 'ports', name: 'Ports', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 6, fullScreen: true } });
+      list.push({ id: 'ports', name: 'Ports', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } });
     }
-    // Always register the AI view to keep ActivityAppsMain/KeepAliveStack stable:
-    // permissions load asynchronously, but FloeRegistryRuntime registers components only once on mount.
-    // Access to Flower is still gated via navigation + permission checks.
-    list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
-    list.push({ id: 'codex', name: 'Codex', icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 8, fullScreen: false, renderIn: 'main' } });
+    list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
+    list.push({ id: 'codex', name: 'Codex', icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'settings', name: 'Runtime Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
 
   const [persistReady, setPersistReady] = createSignal(false);
-  let skipPersistOnce = false;
 
   const queueSidebarVisibilityMotion = (motion: EnvSidebarVisibilityMotion) => {
     if (motion !== 'instant') {
@@ -1611,36 +1647,111 @@ export function EnvAppShell() {
     });
   };
 
-  const activateEnvTab = (tab: EnvNavTab | 'settings', opts?: { persist?: boolean }) => {
-    if (opts?.persist !== false && tab !== 'settings') {
-      persistActiveTab(tab);
+  const activateEnvTab = (tab: EnvSurfaceId | 'settings', opts?: { persist?: boolean }) => {
+    if (tab !== 'settings') {
+      setLastTabSurface(tab);
+      setLastRequestedSurface(tab);
+      if (opts?.persist !== false) {
+        persistActiveSurface(tab);
+      }
     }
-    let next = tab;
-    if (layout.isMobile() && next === 'deck') next = 'terminal';
-    if (layout.isMobile() && tab === 'deck' && next === 'terminal') skipPersistOnce = true;
-
     queueSidebarVisibilityMotion(resolveEnvSidebarVisibilityMotion({
       currentTab: layout.sidebarActiveTab(),
-      nextTab: next,
+      nextTab: tab,
       isMobile: layout.isMobile(),
     }));
 
-    layout.setSidebarActiveTab(next, { openSidebar: shouldEnvTabOpenSidebar(next) });
+    layout.setSidebarActiveTab(tab, { openSidebar: shouldEnvTabOpenSidebar(tab) });
   };
 
-  const goTab = (tab: EnvNavTab) => {
-    if (tab === 'ai' && !canUseFlower()) {
-      notify.error('Permission denied', 'Read/write/execute permission required.');
-      return;
+  const fallbackSurfaceFor = (surfaceId: EnvSurfaceId): EnvSurfaceId => {
+    if (surfaceId === 'ports' && isLocalMode()) {
+      return 'codespaces';
     }
-    if (tab === 'codex' && !canUseCodex()) {
-      notify.error('Permission denied', 'Read/write/execute permission required.');
-      return;
-    }
-    activateEnvTab(tab);
+    return ENV_DEFAULT_SURFACE_ID;
   };
 
-  // If the user preferred Flower and the session has RWX, open it once after permissions load.
+  const resolveOpenSurfaceTarget = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions): EnvSurfaceId => {
+    if (surfaceId === 'ports' && isLocalMode()) {
+      if (options?.reason !== 'mode_restore') {
+        notify.error('Ports unavailable', 'Port forwards are only available for remote environments.');
+      }
+      return fallbackSurfaceFor(surfaceId);
+    }
+    if (surfaceId === 'ai' && !canUseFlower()) {
+      if (options?.reason !== 'mode_restore') {
+        notify.error(
+          env.state === 'ready' ? 'Permission denied' : 'Not ready',
+          env.state === 'ready'
+            ? 'Read/write/execute permission required.'
+            : 'Loading environment permissions...',
+        );
+      }
+      return fallbackSurfaceFor(surfaceId);
+    }
+    if (surfaceId === 'codex' && !canUseCodex()) {
+      if (options?.reason !== 'mode_restore') {
+        notify.error(
+          env.state === 'ready' ? 'Permission denied' : 'Not ready',
+          env.state === 'ready'
+            ? 'Read/write/execute permission required.'
+            : 'Loading environment permissions...',
+        );
+      }
+      return fallbackSurfaceFor(surfaceId);
+    }
+    return surfaceId;
+  };
+
+  const activateDeckSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
+    const widgetType = envDeckWidgetTypeForSurface(surfaceId);
+    const existingWidget = deck.activeLayout()?.widgets.find((widget) => widget.type === widgetType);
+    const widgetId = existingWidget?.id ?? deck.addWidget(widgetType);
+    setLastRequestedSurface(surfaceId);
+    setDeckSurfaceActivation({
+      requestId: createClientId(),
+      surfaceId,
+      widgetId,
+      focus: options?.focus ?? true,
+      ensureVisible: options?.ensureVisible ?? true,
+    });
+    setDeckSurfaceActivationSeq((n) => n + 1);
+  };
+
+  const setViewMode = (mode: EnvViewMode, options?: { surfaceId?: EnvSurfaceId; focusSurface?: boolean }) => {
+    const requestedMode = layout.isMobile() ? 'tab' : mode;
+    if (!layout.isMobile()) {
+      setDesktopViewMode(requestedMode);
+      persistDesktopViewMode(requestedMode);
+    }
+
+    const targetSurface = resolveOpenSurfaceTarget(options?.surfaceId ?? activeSurface(), { reason: 'mode_restore' });
+    setLastRequestedSurface(targetSurface);
+
+    if (requestedMode === 'tab') {
+      activateEnvTab(targetSurface, { persist: false });
+      return;
+    }
+    if (requestedMode === 'deck' && (options?.focusSurface ?? true)) {
+      activateDeckSurface(targetSurface, { reason: 'mode_restore', focus: true, ensureVisible: true });
+    }
+  };
+
+  const openSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
+    const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
+    setLastRequestedSurface(targetSurface);
+
+    if (viewMode() === 'deck') {
+      activateDeckSurface(targetSurface, options);
+      return;
+    }
+    if (viewMode() === 'infinite_map') {
+      setViewMode('tab', { surfaceId: targetSurface });
+      return;
+    }
+    activateEnvTab(targetSurface);
+  };
+
   createEffect(() => {
     if (!persistReady() || !pendingAutoOpenAI()) return;
     if (env.state === 'ready' && !canUseFlower()) {
@@ -1648,9 +1759,9 @@ export function EnvAppShell() {
       return;
     }
     if (!canUseFlower()) return;
-    if (initialTab && layout.sidebarActiveTab() !== initialTab) return;
+    if (initialTabSurface && layout.sidebarActiveTab() !== initialTabSurface) return;
     setPendingAutoOpenAI(false);
-    goTab('ai');
+    openSurface('ai', { reason: 'mode_restore', focus: true, ensureVisible: true });
   });
 
   createEffect(() => {
@@ -1660,9 +1771,9 @@ export function EnvAppShell() {
       return;
     }
     if (!canUseCodex()) return;
-    if (initialTab && layout.sidebarActiveTab() !== initialTab) return;
+    if (initialTabSurface && layout.sidebarActiveTab() !== initialTabSurface) return;
     setPendingAutoOpenCodex(false);
-    goTab('codex');
+    openSurface('codex', { reason: 'mode_restore', focus: true, ensureVisible: true });
   });
 
   createEffect(() => {
@@ -1672,19 +1783,16 @@ export function EnvAppShell() {
     flushPendingMainWindowAskFlowerComposerIntent();
   });
 
-  // Never keep the user on Flower when RWX is not granted.
   createEffect(() => {
     if (layout.sidebarActiveTab() !== 'ai') return;
     if (canUseFlower()) return;
-    const fallback = layout.isMobile() ? 'terminal' : 'deck';
-    activateEnvTab(fallback, { persist: false });
+    activateEnvTab(ENV_DEFAULT_SURFACE_ID, { persist: false });
   });
 
   createEffect(() => {
     if (layout.sidebarActiveTab() !== 'codex') return;
     if (canUseCodex()) return;
-    const fallback = layout.isMobile() ? 'terminal' : 'deck';
-    activateEnvTab(fallback, { persist: false });
+    activateEnvTab(ENV_DEFAULT_SURFACE_ID, { persist: false });
   });
 
   createEffect(() => {
@@ -1693,35 +1801,21 @@ export function EnvAppShell() {
     }
   });
 
-  // Keep a global (cross-env) active tab preference, independent from FloeProvider's per-env storage namespace.
-  // NOTE: On mobile, the "deck" tab is downgraded to "terminal"; skip persisting that one downgrade.
   createEffect(() => {
     if (!persistReady()) return;
     const id = layout.sidebarActiveTab();
-    const allowPorts = !isLocalMode();
-    const isKnown =
-      id === 'deck' ||
-      id === 'terminal' ||
-      id === 'monitor' ||
-      id === 'files' ||
-      id === 'codespaces' ||
-      (id === 'ai' && canUseFlower()) ||
-      (id === 'codex' && canUseCodex()) ||
-      (allowPorts && id === 'ports');
-    if (!isKnown) return;
-    if (skipPersistOnce) {
-      skipPersistOnce = false;
-      return;
+    if (!isEnvSurfaceId(id)) return;
+    if (id === 'ports' && isLocalMode()) return;
+    setLastTabSurface(id);
+    if (viewMode() === 'tab') {
+      setLastRequestedSurface(id);
     }
-    persistActiveTab(id as EnvNavTab);
+    persistActiveSurface(id);
   });
 
   const activityItems = (): ActivityBarItem[] => {
     const items: ActivityBarItem[] = [];
 
-    if (!layout.isMobile()) {
-      items.push({ id: 'deck', icon: LayoutDashboard, label: 'Deck', collapseBehavior: 'preserve' });
-    }
     items.push(
       { id: 'terminal', icon: Terminal, label: 'Terminal', collapseBehavior: 'preserve' },
       { id: 'monitor', icon: Activity, label: 'Monitoring', collapseBehavior: 'preserve' },
@@ -1734,7 +1828,6 @@ export function EnvAppShell() {
             onClick: () => {
               const active = layout.sidebarActiveTab() === 'files';
               if (!active) {
-                persistActiveTab('files');
                 layout.setSidebarActiveTab('files', { openSidebar: false });
                 setFilesMobileSidebarOpen(true);
                 return;
@@ -1768,7 +1861,7 @@ export function EnvAppShell() {
       if (item.onClick) {
         return item;
       }
-      const nextTab = item.id as EnvNavTab;
+      const nextTab = item.id as EnvSurfaceId;
       if (resolveEnvSidebarVisibilityMotion({
         currentTab: layout.sidebarActiveTab(),
         nextTab,
@@ -1781,22 +1874,6 @@ export function EnvAppShell() {
         onClick: () => activateEnvTab(nextTab),
       };
     });
-  };
-
-  const activityBottomItems = (): ActivityBarItem[] => {
-    const items: ActivityBarItem[] = [];
-    if (desktopShellBridgeAvailable()) {
-      items.push({
-        id: 'switch-environment',
-        icon: ArrowRightLeft,
-        label: 'Switch Environment',
-        onClick: () => {
-          void openConnectionCenter();
-        },
-      });
-    }
-    items.push({ id: 'settings', icon: Settings, label: 'Runtime Settings', onClick: () => openSettings() });
-    return items;
   };
 
   const envName = () => {
@@ -1829,13 +1906,31 @@ export function EnvAppShell() {
 
     const list: any[] = [
       {
-        id: 'redeven.env.goToDeck',
-        title: 'Go to Deck',
-        description: 'Open the deck view',
+        id: 'redeven.env.switchToDeck',
+        title: 'Switch to Deck Mode',
+        description: 'Open the deck workspace',
         category: 'Navigation',
         keybind: 'mod+shift+d',
         icon: LayoutDashboard,
-        execute: () => goTab('deck'),
+        execute: () => setViewMode('deck', { surfaceId: activeSurface(), focusSurface: true }),
+      },
+      {
+        id: 'redeven.env.switchToTabs',
+        title: 'Switch to Tab Mode',
+        description: 'Show the activity-bar workspace',
+        category: 'Navigation',
+        keybind: 'mod+shift+1',
+        icon: Terminal,
+        execute: () => setViewMode('tab', { surfaceId: lastTabSurface() }),
+      },
+      {
+        id: 'redeven.env.switchToInfiniteMap',
+        title: 'Switch to Infinite Map Mode',
+        description: 'Open the infinite-map placeholder',
+        category: 'Navigation',
+        keybind: 'mod+shift+2',
+        icon: Grid3x3,
+        execute: () => setViewMode('infinite_map', { surfaceId: activeSurface(), focusSurface: false }),
       },
       {
         id: 'redeven.env.goToTerminal',
@@ -1844,7 +1939,7 @@ export function EnvAppShell() {
         category: 'Navigation',
         keybind: 'mod+shift+t',
         icon: Terminal,
-        execute: () => goTab('terminal'),
+        execute: () => openSurface('terminal', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
       {
         id: 'redeven.env.goToMonitoring',
@@ -1853,7 +1948,7 @@ export function EnvAppShell() {
         category: 'Navigation',
         keybind: 'mod+shift+m',
         icon: Activity,
-        execute: () => goTab('monitor'),
+        execute: () => openSurface('monitor', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
       {
         id: 'redeven.env.goToFiles',
@@ -1862,7 +1957,7 @@ export function EnvAppShell() {
         category: 'Navigation',
         keybind: 'mod+shift+f',
         icon: Files,
-        execute: () => goTab('files'),
+        execute: () => openSurface('files', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
       {
         id: 'redeven.env.goToCodespaces',
@@ -1871,11 +1966,10 @@ export function EnvAppShell() {
         category: 'Navigation',
         keybind: 'mod+shift+c',
         icon: Code,
-        execute: () => goTab('codespaces'),
+        execute: () => openSurface('codespaces', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
     ];
 
-    // Local UI mode disables port forwarding entirely.
     if (!local) {
       list.push({
         id: 'redeven.env.goToPorts',
@@ -1884,7 +1978,19 @@ export function EnvAppShell() {
         category: 'Navigation',
         keybind: 'mod+shift+o',
         icon: Globe,
-        execute: () => goTab('ports'),
+        execute: () => openSurface('ports', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
+      });
+    }
+
+    if (canUseFlower()) {
+      list.push({
+        id: 'redeven.env.goToFlower',
+        title: 'Go to Flower',
+        description: 'Open Flower',
+        category: 'Navigation',
+        keybind: 'mod+shift+a',
+        icon: FlowerNavigationIcon,
+        execute: () => openSurface('ai', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       });
     }
 
@@ -1895,7 +2001,7 @@ export function EnvAppShell() {
       category: 'Navigation',
       keybind: 'mod+shift+x',
       icon: CodexNavigationIcon,
-      execute: () => goTab('codex'),
+      execute: () => openSurface('codex', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
     });
 
     const runDesktopShellCommand = async (
@@ -2208,6 +2314,69 @@ export function EnvAppShell() {
     closeBrowser: fileBrowserSurfaceController.closeSurface,
   } as const;
 
+  const availableDeckSurfaces = createMemo<EnvSurfaceId[]>(() => {
+    const surfaces: EnvSurfaceId[] = ['terminal', 'monitor', 'files', 'codespaces'];
+    if (!isLocalMode()) {
+      surfaces.push('ports');
+    }
+    if (canUseFlower()) {
+      surfaces.push('ai');
+    }
+    if (canUseCodex()) {
+      surfaces.push('codex');
+    }
+    return surfaces;
+  });
+
+  const topBarOverflowItems = createMemo(() => {
+    const items: Array<{ id: string; label: string; icon?: () => any; separator?: boolean }> = [];
+    if (desktopShellBridgeAvailable()) {
+      items.push({
+        id: 'switch-environment',
+        label: 'Switch Environment',
+        icon: ArrowRightLeft,
+      });
+    }
+    items.push({
+      id: 'runtime-settings',
+      label: 'Runtime Settings',
+      icon: Settings,
+    });
+    items.push({
+      id: 'reconnect-runtime',
+      label: reconnectLabel(),
+      icon: Refresh,
+    });
+    if (canViewAudit()) {
+      items.push({ id: 'divider-audit', label: '', separator: true });
+      items.push({
+        id: 'audit-log',
+        label: 'Audit Log',
+      });
+    }
+    return items;
+  });
+
+  const handleTopBarOverflowSelect = (id: string) => {
+    if (id === 'switch-environment') {
+      void openConnectionCenter();
+      return;
+    }
+    if (id === 'runtime-settings') {
+      openSettings();
+      return;
+    }
+    if (id === 'reconnect-runtime') {
+      if (!reconnectDisabled()) {
+        void triggerReconnect();
+      }
+      return;
+    }
+    if (id === 'audit-log' && canViewAudit()) {
+      setAuditOpen(true);
+    }
+  };
+
   const renderDetachedSurface = () => {
     const surface = detachedSurface();
     if (!surface) return null;
@@ -2223,12 +2392,14 @@ export function EnvAppShell() {
 
   const renderMainShell = () => (
     <Shell
-      sidebarMode="auto"
+      sidebarMode={viewMode() === 'tab' ? 'auto' : 'hidden'}
       slotClassNames={{
-        sidebar: sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
+        sidebar: viewMode() === 'tab' && sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
       }}
       sidebarContent={(activeTab) =>
-        activeTab === 'ai' && canUseFlower()
+        viewMode() !== 'tab'
+          ? <></>
+          : activeTab === 'ai' && canUseFlower()
           ? <AIChatSidebar />
           : activeTab === 'codex' && canUseCodex()
             ? <CodexSidebar />
@@ -2248,11 +2419,16 @@ export function EnvAppShell() {
           />
         </TopBarBrandButton>
       }
-      activityItems={activityItems()}
-      activityBottomItems={activityBottomItems()}
-      activityBottomItemsMobileMode="topBar"
+      activityItems={viewMode() === 'tab' ? activityItems() : []}
       topBarActions={
         <div class="flex items-center gap-1">
+          <Show when={!layout.isMobile()}>
+            <EnvTopBarModeSwitcher
+              value={viewMode()}
+              onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'tab' })}
+            />
+          </Show>
+          <EnvTopBarOverflowMenu items={topBarOverflowItems()} onSelect={handleTopBarOverflowSelect} />
           <TopBarIconButton
             label="Notes overlay"
             tooltip={topBarTooltip(`Notes overlay (${notesOverlayShortcutLabel()})`)}
@@ -2316,7 +2492,15 @@ export function EnvAppShell() {
             when={accessGateVisible()}
             fallback={
               <>
-                <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
+                <Show when={viewMode() === 'tab'}>
+                  <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
+                </Show>
+                <Show when={viewMode() === 'deck'}>
+                  <EnvDeckPage availableSurfaces={availableDeckSurfaces()} />
+                </Show>
+                <Show when={viewMode() === 'infinite_map'}>
+                  <EnvInfiniteMapPage />
+                </Show>
                 <NotesOverlay
                   open={notesOverlayOpen()}
                   onClose={closeNotesOverlay}
@@ -2362,7 +2546,15 @@ export function EnvAppShell() {
         connectError,
         connectionOverlayVisible,
         connectionOverlayMessage,
-        goTab,
+        viewMode,
+        setViewMode,
+        activeSurface,
+        lastTabSurface,
+        openSurface,
+        goTab: (surfaceId) => openSurface(surfaceId, { reason: 'direct_navigation', focus: true, ensureVisible: true }),
+        deckSurfaceActivationSeq,
+        deckSurfaceActivation,
+        consumeDeckSurfaceActivation,
         filesSidebarOpen: filesMobileSidebarOpen,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,
         toggleFilesSidebar: toggleFilesMobileSidebar,

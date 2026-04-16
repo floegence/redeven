@@ -53,6 +53,12 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     themePreset: () => undefined,
     setThemePreset: vi.fn(),
   }),
+  useDeck: () => ({
+    activeLayout: () => ({ widgets: [] }),
+    addWidget: vi.fn(() => 'widget-1'),
+    updateWidgetState: vi.fn(),
+    getWidgetState: () => ({}),
+  }),
   useWidgetRegistry: () => ({ registerAll: vi.fn() }),
 }));
 
@@ -67,10 +73,20 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   PanelContent: (props: any) => <div>{props.children}</div>,
   Shell: (props: any) => <div>{props.children}</div>,
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
+  TopBarIconButton: (props: any) => <button type="button" onClick={props.onClick}>{props.children}</button>,
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Dropdown: (props: any) => <>{props.trigger}</>,
+  SegmentedControl: (props: any) => (
+    <div>
+      {props.options?.map((option: any) => (
+        <button type="button" onClick={() => props.onChange?.(option.value)}>
+          {option.label}
+        </button>
+      ))}
+    </div>
+  ),
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
@@ -154,7 +170,8 @@ vi.mock('./accessResume', () => ({
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
-vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div /> }));
+vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div data-testid="deck-page" /> }));
+vi.mock('./pages/EnvInfiniteMapPage', () => ({ EnvInfiniteMapPage: () => <div data-testid="infinite-map-page" /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
@@ -264,9 +281,9 @@ describe('EnvAppShell update prompt orchestration', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushUntil(() => (host.textContent ?? '').includes('activity main'));
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="deck-page"]')));
 
-      expect(host.textContent).toContain('activity main');
+      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
       expect(connectMock).toHaveBeenCalled();
 
       latestDeferred.resolve({

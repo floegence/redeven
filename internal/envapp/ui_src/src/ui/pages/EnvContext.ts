@@ -1,8 +1,7 @@
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { AskFlowerIntent } from './askFlowerIntent';
-
-export type EnvNavTab = 'deck' | 'terminal' | 'monitor' | 'files' | 'codespaces' | 'ports' | 'ai' | 'codex';
+import type { EnvOpenSurfaceOptions, EnvSurfaceId, EnvViewMode } from '../envViewMode';
 
 export type EnvSettingsSection =
   | 'config'
@@ -22,10 +21,24 @@ export type AskFlowerComposerAnchor = {
   y: number;
 };
 
+export type SetEnvViewModeOptions = {
+  surfaceId?: EnvSurfaceId;
+  focusSurface?: boolean;
+};
+
+export type EnvDeckSurfaceActivationRequest = {
+  requestId: string;
+  surfaceId: EnvSurfaceId;
+  widgetId?: string;
+  focus?: boolean;
+  ensureVisible?: boolean;
+};
+
 export type OpenTerminalInDirectoryRequest = {
   requestId: string;
   workingDir: string;
   preferredName?: string;
+  targetMode: 'tab' | 'deck';
 };
 
 export type EnvContextValue = {
@@ -38,7 +51,15 @@ export type EnvContextValue = {
   connectionOverlayVisible: () => boolean;
   connectionOverlayMessage: () => string;
 
-  goTab: (tab: EnvNavTab) => void;
+  viewMode: () => EnvViewMode;
+  setViewMode: (mode: EnvViewMode, options?: SetEnvViewModeOptions) => void;
+  activeSurface: () => EnvSurfaceId;
+  lastTabSurface: () => EnvSurfaceId;
+  openSurface: (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => void;
+  goTab: (surfaceId: EnvSurfaceId) => void;
+  deckSurfaceActivationSeq: () => number;
+  deckSurfaceActivation: () => EnvDeckSurfaceActivationRequest | null;
+  consumeDeckSurfaceActivation: (requestId: string) => void;
   filesSidebarOpen: () => boolean;
   setFilesSidebarOpen: (open: boolean) => void;
   toggleFilesSidebar: () => void;

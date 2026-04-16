@@ -60,7 +60,7 @@ function buildFloeConfig() {
     deck: {
       storageKey: persistenceBinding.deckStorageKey,
       defaultActiveLayoutId: REDEVEN_DECK_LAYOUT_IDS.default,
-      presetsMode: 'immutable',
+      presetsMode: 'mutable',
       presets: redevenDeckPresets,
     },
   } as const;

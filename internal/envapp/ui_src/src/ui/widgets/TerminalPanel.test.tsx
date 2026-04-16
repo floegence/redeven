@@ -10,6 +10,10 @@ const layoutState = vi.hoisted(() => ({
   mobile: false,
 }));
 
+const widgetState = vi.hoisted(() => ({
+  currentWidgetId: null as string | null,
+}));
+
 const terminalPrefsState = vi.hoisted(() => ({
   userTheme: 'system',
   fontSize: 12,
@@ -192,7 +196,7 @@ const sessionsCoordinatorMocks = vi.hoisted(() => ({
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
-  useCurrentWidgetId: () => null,
+  useCurrentWidgetId: () => widgetState.currentWidgetId,
   useLayout: () => ({
     isMobile: () => layoutState.mobile,
   }),
@@ -630,6 +634,7 @@ describe('TerminalPanel', () => {
     terminalPrefsState.fontSize = 12;
     terminalPrefsState.fontFamilyId = 'iosevka';
     terminalPrefsState.mobileInputMode = 'floe';
+    widgetState.currentWidgetId = null;
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
     scrollLinesSpy.mockClear();
@@ -864,6 +869,51 @@ describe('TerminalPanel', () => {
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
     expect(handledSpy).toHaveBeenCalledWith('request-1');
     expect(host.textContent).toContain('repo');
+  });
+
+  it('ignores open-session requests that target a different container mode', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const handledSpy = vi.fn();
+
+    render(() => (
+      <TerminalPanel
+        variant="deck"
+        openSessionRequest={{
+          requestId: 'request-ignored',
+          workingDir: '/workspace/repo',
+          preferredName: 'repo',
+          targetMode: 'deck',
+        }}
+        onOpenSessionRequestHandled={handledSpy}
+      />
+    ), host);
+    await settleTerminalPanel();
+
+    expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalledWith('repo', '/workspace/repo');
+    expect(handledSpy).not.toHaveBeenCalledWith('request-ignored');
+
+    widgetState.currentWidgetId = 'widget-1';
+    sessionsCoordinatorMocks.createSession.mockClear();
+
+    const deckHost = document.createElement('div');
+    document.body.appendChild(deckHost);
+    render(() => (
+      <TerminalPanel
+        variant="deck"
+        openSessionRequest={{
+          requestId: 'request-deck',
+          workingDir: '/workspace/repo',
+          preferredName: 'repo',
+          targetMode: 'deck',
+        }}
+        onOpenSessionRequestHandled={handledSpy}
+      />
+    ), deckHost);
+    await settleTerminalPanel();
+
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
+    expect(handledSpy).toHaveBeenCalledWith('request-deck');
   });
 
   it('creates a new terminal session without sending a fixed 80x24 create size', async () => {

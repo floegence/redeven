@@ -61,6 +61,12 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     themePreset: () => undefined,
     setThemePreset: vi.fn(),
   }),
+  useDeck: () => ({
+    activeLayout: () => ({ widgets: [] }),
+    addWidget: vi.fn(() => 'widget-1'),
+    updateWidgetState: vi.fn(),
+    getWidgetState: () => ({}),
+  }),
   useWidgetRegistry: () => ({ registerAll: vi.fn() }),
 }));
 
@@ -80,6 +86,15 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Dropdown: (props: any) => <>{props.trigger}</>,
+  SegmentedControl: (props: any) => (
+    <div>
+      {props.options?.map((option: any) => (
+        <button type="button" onClick={() => props.onChange?.(option.value)}>
+          {option.label}
+        </button>
+      ))}
+    </div>
+  ),
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
@@ -162,6 +177,7 @@ vi.mock('./accessResume', () => ({
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
 vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div /> }));
+vi.mock('./pages/EnvInfiniteMapPage', () => ({ EnvInfiniteMapPage: () => <div /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
