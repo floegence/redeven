@@ -3797,6 +3797,8 @@ const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
   'max-h-[calc(100dvh-1rem)] w-[min(52rem,96vw)]',
 );
 
+const CONNECTION_DIALOG_CLASS = 'max-w-none w-[min(58rem,96vw)]';
+
 const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-md border border-border px-4 py-4';
 
 function accessModeIcon(mode: DesktopAccessMode): (props?: { class?: string }) => JSX.Element {
@@ -4301,6 +4303,7 @@ function ConnectionDialog(props: Readonly<{
       open={isOpen()}
       onOpenChange={props.onOpenChange}
       title={isCreate() ? 'New Environment' : 'Edit Environment'}
+      class={CONNECTION_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
