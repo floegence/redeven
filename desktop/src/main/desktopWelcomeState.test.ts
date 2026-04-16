@@ -452,7 +452,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 
-  it('projects local and remote sessions onto separate local-serve and provider cards', () => {
+  it('projects provider local-serve state onto the visible provider card while preserving the hidden local entry', () => {
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
     const localTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'local_host' });
     const remoteTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'remote_desktop' });
@@ -534,9 +534,13 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: managedControlPlane.id,
         kind: 'provider_environment',
+        open_local_session_key: localTarget.session_key,
         open_remote_session_key: remoteTarget.session_key,
         open_session_key: remoteTarget.session_key,
-        local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
+        local_ui_url: 'http://localhost:23998/',
+        provider_local_runtime_state: 'running_desktop',
+        provider_local_runtime_url: 'http://localhost:23998/',
+        provider_local_serve_state: 'open',
       }),
     ]));
   });

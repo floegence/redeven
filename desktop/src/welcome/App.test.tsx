@@ -207,7 +207,7 @@ describe('DesktopWelcomeShell', () => {
       }],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(5);
+    expect(environmentLibraryCount(snapshot)).toBe(4);
     expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
     expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
@@ -218,9 +218,9 @@ describe('DesktopWelcomeShell', () => {
         managed_environment_kind: 'local',
       }),
       expect.objectContaining({
-        id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-        category: 'managed',
-        managed_environment_kind: 'controlplane',
+        kind: 'provider_environment',
+        category: 'provider',
+        provider_local_serve_state: 'saved',
       }),
     ]);
     expect(filterEnvironmentLibrary(snapshot, 'stag')).toEqual([
@@ -323,11 +323,6 @@ describe('DesktopWelcomeShell', () => {
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     )).toEqual([
       expect.objectContaining({
-        id: providerLocalServe.id,
-        env_public_id: 'env_demo',
-      }),
-      expect.objectContaining({
-        id: providerLocalServe.id,
         kind: 'provider_environment',
         env_public_id: 'env_demo',
       }),
@@ -491,18 +486,20 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('EnvironmentStatusIndicator');
   });
 
-  it('renders one primary managed action button instead of a split route menu', () => {
+  it('renders a provider split action that keeps local serve primary and remote open in a dropdown', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('managedPrimaryAction');
-    expect(appSrc).not.toContain('function ManagedEnvironmentSplitActionButton');
-    expect(appSrc).not.toContain('data-redeven-split-action=""');
-    expect(appSrc).not.toContain('data-redeven-split-action-menu=""');
-    expect(appSrc).not.toContain('props.presentation.menu_button_label');
-    expect(styles).not.toContain('.redeven-split-action');
-    expect(styles).not.toContain('.redeven-split-menu');
-    expect(styles).not.toContain('.redeven-split-menu-item');
+    expect(appSrc).toContain('function EnvironmentSplitActionButton');
+    expect(appSrc).toContain('props.presentation.menu_button_label');
+    expect(appSrc).toContain('openProviderEnvironment');
+    expect(appSrc).toContain('stopManagedEnvironmentRuntime');
+    expect(appSrc).toContain("case 'stop':");
+    expect(appSrc).toContain('aria-label={props.presentation.menu_button_label}');
+    expect(styles).toContain('.redeven-split-action');
+    expect(styles).toContain('.redeven-split-action-toggle');
+    expect(styles).toContain('.redeven-split-menu');
+    expect(styles).toContain('.redeven-split-menu-item');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {
@@ -594,6 +591,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
     expect(appSrc).toContain('Local environments are created independently and are not bound directly to a provider environment.');
     expect(appSrc).toContain('Create a local serve runtime for this provider environment on this Mac.');
+    expect(appSrc).toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Control Plane URL.');
     expect(appSrc).toContain('Connect to another machine over SSH.');
@@ -638,7 +636,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('bindingResolution()');
     expect(appSrc).toContain('saveActionLabel');
     expect(appSrc).toContain('connectActionLabel');
-    expect(bindingResolutionSrc).toContain('Desktop will save a separate Local Serve card for the selected provider environment.');
+    expect(bindingResolutionSrc).toContain('Desktop will save local-serve settings for this provider environment on this device.');
+    expect(bindingResolutionSrc).toContain('The same provider environment card will keep both routes visible: local serve here, or open via Control Plane.');
     expect(bindingResolutionSrc).toContain('Desktop already manages a Local Serve for');
     expect(bindingResolutionSrc).toContain('Desktop cannot take over that Local Serve host from this launcher session.');
     expect(bindingResolutionSrc).toContain('Save & Focus');

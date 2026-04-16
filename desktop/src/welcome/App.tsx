@@ -5,6 +5,7 @@ import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-c
 import {
   AlertCircle,
   Check,
+  ChevronDown,
   Copy,
   Globe,
   Lock,
@@ -96,8 +97,10 @@ import {
   URL_ENVIRONMENT_LIBRARY_FILTER,
   splitPinnedEnvironmentEntries,
   type EnvironmentActionModel,
+  type EnvironmentActionMenuItemModel,
   type EnvironmentCardEndpointModel,
   type EnvironmentCardFactModel,
+  type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
   shouldUseSpaciousEnvironmentGrid,
   shellStatus,
@@ -177,6 +180,7 @@ type BusyAction =
   | 'open_managed_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
+  | 'stop_managed_environment_runtime'
   | 'start_control_plane_connect'
   | 'focus_environment_window'
   | 'open_managed_environment_settings'
@@ -1414,6 +1418,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
 
+  async function stopManagedEnvironmentRuntime(
+    environmentID: string,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    const result = await performLauncherAction({
+      kind: 'stop_managed_environment_runtime',
+      environment_id: environmentID,
+    }, errorTarget);
+    return result?.outcome === 'stopped_environment_runtime';
+  }
+
   async function openSSHEnvironment(
     details: DesktopSSHEnvironmentDetails,
     errorTarget: 'connect' | 'dialog' = 'connect',
@@ -1486,6 +1501,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           }
           openProviderLocalServeDialog(environment);
           return false;
+        }
+        return false;
+      case 'stop':
+        if (environment.kind === 'provider_environment' && environment.provider_local_serve_environment_id) {
+          return stopManagedEnvironmentRuntime(environment.provider_local_serve_environment_id, errorTarget);
+        }
+        if (environment.kind === 'managed_environment') {
+          return stopManagedEnvironmentRuntime(environment.id, errorTarget);
         }
         return false;
       case 'refresh_status':
@@ -2975,6 +2998,91 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
   );
 }
 
+function EnvironmentSplitActionButton(props: Readonly<{
+  presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
+  loading?: boolean;
+  onRunAction: (action: EnvironmentActionModel) => void;
+}>) {
+  const [menuOpen, setMenuOpen] = createSignal(false);
+  const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0);
+  let rootRef: HTMLDivElement | undefined;
+
+  const closeMenu = () => setMenuOpen(false);
+
+  createEffect(() => {
+    if (!menuOpen()) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !rootRef?.contains(target)) {
+        closeMenu();
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeMenu();
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
+  return (
+    <div ref={rootRef} class="redeven-split-action flex-1">
+      <Button
+        size="sm"
+        variant={props.presentation.primary_action.variant}
+        class={cn('min-w-0 flex-1', hasMenuActions() && 'rounded-r-none border-r-0')}
+        loading={props.loading}
+        disabled={!props.presentation.primary_action.enabled}
+        onClick={() => props.onRunAction(props.presentation.primary_action)}
+      >
+        {props.presentation.primary_action.label}
+      </Button>
+      <Show when={hasMenuActions()}>
+        <button
+          type="button"
+          class="redeven-split-action-toggle"
+          aria-label={props.presentation.menu_button_label}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen()}
+          disabled={props.loading}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', menuOpen() && 'rotate-180')} />
+        </button>
+      </Show>
+      <Show when={menuOpen() && hasMenuActions()}>
+        <div class="redeven-split-menu" role="menu" aria-label={props.presentation.menu_button_label}>
+          <For each={props.presentation.menu_actions}>
+            {(item: EnvironmentActionMenuItemModel) => (
+              <button
+                type="button"
+                role="menuitem"
+                class="redeven-split-menu-item"
+                disabled={!item.action.enabled}
+                onClick={() => {
+                  closeMenu();
+                  props.onRunAction(item.action);
+                }}
+              >
+                {item.label}
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 function QuickCreateConnectionCard(props: Readonly<{
   title: string;
   badge: string;
@@ -3035,7 +3143,24 @@ function EnvironmentConnectionCard(props: Readonly<{
       ? buildProviderBackedEnvironmentActionModel(props.environment)
       : null
   ));
-  const managedPrimaryAction = createMemo(() => managedActionModel()?.action_presentation.action ?? null);
+  const managedActionPresentation = createMemo(() => managedActionModel()?.action_presentation ?? null);
+  const managedPrimaryAction = createMemo(() => {
+    const presentation = managedActionPresentation();
+    if (!presentation) {
+      return null;
+    }
+    return presentation.kind === 'single_button'
+      ? presentation.action
+      : presentation.primary_action;
+  });
+  const managedSecondaryAction = createMemo(() => managedActionPresentation()?.secondary_action);
+  const isCardOpen = createMemo(() => (
+    props.environment.is_open
+    || (
+      props.environment.kind === 'provider_environment'
+      && props.environment.open_local_session_lifecycle === 'open'
+    )
+  ));
   const isEnvironmentActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
     || props.busyAction === 'open_remote_environment'
@@ -3043,6 +3168,10 @@ function EnvironmentConnectionCard(props: Readonly<{
     || props.busyAction === 'focus_environment_window'
     || props.busyAction === 'refresh_control_plane'
     || props.busyAction === 'start_control_plane_connect'
+    || props.busyAction === 'open_control_plane_environment'
+  ));
+  const isStopActionBusy = createMemo(() => (
+    props.busyAction === 'stop_managed_environment_runtime'
   ));
   const isPinBusy = createMemo(() => (
     props.busyAction === 'set_managed_environment_pinned'
@@ -3055,7 +3184,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     <Card class={cn(
       'redeven-environment-card h-full overflow-hidden border',
       'transition-[transform,border-color,box-shadow] duration-200',
-      props.environment.is_open
+      isCardOpen()
         ? 'redeven-environment-card--open'
         : 'border-border',
     )}>
@@ -3114,24 +3243,68 @@ function EnvironmentConnectionCard(props: Readonly<{
             </Button>
           )}
         >
+          {(() => {
+            const presentation = managedActionPresentation();
+            if (!presentation) {
+              return null;
+            }
+            if (presentation.kind === 'split_button') {
+              return (
+                <EnvironmentSplitActionButton
+                  presentation={presentation}
+                  loading={isEnvironmentActionBusy()}
+                  onRunAction={(action) => {
+                    void props.runManagedEnvironmentAction(
+                      props.environment,
+                      action,
+                      'connect',
+                    );
+                  }}
+                />
+              );
+            }
+            return (
+              <Button
+                size="sm"
+                variant={managedPrimaryAction()?.variant ?? 'default'}
+                class="flex-1"
+                loading={isEnvironmentActionBusy()}
+                disabled={!managedPrimaryAction()?.enabled}
+                onClick={() => {
+                  if (!managedPrimaryAction()) {
+                    return;
+                  }
+                  void props.runManagedEnvironmentAction(
+                    props.environment,
+                    managedPrimaryAction()!,
+                    'connect',
+                  );
+                }}
+              >
+                {managedPrimaryAction()?.label ?? 'Open'}
+              </Button>
+            );
+          })()}
+        </Show>
+        <Show when={managedSecondaryAction()}>
           <Button
             size="sm"
-            variant={managedPrimaryAction()?.variant ?? 'default'}
-            class="flex-1"
-            loading={isEnvironmentActionBusy()}
-            disabled={!managedPrimaryAction()?.enabled}
+            variant={managedSecondaryAction()?.variant ?? 'outline'}
+            class="shrink-0"
+            loading={isStopActionBusy()}
+            disabled={!managedSecondaryAction()?.enabled || isEnvironmentActionBusy()}
             onClick={() => {
-              if (!managedPrimaryAction()) {
+              if (!managedSecondaryAction()) {
                 return;
               }
               void props.runManagedEnvironmentAction(
                 props.environment,
-                managedPrimaryAction()!,
+                managedSecondaryAction()!,
                 'connect',
               );
             }}
           >
-            {managedPrimaryAction()?.label ?? 'Open'}
+            {managedSecondaryAction()?.label ?? 'Stop'}
           </Button>
         </Show>
         <div class="flex items-center gap-0.5">
@@ -4292,7 +4465,7 @@ function ConnectionDialog(props: Readonly<{
                   <div class="space-y-1">
                     <div class="text-xs font-medium text-foreground">Provider Environment</div>
                     <div class="text-[11px] leading-5 text-muted-foreground">
-                      This local serve will stay separate from the remote provider card and use the provider environment only as its runtime source.
+                      This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.
                     </div>
                   </div>
                   <div class="mt-3 grid gap-2 sm:grid-cols-2">
