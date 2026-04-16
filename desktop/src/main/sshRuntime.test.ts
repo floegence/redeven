@@ -23,16 +23,18 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('REDEVEN_INSTALL_MODE=upgrade');
     expect(buildManagedSSHStartScript()).toContain('--state-root "$state_root"');
     expect(buildManagedSSHStartScript()).toContain('--startup-report-file "$report_path"');
+    expect(buildManagedSSHStartScript()).toContain('instance_root="${install_root%/}/instances/${instance_id}"');
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'status=%s\\n' \"$probe_status\"");
-    expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${version_root}'}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`);
+    expect(buildManagedSSHRuntimeProbeScript()).toContain(`stamp_path="${'${release_root}'}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`);
     expect(buildManagedSSHRuntimeProbeScript()).toContain('runtime_release_tag=$release_tag');
     expect(buildManagedSSHUploadedInstallScript()).toContain('archive_path="$3"');
     expect(buildManagedSSHUploadedInstallScript()).toContain('uploaded Redeven archive did not contain redeven');
     expect(buildManagedSSHUploadedInstallScript()).toContain('write_runtime_stamp "desktop_upload"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('install_root="${XDG_CACHE_HOME:-$HOME/.cache}/redeven-desktop/runtime"');
+    expect(buildManagedSSHRemoteInstallScript()).toContain('release_root="${install_root%/}/releases/${release_tag}"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('if ! runtime_is_compatible; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('write_runtime_stamp "remote_install"');
-    expect(buildManagedSSHReportReadScript()).toContain('startup-report.json');
+    expect(buildManagedSSHReportReadScript()).toContain('instances/${instance_id}/sessions/${session_token}/startup-report.json');
   });
 
   it('parses structured probe results and normalizes reported release tags', () => {

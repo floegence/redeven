@@ -66,6 +66,7 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  createDesktopSSHEnvironmentInstanceID,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
   DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR_LABEL,
@@ -233,6 +234,7 @@ type SSHConnectionDialogState = Readonly<{
   remote_install_dir: string;
   bootstrap_strategy: DesktopSSHBootstrapStrategy;
   release_base_url: string;
+  environment_instance_id: string;
 }>;
 
 const LOCAL_UI_BIND_TOOLTIP_PATTERNS: ReadonlyArray<{
@@ -515,6 +517,8 @@ function createSSHConnectionDialogState(
     remote_install_dir: trimString(overrides.remote_install_dir),
     bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
     release_base_url: trimString(overrides.release_base_url),
+    environment_instance_id: trimString(overrides.environment_instance_id)
+      || (mode === 'create' ? createDesktopSSHEnvironmentInstanceID() : ''),
   };
 }
 
@@ -664,10 +668,10 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.focusEnvironmentURL',
         title: 'Connect Another Environment',
-        description: 'Open the New Environment dialog for a local environment, Redeven URL, or SSH target',
+        description: 'Open the New Environment dialog for a local environment, Redeven URL, or SSH host',
         category: 'Desktop',
         icon: Search,
-        execute: () => props.openCreateConnectionDialog('Create a Local Environment, enter a Redeven URL, or add an SSH target.'),
+        execute: () => props.openCreateConnectionDialog('Create a Local Environment, enter a Redeven URL, or add an SSH host.'),
       },
       {
         id: 'redeven.desktop.closeLauncherOrQuit',
@@ -1071,6 +1075,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           : (environment.ssh_details?.remote_install_dir ?? ''),
         bootstrap_strategy: environment.ssh_details?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
         release_base_url: environment.ssh_details?.release_base_url ?? '',
+        environment_instance_id: environment.ssh_details?.environment_instance_id ?? '',
       }));
     } else {
       setConnectionDialogState(createExternalURLConnectionDialogState('edit', {
@@ -1238,7 +1243,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -1447,6 +1452,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       remote_install_dir: details.remote_install_dir,
       bootstrap_strategy: details.bootstrap_strategy,
       release_base_url: details.release_base_url,
+      environment_instance_id: details.environment_instance_id,
     }, errorTarget);
     const opened = result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
     if (opened && errorTarget === 'dialog') {
@@ -1730,6 +1736,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: request.details.remote_install_dir,
         bootstrap_strategy: request.details.bootstrap_strategy,
         release_base_url: request.details.release_base_url,
+        environment_instance_id: request.details.environment_instance_id,
       });
       await refreshSnapshot();
       showActionToast(request.successMessage);
@@ -1863,6 +1870,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
           bootstrap_strategy: state.bootstrap_strategy,
           release_base_url: trimString(state.release_base_url),
+          environment_instance_id: trimString(state.environment_instance_id),
         },
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
@@ -1943,6 +1951,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: trimString(state.remote_install_dir) || DEFAULT_DESKTOP_SSH_REMOTE_INSTALL_DIR,
         bootstrap_strategy: state.bootstrap_strategy,
         release_base_url: trimString(state.release_base_url),
+        environment_instance_id: trimString(state.environment_instance_id),
       }, 'dialog');
       return;
     }
@@ -1998,6 +2007,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         remote_install_dir: details.remote_install_dir,
         bootstrap_strategy: details.bootstrap_strategy,
         release_base_url: details.release_base_url,
+        environment_instance_id: details.environment_instance_id,
       }, 'connect');
       if (result?.outcome === 'saved_environment') {
         showActionToast(successMessage);
@@ -2416,7 +2426,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     if (sshSourceCount() > 0) {
       options.push({
         value: SSH_ENVIRONMENT_LIBRARY_FILTER,
-        label: 'SSH',
+        label: 'SSH Host',
         count: sshSourceCount(),
       });
     }
@@ -4136,7 +4146,7 @@ function ConnectionDialog(props: Readonly<{
   bindingResolution: ManagedEnvironmentBindingResolutionView | null;
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url',
+    name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
     value: string,
   ) => void;
   switchKind: (kind: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
@@ -4209,7 +4219,7 @@ function ConnectionDialog(props: Readonly<{
           </>
         );
       case 'ssh_environment':
-        return 'Connect to another machine over SSH. Desktop can install the matching Redeven release on demand and tunnel its Local UI back to this desktop.';
+        return 'Deploy a Desktop-managed environment to a machine you can reach over SSH. Desktop reuses shared release artifacts on that host, but each Environment Instance stays isolated unless you explicitly reuse its Instance ID.';
       case 'managed_environment':
       default:
         return managedEnvironmentVariant() === 'provider_local_serve'
@@ -4292,7 +4302,7 @@ function ConnectionDialog(props: Readonly<{
               options={[
                 { value: 'managed_environment', label: 'Managed' },
                 { value: 'external_local_ui', label: 'Redeven URL' },
-                { value: 'ssh_environment', label: 'SSH' },
+                { value: 'ssh_environment', label: 'SSH Host' },
               ]}
               size="sm"
             />
@@ -4513,7 +4523,7 @@ function ConnectionDialog(props: Readonly<{
         <Show when={connectionKind() === 'ssh_environment'}>
           <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="text-xs leading-5 text-muted-foreground">
-              Desktop reuses only the exact Desktop-managed Redeven release, installs it on demand when needed, and tunnels its Local UI over SSH.
+              Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and keeps runtime state isolated per Environment Instance.
             </div>
             <div class="mt-3 space-y-3">
               <div class="space-y-1.5">
@@ -4571,7 +4581,7 @@ function ConnectionDialog(props: Readonly<{
                   <div>
                     <div class="text-xs font-medium text-foreground">Advanced</div>
                     <div class="mt-1 text-[11px] text-muted-foreground">
-                      Keep the default remote cache or pin a custom absolute install directory.
+                      Default behavior creates an isolated Environment Instance on that host. Reuse the same Instance ID only when you intentionally want another Desktop to attach the same remote environment state.
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -4581,6 +4591,21 @@ function ConnectionDialog(props: Readonly<{
                 <Show when={showSSHAdvanced()}>
                   <div class="border-t border-border/70 px-3 py-3">
                     <div class="space-y-3">
+                      <div class="space-y-1.5">
+                        <label for="environment-ssh-instance-id" class="block text-xs font-medium text-foreground">Environment Instance ID</label>
+                        <Input
+                          id="environment-ssh-instance-id"
+                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.environment_instance_id : ''}
+                          onInput={(event) => props.updateField('environment_instance_id', event.currentTarget.value)}
+                          placeholder="envinst_..."
+                          size="sm"
+                          class="w-full font-mono"
+                          spellcheck={false}
+                        />
+                        <div class="text-[11px] text-muted-foreground">
+                          Desktop generates a new isolated instance by default. Use the same ID on another Desktop only when you intentionally want to open the same remote environment state.
+                        </div>
+                      </div>
                       <div class="space-y-1.5">
                         <label for="environment-ssh-install-dir" class="block text-xs font-medium text-foreground">Remote Install Directory</label>
                         <Input
