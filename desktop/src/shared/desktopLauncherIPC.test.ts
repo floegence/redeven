@@ -23,6 +23,13 @@ describe('desktopLauncherIPC', () => {
       kind: 'open_managed_environment_settings',
       environment_id: 'local:default',
     });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'stop_managed_environment_runtime',
+      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+    })).toEqual({
+      kind: 'stop_managed_environment_runtime',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+    });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'close_launcher_or_quit' })).toEqual({ kind: 'close_launcher_or_quit' });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_managed_environment',
@@ -219,6 +226,7 @@ describe('desktopLauncherIPC', () => {
   it('rejects unsupported or incomplete launcher actions', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_advanced_settings' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_managed_environment' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_managed_environment_runtime', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_provider_local_serve',

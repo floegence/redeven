@@ -202,9 +202,10 @@ describe('buildEnvironmentCardModel', () => {
     }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
-      status_label: 'Ready',
+      status_label: 'Open',
       source_label: 'Control Plane',
-      target_primary: 'https://cp.example.invalid/env/env_demo',
+      target_primary: 'http://127.0.0.1:24001/',
+      target_secondary: 'https://cp.example.invalid/env/env_demo',
     }));
     expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Redeven URL',
@@ -232,8 +233,8 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('CONTROL PLANE', 'Demo Portal'),
-      defaultFact('STATUS', 'online · active'),
-      defaultFact('LOCAL SERVE', 'Open in Desktop'),
+      defaultFact('REMOTE', 'online · active'),
+      defaultFact('LOCAL SERVE', 'Running in Desktop'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('SOURCE', 'Saved'),
@@ -260,6 +261,12 @@ describe('buildEnvironmentCardModel', () => {
       },
     ]);
     expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
+      {
+        label: 'LOCAL',
+        value: 'http://127.0.0.1:24001/',
+        monospace: true,
+        copy_label: 'Copy local endpoint',
+      },
       {
         label: 'REMOTE',
         value: 'https://cp.example.invalid/env/env_demo',
@@ -316,7 +323,7 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [controlPlane],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(5);
+    expect(environmentLibraryCount(snapshot)).toBe(4);
     expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
     expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
     expect(environmentLibraryCount(snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
@@ -327,7 +334,6 @@ describe('buildEnvironmentCardModel', () => {
       '',
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     ).map((environment) => environment.id)).toEqual([
-      localServe.id,
       'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
     ]);
   });
@@ -350,13 +356,26 @@ describe('buildEnvironmentCardModel', () => {
       status_label: 'Offline',
       status_tone: 'warning',
       action_presentation: {
-        kind: 'single_button',
-        action: {
+        kind: 'split_button',
+        primary_action: {
           intent: 'serve_runtime',
-          label: 'Serve Runtime',
+          label: 'Serve Local…',
           enabled: true,
           variant: 'default',
         },
+        menu_button_label: 'Choose environment route',
+        menu_actions: [{
+          id: 'remote_route',
+          label: 'Check Remote Status',
+          action: {
+            intent: 'check_status',
+            label: 'Check Remote Status',
+            enabled: true,
+            variant: 'outline',
+            route: 'remote_desktop',
+          },
+        }],
+        secondary_action: undefined,
       },
     });
 
@@ -372,16 +391,29 @@ describe('buildEnvironmentCardModel', () => {
     const savedLocalServeProviderEntry = savedLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(savedLocalServeProviderEntry?.provider_local_serve_state).toBe('saved');
     expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual({
-      status_label: 'Offline',
-      status_tone: 'warning',
+      status_label: 'Local Ready',
+      status_tone: 'primary',
       action_presentation: {
-        kind: 'single_button',
-        action: {
+        kind: 'split_button',
+        primary_action: {
           intent: 'serve_runtime',
           label: 'Open Local Serve',
           enabled: true,
           variant: 'default',
         },
+        menu_button_label: 'Choose environment route',
+        menu_actions: [{
+          id: 'remote_route',
+          label: 'Check Remote Status',
+          action: {
+            intent: 'check_status',
+            label: 'Check Remote Status',
+            enabled: true,
+            variant: 'outline',
+            route: 'remote_desktop',
+          },
+        }],
+        secondary_action: undefined,
       },
     });
 
@@ -397,15 +429,33 @@ describe('buildEnvironmentCardModel', () => {
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(openLocalServeProviderEntry?.provider_local_serve_state).toBe('open');
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
-      status_label: 'Offline',
-      status_tone: 'warning',
+      status_label: 'Open',
+      status_tone: 'success',
       action_presentation: {
-        kind: 'single_button',
-        action: {
+        kind: 'split_button',
+        primary_action: {
           intent: 'serve_runtime',
           label: 'Focus Local Serve',
           enabled: true,
           variant: 'default',
+        },
+        menu_button_label: 'Choose environment route',
+        menu_actions: [{
+          id: 'remote_route',
+          label: 'Check Remote Status',
+          action: {
+            intent: 'check_status',
+            label: 'Check Remote Status',
+            enabled: true,
+            variant: 'outline',
+            route: 'remote_desktop',
+          },
+        }],
+        secondary_action: {
+          intent: 'stop',
+          label: 'Stop',
+          enabled: true,
+          variant: 'outline',
         },
       },
     });
@@ -425,34 +475,76 @@ describe('buildEnvironmentCardModel', () => {
       status_label: 'Ready',
       status_tone: 'primary',
       action_presentation: {
-        kind: 'single_button',
-        action: {
+        kind: 'split_button',
+        primary_action: {
           intent: 'open',
           label: 'Open Remote',
           enabled: true,
           variant: 'outline',
           route: 'remote_desktop',
         },
+        menu_button_label: 'Choose environment route',
+        menu_actions: [{
+          id: 'local_serve',
+          label: 'Serve Local…',
+          action: {
+            intent: 'serve_runtime',
+            label: 'Serve Local…',
+            enabled: true,
+            variant: 'default',
+          },
+        }],
+        secondary_action: undefined,
       },
     });
 
     expect(buildProviderBackedEnvironmentActionModel({
       ...readyEntry!,
       remote_route_state: 'stale',
-    }).action_presentation.action).toEqual({
-      intent: 'refresh_status',
-      label: 'Refresh Status',
-      enabled: true,
-      variant: 'outline',
+    }).action_presentation).toEqual({
+      kind: 'split_button',
+      primary_action: {
+        intent: 'refresh_status',
+        label: 'Refresh Status',
+        enabled: true,
+        variant: 'outline',
+      },
+      menu_button_label: 'Choose environment route',
+      menu_actions: [{
+        id: 'local_serve',
+        label: 'Serve Local…',
+        action: {
+          intent: 'serve_runtime',
+          label: 'Serve Local…',
+          enabled: true,
+          variant: 'default',
+        },
+      }],
+      secondary_action: undefined,
     });
     expect(buildProviderBackedEnvironmentActionModel({
       ...readyEntry!,
       remote_route_state: 'auth_required',
-    }).action_presentation.action).toEqual({
-      intent: 'reconnect_provider',
-      label: 'Reconnect',
-      enabled: true,
-      variant: 'outline',
+    }).action_presentation).toEqual({
+      kind: 'split_button',
+      primary_action: {
+        intent: 'reconnect_provider',
+        label: 'Reconnect',
+        enabled: true,
+        variant: 'outline',
+      },
+      menu_button_label: 'Choose environment route',
+      menu_actions: [{
+        id: 'local_serve',
+        label: 'Serve Local…',
+        action: {
+          intent: 'serve_runtime',
+          label: 'Serve Local…',
+          enabled: true,
+          variant: 'default',
+        },
+      }],
+      secondary_action: undefined,
     });
   });
 

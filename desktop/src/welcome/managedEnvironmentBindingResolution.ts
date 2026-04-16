@@ -149,8 +149,8 @@ export function describeManagedEnvironmentBindingResolution(
       return {
         tone: 'primary',
         title: 'This provider environment is ready for local serve.',
-        description: 'Desktop will save a separate Local Serve card for the selected provider environment.',
-        detail: 'The remote provider card stays remote-first, and this local serve owns only the on-device runtime state.',
+        description: 'Desktop will save local-serve settings for this provider environment on this device.',
+        detail: 'The same provider environment card will keep both routes visible: local serve here, or open via Control Plane.',
         save_label: defaultSaveLabel,
         connect_label: defaultConnectLabel,
         save_disabled: false,
@@ -163,7 +163,7 @@ export function describeManagedEnvironmentBindingResolution(
         description: `Desktop will keep using "${existingLabel}" and update its local hosting settings in place.`,
         detail: resolution.existing_entry?.is_open
           ? 'That local serve is already open, so Serve Now will focus the existing window after saving.'
-          : 'Desktop will keep one stable local-serve card instead of creating a duplicate.',
+          : 'Desktop will keep one stable local-serve configuration for this provider environment instead of creating a duplicate.',
         save_label: options.isCreate ? 'Save' : 'Update',
         connect_label: resolution.existing_entry?.is_open ? 'Save & Focus' : defaultConnectLabel,
         save_disabled: false,
@@ -173,7 +173,7 @@ export function describeManagedEnvironmentBindingResolution(
       return {
         tone: 'success',
         title: `This provider Local Serve is already open as "${existingLabel}".`,
-        description: 'Desktop will reuse that existing local-serve card instead of creating a duplicate.',
+        description: 'Desktop will reuse that existing local-serve configuration instead of creating a duplicate.',
         detail: 'Serve Now will focus the existing window after saving.',
         save_label: 'Save & Reuse',
         connect_label: 'Save & Focus',
@@ -195,7 +195,7 @@ export function describeManagedEnvironmentBindingResolution(
       return {
         tone: 'success',
         title: `Desktop already manages a Local Serve for "${existingLabel}".`,
-        description: 'Saving here will reuse that existing local-serve card instead of creating a second one.',
+        description: 'Saving here will reuse that existing local-serve configuration instead of creating a second one.',
         detail: 'Desktop will not create another local host on this device for the same provider environment.',
         save_label: 'Save & Reuse',
         connect_label: defaultConnectLabel,
@@ -218,7 +218,7 @@ export function describeManagedEnvironmentBindingResolution(
       return {
         tone: 'success',
         title: `This provider environment already has a Local Serve named "${existingLabel}".`,
-        description: 'Desktop will reuse that local-serve card instead of creating a duplicate.',
+        description: 'Desktop will reuse that local-serve configuration instead of creating a duplicate.',
         detail: 'Saving here keeps one stable on-device local serve for this provider environment.',
         save_label: 'Save & Reuse',
         connect_label: defaultConnectLabel,

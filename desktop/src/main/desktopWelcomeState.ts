@@ -632,6 +632,21 @@ function buildProviderEnvironmentEntry(
   const localServeSessions: Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>> = localServeEnvironment
     ? openSessionsByManagedEnvironment(openSessions, localServeEnvironment)
     : {};
+  const localServeSession = localServeSessions.local_host ?? null;
+  const localServeAccess = localServeEnvironment ? managedEnvironmentLocalAccess(localServeEnvironment) : null;
+  const localServeRuntimeState = localServeEnvironment
+    ? managedLocalRuntimeState(localServeEnvironment, localServeSession)
+    : 'not_running';
+  const localServeRuntimeURL = localServeEnvironment
+    ? managedLocalRuntimeURL(localServeEnvironment, localServeSession)
+    : '';
+  const localServeCloseBehavior = localServeEnvironment
+    ? managedLocalCloseBehavior(localServeEnvironment, localServeRuntimeState)
+    : 'not_applicable';
+  const localServeSessionOpen = sessionIsOpen(localServeSession);
+  const remoteSessionOpen = sessionIsOpen(remoteSession);
+  const localServeSessionOpening = sessionIsOpening(localServeSession);
+  const remoteSessionOpening = sessionIsOpening(remoteSession);
   return {
     id: desktopManagedControlPlaneEnvironmentID(
       controlPlane.provider.provider_origin,
@@ -639,9 +654,21 @@ function buildProviderEnvironmentEntry(
     ),
     kind: 'provider_environment',
     label: providerEnvironment.label,
-    local_ui_url: remoteSession?.entry_url ?? remoteSession?.startup?.local_ui_url ?? providerEnvironment.environment_url ?? '',
+    local_ui_url: localServeRuntimeURL
+      || remoteSession?.entry_url
+      || remoteSession?.startup?.local_ui_url
+      || providerEnvironment.environment_url
+      || '',
     secondary_text: providerEnvironment.environment_url
       || [controlPlane.display_label, providerEnvironment.env_public_id].filter(Boolean).join(' / '),
+    open_local_session_key: localServeSession?.session_key,
+    open_local_session_lifecycle: sessionLifecycle(localServeSession),
+    provider_local_ui_bind: localServeAccess?.local_ui_bind,
+    provider_local_ui_password_configured: localServeAccess?.local_ui_password_configured,
+    provider_local_owner: localServeEnvironment?.local_hosting?.owner,
+    provider_local_runtime_state: localServeRuntimeState,
+    provider_local_runtime_url: localServeRuntimeURL || undefined,
+    provider_local_close_behavior: localServeCloseBehavior,
     provider_origin: controlPlane.provider.provider_origin,
     provider_id: controlPlane.provider.provider_id,
     env_public_id: providerEnvironment.env_public_id,
@@ -655,25 +682,27 @@ function buildProviderEnvironmentEntry(
     remote_state_reason: remoteStateReason,
     provider_local_serve_environment_id: localServeEnvironment?.id,
     provider_local_serve_state: localServeEnvironment
-      ? sessionIsOpen(localServeSessions.local_host ?? null)
+      ? localServeSessionOpen
         ? 'open'
-        : sessionIsOpening(localServeSessions.local_host ?? null)
+        : localServeSessionOpening
           ? 'opening'
           : 'saved'
       : 'absent',
     pinned: preference?.pinned ?? false,
     control_plane_label: controlPlane.display_label,
-    tag: sessionIsOpen(remoteSession) ? 'Open' : 'Managed',
+    tag: localServeSessionOpen || remoteSessionOpen ? 'Open' : 'Managed',
     category: 'provider',
-    is_open: sessionIsOpen(remoteSession),
-    is_opening: sessionIsOpening(remoteSession),
+    is_open: localServeSessionOpen || remoteSessionOpen,
+    is_opening: localServeSessionOpening || remoteSessionOpening,
     open_remote_session_key: remoteSession?.session_key,
     open_remote_session_lifecycle: sessionLifecycle(remoteSession),
-    open_session_key: remoteSession?.session_key ?? '',
-    open_session_lifecycle: sessionLifecycle(remoteSession),
-    open_action_label: sessionIsOpen(remoteSession)
+    open_session_key: remoteSession?.session_key ?? localServeSession?.session_key ?? '',
+    open_session_lifecycle: sessionLifecycle(remoteSession ?? localServeSession),
+    open_action_label: localServeSessionOpen
       ? 'Focus'
-      : sessionIsOpening(remoteSession)
+      : sessionIsOpen(remoteSession)
+      ? 'Focus'
+      : localServeSessionOpening || sessionIsOpening(remoteSession)
         ? 'Opening…'
         : 'Open',
     can_edit: false,

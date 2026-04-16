@@ -29,6 +29,7 @@ export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
+  | 'stopped_environment_runtime'
   | 'opened_utility_window'
   | 'focused_utility_window'
   | 'started_control_plane_connect'
@@ -60,6 +61,7 @@ export type DesktopLauncherActionKind =
   | 'open_managed_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
+  | 'stop_managed_environment_runtime'
   | 'start_control_plane_connect'
   | 'set_managed_environment_pinned'
   | 'set_provider_environment_pinned'
@@ -121,6 +123,12 @@ export type DesktopEnvironmentEntry = Readonly<{
   open_local_session_lifecycle?: DesktopLauncherSessionLifecycle;
   open_remote_session_key?: string;
   open_remote_session_lifecycle?: DesktopLauncherSessionLifecycle;
+  provider_local_ui_bind?: string;
+  provider_local_ui_password_configured?: boolean;
+  provider_local_owner?: 'desktop' | 'agent' | 'unknown';
+  provider_local_runtime_state?: DesktopManagedLocalRuntimeState;
+  provider_local_runtime_url?: string;
+  provider_local_close_behavior?: DesktopManagedLocalCloseBehavior;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -180,6 +188,10 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id?: string;
       label?: string;
     } & DesktopSSHEnvironmentDetails)
+  | {
+      kind: 'stop_managed_environment_runtime';
+      environment_id: string;
+    }
   | {
       kind: 'start_control_plane_connect';
       provider_origin: string;
@@ -350,6 +362,16 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
               })(),
             }
           : {}),
+      };
+    }
+    case 'stop_managed_environment_runtime': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
       };
     }
     case 'open_remote_environment':

@@ -3369,6 +3369,62 @@ async function deleteManagedEnvironmentFromWelcome(environmentID: string): Promi
   await deleteManagedEnvironmentStateDir(result.deleted_state_dir);
 }
 
+async function stopManagedEnvironmentRuntimeFromWelcome(
+  environmentID: string,
+): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  const environment = findManagedEnvironmentByID(preferences, environmentID);
+  if (!environment || !environment.local_hosting) {
+    return launcherActionFailure(
+      'environment_missing',
+      'environment',
+      'This local serve is no longer available on this device.',
+      {
+        environmentID,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+
+  const liveLocalSession = [...sessionsByKey.values()].find((sessionRecord) => (
+    !sessionRecord.closing
+    && sessionRecord.target.kind === 'managed_environment'
+    && sessionRecord.target.environment_id === environmentID
+    && sessionRecord.target.route === 'local_host'
+  )) ?? null;
+  if (!liveLocalSession) {
+    return launcherActionFailure(
+      'action_invalid',
+      'environment',
+      'Local Serve is not currently running in Desktop.',
+      {
+        environmentID,
+      },
+    );
+  }
+
+  if (
+    !liveLocalSession.runtime_handle
+    || liveLocalSession.runtime_handle.runtime_kind !== 'managed_environment'
+    || liveLocalSession.runtime_handle.lifecycle_owner !== 'desktop'
+  ) {
+    return launcherActionFailure(
+      'action_invalid',
+      'environment',
+      'This local serve is managed by another Redeven host process on this device. Stop it from that host process instead.',
+      {
+        environmentID,
+      },
+    );
+  }
+
+  await finalizeSessionClosure(liveLocalSession.session_key);
+  resetLauncherIssueState();
+  return launcherActionSuccess('stopped_environment_runtime', {
+    sessionKey: liveLocalSession.session_key,
+  });
+}
+
 function hasLiveManagedEnvironmentSession(environmentID: string): boolean {
   const cleanEnvironmentID = String(environmentID ?? '').trim();
   if (cleanEnvironmentID === '') {
@@ -3412,6 +3468,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return openRemoteEnvironmentFromLauncher(request);
     case 'open_ssh_environment':
       return openSSHEnvironmentFromLauncher(request);
+    case 'stop_managed_environment_runtime':
+      return stopManagedEnvironmentRuntimeFromWelcome(request.environment_id);
     case 'start_control_plane_connect':
       return startControlPlaneConnectFromLauncher(request);
     case 'set_managed_environment_pinned':
