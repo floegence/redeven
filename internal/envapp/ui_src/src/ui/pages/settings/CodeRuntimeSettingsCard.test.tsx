@@ -36,6 +36,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
 }));
 
+vi.mock('../../primitives/Tooltip', () => ({
+  Tooltip: (props: any) => (
+    <div data-testid="tooltip" data-content={String(props.content ?? '')}>
+      {props.children}
+    </div>
+  ),
+}));
+
 vi.mock('./SettingsPrimitives', () => ({
   SettingsCard: (props: any) => (
     <section>
@@ -155,8 +163,19 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).toContain('Installed on this machine');
     expect(host.textContent).toContain('Pinned to this environment');
     expect(host.textContent).toContain('Shared runtime root');
+    expect(host.textContent).toContain('Refresh');
+    expect(host.textContent).toContain('Unpin');
+    expect(host.textContent).toContain('Install latest');
+    expect(host.textContent).not.toContain('Refresh runtime');
+    expect(host.textContent).not.toContain('Remove from current environment');
+    expect(host.textContent).not.toContain('Install latest and use for this environment');
     expect(host.textContent).toContain('Use for this environment');
     expect(host.textContent).toContain('Set as default for new environments');
+
+    const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
+    expect(tooltipContents).toContain('Re-scan the machine inventory and the active runtime used by this environment.');
+    expect(tooltipContents).toContain('Remove this environment-specific runtime pin. The environment falls back to the machine default when one is configured.');
+    expect(tooltipContents).toContain('Install the latest stable managed code-server on this machine, then pin this environment to it.');
   });
 
   it('shows an empty-state warning when no managed versions are installed on this machine', () => {
@@ -189,13 +208,14 @@ describe('CodeRuntimeSettingsCard', () => {
     const onInstall = vi.fn(async () => undefined);
     renderCard(host, { onInstall });
 
-    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install latest and use for this environment');
+    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install latest');
     installButton?.click();
 
+    expect(host.textContent).toContain('Install latest runtime');
     expect(host.textContent).toContain('Redeven will install the latest stable managed code-server runtime');
     expect(host.textContent).toContain('This does not automatically switch other environments');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Install latest and use for this environment').at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Install latest').at(-1);
     confirmButton?.click();
 
     expect(onInstall).toHaveBeenCalledTimes(1);
@@ -205,13 +225,14 @@ describe('CodeRuntimeSettingsCard', () => {
     const onDetach = vi.fn(async () => undefined);
     renderCard(host, { onDetach });
 
-    const detachButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Remove from current environment');
+    const detachButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Unpin');
     detachButton?.click();
 
+    expect(host.textContent).toContain('Unpin environment');
     expect(host.textContent).toContain('This environment will stop using its pinned managed version.');
     expect(host.textContent).toContain('No machine-managed version files are deleted by this action.');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Remove from current environment').at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Unpin').at(-1);
     confirmButton?.click();
 
     expect(onDetach).toHaveBeenCalledTimes(1);

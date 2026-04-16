@@ -3,7 +3,6 @@ import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 
 import {
-  codeRuntimeManagedActionLabel,
   codeRuntimeOperationCancelled,
   codeRuntimeOperationFailed,
   codeRuntimeOperationNeedsAttention,
@@ -13,6 +12,7 @@ import {
   type CodeRuntimeInstalledVersion,
   type CodeRuntimeStatus,
 } from '../../services/codeRuntimeApi';
+import { Tooltip } from '../../primitives/Tooltip';
 import { SettingsCard, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
 
 type RuntimeDetailRow = Readonly<{
@@ -84,6 +84,16 @@ function RuntimeDetailsTableSection(props: { title: string; rows: readonly Runti
       <div class="text-sm font-semibold text-foreground">{props.title}</div>
       <SettingsKeyValueTable rows={props.rows} minWidthClass="min-w-[40rem]" />
     </div>
+  );
+}
+
+function ActionButtonTooltip(props: { content: string; disabled?: boolean; children: JSX.Element }) {
+  return (
+    <Tooltip content={props.content} placement="top" delay={0}>
+      <span class={props.disabled ? 'inline-flex cursor-not-allowed' : 'inline-flex cursor-pointer'}>
+        {props.children}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -189,6 +199,14 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const operationNeedsAttention = createMemo(() => codeRuntimeOperationNeedsAttention(props.status));
   const installedVersions = createMemo(() => props.status?.installed_versions ?? []);
   const activeRuntime = createMemo(() => props.status?.active_runtime);
+  const refreshActionLabel = () => 'Refresh';
+  const refreshActionTooltip = () => 'Re-scan the machine inventory and the active runtime used by this environment.';
+  const installActionLabel = () => 'Install latest';
+  const installActionTooltip = () => 'Install the latest stable managed code-server on this machine, then pin this environment to it.';
+  const detachActionLabel = () => 'Unpin';
+  const detachActionTooltip = () => 'Remove this environment-specific runtime pin. The environment falls back to the machine default when one is configured.';
+  const cancelActionLabel = () => 'Cancel';
+  const cancelActionTooltip = () => 'Cancel the current managed runtime install.';
 
   const currentEnvironmentRows = createMemo<readonly RuntimeDetailRow[]>(() => {
     const active = activeRuntime();
@@ -318,36 +336,53 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         error={props.error}
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
-              <RefreshIcon class="mr-2 h-4 w-4" />
-              {props.loading ? 'Refreshing...' : 'Refresh runtime'}
-            </Button>
+            <ActionButtonTooltip content={refreshActionTooltip()} disabled={props.loading}>
+              <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
+                <RefreshIcon class="mr-2 h-4 w-4" />
+                {props.loading ? 'Refreshing...' : refreshActionLabel()}
+              </Button>
+            </ActionButtonTooltip>
             <Show
               when={operationRunning()}
               fallback={
                 <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setDetachConfirmOpen(true)}
+                  <ActionButtonTooltip
+                    content={detachActionTooltip()}
                     disabled={!props.canInteract || !props.canManage || !canDetach() || props.detachLoading}
                   >
-                    {props.detachLoading ? 'Removing...' : 'Remove from current environment'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={() => setInstallConfirmOpen(true)}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setDetachConfirmOpen(true)}
+                      disabled={!props.canInteract || !props.canManage || !canDetach() || props.detachLoading}
+                    >
+                      {props.detachLoading ? 'Unpinning...' : detachActionLabel()}
+                    </Button>
+                  </ActionButtonTooltip>
+                  <ActionButtonTooltip
+                    content={installActionTooltip()}
                     disabled={!props.canInteract || !props.canManage || props.actionLoading}
                   >
-                    {props.actionLoading ? 'Starting...' : codeRuntimeManagedActionLabel(props.status)}
-                  </Button>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => setInstallConfirmOpen(true)}
+                      disabled={!props.canInteract || !props.canManage || props.actionLoading}
+                    >
+                      {props.actionLoading ? 'Starting...' : installActionLabel()}
+                    </Button>
+                  </ActionButtonTooltip>
                 </>
               }
             >
-              <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
-                {props.cancelLoading ? 'Cancelling...' : 'Cancel install'}
-              </Button>
+              <ActionButtonTooltip
+                content={cancelActionTooltip()}
+                disabled={!props.canInteract || !props.canManage || props.cancelLoading}
+              >
+                <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
+                  {props.cancelLoading ? 'Cancelling...' : cancelActionLabel()}
+                </Button>
+              </ActionButtonTooltip>
             </Show>
           </>
         }
@@ -421,8 +456,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <ConfirmDialog
         open={installConfirmOpen()}
         onOpenChange={(open) => setInstallConfirmOpen(open)}
-        title={codeRuntimeManagedActionLabel(props.status)}
-        confirmText={codeRuntimeManagedActionLabel(props.status)}
+        title="Install latest runtime"
+        confirmText={installActionLabel()}
         loading={props.actionLoading}
         onConfirm={() => void confirmInstall()}
       >
@@ -440,8 +475,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <ConfirmDialog
         open={detachConfirmOpen()}
         onOpenChange={(open) => setDetachConfirmOpen(open)}
-        title="Remove from current environment"
-        confirmText="Remove from current environment"
+        title="Unpin environment"
+        confirmText={detachActionLabel()}
         loading={props.detachLoading}
         onConfirm={() => void confirmDetach()}
       >
