@@ -31,6 +31,7 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(typeof bridge.openWindow).toBe('function');
     expect(typeof bridge.performWindowCommand).toBe('function');
     expect(typeof bridge.minimizeWindow).toBe('function');
+    expect(typeof bridge.closeWindow).toBe('function');
     expect(typeof bridge.toggleMaximizeWindow).toBe('function');
     expect(typeof bridge.toggleFullScreenWindow).toBe('function');
     expect(typeof bridge.openExternalURL).toBe('function');
@@ -44,6 +45,7 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.performWindowCommand('maximize');
     await bridge.performWindowCommand('invalid');
     await bridge.minimizeWindow();
+    await bridge.closeWindow();
     await bridge.toggleMaximizeWindow();
     await bridge.toggleFullScreenWindow();
     await bridge.openExternalURL('http://127.0.0.1:43123/cs/demo/');
@@ -55,10 +57,11 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(4, 'redeven-desktop:shell-open-window', { kind: 'settings' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(5, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(6, 'redeven-desktop:shell-window-command', { command: 'minimize' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(10);
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:shell-window-command', { command: 'close' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(11);
   });
 });

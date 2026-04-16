@@ -25,6 +25,8 @@ describe('desktop persistence wiring', () => {
 
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopAskFlowerHandoffBridge } from './askFlowerHandoff';");
     expect(sessionPreloadSrc).toContain('bootstrapDesktopAskFlowerHandoffBridge();');
+    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopEmbeddedDragHostBridge } from './desktopEmbeddedDragHost';");
+    expect(sessionPreloadSrc).toContain('bootstrapDesktopEmbeddedDragHostBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopSessionContextBridge } from './desktopSessionContext';");
     expect(sessionPreloadSrc).toContain('bootstrapDesktopSessionContextBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopShellBridge } from './desktopShell';");

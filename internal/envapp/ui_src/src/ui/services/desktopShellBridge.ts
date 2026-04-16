@@ -20,6 +20,7 @@ export interface DesktopShellBridge {
   openWindow?: (kind: unknown) => Promise<void>;
   performWindowCommand?: (command: unknown) => Promise<DesktopShellWindowCommandResponse>;
   minimizeWindow?: () => Promise<DesktopShellWindowCommandResponse>;
+  closeWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   toggleMaximizeWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   toggleFullScreenWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
@@ -47,6 +48,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.openWindow !== 'function'
       && typeof candidate.performWindowCommand !== 'function'
       && typeof candidate.minimizeWindow !== 'function'
+      && typeof candidate.closeWindow !== 'function'
       && typeof candidate.toggleMaximizeWindow !== 'function'
       && typeof candidate.toggleFullScreenWindow !== 'function'
       && typeof candidate.openExternalURL !== 'function'
@@ -109,6 +111,21 @@ export async function minimizeDesktopWindow(): Promise<DesktopShellWindowCommand
   }
   if (typeof bridge.performWindowCommand === 'function') {
     return normalizeDesktopShellWindowCommandResponse(await bridge.performWindowCommand('minimize'));
+  }
+  return null;
+}
+
+export async function closeDesktopWindow(): Promise<DesktopShellWindowCommandResponse | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge) {
+    return null;
+  }
+
+  if (typeof bridge.closeWindow === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.closeWindow());
+  }
+  if (typeof bridge.performWindowCommand === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.performWindowCommand('close'));
   }
   return null;
 }

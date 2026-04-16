@@ -579,8 +579,9 @@ Behavior:
 - When a desktop-managed remote session renders Env App through a same-origin iframe, the embedded document resolves desktop theme, session context, state storage, and window chrome from its host session window instead of falling back to plain browser semantics.
 - In that same-origin iframe case, safe-area styling and native drag ownership are intentionally split:
   - the embedded Env App computes the final draggable rectangles from the shared desktop titlebar drag/no-drag hooks;
-  - the top-level `/_redeven_boot/` host turns those rectangles into transparent top-level `app-region: drag` overlays;
+  - the session preload running in the top-level Desktop document turns those rectangles into transparent top-level `app-region: drag` overlays;
   - Electron window movement always stays owned by the top-level session document, never by iframe DOM alone.
+- The drag-overlay bridge is exposed only from the top-level session document. Electron loads the same preload into same-window iframes too, so subframes must publish drag intent upward instead of trying to own native drag hit-testing themselves.
 - Detached desktop child windows render through a shared chrome-safe frame in Env App, so title, subtitle, banner, footer, and scene body can evolve independently while native control reservations still come only from the shell contract.
 - Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
 - Welcome and Env App each keep an explicit entry-document background fallback (`html` / `body` / `#root`) so the first renderer frame matches the shell-owned native window background even before business UI mounts.
@@ -597,7 +598,7 @@ Non-goals:
 
 - Cold app launch opens the singleton launcher window.
 - The native app menu exposes one primary shell action: `Connect Environment...`
-- The native app menu also preserves OS-owned window-command roles for full screen and window management, so custom desktop headers do not replace native shortcut inheritance.
+- The native app menu also preserves OS-owned window-command roles for close, full screen, and window management, so custom desktop headers do not replace native shortcut inheritance.
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Compatible providers may also enter through the registered `redeven://` deep-link scheme.
 - Generic settings aliases such as `advanced_settings` route to the launcher-owned `Environment Settings` dialog.
@@ -605,7 +606,7 @@ Non-goals:
 - `Switch Environment` focuses or opens the singleton launcher instead of replacing the active Environment session window.
 - `Runtime Settings` focuses or opens the singleton launcher and presents the `Environment Settings` dialog instead of creating a second native window.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
-- The desktop browser bridge also exposes shell-owned native window commands for explicit renderer actions, while keyboard shortcut inheritance remains owned by the Electron app menu roles.
+- The desktop browser bridge also exposes shell-owned native window commands for explicit renderer actions, including `close`, while keyboard shortcut inheritance remains owned by the Electron app menu roles.
 - The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
 - Env App exposes `Switch Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
 - Env App Codespaces uses that external-URL bridge when the desktop shell is present, so `Open` launches the selected codespace in the system browser instead of an Electron child window.

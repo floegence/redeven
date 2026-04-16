@@ -37,6 +37,7 @@ const accessResumeMock = vi.fn(async () => undefined);
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
+  deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
   useLayout: () => ({
     isMobile: () => false,

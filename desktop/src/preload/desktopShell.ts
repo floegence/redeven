@@ -47,6 +47,9 @@ export function bootstrapDesktopShellBridge(): void {
     minimizeWindow: async () => normalizeDesktopShellWindowCommandResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, { command: 'minimize' }),
     ),
+    closeWindow: async () => normalizeDesktopShellWindowCommandResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, { command: 'close' }),
+    ),
     toggleMaximizeWindow: async () => normalizeDesktopShellWindowCommandResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, { command: 'toggle_maximize' }),
     ),

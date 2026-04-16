@@ -15,9 +15,11 @@ type DesktopShellWindowCommandTarget = Pick<
   | 'isMinimizable'
   | 'isMaximizable'
   | 'isFullScreenable'
+  | 'isClosable'
   | 'minimize'
   | 'maximize'
   | 'unmaximize'
+  | 'close'
   | 'setFullScreen'
 >;
 
@@ -44,6 +46,7 @@ export function captureDesktopShellWindowState(
     minimizable: win.isMinimizable(),
     maximizable: win.isMaximizable(),
     full_screenable: win.isFullScreenable(),
+    closable: win.isClosable(),
   };
 }
 
@@ -89,6 +92,23 @@ export function performDesktopShellWindowCommand(
     } else {
       win.maximize();
     }
+    return {
+      ok: true,
+      performed: true,
+      state: captureDesktopShellWindowState(win),
+    };
+  }
+
+  if (command === 'close') {
+    if (!state.closable) {
+      return {
+        ok: false,
+        performed: false,
+        state,
+        message: 'Desktop cannot close this window.',
+      };
+    }
+    win.close();
     return {
       ok: true,
       performed: true,

@@ -1,25 +1,13 @@
 import {
+  type DesktopEmbeddedDragRegionRect,
+  type DesktopEmbeddedDragRegionSnapshot,
+  type DesktopEmbeddedDragRegionsBridge,
+} from '../../../../../../desktop/src/shared/desktopEmbeddedDragRegions';
+import {
   DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS,
   DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS,
 } from '../../../../../../desktop/src/shared/windowChromeContract';
 import { readDesktopHostBridge } from './desktopHostWindow';
-
-export type DesktopEmbeddedDragRegionRect = Readonly<{
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}>;
-
-export type DesktopEmbeddedDragRegionSnapshot = Readonly<{
-  version: 1;
-  regions: readonly DesktopEmbeddedDragRegionRect[];
-}>;
-
-export interface DesktopEmbeddedDragRegionsBridge {
-  setSnapshot: (snapshot: DesktopEmbeddedDragRegionSnapshot) => void;
-  clear: () => void;
-}
 
 export interface DesktopEmbeddedDragRegionSync {
   refresh: () => DesktopEmbeddedDragRegionSnapshot | null;
@@ -39,7 +27,6 @@ declare global {
   }
 }
 
-const DESKTOP_EMBEDDED_DRAG_REGION_VERSION = 1;
 const NO_DRAG_TARGET_SELECTOR = DESKTOP_WINDOW_CHROME_NO_DRAG_TARGET_SELECTORS.join(',');
 
 function defaultCreateResizeObserver(callback: ResizeObserverCallback): ResizeObserverLike | null {
@@ -238,7 +225,7 @@ export function buildDesktopEmbeddedDragRegionSnapshot(
   }
 
   return {
-    version: DESKTOP_EMBEDDED_DRAG_REGION_VERSION,
+    version: 1,
     regions: dragRects,
   };
 }

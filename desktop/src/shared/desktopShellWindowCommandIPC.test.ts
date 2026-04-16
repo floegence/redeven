@@ -12,6 +12,7 @@ describe('desktopShellWindowCommandIPC', () => {
     expect(normalizeDesktopShellWindowCommand(' minimize_window ')).toBe('minimize');
     expect(normalizeDesktopShellWindowCommand('MAXIMIZE')).toBe('toggle_maximize');
     expect(normalizeDesktopShellWindowCommand('toggle_fullscreen')).toBe('toggle_full_screen');
+    expect(normalizeDesktopShellWindowCommand(' close_window ')).toBe('close');
   });
 
   it('normalizes valid command requests', () => {
@@ -21,8 +22,8 @@ describe('desktopShellWindowCommandIPC', () => {
   });
 
   it('rejects unsupported commands', () => {
-    expect(normalizeDesktopShellWindowCommand('close')).toBe('');
-    expect(normalizeDesktopShellWindowCommandRequest({ command: 'close' })).toBeNull();
+    expect(normalizeDesktopShellWindowCommand('launch')).toBe('');
+    expect(normalizeDesktopShellWindowCommandRequest({ command: 'launch' })).toBeNull();
   });
 
   it('normalizes window state payloads', () => {
@@ -33,6 +34,7 @@ describe('desktopShellWindowCommandIPC', () => {
       minimizable: true,
       maximizable: true,
       full_screenable: false,
+      closable: true,
     })).toEqual({
       minimized: true,
       maximized: false,
@@ -40,6 +42,7 @@ describe('desktopShellWindowCommandIPC', () => {
       minimizable: true,
       maximizable: true,
       full_screenable: false,
+      closable: true,
     });
   });
 
@@ -54,6 +57,7 @@ describe('desktopShellWindowCommandIPC', () => {
         minimizable: true,
         maximizable: true,
         full_screenable: true,
+        closable: true,
       },
       message: ' updated ',
     })).toEqual({
@@ -66,6 +70,7 @@ describe('desktopShellWindowCommandIPC', () => {
         minimizable: true,
         maximizable: true,
         full_screenable: true,
+        closable: true,
       },
       message: 'updated',
     });

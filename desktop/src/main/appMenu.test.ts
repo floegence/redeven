@@ -26,6 +26,12 @@ describe('appMenu', () => {
 
     expect(template).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        label: 'File',
+        submenu: expect.arrayContaining([
+          expect.objectContaining({ role: 'close' }),
+        ]),
+      }),
+      expect.objectContaining({
         label: 'View',
         submenu: expect.arrayContaining([
           expect.objectContaining({ role: 'togglefullscreen' }),

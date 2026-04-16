@@ -12,6 +12,31 @@ function buildViewSubmenu(): MenuItemConstructorOptions[] {
   ];
 }
 
+function buildFileMenu(
+  actions: AppMenuActions,
+  platform: NodeJS.Platform,
+): MenuItemConstructorOptions {
+  if (platform === 'darwin') {
+    return {
+      label: 'File',
+      submenu: [
+        { label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
+        { type: 'separator' },
+        { role: 'close' },
+      ],
+    };
+  }
+
+  return {
+    label: 'File',
+    submenu: [
+      { label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
+      { type: 'separator' },
+      { label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
+    ],
+  };
+}
+
 function buildWindowMenu(platform: NodeJS.Platform): MenuItemConstructorOptions {
   if (platform === 'darwin') {
     return {
@@ -61,12 +86,10 @@ export function buildAppMenuTemplate(
   actions: AppMenuActions,
   platform: NodeJS.Platform = process.platform,
 ): MenuItemConstructorOptions[] {
-  const appMenu: MenuItemConstructorOptions = platform === 'darwin'
+  const appMenu: MenuItemConstructorOptions | null = platform === 'darwin'
     ? {
         label: 'Redeven Desktop',
         submenu: [
-          { label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
-          { type: 'separator' },
           { label: 'Hide Redeven Desktop', role: 'hide' },
           { label: 'Hide Others', role: 'hideOthers' },
           { label: 'Show All', role: 'unhide' },
@@ -74,17 +97,11 @@ export function buildAppMenuTemplate(
           { label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
         ],
       }
-    : {
-        label: 'File',
-        submenu: [
-          { label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
-          { type: 'separator' },
-          { label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
-        ],
-      };
+    : null;
 
   return [
-    appMenu,
+    ...(appMenu ? [appMenu] : []),
+    buildFileMenu(actions, platform),
     {
       label: 'Edit',
       submenu: buildEditSubmenu(platform),
