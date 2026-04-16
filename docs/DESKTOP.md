@@ -595,6 +595,7 @@ Non-goals:
 
 - Cold app launch opens the singleton launcher window.
 - The native app menu exposes one primary shell action: `Connect Environment...`
+- The native app menu also preserves OS-owned window-command roles for full screen and window management, so custom desktop headers do not replace native shortcut inheritance.
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Compatible providers may also enter through the registered `redeven://` deep-link scheme.
 - Generic settings aliases such as `advanced_settings` route to the launcher-owned `Environment Settings` dialog.
@@ -602,6 +603,7 @@ Non-goals:
 - `Switch Environment` focuses or opens the singleton launcher instead of replacing the active Environment session window.
 - `Runtime Settings` focuses or opens the singleton launcher and presents the `Environment Settings` dialog instead of creating a second native window.
 - The desktop browser bridge also exposes a dedicated managed-runtime restart action for `Restart runtime`; it is separate from window-navigation actions.
+- The desktop browser bridge also exposes shell-owned native window commands for explicit renderer actions, while keyboard shortcut inheritance remains owned by the Electron app menu roles.
 - The desktop browser bridge also exposes an explicit external-URL action for workflows that must leave the Electron shell and continue in the system browser.
 - Env App exposes `Switch Environment` and `Runtime Settings` through the desktop browser bridge when the desktop shell bridge is available.
 - Env App Codespaces uses that external-URL bridge when the desktop shell is present, so `Open` launches the selected codespace in the system browser instead of an Electron child window.

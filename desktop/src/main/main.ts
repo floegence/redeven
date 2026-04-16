@@ -105,6 +105,7 @@ import {
 } from './windowState';
 import { resolveDesktopWindowSpec } from './windowSpec';
 import { buildDesktopWindowChromeOptions } from './windowChrome';
+import { performDesktopShellWindowCommand } from './desktopShellWindowCommands';
 import {
   CANCEL_DESKTOP_SETTINGS_CHANNEL,
   SAVE_DESKTOP_SETTINGS_CHANNEL,
@@ -133,6 +134,11 @@ import {
   DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWindowRequest,
 } from '../shared/desktopShellWindowIPC';
+import {
+  DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL,
+  normalizeDesktopShellWindowCommandRequest,
+  type DesktopShellWindowCommandResponse,
+} from '../shared/desktopShellWindowCommandIPC';
 import {
   DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
   normalizeDesktopShellRuntimeActionRequest,
@@ -3927,6 +3933,19 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     await openAdvancedSettingsWindow();
+  });
+  ipcMain.handle(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, async (event, request): Promise<DesktopShellWindowCommandResponse> => {
+    const normalized = normalizeDesktopShellWindowCommandRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        performed: false,
+        state: null,
+        message: 'Invalid desktop window command.',
+      };
+    }
+
+    return performDesktopShellWindowCommand(BrowserWindow.fromWebContents(event.sender), normalized.command);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL, async (_event, request): Promise<DesktopShellOpenExternalURLResponse> => {
     const normalized = normalizeDesktopShellOpenExternalURLRequest(request);

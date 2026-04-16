@@ -1,3 +1,8 @@
+import {
+  normalizeDesktopShellWindowCommandResponse,
+  type DesktopShellWindowCommandResponse,
+} from '../../../../../../desktop/src/shared/desktopShellWindowCommandIPC';
+
 export type DesktopShellExternalURLOpenResult = Readonly<{
   ok: boolean;
   message?: string;
@@ -13,6 +18,10 @@ export interface DesktopShellBridge {
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
   openWindow?: (kind: unknown) => Promise<void>;
+  performWindowCommand?: (command: unknown) => Promise<DesktopShellWindowCommandResponse>;
+  minimizeWindow?: () => Promise<DesktopShellWindowCommandResponse>;
+  toggleMaximizeWindow?: () => Promise<DesktopShellWindowCommandResponse>;
+  toggleFullScreenWindow?: () => Promise<DesktopShellWindowCommandResponse>;
   openExternalURL?: (url: string) => Promise<DesktopShellExternalURLOpenResult>;
   restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
   manageDesktopUpdate?: () => Promise<DesktopManagedRuntimeRestartResult>;
@@ -36,6 +45,10 @@ function desktopShellBridge(): DesktopShellBridge | null {
       typeof candidate.openConnectionCenter !== 'function'
       && typeof candidate.openAdvancedSettings !== 'function'
       && typeof candidate.openWindow !== 'function'
+      && typeof candidate.performWindowCommand !== 'function'
+      && typeof candidate.minimizeWindow !== 'function'
+      && typeof candidate.toggleMaximizeWindow !== 'function'
+      && typeof candidate.toggleFullScreenWindow !== 'function'
       && typeof candidate.openExternalURL !== 'function'
       && typeof candidate.restartManagedRuntime !== 'function'
       && typeof candidate.manageDesktopUpdate !== 'function'
@@ -83,6 +96,51 @@ export async function openAdvancedSettings(): Promise<boolean> {
     return true;
   }
   return openConnectionCenter();
+}
+
+export async function minimizeDesktopWindow(): Promise<DesktopShellWindowCommandResponse | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge) {
+    return null;
+  }
+
+  if (typeof bridge.minimizeWindow === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.minimizeWindow());
+  }
+  if (typeof bridge.performWindowCommand === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.performWindowCommand('minimize'));
+  }
+  return null;
+}
+
+export async function toggleDesktopWindowMaximize(): Promise<DesktopShellWindowCommandResponse | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge) {
+    return null;
+  }
+
+  if (typeof bridge.toggleMaximizeWindow === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.toggleMaximizeWindow());
+  }
+  if (typeof bridge.performWindowCommand === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.performWindowCommand('toggle_maximize'));
+  }
+  return null;
+}
+
+export async function toggleDesktopWindowFullScreen(): Promise<DesktopShellWindowCommandResponse | null> {
+  const bridge = desktopShellBridge();
+  if (!bridge) {
+    return null;
+  }
+
+  if (typeof bridge.toggleFullScreenWindow === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.toggleFullScreenWindow());
+  }
+  if (typeof bridge.performWindowCommand === 'function') {
+    return normalizeDesktopShellWindowCommandResponse(await bridge.performWindowCommand('toggle_full_screen'));
+  }
+  return null;
 }
 
 export function desktopShellExternalURLOpenAvailable(): boolean {

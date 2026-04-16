@@ -6,6 +6,30 @@ export type AppMenuActions = Readonly<{
   requestQuit: () => void;
 }>;
 
+function buildViewSubmenu(): MenuItemConstructorOptions[] {
+  return [
+    { role: 'togglefullscreen' },
+  ];
+}
+
+function buildWindowMenu(platform: NodeJS.Platform): MenuItemConstructorOptions {
+  if (platform === 'darwin') {
+    return {
+      role: 'windowMenu',
+    };
+  }
+
+  return {
+    label: 'Window',
+    submenu: [
+      { role: 'minimize' },
+      { role: 'zoom' },
+      { type: 'separator' },
+      { role: 'close' },
+    ],
+  };
+}
+
 function buildEditSubmenu(platform: NodeJS.Platform): MenuItemConstructorOptions[] {
   const commonItems: MenuItemConstructorOptions[] = [
     { role: 'undo' },
@@ -66,11 +90,9 @@ export function buildAppMenuTemplate(
       submenu: buildEditSubmenu(platform),
     },
     {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize' },
-        { role: 'close' },
-      ],
+      label: 'View',
+      submenu: buildViewSubmenu(),
     },
+    buildWindowMenu(platform),
   ];
 }

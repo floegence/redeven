@@ -26,6 +26,13 @@ describe('appMenu', () => {
 
     expect(template).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        label: 'View',
+        submenu: expect.arrayContaining([
+          expect.objectContaining({ role: 'togglefullscreen' }),
+        ]),
+      }),
+      expect.objectContaining({ role: 'windowMenu' }),
+      expect.objectContaining({
         label: 'Edit',
         submenu: expect.arrayContaining([
           expect.objectContaining({ role: 'copy' }),
@@ -42,10 +49,24 @@ describe('appMenu', () => {
     expect(template).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'File' }),
       expect.objectContaining({
+        label: 'View',
+        submenu: expect.arrayContaining([
+          expect.objectContaining({ role: 'togglefullscreen' }),
+        ]),
+      }),
+      expect.objectContaining({
         label: 'Edit',
         submenu: expect.arrayContaining([
           expect.objectContaining({ role: 'copy' }),
           expect.objectContaining({ role: 'selectAll' }),
+        ]),
+      }),
+      expect.objectContaining({
+        label: 'Window',
+        submenu: expect.arrayContaining([
+          expect.objectContaining({ role: 'minimize' }),
+          expect.objectContaining({ role: 'zoom' }),
+          expect.objectContaining({ role: 'close' }),
         ]),
       }),
     ]));
