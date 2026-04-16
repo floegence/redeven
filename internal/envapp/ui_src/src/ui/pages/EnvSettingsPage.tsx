@@ -25,11 +25,14 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import { shouldOpenDetachedSurface } from '../services/detachedSurface';
 import {
   cancelCodeRuntimeOperation,
+  detachCodeRuntimeSelection,
   codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationSucceeded,
   fetchCodeRuntimeStatus,
   installCodeRuntime,
-  uninstallCodeRuntime,
+  removeCodeRuntimeVersion,
+  selectCodeRuntimeVersion,
+  setCodeRuntimeDefaultVersion,
   type CodeRuntimeStatus,
 } from '../services/codeRuntimeApi';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -411,10 +414,10 @@ export function EnvSettingsPage() {
     if (status.operation.state === 'running') return;
 
     if (codeRuntimeOperationSucceeded(status) && operationAction === pendingAction) {
-      if (pendingAction === 'uninstall') {
-        notify.success('Runtime removed', 'The Redeven-managed code-server runtime has been removed.');
+      if (pendingAction === 'remove_machine_version') {
+        notify.success('Version removed', 'The selected managed code-server version has been removed from this machine.');
       } else {
-        notify.success('Runtime ready', 'The Redeven-managed code-server runtime is ready for Codespaces.');
+        notify.success('Runtime ready', 'The latest managed code-server runtime is now installed on this machine and selected for the current environment.');
       }
       setPendingRuntimeSuccessAction('');
       return;
@@ -510,9 +513,12 @@ export function EnvSettingsPage() {
   const [policyView, setPolicyView] = createSignal<ViewMode>('ui');
   const [aiView, setAiView] = createSignal<ViewMode>('ui');
   const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
-  const [codeRuntimeUninstallLoading, setCodeRuntimeUninstallLoading] = createSignal(false);
   const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
-  const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'install' | 'uninstall'>('');
+  const [codeRuntimeSelectionLoadingVersion, setCodeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
+  const [codeRuntimeDefaultLoadingVersion, setCodeRuntimeDefaultLoadingVersion] = createSignal<string | null>(null);
+  const [codeRuntimeDetachLoading, setCodeRuntimeDetachLoading] = createSignal(false);
+  const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
+  const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'install' | 'remove_machine_version'>('');
 
   // Dirty flags
   const [runtimeDirty, setRuntimeDirty] = createSignal(false);
@@ -548,18 +554,57 @@ export function EnvSettingsPage() {
       setCodeRuntimeActionLoading(false);
     }
   };
-  const uninstallManagedCodeRuntime = async () => {
-    setCodeRuntimeUninstallLoading(true);
-    setPendingRuntimeSuccessAction('uninstall');
+  const selectManagedCodeRuntimeVersion = async (version: string) => {
+    setCodeRuntimeSelectionLoadingVersion(version);
     try {
-      await uninstallCodeRuntime();
+      await selectCodeRuntimeVersion(version);
+      await refetchCodeRuntimeStatus();
+      notify.success('Environment updated', `This environment now uses managed version ${version}.`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Selection failed', msg || 'Request failed.');
+    } finally {
+      setCodeRuntimeSelectionLoadingVersion(null);
+    }
+  };
+  const setManagedCodeRuntimeDefaultVersion = async (version: string) => {
+    setCodeRuntimeDefaultLoadingVersion(version);
+    try {
+      await setCodeRuntimeDefaultVersion(version);
+      await refetchCodeRuntimeStatus();
+      notify.success('Machine default updated', `${version} is now the default managed version for environments that follow the machine default.`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Default update failed', msg || 'Request failed.');
+    } finally {
+      setCodeRuntimeDefaultLoadingVersion(null);
+    }
+  };
+  const detachManagedCodeRuntimeSelection = async () => {
+    setCodeRuntimeDetachLoading(true);
+    try {
+      await detachCodeRuntimeSelection();
+      await refetchCodeRuntimeStatus();
+      notify.success('Environment selection removed', 'This environment now follows the machine default managed version when one is configured.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error('Remove failed', msg || 'Request failed.');
+    } finally {
+      setCodeRuntimeDetachLoading(false);
+    }
+  };
+  const removeManagedCodeRuntimeVersion = async (version: string) => {
+    setCodeRuntimeRemoveVersionLoading(version);
+    setPendingRuntimeSuccessAction('remove_machine_version');
+    try {
+      await removeCodeRuntimeVersion(version);
       await refetchCodeRuntimeStatus();
     } catch (e) {
       setPendingRuntimeSuccessAction('');
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Uninstall failed', msg || 'Request failed.');
+      notify.error('Version removal failed', msg || 'Request failed.');
     } finally {
-      setCodeRuntimeUninstallLoading(false);
+      setCodeRuntimeRemoveVersionLoading(null);
     }
   };
   const cancelManagedCodeRuntimeOperation = async () => {
@@ -2953,11 +2998,17 @@ export function EnvSettingsPage() {
                 canInteract={canInteract()}
                 canManage={canManageCodeRuntime()}
                 actionLoading={codeRuntimeActionLoading()}
-                uninstallLoading={codeRuntimeUninstallLoading()}
                 cancelLoading={codeRuntimeCancelLoading()}
+                selectionLoadingVersion={codeRuntimeSelectionLoadingVersion()}
+                defaultLoadingVersion={codeRuntimeDefaultLoadingVersion()}
+                detachLoading={codeRuntimeDetachLoading()}
+                removeVersionLoading={codeRuntimeRemoveVersionLoading()}
                 onRefresh={() => void refreshCodeRuntimeStatus()}
                 onInstall={() => installManagedCodeRuntime()}
-                onUninstall={() => uninstallManagedCodeRuntime()}
+                onSelectVersion={(version) => selectManagedCodeRuntimeVersion(version)}
+                onSetDefaultVersion={(version) => setManagedCodeRuntimeDefaultVersion(version)}
+                onDetach={() => detachManagedCodeRuntimeSelection()}
+                onRemoveVersion={(version) => removeManagedCodeRuntimeVersion(version)}
                 onCancel={() => cancelManagedCodeRuntimeOperation()}
               />
 

@@ -25,9 +25,10 @@ func TestService_CreateUpdateDeleteSpace_MetadataOnly(t *testing.T) {
 	t.Cleanup(func() { _ = reg.Close() })
 
 	runner := codeserver.NewRunner(codeserver.RunnerOptions{
-		StateDir: stateDir,
-		PortMin:  20000,
-		PortMax:  20010,
+		StateDir:  stateDir,
+		StateRoot: stateDir,
+		PortMin:   20000,
+		PortMax:   20010,
 	})
 	ws := t.TempDir()
 	svc := &Service{
@@ -156,9 +157,10 @@ func TestService_CreateSpace_GeneratesValidIDWhenMissing(t *testing.T) {
 		agentHomeDir: ws,
 		reg:          reg,
 		runner: codeserver.NewRunner(codeserver.RunnerOptions{
-			StateDir: stateDir,
-			PortMin:  20000,
-			PortMax:  20010,
+			StateDir:  stateDir,
+			StateRoot: stateDir,
+			PortMin:   20000,
+			PortMax:   20010,
 		}),
 	}
 

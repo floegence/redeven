@@ -68,6 +68,7 @@ type Options struct {
 	Config *config.Config
 	// ConfigPath is the path used to load the config file (used to derive state_dir).
 	ConfigPath string
+	StateRoot  string
 	// LocalUIEnabled indicates Local UI is enabled (e.g. `redeven run --mode hybrid|local`).
 	//
 	// When enabled, the agent is allowed to start even without a full bootstrap config.
@@ -189,6 +190,14 @@ func New(opts Options) (*Agent, error) {
 	}
 	cfgPathAbs := cfgPath
 	stateDir := filepath.Dir(cfgPathAbs)
+	stateRoot := strings.TrimSpace(opts.StateRoot)
+	if stateRoot == "" {
+		resolvedStateRoot, err := config.ResolveStateRoot("")
+		if err != nil {
+			return nil, err
+		}
+		stateRoot = resolvedStateRoot
+	}
 
 	a := &Agent{
 		cfg:                   opts.Config,
@@ -246,6 +255,7 @@ func New(opts Options) (*Agent, error) {
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
 		Logger:              logger,
 		StateDir:            stateDir,
+		StateRoot:           stateRoot,
 		ConfigPath:          cfgPathAbs,
 		ControlplaneBaseURL: strings.TrimSpace(opts.Config.ControlplaneBaseURL),
 		CodeServerPortMin:   opts.Config.CodeServerPortMin,

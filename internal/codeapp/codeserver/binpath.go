@@ -6,9 +6,11 @@ import (
 )
 
 // ResolveBinary resolves the selected code-server binary path for the current
-// machine and validates that it is usable.
-func ResolveBinary(stateDir string) (string, error) {
-	detection := detectRuntime(context.Background(), stateDir)
+// environment and validates that it is usable.
+func ResolveBinary(stateDir string, stateRoot string) (string, error) {
+	machineState, _ := loadMachineRuntimeState(stateRoot)
+	selectedVersion, _ := resolveManagedSelection(stateDir, machineState)
+	detection := detectRuntime(context.Background(), stateDir, stateRoot, selectedVersion)
 	switch detection.state {
 	case RuntimeDetectionReady:
 		return detection.binaryPath, nil

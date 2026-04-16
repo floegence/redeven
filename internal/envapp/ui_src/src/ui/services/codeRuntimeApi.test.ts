@@ -15,15 +15,32 @@ function makeStatus(state: CodeRuntimeStatus['operation']['state']): CodeRuntime
       detection_state: 'ready',
       present: true,
       source: 'managed',
-      binary_path: '/Users/test/.redeven/apps/code/runtime/managed/bin/code-server',
+      binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+      version: '4.109.1',
     },
     managed_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
-      binary_path: '/Users/test/.redeven/apps/code/runtime/managed/bin/code-server',
+      binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+      version: '4.109.1',
     },
-    managed_prefix: '/Users/test/.redeven/apps/code/runtime/managed',
+    managed_prefix: '/Users/test/.redeven/scopes/controlplane/dev/env_1/apps/code/runtime/managed',
+    shared_runtime_root: '/Users/test/.redeven/shared/code-server/darwin-arm64',
+    environment_selection_version: '4.109.1',
+    environment_selection_source: 'environment',
+    machine_default_version: '4.109.1',
+    installed_versions: [
+      {
+        version: '4.109.1',
+        binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
+        selection_count: 1,
+        selected_by_current_environment: true,
+        default_for_new_environments: true,
+        removable: false,
+        detection_state: 'ready',
+      },
+    ],
     installer_script_url: 'https://code-server.dev/install.sh',
     operation: {
       action: 'install',
@@ -48,15 +65,23 @@ describe('codeRuntimeApi selectors', () => {
     expect(codeRuntimeOperationSucceeded(makeStatus('idle'))).toBe(false);
   });
 
-  it('labels the managed action around latest-stable install semantics', () => {
+  it('labels install actions around machine-scoped reuse', () => {
     expect(codeRuntimeManagedActionLabel({
       ...makeStatus('idle'),
+      installed_versions: [],
+      active_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'none',
+      },
       managed_runtime: {
         detection_state: 'missing',
         present: false,
         source: 'managed',
       },
-    })).toBe('Install latest');
-    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Update to latest');
+      environment_selection_source: 'none',
+    })).toBe('Install and use for this environment');
+
+    expect(codeRuntimeManagedActionLabel(makeStatus('idle'))).toBe('Install latest and use for this environment');
   });
 });

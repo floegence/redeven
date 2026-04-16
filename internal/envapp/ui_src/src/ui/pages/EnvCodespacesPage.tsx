@@ -594,7 +594,7 @@ function runtimeRequirementLabel(status: CodeRuntimeStatus | null | undefined): 
   if (status.active_runtime.detection_state === "unusable") {
     return status.active_runtime.error_message || "Redeven detected a code-server runtime, but it is not usable for Codespaces on this host.";
   }
-  return "Redeven can install or update the latest stable code-server release for this host using the official installer.";
+  return "Redeven can install the latest stable code-server once for this machine, then use it for the current environment.";
 }
 
 type CodeRuntimeBannerMode = "inline" | "floating";
@@ -628,9 +628,15 @@ function CodeRuntimeBanner(props: {
     const status = props.status;
     if (props.loading) return "Checking runtime";
     if (!status) return "Runtime unavailable";
-    if (status.operation.state === "running") return status.operation.action === "uninstall" ? "Removing" : "Installing";
-    if (status.operation.state === "failed") return status.operation.action === "uninstall" ? "Uninstall failed" : "Install failed";
-    if (status.operation.state === "cancelled") return status.operation.action === "uninstall" ? "Uninstall cancelled" : "Install cancelled";
+    if (status.operation.state === "running") {
+      return status.operation.action === "remove_machine_version" ? "Removing version" : "Installing";
+    }
+    if (status.operation.state === "failed") {
+      return status.operation.action === "remove_machine_version" ? "Version removal failed" : "Install failed";
+    }
+    if (status.operation.state === "cancelled") {
+      return status.operation.action === "remove_machine_version" ? "Version removal cancelled" : "Install cancelled";
+    }
     if (status.active_runtime.detection_state === "unusable") return "Needs attention";
     return "Not installed";
   };
@@ -702,7 +708,10 @@ function CodeRuntimeBanner(props: {
               <div>Detected path: <span class="font-mono break-all">{props.status?.active_runtime.binary_path}</span></div>
             </Show>
             <Show when={props.status?.managed_prefix}>
-              <div>Managed location: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
+              <div>Current environment link: <span class="font-mono break-all">{props.status?.managed_prefix}</span></div>
+            </Show>
+            <Show when={props.status?.shared_runtime_root}>
+              <div>Shared runtime root: <span class="font-mono break-all">{props.status?.shared_runtime_root}</span></div>
             </Show>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -830,7 +839,7 @@ function CodeRuntimeInstallDialog(props: {
       <div class="space-y-4">
         <div class="space-y-1">
           <div class="text-sm text-foreground">
-            Redeven installs or updates a managed <span class="font-mono">code-server</span> runtime only after you explicitly confirm it here.
+            Redeven installs the latest stable managed <span class="font-mono">code-server</span> runtime once for this machine only after you explicitly confirm it here.
           </div>
           <div class="text-xs text-muted-foreground">
             Installer source: official <span class="font-mono">code-server install.sh</span> latest-stable flow.
@@ -838,7 +847,8 @@ function CodeRuntimeInstallDialog(props: {
         </div>
 
         <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-          <div>Managed location: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
+          <div>Shared runtime root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root ?? "-"}</span></div>
+          <div>Current environment link: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
           <div>Installer URL: <span class="font-mono text-foreground break-all">{props.status?.installer_script_url ?? "-"}</span></div>
           <Show when={props.pendingIntent}>
             <div>Pending action: <span class="text-foreground">{props.pendingIntent?.kind === "open" ? "Open codespace after install" : "Start codespace after install"}</span></div>
@@ -856,9 +866,9 @@ function CodeRuntimeInstallDialog(props: {
 
         <Show when={runtimeReady()}>
           <div class="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.04] p-3 space-y-1">
-            <div class="text-sm font-medium text-foreground">Managed runtime is ready.</div>
+            <div class="text-sm font-medium text-foreground">Managed runtime is ready for this environment.</div>
             <div class="text-xs text-muted-foreground">
-              Binary path: <span class="font-mono text-foreground break-all">{props.status?.managed_runtime.binary_path ?? "-"}</span>.
+              Binary path: <span class="font-mono text-foreground break-all">{props.status?.active_runtime.binary_path ?? "-"}</span>.
             </div>
           </div>
         </Show>
@@ -1280,13 +1290,14 @@ export function EnvCodespacesPage() {
   };
   const runtimeBannerMode = (): CodeRuntimeBannerMode | null => {
     const status = runtimeStatus();
+    const installFlowActive = status?.operation.action !== "remove_machine_version";
     if (runtimeBannerError()) return "inline";
-    if (runtimeStatus.loading || status?.operation.state === "running") return "floating";
+    if (runtimeStatus.loading || (installFlowActive && status?.operation.state === "running")) return "floating";
     if (!status) return null;
     if (
       codeRuntimeMissing(status)
-      || status.operation.state === "failed"
-      || status.operation.state === "cancelled"
+      || (installFlowActive && status.operation.state === "failed")
+      || (installFlowActive && status.operation.state === "cancelled")
     ) {
       return "inline";
     }

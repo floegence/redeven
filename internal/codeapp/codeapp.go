@@ -35,8 +35,9 @@ const (
 )
 
 type Options struct {
-	Logger   *slog.Logger
-	StateDir string
+	Logger    *slog.Logger
+	StateDir  string
+	StateRoot string
 	// ConfigPath is the absolute path to the runtime config file (used to persist settings updates from the Env App UI).
 	ConfigPath          string
 	ControlplaneBaseURL string
@@ -93,7 +94,15 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if stateDir == "" {
 		return nil, errors.New("missing StateDir")
 	}
+	stateRoot := strings.TrimSpace(opts.StateRoot)
+	if stateRoot == "" {
+		return nil, errors.New("missing StateRoot")
+	}
 	stateAbs, err := filepath.Abs(stateDir)
+	if err != nil {
+		return nil, err
+	}
+	stateRootAbs, err := filepath.Abs(stateRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -154,13 +163,15 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	runner := codeserver.NewRunner(codeserver.RunnerOptions{
 		Logger:            logger,
 		StateDir:          stateAbs,
+		StateRoot:         stateRootAbs,
 		PortMin:           portMin,
 		PortMax:           portMax,
 		ReconnectionGrace: reconnectionGrace,
 	})
 	runtimeMgr := codeserver.NewRuntimeManager(codeserver.RuntimeManagerOptions{
-		Logger:   logger,
-		StateDir: stateAbs,
+		Logger:    logger,
+		StateDir:  stateAbs,
+		StateRoot: stateRootAbs,
 	})
 
 	svc := &Service{

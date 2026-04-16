@@ -37,36 +37,51 @@ The Code App stores all code space data on the user's machine (not on Redeven se
 By default, the local scope config is `~/.redeven/scopes/local/default/config.json`, so the state directory is:
 
 - `state_dir = ~/.redeven/scopes/local/default/`
+- `state_root = ~/.redeven/`
 
-Code App data:
+Environment-scoped Code App data:
 
 ```
-~/.redeven/scopes/local/default/
-  config.json
-  apps/
-    code/
-      runtime/
-        managed/
-          bin/code-server
-          lib/code-server-<upstream_release>/
+~/.redeven/
+  scopes/
+    local/
+      default/
+        config.json
+        apps/
+          code/
+            runtime/
+              current.json
+              managed -> ~/.redeven/shared/code-server/<os>-<arch>/versions/<version>/
+            registry.sqlite
+            spaces/
+              <code_space_id>/
+                codeserver/
+                  user-data/
+                  extensions/
+                  xdg-config/
+                  xdg-cache/
+                  xdg-data/
+                  stdout.log
+                  stderr.log
+```
+
+Machine-scoped shared managed runtime data:
+
+```
+~/.redeven/
+  shared/
+    code-server/
+      <os>-<arch>/
+        machine.json
+        lock
+        downloads/
+          install.sh
         staging/
           <job_id>/
-        cache/
-          installer/
-            install.sh
-          code-server/
-            code-server-<upstream_release>-<os>-<arch>.tar.gz
-      registry.sqlite
-      spaces/
-        <code_space_id>/
-          codeserver/
-            user-data/
-            extensions/
-            xdg-config/
-            xdg-cache/
-            xdg-data/
-            stdout.log
-            stderr.log
+        versions/
+          <version>/
+            bin/code-server
+            lib/code-server-<upstream_release>/
 ```
 
 Deleting a codespace via the Env App (Codespaces page) removes:
@@ -83,10 +98,24 @@ Instead, Codespaces can install a **managed** `code-server` runtime on demand af
 Rules:
 
 - Redeven never auto-installs `code-server` on page load or on codespace open.
-- The user must explicitly click `Install latest` or `Update to latest`.
+- Installing a managed version stores it once per machine under the shared runtime root.
+- Each environment stores only its own managed version selection in `apps/code/runtime/current.json`.
+- New environments inherit the machine default managed version when they do not pin their own version.
+- The user must explicitly click `Install and use for this environment` or `Install latest and use for this environment`.
 - Redeven runs the official upstream `code-server` install script in `standalone` mode and follows the latest stable release flow by default.
-- The managed install target lives under the runtime state directory, so no user shell commands or PATH edits are required.
+- The environment-local `apps/code/runtime/managed` path is only a symlink to the selected shared version.
+- No user shell commands or PATH edits are required for the managed runtime.
 - Redeven does not pin business behavior to one exact upstream `code-server` version.
+- If an environment explicitly selected a managed version and that version is missing or unusable, Redeven reports the problem directly and does **not** silently fall back to another managed or host runtime.
+
+Managed selection precedence remains:
+
+1. `REDEVEN_CODE_SERVER_BIN`
+2. `CODE_SERVER_BIN`
+3. `CODE_SERVER_PATH`
+4. explicit environment-managed selection
+5. machine default managed selection
+6. host runtime discovery
 
 ## Runtime status and install API
 
@@ -94,35 +123,47 @@ Env App uses the local gateway runtime endpoints before it tries to start Code A
 
 - `GET /_redeven_proxy/api/code-runtime/status`
 - `POST /_redeven_proxy/api/code-runtime/install`
-- `POST /_redeven_proxy/api/code-runtime/uninstall`
+- `POST /_redeven_proxy/api/code-runtime/select`
+- `POST /_redeven_proxy/api/code-runtime/default`
+- `POST /_redeven_proxy/api/code-runtime/detach`
+- `POST /_redeven_proxy/api/code-runtime/remove-version`
 - `POST /_redeven_proxy/api/code-runtime/cancel`
 
 The explicit install flow is:
 
 1. Env App reads runtime status.
 2. Env App Settings exposes a dedicated `code-server Runtime` management card that shows:
-   - a steady-state runtime summary for the current Codespaces runtime,
-   - a separate `Managed runtime` section only when the managed install adds distinct context beyond the current runtime,
-   - a focused running/error panel for explicit install or uninstall actions,
+   - the current environment selection,
+   - the machine-managed version inventory and machine default,
+   - a focused running/error panel for explicit install or machine-version removal actions,
    - recent output only while an operation is running or when the last action failed or was cancelled.
 3. If the runtime is missing or unusable, Env App Codespaces shows a dedicated install UI instead of trying to start a codespace.
-4. After the user explicitly clicks `Install latest` or `Update to latest`, the runtime:
+4. After the user explicitly clicks `Install and use for this environment` or `Install latest and use for this environment`, the runtime:
    - downloads the official upstream `install.sh` latest-stable entrypoint,
-   - runs it with `--method=standalone --prefix <managed staging prefix>`,
-   - validates that the installed binary is usable,
-   - promotes the managed runtime into the stable managed prefix.
-5. If the user explicitly clicks `Uninstall`, the runtime removes only the Redeven-managed runtime path. Host-installed runtimes and environment overrides are left untouched.
-6. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
+   - runs it with `--method=standalone --prefix <shared staging prefix>`,
+   - validates the staged binary and resolves the upstream `code-server` version,
+   - promotes that install into `shared/code-server/<os>-<arch>/versions/<version>/`,
+   - selects that version for the current environment,
+   - sets the machine default only when the machine does not already have one.
+5. If the resolved latest version is already installed on the machine, Redeven reuses it and only updates the current environment selection instead of running a second install.
+6. `POST /detach` removes only the current environment pin. It does not delete any machine-managed files.
+7. `POST /remove-version` deletes only one machine-managed version, and only when it is not the machine default and no environment still selects it.
+8. Env App shows focused progress while the action is running, then returns to the calm steady state after success. Failed or cancelled actions keep their recent output visible for recovery.
 
 ## Runtime status model
 
 `GET /_redeven_proxy/api/code-runtime/status` returns:
 
 - `active_runtime`: the runtime currently selected for Codespaces (`managed`, `system`, `env_override`, or `none`)
-- `managed_runtime`: the Redeven-managed runtime under the runtime state directory, whether or not it is currently selected
-- `operation`: the current or most recent explicit management operation (`install` / `uninstall`) plus stage, error, and log tail
+- `managed_runtime`: the managed version currently selected for the environment or inherited from the machine default, whether or not it is active
+- `environment_selection_version`: the managed version chosen by or inherited into the current environment
+- `environment_selection_source`: `environment`, `machine_default`, or `none`
+- `machine_default_version`: the managed version inherited by new environments on this machine
+- `shared_runtime_root`: the machine-scoped shared runtime directory
+- `installed_versions[]`: every managed version installed on this machine, including selection counts, removability, default status, and health
+- `operation`: the current or most recent explicit management operation (`install` / `remove_machine_version`) plus stage, error, target version, and log tail
 
-This split exists so Settings can truthfully show managed runtime state even when an env override or host runtime is active.
+This split exists so Settings can truthfully show managed inventory, environment selection, and active runtime precedence without inferring hidden state on the client.
 
 ## code-server binary resolution
 
@@ -132,11 +173,12 @@ Binary resolution order:
    - `REDEVEN_CODE_SERVER_BIN`
    - `CODE_SERVER_BIN`
    - `CODE_SERVER_PATH`
-2) Redeven-managed runtime under `~/.redeven/apps/code/runtime/managed/`
-3) Common install locations (`~/.local/bin/code-server`, Homebrew paths, `/usr/local/bin`, `/usr/bin`, ...)
-4) `PATH` (`exec.LookPath("code-server")`)
+2) The current environment's explicit managed version selection, if present
+3) The machine default managed version, if present
+4) Common install locations (`~/.local/bin/code-server`, Homebrew paths, `/usr/local/bin`, `/usr/bin`, ...)
+5) `PATH` (`exec.LookPath("code-server")`)
 
-The selected binary must be usable on the current machine. If the resolved runtime is missing or unusable, Env App blocks the Codespaces launch path and asks the user to explicitly install or update the managed runtime.
+The selected binary must be usable on the current machine. If an explicit managed selection is missing or unusable, Redeven reports that exact problem and does not silently fall back to host discovery. If no managed selection exists at all, Env App blocks the Codespaces launch path and asks the user to explicitly install the managed runtime.
 
 ### Note for macOS/Homebrew
 
@@ -193,12 +235,12 @@ This is conservative: code-server is not designed to enforce a partial permissio
   - Open the codespace from the Redeven Env App (Codespaces page). Do not open the sandbox subdomain directly.
 
 - "code-server binary not found":
-  - Open Env App -> Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime` -> `Install latest`.
+  - Open Env App -> Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime` and use the explicit install action for the current environment.
   - If you intentionally manage `code-server` yourself, set `REDEVEN_CODE_SERVER_BIN` to a usable binary path.
 
 - "code-server binary is present but unusable":
   - Redeven detected a `code-server` binary, but the runtime probe failed on this host.
-  - Update the Redeven-managed runtime to latest from Env App -> Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
+  - Reinstall or reselect a usable managed version from Env App -> Runtime Settings -> `Codespaces & Tooling` -> `code-server Runtime`, or point `REDEVEN_CODE_SERVER_BIN` at a usable binary.
 
 - "code-server did not start listening on 127.0.0.1:PORT":
   - Check the per-codespace logs under:

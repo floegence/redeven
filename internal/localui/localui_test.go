@@ -79,7 +79,19 @@ func (localUITestBackend) InstallCodeRuntime(context.Context) (gatewaypkg.CodeRu
 	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) UninstallCodeRuntime(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+func (localUITestBackend) SelectCodeRuntimeVersion(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{}, nil
+}
+
+func (localUITestBackend) SetCodeRuntimeDefaultVersion(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{}, nil
+}
+
+func (localUITestBackend) RemoveCodeRuntimeSelection(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
+	return gatewaypkg.CodeRuntimeStatus{}, nil
+}
+
+func (localUITestBackend) RemoveCodeRuntimeVersion(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
 	return gatewaypkg.CodeRuntimeStatus{}, nil
 }
 

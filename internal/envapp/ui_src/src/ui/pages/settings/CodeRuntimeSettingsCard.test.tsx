@@ -29,10 +29,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     </Show>
   ),
   HighlightBlock: (props: any) => (
-    <div
-      class={['highlight-block', props.class].filter(Boolean).join(' ')}
-      data-highlight-variant={props.variant}
-    >
+    <div class={['highlight-block', props.class].filter(Boolean).join(' ')} data-highlight-variant={props.variant}>
       <div>{props.title}</div>
       {props.children}
     </div>
@@ -65,24 +62,42 @@ vi.mock('./SettingsPrimitives', () => ({
 }));
 
 function makeStatus(overrides: any = {}) {
-  const managedPrefix = '/Users/test/.redeven/apps/code/runtime/managed';
+  const sharedRoot = '/Users/test/.redeven/shared/code-server/darwin-arm64';
+  const managedPrefix = '/Users/test/.redeven/scopes/controlplane/dev/env_1/apps/code/runtime/managed';
   return {
-    ...overrides,
     active_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
-      binary_path: `${managedPrefix}/bin/code-server`,
+      binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
+      version: '4.109.1',
       ...(overrides.active_runtime ?? {}),
     },
     managed_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
-      binary_path: `${managedPrefix}/bin/code-server`,
+      binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
+      version: '4.109.1',
       ...(overrides.managed_runtime ?? {}),
     },
     managed_prefix: managedPrefix,
+    shared_runtime_root: sharedRoot,
+    environment_selection_version: '4.109.1',
+    environment_selection_source: 'environment',
+    machine_default_version: '4.109.1',
+    installed_versions: [
+      {
+        version: '4.109.1',
+        binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
+        selection_count: 1,
+        selected_by_current_environment: true,
+        default_for_new_environments: true,
+        removable: false,
+        detection_state: 'ready',
+      },
+      ...(overrides.installed_versions ?? []),
+    ],
     installer_script_url: 'https://code-server.dev/install.sh',
     operation: {
       state: 'idle',
@@ -90,6 +105,7 @@ function makeStatus(overrides: any = {}) {
       ...(overrides.operation ?? {}),
     },
     updated_at_unix_ms: 1,
+    ...overrides,
   };
 }
 
@@ -101,11 +117,17 @@ function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCar
     canInteract: true,
     canManage: true,
     actionLoading: false,
-    uninstallLoading: false,
     cancelLoading: false,
+    selectionLoadingVersion: null,
+    defaultLoadingVersion: null,
+    detachLoading: false,
+    removeVersionLoading: null,
     onRefresh: () => undefined,
     onInstall: () => undefined,
-    onUninstall: () => undefined,
+    onSelectVersion: () => undefined,
+    onSetDefaultVersion: () => undefined,
+    onDetach: () => undefined,
+    onRemoveVersion: () => undefined,
     onCancel: () => undefined,
     ...overrides,
   };
@@ -126,30 +148,18 @@ describe('CodeRuntimeSettingsCard', () => {
     host.remove();
   });
 
-  it('collapses to a single current runtime section when the managed runtime is healthy and selected', () => {
+  it('renders current environment and machine inventory sections with scope-explicit wording', () => {
     renderCard(host);
 
-    expect(host.textContent).toContain('Current runtime');
-    expect(host.textContent).not.toContain('Codespaces selection');
-    expect(host.textContent).toContain('Managed location');
-    expect(host.querySelectorAll('table')).toHaveLength(1);
+    expect(host.textContent).toContain('Current environment');
+    expect(host.textContent).toContain('Installed on this machine');
+    expect(host.textContent).toContain('Pinned to this environment');
+    expect(host.textContent).toContain('Shared runtime root');
+    expect(host.textContent).toContain('Use for this environment');
+    expect(host.textContent).toContain('Set as default for new environments');
   });
 
-  it('shows managed runtime details when a host runtime is active instead of the managed runtime', () => {
-    renderCard(host, {
-      status: makeStatus({
-        active_runtime: { source: 'system', binary_path: '/usr/local/bin/code-server' },
-      }),
-    });
-
-    expect(host.textContent).toContain('Update to latest');
-    expect(host.textContent).toContain('Current runtime');
-    expect(host.textContent).toContain('Managed runtime');
-    expect(host.textContent).toContain('higher-priority runtime is currently active');
-    expect(host.querySelectorAll('table')).toHaveLength(2);
-  });
-
-  it('renders a compact installable state when no compatible runtime is installed', () => {
+  it('shows an empty-state warning when no managed versions are installed on this machine', () => {
     renderCard(host, {
       status: makeStatus({
         active_runtime: {
@@ -164,139 +174,46 @@ describe('CodeRuntimeSettingsCard', () => {
           source: 'managed',
           binary_path: '',
         },
+        installed_versions: [],
+        environment_selection_source: 'none',
+        environment_selection_version: '',
+        machine_default_version: '',
       }),
     });
 
-    expect(host.textContent).toContain('No runtime installed');
-    expect(host.textContent).toContain('Codespaces needs a usable code-server runtime before it can start.');
-    expect(host.querySelector('.highlight-block')?.getAttribute('data-highlight-variant')).toBe('warning');
-    expect(host.textContent).not.toContain('Current runtime');
-    expect(host.textContent).not.toContain('Managed runtime');
-    expect(host.querySelectorAll('table')).toHaveLength(0);
+    expect(host.textContent).toContain('No managed versions installed');
+    expect(host.textContent).toContain('Install the latest stable managed runtime once on this machine');
   });
 
-  it('shows a focused uninstall progress panel while runtime removal is running', () => {
-    renderCard(host, {
-      status: makeStatus({
-        operation: {
-          action: 'uninstall',
-          state: 'running',
-          stage: 'removing',
-          log_tail: ['Preparing managed code-server uninstall.', 'Managed runtime has been removed.'],
-        },
-      }),
-    });
-
-    expect(host.textContent).toContain('Removing managed runtime');
-    expect(host.textContent).toContain('Removing managed runtime files...');
-    expect(host.textContent).toContain('Recent runtime output');
-    expect(host.textContent).not.toContain('Current runtime');
-    expect(host.textContent).not.toContain('Codespaces selection');
-    expect(host.querySelectorAll('table')).toHaveLength(0);
-  });
-
-  it('returns to the compact steady state after a successful uninstall', () => {
-    renderCard(host, {
-      status: makeStatus({
-        active_runtime: {
-          detection_state: 'missing',
-          present: false,
-          source: 'none',
-          binary_path: '',
-        },
-        managed_runtime: {
-          detection_state: 'missing',
-          present: false,
-          source: 'managed',
-          binary_path: '',
-        },
-        operation: {
-          action: 'uninstall',
-          state: 'succeeded',
-          log_tail: ['Preparing managed code-server uninstall.', 'Managed runtime has been removed.'],
-        },
-      }),
-    });
-
-    expect(host.textContent).toContain('No runtime installed');
-    expect(host.textContent).not.toContain('Uninstall completed');
-    expect(host.textContent).not.toContain('Recent runtime output');
-    expect(host.querySelectorAll('table')).toHaveLength(0);
-  });
-
-  it('shows an attention panel with output when uninstall fails', () => {
-    renderCard(host, {
-      status: makeStatus({
-        operation: {
-          action: 'uninstall',
-          state: 'failed',
-          last_error: 'permission denied',
-          log_tail: ['Preparing managed code-server uninstall.', 'permission denied'],
-        },
-      }),
-    });
-
-    expect(host.textContent).toContain('Unable to remove managed runtime');
-    expect(host.textContent).toContain('permission denied');
-    expect(host.textContent).toContain('Recent runtime output');
-    expect(host.textContent).toContain('Current runtime');
-    expect(host.querySelectorAll('table')).toHaveLength(1);
-  });
-
-  it('opens the explicit install confirmation and calls the install action', async () => {
+  it('opens the install confirmation and calls the install action', () => {
     const onInstall = vi.fn(async () => undefined);
+    renderCard(host, { onInstall });
 
-    renderCard(host, {
-      status: makeStatus({
-        active_runtime: {
-          detection_state: 'missing',
-          present: false,
-          source: 'none',
-          binary_path: '',
-        },
-        managed_runtime: {
-          detection_state: 'missing',
-          present: false,
-          source: 'managed',
-          binary_path: '',
-        },
-      }),
-      onInstall,
-    });
-
-    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install latest');
+    const installButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Install latest and use for this environment');
     installButton?.click();
 
-    expect(host.textContent).toContain('Redeven will run the official latest-stable code-server installer');
-    expect(host.textContent).toContain('https://code-server.dev/install.sh');
+    expect(host.textContent).toContain('Redeven will install the latest stable managed code-server runtime');
+    expect(host.textContent).toContain('This does not automatically switch other environments');
 
-    const confirmButton = Array.from(host.querySelectorAll('button'))
-      .filter((button) => button.textContent === 'Install latest')
-      .at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Install latest and use for this environment').at(-1);
     confirmButton?.click();
 
     expect(onInstall).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the explicit uninstall confirmation and calls the uninstall action', () => {
-    const onUninstall = vi.fn(async () => undefined);
+  it('opens the current-environment removal confirmation and calls the detach action', () => {
+    const onDetach = vi.fn(async () => undefined);
+    renderCard(host, { onDetach });
 
-    renderCard(host, { onUninstall });
+    const detachButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Remove from current environment');
+    detachButton?.click();
 
-    expect(host.textContent).not.toContain('Uninstall managed runtime');
-    expect(host.textContent).toContain('Current runtime');
-    expect(host.querySelectorAll('table')).toHaveLength(1);
+    expect(host.textContent).toContain('This environment will stop using its pinned managed version.');
+    expect(host.textContent).toContain('No machine-managed version files are deleted by this action.');
 
-    const uninstallButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Uninstall');
-    uninstallButton?.click();
-
-    expect(host.textContent).toContain('This removes only the Redeven-managed code-server runtime');
-
-    const confirmButton = Array.from(host.querySelectorAll('button'))
-      .filter((button) => button.textContent === 'Uninstall')
-      .at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Remove from current environment').at(-1);
     confirmButton?.click();
 
-    expect(onUninstall).toHaveBeenCalledTimes(1);
+    expect(onDetach).toHaveBeenCalledTimes(1);
   });
 });

@@ -27,6 +27,7 @@ func TestNewMigratesLegacyFollowupQueueSchema(t *testing.T) {
 	svc, err := New(context.Background(), Options{
 		Logger:       slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
 		StateDir:     stateDir,
+		StateRoot:    stateDir,
 		ConfigPath:   filepath.Join(stateDir, "config.json"),
 		AgentHomeDir: stateDir,
 		Shell:        "/bin/sh",

@@ -2,7 +2,6 @@ package codeserver
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,11 +16,7 @@ func TestRuntimeManagerStatusDetectsSupportedOverride(t *testing.T) {
 	writeFakeCodeServerBinary(t, bin, "4.108.2")
 	t.Setenv("REDEVEN_CODE_SERVER_BIN", bin)
 
-	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             t.TempDir(),
-		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
-	})
-
+	mgr := newTestRuntimeManager(t)
 	status := waitForActiveRuntimeDetection(t, mgr, RuntimeDetectionReady)
 	if status.ActiveRuntime.Source != "env_override" {
 		t.Fatalf("source=%q, want %q", status.ActiveRuntime.Source, "env_override")
@@ -31,61 +26,105 @@ func TestRuntimeManagerStatusDetectsSupportedOverride(t *testing.T) {
 	}
 }
 
-func TestRuntimeManagerStatusRejectsUnsupportedOverride(t *testing.T) {
-	root := t.TempDir()
-	bin := filepath.Join(root, "code-server")
-	writeBrokenCodeServerBinary(t, bin, "boom")
-	t.Setenv("REDEVEN_CODE_SERVER_BIN", bin)
+func TestRuntimeManagerSelectedManagedVersionDoesNotSilentlyFallBackToSystem(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	systemRoot := t.TempDir()
+	systemBin := filepath.Join(systemRoot, "code-server")
+	writeFakeCodeServerBinary(t, systemBin, "4.108.2")
+	t.Setenv("PATH", systemRoot+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := saveScopeSelection(stateDir, scopeSelectionState{
+		SelectedVersion: "4.109.1",
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("saveScopeSelection() error = %v", err)
+	}
+	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+		DefaultVersion: "",
+		Versions:       map[string]machineRuntimeVersion{},
+		Selections: map[string]machineRuntimeSelection{
+			filepath.Clean(stateDir): {
+				Version:         "4.109.1",
+				UpdatedAtUnixMs: time.Now().UnixMilli(),
+			},
+		},
+	}); err != nil {
+		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	}
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             t.TempDir(),
-		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
+		StateDir:             stateDir,
+		StateRoot:            stateRoot,
+		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
 	})
 
 	status := mgr.Status(context.Background())
-	if status.ActiveRuntime.DetectionState != RuntimeDetectionUnusable {
-		t.Fatalf("active detection_state=%q, want %q", status.ActiveRuntime.DetectionState, RuntimeDetectionUnusable)
+	if status.ActiveRuntime.Source != "managed" {
+		t.Fatalf("active source=%q, want managed", status.ActiveRuntime.Source)
 	}
-	if status.ActiveRuntime.ErrorCode != "binary_unusable" {
-		t.Fatalf("error_code=%q, want %q", status.ActiveRuntime.ErrorCode, "binary_unusable")
+	if status.ActiveRuntime.DetectionState != RuntimeDetectionMissing {
+		t.Fatalf("active detection_state=%q, want missing", status.ActiveRuntime.DetectionState)
+	}
+	if status.ActiveRuntime.ErrorCode != "managed_version_missing" {
+		t.Fatalf("error_code=%q, want managed_version_missing", status.ActiveRuntime.ErrorCode)
 	}
 }
 
-func TestRuntimeManagerStatusKeepsManagedRuntimeVisibleWhenOverrideIsActive(t *testing.T) {
+func TestRuntimeManagerStatusKeepsSelectedManagedRuntimeVisibleWhenOverrideIsActive(t *testing.T) {
 	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
 	overrideRoot := t.TempDir()
 	overrideBin := filepath.Join(overrideRoot, "code-server")
 	writeFakeCodeServerBinary(t, overrideBin, "4.108.2")
 	t.Setenv("REDEVEN_CODE_SERVER_BIN", overrideBin)
 
-	managedBin := filepath.Join(managedRuntimePrefix(stateDir), "bin", codeServerBinaryName())
-	writeFakeCodeServerBinary(t, managedBin, "4.108.2")
+	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName()), "4.109.1")
+	if err := saveScopeSelection(stateDir, scopeSelectionState{
+		SelectedVersion: "4.109.1",
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("saveScopeSelection() error = %v", err)
+	}
+	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+		Versions: map[string]machineRuntimeVersion{
+			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+		},
+		Selections: map[string]machineRuntimeSelection{
+			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
+		},
+	}); err != nil {
+		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	}
 
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             stateDir,
-		InstallScriptContent: []byte("#!/bin/sh\nexit 0\n"),
+		StateRoot:            stateRoot,
+		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
 	})
 
 	status := waitForActiveRuntimeDetection(t, mgr, RuntimeDetectionReady)
 	if status.ActiveRuntime.Source != "env_override" {
 		t.Fatalf("active source=%q, want env_override", status.ActiveRuntime.Source)
 	}
-	if !status.ManagedRuntime.Present {
-		t.Fatalf("managed runtime should be present")
-	}
-	if status.ManagedRuntime.Source != "managed" {
-		t.Fatalf("managed source=%q, want managed", status.ManagedRuntime.Source)
-	}
 	if status.ManagedRuntime.DetectionState != RuntimeDetectionReady {
-		t.Fatalf("managed detection_state=%q, want %q", status.ManagedRuntime.DetectionState, RuntimeDetectionReady)
+		t.Fatalf("managed detection_state=%q, want ready", status.ManagedRuntime.DetectionState)
+	}
+	if status.ManagedRuntime.Version != "4.109.1" {
+		t.Fatalf("managed version=%q, want 4.109.1", status.ManagedRuntime.Version)
+	}
+	if status.EnvironmentSelectionSource != "environment" {
+		t.Fatalf("environment_selection_source=%q, want environment", status.EnvironmentSelectionSource)
 	}
 }
 
-func TestRuntimeManagerInstallSucceedsAndPromotesManagedRuntime(t *testing.T) {
+func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *testing.T) {
 	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:             stateDir,
-		InstallScriptContent: []byte(fakeInstallScript("latest", false, 0)),
+		StateRoot:            stateRoot,
+		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
 	})
 
 	status := mgr.StartInstall(context.Background())
@@ -94,92 +133,195 @@ func TestRuntimeManagerInstallSucceedsAndPromotesManagedRuntime(t *testing.T) {
 	}
 
 	final := waitForOperationState(t, mgr, RuntimeOperationStateSucceeded)
-	managedBin := filepath.Join(managedRuntimePrefix(stateDir), "bin", codeServerBinaryName())
+	sharedBin := filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName())
 	if final.ActiveRuntime.DetectionState != RuntimeDetectionReady {
-		t.Fatalf("active detection_state=%q, want %q", final.ActiveRuntime.DetectionState, RuntimeDetectionReady)
+		t.Fatalf("active detection_state=%q, want ready", final.ActiveRuntime.DetectionState)
 	}
-	if final.ManagedRuntime.DetectionState != RuntimeDetectionReady {
-		t.Fatalf("managed detection_state=%q, want %q", final.ManagedRuntime.DetectionState, RuntimeDetectionReady)
+	if final.EnvironmentSelectionVersion != "4.109.1" {
+		t.Fatalf("environment_selection_version=%q, want 4.109.1", final.EnvironmentSelectionVersion)
 	}
-	if _, err := os.Stat(managedBin); err != nil {
-		t.Fatalf("managed runtime missing: %v", err)
+	if final.MachineDefaultVersion != "4.109.1" {
+		t.Fatalf("machine_default_version=%q, want 4.109.1", final.MachineDefaultVersion)
 	}
-	if err := probeRuntimeBinary(context.Background(), managedBin); err != nil {
-		t.Fatalf("probeRuntimeBinary(managedBin) error = %v", err)
+	if _, err := os.Stat(sharedBin); err != nil {
+		t.Fatalf("shared runtime missing: %v", err)
+	}
+	linkTarget, err := os.Readlink(managedRuntimePrefix(stateDir))
+	if err != nil {
+		t.Fatalf("Readlink(managedRuntimePrefix) error = %v", err)
+	}
+	if filepath.Clean(linkTarget) != filepath.Clean(sharedVersionRoot(stateRoot, "4.109.1")) {
+		t.Fatalf("managed link target=%q, want %q", linkTarget, sharedVersionRoot(stateRoot, "4.109.1"))
 	}
 }
 
-func TestRuntimeManagerInstallFailsWithInstallerError(t *testing.T) {
-	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             t.TempDir(),
-		InstallScriptContent: []byte(fakeInstallScript("latest", true, 0)),
-	})
+func TestRuntimeManagerInstallReusesExistingSharedVersion(t *testing.T) {
+	stateRoot := t.TempDir()
+	firstStateDir := t.TempDir()
+	secondStateDir := t.TempDir()
 
-	mgr.StartInstall(context.Background())
+	first := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:             firstStateDir,
+		StateRoot:            stateRoot,
+		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+	})
+	first.StartInstall(context.Background())
+	waitForOperationState(t, first, RuntimeOperationStateSucceeded)
+
+	second := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:             secondStateDir,
+		StateRoot:            stateRoot,
+		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+	})
+	second.StartInstall(context.Background())
+	final := waitForOperationState(t, second, RuntimeOperationStateSucceeded)
+
+	if final.EnvironmentSelectionVersion != "4.109.1" {
+		t.Fatalf("environment_selection_version=%q, want 4.109.1", final.EnvironmentSelectionVersion)
+	}
+	state, err := loadMachineRuntimeState(stateRoot)
+	if err != nil {
+		t.Fatalf("loadMachineRuntimeState() error = %v", err)
+	}
+	if len(state.Versions) != 1 {
+		t.Fatalf("len(versions)=%d, want 1", len(state.Versions))
+	}
+}
+
+func TestRuntimeManagerRemoveEnvironmentSelectionFallsBackToMachineDefault(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.108.2"), "bin", codeServerBinaryName()), "4.108.2")
+	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName()), "4.109.1")
+
+	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+		DefaultVersion: "4.108.2",
+		Versions: map[string]machineRuntimeVersion{
+			"4.108.2": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+		},
+		Selections: map[string]machineRuntimeSelection{
+			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
+		},
+	}); err != nil {
+		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	}
+	if err := saveScopeSelection(stateDir, scopeSelectionState{
+		SelectedVersion: "4.109.1",
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("saveScopeSelection() error = %v", err)
+	}
+
+	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: stateDir, StateRoot: stateRoot})
+	status, err := mgr.RemoveEnvironmentSelection(context.Background())
+	if err != nil {
+		t.Fatalf("RemoveEnvironmentSelection() error = %v", err)
+	}
+	if status.EnvironmentSelectionSource != "machine_default" {
+		t.Fatalf("environment_selection_source=%q, want machine_default", status.EnvironmentSelectionSource)
+	}
+	if status.EnvironmentSelectionVersion != "4.108.2" {
+		t.Fatalf("environment_selection_version=%q, want 4.108.2", status.EnvironmentSelectionVersion)
+	}
+	if _, err := os.Stat(scopeSelectionPath(stateDir)); !os.IsNotExist(err) {
+		t.Fatalf("scope selection should be removed, err=%v", err)
+	}
+}
+
+func TestRuntimeManagerRemoveMachineVersionEnforcesSafetyChecks(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.108.2"), "bin", codeServerBinaryName()), "4.108.2")
+	writeFakeCodeServerBinary(t, filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName()), "4.109.1")
+	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+		DefaultVersion: "4.108.2",
+		Versions: map[string]machineRuntimeVersion{
+			"4.108.2": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+		},
+		Selections: map[string]machineRuntimeSelection{
+			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
+		},
+	}); err != nil {
+		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	}
+
+	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: stateDir, StateRoot: stateRoot})
+	if _, err := mgr.RemoveMachineVersion(context.Background(), "4.108.2"); err != nil {
+		t.Fatalf("RemoveMachineVersion(default) returned error = %v, want nil status kickoff", err)
+	}
 	final := waitForOperationState(t, mgr, RuntimeOperationStateFailed)
-	if final.Operation.LastErrorCode != "installer_failed" {
-		t.Fatalf("last_error_code=%q, want %q", final.Operation.LastErrorCode, "installer_failed")
+	if !strings.Contains(final.Operation.LastError, "machine default") {
+		t.Fatalf("last_error=%q, want machine default guidance", final.Operation.LastError)
+	}
+
+	state, err := loadMachineRuntimeState(stateRoot)
+	if err != nil {
+		t.Fatalf("loadMachineRuntimeState() error = %v", err)
+	}
+	state.DefaultVersion = ""
+	if err := saveMachineRuntimeState(stateRoot, state); err != nil {
+		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	}
+
+	if _, err := mgr.RemoveMachineVersion(context.Background(), "4.109.1"); err != nil {
+		t.Fatalf("RemoveMachineVersion(selected) returned error = %v, want nil status kickoff", err)
+	}
+	final = waitForOperationState(t, mgr, RuntimeOperationStateFailed)
+	if !strings.Contains(final.Operation.LastError, "selected by one or more environments") {
+		t.Fatalf("last_error=%q, want selection guidance", final.Operation.LastError)
+	}
+
+	delete(state.Selections, filepath.Clean(stateDir))
+	if err := saveMachineRuntimeState(stateRoot, state); err != nil {
+		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	}
+	if _, err := mgr.RemoveMachineVersion(context.Background(), "4.109.1"); err != nil {
+		t.Fatalf("RemoveMachineVersion(removable) returned error = %v", err)
+	}
+	final = waitForOperationState(t, mgr, RuntimeOperationStateSucceeded)
+	if final.Operation.TargetVersion != "4.109.1" {
+		t.Fatalf("target_version=%q, want 4.109.1", final.Operation.TargetVersion)
+	}
+	if _, err := os.Stat(sharedVersionRoot(stateRoot, "4.109.1")); !os.IsNotExist(err) {
+		t.Fatalf("shared version should be removed, err=%v", err)
 	}
 }
 
-func TestRuntimeManagerCancelInstall(t *testing.T) {
-	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             t.TempDir(),
-		InstallScriptContent: []byte(fakeInstallScript("latest", false, 5*time.Second)),
-	})
-
-	mgr.StartInstall(context.Background())
-	waitForRunning(t, mgr)
-	mgr.CancelOperation(context.Background())
-	final := waitForOperationState(t, mgr, RuntimeOperationStateCancelled)
-	if final.Operation.FinishedAtUnixMs == 0 {
-		t.Fatalf("finished_at_unix_ms=%d, want > 0", final.Operation.FinishedAtUnixMs)
-	}
-}
-
-func TestRuntimeManagerUninstallRemovesManagedRuntime(t *testing.T) {
+func TestResolveBinaryReturnsSelectedManagedRuntime(t *testing.T) {
 	stateDir := t.TempDir()
-	managedBin := filepath.Join(managedRuntimePrefix(stateDir), "bin", codeServerBinaryName())
-	writeFakeCodeServerBinary(t, managedBin, "4.108.2")
-
-	mgr := NewRuntimeManager(RuntimeManagerOptions{
-		StateDir:             stateDir,
-		InstallScriptContent: []byte(fakeInstallScript("latest", false, 0)),
-	})
-
-	status := mgr.StartUninstall(context.Background())
-	if status.Operation.State != RuntimeOperationStateRunning && status.Operation.State != RuntimeOperationStateSucceeded {
-		t.Fatalf("initial operation.state=%q, want running or succeeded", status.Operation.State)
+	stateRoot := t.TempDir()
+	managedBin := filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName())
+	writeFakeCodeServerBinary(t, managedBin, "4.109.1")
+	if err := saveMachineRuntimeState(stateRoot, machineRuntimeState{
+		Versions: map[string]machineRuntimeVersion{
+			"4.109.1": {InstalledAtUnixMs: time.Now().UnixMilli(), BinaryRelPath: filepath.Join("bin", codeServerBinaryName())},
+		},
+		Selections: map[string]machineRuntimeSelection{
+			filepath.Clean(stateDir): {Version: "4.109.1", UpdatedAtUnixMs: time.Now().UnixMilli()},
+		},
+	}); err != nil {
+		t.Fatalf("saveMachineRuntimeState() error = %v", err)
+	}
+	if err := saveScopeSelection(stateDir, scopeSelectionState{
+		SelectedVersion: "4.109.1",
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("saveScopeSelection() error = %v", err)
 	}
 
-	final := waitForOperationState(t, mgr, RuntimeOperationStateSucceeded)
-	if final.ManagedRuntime.DetectionState != RuntimeDetectionMissing {
-		t.Fatalf("managed detection_state=%q, want %q", final.ManagedRuntime.DetectionState, RuntimeDetectionMissing)
-	}
-	if final.ManagedRuntime.Present {
-		t.Fatalf("managed runtime should not be present after uninstall")
-	}
-	if _, err := os.Lstat(managedBin); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("managed binary should be removed, err=%v", err)
-	}
-}
-
-func TestResolveBinaryReturnsManagedRuntime(t *testing.T) {
-	stateDir := t.TempDir()
-	managedBin := filepath.Join(managedRuntimePrefix(stateDir), "bin", codeServerBinaryName())
-	writeFakeCodeServerBinary(t, managedBin, "4.108.2")
-
-	got, err := ResolveBinary(stateDir)
+	got, err := ResolveBinary(stateDir, stateRoot)
 	if err != nil {
 		t.Fatalf("ResolveBinary() error = %v", err)
 	}
 	if got != managedBin {
-		t.Fatalf("ResolveBinary() = %q, want %q", got, managedBin)
+		t.Fatalf("ResolveBinary()=%q, want %q", got, managedBin)
 	}
 }
 
 func TestRuntimeManagerStatusUsesOfficialLatestInstallerURL(t *testing.T) {
-	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: t.TempDir()})
+	mgr := NewRuntimeManager(RuntimeManagerOptions{StateDir: t.TempDir(), StateRoot: t.TempDir()})
 
 	status := mgr.Status(context.Background())
 	if status.InstallerScriptURL != defaultInstallScriptURL {
@@ -187,17 +329,29 @@ func TestRuntimeManagerStatusUsesOfficialLatestInstallerURL(t *testing.T) {
 	}
 }
 
-func waitForRunning(t *testing.T, mgr *RuntimeManager) {
+func newTestRuntimeManager(t *testing.T) *RuntimeManager {
+	t.Helper()
+	return NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:             t.TempDir(),
+		StateRoot:            t.TempDir(),
+		InstallScriptContent: []byte(fakeInstallScript("4.109.1", false, 0)),
+	})
+}
+
+func waitForActiveRuntimeDetection(t *testing.T, mgr *RuntimeManager, want RuntimeDetectionState) RuntimeStatus {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
+	last := RuntimeStatus{}
 	for time.Now().Before(deadline) {
 		status := mgr.Status(context.Background())
-		if status.Operation.State == RuntimeOperationStateRunning {
-			return
+		last = status
+		if status.ActiveRuntime.DetectionState == want {
+			return status
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("operation never entered running state")
+	t.Fatalf("active detection_state=%q, want %q (last=%+v)", last.ActiveRuntime.DetectionState, want, last)
+	return RuntimeStatus{}
 }
 
 func waitForOperationState(t *testing.T, mgr *RuntimeManager, want RuntimeOperationState) RuntimeStatus {
@@ -216,28 +370,6 @@ func waitForOperationState(t *testing.T, mgr *RuntimeManager, want RuntimeOperat
 	return RuntimeStatus{}
 }
 
-func waitForActiveRuntimeDetection(t *testing.T, mgr *RuntimeManager, want RuntimeDetectionState) RuntimeStatus {
-	t.Helper()
-	deadline := time.Now().Add(6 * time.Second)
-	last := RuntimeStatus{}
-	for time.Now().Before(deadline) {
-		status := mgr.Status(context.Background())
-		last = status
-		if status.ActiveRuntime.DetectionState == want {
-			return status
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf(
-		"active detection_state=%q, want %q (error_code=%q error=%q)",
-		last.ActiveRuntime.DetectionState,
-		want,
-		last.ActiveRuntime.ErrorCode,
-		last.ActiveRuntime.ErrorMessage,
-	)
-	return RuntimeStatus{}
-}
-
 func writeFakeCodeServerBinary(t *testing.T, path string, version string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -250,20 +382,6 @@ if [ "${1:-}" = "--version" ]; then
 fi
 echo "ok"
 `, version)
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-func writeBrokenCodeServerBinary(t *testing.T, path string, message string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
-	}
-	script := fmt.Sprintf(`#!/bin/sh
-echo "%s" >&2
-exit 1
-`, message)
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}

@@ -555,6 +555,7 @@ func (c *cli) runCmd(args []string) int {
 	a, err := agent.New(agent.Options{
 		Config:                cfg,
 		ConfigPath:            stateLayout.ConfigPath,
+		StateRoot:             stateLayout.StateRoot,
 		LocalUIEnabled:        localUIEnabled,
 		ControlChannelEnabled: controlChannelEnabled,
 		DesktopManaged:        *desktopManaged,

@@ -1,7 +1,7 @@
 import { fetchGatewayJSON } from './gatewayApi';
 
 export type CodeRuntimeDetectionState = 'ready' | 'missing' | 'unusable';
-export type CodeRuntimeOperationAction = 'install' | 'uninstall' | '';
+export type CodeRuntimeOperationAction = 'install' | 'remove_machine_version' | '';
 export type CodeRuntimeOperationState = 'idle' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 export type CodeRuntimeOperationStage = 'preparing' | 'downloading' | 'installing' | 'removing' | 'validating' | 'finalizing' | '';
 
@@ -10,7 +10,20 @@ export type CodeRuntimeTargetStatus = Readonly<{
   present: boolean;
   source: string;
   binary_path?: string;
+  version?: string;
   error_code?: string;
+  error_message?: string;
+}>;
+
+export type CodeRuntimeInstalledVersion = Readonly<{
+  version: string;
+  binary_path?: string;
+  installed_at_unix_ms?: number;
+  selection_count: number;
+  selected_by_current_environment?: boolean;
+  default_for_new_environments?: boolean;
+  removable?: boolean;
+  detection_state: CodeRuntimeDetectionState;
   error_message?: string;
 }>;
 
@@ -18,6 +31,7 @@ export type CodeRuntimeOperationStatus = Readonly<{
   action?: CodeRuntimeOperationAction;
   state: CodeRuntimeOperationState;
   stage?: CodeRuntimeOperationStage;
+  target_version?: string;
   last_error?: string;
   last_error_code?: string;
   started_at_unix_ms?: number;
@@ -29,6 +43,11 @@ export type CodeRuntimeStatus = Readonly<{
   active_runtime: CodeRuntimeTargetStatus;
   managed_runtime: CodeRuntimeTargetStatus;
   managed_prefix: string;
+  shared_runtime_root: string;
+  environment_selection_version?: string;
+  environment_selection_source: 'environment' | 'machine_default' | 'none';
+  machine_default_version?: string;
+  installed_versions: CodeRuntimeInstalledVersion[];
   installer_script_url: string;
   operation: CodeRuntimeOperationStatus;
   updated_at_unix_ms: number;
@@ -42,8 +61,29 @@ export async function installCodeRuntime(): Promise<CodeRuntimeStatus> {
   return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/install', { method: 'POST' });
 }
 
-export async function uninstallCodeRuntime(): Promise<CodeRuntimeStatus> {
-  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/uninstall', { method: 'POST' });
+export async function selectCodeRuntimeVersion(version: string): Promise<CodeRuntimeStatus> {
+  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/select', {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
+}
+
+export async function setCodeRuntimeDefaultVersion(version: string): Promise<CodeRuntimeStatus> {
+  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/default', {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
+}
+
+export async function detachCodeRuntimeSelection(): Promise<CodeRuntimeStatus> {
+  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/detach', { method: 'POST' });
+}
+
+export async function removeCodeRuntimeVersion(version: string): Promise<CodeRuntimeStatus> {
+  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/remove-version', {
+    method: 'POST',
+    body: JSON.stringify({ version }),
+  });
 }
 
 export async function cancelCodeRuntimeOperation(): Promise<CodeRuntimeStatus> {
@@ -80,7 +120,7 @@ export function codeRuntimeOperationNeedsAttention(status: CodeRuntimeStatus | n
 }
 
 export function codeRuntimeManagedInstalled(status: CodeRuntimeStatus | null | undefined): boolean {
-  return Boolean(status?.managed_runtime.present);
+  return (status?.installed_versions?.length ?? 0) > 0;
 }
 
 export function codeRuntimeManagedRuntimeSelected(status: CodeRuntimeStatus | null | undefined): boolean {
@@ -88,24 +128,24 @@ export function codeRuntimeManagedRuntimeSelected(status: CodeRuntimeStatus | nu
 }
 
 export function codeRuntimeManagedActionLabel(status: CodeRuntimeStatus | null | undefined): string {
-  if (!codeRuntimeManagedInstalled(status)) return 'Install latest';
-  return 'Update to latest';
+  if (!codeRuntimeManagedInstalled(status)) return 'Install and use for this environment';
+  return 'Install latest and use for this environment';
 }
 
 export function codeRuntimeStageLabel(stage: string | null | undefined, action?: string | null | undefined): string {
   const normalizedStage = String(stage ?? '').trim();
-  if (String(action ?? '').trim() === 'uninstall') {
+  if (String(action ?? '').trim() === 'remove_machine_version') {
     switch (normalizedStage) {
       case 'preparing':
-        return 'Preparing managed runtime removal...';
+        return 'Preparing machine version removal...';
       case 'removing':
-        return 'Removing managed runtime files...';
+        return 'Removing machine version files...';
       case 'validating':
-        return 'Validating managed runtime removal...';
+        return 'Validating machine version removal...';
       case 'finalizing':
-        return 'Finalizing runtime removal...';
+        return 'Finalizing machine version removal...';
       default:
-        return 'Removing managed runtime...';
+        return 'Removing machine version...';
     }
   }
 
@@ -121,6 +161,6 @@ export function codeRuntimeStageLabel(stage: string | null | undefined, action?:
     case 'finalizing':
       return 'Finalizing managed runtime...';
     default:
-      return 'Installing or updating code-server...';
+      return 'Installing code-server for this machine...';
   }
 }

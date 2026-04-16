@@ -161,31 +161,49 @@ async function waitForHostText(host: HTMLElement, text: string, attempts = 20): 
 }
 
 function makeRuntimeStatus(overrides: any = {}): any {
-  const managedPrefix = '/Users/test/.redeven/apps/code/runtime/managed';
+  const sharedRoot = '/Users/test/.redeven/shared/code-server/darwin-arm64';
+  const managedPrefix = '/Users/test/.redeven/scopes/controlplane/dev/env_1/apps/code/runtime/managed';
   return {
-    ...overrides,
     active_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
-      binary_path: `${managedPrefix}/bin/code-server`,
+      binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
+      version: '4.109.1',
       ...(overrides.active_runtime ?? {}),
     },
     managed_runtime: {
       detection_state: 'ready',
       present: true,
       source: 'managed',
-      binary_path: `${managedPrefix}/bin/code-server`,
+      binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
+      version: '4.109.1',
       ...(overrides.managed_runtime ?? {}),
     },
-    managed_prefix: managedPrefix,
-    installer_script_url: 'https://code-server.dev/install.sh',
+    managed_prefix: overrides.managed_prefix ?? managedPrefix,
+    shared_runtime_root: overrides.shared_runtime_root ?? sharedRoot,
+    environment_selection_version: overrides.environment_selection_version ?? '4.109.1',
+    environment_selection_source: overrides.environment_selection_source ?? 'environment',
+    machine_default_version: overrides.machine_default_version ?? '4.109.1',
+    installed_versions: overrides.installed_versions ?? [
+      {
+        version: '4.109.1',
+        binary_path: `${sharedRoot}/versions/4.109.1/bin/code-server`,
+        selection_count: 1,
+        selected_by_current_environment: true,
+        default_for_new_environments: true,
+        removable: false,
+        detection_state: 'ready',
+      },
+    ],
+    installer_script_url: overrides.installer_script_url ?? 'https://code-server.dev/install.sh',
     operation: {
       state: 'idle',
       log_tail: [],
       ...(overrides.operation ?? {}),
     },
     updated_at_unix_ms: 1,
+    ...overrides,
   };
 }
 
@@ -348,6 +366,10 @@ describe('EnvCodespacesPage', () => {
         source: 'managed',
         binary_path: '',
       },
+      installed_versions: [],
+      environment_selection_version: '',
+      environment_selection_source: 'none',
+      machine_default_version: '',
       operation: { state: 'idle', log_tail: [] },
     });
 
@@ -360,7 +382,7 @@ describe('EnvCodespacesPage', () => {
     expect(banner?.querySelector('.highlight-block')).toBeTruthy();
     expect(banner?.querySelector('.highlight-block')?.getAttribute('data-highlight-variant')).toBe('warning');
     expect(banner?.textContent).toContain('code-server runtime');
-    expect(banner?.textContent).toContain('Install latest');
+    expect(banner?.textContent).toContain('Install and use for this environment');
     expect(banner?.textContent).toContain('latest stable code-server');
   });
 
@@ -423,6 +445,10 @@ describe('EnvCodespacesPage', () => {
         source: 'managed',
         binary_path: '',
       },
+      installed_versions: [],
+      environment_selection_version: '',
+      environment_selection_source: 'none',
+      machine_default_version: '',
       operation: { state: 'idle', log_tail: [] },
     });
 
@@ -467,7 +493,7 @@ describe('EnvCodespacesPage', () => {
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
-    expect(host.textContent).toContain('Install latest');
+    expect(host.textContent).toContain('Install and use for this environment');
     expect(host.textContent).toContain('Pending action: Start codespace after install');
 
     windowOpenSpy.mockRestore();

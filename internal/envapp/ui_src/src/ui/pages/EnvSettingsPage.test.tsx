@@ -67,7 +67,10 @@ const gatewayMocks = vi.hoisted(() => ({
 const codeRuntimeMocks = vi.hoisted(() => ({
   fetchCodeRuntimeStatus: vi.fn(async () => null),
   installCodeRuntime: vi.fn(async () => undefined),
-  uninstallCodeRuntime: vi.fn(async () => undefined),
+  selectCodeRuntimeVersion: vi.fn(async () => undefined),
+  setCodeRuntimeDefaultVersion: vi.fn(async () => undefined),
+  detachCodeRuntimeSelection: vi.fn(async () => undefined),
+  removeCodeRuntimeVersion: vi.fn(async () => undefined),
   cancelCodeRuntimeOperation: vi.fn(async () => undefined),
   codeRuntimeOperationNeedsAttention: vi.fn(() => false),
   codeRuntimeOperationSucceeded: vi.fn(() => false),
@@ -178,7 +181,10 @@ vi.mock('../services/gatewayApi', () => ({
 vi.mock('../services/codeRuntimeApi', () => ({
   fetchCodeRuntimeStatus: codeRuntimeMocks.fetchCodeRuntimeStatus,
   installCodeRuntime: codeRuntimeMocks.installCodeRuntime,
-  uninstallCodeRuntime: codeRuntimeMocks.uninstallCodeRuntime,
+  selectCodeRuntimeVersion: codeRuntimeMocks.selectCodeRuntimeVersion,
+  setCodeRuntimeDefaultVersion: codeRuntimeMocks.setCodeRuntimeDefaultVersion,
+  detachCodeRuntimeSelection: codeRuntimeMocks.detachCodeRuntimeSelection,
+  removeCodeRuntimeVersion: codeRuntimeMocks.removeCodeRuntimeVersion,
   cancelCodeRuntimeOperation: codeRuntimeMocks.cancelCodeRuntimeOperation,
   codeRuntimeOperationNeedsAttention: codeRuntimeMocks.codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationSucceeded: codeRuntimeMocks.codeRuntimeOperationSucceeded,

@@ -255,11 +255,36 @@ func (s *Service) InstallCodeRuntime(ctx context.Context) (gateway.CodeRuntimeSt
 	return gateway.CodeRuntimeStatus(s.runtime.StartInstall(ctx)), nil
 }
 
-func (s *Service) UninstallCodeRuntime(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) SelectCodeRuntimeVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
 		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	return gateway.CodeRuntimeStatus(s.runtime.StartUninstall(ctx)), nil
+	status, err := s.runtime.SelectVersion(ctx, version)
+	return gateway.CodeRuntimeStatus(status), err
+}
+
+func (s *Service) SetCodeRuntimeDefaultVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	status, err := s.runtime.SetMachineDefaultVersion(ctx, version)
+	return gateway.CodeRuntimeStatus(status), err
+}
+
+func (s *Service) RemoveCodeRuntimeSelection(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	status, err := s.runtime.RemoveEnvironmentSelection(ctx)
+	return gateway.CodeRuntimeStatus(status), err
+}
+
+func (s *Service) RemoveCodeRuntimeVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	status, err := s.runtime.RemoveMachineVersion(ctx, version)
+	return gateway.CodeRuntimeStatus(status), err
 }
 
 func (s *Service) CancelCodeRuntimeOperation(ctx context.Context) (gateway.CodeRuntimeStatus, error) {

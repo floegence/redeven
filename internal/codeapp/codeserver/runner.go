@@ -17,8 +17,9 @@ import (
 )
 
 type RunnerOptions struct {
-	Logger   *slog.Logger
-	StateDir string
+	Logger    *slog.Logger
+	StateDir  string
+	StateRoot string
 
 	PortMin int
 	PortMax int
@@ -31,6 +32,7 @@ type RunnerOptions struct {
 type Runner struct {
 	log               *slog.Logger
 	stateDir          string
+	stateRoot         string
 	portMin           int
 	portMax           int
 	reconnectionGrace time.Duration
@@ -61,6 +63,7 @@ func NewRunner(opts RunnerOptions) *Runner {
 	return &Runner{
 		log:               logger,
 		stateDir:          strings.TrimSpace(opts.StateDir),
+		stateRoot:         strings.TrimSpace(opts.StateRoot),
 		portMin:           opts.PortMin,
 		portMax:           opts.PortMax,
 		reconnectionGrace: normalizePositiveDuration(opts.ReconnectionGrace),
@@ -206,7 +209,7 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		return nil, err
 	}
 
-	bin, err := ResolveBinary(r.stateDir)
+	bin, err := ResolveBinary(r.stateDir, r.stateRoot)
 	if err != nil {
 		return nil, err
 	}
