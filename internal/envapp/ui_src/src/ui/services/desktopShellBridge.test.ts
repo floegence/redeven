@@ -5,10 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   desktopShellExternalURLOpenAvailable,
   desktopShellBridgeAvailable,
+  minimizeDesktopWindow,
   openAdvancedSettings,
   openConnectionCenter,
   openExternalURLInDesktopShell,
   restartDesktopManagedRuntime,
+  toggleDesktopWindowFullScreen,
+  toggleDesktopWindowMaximize,
 } from './desktopShellBridge';
 
 afterEach(() => {
@@ -49,6 +52,82 @@ describe('desktopShellBridge', () => {
     expect(openWindowBridge).toHaveBeenNthCalledWith(1, 'connection_center');
     expect(openWindowBridge).toHaveBeenNthCalledWith(2, 'settings');
     expect(openWindowBridge).toHaveBeenCalledTimes(2);
+  });
+
+  it('prefers explicit native window command bridge methods when present', async () => {
+    const minimizeWindowBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      performed: true,
+      state: null,
+    });
+    const toggleMaximizeWindowBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      performed: true,
+      state: { minimized: false, maximized: true, full_screen: false, minimizable: true, maximizable: true, full_screenable: true },
+    });
+    const toggleFullScreenWindowBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      performed: true,
+      state: { minimized: false, maximized: false, full_screen: true, minimizable: true, maximizable: true, full_screenable: true },
+    });
+    window.redevenDesktopShell = {
+      minimizeWindow: minimizeWindowBridge,
+      toggleMaximizeWindow: toggleMaximizeWindowBridge,
+      toggleFullScreenWindow: toggleFullScreenWindowBridge,
+    };
+
+    await expect(minimizeDesktopWindow()).resolves.toEqual({
+      ok: true,
+      performed: true,
+      state: null,
+      message: undefined,
+    });
+    await expect(toggleDesktopWindowMaximize()).resolves.toEqual({
+      ok: true,
+      performed: true,
+      state: { minimized: false, maximized: true, full_screen: false, minimizable: true, maximizable: true, full_screenable: true },
+      message: undefined,
+    });
+    await expect(toggleDesktopWindowFullScreen()).resolves.toEqual({
+      ok: true,
+      performed: true,
+      state: { minimized: false, maximized: false, full_screen: true, minimizable: true, maximizable: true, full_screenable: true },
+      message: undefined,
+    });
+
+    expect(minimizeWindowBridge).toHaveBeenCalledTimes(1);
+    expect(toggleMaximizeWindowBridge).toHaveBeenCalledTimes(1);
+    expect(toggleFullScreenWindowBridge).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the generic window-command bridge when explicit methods are unavailable', async () => {
+    const performWindowCommandBridge = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        performed: true,
+        state: { minimized: true, maximized: false, full_screen: false, minimizable: true, maximizable: true, full_screenable: true },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        performed: true,
+        state: { minimized: false, maximized: true, full_screen: false, minimizable: true, maximizable: true, full_screenable: true },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        performed: true,
+        state: { minimized: false, maximized: false, full_screen: true, minimizable: true, maximizable: true, full_screenable: true },
+      });
+    window.redevenDesktopShell = {
+      performWindowCommand: performWindowCommandBridge,
+    };
+
+    await minimizeDesktopWindow();
+    await toggleDesktopWindowMaximize();
+    await toggleDesktopWindowFullScreen();
+
+    expect(performWindowCommandBridge).toHaveBeenNthCalledWith(1, 'minimize');
+    expect(performWindowCommandBridge).toHaveBeenNthCalledWith(2, 'toggle_maximize');
+    expect(performWindowCommandBridge).toHaveBeenNthCalledWith(3, 'toggle_full_screen');
   });
 
   it('forwards managed runtime restart when the desktop bridge exposes it', async () => {

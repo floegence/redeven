@@ -7,6 +7,11 @@ import {
   normalizeDesktopShellWindowKind,
 } from '../shared/desktopShellWindowIPC';
 import {
+  DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL,
+  normalizeDesktopShellWindowCommand,
+  normalizeDesktopShellWindowCommandResponse,
+} from '../shared/desktopShellWindowCommandIPC';
+import {
   DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
   normalizeDesktopShellRuntimeActionResponse,
 } from '../shared/desktopShellRuntimeIPC';
@@ -30,6 +35,24 @@ export function bootstrapDesktopShellBridge(): void {
       }
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: normalized });
     },
+    performWindowCommand: async (command: unknown) => {
+      const normalized = normalizeDesktopShellWindowCommand(command);
+      if (!normalized) {
+        return normalizeDesktopShellWindowCommandResponse(null);
+      }
+      return normalizeDesktopShellWindowCommandResponse(
+        await ipcRenderer.invoke(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, { command: normalized }),
+      );
+    },
+    minimizeWindow: async () => normalizeDesktopShellWindowCommandResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, { command: 'minimize' }),
+    ),
+    toggleMaximizeWindow: async () => normalizeDesktopShellWindowCommandResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, { command: 'toggle_maximize' }),
+    ),
+    toggleFullScreenWindow: async () => normalizeDesktopShellWindowCommandResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_WINDOW_COMMAND_CHANNEL, { command: 'toggle_full_screen' }),
+    ),
     openExternalURL: async (url: string) => normalizeDesktopShellOpenExternalURLResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL, { url }),
     ),

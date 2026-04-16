@@ -168,6 +168,8 @@ function snapshotBridgeState() {
     hasDesktopShellBridge: typeof window.redevenDesktopShell === 'object'
       && typeof window.redevenDesktopShell?.openConnectionCenter === 'function'
       && typeof window.redevenDesktopShell?.openAdvancedSettings === 'function'
+      && typeof window.redevenDesktopShell?.minimizeWindow === 'function'
+      && typeof window.redevenDesktopShell?.toggleFullScreenWindow === 'function'
       && typeof window.redevenDesktopShell?.restartManagedRuntime === 'function',
     hasStateStorageBridge: typeof window.redevenDesktopStateStorage === 'object',
     hasDesktopThemeBridge: typeof window.redevenDesktopTheme === 'object'
