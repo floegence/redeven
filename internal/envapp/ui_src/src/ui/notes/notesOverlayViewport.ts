@@ -6,6 +6,8 @@ type ResizeObserverLike = Readonly<{
 
 type ResizeObserverFactory = (callback: ResizeObserverCallback) => ResizeObserverLike | null;
 
+type NotesOverlayViewportSourceRect = Partial<Pick<DOMRectReadOnly, 'top' | 'left' | 'right' | 'bottom' | 'width' | 'height'>>;
+
 export const NOTES_OVERLAY_VIEWPORT_ATTR = 'data-redeven-notes-overlay-viewport';
 export const NOTES_OVERLAY_VIEWPORT_ATTR_VALUE = 'active';
 export const NOTES_OVERLAY_VIEWPORT_CSS_VARS = {
@@ -32,7 +34,7 @@ type NotesOverlayViewportSize = Readonly<{
 }>;
 
 export type NotesOverlayViewportController = Readonly<{
-  setViewportHostElement: (element: HTMLElement | null | undefined) => void;
+  setViewportHostElements: (elements: readonly (HTMLElement | null | undefined)[] | null | undefined) => void;
   setActive: (active: boolean) => void;
   rect: () => NotesOverlayViewportRect;
   sync: () => NotesOverlayViewportRect;
@@ -88,13 +90,14 @@ function defaultViewportSize(): NotesOverlayViewportSize {
 }
 
 export function resolveNotesOverlayViewportRect(args: Readonly<{
-  hostRect?: Partial<Pick<DOMRectReadOnly, 'top' | 'left' | 'right' | 'bottom' | 'width' | 'height'>> | null;
+  hostRect?: NotesOverlayViewportSourceRect | null;
+  hostRects?: readonly (NotesOverlayViewportSourceRect | null | undefined)[] | null;
   viewportWidth?: number;
   viewportHeight?: number;
 }>): NotesOverlayViewportRect {
   const viewportWidth = normalizeViewportPixelValue(args.viewportWidth);
   const viewportHeight = normalizeViewportPixelValue(args.viewportHeight);
-  const hostRect = args.hostRect;
+  const hostRect = resolveUnionHostRect(args.hostRects ?? (args.hostRect ? [args.hostRect] : []));
 
   if (!hostRect || viewportWidth <= 0 || viewportHeight <= 0) {
     return createEmptyRect();
@@ -121,13 +124,95 @@ export function resolveNotesOverlayViewportRect(args: Readonly<{
   };
 }
 
+function normalizeBoundaryValue(value: unknown): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return numeric;
+}
+
+function resolveRectEdgePair(
+  rect: NotesOverlayViewportSourceRect,
+  startKey: 'top' | 'left',
+  endKey: 'bottom' | 'right',
+  sizeKey: 'height' | 'width',
+): Readonly<{ start: number; end: number }> | null {
+  const start = normalizeBoundaryValue(rect[startKey]);
+  if (start === null) return null;
+
+  const explicitEnd = normalizeBoundaryValue(rect[endKey]);
+  if (explicitEnd !== null) {
+    return { start, end: explicitEnd };
+  }
+
+  const size = normalizeBoundaryValue(rect[sizeKey]);
+  if (size === null) return null;
+  return { start, end: start + size };
+}
+
+function resolveUnionHostRect(
+  hostRects: readonly (NotesOverlayViewportSourceRect | null | undefined)[],
+): NotesOverlayViewportSourceRect | null {
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  let found = false;
+
+  for (const hostRect of hostRects) {
+    if (!hostRect) continue;
+    const horizontal = resolveRectEdgePair(hostRect, 'left', 'right', 'width');
+    const vertical = resolveRectEdgePair(hostRect, 'top', 'bottom', 'height');
+    if (!horizontal || !vertical) continue;
+
+    found = true;
+    left = Math.min(left, horizontal.start);
+    top = Math.min(top, vertical.start);
+    right = Math.max(right, horizontal.end);
+    bottom = Math.max(bottom, vertical.end);
+  }
+
+  if (!found) return null;
+  return {
+    top,
+    left,
+    right,
+    bottom,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+  };
+}
+
+function normalizeViewportHostElements(
+  elements: readonly (HTMLElement | null | undefined)[] | null | undefined,
+): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+
+  for (const element of elements ?? []) {
+    if (!(element instanceof HTMLElement)) continue;
+    if (seen.has(element)) continue;
+    seen.add(element);
+    out.push(element);
+  }
+
+  return out;
+}
+
+function sameViewportHostElements(a: readonly HTMLElement[], b: readonly HTMLElement[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index]) return false;
+  }
+  return true;
+}
+
 export function createNotesOverlayViewportController(
   args: CreateNotesOverlayViewportControllerArgs = {},
 ): NotesOverlayViewportController {
   const createResizeObserver = args.createResizeObserver ?? defaultResizeObserverFactory;
   const getViewportSize = args.getViewportSize ?? defaultViewportSize;
 
-  let viewportHostEl: HTMLElement | null = null;
+  let viewportHostElements: HTMLElement[] = [];
   let active = false;
   let currentRect = createEmptyRect();
   let removeWindowListeners: (() => void) | null = null;
@@ -147,7 +232,7 @@ export function createNotesOverlayViewportController(
 
   const applyContract = (): void => {
     const target = resolveTarget(args.target);
-    if (!target || !active || !viewportHostEl || currentRect.width <= 0 || currentRect.height <= 0) {
+    if (!target || !active || viewportHostElements.length === 0 || currentRect.width <= 0 || currentRect.height <= 0) {
       clearContract();
       return;
     }
@@ -169,7 +254,7 @@ export function createNotesOverlayViewportController(
   const sync = (): NotesOverlayViewportRect => {
     const viewportSize = getViewportSize();
     currentRect = resolveNotesOverlayViewportRect({
-      hostRect: viewportHostEl?.getBoundingClientRect() ?? null,
+      hostRects: viewportHostElements.map((element) => element.getBoundingClientRect()),
       viewportWidth: viewportSize.width,
       viewportHeight: viewportSize.height,
     });
@@ -177,10 +262,12 @@ export function createNotesOverlayViewportController(
     return currentRect;
   };
 
-  const observeViewportHost = (): void => {
+  const observeViewportHosts = (): void => {
     resizeObserver?.disconnect();
-    if (!active || !viewportHostEl) return;
-    resizeObserver?.observe(viewportHostEl);
+    if (!active || viewportHostElements.length === 0) return;
+    for (const element of viewportHostElements) {
+      resizeObserver?.observe(element);
+    }
   };
 
   const connectViewportEvents = (): void => {
@@ -206,7 +293,7 @@ export function createNotesOverlayViewportController(
   };
 
   const refreshBindings = (): void => {
-    observeViewportHost();
+    observeViewportHosts();
     connectViewportEvents();
     if (active) {
       sync();
@@ -215,9 +302,10 @@ export function createNotesOverlayViewportController(
     clearContract();
   };
 
-  const setViewportHostElement = (element: HTMLElement | null | undefined): void => {
-    if (viewportHostEl === (element ?? null)) return;
-    viewportHostEl = element ?? null;
+  const setViewportHostElements = (elements: readonly (HTMLElement | null | undefined)[] | null | undefined): void => {
+    const nextElements = normalizeViewportHostElements(elements);
+    if (sameViewportHostElements(viewportHostElements, nextElements)) return;
+    viewportHostElements = nextElements;
     refreshBindings();
   };
 
@@ -231,13 +319,13 @@ export function createNotesOverlayViewportController(
     disconnectViewportEvents();
     resizeObserver?.disconnect();
     clearContract();
-    viewportHostEl = null;
+    viewportHostElements = [];
     active = false;
     currentRect = createEmptyRect();
   };
 
   return {
-    setViewportHostElement,
+    setViewportHostElements,
     setActive,
     rect: () => currentRect,
     sync,

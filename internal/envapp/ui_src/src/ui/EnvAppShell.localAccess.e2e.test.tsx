@@ -25,6 +25,7 @@ const notesOverlayState = vi.hoisted(() => ({
   lastProps: null as null | {
     open: boolean;
     onClose: () => void;
+    viewportHosts?: readonly HTMLElement[];
     toggleKeybind?: string;
   },
 }));
@@ -101,8 +102,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
   Shell: (props: any) => (
-    <div>
-      <div data-testid="shell-sidebar" class={props.slotClassNames?.sidebar} />
+    <div data-floe-shell="">
       {props.logo}
       {props.topBarActions}
       <div>
@@ -124,7 +124,10 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
           : null}
       </div>
       {props.bottomBarItems}
-      {props.children}
+      <div data-testid="shell-sidebar" data-floe-shell-slot="sidebar" class={props.slotClassNames?.sidebar} />
+      <div data-floe-shell-slot="content-area">
+        <main data-floe-shell-slot="main">{props.children}</main>
+      </div>
     </div>
   ),
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
@@ -507,16 +510,44 @@ describe('EnvAppShell top bar affordances', () => {
       await flushAsync();
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]') as HTMLButtonElement | null;
+      const shellSidebar = host.querySelector('[data-floe-shell-slot="sidebar"]') as HTMLElement | null;
+      const shellMain = host.querySelector('[data-floe-shell-slot="main"]') as HTMLElement | null;
       expect(notesButton).toBeTruthy();
       expect(notesOverlayState.lastProps?.open).toBe(false);
+      expect(notesOverlayState.lastProps?.viewportHosts).toEqual([shellSidebar, shellMain]);
 
       notesButton?.click();
       await flushAsync();
       expect(notesOverlayState.lastProps?.open).toBe(true);
+      expect(notesOverlayState.lastProps?.viewportHosts).toEqual([shellSidebar, shellMain]);
 
       notesOverlayState.lastProps?.onClose();
       await flushAsync();
       expect(notesOverlayState.lastProps?.open).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('binds Notes to the shared shell sidebar + main viewport hosts instead of a local main-only ref', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const shellSidebar = host.querySelector('[data-floe-shell-slot="sidebar"]') as HTMLElement | null;
+      const shellMain = host.querySelector('[data-floe-shell-slot="main"]') as HTMLElement | null;
+
+      expect(shellSidebar).toBeTruthy();
+      expect(shellMain).toBeTruthy();
+      expect(notesOverlayState.lastProps?.viewportHosts).toEqual([shellSidebar, shellMain]);
     } finally {
       dispose();
     }

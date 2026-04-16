@@ -74,6 +74,7 @@ import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
+import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';
@@ -491,7 +492,9 @@ export function EnvAppShell() {
   const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
   const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
-  const [notesViewportHost, setNotesViewportHost] = createSignal<HTMLElement | null>(null);
+  const [notesViewportAnchor, setNotesViewportAnchor] = createSignal<HTMLElement | null>(null);
+  const [notesViewportHosts, setNotesViewportHosts] = createSignal<readonly HTMLElement[]>([]);
+  let notesViewportHostsRevision = 0;
   const openNotesOverlay = () => setNotesOverlayOpen(true);
   const closeNotesOverlay = () => setNotesOverlayOpen(false);
   const toggleNotesOverlay = () => setNotesOverlayOpen((open) => !open);
@@ -511,6 +514,22 @@ export function EnvAppShell() {
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [aiThreadFocusSeq, setAIThreadFocusSeq] = createSignal(0);
   const [aiThreadFocusId, setAIThreadFocusId] = createSignal<string | null>(null);
+
+  createEffect(() => {
+    const anchor = notesViewportAnchor();
+    notesViewportHostsRevision += 1;
+    const revision = notesViewportHostsRevision;
+
+    if (!anchor) {
+      setNotesViewportHosts([]);
+      return;
+    }
+
+    deferAfterPaint(() => {
+      if (notesViewportHostsRevision !== revision) return;
+      setNotesViewportHosts(resolveNotesOverlayViewportHosts(anchor));
+    });
+  });
 
   const openSettings = (section?: EnvSettingsSection) => {
     if (!section) {
@@ -2292,7 +2311,7 @@ export function EnvAppShell() {
           </Panel>
         </Show>
 
-        <div ref={setNotesViewportHost} class="flex-1 min-h-0 overflow-hidden relative">
+        <div ref={setNotesViewportAnchor} class="flex-1 min-h-0 overflow-hidden relative">
           <Show
             when={accessGateVisible()}
             fallback={
@@ -2301,7 +2320,7 @@ export function EnvAppShell() {
                 <NotesOverlay
                   open={notesOverlayOpen()}
                   onClose={closeNotesOverlay}
-                  viewportHost={notesViewportHost()}
+                  viewportHosts={notesViewportHosts()}
                   toggleKeybind={NOTES_OVERLAY_KEYBIND}
                 />
               </>

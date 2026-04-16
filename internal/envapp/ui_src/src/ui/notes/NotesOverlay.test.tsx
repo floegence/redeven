@@ -325,19 +325,34 @@ describe('Redeven NotesOverlay adapter', () => {
   it('publishes and clears the shell viewport contract on document.body while the overlay is open', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const viewportHost = document.createElement('div');
+    const sidebarHost = document.createElement('div');
+    const mainHost = document.createElement('div');
     const initialInnerWidth = window.innerWidth;
     const initialInnerHeight = window.innerHeight;
-    Object.defineProperty(viewportHost, 'getBoundingClientRect', {
+    Object.defineProperty(sidebarHost, 'getBoundingClientRect', {
       configurable: true,
       value: () => ({
         top: 40,
         left: 64,
-        right: 1216,
+        right: 336,
         bottom: 768,
-        width: 1152,
+        width: 272,
         height: 728,
         x: 64,
+        y: 40,
+        toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(mainHost, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        top: 40,
+        left: 336,
+        right: 1216,
+        bottom: 768,
+        width: 880,
+        height: 728,
+        x: 336,
         y: 40,
         toJSON: () => ({}),
       }),
@@ -355,7 +370,7 @@ describe('Redeven NotesOverlay adapter', () => {
     try {
       const [open, setOpen] = createSignal(false);
       const dispose = mountIntoHost(
-        () => <NotesOverlay open={open()} onClose={() => undefined} viewportHost={viewportHost} />,
+        () => <NotesOverlay open={open()} onClose={() => undefined} viewportHosts={[sidebarHost, mainHost]} />,
         host,
       );
       await settle();

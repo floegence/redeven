@@ -9,7 +9,7 @@ import { createNotesOverlayViewportController } from './notesOverlayViewport';
 export interface NotesOverlayProps {
   open: boolean;
   onClose: () => void;
-  viewportHost?: HTMLElement | null;
+  viewportHosts?: readonly (HTMLElement | null | undefined)[];
   /** Shell-owned toggle shortcut that must remain available while floating Notes is focused. */
   toggleKeybind?: string;
 }
@@ -23,7 +23,7 @@ export function NotesOverlay(props: NotesOverlayProps) {
   });
 
   createEffect(() => {
-    viewportController.setViewportHostElement(props.viewportHost ?? null);
+    viewportController.setViewportHostElements(props.viewportHosts ?? []);
   });
 
   createEffect(() => {

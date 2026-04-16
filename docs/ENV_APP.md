@@ -8,7 +8,7 @@ Key points:
 - The browser accesses it over a **Flowersec E2EE proxy** (runtime mode).
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex/Notes overlay).
 - Notes overlay now consumes the released shared floe-webapp Notes surface (`@floegence/floe-webapp-core/notes`); Redeven keeps snapshot fetch, API mutations, SSE projection, and controller glue as the product-owned runtime layer.
-- Notes overlay shell integration is also product-owned: Env App measures the shell-safe content viewport and publishes a small body-level CSS geometry contract so the shared Notes overlay plus its body-portal flyouts/backdrops stay inside the actual content area instead of the raw desktop window viewport.
+- Notes overlay shell integration is also product-owned: Env App measures the shell-safe workspace viewport (the shared sidebar + main surface, excluding top bar / activity bar / bottom bar / terminal panel) and publishes a small body-level CSS geometry contract so the shared Notes overlay plus its body-portal flyouts/backdrops stay inside the actual workspace area instead of the raw desktop window viewport.
 - Notes overlay keyboard ownership is split deliberately: shared floe-webapp Notes now owns note numbering, overlay-wide digit-to-copy capture, copied-state feedback, and related toasts, while Env App forwards only its single shell-owned Notes toggle keybind (`mod+.`) into the shared floating allowlist so the overlay can still close after canvas or note interactions without reopening the rest of the shell hotkey surface.
 - Monitor `Top Processes` severity coloring is semantic and threshold-driven: CPU uses muted/success/warning/error tiers at `<20`, `20-49.9`, `50-99.9`, and `>=100`, while memory uses muted/success/warning tiers at `<1 GiB`, `1-9.9 GiB`, and `>=10 GiB`.
 - In Redeven Desktop, the command palette also exposes a shell-owned `Open Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
@@ -82,6 +82,7 @@ Env App now exposes a product-owned **Notes overlay** that floats above the curr
 - Notes also exposes a shell-level `Cmd/Ctrl+.` command so users can open or dismiss the overlay without leaving the current workspace flow, even while typing in another editor/input.
 - Opening the overlay does not auto-focus an editor field; users can keep their current input focus until they explicitly create or edit a note.
 - Env App enables the shared floe-webapp Notes surface in `interactionMode="floating"`, so the overlay stays non-modal over the current workspace instead of trapping focus like a settings dialog.
+- On pages that keep the shell conversation sidebar visible, Notes still spans the full workspace viewport (`sidebar + main`) instead of shrinking to the main pane only.
 - In floating mode, `Escape` dismisses the full overlay when focus is outside the Notes surface, and clicking outside the Notes-owned surface also dismisses the overlay without swallowing the underlying click target.
 - A fresh Notes runtime boots with a default `Welcome` topic and one welcome note so first-time users land in a useful board instead of an empty shell.
 - The overlay keeps a narrow topic rail with product-owned animal icons, inline rename/delete actions, and compact counts for live notes plus trash.
