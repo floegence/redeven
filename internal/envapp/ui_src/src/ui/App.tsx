@@ -1,11 +1,12 @@
 import { FileBrowserDragProvider, FloeProvider, NotificationContainer, useTheme } from '@floegence/floe-webapp-core';
-import { onCleanup } from 'solid-js';
+import { onCleanup, onMount } from 'solid-js';
 import { CommandPalette } from '@floegence/floe-webapp-core/ui';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
 import { redevenV1Contract } from './protocol/redeven_v1';
 import { createUIStorageAdapter, isDesktopStateStorageAvailable } from './services/uiStorage';
 import { createDesktopThemeStorageAdapter, desktopThemeBridge } from './services/desktopTheme';
+import { installDesktopEmbeddedDragRegionSync } from './services/desktopEmbeddedDragRegions';
 import { installDesktopWindowChromeDocumentSync } from './services/desktopWindowChrome';
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
@@ -84,6 +85,13 @@ function DesktopThemeSync() {
 }
 
 export function App() {
+  onMount(() => {
+    const dragRegionSync = installDesktopEmbeddedDragRegionSync();
+    onCleanup(() => {
+      dragRegionSync?.dispose();
+    });
+  });
+
   return (
     <FloeProvider
       config={buildFloeConfig()}
