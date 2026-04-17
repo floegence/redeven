@@ -1,4 +1,5 @@
 import {
+  managedEnvironmentKind,
   managedEnvironmentLocalAccess,
   managedEnvironmentProviderOrigin,
   managedEnvironmentPublicID,
@@ -74,8 +75,14 @@ export function buildDesktopRuntimeArgs(
   }
 
   const bootstrap = resolvedRuntimeBootstrap(options.bootstrap);
+  if (managedEnvironmentKind(environment) === 'controlplane') {
+    const controlPlaneURL = bootstrap?.controlplane_url ?? managedEnvironmentProviderOrigin(environment);
+    const envID = bootstrap?.env_id ?? managedEnvironmentPublicID(environment);
+    if (controlPlaneURL !== '' && envID !== '') {
+      args.push('--controlplane', controlPlaneURL, '--env-id', envID);
+    }
+  }
   if (bootstrap) {
-    args.push('--controlplane', bootstrap.controlplane_url, '--env-id', bootstrap.env_id);
     if (bootstrap.kind === 'bootstrap_ticket') {
       args.push('--bootstrap-ticket-env', BOOTSTRAP_TICKET_ENV_NAME);
     } else {

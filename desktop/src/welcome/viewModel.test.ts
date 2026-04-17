@@ -132,7 +132,7 @@ function buildControlPlaneSummary(options: Readonly<{
 }
 
 describe('buildEnvironmentCardModel', () => {
-  it('builds local, local-serve, provider, URL, and SSH cards from separated launcher entries', () => {
+  it('builds local, provider, URL, and SSH cards from the aggregated launcher entries', () => {
     const managedLocal = testManagedLocalEnvironment('default');
     const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
@@ -210,15 +210,11 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = snapshot.environments.find((environment) => (
       environment.kind === 'managed_environment' && environment.managed_environment_kind === 'local'
     ));
-    const localServeEntry = snapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
-    ));
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
     const urlEntry = snapshot.environments.find((environment) => environment.kind === 'external_local_ui');
     const sshEntry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
 
     expect(localEntry).toBeTruthy();
-    expect(localServeEntry).toBeTruthy();
     expect(providerEntry).toBeTruthy();
     expect(urlEntry).toBeTruthy();
     expect(sshEntry).toBeTruthy();
@@ -228,18 +224,12 @@ describe('buildEnvironmentCardModel', () => {
       status_label: 'RUNTIME ONLINE',
       target_primary: 'http://localhost:23998/',
     }));
-    expect(buildEnvironmentCardModel(localServeEntry!)).toEqual(expect.objectContaining({
-      kind_label: 'Local Serve',
-      status_label: 'RUNTIME ONLINE',
-      target_primary: 'http://127.0.0.1:24001/',
-      target_secondary: 'https://cp.example.invalid/env/env_demo',
-    }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
       status_label: 'RUNTIME ONLINE',
       source_label: 'Control Plane',
-      target_primary: 'https://cp.example.invalid/env/env_demo',
-      target_secondary: '',
+      target_primary: 'http://127.0.0.1:24001/',
+      target_secondary: 'https://cp.example.invalid/env/env_demo',
     }));
     expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Redeven URL',
@@ -254,49 +244,35 @@ describe('buildEnvironmentCardModel', () => {
     }));
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
-      defaultFact('SOURCE', 'Desktop-managed'),
       defaultFact('RUNS ON', 'This device'),
-      defaultFact('WINDOW', 'Open'),
       placeholderFact('CONTROL PLANE'),
-    ]);
-    expect(buildEnvironmentCardFactsModel(localServeEntry!)).toEqual([
-      defaultFact('SOURCE ENV', 'env_demo'),
-      defaultFact('CONTROL PLANE', 'Demo Portal'),
-      defaultFact('RUNS ON', 'This device'),
+      defaultFact('SOURCE', 'Desktop-managed'),
       defaultFact('WINDOW', 'Open'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
-      defaultFact('SOURCE ENV', 'env_demo'),
+      defaultFact('RUNS ON', 'This device'),
       defaultFact('CONTROL PLANE', 'Demo Portal'),
-      defaultFact('RUNS ON', 'Provider remote'),
-      defaultFact('WINDOW', 'Closed'),
+      defaultFact('SOURCE ENV', 'env_demo'),
+      defaultFact('WINDOW', 'Open'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
-      defaultFact('SOURCE', 'Saved'),
       defaultFact('RUNS ON', 'LAN host'),
+      defaultFact('SOURCE', 'Saved'),
       defaultFact('WINDOW', 'Open'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
       defaultFact('RUNS ON', 'ops@example.internal:2222'),
-      defaultFact('WINDOW', 'Open'),
       defaultFact('BOOTSTRAP', 'Desktop upload'),
+      defaultFact('WINDOW', 'Open'),
     ]);
 
-    expect(buildEnvironmentCardEndpointsModel(localServeEntry!)).toEqual([
+    expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
       {
-        label: 'URL',
+        label: 'LOCAL',
         value: 'http://127.0.0.1:24001/',
         monospace: true,
         copy_label: 'Copy local endpoint',
       },
-      {
-        label: 'SOURCE',
-        value: 'https://cp.example.invalid/env/env_demo',
-        monospace: true,
-        copy_label: 'Copy provider URL',
-      },
-    ]);
-    expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
       {
         label: 'REMOTE',
         value: 'https://cp.example.invalid/env/env_demo',
@@ -354,8 +330,8 @@ describe('buildEnvironmentCardModel', () => {
       controlPlanes: [controlPlane],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(5);
-    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
+    expect(environmentLibraryCount(snapshot)).toBe(4);
+    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
     expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
     expect(environmentLibraryCount(snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
     expect(environmentLibraryCount(snapshot, '', SSH_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
@@ -365,7 +341,6 @@ describe('buildEnvironmentCardModel', () => {
       '',
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     ).map((environment) => environment.kind)).toEqual([
-      'managed_environment',
       'provider_environment',
     ]);
   });
@@ -450,26 +425,25 @@ describe('buildEnvironmentCardModel', () => {
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(openLocalServeProviderEntry?.provider_local_serve_state).toBe('open');
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
-      status_label: 'RUNTIME OFFLINE',
-      status_tone: 'warning',
+      status_label: 'RUNTIME ONLINE',
+      status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
         primary_action: {
-          intent: 'open',
-          label: 'Open',
-          enabled: false,
+          intent: 'focus',
+          label: 'Focus',
+          enabled: true,
           variant: 'default',
-          tooltip: 'the runtime offline / unavailable',
         },
-        primary_action_tooltip: 'the runtime offline / unavailable',
+        primary_action_tooltip: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'focus_local_serve',
-            label: 'Focus local serve',
+            id: 'serve_runtime_locally',
+            label: 'Serve runtime locally',
             action: {
-              intent: 'focus_local_serve',
-              label: 'Focus local serve',
+              intent: 'serve_runtime_locally',
+              label: 'Serve runtime locally',
               enabled: true,
               variant: 'outline',
             },
@@ -539,7 +513,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('builds local and local-serve cards around local runtime actions rather than remote route menus', () => {
+  it('builds provider cards around effective local-serve routes instead of separate local-serve cards', () => {
     const attachableLocalServe = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [
@@ -555,9 +529,7 @@ describe('buildEnvironmentCardModel', () => {
         status: 'offline',
         lifecycleStatus: 'suspended',
       })],
-    }).environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
-    ));
+    }).environments.find((environment) => environment.kind === 'provider_environment');
 
     expect(attachableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(attachableLocalServe!)).toEqual({
@@ -576,11 +548,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'stop_runtime',
-            label: 'Stop runtime',
+            id: 'serve_runtime_locally',
+            label: 'Serve runtime locally',
             action: {
-              intent: 'stop_runtime',
-              label: 'Stop runtime',
+              intent: 'serve_runtime_locally',
+              label: 'Serve runtime locally',
               enabled: true,
               variant: 'outline',
             },
@@ -612,9 +584,7 @@ describe('buildEnvironmentCardModel', () => {
           'http://127.0.0.1:24001/',
         ),
       ],
-    }).environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
-    ));
+    }).environments.find((environment) => environment.kind === 'provider_environment');
 
     expect(focusableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(focusableLocalServe!)).toEqual({
@@ -632,13 +602,24 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'stop_runtime',
-            label: 'Stop runtime',
+            id: 'serve_runtime_locally',
+            label: 'Serve runtime locally',
             action: {
-              intent: 'stop_runtime',
-              label: 'Stop runtime',
+              intent: 'serve_runtime_locally',
+              label: 'Serve runtime locally',
               enabled: true,
               variant: 'outline',
+            },
+          },
+          {
+            id: 'open_provider_window',
+            label: 'Open provider window',
+            action: {
+              intent: 'open',
+              label: 'Open provider window',
+              enabled: true,
+              variant: 'outline',
+              route: 'remote_desktop',
             },
           },
           {
@@ -690,11 +671,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'stop_runtime',
-            label: 'Stop runtime',
+            id: 'serve_runtime_locally',
+            label: 'Serve runtime locally',
             action: {
-              intent: 'stop_runtime',
-              label: 'Stop runtime',
+              intent: 'serve_runtime_locally',
+              label: 'Serve runtime locally',
               enabled: true,
               variant: 'outline',
             },
@@ -738,9 +719,6 @@ describe('buildEnvironmentCardModel', () => {
     });
 
     const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
-    const localServeEntry = snapshot.environments.find((environment) => (
-      environment.kind === 'managed_environment' && environment.managed_environment_kind === 'controlplane'
-    ));
 
     expect(providerEntry).toEqual(expect.objectContaining({
       is_open: true,
@@ -748,11 +726,7 @@ describe('buildEnvironmentCardModel', () => {
       open_session_key: remoteTarget.session_key,
       local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
       open_action_label: 'Focus',
-    }));
-    expect(localServeEntry).toEqual(expect.objectContaining({
-      is_open: false,
       open_local_session_key: undefined,
-      open_action_label: 'Open',
     }));
   });
 

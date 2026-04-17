@@ -652,56 +652,103 @@ function buildManagedEnvironmentEntry(
   };
 }
 
+function providerIdentityKey(
+  providerOrigin: string,
+  providerID: string,
+  envPublicID: string,
+): string {
+  return [compact(providerOrigin), compact(providerID), compact(envPublicID)].join('\u0000');
+}
+
+function providerRemoteStateReason(remoteRouteState: DesktopProviderRemoteRouteState): string {
+  switch (remoteRouteState) {
+    case 'ready':
+      return 'Remote Desktop is ready.';
+    case 'offline':
+      return 'The provider currently reports this environment as offline.';
+    case 'stale':
+      return 'Remote status is stale. Refresh the provider to confirm the current state.';
+    case 'removed':
+      return 'This environment is no longer published by the provider.';
+    case 'auth_required':
+      return 'Reconnect this Control Plane in Desktop to restore remote access.';
+    case 'provider_unreachable':
+      return 'Desktop could not refresh this provider from the current machine.';
+    case 'provider_invalid':
+      return 'The provider returned an invalid response while Desktop refreshed status.';
+    default:
+      return 'Remote status is not yet confirmed.';
+  }
+}
+
+function offlineRuntimeHealthForProviderRoute(
+  remoteRouteState: DesktopProviderRemoteRouteState,
+  remoteStateReason: string,
+): DesktopRuntimeHealth {
+  switch (remoteRouteState) {
+    case 'offline':
+      return offlineRuntimeHealth(
+        'provider_batch_probe',
+        'provider_reported_offline',
+        remoteStateReason,
+      );
+    case 'removed':
+      return offlineRuntimeHealth(
+        'provider_batch_probe',
+        'environment_removed',
+        remoteStateReason,
+      );
+    default:
+      return offlineRuntimeHealth(
+        'provider_batch_probe',
+        'provider_unavailable',
+        remoteStateReason || 'The runtime offline / unavailable',
+      );
+  }
+}
+
+type ProviderEnvironmentCardSource = Readonly<{
+  provider_origin: string;
+  provider_id: string;
+  env_public_id: string;
+  control_plane: DesktopControlPlaneSummary | null;
+  provider_environment: DesktopControlPlaneSummary['environments'][number] | null;
+  local_serve_environment: DesktopManagedEnvironment | null;
+  preference: DesktopPreferences['provider_environment_preferences'][number] | null;
+}>;
+
 function buildProviderEnvironmentEntry(
-  preferences: DesktopPreferences,
-  controlPlane: DesktopControlPlaneSummary,
-  providerEnvironment: DesktopControlPlaneSummary['environments'][number],
+  source: ProviderEnvironmentCardSource,
   openSessions: readonly DesktopSessionSummary[],
 ): DesktopEnvironmentEntry {
+  const {
+    control_plane: controlPlane,
+    provider_environment: providerEnvironment,
+    local_serve_environment: localServeEnvironment,
+    preference,
+    provider_origin: providerOrigin,
+    provider_id: providerID,
+    env_public_id: envPublicID,
+  } = source;
   const remoteSession = openSessionByProviderEnvironment(
     openSessions,
-    controlPlane.provider.provider_origin,
-    providerEnvironment.env_public_id,
+    providerOrigin,
+    envPublicID,
   );
-  const localServeEnvironment = preferences.managed_environments.find((environment) => (
-    managedEnvironmentProviderOrigin(environment) === controlPlane.provider.provider_origin
-    && managedEnvironmentProviderID(environment) === controlPlane.provider.provider_id
-    && managedEnvironmentPublicID(environment) === providerEnvironment.env_public_id
-  )) ?? null;
-  const preference = providerEnvironmentPreference(
-    preferences,
-    controlPlane.provider.provider_origin,
-    controlPlane.provider.provider_id,
-    providerEnvironment.env_public_id,
-  );
-  const remoteRouteState = desktopProviderRemoteRouteState({
-    syncState: controlPlane.sync_state,
-    environmentPresent: true,
-    providerRuntimeStatus: providerEnvironment.runtime_health?.runtime_status,
-    providerStatus: providerEnvironment.status,
-    providerLifecycleStatus: providerEnvironment.lifecycle_status,
-    lastSyncedAtMS: controlPlane.last_synced_at_ms,
-  });
-  const remoteStateReason = (() => {
-    switch (remoteRouteState) {
-      case 'ready':
-        return 'Remote Desktop is ready.';
-      case 'offline':
-        return 'The provider currently reports this environment as offline.';
-      case 'stale':
-        return 'Remote status is stale. Refresh the provider to confirm the current state.';
-      case 'removed':
-        return 'This environment is no longer published by the provider.';
-      case 'auth_required':
-        return 'Reconnect this Control Plane in your browser to restore access.';
-      case 'provider_unreachable':
-        return 'Desktop could not refresh this provider from the current machine.';
-      case 'provider_invalid':
-        return 'The provider returned an invalid response while Desktop refreshed status.';
-      default:
-        return 'Remote status is not yet confirmed.';
-    }
-  })();
+  const remoteRouteState = controlPlane
+    ? desktopProviderRemoteRouteState({
+      syncState: controlPlane.sync_state,
+      environmentPresent: providerEnvironment !== null,
+      providerRuntimeStatus: providerEnvironment?.runtime_health?.runtime_status,
+      providerStatus: providerEnvironment?.status,
+      providerLifecycleStatus: providerEnvironment?.lifecycle_status,
+      lastSyncedAtMS: controlPlane.last_synced_at_ms,
+    })
+    : 'auth_required';
+  const remoteStateReason = providerRemoteStateReason(remoteRouteState);
+  const remoteRuntimeHealth = providerEnvironment
+    ? providerEnvironmentRuntimeHealth(providerEnvironment)
+    : offlineRuntimeHealthForProviderRoute(remoteRouteState, remoteStateReason);
   const localServeSessions: Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>> = localServeEnvironment
     ? openSessionsByManagedEnvironment(openSessions, localServeEnvironment)
     : {};
@@ -720,20 +767,65 @@ function buildProviderEnvironmentEntry(
   const remoteSessionOpen = sessionIsOpen(remoteSession);
   const localServeSessionOpening = sessionIsOpening(localServeSession);
   const remoteSessionOpening = sessionIsOpening(remoteSession);
-  const runtimeHealth = providerEnvironmentRuntimeHealth(providerEnvironment);
+  const localServeRuntimeHealth = localServeEnvironment
+    ? managedEnvironmentRuntimeHealth(localServeRuntimeState, localServeRuntimeURL)
+    : null;
+  const effectiveRoute: 'local_host' | 'remote_desktop' | 'none' = (() => {
+    if (localServeSessionOpen || localServeSessionOpening) {
+      return 'local_host';
+    }
+    if (remoteSessionOpen || remoteSessionOpening) {
+      return 'remote_desktop';
+    }
+    if (remoteRuntimeHealth.status === 'online') {
+      return 'remote_desktop';
+    }
+    if (localServeRuntimeHealth?.status === 'online') {
+      return 'local_host';
+    }
+    return 'none';
+  })();
+  const runtimeHealth = localServeRuntimeHealth?.status === 'online'
+    ? localServeRuntimeHealth
+    : remoteRuntimeHealth.status === 'online'
+      ? remoteRuntimeHealth
+      : remoteRuntimeHealth;
+  const effectiveWindowState = effectiveRoute === 'local_host'
+    ? environmentWindowState(localServeSession)
+    : effectiveRoute === 'remote_desktop'
+      ? environmentWindowState(remoteSession)
+      : 'closed';
+  const effectiveSession = effectiveRoute === 'local_host'
+    ? localServeSession
+    : effectiveRoute === 'remote_desktop'
+      ? remoteSession
+      : null;
+  const effectiveOpenActionLabel: DesktopEnvironmentEntry['open_action_label'] = effectiveWindowState === 'open'
+    ? 'Focus'
+    : effectiveWindowState === 'opening'
+      ? 'Opening…'
+      : 'Open';
+  const label = compact(providerEnvironment?.label)
+    || compact(localServeEnvironment?.label)
+    || envPublicID;
+  const remoteEnvironmentURL = compact(providerEnvironment?.environment_url);
+  const controlPlaneLabel = compact(controlPlane?.display_label) || providerOrigin;
+  const secondaryText = remoteEnvironmentURL || [controlPlaneLabel, envPublicID].filter(Boolean).join(' / ');
+  const lastUsedAtMS = Math.max(
+    preference?.last_used_at_ms ?? 0,
+    localServeEnvironment?.last_used_at_ms ?? 0,
+  );
   return {
     id: desktopManagedControlPlaneEnvironmentID(
-      controlPlane.provider.provider_origin,
-      providerEnvironment.env_public_id,
+      providerOrigin,
+      envPublicID,
     ),
     kind: 'provider_environment',
-    label: providerEnvironment.label,
-    local_ui_url: remoteSession?.entry_url
-      || remoteSession?.startup?.local_ui_url
-      || providerEnvironment.environment_url
-      || '',
-    secondary_text: providerEnvironment.environment_url
-      || [controlPlane.display_label, providerEnvironment.env_public_id].filter(Boolean).join(' / '),
+    label,
+    local_ui_url: effectiveRoute === 'local_host'
+      ? (localServeSession?.entry_url ?? localServeSession?.startup?.local_ui_url ?? localServeRuntimeURL)
+      : (remoteSession?.entry_url ?? remoteSession?.startup?.local_ui_url ?? remoteEnvironmentURL ?? localServeRuntimeURL),
+    secondary_text: secondaryText,
     open_local_session_key: localServeSession?.session_key,
     open_local_session_lifecycle: sessionLifecycle(localServeSession),
     provider_local_ui_bind: localServeAccess?.local_ui_bind,
@@ -742,16 +834,16 @@ function buildProviderEnvironmentEntry(
     provider_local_runtime_state: localServeRuntimeState,
     provider_local_runtime_url: localServeRuntimeURL || undefined,
     provider_local_close_behavior: localServeCloseBehavior,
-    provider_origin: controlPlane.provider.provider_origin,
-    provider_id: controlPlane.provider.provider_id,
-    env_public_id: providerEnvironment.env_public_id,
-    remote_environment_url: providerEnvironment.environment_url,
-    provider_status: providerEnvironment.status,
-    provider_lifecycle_status: providerEnvironment.lifecycle_status,
-    provider_last_seen_at_unix_ms: providerEnvironment.last_seen_at_unix_ms,
-    control_plane_sync_state: controlPlane.sync_state,
+    provider_origin: providerOrigin,
+    provider_id: providerID,
+    env_public_id: envPublicID,
+    remote_environment_url: remoteEnvironmentURL || undefined,
+    provider_status: providerEnvironment?.status,
+    provider_lifecycle_status: providerEnvironment?.lifecycle_status,
+    provider_last_seen_at_unix_ms: providerEnvironment?.last_seen_at_unix_ms,
+    control_plane_sync_state: controlPlane?.sync_state,
     remote_route_state: remoteRouteState,
-    remote_catalog_freshness: controlPlane.catalog_freshness,
+    remote_catalog_freshness: controlPlane?.catalog_freshness ?? 'unknown',
     remote_state_reason: remoteStateReason,
     provider_local_serve_environment_id: localServeEnvironment?.id,
     provider_local_serve_state: localServeEnvironment
@@ -761,28 +853,24 @@ function buildProviderEnvironmentEntry(
           ? 'opening'
           : 'saved'
       : 'absent',
-    pinned: preference?.pinned ?? false,
-    control_plane_label: controlPlane.display_label,
-    tag: remoteSessionOpen ? 'Open' : 'Managed',
+    pinned: preference?.pinned ?? localServeEnvironment?.pinned ?? false,
+    control_plane_label: controlPlaneLabel || undefined,
+    tag: effectiveWindowState === 'open' ? 'Open' : 'Managed',
     category: 'provider',
-    window_state: environmentWindowState(remoteSession),
-    is_open: remoteSessionOpen,
-    is_opening: remoteSessionOpening,
+    window_state: effectiveWindowState,
+    is_open: effectiveWindowState === 'open',
+    is_opening: effectiveWindowState === 'opening',
     runtime_health: runtimeHealth,
     runtime_control_capability: 'observe_only',
     open_remote_session_key: remoteSession?.session_key,
     open_remote_session_lifecycle: sessionLifecycle(remoteSession),
-    open_session_key: remoteSession?.session_key ?? '',
-    open_session_lifecycle: sessionLifecycle(remoteSession),
-    open_action_label: remoteSessionOpen
-      ? 'Focus'
-      : remoteSessionOpening
-        ? 'Opening…'
-        : 'Open',
-    can_edit: false,
-    can_delete: false,
+    open_session_key: effectiveSession?.session_key ?? '',
+    open_session_lifecycle: sessionLifecycle(effectiveSession),
+    open_action_label: effectiveOpenActionLabel,
+    can_edit: localServeEnvironment !== null,
+    can_delete: localServeEnvironment !== null,
     can_save: false,
-    last_used_at_ms: preference?.last_used_at_ms ?? 0,
+    last_used_at_ms: lastUsedAtMS,
   };
 }
 
@@ -795,17 +883,74 @@ function buildEnvironmentEntries(
 ): readonly DesktopEnvironmentEntry[] {
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
-  const entries: DesktopEnvironmentEntry[] = [
-    ...preferences.managed_environments.map((environment) => (
-      buildManagedEnvironmentEntry(
-        environment,
-        openSessionsByManagedEnvironment(openSessions, environment),
+  const providerSources = new Map<string, ProviderEnvironmentCardSource>();
+  for (const controlPlane of controlPlanes) {
+    for (const providerEnvironment of controlPlane.environments) {
+      const key = providerIdentityKey(
+        controlPlane.provider.provider_origin,
+        controlPlane.provider.provider_id,
+        providerEnvironment.env_public_id,
+      );
+      providerSources.set(key, {
+        provider_origin: controlPlane.provider.provider_origin,
+        provider_id: controlPlane.provider.provider_id,
+        env_public_id: providerEnvironment.env_public_id,
+        control_plane: controlPlane,
+        provider_environment: providerEnvironment,
+        local_serve_environment: providerSources.get(key)?.local_serve_environment ?? null,
+        preference: providerEnvironmentPreference(
+          preferences,
+          controlPlane.provider.provider_origin,
+          controlPlane.provider.provider_id,
+          providerEnvironment.env_public_id,
+        ),
+      });
+    }
+  }
+  for (const environment of preferences.managed_environments) {
+    if (managedEnvironmentKind(environment) !== 'controlplane' || !environment.local_hosting) {
+      continue;
+    }
+    const providerOrigin = managedEnvironmentProviderOrigin(environment);
+    const providerID = managedEnvironmentProviderID(environment);
+    const envPublicID = managedEnvironmentPublicID(environment);
+    if (providerOrigin === '' || providerID === '' || envPublicID === '') {
+      continue;
+    }
+    const key = providerIdentityKey(providerOrigin, providerID, envPublicID);
+    const existing = providerSources.get(key);
+    providerSources.set(key, {
+      provider_origin: providerOrigin,
+      provider_id: providerID,
+      env_public_id: envPublicID,
+      control_plane: existing?.control_plane ?? controlPlaneSummaryByIdentity(
         controlPlanes,
-      )
+        providerOrigin,
+        providerID,
+      ) ?? null,
+      provider_environment: existing?.provider_environment ?? null,
+      local_serve_environment: environment,
+      preference: existing?.preference ?? providerEnvironmentPreference(
+        preferences,
+        providerOrigin,
+        providerID,
+        envPublicID,
+      ),
+    });
+  }
+  const entries: DesktopEnvironmentEntry[] = [
+    ...preferences.managed_environments
+      .filter((environment) => managedEnvironmentKind(environment) === 'local')
+      .map((environment) => (
+        buildManagedEnvironmentEntry(
+          environment,
+          openSessionsByManagedEnvironment(openSessions, environment),
+          controlPlanes,
+        )
+      )),
+    ...[...providerSources.values()].map((source) => (
+      buildProviderEnvironmentEntry(source, openSessions)
     )),
-    ...controlPlanes.flatMap((controlPlane) => controlPlane.environments.map((providerEnvironment) => (
-      buildProviderEnvironmentEntry(preferences, controlPlane, providerEnvironment, openSessions)
-    ))),
   ];
 
   const catalog = preferences.saved_environments;

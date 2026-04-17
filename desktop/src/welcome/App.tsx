@@ -80,6 +80,7 @@ import {
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
   deriveDesktopAccessDraftModel,
+  DEFAULT_DESKTOP_FIXED_PORT,
 } from '../shared/desktopAccessModel';
 import {
   buildEnvironmentLibraryLayoutModel,
@@ -363,6 +364,59 @@ const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; 
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function splitHostPortLoose(raw: string): Readonly<{ host: string; port: number }> | null {
+  const value = trimString(raw);
+  if (value === '') {
+    return null;
+  }
+  if (value.startsWith('[')) {
+    const closingBracket = value.indexOf(']');
+    if (closingBracket <= 1 || closingBracket === value.length - 1 || value[closingBracket + 1] !== ':') {
+      return null;
+    }
+    const port = Number.parseInt(value.slice(closingBracket + 2).trim(), 10);
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      return null;
+    }
+    return {
+      host: value.slice(1, closingBracket).trim(),
+      port,
+    };
+  }
+  const separator = value.lastIndexOf(':');
+  if (separator <= 0 || separator === value.length - 1) {
+    return null;
+  }
+  const port = Number.parseInt(value.slice(separator + 1).trim(), 10);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    return null;
+  }
+  return {
+    host: value.slice(0, separator).trim(),
+    port,
+  };
+}
+
+function bindConflictsWithSuggestedLoopback(rawBind: string, port: number): boolean {
+  const bind = splitHostPortLoose(rawBind);
+  if (!bind || bind.port !== port) {
+    return false;
+  }
+  const host = trimString(bind.host).toLowerCase();
+  return host === 'localhost'
+    || host === '::1'
+    || host === '::'
+    || host === '0.0.0.0'
+    || host === '127.0.0.1'
+    || host.startsWith('127.');
+}
+
+function providerLocalServeEnvironmentID(environment: DesktopEnvironmentEntry): string {
+  return environment.kind === 'provider_environment'
+    ? trimString(environment.provider_local_serve_environment_id)
+    : '';
 }
 
 function deriveManagedEnvironmentScopeNameFromName(value: string): string {
@@ -823,6 +877,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       },
     );
   });
+  const deleteTargetIsManaged = createMemo(() => {
+    const target = deleteTarget();
+    if (!target) {
+      return false;
+    }
+    return target.kind === 'managed_environment'
+      || providerLocalServeEnvironmentID(target) !== '';
+  });
 
   createEffect(() => {
     const activeSourceFilter = librarySourceFilter();
@@ -1013,6 +1075,47 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
   }
 
+  function suggestManagedEnvironmentLocalBind(excludeEnvironmentID = ''): string {
+    const occupiedPorts = new Set<number>();
+    const cleanExcludeEnvironmentID = trimString(excludeEnvironmentID);
+    for (const environment of snapshot().environments) {
+      if (environment.kind === 'managed_environment') {
+        if (trimString(environment.id) === cleanExcludeEnvironmentID) {
+          continue;
+        }
+        const bind = trimString(environment.managed_local_ui_bind);
+        if (bind === '') {
+          continue;
+        }
+        const parsed = splitHostPortLoose(bind);
+        if (parsed && bindConflictsWithSuggestedLoopback(bind, parsed.port)) {
+          occupiedPorts.add(parsed.port);
+        }
+        continue;
+      }
+      if (environment.kind !== 'provider_environment') {
+        continue;
+      }
+      if (providerLocalServeEnvironmentID(environment) === cleanExcludeEnvironmentID) {
+        continue;
+      }
+      const bind = trimString(environment.provider_local_ui_bind);
+      if (bind === '') {
+        continue;
+      }
+      const parsed = splitHostPortLoose(bind);
+      if (parsed && bindConflictsWithSuggestedLoopback(bind, parsed.port)) {
+        occupiedPorts.add(parsed.port);
+      }
+    }
+
+    let port = DEFAULT_DESKTOP_FIXED_PORT;
+    while (occupiedPorts.has(port) && port < 65535) {
+      port += 1;
+    }
+    return `localhost:${port}`;
+  }
+
   function openCreateConnectionDialog(
     message = '',
     preferredKind: 'managed_environment' | 'external_local_ui' | 'ssh_environment' = 'managed_environment',
@@ -1034,7 +1137,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       preferredKind === 'managed_environment'
         ? createManagedEnvironmentConnectionDialogState('create', {
           managed_environment_variant: 'local_environment',
-          local_ui_bind: 'localhost:23998',
+          local_ui_bind: suggestManagedEnvironmentLocalBind(),
           local_ui_password_mode: 'replace',
         })
         : preferredKind === 'ssh_environment'
@@ -1045,31 +1148,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           external_local_ui_url: trimString(snapshot().suggested_remote_url),
         }),
     );
-  }
-
-  function providerLocalServeEntry(environment: DesktopEnvironmentEntry): DesktopEnvironmentEntry | null {
-    if (environment.kind !== 'provider_environment') {
-      return null;
-    }
-
-    const savedEntryID = trimString(environment.provider_local_serve_environment_id);
-    const matchedByID = savedEntryID === ''
-      ? null
-      : snapshot().environments.find((candidate) => (
-        candidate.kind === 'managed_environment'
-        && candidate.id === savedEntryID
-      )) ?? null;
-    if (matchedByID) {
-      return matchedByID;
-    }
-
-    return snapshot().environments.find((candidate) => (
-      candidate.kind === 'managed_environment'
-      && candidate.managed_environment_kind === 'controlplane'
-      && trimString(candidate.provider_origin) === trimString(environment.provider_origin)
-      && trimString(candidate.provider_id) === trimString(environment.provider_id)
-      && trimString(candidate.env_public_id) === trimString(environment.env_public_id)
-    )) ?? null;
   }
 
   function openProviderLocalServeDialog(
@@ -1092,17 +1170,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
 
-    const localServeEntry = providerLocalServeEntry(environment);
+    const localServeEnvironmentID = providerLocalServeEnvironmentID(environment);
     setActiveCenterTab('environments');
     setLibrarySourceFilter('');
     resetMessages();
     setControlPlaneDialogState(null);
-    setConnectionDialogState(createManagedEnvironmentConnectionDialogState(localServeEntry ? 'edit' : 'create', {
+    setConnectionDialogState(createManagedEnvironmentConnectionDialogState(localServeEnvironmentID !== '' ? 'edit' : 'create', {
       managed_environment_variant: 'provider_local_serve',
-      environment_id: localServeEntry?.id,
-      label: trimString(localServeEntry?.label) || trimString(environment.label),
-      local_ui_bind: trimString(localServeEntry?.managed_local_ui_bind) || 'localhost:23998',
-      local_ui_password_configured: localServeEntry?.managed_local_ui_password_configured === true,
+      environment_id: localServeEnvironmentID,
+      label: trimString(environment.label),
+      local_ui_bind: trimString(environment.provider_local_ui_bind) || suggestManagedEnvironmentLocalBind(localServeEnvironmentID),
+      local_ui_password_configured: environment.provider_local_ui_password_configured === true,
       use_control_plane_binding: true,
       provider_origin: environment.provider_origin,
       provider_id: environment.provider_id,
@@ -1114,6 +1192,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
     if (environment.kind === 'managed_environment') {
       openSettingsSurface(environment.id);
+    } else if (environment.kind === 'provider_environment') {
+      openProviderLocalServeDialog(environment);
     } else if (environment.kind === 'ssh_environment') {
       setConnectionDialogState(createSSHConnectionDialogState('edit', {
         environment_id: environment.id,
@@ -1274,7 +1354,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (kind === 'managed_environment') {
         return createManagedEnvironmentConnectionDialogState('create', {
           label: current.label,
-          local_ui_bind: 'localhost:23998',
+          local_ui_bind: suggestManagedEnvironmentLocalBind(),
         });
       }
       if (kind === 'ssh_environment') {
@@ -1453,12 +1533,49 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openProviderEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    route: 'auto' | DesktopManagedEnvironmentRoute = 'auto',
   ): Promise<boolean> {
     if (environment.kind !== 'provider_environment') {
       return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
     }
-    if (environment.open_remote_session_key) {
-      return focusEnvironmentWindow(environment.open_remote_session_key, errorTarget);
+    const localServeEnvironmentID = providerLocalServeEnvironmentID(environment);
+    const openLocalSessionKey = trimString(environment.open_local_session_key);
+    const openRemoteSessionKey = trimString(environment.open_remote_session_key);
+    const openSessionKey = trimString(environment.open_session_key);
+    const localRuntimeOnline = environment.provider_local_runtime_state === 'running_desktop'
+      || environment.provider_local_runtime_state === 'running_external';
+    const effectiveRoute: DesktopManagedEnvironmentRoute | null = route === 'local_host'
+      ? (localServeEnvironmentID !== '' ? 'local_host' : null)
+      : route === 'remote_desktop'
+        ? (trimString(environment.provider_origin) !== '' && trimString(environment.provider_id) !== '' && trimString(environment.env_public_id) !== ''
+          ? 'remote_desktop'
+          : null)
+        : openSessionKey !== '' && openSessionKey === openLocalSessionKey
+          ? 'local_host'
+          : openSessionKey !== '' && openSessionKey === openRemoteSessionKey
+            ? 'remote_desktop'
+            : environment.remote_route_state === 'ready'
+              ? 'remote_desktop'
+              : localServeEnvironmentID !== '' && localRuntimeOnline
+                ? 'local_host'
+                : null;
+    if (effectiveRoute === 'local_host') {
+      if (openLocalSessionKey !== '') {
+        return focusEnvironmentWindow(openLocalSessionKey, errorTarget);
+      }
+      if (localServeEnvironmentID === '') {
+        setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve the local serve for this environment.');
+        return false;
+      }
+      const result = await performLauncherAction({
+        kind: 'open_managed_environment',
+        environment_id: localServeEnvironmentID,
+        route: 'local_host',
+      }, errorTarget);
+      return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+    }
+    if (openRemoteSessionKey !== '') {
+      return focusEnvironmentWindow(openRemoteSessionKey, errorTarget);
     }
     if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that provider environment.');
@@ -1491,12 +1608,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       };
     }
     if (environment.kind === 'provider_environment') {
+      const localServeEnvironmentID = providerLocalServeEnvironmentID(environment);
+      if (kind !== 'refresh_environment_runtime' && localServeEnvironmentID !== '') {
+        return {
+          kind,
+          environment_id: localServeEnvironmentID,
+          label: environment.label,
+        };
+      }
       if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
-        return null;
+        return kind === 'refresh_environment_runtime' && localServeEnvironmentID !== ''
+          ? {
+            kind,
+            environment_id: localServeEnvironmentID,
+            label: environment.label,
+          }
+          : null;
       }
       return {
         kind,
-        environment_id: environment.id,
+        environment_id: localServeEnvironmentID || environment.id,
         provider_origin: environment.provider_origin,
         provider_id: environment.provider_id,
         env_public_id: environment.env_public_id,
@@ -1586,17 +1717,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
 
-    const localServeEntry = providerLocalServeEntry(environment);
-    if (!localServeEntry) {
+    if (providerLocalServeEnvironmentID(environment) === '') {
       return openProviderLocalServeDialog(environment, errorTarget);
     }
-    if (localServeEntry.window_state === 'open' && trimString(localServeEntry.open_session_key) !== '') {
-      return focusEnvironmentWindow(localServeEntry.open_session_key, errorTarget);
+    const openLocalSessionKey = trimString(environment.open_local_session_key);
+    if (openLocalSessionKey !== '') {
+      return focusEnvironmentWindow(openLocalSessionKey, errorTarget);
     }
-    if (localServeEntry.runtime_health.status === 'online') {
-      return openManagedEnvironment(localServeEntry, errorTarget, 'local_host');
+    if (
+      environment.provider_local_runtime_state === 'running_desktop'
+      || environment.provider_local_runtime_state === 'running_external'
+    ) {
+      return openProviderEnvironment(environment, errorTarget, 'local_host');
     }
-    return startEnvironmentRuntime(localServeEntry, errorTarget);
+    return startEnvironmentRuntime(environment, errorTarget);
   }
 
   async function refreshAllEnvironmentRuntimes(): Promise<void> {
@@ -1648,7 +1782,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return openManagedEnvironment(environment, errorTarget, route);
     }
     if (environment.kind === 'provider_environment') {
-      return openProviderEnvironment(environment, errorTarget);
+      return openProviderEnvironment(environment, errorTarget, route);
     }
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
@@ -2044,29 +2178,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
       await refreshSnapshot();
-      const managedEntry = snapshot().environments.find((environment) => (
-        environment.kind === 'managed_environment'
-        && (
-          (
-            state.use_control_plane_binding === true
-            && environment.provider_origin === trimString(state.provider_origin)
-            && environment.provider_id === trimString(state.provider_id)
-            && environment.env_public_id === trimString(state.env_public_id)
+      const managedEntry = state.use_control_plane_binding === true
+        ? snapshot().environments.find((environment) => (
+          environment.kind === 'provider_environment'
+          && environment.provider_origin === trimString(state.provider_origin)
+          && environment.provider_id === trimString(state.provider_id)
+          && environment.env_public_id === trimString(state.env_public_id)
+        )) ?? null
+        : snapshot().environments.find((environment) => (
+          environment.kind === 'managed_environment'
+          && (
+            (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
+            || (requestedEnvironmentName !== '' && environment.managed_environment_name === requestedEnvironmentName)
           )
-          || (
-            state.use_control_plane_binding !== true
-            && (
-              (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
-              || (requestedEnvironmentName !== '' && environment.managed_environment_name === requestedEnvironmentName)
-            )
-          )
-        )
-      )) ?? null;
+        )) ?? null;
       if (!managedEntry) {
-        setConnectionDialogError('Desktop saved the managed environment, but could not reopen it yet.');
+        setConnectionDialogError('Desktop saved the environment, but could not reopen it yet.');
         return;
       }
-      const opened = await openManagedEnvironment(managedEntry, 'dialog');
+      const opened = state.use_control_plane_binding === true
+        ? await serveRuntimeLocally(managedEntry, 'dialog')
+        : await openManagedEnvironment(managedEntry, 'dialog');
       if (opened) {
         closeConnectionDialog();
       }
@@ -2165,20 +2297,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return;
     }
+    const providerLocalServeID = providerLocalServeEnvironmentID(target);
     setBusyAction('delete_environment');
     try {
       await props.runtime.launcher.performAction({
-        kind: target.kind === 'managed_environment'
+        kind: target.kind === 'managed_environment' || providerLocalServeID !== ''
           ? 'delete_managed_environment'
           : target.kind === 'ssh_environment'
             ? 'delete_saved_ssh_environment'
             : 'delete_saved_environment',
-        environment_id: target.id,
+        environment_id: providerLocalServeID || target.id,
       });
       await refreshSnapshot();
       setDeleteTarget(null);
       showActionToast(
-        target.kind === 'managed_environment'
+        target.kind === 'managed_environment' || providerLocalServeID !== ''
           ? 'Environment removed from this device.'
           : 'Connection removed from Environment Library.',
       );
@@ -2359,8 +2492,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteTarget(null);
           }
         }}
-        title={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}
-        confirmText={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}
+        title={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}
+        confirmText={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}
         variant="destructive"
         loading={busyAction() === 'delete_environment'}
         onConfirm={() => void deleteEnvironment()}
@@ -2368,7 +2501,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         <div class="space-y-2">
           <p class="text-sm">
             <Show
-              when={deleteTarget()?.kind === 'managed_environment'}
+              when={deleteTargetIsManaged()}
               fallback={(
                 <>
                   Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
@@ -2380,7 +2513,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </p>
           <p class="text-xs text-muted-foreground">
             <Show
-              when={deleteTarget()?.kind === 'managed_environment'}
+              when={deleteTargetIsManaged()}
               fallback={'This only removes the saved Desktop entry. It does not stop the remote Environment.'}
             >
               Desktop will remove the local managed state for this device. If this environment is bound to a Control Plane, the remote environment will remain available there.
@@ -3223,7 +3356,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
     <Button
       size="sm"
       variant={props.presentation.primary_action.variant}
-      class={cn('min-w-0 w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')}
+      class={cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')}
+      style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
       loading={props.loading}
       disabled={!props.presentation.primary_action.enabled}
       onClick={() => {
@@ -3620,12 +3754,12 @@ function controlPlaneManagedEnvironmentStats(
 }> {
   const providerFilter = controlPlaneFilterValue(controlPlane);
   const matchedEntries = environments.filter((environment) => (
-    environment.kind === 'managed_environment'
+    environment.kind === 'provider_environment'
     && environmentProviderFilterValue(environment) === providerFilter
   ));
   return {
     online_count: desktopProviderOnlineEnvironmentCount(controlPlane.environments),
-    local_host_count: matchedEntries.filter((environment) => environment.managed_has_local_hosting === true).length,
+    local_host_count: matchedEntries.filter((environment) => providerLocalServeEnvironmentID(environment) !== '').length,
     open_count: matchedEntries.filter((environment) => environment.is_open).length,
   };
 }

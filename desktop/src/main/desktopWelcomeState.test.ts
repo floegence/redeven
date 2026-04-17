@@ -461,7 +461,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 
-  it('projects provider local-serve state onto both the local-serve card and the provider card', () => {
+  it('projects provider local-serve state onto the aggregated provider card', () => {
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
     const localTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'local_host' });
     const remoteTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'remote_desktop' });
@@ -539,30 +539,29 @@ describe('desktopWelcomeState', () => {
       }],
     });
 
-    expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: managedControlPlane.id,
-        kind: 'managed_environment',
-        default_open_route: 'local_host',
-        open_local_session_key: localTarget.session_key,
-        open_session_key: localTarget.session_key,
-        local_ui_url: 'http://localhost:23998/',
+    expect(snapshot.environments.find((entry) => (
+      entry.kind === 'managed_environment'
+      && entry.managed_environment_kind === 'controlplane'
+      && entry.id === managedControlPlane.id
+    ))).toBeUndefined();
+    expect(snapshot.environments.find((entry) => (
+      entry.kind === 'provider_environment'
+      && entry.id === managedControlPlane.id
+    ))).toEqual(expect.objectContaining({
+      id: managedControlPlane.id,
+      kind: 'provider_environment',
+      open_local_session_key: localTarget.session_key,
+      open_remote_session_key: remoteTarget.session_key,
+      open_session_key: localTarget.session_key,
+      local_ui_url: 'http://localhost:23998/',
+      provider_local_runtime_state: 'running_desktop',
+      provider_local_runtime_url: 'http://localhost:23998/',
+      provider_local_serve_state: 'open',
+      runtime_health: expect.objectContaining({
+        status: 'online',
+        source: 'local_runtime_probe',
       }),
-      expect.objectContaining({
-        id: managedControlPlane.id,
-        kind: 'provider_environment',
-        open_local_session_key: localTarget.session_key,
-        open_remote_session_key: remoteTarget.session_key,
-        open_session_key: remoteTarget.session_key,
-        local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
-        provider_local_runtime_state: 'running_desktop',
-        provider_local_runtime_url: 'http://localhost:23998/',
-        provider_local_serve_state: 'open',
-        runtime_health: expect.objectContaining({
-          status: 'online',
-        }),
-      }),
-    ]));
+    }));
   });
 
   it('threads Control Plane runtime state into managed environment library entries', () => {
@@ -614,7 +613,7 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
-  it('splits a repaired legacy dual-route environment into local-serve and provider launcher entries after control-plane connect', () => {
+  it('keeps a repaired legacy dual-route environment on one provider card after control-plane connect', () => {
     expect(testProvider).toBeTruthy();
     if (!testProvider) {
       throw new Error('Expected normalized test provider.');
@@ -657,31 +656,26 @@ describe('desktopWelcomeState', () => {
       preferences,
     });
 
-    const localServeEntry = snapshot.environments.find((entry) => (
-      entry.kind === 'managed_environment'
-      && entry.provider_origin === testProvider.provider_origin
-      && entry.env_public_id === 'env_demo'
-    ));
     const providerEntry = snapshot.environments.find((entry) => (
       entry.kind === 'provider_environment'
       && entry.provider_origin === testProvider.provider_origin
       && entry.env_public_id === 'env_demo'
     ));
 
-    expect(localServeEntry).toEqual(expect.objectContaining({
-      id: legacyEnvironment.id,
-      label: 'Desktop Label',
-      provider_id: testProvider.provider_id,
-      managed_has_local_hosting: true,
-      managed_has_remote_desktop: false,
-      category: 'managed',
-    }));
+    expect(snapshot.environments.find((entry) => (
+      entry.kind === 'managed_environment'
+      && entry.provider_origin === testProvider.provider_origin
+      && entry.env_public_id === 'env_demo'
+    ))).toBeUndefined();
     expect(providerEntry).toEqual(expect.objectContaining({
       id: legacyEnvironment.id,
       label: 'Demo Environment',
       provider_id: testProvider.provider_id,
       category: 'provider',
       provider_local_serve_environment_id: legacyEnvironment.id,
+      provider_local_serve_state: 'saved',
+      can_edit: true,
+      can_delete: true,
     }));
   });
 
@@ -741,8 +735,10 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: managedControlPlane.id,
+        kind: 'provider_environment',
         control_plane_sync_state: 'ready',
-        local_route_state: 'ready',
+        provider_local_serve_environment_id: managedControlPlane.id,
+        provider_local_serve_state: 'saved',
         remote_route_state: 'offline',
         remote_catalog_freshness: 'fresh',
         remote_state_reason: 'The provider currently reports this environment as offline.',
@@ -797,15 +793,16 @@ describe('desktopWelcomeState', () => {
       }],
     });
 
-    expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: managedControlPlane.id,
-        managed_local_scope_kind: 'controlplane',
-        managed_has_local_hosting: true,
-        remote_route_state: 'removed',
-        remote_state_reason: 'This environment is no longer published by the provider.',
-      }),
-    ]));
+    expect(snapshot.environments.find((entry) => (
+      entry.kind === 'provider_environment'
+      && entry.id === managedControlPlane.id
+    ))).toEqual(expect.objectContaining({
+      id: managedControlPlane.id,
+      provider_local_serve_environment_id: managedControlPlane.id,
+      provider_local_serve_state: 'saved',
+      remote_route_state: 'removed',
+      remote_state_reason: 'This environment is no longer published by the provider.',
+    }));
   });
 
   it('turns blocked local-runtime reports into managed-environment recovery copy', () => {
