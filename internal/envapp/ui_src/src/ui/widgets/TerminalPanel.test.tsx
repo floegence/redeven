@@ -14,6 +14,11 @@ const widgetState = vi.hoisted(() => ({
   currentWidgetId: null as string | null,
 }));
 
+const viewActivationState = vi.hoisted(() => ({
+  missing: false,
+  active: true,
+}));
+
 const terminalPrefsState = vi.hoisted(() => ({
   userTheme: 'system',
   fontSize: 12,
@@ -210,9 +215,16 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   useTheme: () => ({
     resolvedTheme: () => 'dark',
   }),
-  useViewActivation: () => ({
-    active: () => true,
-  }),
+  useViewActivation: () => {
+    if (viewActivationState.missing) {
+      throw new Error('ViewActivationContext not found. Wrap your view with <ViewActivationProvider />.');
+    }
+    return {
+      id: 'test-view',
+      active: () => viewActivationState.active,
+      activationSeq: () => 0,
+    };
+  },
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
@@ -635,6 +647,8 @@ describe('TerminalPanel', () => {
     terminalPrefsState.fontFamilyId = 'iosevka';
     terminalPrefsState.mobileInputMode = 'floe';
     widgetState.currentWidgetId = null;
+    viewActivationState.missing = false;
+    viewActivationState.active = true;
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
     scrollLinesSpy.mockClear();
@@ -817,6 +831,19 @@ describe('TerminalPanel', () => {
     await Promise.resolve();
     expect(host.querySelector('[data-testid="dialog"]')).toBeTruthy();
     expect(host.textContent).toContain('Terminal settings');
+  });
+
+  it('falls back to an always-active view when ViewActivationContext is unavailable', async () => {
+    viewActivationState.missing = true;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    expect(terminalCoreInstances.length).toBeGreaterThan(0);
+    expect(host.textContent).toContain('Terminal 1');
   });
 
   it('configures TerminalCore with focus-triggered remote resize handoff enabled', async () => {
