@@ -1047,6 +1047,70 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     );
   }
 
+  function providerLocalServeEntry(environment: DesktopEnvironmentEntry): DesktopEnvironmentEntry | null {
+    if (environment.kind !== 'provider_environment') {
+      return null;
+    }
+
+    const savedEntryID = trimString(environment.provider_local_serve_environment_id);
+    const matchedByID = savedEntryID === ''
+      ? null
+      : snapshot().environments.find((candidate) => (
+        candidate.kind === 'managed_environment'
+        && candidate.id === savedEntryID
+      )) ?? null;
+    if (matchedByID) {
+      return matchedByID;
+    }
+
+    return snapshot().environments.find((candidate) => (
+      candidate.kind === 'managed_environment'
+      && candidate.managed_environment_kind === 'controlplane'
+      && trimString(candidate.provider_origin) === trimString(environment.provider_origin)
+      && trimString(candidate.provider_id) === trimString(environment.provider_id)
+      && trimString(candidate.env_public_id) === trimString(environment.env_public_id)
+    )) ?? null;
+  }
+
+  function openProviderLocalServeDialog(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): boolean {
+    if (environment.kind !== 'provider_environment') {
+      return false;
+    }
+    if (snapshot().surface !== 'connect_environment') {
+      showConnectEnvironment('Open the launcher to serve this provider environment locally.');
+      return false;
+    }
+    if (
+      trimString(environment.provider_origin) === ''
+      || trimString(environment.provider_id) === ''
+      || trimString(environment.env_public_id) === ''
+    ) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that provider environment.');
+      return false;
+    }
+
+    const localServeEntry = providerLocalServeEntry(environment);
+    setActiveCenterTab('environments');
+    setLibrarySourceFilter('');
+    resetMessages();
+    setControlPlaneDialogState(null);
+    setConnectionDialogState(createManagedEnvironmentConnectionDialogState(localServeEntry ? 'edit' : 'create', {
+      managed_environment_variant: 'provider_local_serve',
+      environment_id: localServeEntry?.id,
+      label: trimString(localServeEntry?.label) || trimString(environment.label),
+      local_ui_bind: trimString(localServeEntry?.managed_local_ui_bind) || 'localhost:23998',
+      local_ui_password_configured: localServeEntry?.managed_local_ui_password_configured === true,
+      use_control_plane_binding: true,
+      provider_origin: environment.provider_origin,
+      provider_id: environment.provider_id,
+      env_public_id: environment.env_public_id,
+    }));
+    return true;
+  }
+
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
     if (environment.kind === 'managed_environment') {
       openSettingsSurface(environment.id);
@@ -1514,6 +1578,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return refreshed;
   }
 
+  async function serveRuntimeLocally(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind !== 'provider_environment') {
+      return false;
+    }
+
+    const localServeEntry = providerLocalServeEntry(environment);
+    if (!localServeEntry) {
+      return openProviderLocalServeDialog(environment, errorTarget);
+    }
+    if (localServeEntry.window_state === 'open' && trimString(localServeEntry.open_session_key) !== '') {
+      return focusEnvironmentWindow(localServeEntry.open_session_key, errorTarget);
+    }
+    if (localServeEntry.runtime_health.status === 'online') {
+      return openManagedEnvironment(localServeEntry, errorTarget, 'local_host');
+    }
+    return startEnvironmentRuntime(localServeEntry, errorTarget);
+  }
+
   async function refreshAllEnvironmentRuntimes(): Promise<void> {
     const result = await performLauncherAction({
       kind: 'refresh_all_environment_runtimes',
@@ -1591,6 +1676,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return stopEnvironmentRuntime(environment, errorTarget);
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
+      case 'serve_runtime_locally':
+      case 'focus_local_serve':
+        return serveRuntimeLocally(environment, errorTarget);
       case 'opening':
       default:
         return false;
@@ -2733,6 +2821,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   const [environmentLibraryElement, setEnvironmentLibraryElement] = createSignal<HTMLDivElement>();
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
   const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
+  const [openRuntimeMenuEnvironmentID, setOpenRuntimeMenuEnvironmentID] = createSignal('');
   const groupedEntries = createMemo(() => splitPinnedEnvironmentEntries(props.entries));
   // Keep transient provider/search filters from collapsing the shared environment column system.
   const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
@@ -2744,6 +2833,16 @@ function EnvironmentCardsPanel(props: Readonly<{
   const environmentGridStyle = createMemo<JSX.CSSProperties>(() => ({
     '--redeven-environment-grid-columns': String(layoutModel().column_count),
   }));
+
+  createEffect(() => {
+    const openID = trimString(openRuntimeMenuEnvironmentID());
+    if (openID === '') {
+      return;
+    }
+    if (!props.entries.some((environment) => environment.id === openID)) {
+      setOpenRuntimeMenuEnvironmentID('');
+    }
+  });
 
   createEffect(() => {
     const element = environmentLibraryElement();
@@ -2809,6 +2908,8 @@ function EnvironmentCardsPanel(props: Readonly<{
                   <EnvironmentConnectionCard
                     environment={environment}
                     busyAction={props.busyAction}
+                    runtimeMenuOpen={openRuntimeMenuEnvironmentID() === environment.id}
+                    onRuntimeMenuOpenChange={(open) => setOpenRuntimeMenuEnvironmentID(open ? environment.id : '')}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
@@ -2831,6 +2932,8 @@ function EnvironmentCardsPanel(props: Readonly<{
                   <EnvironmentConnectionCard
                     environment={environment}
                     busyAction={props.busyAction}
+                    runtimeMenuOpen={openRuntimeMenuEnvironmentID() === environment.id}
+                    onRuntimeMenuOpenChange={(open) => setOpenRuntimeMenuEnvironmentID(open ? environment.id : '')}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
@@ -3081,17 +3184,18 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
 
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
+  menuOpen: boolean;
+  onMenuOpenChange: (open: boolean) => void;
   loading?: boolean;
   onRunAction: (action: EnvironmentActionModel) => void;
 }>) {
-  const [menuOpen, setMenuOpen] = createSignal(false);
   const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0);
   let rootRef: HTMLDivElement | undefined;
 
-  const closeMenu = () => setMenuOpen(false);
+  const closeMenu = () => props.onMenuOpenChange(false);
 
   createEffect(() => {
-    if (!menuOpen()) {
+    if (!props.menuOpen) {
       return;
     }
 
@@ -3119,10 +3223,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
     <Button
       size="sm"
       variant={props.presentation.primary_action.variant}
-      class={cn('min-w-0 flex-1', hasMenuActions() && 'rounded-r-none border-r-0')}
+      class={cn('min-w-0 w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')}
       loading={props.loading}
       disabled={!props.presentation.primary_action.enabled}
-      onClick={() => props.onRunAction(props.presentation.primary_action)}
+      onClick={() => {
+        closeMenu();
+        props.onRunAction(props.presentation.primary_action);
+      }}
     >
       {props.presentation.primary_action.label}
     </Button>
@@ -3130,30 +3237,34 @@ function EnvironmentSplitActionButton(props: Readonly<{
 
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
-      <Show
-        when={trimString(props.presentation.primary_action_tooltip) !== ''}
-        fallback={primaryButton}
-      >
-        <DesktopTooltip content={props.presentation.primary_action_tooltip!} placement="top">
-          <span class="flex flex-1">
+      <div class="redeven-split-action-primary">
+        <Show
+          when={trimString(props.presentation.primary_action_tooltip) !== ''}
+          fallback={primaryButton}
+        >
+          <DesktopTooltip
+            content={props.presentation.primary_action_tooltip!}
+            placement="top"
+            anchorClass="flex w-full"
+          >
             {primaryButton}
-          </span>
-        </DesktopTooltip>
-      </Show>
+          </DesktopTooltip>
+        </Show>
+      </div>
       <Show when={hasMenuActions()}>
         <button
           type="button"
           class="redeven-split-action-toggle"
           aria-label={props.presentation.menu_button_label}
           aria-haspopup="menu"
-          aria-expanded={menuOpen()}
+          aria-expanded={props.menuOpen}
           disabled={props.loading}
-          onClick={() => setMenuOpen((open) => !open)}
+          onClick={() => props.onMenuOpenChange(!props.menuOpen)}
         >
-          <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', menuOpen() && 'rotate-180')} />
+          <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
         </button>
       </Show>
-      <Show when={menuOpen() && hasMenuActions()}>
+      <Show when={props.menuOpen && hasMenuActions()}>
         <div class="redeven-split-menu" role="menu" aria-label={props.presentation.menu_button_label}>
           <For each={props.presentation.menu_actions}>
             {(item: EnvironmentActionMenuItemModel) => (
@@ -3213,6 +3324,8 @@ function QuickCreateConnectionCard(props: Readonly<{
 function EnvironmentConnectionCard(props: Readonly<{
   environment: DesktopEnvironmentEntry;
   busyAction: BusyAction;
+  runtimeMenuOpen: boolean;
+  onRuntimeMenuOpenChange: (open: boolean) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -3323,6 +3436,8 @@ function EnvironmentConnectionCard(props: Readonly<{
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <EnvironmentSplitActionButton
           presentation={environmentActionPresentation()}
+          menuOpen={props.runtimeMenuOpen}
+          onMenuOpenChange={props.onRuntimeMenuOpenChange}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           onRunAction={(action) => {
             void props.runManagedEnvironmentAction(

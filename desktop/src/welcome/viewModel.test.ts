@@ -254,29 +254,30 @@ describe('buildEnvironmentCardModel', () => {
     }));
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
+      defaultFact('SOURCE', 'Desktop-managed'),
       defaultFact('RUNS ON', 'This device'),
       defaultFact('WINDOW', 'Open'),
-      defaultFact('CONTROL', 'Desktop can start or stop'),
       placeholderFact('CONTROL PLANE'),
     ]);
     expect(buildEnvironmentCardFactsModel(localServeEntry!)).toEqual([
       defaultFact('SOURCE ENV', 'env_demo'),
       defaultFact('CONTROL PLANE', 'Demo Portal'),
+      defaultFact('RUNS ON', 'This device'),
       defaultFact('WINDOW', 'Open'),
-      defaultFact('CONTROL', 'Desktop can start or stop'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
+      defaultFact('SOURCE ENV', 'env_demo'),
       defaultFact('CONTROL PLANE', 'Demo Portal'),
+      defaultFact('RUNS ON', 'Provider remote'),
       defaultFact('WINDOW', 'Closed'),
-      defaultFact('CONTROL', 'Managed externally'),
     ]);
     expect(buildEnvironmentCardFactsModel(urlEntry!)).toEqual([
       defaultFact('SOURCE', 'Saved'),
-      defaultFact('NETWORK', 'LAN host'),
+      defaultFact('RUNS ON', 'LAN host'),
       defaultFact('WINDOW', 'Open'),
     ]);
     expect(buildEnvironmentCardFactsModel(sshEntry!)).toEqual([
-      defaultFact('HOST', 'ops@example.internal:2222'),
+      defaultFact('RUNS ON', 'ops@example.internal:2222'),
       defaultFact('WINDOW', 'Open'),
       defaultFact('BOOTSTRAP', 'Desktop upload'),
     ]);
@@ -399,12 +400,12 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'runtime_managed_externally',
-            label: 'Runtime managed externally',
+            id: 'serve_runtime_locally',
+            label: 'Serve runtime locally',
             action: {
-              intent: 'unavailable',
-              label: 'Runtime managed externally',
-              enabled: false,
+              intent: 'serve_runtime_locally',
+              label: 'Serve runtime locally',
+              enabled: true,
               variant: 'outline',
             },
           },
@@ -448,9 +449,44 @@ describe('buildEnvironmentCardModel', () => {
     });
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(openLocalServeProviderEntry?.provider_local_serve_state).toBe('open');
-    expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual(
-      buildProviderBackedEnvironmentActionModel(providerOnlyEntry!),
-    );
+    expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
+      action_presentation: {
+        kind: 'split_button',
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+          variant: 'default',
+          tooltip: 'the runtime offline / unavailable',
+        },
+        primary_action_tooltip: 'the runtime offline / unavailable',
+        menu_button_label: 'Runtime actions',
+        menu_actions: [
+          {
+            id: 'focus_local_serve',
+            label: 'Focus local serve',
+            action: {
+              intent: 'focus_local_serve',
+              label: 'Focus local serve',
+              enabled: true,
+              variant: 'outline',
+            },
+          },
+          {
+            id: 'refresh_runtime',
+            label: 'Refresh runtime status',
+            action: {
+              intent: 'refresh_runtime',
+              label: 'Refresh runtime status',
+              enabled: true,
+              variant: 'outline',
+            },
+          },
+        ],
+      },
+    });
 
     const readyControlPlane = buildControlPlaneSummary({
       status: 'online',

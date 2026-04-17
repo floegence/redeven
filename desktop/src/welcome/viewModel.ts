@@ -66,6 +66,8 @@ export type EnvironmentActionIntent =
   | 'start_runtime'
   | 'stop_runtime'
   | 'refresh_runtime'
+  | 'serve_runtime_locally'
+  | 'focus_local_serve'
   | 'unavailable';
 
 export type EnvironmentActionModel = Readonly<{
@@ -392,10 +394,17 @@ function environmentWindowLabel(environment: DesktopEnvironmentEntry): string {
   }
 }
 
-function environmentRuntimeControlLabel(environment: DesktopEnvironmentEntry): string {
-  return environment.runtime_control_capability === 'start_stop'
-    ? 'Desktop can start or stop'
-    : 'Managed externally';
+function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
+  if (environment.kind === 'managed_environment') {
+    return 'This device';
+  }
+  if (environment.kind === 'provider_environment') {
+    return 'Provider remote';
+  }
+  if (environment.kind === 'ssh_environment') {
+    return environment.secondary_text || 'Unknown';
+  }
+  return externalLocalUINetworkLabel(environment);
 }
 
 export function buildEnvironmentCardFactsModel(
@@ -406,32 +415,32 @@ export function buildEnvironmentCardFactsModel(
       ? [
           buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
           buildEnvironmentCardFact('CONTROL PLANE', controlPlaneDisplayLabel(environment) || 'Unavailable'),
+          buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
           buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
         ]
       : [
-          buildEnvironmentCardFact('RUNS ON', 'This device'),
+          buildEnvironmentCardFact('SOURCE', environmentSourceLabel(environment)),
+          buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
           buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
-          buildEnvironmentCardFact('CONTROL', environmentRuntimeControlLabel(environment)),
         ];
     if (environment.managed_environment_kind !== 'controlplane') {
       facts.push(buildPlaceholderEnvironmentCardFact('CONTROL PLANE'));
-    } else {
-      facts.push(buildEnvironmentCardFact('CONTROL', environmentRuntimeControlLabel(environment)));
     }
     return facts;
   }
 
   if (environment.kind === 'provider_environment') {
     return [
+      buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
       buildEnvironmentCardFact('CONTROL PLANE', controlPlaneDisplayLabel(environment) || 'Unavailable'),
+      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
       buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
-      buildEnvironmentCardFact('CONTROL', environmentRuntimeControlLabel(environment)),
     ];
   }
 
   if (environment.kind === 'ssh_environment') {
     return [
-      buildEnvironmentCardFact('HOST', environment.secondary_text || 'Unknown'),
+      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
       buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
       buildEnvironmentCardFact('BOOTSTRAP', sshBootstrapSummary(environment) || 'Automatic bootstrap'),
     ];
@@ -439,7 +448,7 @@ export function buildEnvironmentCardFactsModel(
 
   return [
     buildEnvironmentCardFact('SOURCE', externalLocalUISourceLabel(environment)),
-    buildEnvironmentCardFact('NETWORK', externalLocalUINetworkLabel(environment)),
+    buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
     buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
   ];
 }
@@ -563,8 +572,57 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   };
 }
 
+function providerLocalServeMenuAction(
+  environment: DesktopEnvironmentEntry,
+): EnvironmentActionMenuItemModel | null {
+  if (environment.kind !== 'provider_environment' || environment.runtime_health.status !== 'offline') {
+    return null;
+  }
+
+  if (environment.provider_local_serve_state === 'open') {
+    return {
+      id: 'focus_local_serve',
+      label: 'Focus local serve',
+      action: {
+        intent: 'focus_local_serve',
+        label: 'Focus local serve',
+        enabled: true,
+        variant: 'outline',
+      },
+    };
+  }
+
+  if (environment.provider_local_serve_state === 'opening') {
+    return {
+      id: 'local_serve_opening',
+      label: 'Local serve opening…',
+      action: {
+        intent: 'opening',
+        label: 'Local serve opening…',
+        enabled: false,
+        variant: 'outline',
+      },
+    };
+  }
+
+  return {
+    id: 'serve_runtime_locally',
+    label: 'Serve runtime locally',
+    action: {
+      intent: 'serve_runtime_locally',
+      label: 'Serve runtime locally',
+      enabled: true,
+      variant: 'outline',
+    },
+  };
+}
+
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
   const items: EnvironmentActionMenuItemModel[] = [];
+  const localServeAction = providerLocalServeMenuAction(environment);
+  if (localServeAction) {
+    items.push(localServeAction);
+  }
   if (environment.runtime_control_capability === 'start_stop') {
     const runtimeAction: EnvironmentActionModel = {
       intent: environment.runtime_health.status === 'online' ? 'stop_runtime' : 'start_runtime',
@@ -577,7 +635,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
       label: runtimeAction.label,
       action: runtimeAction,
     });
-  } else {
+  } else if (!localServeAction) {
     items.push({
       id: 'runtime_managed_externally',
       label: 'Runtime managed externally',
