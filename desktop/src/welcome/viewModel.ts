@@ -1,6 +1,5 @@
 import type {
   DesktopEnvironmentEntry,
-  DesktopLauncherSessionLifecycle,
   DesktopLauncherSurface,
   DesktopManagedEnvironmentRoute,
   DesktopWelcomeSnapshot,
@@ -8,7 +7,6 @@ import type {
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
   type DesktopControlPlaneSyncState,
-  type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
 
 export type DesktopWelcomeShellViewModel = Readonly<{
@@ -63,15 +61,11 @@ export type EnvironmentCardModel = Readonly<{
 
 export type EnvironmentActionIntent =
   | 'open'
-  | 'attach'
   | 'focus'
   | 'opening'
-  | 'serve_runtime'
-  | 'stop'
-  | 'refresh_status'
-  | 'check_status'
-  | 'reconnect_provider'
-  | 'retry_sync'
+  | 'start_runtime'
+  | 'stop_runtime'
+  | 'refresh_runtime'
   | 'unavailable';
 
 export type EnvironmentActionModel = Readonly<{
@@ -79,6 +73,7 @@ export type EnvironmentActionModel = Readonly<{
   label: string;
   enabled: boolean;
   variant: 'default' | 'outline';
+  tooltip?: string;
   route?: DesktopManagedEnvironmentRoute;
 }>;
 
@@ -88,19 +83,13 @@ export type EnvironmentActionMenuItemModel = Readonly<{
   action: EnvironmentActionModel;
 }>;
 
-export type EnvironmentActionPresentation =
-  | Readonly<{
-      kind: 'single_button';
-      action: EnvironmentActionModel;
-      secondary_action?: EnvironmentActionModel;
-    }>
-  | Readonly<{
-      kind: 'split_button';
-      primary_action: EnvironmentActionModel;
-      menu_button_label: string;
-      menu_actions: readonly EnvironmentActionMenuItemModel[];
-      secondary_action?: EnvironmentActionModel;
-    }>;
+export type EnvironmentActionPresentation = Readonly<{
+  kind: 'split_button';
+  primary_action: EnvironmentActionModel;
+  primary_action_tooltip?: string;
+  menu_button_label: string;
+  menu_actions: readonly EnvironmentActionMenuItemModel[];
+}>;
 
 export type ProviderBackedEnvironmentActionModel = Readonly<{
   status_label: string;
@@ -369,31 +358,6 @@ function externalLocalUINetworkLabel(environment: DesktopEnvironmentEntry): stri
   }
 }
 
-function localRuntimeStateLabel(state: DesktopEnvironmentEntry['managed_local_runtime_state'] | DesktopEnvironmentEntry['provider_local_runtime_state']): string {
-  switch (state) {
-    case 'running_desktop':
-      return 'Running in Desktop';
-    case 'running_external':
-      return 'Running externally';
-    default:
-      return 'Starts on open';
-  }
-}
-
-function managedEnvironmentLocalRuntimeLabel(environment: DesktopEnvironmentEntry): string {
-  return localRuntimeStateLabel(environment.managed_local_runtime_state);
-}
-
-function localCloseBehaviorLabel(closeBehavior: DesktopEnvironmentEntry['managed_local_close_behavior'] | DesktopEnvironmentEntry['provider_local_close_behavior']): string {
-  return closeBehavior === 'detaches'
-    ? 'Detaches on close'
-    : 'Stops on close';
-}
-
-function managedEnvironmentLocalCloseLabel(environment: DesktopEnvironmentEntry): string {
-  return localCloseBehaviorLabel(environment.managed_local_close_behavior);
-}
-
 function buildEnvironmentCardFact(label: string, value: string): EnvironmentCardFactModel {
   return {
     label,
@@ -417,34 +381,21 @@ function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string 
   return environment.control_plane_label || environment.provider_origin || '';
 }
 
-function providerRuntimeStatusLabel(environment: DesktopEnvironmentEntry): string {
-  const status = compact(environment.provider_status);
-  const lifecycleStatus = compact(environment.provider_lifecycle_status);
-  if (status !== '' && lifecycleStatus !== '') {
-    return `${status} · ${lifecycleStatus}`;
+function environmentWindowLabel(environment: DesktopEnvironmentEntry): string {
+  switch (environment.window_state) {
+    case 'open':
+      return 'Open';
+    case 'opening':
+      return 'Opening';
+    default:
+      return 'Closed';
   }
-  return status || lifecycleStatus || 'Unknown';
 }
 
-function providerLocalServeStateLabel(environment: DesktopEnvironmentEntry): string {
-  if (environment.provider_local_runtime_state === 'running_desktop') {
-    return 'Running in Desktop';
-  }
-  if (environment.provider_local_runtime_state === 'running_external') {
-    return 'Running externally';
-  }
-  switch (environment.provider_local_serve_state) {
-    case 'open':
-      return 'Open in Desktop';
-    case 'opening':
-      return 'Starting';
-    case 'saved':
-      return 'Saved on this device';
-    case 'blocked':
-      return 'Needs attention';
-    default:
-      return 'Not configured';
-  }
+function environmentRuntimeControlLabel(environment: DesktopEnvironmentEntry): string {
+  return environment.runtime_control_capability === 'start_stop'
+    ? 'Desktop can start or stop'
+    : 'Managed externally';
 }
 
 export function buildEnvironmentCardFactsModel(
@@ -455,20 +406,17 @@ export function buildEnvironmentCardFactsModel(
       ? [
           buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
           buildEnvironmentCardFact('CONTROL PLANE', controlPlaneDisplayLabel(environment) || 'Unavailable'),
-          buildEnvironmentCardFact('LOCAL RUNTIME', managedEnvironmentLocalRuntimeLabel(environment)),
+          buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
         ]
       : [
           buildEnvironmentCardFact('RUNS ON', 'This device'),
-          buildEnvironmentCardFact('LOCAL RUNTIME', managedEnvironmentLocalRuntimeLabel(environment)),
+          buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
+          buildEnvironmentCardFact('CONTROL', environmentRuntimeControlLabel(environment)),
         ];
-    if (
-      environment.managed_local_runtime_state === 'running_desktop'
-      || environment.managed_local_runtime_state === 'running_external'
-    ) {
-      facts.push(buildEnvironmentCardFact('WINDOW', managedEnvironmentLocalCloseLabel(environment)));
-    }
     if (environment.managed_environment_kind !== 'controlplane') {
       facts.push(buildPlaceholderEnvironmentCardFact('CONTROL PLANE'));
+    } else {
+      facts.push(buildEnvironmentCardFact('CONTROL', environmentRuntimeControlLabel(environment)));
     }
     return facts;
   }
@@ -476,15 +424,15 @@ export function buildEnvironmentCardFactsModel(
   if (environment.kind === 'provider_environment') {
     return [
       buildEnvironmentCardFact('CONTROL PLANE', controlPlaneDisplayLabel(environment) || 'Unavailable'),
-      buildEnvironmentCardFact('REMOTE', providerRuntimeStatusLabel(environment)),
-      buildEnvironmentCardFact('LOCAL SERVE', providerLocalServeStateLabel(environment)),
+      buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
+      buildEnvironmentCardFact('CONTROL', environmentRuntimeControlLabel(environment)),
     ];
   }
 
   if (environment.kind === 'ssh_environment') {
     return [
       buildEnvironmentCardFact('HOST', environment.secondary_text || 'Unknown'),
-      buildEnvironmentCardFact('INSTANCE', environment.ssh_details?.environment_instance_id ?? 'Unknown'),
+      buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
       buildEnvironmentCardFact('BOOTSTRAP', sshBootstrapSummary(environment) || 'Automatic bootstrap'),
     ];
   }
@@ -492,6 +440,7 @@ export function buildEnvironmentCardFactsModel(
   return [
     buildEnvironmentCardFact('SOURCE', externalLocalUISourceLabel(environment)),
     buildEnvironmentCardFact('NETWORK', externalLocalUINetworkLabel(environment)),
+    buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
   ];
 }
 
@@ -522,20 +471,11 @@ export function buildEnvironmentCardEndpointsModel(
   }
 
   if (environment.kind === 'provider_environment') {
-    const localEndpoint = compact(environment.provider_local_runtime_url) || compact(environment.provider_local_ui_bind);
     const remoteEndpoint = compact(environment.remote_environment_url) || compact(environment.local_ui_url);
     return [
-      localEndpoint !== ''
-        ? {
-            label: 'LOCAL',
-            value: localEndpoint,
-            monospace: shouldUseMonospaceEndpoint(localEndpoint),
-            copy_label: 'Copy local endpoint',
-          }
-        : null,
       remoteEndpoint !== ''
         ? {
-            label: 'REMOTE',
+          label: 'REMOTE',
             value: remoteEndpoint,
             monospace: shouldUseMonospaceEndpoint(remoteEndpoint),
             copy_label: 'Copy environment URL',
@@ -580,116 +520,33 @@ export function splitPinnedEnvironmentEntries(
   };
 }
 
-function localRouteActionModel(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
-  if (environment.open_local_session_lifecycle === 'opening') {
-    return {
-      intent: 'opening',
-      label: 'Opening…',
-      enabled: false,
-      variant: 'default',
-      route: 'local_host',
-    };
-  }
-  return {
-    intent: environment.open_local_session_lifecycle === 'open'
-      ? 'focus'
-      : environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external'
-        ? 'attach'
-        : 'open',
-    label: environment.open_local_session_lifecycle === 'open'
-      ? 'Focus Local'
-      : environment.managed_local_runtime_state === 'running_desktop' || environment.managed_local_runtime_state === 'running_external'
-        ? 'Attach Local'
-        : 'Open Local',
-    enabled: true,
-    variant: 'default',
-    route: 'local_host',
-  };
+function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
+  return environment.runtime_health.status === 'online' ? 'RUNTIME ONLINE' : 'RUNTIME OFFLINE';
 }
 
-function remoteRouteActionModel(options: Readonly<{
-  remoteRouteState: DesktopProviderRemoteRouteState | undefined;
-  remoteSessionLifecycle?: DesktopLauncherSessionLifecycle;
-}>): EnvironmentActionModel {
-  if (options.remoteSessionLifecycle === 'opening') {
-    return {
-      intent: 'opening',
-      label: 'Opening…',
-      enabled: false,
-      variant: 'outline',
-      route: 'remote_desktop',
-    };
-  }
+function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
+  return environment.runtime_health.status === 'online' ? 'success' : 'warning';
+}
 
-  if (options.remoteSessionLifecycle === 'open') {
+function environmentPrimaryTooltip(environment: DesktopEnvironmentEntry): string {
+  if (environment.window_state !== 'closed' || environment.runtime_health.status === 'online') {
+    return '';
+  }
+  return environment.runtime_control_capability === 'start_stop'
+    ? 'serve the runtime first'
+    : 'the runtime offline / unavailable';
+}
+
+function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
+  if (environment.window_state === 'open') {
     return {
       intent: 'focus',
-      label: 'Focus Remote',
+      label: 'Focus',
       enabled: true,
-      variant: 'outline',
-      route: 'remote_desktop',
+      variant: 'default',
     };
   }
-
-  switch (options.remoteRouteState) {
-    case 'ready':
-      return {
-        intent: 'open',
-        label: 'Open Remote',
-        enabled: true,
-        variant: 'outline',
-        route: 'remote_desktop',
-      };
-    case 'offline':
-      return {
-        intent: 'check_status',
-        label: 'Check Remote Status',
-        enabled: true,
-        variant: 'outline',
-        route: 'remote_desktop',
-      };
-    case 'stale':
-    case 'unknown':
-      return {
-        intent: 'refresh_status',
-        label: 'Refresh Status',
-        enabled: true,
-        variant: 'outline',
-      };
-    case 'auth_required':
-      return {
-        intent: 'reconnect_provider',
-        label: 'Reconnect',
-        enabled: true,
-        variant: 'outline',
-      };
-    case 'provider_unreachable':
-    case 'provider_invalid':
-      return {
-        intent: 'retry_sync',
-        label: 'Retry Sync',
-        enabled: true,
-        variant: 'outline',
-      };
-    case 'removed':
-      return {
-        intent: 'unavailable',
-        label: 'Unavailable',
-        enabled: false,
-        variant: 'outline',
-      };
-    default:
-      return {
-        intent: 'check_status',
-        label: 'Check Remote Status',
-        enabled: true,
-        variant: 'outline',
-      };
-  }
-}
-
-function providerLocalServeActionModel(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
-  if (environment.open_local_session_lifecycle === 'opening') {
+  if (environment.window_state === 'opening') {
     return {
       intent: 'opening',
       label: 'Opening…',
@@ -697,259 +554,68 @@ function providerLocalServeActionModel(environment: DesktopEnvironmentEntry): En
       variant: 'default',
     };
   }
-  if (environment.open_local_session_lifecycle === 'open') {
-    return {
-      intent: 'serve_runtime',
-      label: 'Focus Local Serve',
-      enabled: true,
-      variant: 'default',
-    };
-  }
-  if (environment.provider_local_serve_state === 'absent') {
-    return {
-      intent: 'serve_runtime',
-      label: 'Serve Local…',
-      enabled: true,
-      variant: 'default',
-    };
-  }
   return {
-    intent: 'serve_runtime',
-    label: 'Open Local Serve',
-    enabled: true,
+    intent: 'open',
+    label: 'Open',
+    enabled: environment.runtime_health.status === 'online',
     variant: 'default',
+    tooltip: environmentPrimaryTooltip(environment) || undefined,
   };
 }
 
-function providerHasLocalServe(environment: DesktopEnvironmentEntry): boolean {
-  return environment.provider_local_serve_state != null && environment.provider_local_serve_state !== 'absent';
-}
-
-function providerRemoteMenuActionLabel(action: EnvironmentActionModel): string {
-  switch (action.intent) {
-    case 'open':
-      return 'Open via Control Plane';
-    case 'focus':
-      return 'Focus via Control Plane';
-    case 'opening':
-      return 'Opening via Control Plane';
-    default:
-      return action.label;
+function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
+  const items: EnvironmentActionMenuItemModel[] = [];
+  if (environment.runtime_control_capability === 'start_stop') {
+    const runtimeAction: EnvironmentActionModel = {
+      intent: environment.runtime_health.status === 'online' ? 'stop_runtime' : 'start_runtime',
+      label: environment.runtime_health.status === 'online' ? 'Stop runtime' : 'Start runtime',
+      enabled: true,
+      variant: 'outline',
+    };
+    items.push({
+      id: runtimeAction.intent,
+      label: runtimeAction.label,
+      action: runtimeAction,
+    });
+  } else {
+    items.push({
+      id: 'runtime_managed_externally',
+      label: 'Runtime managed externally',
+      action: {
+        intent: 'unavailable',
+        label: 'Runtime managed externally',
+        enabled: false,
+        variant: 'outline',
+      },
+    });
   }
-}
-
-function providerLocalServeMenuAction(environment: DesktopEnvironmentEntry): EnvironmentActionMenuItemModel {
-  const action = {
-    ...providerLocalServeActionModel(environment),
-    label: 'Serve Local…',
-  };
-  return {
-    id: 'local_serve',
-    label: action.label,
-    action,
-  };
-}
-
-function providerRemoteMenuAction(action: EnvironmentActionModel): EnvironmentActionMenuItemModel {
-  return {
-    id: 'remote_route',
-    label: providerRemoteMenuActionLabel(action),
+  items.push({
+    id: 'refresh_runtime',
+    label: 'Refresh runtime status',
     action: {
-      ...action,
-      label: providerRemoteMenuActionLabel(action),
+      intent: 'refresh_runtime',
+      label: 'Refresh runtime status',
+      enabled: true,
+      variant: 'outline',
     },
-  };
-}
-
-function providerLocalServeStopActionModel(environment: DesktopEnvironmentEntry): EnvironmentActionModel | undefined {
-  if (
-    environment.open_local_session_lifecycle !== 'open'
-    || environment.provider_local_runtime_state !== 'running_desktop'
-  ) {
-    return undefined;
-  }
-  return {
-    intent: 'stop',
-    label: 'Stop',
-    enabled: true,
-    variant: 'outline',
-  };
-}
-
-function providerBackedStatusModel(options: Readonly<{
-  isOpen: boolean;
-  isOpening: boolean;
-  hasLocalHosting: boolean;
-  hasRemoteDesktop: boolean;
-  localSessionOpen: boolean;
-  remoteSessionOpen: boolean;
-  remoteRouteState?: DesktopProviderRemoteRouteState;
-  controlPlaneSyncState?: DesktopControlPlaneSyncState;
-}>): Readonly<{
-  label: string;
-  tone: EnvironmentCardTone;
-}> {
-  if (options.isOpening) {
-    return {
-      label: 'Opening',
-      tone: 'primary',
-    };
-  }
-  if (options.isOpen) {
-    return {
-      label: 'Open',
-      tone: 'success',
-    };
-  }
-  if (!options.hasRemoteDesktop) {
-    return {
-      label: 'Ready',
-      tone: 'primary',
-    };
-  }
-  if (
-    options.controlPlaneSyncState === 'syncing'
-    && !options.hasLocalHosting
-    && options.remoteRouteState !== 'ready'
-  ) {
-    return {
-      label: 'Checking',
-      tone: 'primary',
-    };
-  }
-  if (options.hasLocalHosting && options.hasRemoteDesktop) {
-    switch (options.remoteRouteState) {
-      case 'offline':
-      case 'stale':
-      case 'auth_required':
-      case 'provider_unreachable':
-      case 'provider_invalid':
-      case 'removed':
-        return {
-          label: 'Local Ready',
-          tone: 'primary',
-        };
-      default:
-        break;
-    }
-  }
-  switch (options.remoteRouteState) {
-    case 'ready':
-      return {
-        label: 'Ready',
-        tone: 'primary',
-      };
-    case 'offline':
-      return {
-        label: 'Offline',
-        tone: 'warning',
-      };
-    case 'stale':
-      return {
-        label: 'Status stale',
-        tone: 'warning',
-      };
-    case 'auth_required':
-      return {
-        label: 'Reconnect required',
-        tone: 'warning',
-      };
-    case 'provider_unreachable':
-    case 'provider_invalid':
-      return {
-        label: 'Sync needed',
-        tone: 'warning',
-      };
-    case 'removed':
-      return {
-        label: 'Unavailable',
-        tone: 'neutral',
-      };
-    case 'unknown':
-      return {
-        label: 'Unknown',
-        tone: 'neutral',
-      };
-    default:
-      return {
-        label: options.hasRemoteDesktop ? 'Unknown' : 'Ready',
-        tone: options.hasRemoteDesktop ? 'neutral' : 'primary',
-      };
-  }
+  });
+  return items;
 }
 
 export function buildProviderBackedEnvironmentActionModel(
   environment: DesktopEnvironmentEntry,
-  controlPlaneSyncState: DesktopControlPlaneSyncState = environment.control_plane_sync_state ?? 'ready',
+  _controlPlaneSyncState: DesktopControlPlaneSyncState = environment.control_plane_sync_state ?? 'ready',
 ): ProviderBackedEnvironmentActionModel {
-  const isProviderEnvironment = environment.kind === 'provider_environment';
-  const hasLocalHosting = environment.kind === 'managed_environment' || providerHasLocalServe(environment);
-  const hasRemoteDesktop = isProviderEnvironment;
-  const localSessionOpen = environment.open_local_session_lifecycle === 'open';
-  const remoteSessionOpen = environment.open_remote_session_lifecycle === 'open';
-  const status = providerBackedStatusModel({
-    isOpen: environment.is_open || localSessionOpen,
-    isOpening: environment.is_opening || environment.open_local_session_lifecycle === 'opening',
-    hasLocalHosting,
-    hasRemoteDesktop,
-    localSessionOpen,
-    remoteSessionOpen,
-    remoteRouteState: environment.remote_route_state,
-    controlPlaneSyncState,
-  });
-  const remoteAction = hasRemoteDesktop
-    ? remoteRouteActionModel({
-      remoteRouteState: environment.remote_route_state,
-      remoteSessionLifecycle: environment.open_remote_session_lifecycle,
-    })
-    : null;
-
-  if (environment.is_opening) {
-    return {
-      status_label: status.label,
-      status_tone: status.tone,
-      action_presentation: {
-        kind: 'single_button',
-        action: {
-          intent: 'opening',
-          label: 'Opening…',
-          enabled: false,
-          variant: 'default',
-          route: environment.default_open_route ?? 'local_host',
-        },
-      },
-    };
-  }
-  if (!isProviderEnvironment) {
-    return {
-      status_label: status.label,
-      status_tone: status.tone,
-      action_presentation: {
-        kind: 'single_button',
-        action: localRouteActionModel(environment),
-      },
-    };
-  }
-
-  const localAction = providerLocalServeActionModel(environment);
-  const shouldPreferLocalServe = providerHasLocalServe(environment)
-    || environment.remote_route_state === 'offline'
-    || environment.remote_route_state === 'removed';
-  const primaryAction = shouldPreferLocalServe
-    ? localAction
-    : (remoteAction ?? localAction);
-  const menuActions = shouldPreferLocalServe
-    ? (remoteAction ? [providerRemoteMenuAction(remoteAction)] : [])
-    : [providerLocalServeMenuAction(environment)];
+  const primaryAction = primaryWindowAction(environment);
   return {
-    status_label: status.label,
-    status_tone: status.tone,
+    status_label: runtimeStatusLabel(environment),
+    status_tone: runtimeStatusTone(environment),
     action_presentation: {
       kind: 'split_button',
       primary_action: primaryAction,
-      menu_button_label: 'Choose environment route',
-      menu_actions: menuActions,
-      secondary_action: providerLocalServeStopActionModel(environment),
+      primary_action_tooltip: primaryAction.tooltip,
+      menu_button_label: 'Runtime actions',
+      menu_actions: runtimeMenuActions(environment),
     },
   };
 }
@@ -1005,50 +671,11 @@ export function buildControlPlaneStatusModel(
 }
 
 export function environmentStatusLabel(environment: DesktopEnvironmentEntry): string {
-  if (environment.kind === 'provider_environment' && environment.open_local_session_lifecycle === 'opening') {
-    return 'Opening';
-  }
-  if (environment.kind === 'provider_environment' && environment.open_local_session_lifecycle === 'open') {
-    return 'Open';
-  }
-  if (environment.is_opening) {
-    return 'Opening';
-  }
-  if (environment.is_open) {
-    return 'Open';
-  }
-  if (environment.kind === 'managed_environment' || environment.kind === 'provider_environment') {
-    return buildProviderBackedEnvironmentActionModel(environment).status_label;
-  }
-  if (environment.category === 'recent_auto') {
-    return 'Recent';
-  }
-  if (environment.category === 'saved') {
-    return 'Saved';
-  }
-  return 'Available';
+  return runtimeStatusLabel(environment);
 }
 
 export function environmentStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
-  if (environment.kind === 'provider_environment' && environment.open_local_session_lifecycle === 'opening') {
-    return 'primary';
-  }
-  if (environment.kind === 'provider_environment' && environment.open_local_session_lifecycle === 'open') {
-    return 'success';
-  }
-  if (environment.is_opening) {
-    return 'primary';
-  }
-  if (environment.is_open) {
-    return 'success';
-  }
-  if (environment.kind === 'managed_environment' || environment.kind === 'provider_environment') {
-    return buildProviderBackedEnvironmentActionModel(environment).status_tone;
-  }
-  if (environment.category === 'recent_auto') {
-    return 'primary';
-  }
-  return 'neutral';
+  return runtimeStatusTone(environment);
 }
 
 function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly EnvironmentCardMetaItem[] {
@@ -1144,10 +771,8 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
   }
 
   if (environment.kind === 'provider_environment') {
-    const localEndpoint = compact(environment.provider_local_runtime_url) || compact(environment.provider_local_ui_bind);
     const remoteEndpoint = compact(environment.remote_environment_url) || compact(environment.local_ui_url);
-    const targetPrimary = localEndpoint
-      || remoteEndpoint
+    const targetPrimary = remoteEndpoint
       || compact(environment.secondary_text)
       || 'Provider environment';
     return {
@@ -1156,11 +781,9 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       status_tone: environmentStatusTone(environment),
       source_label: environmentSourceLabel(environment),
       target_primary: targetPrimary,
-      target_secondary: localEndpoint !== '' && remoteEndpoint !== '' && remoteEndpoint !== targetPrimary
-        ? remoteEndpoint
-        : '',
+      target_secondary: '',
       target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
-      target_secondary_monospace: shouldUseMonospaceEndpoint(remoteEndpoint),
+      target_secondary_monospace: false,
       meta: environmentCardMeta(environment),
     };
   }
@@ -1230,10 +853,7 @@ export function environmentProviderFilterValue(environment: DesktopEnvironmentEn
 }
 
 function isVisibleEnvironmentLibraryEntry(environment: DesktopEnvironmentEntry): boolean {
-  return !(
-    environment.kind === 'managed_environment'
-    && environment.managed_environment_kind === 'controlplane'
-  );
+  return Boolean(environment);
 }
 
 export function environmentMatchesProviderFilter(
@@ -1245,10 +865,7 @@ export function environmentMatchesProviderFilter(
     return true;
   }
   if (activeFilter === LOCAL_ENVIRONMENT_LIBRARY_FILTER) {
-    return (
-      (environment.kind === 'managed_environment' && environment.managed_environment_kind !== 'controlplane')
-      || (environment.kind === 'provider_environment' && providerHasLocalServe(environment))
-    );
+    return environment.kind === 'managed_environment';
   }
   if (activeFilter === PROVIDER_ENVIRONMENT_LIBRARY_FILTER) {
     return environment.kind === 'provider_environment';

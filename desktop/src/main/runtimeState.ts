@@ -16,8 +16,8 @@ type RuntimeProbeResponse = Readonly<{
 }>;
 
 type RuntimeProbeStatus = Readonly<{
+  status: 'online';
   password_required: boolean;
-  unlocked: boolean;
 }>;
 
 function candidateStartupURLs(startup: StartupReport): string[] {
@@ -62,7 +62,7 @@ function request(url: URL, timeoutMs: number): Promise<RuntimeProbeResponse> {
   });
 }
 
-function parseLocalAccessStatusResponse(raw: string): RuntimeProbeStatus | null {
+function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null {
   if (!raw) {
     return null;
   }
@@ -73,12 +73,12 @@ function parseLocalAccessStatusResponse(raw: string): RuntimeProbeStatus | null 
       return null;
     }
     const data = inner as Record<string, unknown>;
-    if (typeof data.password_required !== 'boolean' || typeof data.unlocked !== 'boolean') {
+    if (String(data.status ?? '').trim().toLowerCase() !== 'online' || typeof data.password_required !== 'boolean') {
       return null;
     }
     return {
+      status: 'online',
       password_required: data.password_required,
-      unlocked: data.unlocked,
     };
   } catch {
     return null;
@@ -89,12 +89,12 @@ async function probeRedevenLocalUI(baseURL: string, timeoutMs: number): Promise<
   if (!isAllowedAppNavigation(baseURL, baseURL)) {
     return null;
   }
-  const probeURL = new URL('/api/local/access/status', baseURL);
+  const probeURL = new URL('/api/local/runtime/health', baseURL);
   const response = await request(probeURL, timeoutMs);
   if (response.statusCode !== 200) {
     return null;
   }
-  return parseLocalAccessStatusResponse(response.body);
+  return parseLocalRuntimeHealthResponse(response.body);
 }
 
 export async function loadExternalLocalUIStartup(

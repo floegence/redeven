@@ -22,6 +22,17 @@ export type DesktopControlPlaneAccount = Readonly<{
   authorization_expires_at_unix_ms: number;
 }>;
 
+export type DesktopProviderRuntimeStatus = 'online' | 'offline';
+
+export type DesktopProviderEnvironmentRuntimeHealth = Readonly<{
+  env_public_id: string;
+  runtime_status: DesktopProviderRuntimeStatus;
+  observed_at_unix_ms: number;
+  last_seen_at_unix_ms: number;
+  offline_reason_code: string;
+  offline_reason: string;
+}>;
+
 export type DesktopProviderEnvironment = Readonly<{
   provider_id: string;
   provider_origin: string;
@@ -34,6 +45,7 @@ export type DesktopProviderEnvironment = Readonly<{
   status: string;
   lifecycle_status: string;
   last_seen_at_unix_ms: number;
+  runtime_health?: DesktopProviderEnvironmentRuntimeHealth;
 }>;
 
 export type DesktopControlPlaneSummary = Readonly<{
@@ -145,6 +157,56 @@ function normalizeEnvironmentURL(value: unknown): string {
   }
 }
 
+function normalizeProviderRuntimeStatus(value: unknown): DesktopProviderRuntimeStatus | null {
+  const clean = compact(value).toLowerCase();
+  return clean === 'online' || clean === 'offline' ? clean : null;
+}
+
+export function normalizeDesktopProviderEnvironmentRuntimeHealth(
+  value: unknown,
+): DesktopProviderEnvironmentRuntimeHealth | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const envPublicID = compact(candidate.env_public_id);
+  const runtimeStatus = normalizeProviderRuntimeStatus(candidate.runtime_status);
+  const observedAtUnixMS = normalizeUnixMS(candidate.observed_at_unix_ms);
+  if (envPublicID === '' || !runtimeStatus || observedAtUnixMS <= 0) {
+    return null;
+  }
+
+  return {
+    env_public_id: envPublicID,
+    runtime_status: runtimeStatus,
+    observed_at_unix_ms: observedAtUnixMS,
+    last_seen_at_unix_ms: normalizeUnixMS(candidate.last_seen_at_unix_ms),
+    offline_reason_code: compact(candidate.offline_reason_code),
+    offline_reason: compact(candidate.offline_reason),
+  };
+}
+
+export function normalizeDesktopProviderEnvironmentRuntimeHealthList(
+  value: unknown,
+): readonly DesktopProviderEnvironmentRuntimeHealth[] {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const environments = Array.isArray(candidate.environments) ? candidate.environments : [];
+  const out: DesktopProviderEnvironmentRuntimeHealth[] = [];
+  for (const environment of environments) {
+    const normalized = normalizeDesktopProviderEnvironmentRuntimeHealth(environment);
+    if (!normalized) {
+      continue;
+    }
+    out.push(normalized);
+  }
+  return out;
+}
+
 export function normalizeDesktopControlPlaneProvider(value: unknown): DesktopControlPlaneProvider | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -241,6 +303,7 @@ export function normalizeDesktopProviderEnvironment(
     status: compact(candidate.status),
     lifecycle_status: compact(candidate.lifecycle_status),
     last_seen_at_unix_ms: normalizeUnixMS(candidate.last_seen_at_unix_ms),
+    runtime_health: normalizeDesktopProviderEnvironmentRuntimeHealth(candidate.runtime_health) ?? undefined,
   };
 }
 

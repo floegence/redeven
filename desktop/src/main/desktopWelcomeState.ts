@@ -49,11 +49,14 @@ import {
   type DesktopProviderCatalogFreshness,
   type DesktopProviderRemoteRouteState,
 } from '../shared/providerEnvironmentState';
+import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 
 export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   preferences: DesktopPreferences;
   controlPlanes?: readonly DesktopControlPlaneSummary[];
   openSessions?: readonly DesktopSessionSummary[];
+  savedExternalRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
+  savedSSHRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
@@ -213,6 +216,44 @@ function sessionIsOpen(session: DesktopSessionSummary | null | undefined): boole
 
 function sessionIsOpening(session: DesktopSessionSummary | null | undefined): boolean {
   return session?.lifecycle === 'opening';
+}
+
+function environmentWindowState(
+  session: DesktopSessionSummary | null | undefined,
+): DesktopEnvironmentEntry['window_state'] {
+  if (session?.lifecycle === 'open') {
+    return 'open';
+  }
+  if (session?.lifecycle === 'opening') {
+    return 'opening';
+  }
+  return 'closed';
+}
+
+function onlineRuntimeHealth(
+  source: DesktopRuntimeHealth['source'],
+  localUIURL: string,
+): DesktopRuntimeHealth {
+  return {
+    status: 'online',
+    checked_at_unix_ms: Date.now(),
+    source,
+    local_ui_url: compact(localUIURL) || undefined,
+  };
+}
+
+function offlineRuntimeHealth(
+  source: DesktopRuntimeHealth['source'],
+  offlineReasonCode: NonNullable<DesktopRuntimeHealth['offline_reason_code']>,
+  offlineReason: string,
+): DesktopRuntimeHealth {
+  return {
+    status: 'offline',
+    checked_at_unix_ms: Date.now(),
+    source,
+    offline_reason_code: offlineReasonCode,
+    offline_reason: offlineReason,
+  };
 }
 
 function buildOpenEnvironmentWindows(
@@ -399,20 +440,46 @@ function managedLocalCloseBehavior(
   return runtimeState === 'running_external' ? 'detaches' : 'stops_runtime';
 }
 
+function managedEnvironmentRuntimeHealth(
+  runtimeState: DesktopManagedLocalRuntimeState,
+  localRuntimeURL: string,
+): DesktopRuntimeHealth {
+  if (runtimeState === 'running_desktop' || runtimeState === 'running_external') {
+    return onlineRuntimeHealth('local_runtime_probe', localRuntimeURL);
+  }
+  return offlineRuntimeHealth('local_runtime_probe', 'not_started', 'Serve the runtime first');
+}
+
+function providerEnvironmentRuntimeHealth(
+  environment: DesktopControlPlaneSummary['environments'][number],
+): DesktopRuntimeHealth {
+  const providerHealth = environment.runtime_health;
+  if (providerHealth?.runtime_status === 'online') {
+    return {
+      status: 'online',
+      checked_at_unix_ms: providerHealth.observed_at_unix_ms || Date.now(),
+      source: 'provider_batch_probe',
+      local_ui_url: compact(environment.environment_url) || undefined,
+    };
+  }
+  return {
+    status: 'offline',
+    checked_at_unix_ms: providerHealth?.observed_at_unix_ms || Date.now(),
+    source: 'provider_batch_probe',
+    offline_reason_code: (providerHealth?.offline_reason_code as DesktopRuntimeHealth['offline_reason_code']) || 'provider_unavailable',
+    offline_reason: providerHealth?.offline_reason || 'The runtime offline / unavailable',
+  };
+}
+
 function managedEnvironmentOpenActionLabel(input: Readonly<{
   isOpen: boolean;
   isOpening: boolean;
-  defaultRoute: DesktopManagedEnvironmentRoute;
-  localRuntimeState: DesktopManagedLocalRuntimeState;
 }>): DesktopEnvironmentEntry['open_action_label'] {
   if (input.isOpen) {
     return 'Focus';
   }
   if (input.isOpening) {
     return 'Opening…';
-  }
-  if (input.defaultRoute === 'local_host' && input.localRuntimeState !== 'not_running') {
-    return 'Attach';
   }
   return 'Open';
 }
@@ -457,6 +524,7 @@ function managedRemoteRouteDetails(
   const remoteRouteState = desktopProviderRemoteRouteState({
     syncState: controlPlane.sync_state,
     environmentPresent: providerEnvironment !== null,
+    providerRuntimeStatus: providerEnvironment?.runtime_health?.runtime_status,
     providerStatus: providerEnvironment?.status,
     providerLifecycleStatus: providerEnvironment?.lifecycle_status,
     lastSyncedAtMS: controlPlane.last_synced_at_ms,
@@ -507,6 +575,7 @@ function buildManagedEnvironmentEntry(
   const localRuntimeState = managedLocalRuntimeState(environment, localSession);
   const localRuntimeURL = managedLocalRuntimeURL(environment, localSession);
   const localCloseBehavior = managedLocalCloseBehavior(environment, localRuntimeState);
+  const runtimeHealth = managedEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL);
   const localRouteState = managedLocalRouteState(environment, localSession);
   const remoteRoute = kind === 'controlplane'
     ? managedRemoteRouteDetails(environment, controlPlanes)
@@ -565,15 +634,16 @@ function buildManagedEnvironmentEntry(
       : undefined,
     tag: isOpen ? 'Open' : 'Managed',
     category: 'managed',
+    window_state: environmentWindowState(localSession),
     is_open: isOpen,
     is_opening: isOpening,
+    runtime_health: runtimeHealth,
+    runtime_control_capability: 'start_stop',
     open_session_key: localSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(localSession),
     open_action_label: managedEnvironmentOpenActionLabel({
       isOpen,
       isOpening,
-      defaultRoute: 'local_host',
-      localRuntimeState,
     }),
     can_edit: true,
     can_delete: !isDefaultLocalManagedEnvironment(environment),
@@ -607,6 +677,7 @@ function buildProviderEnvironmentEntry(
   const remoteRouteState = desktopProviderRemoteRouteState({
     syncState: controlPlane.sync_state,
     environmentPresent: true,
+    providerRuntimeStatus: providerEnvironment.runtime_health?.runtime_status,
     providerStatus: providerEnvironment.status,
     providerLifecycleStatus: providerEnvironment.lifecycle_status,
     lastSyncedAtMS: controlPlane.last_synced_at_ms,
@@ -649,6 +720,7 @@ function buildProviderEnvironmentEntry(
   const remoteSessionOpen = sessionIsOpen(remoteSession);
   const localServeSessionOpening = sessionIsOpening(localServeSession);
   const remoteSessionOpening = sessionIsOpening(remoteSession);
+  const runtimeHealth = providerEnvironmentRuntimeHealth(providerEnvironment);
   return {
     id: desktopManagedControlPlaneEnvironmentID(
       controlPlane.provider.provider_origin,
@@ -656,8 +728,7 @@ function buildProviderEnvironmentEntry(
     ),
     kind: 'provider_environment',
     label: providerEnvironment.label,
-    local_ui_url: localServeRuntimeURL
-      || remoteSession?.entry_url
+    local_ui_url: remoteSession?.entry_url
       || remoteSession?.startup?.local_ui_url
       || providerEnvironment.environment_url
       || '',
@@ -692,19 +763,20 @@ function buildProviderEnvironmentEntry(
       : 'absent',
     pinned: preference?.pinned ?? false,
     control_plane_label: controlPlane.display_label,
-    tag: localServeSessionOpen || remoteSessionOpen ? 'Open' : 'Managed',
+    tag: remoteSessionOpen ? 'Open' : 'Managed',
     category: 'provider',
-    is_open: localServeSessionOpen || remoteSessionOpen,
-    is_opening: localServeSessionOpening || remoteSessionOpening,
+    window_state: environmentWindowState(remoteSession),
+    is_open: remoteSessionOpen,
+    is_opening: remoteSessionOpening,
+    runtime_health: runtimeHealth,
+    runtime_control_capability: 'observe_only',
     open_remote_session_key: remoteSession?.session_key,
     open_remote_session_lifecycle: sessionLifecycle(remoteSession),
-    open_session_key: remoteSession?.session_key ?? localServeSession?.session_key ?? '',
-    open_session_lifecycle: sessionLifecycle(remoteSession ?? localServeSession),
-    open_action_label: localServeSessionOpen
+    open_session_key: remoteSession?.session_key ?? '',
+    open_session_lifecycle: sessionLifecycle(remoteSession),
+    open_action_label: remoteSessionOpen
       ? 'Focus'
-      : sessionIsOpen(remoteSession)
-      ? 'Focus'
-      : localServeSessionOpening || sessionIsOpening(remoteSession)
+      : remoteSessionOpening
         ? 'Opening…'
         : 'Open',
     can_edit: false,
@@ -718,6 +790,8 @@ function buildEnvironmentEntries(
   preferences: DesktopPreferences,
   controlPlanes: readonly DesktopControlPlaneSummary[],
   openSessions: readonly DesktopSessionSummary[],
+  savedExternalRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
+  savedSSHRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
 ): readonly DesktopEnvironmentEntry[] {
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
@@ -762,8 +836,11 @@ function buildEnvironmentEntries(
       pinned: false,
       tag: isOpen ? 'Open' : '',
       category: 'open_unsaved',
+      window_state: environmentWindowState(session),
       is_open: isOpen,
       is_opening: isOpening,
+      runtime_health: onlineRuntimeHealth('external_local_ui_probe', localUIURL),
+      runtime_control_capability: 'observe_only',
       open_session_key: session.session_key,
       open_session_lifecycle: session.lifecycle,
       open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -811,8 +888,11 @@ function buildEnvironmentEntries(
       pinned: false,
       tag: isOpen ? 'Open' : '',
       category: 'open_unsaved',
+      window_state: environmentWindowState(session),
       is_open: isOpen,
       is_opening: isOpening,
+      runtime_health: onlineRuntimeHealth('ssh_runtime_probe', session.entry_url ?? session.startup?.local_ui_url ?? ''),
+      runtime_control_capability: 'start_stop',
       open_session_key: session.session_key,
       open_session_lifecycle: session.lifecycle,
       open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -824,10 +904,18 @@ function buildEnvironmentEntries(
   }
 
   for (const environment of catalog) {
-    entries.push(buildSavedEnvironmentEntry(environment, openSessionByURL(openSessions, environment.local_ui_url)));
+    entries.push(buildSavedEnvironmentEntry(
+      environment,
+      openSessionByURL(openSessions, environment.local_ui_url),
+      savedExternalRuntimeHealth[environment.id],
+    ));
   }
   for (const environment of sshCatalog) {
-    entries.push(buildSavedSSHEnvironmentEntry(environment, openSessionBySSHEnvironment(openSessions, environment)));
+    entries.push(buildSavedSSHEnvironmentEntry(
+      environment,
+      openSessionBySSHEnvironment(openSessions, environment),
+      savedSSHRuntimeHealth[environment.id],
+    ));
   }
 
   return entries;
@@ -836,9 +924,17 @@ function buildEnvironmentEntries(
 function buildSavedEnvironmentEntry(
   environment: DesktopSavedEnvironment,
   openSession: DesktopSessionSummary | null,
+  savedRuntimeHealth: DesktopRuntimeHealth | undefined,
 ): DesktopEnvironmentEntry {
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
+  const runtimeHealth = isOpen || isOpening
+    ? onlineRuntimeHealth('external_local_ui_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? environment.local_ui_url)
+    : savedRuntimeHealth ?? offlineRuntimeHealth(
+      'external_local_ui_probe',
+      'external_unreachable',
+      'The runtime offline / unavailable',
+    );
   return {
     id: environment.id,
     kind: 'external_local_ui',
@@ -848,8 +944,11 @@ function buildSavedEnvironmentEntry(
     pinned: environment.pinned,
     tag: isOpen ? 'Open' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',
     category: environment.source,
+    window_state: environmentWindowState(openSession),
     is_open: isOpen,
     is_opening: isOpening,
+    runtime_health: runtimeHealth,
+    runtime_control_capability: 'observe_only',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -863,9 +962,17 @@ function buildSavedEnvironmentEntry(
 function buildSavedSSHEnvironmentEntry(
   environment: DesktopSavedSSHEnvironment,
   openSession: DesktopSessionSummary | null,
+  savedRuntimeHealth: DesktopRuntimeHealth | undefined,
 ): DesktopEnvironmentEntry {
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
+  const runtimeHealth = isOpen || isOpening
+    ? onlineRuntimeHealth('ssh_runtime_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '')
+    : savedRuntimeHealth ?? offlineRuntimeHealth(
+      'ssh_runtime_probe',
+      'not_started',
+      'Serve the runtime first',
+    );
   return {
     id: environment.id,
     kind: 'ssh_environment',
@@ -885,8 +992,11 @@ function buildSavedSSHEnvironmentEntry(
     pinned: environment.pinned,
     tag: isOpen ? 'Open' : environment.source === 'recent_auto' ? 'Recent' : 'Saved',
     category: environment.source,
+    window_state: environmentWindowState(openSession),
     is_open: isOpen,
     is_opening: isOpening,
+    runtime_health: runtimeHealth,
+    runtime_control_capability: 'start_stop',
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
     open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
@@ -922,7 +1032,13 @@ export function buildDesktopWelcomeSnapshot(
   const openSessions = sortOpenSessions(args.openSessions ?? []);
   const issue = args.issue ?? null;
   const surface = args.surface ?? 'connect_environment';
-  const environments = buildEnvironmentEntries(preferences, controlPlanes, openSessions);
+  const environments = buildEnvironmentEntries(
+    preferences,
+    controlPlanes,
+    openSessions,
+    args.savedExternalRuntimeHealth ?? {},
+    args.savedSSHRuntimeHealth ?? {},
+  );
   const selectedManagedEnvironment = (
     findManagedEnvironmentByID(preferences, args.selectedManagedEnvironmentID ?? '')
     ?? preferences.managed_environments.find((environment) => Boolean(environment.local_hosting))

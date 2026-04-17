@@ -61,13 +61,13 @@ func TestWriteStateRejectsMissingLocalURL(t *testing.T) {
 
 func TestLoadAttachable(t *testing.T) {
 	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/local/access/status" {
+		if r.URL.Path != "/api/local/runtime/health" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true,"data":{"password_required":true,"unlocked":false}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"status":"online","password_required":true}}`))
 	}))
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
@@ -106,13 +106,13 @@ func TestLoadAttachable(t *testing.T) {
 
 func TestWaitForAttachable(t *testing.T) {
 	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/local/access/status" {
+		if r.URL.Path != "/api/local/runtime/health" {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true,"data":{"password_required":false,"unlocked":true}}`))
+		_, _ = w.Write([]byte(`{"ok":true,"data":{"status":"online","password_required":false}}`))
 	}))
 
 	runtimePath := filepath.Join(t.TempDir(), "runtime", "local-ui.json")
@@ -158,7 +158,7 @@ func TestLoadAttachableRejectsNonLoopbackURL(t *testing.T) {
 
 func TestLoadAttachableRejectsNonRedevenProbeResponse(t *testing.T) {
 	server := httpTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/local/access/status" {
+		if r.URL.Path != "/api/local/runtime/health" {
 			http.NotFound(w, r)
 			return
 		}

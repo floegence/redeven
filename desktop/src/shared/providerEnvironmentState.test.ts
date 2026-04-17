@@ -10,9 +10,9 @@ import {
 
 describe('providerEnvironmentState', () => {
   it('derives online, offline, and unknown availability from provider runtime fields', () => {
-    expect(desktopProviderEnvironmentAvailability('online', 'active')).toBe('online');
-    expect(desktopProviderEnvironmentAvailability('offline', 'suspended')).toBe('offline');
-    expect(desktopProviderEnvironmentAvailability('', '')).toBe('unknown');
+    expect(desktopProviderEnvironmentAvailability('online', 'ready', 'active')).toBe('online');
+    expect(desktopProviderEnvironmentAvailability('offline', 'offline', 'suspended')).toBe('offline');
+    expect(desktopProviderEnvironmentAvailability('', '', '')).toBe('unknown');
   });
 
   it('counts provider environments that are currently online', () => {

@@ -231,7 +231,7 @@ describe('desktopWelcomeState', () => {
     ]));
   });
 
-  it('marks a discovered external local runtime as attachable before a Desktop session is open', () => {
+  it('marks a discovered external local runtime as online before a Desktop session is open', () => {
     const managedLocal = testManagedLocalEnvironment('default', {
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
@@ -253,7 +253,12 @@ describe('desktopWelcomeState', () => {
         managed_local_runtime_state: 'running_external',
         managed_local_runtime_url: 'http://127.0.0.1:24001/',
         managed_local_close_behavior: 'detaches',
-        open_action_label: 'Attach',
+        window_state: 'closed',
+        open_action_label: 'Open',
+        runtime_control_capability: 'start_stop',
+        runtime_health: expect.objectContaining({
+          status: 'online',
+        }),
       }),
     ]));
   });
@@ -456,7 +461,7 @@ describe('desktopWelcomeState', () => {
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
   });
 
-  it('projects provider local-serve state onto the visible provider card while preserving the hidden local entry', () => {
+  it('projects provider local-serve state onto both the local-serve card and the provider card', () => {
     const managedControlPlane = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_demo');
     const localTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'local_host' });
     const remoteTarget = buildManagedEnvironmentDesktopTarget(managedControlPlane, { route: 'remote_desktop' });
@@ -516,6 +521,14 @@ describe('desktopWelcomeState', () => {
           status: 'online',
           lifecycle_status: 'active',
           last_seen_at_unix_ms: 456,
+          runtime_health: {
+            env_public_id: 'env_demo',
+            runtime_status: 'online',
+            observed_at_unix_ms: 456,
+            last_seen_at_unix_ms: 456,
+            offline_reason_code: '',
+            offline_reason: '',
+          },
         }],
         last_synced_at_ms: Date.now(),
         sync_state: 'ready',
@@ -541,10 +554,13 @@ describe('desktopWelcomeState', () => {
         open_local_session_key: localTarget.session_key,
         open_remote_session_key: remoteTarget.session_key,
         open_session_key: remoteTarget.session_key,
-        local_ui_url: 'http://localhost:23998/',
+        local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
         provider_local_runtime_state: 'running_desktop',
         provider_local_runtime_url: 'http://localhost:23998/',
         provider_local_serve_state: 'open',
+        runtime_health: expect.objectContaining({
+          status: 'online',
+        }),
       }),
     ]));
   });

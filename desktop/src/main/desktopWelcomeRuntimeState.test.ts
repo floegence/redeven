@@ -53,13 +53,13 @@ describe('desktopWelcomeRuntimeState', () => {
 
   it('probes a detached managed runtime from the local scope state file', async () => {
     const server = http.createServer((request, response) => {
-      if (request.url === '/api/local/access/status') {
+      if (request.url === '/api/local/runtime/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({
           ok: true,
           data: {
+            status: 'online',
             password_required: false,
-            unlocked: true,
           },
         }));
         return;
