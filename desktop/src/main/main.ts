@@ -6,8 +6,10 @@ import { pathToFileURL } from 'node:url';
 import { attachManagedRuntimeFromStateFile, startManagedRuntime } from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
+  buildDesktopLastWindowCloseDialogCopy,
   buildDesktopQuitDialogCopy,
   buildDesktopQuitImpact,
+  shouldConfirmDesktopLastWindowClose,
   shouldConfirmDesktopQuit,
   type DesktopQuitImpact,
   type DesktopQuitSource,
@@ -324,6 +326,7 @@ const UTILITY_WINDOW_KINDS = ['launcher'] as const;
 const sessionsByKey = new Map<DesktopSessionKey, DesktopSessionRecord>();
 const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
+const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 let lastFocusedSessionKey: DesktopSessionKey | null = null;
 let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
@@ -792,6 +795,20 @@ function quitDialogOptions(impact: DesktopQuitImpact): MessageBoxOptions {
   };
 }
 
+function finalWindowCloseDialogOptions(impact: DesktopQuitImpact): MessageBoxOptions {
+  const copy = buildDesktopLastWindowCloseDialogCopy(impact);
+  return {
+    type: 'question',
+    buttons: [...copy.buttons],
+    defaultId: copy.default_id,
+    cancelId: copy.cancel_id,
+    title: copy.title,
+    message: copy.message,
+    detail: copy.detail,
+    normalizeAccessKeys: true,
+  };
+}
+
 function requestImmediateQuit(): void {
   if (quitPhase === 'requested' || quitPhase === 'shutting_down') {
     app.quit();
@@ -799,6 +816,32 @@ function requestImmediateQuit(): void {
   }
   quitPhase = 'requested';
   app.quit();
+}
+
+async function requestFinalWindowClose(
+  win: BrowserWindow,
+): Promise<void> {
+  if (!win || win.isDestroyed()) {
+    return;
+  }
+
+  const impact = await buildCurrentDesktopQuitImpact();
+  if (shouldConfirmDesktopLastWindowClose(impact)) {
+    try {
+      const result = await dialog.showMessageBox(win, finalWindowCloseDialogOptions(impact));
+      if (result.response !== 1) {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+
+  if (win.isDestroyed()) {
+    return;
+  }
+  confirmedFinalWindowCloseWebContentsIDs.add(win.webContents.id);
+  win.close();
 }
 
 async function requestQuit(
@@ -1198,16 +1241,25 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     recordWindowLifecycle(args.diagnostics, 'ready_to_show', 'browser window is ready to show', { role: args.role });
   });
   win.on('close', (event) => {
-    if (quitPhase !== 'idle' || process.platform === 'darwin') {
+    if (confirmedFinalWindowCloseWebContentsIDs.delete(win.webContents.id)) {
+      return;
+    }
+    if (quitPhase !== 'idle') {
       return;
     }
     if (currentAppWindowCount() > 1) {
+      return;
+    }
+    if (process.platform === 'darwin') {
+      event.preventDefault();
+      void requestFinalWindowClose(win);
       return;
     }
     event.preventDefault();
     void requestQuit('last_window_close', win);
   });
   win.on('closed', () => {
+    confirmedFinalWindowCloseWebContentsIDs.delete(win.webContents.id);
     disposeWindowChromeBroadcast();
     cleanupWindowStatePersistence(win);
     recordWindowLifecycle(args.diagnostics, 'window_closed', 'browser window closed', { role: args.role });

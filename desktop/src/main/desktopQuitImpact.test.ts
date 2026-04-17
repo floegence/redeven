@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildDesktopLastWindowCloseDialogCopy,
   buildDesktopQuitDialogCopy,
   buildDesktopQuitImpact,
+  shouldConfirmDesktopLastWindowClose,
   shouldConfirmDesktopQuit,
 } from './desktopQuitImpact';
 
@@ -41,6 +43,7 @@ describe('desktopQuitImpact', () => {
     expect(shouldConfirmDesktopQuit(impact, 'explicit')).toBe(true);
     expect(shouldConfirmDesktopQuit(impact, 'system')).toBe(true);
     expect(shouldConfirmDesktopQuit(impact, 'last_window_close')).toBe(true);
+    expect(shouldConfirmDesktopLastWindowClose(impact)).toBe(true);
   });
 
   it('keeps explicit and system quit confirmations for open environment windows without local runtime shutdown', () => {
@@ -53,6 +56,7 @@ describe('desktopQuitImpact', () => {
     expect(shouldConfirmDesktopQuit(impact, 'explicit')).toBe(true);
     expect(shouldConfirmDesktopQuit(impact, 'system')).toBe(true);
     expect(shouldConfirmDesktopQuit(impact, 'last_window_close')).toBe(false);
+    expect(shouldConfirmDesktopLastWindowClose(impact)).toBe(true);
   });
 
   it('avoids a confirmation when quitting has no active runtime or window impact', () => {
@@ -65,6 +69,7 @@ describe('desktopQuitImpact', () => {
     expect(shouldConfirmDesktopQuit(impact, 'explicit')).toBe(false);
     expect(shouldConfirmDesktopQuit(impact, 'system')).toBe(false);
     expect(shouldConfirmDesktopQuit(impact, 'last_window_close')).toBe(false);
+    expect(shouldConfirmDesktopLastWindowClose(impact)).toBe(false);
   });
 
   it('builds impact-aware dialog copy for runtime shutdown and open windows', () => {
@@ -111,5 +116,45 @@ describe('desktopQuitImpact', () => {
     expect(copy.detail).toContain('- Alpha');
     expect(copy.detail).toContain('- Delta');
     expect(copy.detail).toContain('- 1 more environment');
+  });
+
+  it('builds a macOS last-window-close warning that preserves close semantics', () => {
+    const copy = buildDesktopLastWindowCloseDialogCopy(buildDesktopQuitImpact({
+      environment_window_count: 1,
+      managed_environment_runtimes: [
+        { id: 'managed-a', label: 'Alpha', lifecycle_owner: 'desktop' },
+      ],
+      ssh_runtimes: [],
+    }));
+
+    expect(copy).toEqual({
+      title: 'Close the Last Window?',
+      message: 'Close the Last Window?',
+      detail: [
+        'Closing the last window will close 1 environment window and keep 1 Desktop-managed runtime running in the background. Redeven Desktop will stay open.',
+        '',
+        'This environment will keep running until you quit Redeven Desktop:',
+        '- Alpha',
+        '',
+        'Reopen the launcher from the Dock or the Redeven Desktop app menu.',
+      ].join('\n'),
+      buttons: ['Cancel', 'Close Window'],
+      default_id: 1,
+      cancel_id: 0,
+    });
+  });
+
+  it('keeps the macOS last-window-close warning concise when only the environment window disappears', () => {
+    const copy = buildDesktopLastWindowCloseDialogCopy(buildDesktopQuitImpact({
+      environment_window_count: 1,
+      managed_environment_runtimes: [],
+      ssh_runtimes: [],
+    }));
+
+    expect(copy.detail).toBe([
+      'Closing the last window will close 1 environment window. Redeven Desktop will stay open.',
+      '',
+      'Reopen the launcher from the Dock or the Redeven Desktop app menu.',
+    ].join('\n'));
   });
 });

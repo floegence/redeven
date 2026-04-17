@@ -88,12 +88,19 @@ describe('main routing', () => {
   it('routes explicit quit, system quit, and non-macOS last-window close through shared quit-impact logic', () => {
     const mainSrc = readMainSource();
 
+    expect(mainSrc).toContain("buildDesktopLastWindowCloseDialogCopy,");
     expect(mainSrc).toContain("buildDesktopQuitDialogCopy,");
     expect(mainSrc).toContain("buildDesktopQuitImpact,");
+    expect(mainSrc).toContain("shouldConfirmDesktopLastWindowClose,");
     expect(mainSrc).toContain("shouldConfirmDesktopQuit,");
     expect(mainSrc).toContain("let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';");
+    expect(mainSrc).toContain('const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();');
     expect(mainSrc).toContain('label: string;');
     expect(mainSrc).toContain('async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {');
+    expect(mainSrc).toContain('async function requestFinalWindowClose(');
+    expect(mainSrc).toContain('confirmedFinalWindowCloseWebContentsIDs.add(win.webContents.id);');
+    expect(mainSrc).toContain('if (process.platform === \'darwin\') {');
+    expect(mainSrc).toContain('void requestFinalWindowClose(win);');
     expect(mainSrc).toContain("if (shouldConfirmDesktopQuit(impact, source)) {");
     expect(mainSrc).toContain("void requestQuit('last_window_close', win);");
     expect(mainSrc).toContain("void requestQuit('system');");
