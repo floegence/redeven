@@ -741,12 +741,24 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const notify = useNotification();
   const theme = useTheme();
   const floe = useResolvedFloeConfig();
-  const view = useViewActivation();
   const widgetId = (() => {
     try {
       return useCurrentWidgetId();
     } catch {
       return null;
+    }
+  })();
+  const view = (() => {
+    try {
+      return useViewActivation();
+    } catch {
+      // Deck layouts can mount terminals outside tab activation providers.
+      const fallbackId = String(widgetId ?? '').trim();
+      return {
+        id: fallbackId ? `deck:${fallbackId}` : 'terminal_page',
+        active: () => true,
+        activationSeq: () => 0,
+      };
     }
   })();
   const connId = getOrCreateTerminalConnId();
