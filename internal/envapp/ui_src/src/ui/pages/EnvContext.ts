@@ -34,11 +34,20 @@ export type EnvDeckSurfaceActivationRequest = {
   ensureVisible?: boolean;
 };
 
+export type EnvWorkbenchSurfaceActivationRequest = {
+  requestId: string;
+  surfaceId: EnvSurfaceId;
+  widgetId?: string;
+  focus?: boolean;
+  ensureVisible?: boolean;
+  centerViewport?: boolean;
+};
+
 export type OpenTerminalInDirectoryRequest = {
   requestId: string;
   workingDir: string;
   preferredName?: string;
-  targetMode: 'tab' | 'deck';
+  targetMode: EnvViewMode;
 };
 
 export type EnvContextValue = {
@@ -54,12 +63,15 @@ export type EnvContextValue = {
   viewMode: () => EnvViewMode;
   setViewMode: (mode: EnvViewMode, options?: SetEnvViewModeOptions) => void;
   activeSurface: () => EnvSurfaceId;
-  lastTabSurface: () => EnvSurfaceId;
+  lastActivitySurface: () => EnvSurfaceId;
   openSurface: (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => void;
-  goTab: (surfaceId: EnvSurfaceId) => void;
+  goActivity: (surfaceId: EnvSurfaceId) => void;
   deckSurfaceActivationSeq: () => number;
   deckSurfaceActivation: () => EnvDeckSurfaceActivationRequest | null;
   consumeDeckSurfaceActivation: (requestId: string) => void;
+  workbenchSurfaceActivationSeq: () => number;
+  workbenchSurfaceActivation: () => EnvWorkbenchSurfaceActivationRequest | null;
+  consumeWorkbenchSurfaceActivation: (requestId: string) => void;
   filesSidebarOpen: () => boolean;
   setFilesSidebarOpen: (open: boolean) => void;
   toggleFilesSidebar: () => void;

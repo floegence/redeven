@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_DECK_STORAGE_KEY,
   DEFAULT_ENVAPP_STORAGE_NAMESPACE,
+  DEFAULT_WORKBENCH_STORAGE_KEY,
   DESKTOP_DECK_STORAGE_KEY,
   DESKTOP_ENVAPP_STORAGE_NAMESPACE,
+  DESKTOP_WORKBENCH_STORAGE_KEY,
   resolveEnvAppStorageBinding,
 } from './uiPersistence';
 
@@ -16,6 +18,7 @@ describe('uiPersistence', () => {
     })).toEqual({
       namespace: DESKTOP_ENVAPP_STORAGE_NAMESPACE,
       deckStorageKey: DESKTOP_DECK_STORAGE_KEY,
+      workbenchStorageKey: DESKTOP_WORKBENCH_STORAGE_KEY,
     });
   });
 
@@ -26,6 +29,7 @@ describe('uiPersistence', () => {
     })).toEqual({
       namespace: 'redeven-envapp:env_demo',
       deckStorageKey: 'deck:env_demo',
+      workbenchStorageKey: 'workbench:env_demo',
     });
   });
 
@@ -36,6 +40,7 @@ describe('uiPersistence', () => {
     })).toEqual({
       namespace: DEFAULT_ENVAPP_STORAGE_NAMESPACE,
       deckStorageKey: DEFAULT_DECK_STORAGE_KEY,
+      workbenchStorageKey: DEFAULT_WORKBENCH_STORAGE_KEY,
     });
   });
 });

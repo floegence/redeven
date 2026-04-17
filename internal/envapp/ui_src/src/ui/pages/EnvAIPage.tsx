@@ -1357,7 +1357,7 @@ const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (pr
 
 /**
  * AI chat page — renders only the workbench area (header + messages + input).
- * Thread navigation may live either in Shell's sidebar (tab mode) or inline inside a deck widget.
+ * Thread navigation may live either in Shell's sidebar (activity mode) or inline inside deck/workbench surfaces.
  */
 export function EnvAIPage() {
   const env = useEnvContext();

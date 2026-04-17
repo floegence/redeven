@@ -1,4 +1,5 @@
-export type EnvViewMode = 'tab' | 'deck' | 'infinite_map';
+export type EnvViewMode = 'activity' | 'deck' | 'workbench';
+export type LegacyEnvViewMode = 'tab' | 'deck' | 'infinite_map';
 
 export type EnvSurfaceId =
   | 'terminal'
@@ -24,12 +25,12 @@ export type EnvOpenSurfaceOptions = {
   ensureVisible?: boolean;
 };
 
-export const ENV_DESKTOP_VIEW_MODES = ['tab', 'deck', 'infinite_map'] as const satisfies readonly EnvViewMode[];
+export const ENV_DESKTOP_VIEW_MODES = ['activity', 'deck', 'workbench'] as const satisfies readonly EnvViewMode[];
 
 export const ENV_VIEW_MODE_LABELS: Record<EnvViewMode, string> = {
-  tab: 'Tab',
+  activity: 'Activity',
   deck: 'Deck',
-  infinite_map: 'Infinite Map',
+  workbench: 'Workbench',
 };
 
 export const ENV_SURFACE_IDS = [
@@ -54,7 +55,7 @@ export const ENV_SURFACE_LABELS: Record<EnvSurfaceId, string> = {
   codex: 'Codex',
 };
 
-export const ENV_DECK_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
+export const ENV_SURFACE_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
   terminal: 'redeven.terminal',
   monitor: 'redeven.monitor',
   files: 'redeven.files',
@@ -65,7 +66,27 @@ export const ENV_DECK_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
 };
 
 export function isEnvViewMode(value: unknown): value is EnvViewMode {
+  return value === 'activity' || value === 'deck' || value === 'workbench';
+}
+
+export function isLegacyEnvViewMode(value: unknown): value is LegacyEnvViewMode {
   return value === 'tab' || value === 'deck' || value === 'infinite_map';
+}
+
+export function normalizePersistedEnvViewMode(value: unknown): EnvViewMode | null {
+  if (isEnvViewMode(value)) {
+    return value;
+  }
+  if (value === 'tab') {
+    return 'activity';
+  }
+  if (value === 'infinite_map') {
+    return 'workbench';
+  }
+  if (value === 'deck') {
+    return 'deck';
+  }
+  return null;
 }
 
 export function isEnvSurfaceId(value: unknown): value is EnvSurfaceId {
@@ -80,6 +101,6 @@ export function isEnvSurfaceId(value: unknown): value is EnvSurfaceId {
   );
 }
 
-export function envDeckWidgetTypeForSurface(surfaceId: EnvSurfaceId): string {
-  return ENV_DECK_WIDGET_TYPES[surfaceId];
+export function envWidgetTypeForSurface(surfaceId: EnvSurfaceId): string {
+  return ENV_SURFACE_WIDGET_TYPES[surfaceId];
 }
