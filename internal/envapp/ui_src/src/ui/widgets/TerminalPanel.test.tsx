@@ -875,14 +875,14 @@ describe('TerminalPanel', () => {
     expect(terminalCoreInstances[0]?.setFontFamily).toHaveBeenCalledWith(expect.stringContaining('Iosevka'));
   });
 
-  it('creates and focuses a terminal session from a page-scoped open-session request', async () => {
+  it('creates and focuses a terminal session from an activity-scoped open-session request', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const handledSpy = vi.fn();
 
     render(() => (
       <TerminalPanel
-        variant="deck"
+        variant="panel"
         openSessionRequest={{
           requestId: 'request-1',
           workingDir: '/workspace/repo',
@@ -910,7 +910,7 @@ describe('TerminalPanel', () => {
           requestId: 'request-ignored',
           workingDir: '/workspace/repo',
           preferredName: 'repo',
-          targetMode: 'deck',
+          targetMode: 'activity',
         }}
         onOpenSessionRequestHandled={handledSpy}
       />
@@ -1256,6 +1256,7 @@ describe('TerminalPanel', () => {
       requestId: 'request-1',
       workingDir: '/workspace/repo',
       preferredName: 'repo',
+      targetMode: 'deck' as const,
     });
 
     render(() => (
@@ -1271,6 +1272,7 @@ describe('TerminalPanel', () => {
       requestId: 'request-1',
       workingDir: '/workspace/repo',
       preferredName: 'repo-again',
+      targetMode: 'deck',
     });
     await settleTerminalPanel();
 

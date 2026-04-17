@@ -64,7 +64,7 @@ import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingCo
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 
-export type TerminalPanelVariant = 'panel' | 'deck';
+export type TerminalPanelVariant = 'panel' | 'deck' | 'workbench';
 
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
@@ -72,7 +72,7 @@ export interface TerminalPanelProps {
     requestId: string;
     workingDir: string;
     preferredName?: string;
-    targetMode?: 'tab' | 'deck';
+    targetMode?: 'activity' | 'deck' | 'workbench';
   } | null;
   onOpenSessionRequestHandled?: (requestId: string) => void;
 }
@@ -1471,8 +1471,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const requestId = String(request?.requestId ?? '').trim();
     if (!requestId || requestId === lastHandledOpenSessionRequestId) return;
     if (!connected()) return;
-    const targetMode = request?.targetMode ?? 'tab';
-    if (targetMode !== (isInDeckWidget ? 'deck' : 'tab')) return;
+    const targetMode = request?.targetMode ?? 'activity';
+    const currentMode = variant === 'deck' ? 'deck' : variant === 'workbench' ? 'workbench' : 'activity';
+    if (targetMode !== currentMode) return;
 
     const workingDir = normalizeAskFlowerAbsolutePath(String(request?.workingDir ?? '').trim());
     if (!workingDir) {
@@ -2577,7 +2578,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     </div>
   );
 
-  if (variant === 'deck') return body;
+  if (variant === 'deck' || variant === 'workbench') return body;
 
   return (
     <Panel class="border border-border rounded-md overflow-hidden h-full">
@@ -2614,7 +2615,7 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
       when={!noExecute()}
       fallback={
         <PermissionEmptyState
-          variant={props.variant === 'deck' ? 'deck' : 'panel'}
+          variant={props.variant === 'deck' || props.variant === 'workbench' ? 'workbench' : 'panel'}
           title="Execute permission required"
           description="Terminal is disabled because execute permission is not granted for this session."
         />

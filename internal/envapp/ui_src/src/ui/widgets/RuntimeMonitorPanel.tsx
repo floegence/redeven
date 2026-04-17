@@ -21,7 +21,7 @@ import { isPermissionDeniedError } from '../utils/permission';
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 
-export type RuntimeMonitorPanelVariant = 'page' | 'deck';
+export type RuntimeMonitorPanelVariant = 'page' | 'deck' | 'workbench';
 
 export interface RuntimeMonitorPanelProps {
   variant?: RuntimeMonitorPanelVariant;
@@ -534,7 +534,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const formatPercent = (value: number) => `${Number(value ?? 0).toFixed(2).replace(/\.?0+$/, '')}%`;
 
   const containerClass = () => (
-    props.variant === 'deck'
+    props.variant === 'deck' || props.variant === 'workbench'
       ? 'h-full min-h-0 overflow-auto p-2'
       : 'h-full min-h-0 overflow-auto p-3'
   );
@@ -562,7 +562,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
         when={!noExecute()}
         fallback={
           <PermissionEmptyState
-            variant={props.variant === 'deck' ? 'deck' : 'page'}
+            variant={props.variant === 'deck' || props.variant === 'workbench' ? 'workbench' : 'page'}
             title="Execute permission required"
             description="Monitoring is disabled because execute permission is not granted for this session."
           />

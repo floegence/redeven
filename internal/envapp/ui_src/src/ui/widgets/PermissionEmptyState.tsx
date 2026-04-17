@@ -1,7 +1,7 @@
 import { Show } from 'solid-js';
 import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
 
-export type PermissionEmptyStateVariant = 'page' | 'deck' | 'panel';
+export type PermissionEmptyStateVariant = 'page' | 'deck' | 'panel' | 'workbench';
 
 export type PermissionEmptyStateProps = {
   title: string;
@@ -27,7 +27,7 @@ const LockIcon = (props: { class?: string }) => (
 
 export function PermissionEmptyState(props: PermissionEmptyStateProps) {
   const variant: PermissionEmptyStateVariant = props.variant ?? 'page';
-  const pad = variant === 'deck' ? 'p-4' : variant === 'panel' ? 'p-5' : 'p-6';
+  const pad = variant === 'deck' || variant === 'workbench' ? 'p-4' : variant === 'panel' ? 'p-5' : 'p-6';
 
   return (
     <Panel class="h-full overflow-hidden">
@@ -43,4 +43,3 @@ export function PermissionEmptyState(props: PermissionEmptyStateProps) {
     </Panel>
   );
 }
-

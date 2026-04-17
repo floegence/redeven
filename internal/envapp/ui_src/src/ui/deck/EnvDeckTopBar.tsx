@@ -4,7 +4,7 @@ import { ChevronDown, Check, Pencil, Plus } from '@floegence/floe-webapp-core/ic
 import { LayoutSelector } from '@floegence/floe-webapp-core/deck';
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
-import { ENV_SURFACE_LABELS, type EnvSurfaceId, envDeckWidgetTypeForSurface } from '../envViewMode';
+import { ENV_SURFACE_LABELS, type EnvSurfaceId, envWidgetTypeForSurface } from '../envViewMode';
 
 export interface EnvDeckTopBarProps {
   availableSurfaces: readonly EnvSurfaceId[];
@@ -18,7 +18,7 @@ export function EnvDeckTopBar(props: EnvDeckTopBarProps) {
   const missingSurfaces = createMemo<EnvSurfaceId[]>(() => {
     const widgets = deck.activeLayout()?.widgets ?? [];
     return props.availableSurfaces.filter((surfaceId) => (
-      !widgets.some((widget) => widget.type === envDeckWidgetTypeForSurface(surfaceId))
+      !widgets.some((widget) => widget.type === envWidgetTypeForSurface(surfaceId))
     ));
   });
   const addItems = createMemo<DropdownItem[]>(() => {

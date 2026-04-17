@@ -36,6 +36,7 @@ import {
   type AskFlowerComposerAnchor,
   type EnvDeckSurfaceActivationRequest,
   type EnvSettingsSection,
+  type EnvWorkbenchSurfaceActivationRequest,
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
 import type { AskFlowerIntent } from './pages/askFlowerIntent';
@@ -51,7 +52,6 @@ import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
 import { AIChatContext, createAIChatContextValue, type ModelsResponse } from './pages/AIChatContext';
 import { AIChatSidebar } from './pages/AIChatSidebar';
-import { EnvInfiniteMapPage } from './pages/EnvInfiniteMapPage';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
@@ -139,13 +139,14 @@ import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeEnvironmentOwnedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import {
   ENV_DEFAULT_SURFACE_ID,
-  envDeckWidgetTypeForSurface,
+  envWidgetTypeForSurface,
   isEnvSurfaceId,
-  isEnvViewMode,
+  normalizePersistedEnvViewMode,
   type EnvOpenSurfaceOptions,
   type EnvSurfaceId,
   type EnvViewMode,
 } from './envViewMode';
+import { EnvWorkbenchPage } from './workbench/EnvWorkbenchPage';
 
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
@@ -245,8 +246,9 @@ function persistActiveThreadId(threadId: string): void {
 
 function readPersistedDesktopViewMode(): EnvViewMode | null {
   const explicit = String(readUIStorageItem(DESKTOP_VIEW_MODE_STORAGE_KEY) ?? '').trim();
-  if (isEnvViewMode(explicit)) {
-    return explicit;
+  const migrated = normalizePersistedEnvViewMode(explicit);
+  if (migrated) {
+    return migrated;
   }
 
   const legacySurface = String(readUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY) ?? '').trim();
@@ -501,16 +503,18 @@ export function EnvAppShell() {
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
   const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('deck');
-  const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'tab' : desktopViewMode()));
-  const [lastTabSurface, setLastTabSurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
+  const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
+  const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
   const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
   const [deckSurfaceActivationSeq, setDeckSurfaceActivationSeq] = createSignal(0);
   const [deckSurfaceActivation, setDeckSurfaceActivation] = createSignal<EnvDeckSurfaceActivationRequest | null>(null);
+  const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
+  const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<EnvWorkbenchSurfaceActivationRequest | null>(null);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
   const [sidebarVisibilityMotion, setSidebarVisibilityMotion] = createSignal<EnvSidebarVisibilityMotion>('animated');
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
   let sidebarVisibilityMotionRevision = 0;
-  let initialTabSurface: EnvSurfaceId | null = null;
+  let initialActivitySurface: EnvSurfaceId | null = null;
 
   const [askFlowerIntentSeq, setAskFlowerIntentSeq] = createSignal(0);
   const [askFlowerIntent, setAskFlowerIntent] = createSignal<AskFlowerIntent | null>(null);
@@ -528,9 +532,9 @@ export function EnvAppShell() {
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
   let pendingMainWindowAskFlowerComposerIntent: AskFlowerIntent | null = null;
   const activeSurface = createMemo<EnvSurfaceId>(() => {
-    if (viewMode() === 'tab') {
+    if (viewMode() === 'activity') {
       const activeTab = layout.sidebarActiveTab();
-      return isEnvSurfaceId(activeTab) ? activeTab : lastTabSurface();
+      return isEnvSurfaceId(activeTab) ? activeTab : lastActivitySurface();
     }
     return lastRequestedSurface();
   });
@@ -572,8 +576,8 @@ export function EnvAppShell() {
       setSettingsFocusSection(section);
       setSettingsFocusSeq((n) => n + 1);
     }
-    setViewMode('tab');
-    activateEnvTab('settings', { persist: false });
+    setViewMode('activity');
+    activateActivitySurface('settings', { persist: false });
   };
 
   const openDebugConsole = () => {
@@ -625,6 +629,16 @@ export function EnvAppShell() {
     });
   };
 
+  const consumeWorkbenchSurfaceActivation = (requestId: string) => {
+    const normalizedRequestId = String(requestId ?? '').trim();
+    if (!normalizedRequestId) return;
+
+    setWorkbenchSurfaceActivation((current) => {
+      if (!current) return current;
+      return current.requestId === normalizedRequestId ? null : current;
+    });
+  };
+
   const focusAIThread = (threadId: string) => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
@@ -650,7 +664,7 @@ export function EnvAppShell() {
     }
 
     const preferredName = String(options?.preferredName ?? '').trim();
-    const targetMode = viewMode() === 'deck' ? 'deck' : 'tab';
+    const targetMode = viewMode();
     setOpenTerminalInDirectoryRequest({
       requestId: createClientId(),
       workingDir: normalizedWorkingDir,
@@ -1514,10 +1528,10 @@ export function EnvAppShell() {
 
       const initialSurface = preferredSurface ?? ENV_DEFAULT_SURFACE_ID;
       setDesktopViewMode(preferredDesktopViewMode);
-      setLastTabSurface(initialSurface);
+      setLastActivitySurface(initialSurface);
       setLastRequestedSurface(initialSurface);
       layout.setSidebarActiveTab(initialSurface, { openSidebar: false });
-      initialTabSurface = initialSurface;
+      initialActivitySurface = initialSurface;
       setPersistReady(true);
 
       if (accessLocked()) {
@@ -1647,21 +1661,21 @@ export function EnvAppShell() {
     });
   };
 
-  const activateEnvTab = (tab: EnvSurfaceId | 'settings', opts?: { persist?: boolean }) => {
-    if (tab !== 'settings') {
-      setLastTabSurface(tab);
-      setLastRequestedSurface(tab);
+  const activateActivitySurface = (surface: EnvSurfaceId | 'settings', opts?: { persist?: boolean }) => {
+    if (surface !== 'settings') {
+      setLastActivitySurface(surface);
+      setLastRequestedSurface(surface);
       if (opts?.persist !== false) {
-        persistActiveSurface(tab);
+        persistActiveSurface(surface);
       }
     }
     queueSidebarVisibilityMotion(resolveEnvSidebarVisibilityMotion({
       currentTab: layout.sidebarActiveTab(),
-      nextTab: tab,
+      nextTab: surface,
       isMobile: layout.isMobile(),
     }));
 
-    layout.setSidebarActiveTab(tab, { openSidebar: shouldEnvTabOpenSidebar(tab) });
+    layout.setSidebarActiveTab(surface, { openSidebar: shouldEnvTabOpenSidebar(surface) });
   };
 
   const fallbackSurfaceFor = (surfaceId: EnvSurfaceId): EnvSurfaceId => {
@@ -1704,7 +1718,7 @@ export function EnvAppShell() {
   };
 
   const activateDeckSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
-    const widgetType = envDeckWidgetTypeForSurface(surfaceId);
+    const widgetType = envWidgetTypeForSurface(surfaceId);
     const existingWidget = deck.activeLayout()?.widgets.find((widget) => widget.type === widgetType);
     const widgetId = existingWidget?.id ?? deck.addWidget(widgetType);
     setLastRequestedSurface(surfaceId);
@@ -1718,8 +1732,20 @@ export function EnvAppShell() {
     setDeckSurfaceActivationSeq((n) => n + 1);
   };
 
+  const activateWorkbenchSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
+    setLastRequestedSurface(surfaceId);
+    setWorkbenchSurfaceActivation({
+      requestId: createClientId(),
+      surfaceId,
+      focus: options?.focus ?? true,
+      ensureVisible: options?.ensureVisible ?? true,
+      centerViewport: options?.ensureVisible ?? true,
+    });
+    setWorkbenchSurfaceActivationSeq((n) => n + 1);
+  };
+
   const setViewMode = (mode: EnvViewMode, options?: { surfaceId?: EnvSurfaceId; focusSurface?: boolean }) => {
-    const requestedMode = layout.isMobile() ? 'tab' : mode;
+    const requestedMode = layout.isMobile() ? 'activity' : mode;
     if (!layout.isMobile()) {
       setDesktopViewMode(requestedMode);
       persistDesktopViewMode(requestedMode);
@@ -1728,12 +1754,16 @@ export function EnvAppShell() {
     const targetSurface = resolveOpenSurfaceTarget(options?.surfaceId ?? activeSurface(), { reason: 'mode_restore' });
     setLastRequestedSurface(targetSurface);
 
-    if (requestedMode === 'tab') {
-      activateEnvTab(targetSurface, { persist: false });
+    if (requestedMode === 'activity') {
+      activateActivitySurface(targetSurface, { persist: false });
       return;
     }
     if (requestedMode === 'deck' && (options?.focusSurface ?? true)) {
       activateDeckSurface(targetSurface, { reason: 'mode_restore', focus: true, ensureVisible: true });
+      return;
+    }
+    if (requestedMode === 'workbench' && (options?.focusSurface ?? true)) {
+      activateWorkbenchSurface(targetSurface, { reason: 'mode_restore', focus: true, ensureVisible: true });
     }
   };
 
@@ -1745,11 +1775,11 @@ export function EnvAppShell() {
       activateDeckSurface(targetSurface, options);
       return;
     }
-    if (viewMode() === 'infinite_map') {
-      setViewMode('tab', { surfaceId: targetSurface });
+    if (viewMode() === 'workbench') {
+      activateWorkbenchSurface(targetSurface, options);
       return;
     }
-    activateEnvTab(targetSurface);
+    activateActivitySurface(targetSurface);
   };
 
   createEffect(() => {
@@ -1759,7 +1789,7 @@ export function EnvAppShell() {
       return;
     }
     if (!canUseFlower()) return;
-    if (initialTabSurface && layout.sidebarActiveTab() !== initialTabSurface) return;
+    if (initialActivitySurface && layout.sidebarActiveTab() !== initialActivitySurface) return;
     setPendingAutoOpenAI(false);
     openSurface('ai', { reason: 'mode_restore', focus: true, ensureVisible: true });
   });
@@ -1771,7 +1801,7 @@ export function EnvAppShell() {
       return;
     }
     if (!canUseCodex()) return;
-    if (initialTabSurface && layout.sidebarActiveTab() !== initialTabSurface) return;
+    if (initialActivitySurface && layout.sidebarActiveTab() !== initialActivitySurface) return;
     setPendingAutoOpenCodex(false);
     openSurface('codex', { reason: 'mode_restore', focus: true, ensureVisible: true });
   });
@@ -1786,13 +1816,13 @@ export function EnvAppShell() {
   createEffect(() => {
     if (layout.sidebarActiveTab() !== 'ai') return;
     if (canUseFlower()) return;
-    activateEnvTab(ENV_DEFAULT_SURFACE_ID, { persist: false });
+    activateActivitySurface(ENV_DEFAULT_SURFACE_ID, { persist: false });
   });
 
   createEffect(() => {
     if (layout.sidebarActiveTab() !== 'codex') return;
     if (canUseCodex()) return;
-    activateEnvTab(ENV_DEFAULT_SURFACE_ID, { persist: false });
+    activateActivitySurface(ENV_DEFAULT_SURFACE_ID, { persist: false });
   });
 
   createEffect(() => {
@@ -1806,8 +1836,8 @@ export function EnvAppShell() {
     const id = layout.sidebarActiveTab();
     if (!isEnvSurfaceId(id)) return;
     if (id === 'ports' && isLocalMode()) return;
-    setLastTabSurface(id);
-    if (viewMode() === 'tab') {
+    setLastActivitySurface(id);
+    if (viewMode() === 'activity') {
       setLastRequestedSurface(id);
     }
     persistActiveSurface(id);
@@ -1861,17 +1891,17 @@ export function EnvAppShell() {
       if (item.onClick) {
         return item;
       }
-      const nextTab = item.id as EnvSurfaceId;
+      const nextSurface = item.id as EnvSurfaceId;
       if (resolveEnvSidebarVisibilityMotion({
         currentTab: layout.sidebarActiveTab(),
-        nextTab,
+        nextTab: nextSurface,
         isMobile: layout.isMobile(),
       }) !== 'instant') {
         return item;
       }
       return {
         ...item,
-        onClick: () => activateEnvTab(nextTab),
+        onClick: () => activateActivitySurface(nextSurface),
       };
     });
   };
@@ -1915,22 +1945,22 @@ export function EnvAppShell() {
         execute: () => setViewMode('deck', { surfaceId: activeSurface(), focusSurface: true }),
       },
       {
-        id: 'redeven.env.switchToTabs',
-        title: 'Switch to Tab Mode',
-        description: 'Show the activity-bar workspace',
+        id: 'redeven.env.switchToActivity',
+        title: 'Switch to Activity Mode',
+        description: 'Show the activity workspace',
         category: 'Navigation',
         keybind: 'mod+shift+1',
         icon: Terminal,
-        execute: () => setViewMode('tab', { surfaceId: lastTabSurface() }),
+        execute: () => setViewMode('activity', { surfaceId: lastActivitySurface() }),
       },
       {
-        id: 'redeven.env.switchToInfiniteMap',
-        title: 'Switch to Infinite Map Mode',
-        description: 'Open the infinite-map placeholder',
+        id: 'redeven.env.switchToWorkbench',
+        title: 'Switch to Workbench Mode',
+        description: 'Open the spatial workbench canvas',
         category: 'Navigation',
         keybind: 'mod+shift+2',
-        icon: Grid3x3,
-        execute: () => setViewMode('infinite_map', { surfaceId: activeSurface(), focusSurface: false }),
+        icon: LayoutDashboard,
+        execute: () => setViewMode('workbench', { surfaceId: activeSurface(), focusSurface: true }),
       },
       {
         id: 'redeven.env.goToTerminal',
@@ -2392,12 +2422,12 @@ export function EnvAppShell() {
 
   const renderMainShell = () => (
     <Shell
-      sidebarMode={viewMode() === 'tab' ? 'auto' : 'hidden'}
+      sidebarMode={viewMode() === 'activity' ? 'auto' : 'hidden'}
       slotClassNames={{
-        sidebar: viewMode() === 'tab' && sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
+        sidebar: viewMode() === 'activity' && sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
       }}
       sidebarContent={(activeTab) =>
-        viewMode() !== 'tab'
+        viewMode() !== 'activity'
           ? <></>
           : activeTab === 'ai' && canUseFlower()
           ? <AIChatSidebar />
@@ -2419,13 +2449,13 @@ export function EnvAppShell() {
           />
         </TopBarBrandButton>
       }
-      activityItems={viewMode() === 'tab' ? activityItems() : []}
+      activityItems={viewMode() === 'activity' ? activityItems() : []}
       topBarActions={
         <div class="flex items-center gap-1">
           <Show when={!layout.isMobile()}>
             <EnvTopBarModeSwitcher
               value={viewMode()}
-              onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'tab' })}
+              onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'activity' })}
             />
           </Show>
           <EnvTopBarOverflowMenu items={topBarOverflowItems()} onSelect={handleTopBarOverflowSelect} />
@@ -2492,14 +2522,14 @@ export function EnvAppShell() {
             when={accessGateVisible()}
             fallback={
               <>
-                <Show when={viewMode() === 'tab'}>
+                <Show when={viewMode() === 'activity'}>
                   <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
                 </Show>
                 <Show when={viewMode() === 'deck'}>
                   <EnvDeckPage availableSurfaces={availableDeckSurfaces()} />
                 </Show>
-                <Show when={viewMode() === 'infinite_map'}>
-                  <EnvInfiniteMapPage />
+                <Show when={viewMode() === 'workbench'}>
+                  <EnvWorkbenchPage />
                 </Show>
                 <NotesOverlay
                   open={notesOverlayOpen()}
@@ -2549,12 +2579,15 @@ export function EnvAppShell() {
         viewMode,
         setViewMode,
         activeSurface,
-        lastTabSurface,
+        lastActivitySurface,
         openSurface,
-        goTab: (surfaceId) => openSurface(surfaceId, { reason: 'direct_navigation', focus: true, ensureVisible: true }),
+        goActivity: (surfaceId) => openSurface(surfaceId, { reason: 'direct_navigation', focus: true, ensureVisible: true }),
         deckSurfaceActivationSeq,
         deckSurfaceActivation,
         consumeDeckSurfaceActivation,
+        workbenchSurfaceActivationSeq,
+        workbenchSurfaceActivation,
+        consumeWorkbenchSurfaceActivation,
         filesSidebarOpen: filesMobileSidebarOpen,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,
         toggleFilesSidebar: toggleFilesMobileSidebar,

@@ -277,7 +277,7 @@ vi.mock('./accessResume', () => ({
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
 vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div data-testid="deck-page" /> }));
-vi.mock('./pages/EnvInfiniteMapPage', () => ({ EnvInfiniteMapPage: () => <div data-testid="infinite-map-page" /> }));
+vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <div data-testid="workbench-page" /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
@@ -634,11 +634,11 @@ describe('EnvAppShell top bar affordances', () => {
     }
   });
 
-  it('suppresses the desktop sidebar width transition for one frame when opening Codex from a full-screen tab', async () => {
+  it('suppresses the desktop sidebar width transition for one frame when opening Codex from a full-screen activity surface', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     const storage = createStorageMock();
-    storage.setItem('redeven_envapp_desktop_view_mode', 'tab');
+    storage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     vi.stubGlobal('localStorage', storage);
 
     const host = document.createElement('div');
@@ -896,9 +896,9 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
-  it('restores the persisted Codex tab after refresh once permissions are ready', async () => {
+  it('restores the persisted Codex activity surface after refresh once permissions are ready', async () => {
     const storage = createStorageMock();
-    storage.setItem('redeven_envapp_desktop_view_mode', 'tab');
+    storage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     storage.setItem('redeven_envapp_active_tab', 'codex');
     vi.stubGlobal('localStorage', storage);
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -1385,7 +1385,7 @@ describe('EnvAppShell remote access gate', () => {
     }
   });
 
-  it('switches between deck and tab mode from the header mode switcher on desktop', async () => {
+  it('switches between activity, deck, and workbench mode from the header mode switcher on desktop', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
     const host = document.createElement('div');
@@ -1400,22 +1400,29 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
 
-      findButtonByText(host, 'Tab')?.click();
+      findButtonByText(host, 'Activity')?.click();
       await flushAsync();
 
       expect(host.textContent).toContain('activity main');
       expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
 
       findButtonByText(host, 'Deck')?.click();
       await flushAsync();
 
       expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+
+      findButtonByText(host, 'Workbench')?.click();
+      await flushAsync();
+
+      expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
     } finally {
       dispose();
     }
   });
 
-  it('forces tab mode on mobile and hides the mode switcher', async () => {
+  it('forces activity mode on mobile and hides the mode switcher', async () => {
     layoutIsMobile = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
@@ -1431,8 +1438,10 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(host.textContent).toContain('activity main');
       expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
       expect(findButtonByText(host, 'Deck')).toBeUndefined();
-      expect(findButtonByText(host, 'Tab')).toBeUndefined();
+      expect(findButtonByText(host, 'Activity')).toBeUndefined();
+      expect(findButtonByText(host, 'Workbench')).toBeUndefined();
     } finally {
       dispose();
     }
