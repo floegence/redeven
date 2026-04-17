@@ -617,6 +617,9 @@ Non-goals:
 - Cold app launch opens the singleton launcher window.
 - The native app menu exposes one primary shell action: `Connect Environment...`
 - The native app menu also preserves OS-owned window-command roles for close, full screen, and window management, so custom desktop headers do not replace native shortcut inheritance.
+- `Quit Redeven Desktop` resolves the current quit impact before shutdown instead of relying on a generic fixed warning.
+- If Desktop still owns one or more managed runtimes, the quit confirmation lists the affected environments and warns that those environments may become unavailable from this machine until Desktop starts them again.
+- On non-macOS platforms, closing the final Desktop window uses that same quit-impact protection before the app is allowed to exit and stop Desktop-owned runtimes.
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Compatible providers may also enter through the registered `redeven://` deep-link scheme.
 - Generic settings aliases such as `advanced_settings` route to the launcher-owned `Environment Settings` dialog.
@@ -666,7 +669,7 @@ Desktop-specific outcomes from this implementation:
 - Desktop-managed Local UI exposes `desktop_managed`, `effective_run_mode`, and `remote_enabled` through local runtime/version endpoints.
 - When the runtime reports a desktop-owned release policy, Env App turns `Update Redeven` into `Manage in Desktop`.
 - Env App keeps `Restart runtime` only for Desktop-owned managed runtimes.
-- When Desktop is attached to an externally owned local runtime, restart and update hand off to the owning host process instead of trying to stop that runtime from Electron.
+- When Desktop is attached to an externally owned local runtime, restart and update hand off to the owning host process instead of trying to stop that runtime from Electron, and Desktop quit warnings do not claim that external runtime as a Desktop-owned shutdown.
 - When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - Desktop resolves update impact before continuing:

@@ -6,6 +6,13 @@ import { pathToFileURL } from 'node:url';
 import { attachManagedRuntimeFromStateFile, startManagedRuntime } from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
+  buildDesktopQuitDialogCopy,
+  buildDesktopQuitImpact,
+  shouldConfirmDesktopQuit,
+  type DesktopQuitImpact,
+  type DesktopQuitSource,
+} from './desktopQuitImpact';
+import {
   describeManagedEnvironmentLocalBindConflict,
   createSafeStorageSecretCodec,
   deleteManagedEnvironment,
@@ -243,6 +250,7 @@ type DesktopControlPlaneSyncRecord = Readonly<{
 
 type ManagedEnvironmentRuntimeRecord = Readonly<{
   environment_id: string;
+  label: string;
   state_file: string;
   startup: StartupReport;
   runtime_handle: DesktopSessionRuntimeHandle;
@@ -318,7 +326,7 @@ const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 let lastFocusedSessionKey: DesktopSessionKey | null = null;
-let quitPhase: 'idle' | 'requested' | 'shutting_down' = 'idle';
+let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
@@ -364,6 +372,7 @@ function managedEnvironmentRuntimeRecordFromHandle(
 ): ManagedEnvironmentRuntimeRecord {
   return {
     environment_id: environment.id,
+    label: environment.label,
     state_file: managedEnvironmentRuntimeStateFile(environment),
     startup,
     runtime_handle: runtimeHandle,
@@ -734,27 +743,91 @@ function currentParentWindow(): BrowserWindow | undefined {
   return undefined;
 }
 
-async function requestQuit(): Promise<void> {
+function currentAppWindowCount(): number {
+  return BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed()).length;
+}
+
+function resolveManagedRuntimeQuitLabel(
+  runtimeRecord: ManagedEnvironmentRuntimeRecord,
+  preferences: DesktopPreferences | null,
+): string {
+  const environment = preferences ? findManagedEnvironmentByID(preferences, runtimeRecord.environment_id) : null;
+  return compact(environment?.label) || compact(runtimeRecord.label) || 'Untitled Environment';
+}
+
+async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {
+  let preferences: DesktopPreferences | null = null;
+  try {
+    preferences = await loadDesktopPreferencesCached();
+  } catch {
+    preferences = null;
+  }
+
+  return buildDesktopQuitImpact({
+    environment_window_count: openSessionSummaries().length,
+    managed_environment_runtimes: [...managedEnvironmentRuntimeByID.values()].map((runtimeRecord) => ({
+      id: runtimeRecord.environment_id,
+      label: resolveManagedRuntimeQuitLabel(runtimeRecord, preferences),
+      lifecycle_owner: runtimeRecord.runtime_handle.lifecycle_owner,
+    })),
+    ssh_runtimes: [...sshEnvironmentRuntimeByKey.values()].map((runtimeRecord) => ({
+      id: runtimeRecord.runtime_key,
+      label: runtimeRecord.label,
+      lifecycle_owner: runtimeRecord.runtime_handle.lifecycle_owner,
+    })),
+  });
+}
+
+function quitDialogOptions(impact: DesktopQuitImpact): MessageBoxOptions {
+  const copy = buildDesktopQuitDialogCopy(impact);
+  return {
+    type: 'question',
+    buttons: [...copy.buttons],
+    defaultId: copy.default_id,
+    cancelId: copy.cancel_id,
+    title: copy.title,
+    message: copy.message,
+    detail: copy.detail,
+    normalizeAccessKeys: true,
+  };
+}
+
+function requestImmediateQuit(): void {
+  if (quitPhase === 'requested' || quitPhase === 'shutting_down') {
+    app.quit();
+    return;
+  }
+  quitPhase = 'requested';
+  app.quit();
+}
+
+async function requestQuit(
+  source: DesktopQuitSource = 'explicit',
+  parentWindow: BrowserWindow | null | undefined = currentParentWindow(),
+): Promise<void> {
   if (quitPhase !== 'idle') {
     return;
   }
 
-  const options: MessageBoxOptions = {
-    type: 'question',
-    buttons: ['Cancel', 'Quit'],
-    defaultId: 1,
-    cancelId: 0,
-    title: 'Quit Redeven Desktop?',
-    message: 'Quit Redeven Desktop?',
-    detail: 'All open environment windows will close, and any desktop-managed Redeven process started by this app will stop.',
-    normalizeAccessKeys: true,
-  };
-  const parentWindow = currentParentWindow();
-  const result = parentWindow
-    ? await dialog.showMessageBox(parentWindow, options)
-    : await dialog.showMessageBox(options);
-  if (result.response !== 1) {
-    return;
+  const impact = await buildCurrentDesktopQuitImpact();
+  if (shouldConfirmDesktopQuit(impact, source)) {
+    quitPhase = 'confirming';
+    try {
+      const options = quitDialogOptions(impact);
+      const liveParentWindow = parentWindow && !parentWindow.isDestroyed()
+        ? parentWindow
+        : currentParentWindow();
+      const result = liveParentWindow
+        ? await dialog.showMessageBox(liveParentWindow, options)
+        : await dialog.showMessageBox(options);
+      if (result.response !== 1) {
+        quitPhase = 'idle';
+        return;
+      }
+    } catch {
+      quitPhase = 'idle';
+      return;
+    }
   }
 
   quitPhase = 'requested';
@@ -1123,6 +1196,16 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
       presentAppWindow(win, { stealAppFocus: args.stealAppFocus });
     }
     recordWindowLifecycle(args.diagnostics, 'ready_to_show', 'browser window is ready to show', { role: args.role });
+  });
+  win.on('close', (event) => {
+    if (quitPhase !== 'idle' || process.platform === 'darwin') {
+      return;
+    }
+    if (currentAppWindowCount() > 1) {
+      return;
+    }
+    event.preventDefault();
+    void requestQuit('last_window_close', win);
   });
   win.on('closed', () => {
     disposeWindowChromeBroadcast();
@@ -4654,7 +4737,7 @@ function registerDesktopProtocolClient(): void {
 }
 
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  requestImmediateQuit();
 } else {
   const initialDesktopDeepLink = detectDesktopDeepLink(process.argv);
   if (initialDesktopDeepLink) {
@@ -4891,7 +4974,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to start', message || 'Unknown startup error.');
-      app.quit();
+      requestImmediateQuit();
     }
   });
 
@@ -4902,7 +4985,7 @@ if (!app.requestSingleInstanceLock()) {
     void restoreBestAvailableWindow().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to restore a window', message || 'Unknown restore error.');
-      app.quit();
+      requestImmediateQuit();
     });
   });
 
@@ -4913,7 +4996,16 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('before-quit', (event) => {
+    if (quitPhase === 'confirming') {
+      event.preventDefault();
+      return;
+    }
     if (quitPhase === 'shutting_down') {
+      return;
+    }
+    if (quitPhase === 'idle') {
+      event.preventDefault();
+      void requestQuit('system');
       return;
     }
     quitPhase = 'shutting_down';
@@ -4924,8 +5016,8 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => {
     updateControlPlaneSyncPoller();
     updateWelcomeRuntimePoller();
-    if (process.platform !== 'darwin') {
-      app.quit();
+    if (process.platform !== 'darwin' && quitPhase === 'idle') {
+      requestImmediateQuit();
     }
   });
 }
