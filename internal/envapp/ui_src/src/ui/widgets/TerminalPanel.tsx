@@ -1102,6 +1102,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     event: TerminalShellIntegrationEvent,
     source: 'history' | 'live',
   ) => {
+    if (event.kind === 'cwd-update') {
+      const workingDir = normalizeAskFlowerAbsolutePath(event.workingDir);
+      if (workingDir) {
+        sessionsCoordinator.updateSessionMeta(sessionId, { workingDir });
+      }
+      return;
+    }
+
     if (event.kind === 'command-start') {
       tabActivityTracker.handleCommandStart(sessionId);
       return;

@@ -1230,6 +1230,24 @@ describe('TerminalPanel', () => {
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
   });
 
+  it('consumes cwd shell-integration markers without writing them to the terminal surface', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const activeCore = terminalCoreInstances[0];
+    activeCore?.write.mockClear();
+    sessionsCoordinatorMocks.updateSessionMeta.mockClear();
+
+    emitTerminalData('session-1', '\x1b]633;P;Cwd=/workspace/repo\u0007', 1);
+    await settleTerminalPanel();
+
+    expect(activeCore?.write).not.toHaveBeenCalled();
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledWith('session-1', { workingDir: '/workspace/repo' });
+  });
+
   it('does not recreate a session when the same open-session request id is replayed', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

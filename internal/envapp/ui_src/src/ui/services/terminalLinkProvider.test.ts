@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectTerminalLinkTargets } from './terminalLinkProvider';
+import { collectTerminalLinkTargets, createTerminalFileLinkProvider } from './terminalLinkProvider';
 
 describe('terminalLinkProvider', () => {
   it('resolves absolute file references with line and column information', () => {
@@ -55,5 +55,29 @@ describe('terminalLinkProvider', () => {
     );
 
     expect(targets).toEqual([]);
+  });
+
+  it('returns no links when hover scanning races with terminal disposal', async () => {
+    const provider = createTerminalFileLinkProvider({
+      core: {
+        terminal: {
+          buffer: {
+            active: {
+              getLine: () => {
+                throw new TypeError("Cannot read properties of undefined (reading 'getWasmTerm')");
+              },
+            },
+          },
+        },
+      } as any,
+      getContext: () => ({ workingDirAbs: '/workspace/repo' }),
+      onActivate: () => undefined,
+    });
+
+    const links = await new Promise<unknown>((resolve) => {
+      provider.provideLinks(1, resolve);
+    });
+
+    expect(links).toBeUndefined();
   });
 });

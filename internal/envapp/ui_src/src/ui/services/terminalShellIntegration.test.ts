@@ -43,13 +43,23 @@ describe('TerminalShellIntegrationParser', () => {
     expect(second.events).toEqual([{ kind: 'command-start' }]);
   });
 
-  it('keeps unrelated OSC sequences intact for the terminal renderer', () => {
+  it('parses cwd markers without leaking them to the terminal renderer', () => {
     const parser = new TerminalShellIntegrationParser();
     const input = encoder.encode('x\x1b]633;P;Cwd=/workspace\u0007y');
 
     const result = parser.parse(input);
 
-    expect(decode(result.displayData)).toBe('x\x1b]633;P;Cwd=/workspace\u0007y');
+    expect(decode(result.displayData)).toBe('xy');
+    expect(result.events).toEqual([{ kind: 'cwd-update', workingDir: '/workspace' }]);
+  });
+
+  it('keeps unrelated OSC sequences intact for the terminal renderer', () => {
+    const parser = new TerminalShellIntegrationParser();
+    const input = encoder.encode('x\x1b]633;P;Editor=ghostty\u0007y');
+
+    const result = parser.parse(input);
+
+    expect(decode(result.displayData)).toBe('x\x1b]633;P;Editor=ghostty\u0007y');
     expect(result.events).toEqual([]);
   });
 

@@ -2,6 +2,7 @@ export type TerminalShellIntegrationEvent =
   | { kind: 'prompt-ready' }
   | { kind: 'command-start' }
   | { kind: 'command-finish'; exitCode: number | null }
+  | { kind: 'cwd-update'; workingDir: string }
   | { kind: 'program-activity'; phase: 'busy' | 'idle' };
 
 export type TerminalShellIntegrationParseResult = {
@@ -129,6 +130,13 @@ function parseShellIntegrationPayload(payload: Uint8Array): TerminalShellIntegra
       kind: 'command-finish',
       exitCode: Number.isFinite(exitCode) ? exitCode : null,
     };
+  }
+  if (protocol === '633' && body.startsWith('P;Cwd=')) {
+    const workingDir = body.slice('P;Cwd='.length);
+    if (!workingDir) {
+      return null;
+    }
+    return { kind: 'cwd-update', workingDir };
   }
   if (protocol === '633' && body === 'P;RedevenActivity=busy') {
     return { kind: 'program-activity', phase: 'busy' };

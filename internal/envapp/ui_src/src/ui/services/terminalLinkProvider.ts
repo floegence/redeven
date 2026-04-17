@@ -256,24 +256,41 @@ function collectTerminalLinkMatches(lineText: string, context: TerminalLinkConte
 }
 
 function readTerminalBufferLine(core: TerminalCore, y: number): string {
-  const runtime = (core as unknown as { terminal?: terminal_runtime | null }).terminal;
-  const activeBuffer = runtime?.buffer?.active;
-  const getLine = activeBuffer?.getLine;
-  if (typeof getLine !== 'function') {
-    return '';
-  }
-
-  const candidateRows = [y - 1, y];
-  for (const row of candidateRows) {
-    if (!Number.isFinite(row) || row < 0) {
-      continue;
+  try {
+    const runtime = (core as unknown as { terminal?: terminal_runtime | null }).terminal;
+    const activeBuffer = runtime?.buffer?.active;
+    const getLine = activeBuffer?.getLine;
+    if (typeof getLine !== 'function') {
+      return '';
     }
 
-    const line = getLine(row);
-    const text = line?.translateToString?.(false);
-    if (typeof text === 'string') {
-      return text;
+    const candidateRows = [y - 1, y];
+    for (const row of candidateRows) {
+      if (!Number.isFinite(row) || row < 0) {
+        continue;
+      }
+
+      let line: terminal_buffer_line | null | undefined;
+      try {
+        line = getLine(row);
+      } catch {
+        // Ghostty hover scans can outlive the active wasm terminal for one frame during remount/dispose.
+        return '';
+      }
+
+      let text: string | undefined;
+      try {
+        const candidate = line?.translateToString?.(false);
+        text = typeof candidate === 'string' ? candidate : undefined;
+      } catch {
+        return '';
+      }
+
+      if (typeof text === 'string') {
+        return text;
+      }
     }
+  } catch {
   }
 
   return '';
