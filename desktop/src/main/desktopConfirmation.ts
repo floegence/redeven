@@ -90,15 +90,18 @@ export function desktopConfirmationActionFromURL(rawURL: string): DesktopConfirm
 }
 
 function renderSummaryItems(items: readonly DesktopConfirmationMetric[]): string {
-  return items.map((item) => {
-    const toneClass = `metric-${item.tone}`;
-    return `
-          <article class="metric ${toneClass}">
-            <p class="metric-value">${escapeHTML(item.value)}</p>
-            <h2 class="metric-label">${escapeHTML(item.label)}</h2>
-            <p class="metric-detail">${escapeHTML(item.detail)}</p>
-          </article>`;
-  }).join('');
+  if (items.length <= 0) {
+    return '';
+  }
+
+  return `
+        <section class="summary-strip" aria-label="Impact summary">
+${items.map((item) => `
+          <div class="summary-pill summary-pill-${item.tone}">
+            <span class="summary-value">${escapeHTML(item.value)}</span>
+            <span class="summary-label">${escapeHTML(item.label)}</span>
+          </div>`).join('')}
+        </section>`;
 }
 
 function renderRuntimePreview(model: DesktopConfirmationDialogModel): string {
@@ -112,30 +115,20 @@ function renderRuntimePreview(model: DesktopConfirmationDialogModel): string {
   }
 
   const items = model.runtime_preview.map((item) => `
-              <li class="runtime-item">
-                <span class="runtime-label">${escapeHTML(item.label)}</span>
-                <span class="runtime-badge">${escapeHTML(item.badge)}</span>
-              </li>`).join('');
+            <span class="runtime-chip">${escapeHTML(item.label)}</span>`).join('');
   const overflow = model.runtime_overflow_count > 0
     ? `
-              <li class="runtime-item runtime-overflow">
-                <span class="runtime-label">${model.runtime_overflow_count} more ${pluralize(model.runtime_overflow_count, 'environment')}</span>
-                <span class="runtime-badge">More</span>
-              </li>`
+            <span class="runtime-chip runtime-chip-overflow">+${model.runtime_overflow_count} more ${pluralize(model.runtime_overflow_count, 'environment')}</span>`
     : '';
 
   return `
-        <section class="runtime-panel" aria-label="${escapeHTML(model.runtime_section_title ?? 'Affected environments')}">
-          ${compact(model.runtime_section_title) === ''
-            ? ''
-            : `<div class="section-kicker">${escapeHTML(model.runtime_section_title ?? '')}</div>`}
+        <section class="detail-panel" aria-label="${escapeHTML(model.runtime_section_title ?? 'Affected environments')}">
           ${compact(model.runtime_section_body) === ''
             ? ''
-            : `<p class="runtime-body">${escapeHTML(model.runtime_section_body ?? '')}</p>`}
+            : `<p class="detail-copy">${escapeHTML(model.runtime_section_body ?? '')}</p>`}
           ${items === '' && overflow === ''
             ? ''
-            : `<ul class="runtime-list">${items}${overflow}
-            </ul>`}
+            : `<div class="runtime-chips">${items}${overflow}</div>`}
         </section>`;
 }
 
@@ -144,10 +137,9 @@ function renderCallout(callout: DesktopConfirmationCallout | undefined): string 
     return '';
   }
   return `
-        <aside class="callout callout-${callout.tone}" aria-label="${escapeHTML(callout.eyebrow)}">
-          <div class="callout-eyebrow">${escapeHTML(callout.eyebrow)}</div>
-          <p class="callout-body">${escapeHTML(callout.body)}</p>
-        </aside>`;
+        <p class="secondary-note secondary-note-${callout.tone}" aria-label="${escapeHTML(callout.eyebrow)}">
+          ${escapeHTML(callout.body)}
+        </p>`;
 }
 
 export function buildDesktopConfirmationPageHTML(
@@ -160,7 +152,8 @@ export function buildDesktopConfirmationPageHTML(
   const confirmURL = desktopConfirmationActionURL('confirm');
   const cancelURL = desktopConfirmationActionURL('cancel');
   const colorScheme = resolvedTheme === 'dark' ? 'dark' : 'light';
-  const hasRuntimeSection = renderRuntimePreview(model);
+  const summaryStrip = renderSummaryItems(model.summary_items);
+  const runtimePreview = renderRuntimePreview(model);
   const callout = renderCallout(model.callout);
 
   return `<!doctype html>
@@ -185,9 +178,9 @@ export function buildDesktopConfirmationPageHTML(
         --success: ${palette.success};
         --info: ${palette.info};
         --signal: ${model.confirm_tone === 'danger' ? palette.danger : palette.warning};
-        --signal-soft: color-mix(in srgb, var(--signal) 12%, var(--surface));
-        --signal-border: color-mix(in srgb, var(--signal) 28%, var(--border));
-        --shadow: ${resolvedTheme === 'dark' ? '0 28px 80px rgba(0, 0, 0, 0.46)' : '0 28px 80px rgba(20, 31, 46, 0.16)'};
+        --signal-soft: color-mix(in srgb, var(--signal) 10%, var(--surface));
+        --signal-border: color-mix(in srgb, var(--signal) 18%, var(--border));
+        --shadow: ${resolvedTheme === 'dark' ? '0 16px 44px rgba(0, 0, 0, 0.34)' : '0 16px 44px rgba(20, 31, 46, 0.12)'};
       }
       * { box-sizing: border-box; }
       html { height: 100%; }
@@ -196,254 +189,192 @@ export function buildDesktopConfirmationPageHTML(
         min-height: 100vh;
         font-family: "Aptos", "Avenir Next", "Segoe UI Variable Text", "Segoe UI", sans-serif;
         color: var(--text);
-        background:
-          radial-gradient(circle at top left, color-mix(in srgb, var(--signal) 16%, transparent), transparent 42%),
-          radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 34%),
-          linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 64%, var(--bg)) 0%, var(--bg) 100%);
-        padding: calc(28px + ${titleBarInset}) 28px 28px;
+        background: color-mix(in srgb, var(--surface-muted) 55%, var(--bg));
+        padding: calc(20px + ${titleBarInset}) 20px 20px;
       }
       .dialog-shell {
-        width: min(760px, 100%);
+        width: min(600px, 100%);
         margin: 0 auto;
-        border-radius: 30px;
-        border: 1px solid color-mix(in srgb, var(--border) 76%, var(--signal));
-        background:
-          linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, white 8%) 0%, var(--surface) 100%);
+        border-radius: 18px;
+        border: 1px solid var(--signal-border);
+        background: var(--surface);
         box-shadow: var(--shadow);
         overflow: hidden;
       }
       .dialog-content {
-        padding: 34px 34px 28px;
+        padding: 22px;
       }
-      .eyebrow-row {
+      .header-row {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 18px;
+        gap: 10px;
       }
       .eyebrow {
         margin: 0;
-        font-size: 13px;
-        letter-spacing: 0.18em;
+        font-size: 12px;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
         color: var(--muted);
       }
       .impact-chip {
         display: inline-flex;
         align-items: center;
+        min-height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: var(--signal-soft);
+        border: 1px solid var(--signal-border);
+        color: color-mix(in srgb, var(--signal) 72%, var(--text));
+        font-size: 12px;
+        font-weight: 600;
+      }
+      h1 {
+        margin: 14px 0 0;
+        font-size: clamp(24px, 4vw, 30px);
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+      }
+      .message {
+        margin: 10px 0 0;
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .summary-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .summary-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface-muted) 72%, var(--surface));
+      }
+      .summary-pill-danger {
+        border-color: color-mix(in srgb, var(--danger) 22%, var(--border));
+        background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+      }
+      .summary-pill-warning {
+        border-color: color-mix(in srgb, var(--warning) 22%, var(--border));
+        background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+      }
+      .summary-pill-success {
+        border-color: color-mix(in srgb, var(--success) 24%, var(--border));
+        background: color-mix(in srgb, var(--success) 9%, var(--surface));
+      }
+      .summary-value {
+        font-size: 13px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+      }
+      .summary-label {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .detail-panel {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--surface-muted) 68%, var(--surface));
+      }
+      .detail-copy {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .runtime-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .runtime-chip {
+        display: inline-flex;
+        align-items: center;
         min-height: 30px;
         padding: 0 12px;
         border-radius: 999px;
-        background: color-mix(in srgb, var(--signal) 14%, var(--surface));
-        border: 1px solid var(--signal-border);
-        color: color-mix(in srgb, var(--signal) 70%, var(--text));
+        border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+        background: color-mix(in srgb, var(--surface) 78%, white 22%);
+        color: var(--text);
         font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        font-weight: 600;
       }
-      .hero {
-        display: grid;
-        grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.9fr);
-        gap: 22px;
-        align-items: start;
-      }
-      h1 {
-        margin: 0;
-        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-        font-size: clamp(34px, 5vw, 48px);
-        line-height: 0.98;
-        letter-spacing: -0.03em;
-      }
-      .message {
-        margin: 16px 0 0;
-        font-size: 16px;
-        line-height: 1.7;
-        color: color-mix(in srgb, var(--muted) 78%, var(--text));
-        max-width: 32rem;
-      }
-      .summary-grid {
-        display: grid;
-        gap: 12px;
-      }
-      .metric {
-        border-radius: 20px;
-        padding: 18px;
-        border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--surface-muted) 65%, var(--surface));
-      }
-      .metric-danger {
-        border-color: color-mix(in srgb, var(--danger) 24%, var(--border));
-        background: color-mix(in srgb, var(--danger) 10%, var(--surface));
-      }
-      .metric-warning {
-        border-color: color-mix(in srgb, var(--warning) 26%, var(--border));
-        background: color-mix(in srgb, var(--warning) 11%, var(--surface));
-      }
-      .metric-success {
-        border-color: color-mix(in srgb, var(--success) 28%, var(--border));
-        background: color-mix(in srgb, var(--success) 11%, var(--surface));
-      }
-      .metric-value {
-        margin: 0;
-        font-size: clamp(28px, 4vw, 38px);
-        line-height: 1;
-        font-weight: 700;
-        letter-spacing: -0.04em;
-      }
-      .metric-label {
-        margin: 12px 0 0;
-        font-size: 14px;
-        font-weight: 700;
-        line-height: 1.35;
-      }
-      .metric-detail {
-        margin: 8px 0 0;
-        font-size: 13px;
-        line-height: 1.55;
+      .runtime-chip-overflow {
         color: var(--muted);
       }
-      .runtime-panel,
-      .callout {
-        margin-top: 22px;
-        border-radius: 24px;
-        border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--surface-muted) 56%, var(--surface));
-        padding: 22px 22px 20px;
-      }
-      .section-kicker,
-      .callout-eyebrow {
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-      }
-      .section-kicker {
-        color: color-mix(in srgb, var(--signal) 70%, var(--text));
-      }
-      .runtime-body,
-      .callout-body {
-        margin: 10px 0 0;
-        font-size: 15px;
-        line-height: 1.65;
-        color: color-mix(in srgb, var(--muted) 74%, var(--text));
-      }
-      .runtime-list {
-        list-style: none;
-        margin: 16px 0 0;
-        padding: 0;
-        display: grid;
-        gap: 12px;
-      }
-      .runtime-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 14px;
-        padding: 14px 16px;
-        border-radius: 16px;
-        border: 1px solid color-mix(in srgb, var(--border) 78%, var(--surface));
-        background: color-mix(in srgb, var(--surface) 88%, white 12%);
-      }
-      .runtime-label {
-        font-size: 15px;
-        font-weight: 600;
-        line-height: 1.45;
-      }
-      .runtime-badge {
-        flex-shrink: 0;
-        display: inline-flex;
-        align-items: center;
-        min-height: 28px;
-        padding: 0 10px;
-        border-radius: 999px;
-        border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-        background: color-mix(in srgb, var(--accent) 8%, var(--surface));
-        color: color-mix(in srgb, var(--accent) 76%, var(--text));
-        font-size: 12px;
-        font-weight: 700;
-      }
-      .runtime-overflow {
-        border-style: dashed;
-      }
-      .callout-warning {
-        border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
-        background: color-mix(in srgb, var(--warning) 10%, var(--surface));
-      }
-      .callout-info {
-        border-color: color-mix(in srgb, var(--info) 26%, var(--border));
-        background: color-mix(in srgb, var(--info) 10%, var(--surface));
-      }
-      .callout-success {
-        border-color: color-mix(in srgb, var(--success) 28%, var(--border));
-        background: color-mix(in srgb, var(--success) 10%, var(--surface));
+      .secondary-note {
+        margin: 12px 0 0;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--muted);
       }
       .footer {
         display: flex;
         flex-wrap: wrap;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
-        gap: 16px;
-        margin-top: 28px;
-        padding-top: 18px;
-        border-top: 1px solid color-mix(in srgb, var(--border) 84%, var(--surface));
+        gap: 12px;
+        margin-top: 20px;
       }
       .footnote {
         margin: 0;
         font-size: 13px;
-        line-height: 1.55;
+        line-height: 1.5;
         color: var(--muted);
+        margin-right: auto;
       }
       .actions {
         display: flex;
         flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 12px;
+        gap: 10px;
       }
       .button {
         appearance: none;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 48px;
-        padding: 0 18px;
-        border-radius: 999px;
+        min-height: 40px;
+        padding: 0 16px;
+        border-radius: 10px;
         border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--surface-muted) 34%, var(--surface));
+        background: color-mix(in srgb, var(--surface-muted) 40%, var(--surface));
         color: var(--text);
         text-decoration: none;
         font-size: 14px;
-        font-weight: 700;
-        letter-spacing: 0.01em;
+        font-weight: 600;
         cursor: pointer;
-        transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
-      }
-      .button:hover {
-        transform: translateY(-1px);
+        transition: background-color 160ms ease, border-color 160ms ease;
       }
       .button:focus-visible {
         outline: 2px solid color-mix(in srgb, var(--signal) 40%, white);
-        outline-offset: 3px;
+        outline-offset: 2px;
       }
       .button-secondary:hover {
         border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-        background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+        background: color-mix(in srgb, var(--accent) 8%, var(--surface));
       }
       .button-confirm {
         border-color: transparent;
-        color: #111;
-        box-shadow: 0 12px 30px color-mix(in srgb, var(--signal) 28%, transparent);
+        color: #fafafa;
       }
       .button-confirm-danger {
-        background: linear-gradient(135deg, color-mix(in srgb, var(--danger) 80%, white 20%), color-mix(in srgb, var(--danger) 92%, black 8%));
+        background: color-mix(in srgb, var(--danger) 80%, black 20%);
       }
       .button-confirm-warning {
-        background: linear-gradient(135deg, color-mix(in srgb, var(--warning) 72%, white 28%), color-mix(in srgb, var(--warning) 86%, black 14%));
+        background: var(--accent);
       }
       .button-confirm:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 16px 34px color-mix(in srgb, var(--signal) 34%, transparent);
+        filter: brightness(0.96);
       }
       @media (prefers-reduced-motion: reduce) {
         *,
@@ -453,28 +384,21 @@ export function buildDesktopConfirmationPageHTML(
           transition: none !important;
         }
       }
-      @media (max-width: 760px) {
+      @media (max-width: 640px) {
         body {
-          padding: calc(14px + ${titleBarInset}) 14px 14px;
+          padding: calc(12px + ${titleBarInset}) 12px 12px;
         }
         .dialog-shell {
-          border-radius: 24px;
+          border-radius: 16px;
         }
         .dialog-content {
-          padding: 24px 20px 20px;
-        }
-        .hero {
-          grid-template-columns: 1fr;
+          padding: 18px;
         }
         .actions {
           width: 100%;
         }
         .button {
           flex: 1 1 100%;
-        }
-        .runtime-item {
-          align-items: flex-start;
-          flex-direction: column;
         }
       }
     </style>
@@ -488,20 +412,14 @@ export function buildDesktopConfirmationPageHTML(
       aria-describedby="desktop-confirmation-message"
     >
       <div class="dialog-content">
-        <div class="eyebrow-row">
+        <div class="header-row">
           <p class="eyebrow">${escapeHTML(model.eyebrow)}</p>
           <span class="impact-chip">${escapeHTML(model.impact_label)}</span>
         </div>
-        <section class="hero">
-          <div class="hero-copy">
-            <h1 id="desktop-confirmation-heading">${escapeHTML(model.heading)}</h1>
-            <p id="desktop-confirmation-message" class="message">${escapeHTML(model.message)}</p>
-          </div>
-          <section class="summary-grid" aria-label="Impact summary">
-${renderSummaryItems(model.summary_items)}
-          </section>
-        </section>
-${hasRuntimeSection}
+        <h1 id="desktop-confirmation-heading">${escapeHTML(model.heading)}</h1>
+        <p id="desktop-confirmation-message" class="message">${escapeHTML(model.message)}</p>
+${summaryStrip}
+${runtimePreview}
 ${callout}
         <footer class="footer">
           <p class="footnote">${escapeHTML(model.footnote)}</p>
@@ -545,17 +463,17 @@ ${callout}
 }
 
 function desktopConfirmationWindowHeight(model: DesktopConfirmationDialogModel): number {
-  let height = 612;
+  let height = 360;
   if (model.runtime_preview.length > 0 || model.runtime_overflow_count > 0) {
-    height += 88;
+    height += 56;
   }
   if (model.callout) {
-    height += 52;
+    height += 32;
   }
   if (model.summary_items.length >= 3) {
-    height += 24;
+    height += 20;
   }
-  return Math.min(744, height);
+  return Math.min(520, height);
 }
 
 export async function showDesktopConfirmationDialog(args: Readonly<{
@@ -570,9 +488,9 @@ export async function showDesktopConfirmationDialog(args: Readonly<{
   const platform = args.platform ?? process.platform;
   const height = desktopConfirmationWindowHeight(args.model);
   const win = new BrowserWindow({
-    width: 760,
+    width: 620,
     height,
-    minWidth: 760,
+    minWidth: 560,
     minHeight: height,
     resizable: false,
     maximizable: false,

@@ -192,29 +192,19 @@ export function buildDesktopQuitConfirmationModel(impact: DesktopQuitImpact): De
     eyebrow: 'Redeven Desktop',
     heading: 'Quit Redeven Desktop?',
     message,
-    impact_label: runtimeCount > 0 ? 'Runtime impact' : 'Window impact',
-    confirm_label: 'Quit Desktop',
-    cancel_label: 'Keep Running',
+    impact_label: runtimeCount > 0 ? 'Will stop runtimes' : 'Will close windows',
+    confirm_label: 'Quit',
+    cancel_label: 'Cancel',
     confirm_tone: 'danger',
     summary_items: summaryItems,
     runtime_section_title: runtimeCount > 0 ? 'Affected environments' : undefined,
     runtime_section_body: runtimeCount > 0
-      ? runtimeCount === 1
-        ? 'Stopping this Desktop-managed runtime may make the environment unavailable from this machine until Redeven Desktop starts it again.'
-        : 'Stopping these Desktop-managed runtimes may make the following environments unavailable from this machine until Redeven Desktop starts them again.'
+      ? 'Affected environments may become unavailable from this machine until Redeven Desktop starts them again.'
       : undefined,
     runtime_preview: runtimePreview.items,
     runtime_overflow_count: runtimePreview.overflow_count,
-    callout: runtimeCount > 0
-      ? {
-        eyebrow: 'Access impact',
-        body: runtimeCount === 1
-          ? 'This machine may stop serving the affected environment until Redeven Desktop starts that runtime again.'
-          : 'This machine may stop serving the affected environments until Redeven Desktop starts those runtimes again.',
-        tone: 'warning',
-      }
-      : undefined,
-    footnote: 'Press Esc to cancel, or Cmd/Ctrl+Enter to quit Desktop.',
+    callout: undefined,
+    footnote: 'Esc cancels. Cmd/Ctrl+Enter confirms.',
   };
 }
 
@@ -269,24 +259,18 @@ export function buildDesktopLastWindowCloseConfirmationModel(
     eyebrow: 'Redeven Desktop',
     heading: 'Close the Last Window?',
     message,
-    impact_label: runtimeCount > 0 ? 'Background activity' : 'Window visibility',
+    impact_label: runtimeCount > 0 ? 'Keeps app running' : 'Last window',
     confirm_label: 'Close Window',
-    cancel_label: 'Keep Window Open',
+    cancel_label: 'Cancel',
     confirm_tone: 'warning',
     summary_items: summaryItems,
     runtime_section_title: runtimeCount > 0 ? 'Still running after the window closes' : undefined,
     runtime_section_body: runtimeCount > 0
-      ? runtimeCount === 1
-        ? 'This environment will keep running until you quit Redeven Desktop.'
-        : 'These environments will keep running until you quit Redeven Desktop.'
+      ? 'These environments keep running until you quit Redeven Desktop.'
       : undefined,
     runtime_preview: runtimePreview.items,
     runtime_overflow_count: runtimePreview.overflow_count,
-    callout: {
-      eyebrow: 'Reopen later',
-      body: 'Redeven Desktop stays active after the final macOS window closes. Reopen the launcher from the Dock or the Redeven Desktop app menu.',
-      tone: 'info',
-    },
-    footnote: 'Press Esc to keep the window open, or Cmd/Ctrl+Enter to close it.',
+    callout: undefined,
+    footnote: 'You can reopen the launcher from the Dock or app menu.',
   };
 }

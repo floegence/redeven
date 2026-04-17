@@ -620,7 +620,7 @@ Non-goals:
 - `Quit Redeven Desktop` resolves the current quit impact before shutdown instead of relying on a generic fixed warning.
 - If Desktop still owns one or more managed runtimes, the quit confirmation lists the affected environments and warns that those environments may become unavailable from this machine until Desktop starts them again.
 - On macOS, closing the final Desktop window keeps the app running, but Desktop now warns before the last window disappears when that close would hide the active environment surface or leave Desktop-managed runtimes running in the background.
-- Desktop-owned quit and final-window-close confirmations render as a wider branded modal sheet with structured impact cards, affected-environment previews, and explicit reopen guidance instead of a narrow generic system prompt.
+- Desktop-owned quit and final-window-close confirmations render as a compact branded confirmation sheet with a short impact summary and affected-environment preview instead of a narrow generic system prompt.
 - On non-macOS platforms, closing the final Desktop window uses that same quit-impact protection before the app is allowed to exit and stop Desktop-owned runtimes.
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Compatible providers may also enter through the registered `redeven://` deep-link scheme.

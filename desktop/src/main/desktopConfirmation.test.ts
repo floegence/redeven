@@ -12,9 +12,9 @@ const baseModel: DesktopConfirmationDialogModel = {
   eyebrow: 'Redeven Desktop',
   heading: 'Quit Redeven Desktop?',
   message: 'Quitting now will stop 2 Desktop-managed runtimes and close 1 environment window.',
-  impact_label: 'Runtime impact',
-  confirm_label: 'Quit Desktop',
-  cancel_label: 'Keep Running',
+  impact_label: 'Will stop runtimes',
+  confirm_label: 'Quit',
+  cancel_label: 'Cancel',
   confirm_tone: 'danger',
   summary_items: [
     {
@@ -37,12 +37,8 @@ const baseModel: DesktopConfirmationDialogModel = {
     { label: 'SSH Lab', badge: 'SSH Host' },
   ],
   runtime_overflow_count: 1,
-  callout: {
-    eyebrow: 'Access impact',
-    body: 'This machine may stop serving the affected environments until Redeven Desktop starts those runtimes again.',
-    tone: 'warning',
-  },
-  footnote: 'Press Esc to cancel, or Cmd/Ctrl+Enter to quit Desktop.',
+  callout: undefined,
+  footnote: 'Esc cancels. Cmd/Ctrl+Enter confirms.',
 };
 
 describe('desktopConfirmation', () => {
@@ -54,15 +50,17 @@ describe('desktopConfirmation', () => {
     expect(desktopConfirmationActionFromURL('https://redeven-desktop.invalid/confirmation/unknown')).toBeNull();
   });
 
-  it('renders a wide structured confirmation page with runtime context and keyboard guidance', () => {
+  it('renders a compact confirmation page with concise runtime context and keyboard guidance', () => {
     const html = buildDesktopConfirmationPageHTML(baseModel, 'light', 'darwin');
 
-    expect(html).toContain('width: min(760px, 100%);');
-    expect(html).toContain('Runtime impact');
+    expect(html).toContain('width: min(600px, 100%);');
+    expect(html).toContain('Will stop runtimes');
     expect(html).toContain('Affected environments');
-    expect(html).toContain('1 more environment');
+    expect(html).toContain('+1 more environment');
     expect(html).toContain('button-confirm-danger');
-    expect(html).toContain('Press Esc to cancel, or Cmd/Ctrl+Enter to quit Desktop.');
+    expect(html).toContain('summary-strip');
+    expect(html).toContain('runtime-chip');
+    expect(html).toContain('Esc cancels. Cmd/Ctrl+Enter confirms.');
     expect(html).toContain('window.location.href = confirmButton.href;');
   });
 
@@ -70,7 +68,7 @@ describe('desktopConfirmation', () => {
     const html = buildDesktopConfirmationPageHTML(baseModel, 'dark', 'linux');
 
     expect(html).toContain('color-scheme: dark;');
-    expect(html).toContain('background:\n          radial-gradient');
+    expect(html).toContain('background: color-mix(in srgb, var(--surface-muted) 55%, var(--bg));');
     expect(html).toContain('body data-tone="danger"');
   });
 });
