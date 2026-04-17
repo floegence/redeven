@@ -13,6 +13,7 @@ import {
   Pin,
   Pencil,
   Plus,
+  Refresh,
   Save,
   Search,
   Settings,
@@ -181,7 +182,10 @@ type BusyAction =
   | 'open_managed_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
-  | 'stop_managed_environment_runtime'
+  | 'start_environment_runtime'
+  | 'stop_environment_runtime'
+  | 'refresh_environment_runtime'
+  | 'refresh_all_environment_runtimes'
   | 'start_control_plane_connect'
   | 'focus_environment_window'
   | 'open_managed_environment_settings'
@@ -648,7 +652,7 @@ function DesktopCommandRegistrar(props: Readonly<{
       {
         id: 'redeven.desktop.openLocalEnvironment',
         title: 'Open Environment',
-        description: 'Open or attach the selected desktop-managed environment',
+        description: 'Open the selected desktop-managed environment window',
         category: 'Desktop',
         keybind: 'mod+enter',
         icon: Globe,
@@ -1043,24 +1047,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     );
   }
 
-  function openProviderLocalServeDialog(environment: DesktopEnvironmentEntry): void {
-    if (environment.kind !== 'provider_environment' || !environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
-      setErrorMessage('connect', 'Desktop could not resolve that provider environment.');
-      return;
-    }
-    setConnectionDialogError('');
-    setConnectionDialogState(createManagedEnvironmentConnectionDialogState('create', {
-      managed_environment_variant: 'provider_local_serve',
-      label: environment.label,
-      local_ui_bind: 'localhost:23998',
-      local_ui_password_mode: 'replace',
-      use_control_plane_binding: true,
-      provider_origin: environment.provider_origin,
-      provider_id: environment.provider_id,
-      env_public_id: environment.env_public_id,
-    }));
-  }
-
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
     if (environment.kind === 'managed_environment') {
       openSettingsSurface(environment.id);
@@ -1423,15 +1409,118 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
 
-  async function stopManagedEnvironmentRuntime(
-    environmentID: string,
+  function runtimeUnavailableMessage(environment: DesktopEnvironmentEntry): string {
+    return environment.runtime_control_capability === 'start_stop'
+      ? 'serve the runtime first'
+      : 'the runtime offline / unavailable';
+  }
+
+  function runtimeActionRequest(
+    environment: DesktopEnvironmentEntry,
+    kind: 'start_environment_runtime' | 'stop_environment_runtime' | 'refresh_environment_runtime',
+  ): DesktopLauncherActionRequest | null {
+    if (environment.kind === 'managed_environment') {
+      return {
+        kind,
+        environment_id: environment.id,
+        label: environment.label,
+      };
+    }
+    if (environment.kind === 'provider_environment') {
+      if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environment.id,
+        provider_origin: environment.provider_origin,
+        provider_id: environment.provider_id,
+        env_public_id: environment.env_public_id,
+        label: environment.label,
+      };
+    }
+    if (environment.kind === 'external_local_ui') {
+      return {
+        kind,
+        environment_id: environment.id,
+        external_local_ui_url: environment.local_ui_url,
+        label: environment.label,
+      };
+    }
+    if (!environment.ssh_details) {
+      return null;
+    }
+    return {
+      kind,
+      environment_id: environment.id,
+      label: environment.label,
+      ssh_destination: environment.ssh_details.ssh_destination,
+      ssh_port: environment.ssh_details.ssh_port,
+      remote_install_dir: environment.ssh_details.remote_install_dir,
+      bootstrap_strategy: environment.ssh_details.bootstrap_strategy,
+      release_base_url: environment.ssh_details.release_base_url,
+      environment_instance_id: environment.ssh_details.environment_instance_id,
+    };
+  }
+
+  async function startEnvironmentRuntime(
+    environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
+    const request = runtimeActionRequest(environment, 'start_environment_runtime');
+    if (!request) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      return false;
+    }
+    const result = await performLauncherAction(request, errorTarget);
+    const started = result?.outcome === 'started_environment_runtime';
+    if (started) {
+      showActionToast(`Runtime started for ${environment.label}.`);
+    }
+    return started;
+  }
+
+  async function stopEnvironmentRuntime(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    const request = runtimeActionRequest(environment, 'stop_environment_runtime');
+    if (!request) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      return false;
+    }
+    const result = await performLauncherAction(request, errorTarget);
+    const stopped = result?.outcome === 'stopped_environment_runtime';
+    if (stopped) {
+      showActionToast(`Runtime stopped for ${environment.label}.`);
+    }
+    return stopped;
+  }
+
+  async function refreshEnvironmentRuntime(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    const request = runtimeActionRequest(environment, 'refresh_environment_runtime');
+    if (!request) {
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      return false;
+    }
+    const result = await performLauncherAction(request, errorTarget);
+    const refreshed = result?.outcome === 'refreshed_environment_runtime';
+    if (refreshed) {
+      showActionToast(`Runtime status refreshed for ${environment.label}.`, 'info');
+    }
+    return refreshed;
+  }
+
+  async function refreshAllEnvironmentRuntimes(): Promise<void> {
     const result = await performLauncherAction({
-      kind: 'stop_managed_environment_runtime',
-      environment_id: environmentID,
-    }, errorTarget);
-    return result?.outcome === 'stopped_environment_runtime';
+      kind: 'refresh_all_environment_runtimes',
+    });
+    if (result?.outcome === 'refreshed_all_environment_runtimes') {
+      showActionToast('Runtime statuses refreshed.', 'info');
+    }
   }
 
   async function openSSHEnvironment(
@@ -1466,6 +1555,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' = 'connect',
     route: 'auto' | DesktopManagedEnvironmentRoute = 'auto',
   ): Promise<boolean> {
+    if (environment.window_state === 'closed' && environment.runtime_health.status !== 'online') {
+      setErrorMessage(errorTarget, runtimeUnavailableMessage(environment));
+      return false;
+    }
     if (environment.kind === 'managed_environment') {
       return openManagedEnvironment(environment, errorTarget, route);
     }
@@ -1490,67 +1583,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     switch (action.intent) {
       case 'open':
-      case 'attach':
       case 'focus':
-        return environment.kind === 'provider_environment'
-          ? openProviderEnvironment(environment, errorTarget)
-          : openManagedEnvironment(environment, errorTarget, action.route ?? 'auto');
-      case 'serve_runtime':
-        if (environment.kind === 'provider_environment') {
-          if (environment.provider_local_serve_environment_id) {
-            const localServe = snapshot().environments.find((entry) => (
-              entry.kind === 'managed_environment' && entry.id === environment.provider_local_serve_environment_id
-            )) ?? null;
-            if (localServe) {
-              return openManagedEnvironment(localServe, errorTarget, 'local_host');
-            }
-          }
-          openProviderLocalServeDialog(environment);
-          return false;
-        }
-        return false;
-      case 'stop':
-        if (environment.kind === 'provider_environment' && environment.provider_local_serve_environment_id) {
-          return stopManagedEnvironmentRuntime(environment.provider_local_serve_environment_id, errorTarget);
-        }
-        if (environment.kind === 'managed_environment') {
-          return stopManagedEnvironmentRuntime(environment.id, errorTarget);
-        }
-        return false;
-      case 'refresh_status':
-      case 'check_status':
-      case 'retry_sync': {
-        const controlPlane = snapshot().control_planes.find((entry) => (
-          entry.provider.provider_origin === environment.provider_origin
-          && entry.provider.provider_id === environment.provider_id
-        )) ?? null;
-        if (!controlPlane) {
-          setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Reconnect this Control Plane first.');
-          return false;
-        }
-        await refreshControlPlane(controlPlane);
-        return false;
-      }
-      case 'reconnect_provider':
-        if (!environment.provider_origin) {
-          setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Reconnect this Control Plane first.');
-          return false;
-        }
-        {
-          const controlPlane = snapshot().control_planes.find((entry) => (
-            entry.provider.provider_origin === environment.provider_origin
-            && entry.provider.provider_id === environment.provider_id
-          )) ?? null;
-          if (controlPlane) {
-            await reconnectControlPlane(controlPlane);
-            return false;
-          }
-          await performLauncherAction({
-            kind: 'start_control_plane_connect',
-            provider_origin: environment.provider_origin,
-          }, errorTarget === 'settings' ? 'connect' : errorTarget);
-        }
-        return false;
+        return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget, action.route ?? 'auto');
+      case 'start_runtime':
+        return startEnvironmentRuntime(environment, errorTarget);
+      case 'stop_runtime':
+        return stopEnvironmentRuntime(environment, errorTarget);
+      case 'refresh_runtime':
+        return refreshEnvironmentRuntime(environment, errorTarget);
       case 'opening':
       default:
         return false;
@@ -2147,10 +2187,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openSettingsSurface={openSettingsSurface}
           openCreateConnectionDialog={openCreateConnectionDialog}
           openCreateControlPlaneDialog={openCreateControlPlaneDialog}
+          refreshAllEnvironmentRuntimes={refreshAllEnvironmentRuntimes}
           openRemoteEnvironment={openRemoteEnvironment}
           openSSHEnvironment={openSSHEnvironment}
           openEnvironment={openEnvironment}
           runManagedEnvironmentAction={triggerManagedEnvironmentAction}
+          refreshEnvironmentRuntime={refreshEnvironmentRuntime}
           toggleEnvironmentPinned={toggleEnvironmentPinned}
           copyEnvironmentValue={copyEnvironmentValue}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
@@ -2350,6 +2392,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openCreateControlPlaneDialog: (message?: string) => void;
+  refreshAllEnvironmentRuntimes: () => Promise<void>;
   openRemoteEnvironment: (
     targetURL: string,
     errorTarget?: 'connect' | 'dialog',
@@ -2368,6 +2411,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
   runManagedEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
+  refreshEnvironmentRuntime: (
+    environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
@@ -2497,6 +2544,23 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     />
                   </div>
                 </Show>
+                <Show when={props.activeTab === 'environments'}>
+                  <DesktopTooltip content="Refresh runtime statuses" placement="top">
+                    <span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        class="px-2.5"
+                        disabled={props.busyAction === 'refresh_all_environment_runtimes'}
+                        onClick={() => {
+                          void props.refreshAllEnvironmentRuntimes();
+                        }}
+                      >
+                        <Refresh class="h-3.5 w-3.5" />
+                      </Button>
+                    </span>
+                  </DesktopTooltip>
+                </Show>
                 <Show
                   when={props.activeTab === 'environments'}
                   fallback={(
@@ -2624,6 +2688,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 openCreateConnectionDialog={props.openCreateConnectionDialog}
                 openEnvironment={props.openEnvironment}
                 runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                 copyEnvironmentValue={props.copyEnvironmentValue}
                 saveEnvironment={props.saveEnvironmentFromLibrary}
@@ -2653,6 +2718,10 @@ function EnvironmentCardsPanel(props: Readonly<{
   runManagedEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
+  refreshEnvironmentRuntime: (
+    environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
@@ -2742,6 +2811,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     busyAction={props.busyAction}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                    refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     saveEnvironment={props.saveEnvironment}
@@ -2763,6 +2833,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     busyAction={props.busyAction}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
+                    refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     saveEnvironment={props.saveEnvironment}
@@ -3044,18 +3115,31 @@ function EnvironmentSplitActionButton(props: Readonly<{
     });
   });
 
+  const primaryButton = (
+    <Button
+      size="sm"
+      variant={props.presentation.primary_action.variant}
+      class={cn('min-w-0 flex-1', hasMenuActions() && 'rounded-r-none border-r-0')}
+      loading={props.loading}
+      disabled={!props.presentation.primary_action.enabled}
+      onClick={() => props.onRunAction(props.presentation.primary_action)}
+    >
+      {props.presentation.primary_action.label}
+    </Button>
+  );
+
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
-      <Button
-        size="sm"
-        variant={props.presentation.primary_action.variant}
-        class={cn('min-w-0 flex-1', hasMenuActions() && 'rounded-r-none border-r-0')}
-        loading={props.loading}
-        disabled={!props.presentation.primary_action.enabled}
-        onClick={() => props.onRunAction(props.presentation.primary_action)}
+      <Show
+        when={trimString(props.presentation.primary_action_tooltip) !== ''}
+        fallback={primaryButton}
       >
-        {props.presentation.primary_action.label}
-      </Button>
+        <DesktopTooltip content={props.presentation.primary_action_tooltip!} placement="top">
+          <span class="flex flex-1">
+            {primaryButton}
+          </span>
+        </DesktopTooltip>
+      </Show>
       <Show when={hasMenuActions()}>
         <button
           type="button"
@@ -3139,6 +3223,10 @@ function EnvironmentConnectionCard(props: Readonly<{
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  refreshEnvironmentRuntime: (
+    environment: DesktopEnvironmentEntry,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
@@ -3148,30 +3236,10 @@ function EnvironmentConnectionCard(props: Readonly<{
   const card = createMemo(() => buildEnvironmentCardModel(props.environment));
   const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment));
   const endpoints = createMemo(() => buildEnvironmentCardEndpointsModel(props.environment));
-  const managedActionModel = createMemo(() => (
-    props.environment.kind === 'managed_environment' || props.environment.kind === 'provider_environment'
-      ? buildProviderBackedEnvironmentActionModel(props.environment)
-      : null
-  ));
-  const managedActionPresentation = createMemo(() => managedActionModel()?.action_presentation ?? null);
-  const managedPrimaryAction = createMemo(() => {
-    const presentation = managedActionPresentation();
-    if (!presentation) {
-      return null;
-    }
-    return presentation.kind === 'single_button'
-      ? presentation.action
-      : presentation.primary_action;
-  });
-  const managedSecondaryAction = createMemo(() => managedActionPresentation()?.secondary_action);
-  const isCardOpen = createMemo(() => (
-    props.environment.is_open
-    || (
-      props.environment.kind === 'provider_environment'
-      && props.environment.open_local_session_lifecycle === 'open'
-    )
-  ));
-  const isEnvironmentActionBusy = createMemo(() => (
+  const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
+  const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
+  const isCardOpen = createMemo(() => props.environment.window_state === 'open');
+  const isWindowActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
     || props.busyAction === 'open_remote_environment'
     || props.busyAction === 'open_ssh_environment'
@@ -3180,8 +3248,11 @@ function EnvironmentConnectionCard(props: Readonly<{
     || props.busyAction === 'start_control_plane_connect'
     || props.busyAction === 'open_control_plane_environment'
   ));
-  const isStopActionBusy = createMemo(() => (
-    props.busyAction === 'stop_managed_environment_runtime'
+  const isRuntimeActionBusy = createMemo(() => (
+    props.busyAction === 'start_environment_runtime'
+    || props.busyAction === 'stop_environment_runtime'
+    || props.busyAction === 'refresh_environment_runtime'
+    || props.busyAction === 'refresh_all_environment_runtimes'
   ));
   const isPinBusy = createMemo(() => (
     props.busyAction === 'set_managed_environment_pinned'
@@ -3224,6 +3295,20 @@ function EnvironmentConnectionCard(props: Readonly<{
               </Show>
             </div>
           </div>
+          <DesktopTooltip content="Refresh runtime status" placement="top">
+            <span>
+              <ConsoleActionIconButton
+                title="Refresh runtime status"
+                aria-label={`Refresh runtime status for ${props.environment.label}`}
+                disabled={isRuntimeActionBusy()}
+                onClick={() => {
+                  void props.refreshEnvironmentRuntime(props.environment, 'connect');
+                }}
+              >
+                <Refresh class="h-3.5 w-3.5" />
+              </ConsoleActionIconButton>
+            </span>
+          </DesktopTooltip>
         </div>
       </CardHeader>
       <CardContent class="flex flex-1 flex-col gap-2.5 px-3.5 pb-2.5">
@@ -3236,87 +3321,17 @@ function EnvironmentConnectionCard(props: Readonly<{
         </Show>
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
-        <Show
-          when={(props.environment.kind === 'managed_environment' || props.environment.kind === 'provider_environment') && managedActionModel()}
-          fallback={(
-            <Button
-              size="sm"
-              variant="default"
-              class="flex-1"
-              loading={isEnvironmentActionBusy()}
-              disabled={props.environment.is_opening}
-              onClick={() => {
-                void props.openEnvironment(props.environment, 'connect');
-              }}
-            >
-              {props.environment.open_action_label}
-            </Button>
-          )}
-        >
-          {(() => {
-            const presentation = managedActionPresentation();
-            if (!presentation) {
-              return null;
-            }
-            if (presentation.kind === 'split_button') {
-              return (
-                <EnvironmentSplitActionButton
-                  presentation={presentation}
-                  loading={isEnvironmentActionBusy()}
-                  onRunAction={(action) => {
-                    void props.runManagedEnvironmentAction(
-                      props.environment,
-                      action,
-                      'connect',
-                    );
-                  }}
-                />
-              );
-            }
-            return (
-              <Button
-                size="sm"
-                variant={managedPrimaryAction()?.variant ?? 'default'}
-                class="flex-1"
-                loading={isEnvironmentActionBusy()}
-                disabled={!managedPrimaryAction()?.enabled}
-                onClick={() => {
-                  if (!managedPrimaryAction()) {
-                    return;
-                  }
-                  void props.runManagedEnvironmentAction(
-                    props.environment,
-                    managedPrimaryAction()!,
-                    'connect',
-                  );
-                }}
-              >
-                {managedPrimaryAction()?.label ?? 'Open'}
-              </Button>
+        <EnvironmentSplitActionButton
+          presentation={environmentActionPresentation()}
+          loading={isWindowActionBusy() || isRuntimeActionBusy()}
+          onRunAction={(action) => {
+            void props.runManagedEnvironmentAction(
+              props.environment,
+              action,
+              'connect',
             );
-          })()}
-        </Show>
-        <Show when={managedSecondaryAction()}>
-          <Button
-            size="sm"
-            variant={managedSecondaryAction()?.variant ?? 'outline'}
-            class="shrink-0"
-            loading={isStopActionBusy()}
-            disabled={!managedSecondaryAction()?.enabled || isEnvironmentActionBusy()}
-            onClick={() => {
-              if (!managedSecondaryAction()) {
-                return;
-              }
-              void props.runManagedEnvironmentAction(
-                props.environment,
-                managedSecondaryAction()!,
-                'connect',
-              );
-            }}
-          >
-            {managedSecondaryAction()?.label ?? 'Stop'}
-          </Button>
-        </Show>
+          }}
+        />
         <div class="flex items-center gap-0.5">
           <DesktopTooltip
             content={props.environment.pinned ? 'Unpin' : 'Pin'}

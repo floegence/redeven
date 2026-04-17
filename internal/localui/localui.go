@@ -118,6 +118,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	mux.HandleFunc("/logo.png", s.handleLogo)
 	mux.HandleFunc("/api/local/access/status", s.handleAccessStatus)
+	mux.HandleFunc("/api/local/runtime/health", s.handleRuntimeHealth)
 	mux.HandleFunc("/api/local/access/unlock", s.handleAccessUnlock)
 	mux.HandleFunc("/api/local/access/logout", s.handleAccessLogout)
 	mux.HandleFunc("/api/local/runtime", s.handleRuntime)
@@ -315,6 +316,11 @@ type apiError struct {
 type accessStatusResp struct {
 	PasswordRequired bool `json:"password_required"`
 	Unlocked         bool `json:"unlocked"`
+}
+
+type runtimeHealthResp struct {
+	Status           string `json:"status"`
+	PasswordRequired bool   `json:"password_required"`
 }
 
 type accessUnlockReq struct {
@@ -527,6 +533,20 @@ func (s *Server) handleAccessStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: accessStatusResp{
 		PasswordRequired: s.accessEnabled(),
 		Unlocked:         s.hasLocalAccess(r),
+	}})
+}
+
+func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
+		Status:           "online",
+		PasswordRequired: s.accessEnabled(),
 	}})
 }
 

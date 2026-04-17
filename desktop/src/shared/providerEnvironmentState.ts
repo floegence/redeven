@@ -29,6 +29,7 @@ type DesktopProviderCatalogFreshnessOptions = Readonly<{
 export type DesktopProviderRemoteRouteStateOptions = Readonly<{
   syncState: DesktopControlPlaneSyncState;
   environmentPresent: boolean;
+  providerRuntimeStatus?: string | null;
   providerStatus?: string | null;
   providerLifecycleStatus?: string | null;
   lastSyncedAtMS?: number;
@@ -37,6 +38,9 @@ export type DesktopProviderRemoteRouteStateOptions = Readonly<{
 }>;
 
 type DesktopProviderEnvironmentRuntimeLike = Readonly<{
+  runtime_health?: Readonly<{
+    runtime_status?: string | null;
+  }> | null;
   status?: string | null;
   lifecycle_status?: string | null;
 }>;
@@ -55,11 +59,20 @@ function normalizeUnixMS(value: unknown): number {
 }
 
 export function desktopProviderEnvironmentAvailability(
+  runtimeStatus: string | null | undefined,
   status: string | null | undefined,
   lifecycleStatus: string | null | undefined,
 ): DesktopProviderEnvironmentAvailability {
+  const cleanRuntimeStatus = normalizedRuntimeState(runtimeStatus);
   const cleanStatus = normalizedRuntimeState(status);
   const cleanLifecycleStatus = normalizedRuntimeState(lifecycleStatus);
+
+  if (cleanRuntimeStatus === 'offline') {
+    return 'offline';
+  }
+  if (cleanRuntimeStatus === 'online') {
+    return 'online';
+  }
 
   if (
     cleanStatus === 'offline'
@@ -87,7 +100,11 @@ export function desktopProviderOnlineEnvironmentCount(
   environments: readonly DesktopProviderEnvironmentRuntimeLike[],
 ): number {
   return environments.filter((environment) => (
-    desktopProviderEnvironmentAvailability(environment.status, environment.lifecycle_status) === 'online'
+    desktopProviderEnvironmentAvailability(
+      environment.runtime_health?.runtime_status,
+      environment.status,
+      environment.lifecycle_status,
+    ) === 'online'
   )).length;
 }
 
@@ -133,6 +150,7 @@ export function desktopProviderRemoteRouteState(
   }
 
   const availability = desktopProviderEnvironmentAvailability(
+    options.providerRuntimeStatus,
     options.providerStatus,
     options.providerLifecycleStatus,
   );

@@ -151,7 +151,8 @@ SSH bootstrap is intentionally transport-light and runtime-heavy:
 - After Desktop starts uploading or installing the tarball over SSH, later failures stay first-class errors instead of silently degrading into `remote_install`.
 - The forwarded localhost URL is session-ephemeral and only used as the live session origin.
 - Session identity is derived from SSH destination, SSH port, remote install directory, and `environment_instance_id` so reconnecting does not create duplicates just because the forwarded local port changed.
-- Closing the Desktop session tears down the local forward and the SSH-owned remote runtime together.
+- Closing the Desktop session window does not stop the SSH-owned remote runtime.
+- SSH runtime stop is an explicit launcher/runtime-menu action. Desktop may reuse an existing live forward or recreate it on the next `Open`.
 - SSH bootstrap still assumes non-interactive SSH authentication (`BatchMode=yes`), so missing keys or host-key trust issues surface as actionable launcher errors instead of prompting through Desktop UI.
 
 ### Launch Outcomes
@@ -278,44 +279,49 @@ Interaction rules:
 - Environment Library pinning is first-class:
   - pinned cards render once inside a dedicated `Pinned` section
   - unpinned cards remain in the regular `Environments` section
-  - pinning an open unsaved Redeven URL or SSH Host entry implicitly promotes it into the saved Environment Library
+- pinning an open unsaved Redeven URL or SSH Host entry implicitly promotes it into the saved Environment Library
 - Local environment cards surface:
   - `RUNS ON`
-  - `LOCAL RUNTIME`
-  - `WINDOW` when applicable
+  - `WINDOW`
+  - `CONTROL`
 - Provider environment cards surface:
   - `CONTROL PLANE`
-  - `STATUS`
-  - `LOCAL SERVE`
+  - `WINDOW`
+  - `CONTROL`
 - Provider local serve cards surface:
   - `SOURCE ENV`
   - `CONTROL PLANE`
-  - `LOCAL RUNTIME`
-  - `WINDOW` when applicable
+  - `WINDOW`
+  - `CONTROL`
 - Redeven URL cards surface:
   - `SOURCE`
   - `NETWORK`
+  - `WINDOW`
 - SSH Host cards surface:
   - `HOST`
-  - `INSTANCE`
+  - `WINDOW`
   - `BOOTSTRAP`
 - Control Plane shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
 - Provider-backed state is freshness-aware instead of being treated as timeless cache:
   - Desktop marks provider catalogs as `fresh`, `stale`, or `unknown`
   - opening the launcher, refocusing it, and waking the machine all trigger best-effort provider refresh
   - while the launcher stays visible, Desktop also polls stale providers in the background
-- Card CTA stays single-primary-action:
-  - local environments and provider local serves use `Open Local`, `Attach Local`, or `Focus Local`
-  - ready provider environments use `Open Remote` / `Focus Remote`
-  - stale provider environments prefer `Refresh Status`
-  - expired provider authorization prefers `Reconnect`
-  - provider refresh failures prefer `Retry Sync`
-  - offline or removed provider environments prefer `Serve Runtime`, `Open Local Serve`, or `Focus Local Serve`
+- Launcher state is split explicitly between runtime health and window state:
+  - every Environment card shows `RUNTIME ONLINE` or `RUNTIME OFFLINE`
+  - the primary button is window-only and uses `Open`, `Opening…`, or `Focus`
+  - the primary button never starts or stops a runtime implicitly
+  - offline local / local-serve / SSH entries keep a disabled `Open` button with the tooltip `serve the runtime first`
+  - offline provider / Redeven URL entries keep a disabled `Open` button with the tooltip `the runtime offline / unavailable`
+  - local environments, provider local serves, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
+  - provider and Redeven URL entries treat runtime control as observe-only and expose `Refresh runtime status` from the runtime menu
+- Runtime health probing uses dedicated contracts instead of route/access inference:
+  - local environments, provider local serves, SSH forwards, and direct Redeven URLs probe `GET /api/local/runtime/health`
+  - Control Plane provider environments use the RCPP batch runtime-health query endpoint
+  - per-card refresh and the launcher-wide refresh button re-probe runtime health without mutating window state
 - Managed session action state is lifecycle-aware:
-  - `Focus` only appears for a route whose session lifecycle is truly `open`
+  - `Focus` only appears for a session whose lifecycle is truly `open`
   - `Opening…` is disabled and does not imply the window is ready yet
   - closing or failed sessions stop contributing `Focus` immediately
-  - `Attach` appears for a local route when Desktop can tell that a compatible local runtime is already running and the next action will reuse it instead of starting a fresh one
 - Environment cards stay concise:
   - card bodies avoid explanatory helper prose under the actions
   - only concrete identifiers, runtime details, badges, explicit `None` placeholders, and notices stay visible inside the card
@@ -426,6 +432,7 @@ Semantics:
 
 - Desktop does not persist a remembered current target for the next launch.
 - Open Environment windows are runtime-only desktop session state.
+- Runtime health is a separate launcher snapshot concern. Window closure alone must not be used as a proxy for stopping a runtime.
 - `managed_environments` stores only records that own real local scope state on this device:
   - local environments
   - provider local serves

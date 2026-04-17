@@ -409,6 +409,32 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   } catch (error) {
     await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
     await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
-    throw error;
+      throw error;
   }
+}
+
+export async function attachManagedRuntimeFromStateFile(args: Readonly<{
+  runtimeStateFile: string;
+  runtimeAttachTimeoutMs?: number;
+  stopTimeoutMs?: number;
+}>): Promise<ManagedRuntime | null> {
+  const runtimeStateFile = String(args.runtimeStateFile ?? '').trim();
+  if (runtimeStateFile === '') {
+    return null;
+  }
+  const startup = await loadAttachableRuntimeState(
+    runtimeStateFile,
+    args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
+  );
+  if (!startup) {
+    return null;
+  }
+  return {
+    child: null,
+    startup,
+    reportDir: null,
+    reportFile: null,
+    attached: true,
+    stop: attachedStop(startup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
+  };
 }

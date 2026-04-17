@@ -174,16 +174,16 @@ func Load(path string) (*Snapshot, error) {
 	return snapshot, nil
 }
 
-type localAccessStatusEnvelope struct {
-	Data *localAccessStatusPayload `json:"data"`
+type localRuntimeHealthEnvelope struct {
+	Data *localRuntimeHealthPayload `json:"data"`
 }
 
-type localAccessStatusPayload struct {
-	PasswordRequired *bool `json:"password_required"`
-	Unlocked         *bool `json:"unlocked"`
+type localRuntimeHealthPayload struct {
+	Status           *string `json:"status"`
+	PasswordRequired *bool   `json:"password_required"`
 }
 
-func probeURL(rawURL string, timeout time.Duration) (*localAccessStatusPayload, bool) {
+func probeURL(rawURL string, timeout time.Duration) (*localRuntimeHealthPayload, bool) {
 	baseURL := strings.TrimSpace(rawURL)
 	if baseURL == "" {
 		return nil, false
@@ -209,7 +209,7 @@ func probeURL(rawURL string, timeout time.Duration) (*localAccessStatusPayload, 
 	if err != nil {
 		return nil, false
 	}
-	probeURL.Path = "/api/local/access/status"
+	probeURL.Path = "/api/local/runtime/health"
 	probeURL.RawQuery = ""
 	probeURL.Fragment = ""
 
@@ -223,11 +223,14 @@ func probeURL(rawURL string, timeout time.Duration) (*localAccessStatusPayload, 
 		return nil, false
 	}
 
-	var envelope localAccessStatusEnvelope
+	var envelope localRuntimeHealthEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		return nil, false
 	}
-	if envelope.Data == nil || envelope.Data.PasswordRequired == nil || envelope.Data.Unlocked == nil {
+	if envelope.Data == nil || envelope.Data.PasswordRequired == nil || envelope.Data.Status == nil {
+		return nil, false
+	}
+	if !strings.EqualFold(strings.TrimSpace(*envelope.Data.Status), "online") {
 		return nil, false
 	}
 	return envelope.Data, true

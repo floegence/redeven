@@ -3,9 +3,11 @@ import {
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentList,
+  normalizeDesktopProviderEnvironmentRuntimeHealthList,
   type DesktopControlPlaneAccount,
   type DesktopControlPlaneProvider,
   type DesktopProviderEnvironment,
+  type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
 import {
   DesktopProviderRequestError,
@@ -17,6 +19,7 @@ import {
 const PROVIDER_DISCOVERY_PATH = '/.well-known/redeven-provider.json';
 const PROVIDER_ME_PATH = '/api/rcpp/v1/me';
 const PROVIDER_ENVIRONMENTS_PATH = '/api/rcpp/v1/environments';
+const PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH = '/api/rcpp/v1/environments/runtime-health/query';
 const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v1/desktop/connect/exchange';
 const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v1/desktop/token/refresh';
 const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v1/desktop/token/revoke';
@@ -48,6 +51,10 @@ export type ProviderDesktopTokenRefreshResult = Readonly<{
   access_token: string;
   access_expires_at_unix_ms: number;
   authorization_expires_at_unix_ms: number;
+}>;
+
+export type ProviderEnvironmentRuntimeHealthQuery = Readonly<{
+  env_public_ids: readonly string[];
 }>;
 
 type ProviderJSONErrorEnvelope = Readonly<{
@@ -417,6 +424,39 @@ export async function fetchProviderEnvironments(
     );
   }
   return normalizeDesktopProviderEnvironmentList(body, { provider });
+}
+
+export async function queryProviderEnvironmentRuntimeHealth(
+  provider: DesktopControlPlaneProvider,
+  accessToken: string,
+  query: ProviderEnvironmentRuntimeHealthQuery,
+  requestOptions: ProviderClientRequestOptions = {},
+): Promise<readonly DesktopProviderEnvironmentRuntimeHealth[]> {
+  const envPublicIDs = query.env_public_ids
+    .map((value) => compact(value))
+    .filter((value) => value !== '');
+  if (envPublicIDs.length === 0) {
+    return [];
+  }
+  const body = await fetchProviderJSON(
+    providerRequestURL(provider.provider_origin, PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH),
+    {
+      method: 'POST',
+      bearerToken: accessToken,
+      body: {
+        env_public_ids: envPublicIDs,
+      },
+      operationLabel: 'the provider runtime health response',
+      transport: requestOptions.transport,
+    },
+  );
+  if (!body || typeof body !== 'object' || !Array.isArray((body as { environments?: unknown }).environments)) {
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The Control Plane runtime health response is invalid.',
+    );
+  }
+  return normalizeDesktopProviderEnvironmentRuntimeHealthList(body);
 }
 
 export async function requestDesktopOpenSession(

@@ -224,6 +224,39 @@ func TestServer_handleGateway_allowsEnvAppShellWhenLocked(t *testing.T) {
 	}
 }
 
+func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	s := newTestServer(t, gate)
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime/health", nil)
+	res := httptest.NewRecorder()
+	s.handleRuntimeHealth(res, req)
+
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Result().StatusCode, http.StatusOK)
+	}
+
+	var payload struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Status           string `json:"status"`
+			PasswordRequired bool   `json:"password_required"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if !payload.OK {
+		t.Fatalf("ok = false, want true")
+	}
+	if payload.Data.Status != "online" {
+		t.Fatalf("status = %q, want %q", payload.Data.Status, "online")
+	}
+	if !payload.Data.PasswordRequired {
+		t.Fatalf("password_required = false, want true")
+	}
+}
+
 func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)

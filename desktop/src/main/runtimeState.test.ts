@@ -20,13 +20,13 @@ describe('runtimeState', () => {
 
   it('loads an attachable loopback runtime from disk', async () => {
     const server = http.createServer((request, response) => {
-      if (request.url === '/api/local/access/status') {
+      if (request.url === '/api/local/runtime/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({
           ok: true,
           data: {
+            status: 'online',
             password_required: true,
-            unlocked: false,
           },
         }));
         return;
@@ -93,13 +93,13 @@ describe('runtimeState', () => {
 
   it('loads an external Local UI startup payload from an explicit local IP url', async () => {
     const server = http.createServer((request, response) => {
-      if (request.url === '/api/local/access/status') {
+      if (request.url === '/api/local/runtime/health') {
         response.writeHead(200, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({
           ok: true,
           data: {
+            status: 'online',
             password_required: false,
-            unlocked: true,
           },
         }));
         return;
@@ -143,7 +143,7 @@ describe('runtimeState', () => {
 
   it('rejects a local target that responds with non-Redeven access status payloads', async () => {
     const server = http.createServer((request, response) => {
-      if (request.url === '/api/local/access/status') {
+      if (request.url === '/api/local/runtime/health') {
         response.writeHead(200, { 'Content-Type': 'text/html' });
         response.end('<html>not redeven</html>');
         return;

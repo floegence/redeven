@@ -9,6 +9,11 @@ import type {
   DesktopProviderCatalogFreshness,
   DesktopProviderRemoteRouteState,
 } from './providerEnvironmentState';
+import type {
+  DesktopEnvironmentWindowState,
+  DesktopRuntimeControlCapability,
+  DesktopRuntimeHealth,
+} from './desktopRuntimeHealth';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
@@ -29,7 +34,10 @@ export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
+  | 'started_environment_runtime'
   | 'stopped_environment_runtime'
+  | 'refreshed_environment_runtime'
+  | 'refreshed_all_environment_runtimes'
   | 'opened_utility_window'
   | 'focused_utility_window'
   | 'started_control_plane_connect'
@@ -61,7 +69,10 @@ export type DesktopLauncherActionKind =
   | 'open_managed_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
-  | 'stop_managed_environment_runtime'
+  | 'start_environment_runtime'
+  | 'stop_environment_runtime'
+  | 'refresh_environment_runtime'
+  | 'refresh_all_environment_runtimes'
   | 'start_control_plane_connect'
   | 'set_managed_environment_pinned'
   | 'set_provider_environment_pinned'
@@ -99,6 +110,18 @@ export type DesktopOpenEnvironmentWindow = Readonly<{
   local_ui_url: string;
   lifecycle: Extract<DesktopLauncherSessionLifecycle, 'open'>;
 }>;
+
+export type DesktopLauncherRuntimeTarget = Readonly<
+  Partial<{
+    environment_id: string;
+    provider_origin: string;
+    provider_id: string;
+    env_public_id: string;
+    external_local_ui_url: string;
+    label: string;
+  }>
+  & Partial<DesktopSSHEnvironmentDetails>
+>;
 
 export type DesktopEnvironmentEntry = Readonly<{
   id: string;
@@ -148,11 +171,14 @@ export type DesktopEnvironmentEntry = Readonly<{
   control_plane_label?: string;
   tag: DesktopEnvironmentEntryTag;
   category: DesktopEnvironmentEntryCategory;
+  window_state: DesktopEnvironmentWindowState;
   is_open: boolean;
   is_opening: boolean;
+  runtime_health: DesktopRuntimeHealth;
+  runtime_control_capability: DesktopRuntimeControlCapability;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
-  open_action_label: 'Open' | 'Attach' | 'Opening…' | 'Focus';
+  open_action_label: 'Open' | 'Opening…' | 'Focus';
   can_edit: boolean;
   can_delete: boolean;
   can_save: boolean;
@@ -188,9 +214,17 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id?: string;
       label?: string;
     } & DesktopSSHEnvironmentDetails)
+  | ({
+      kind: 'start_environment_runtime';
+    } & DesktopLauncherRuntimeTarget)
+  | ({
+      kind: 'stop_environment_runtime';
+    } & DesktopLauncherRuntimeTarget)
+  | ({
+      kind: 'refresh_environment_runtime';
+    } & DesktopLauncherRuntimeTarget)
   | {
-      kind: 'stop_managed_environment_runtime';
-      environment_id: string;
+      kind: 'refresh_all_environment_runtimes';
     }
   | {
       kind: 'start_control_plane_connect';
@@ -332,6 +366,63 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function normalizeDesktopLauncherRuntimeTarget(
+  candidate: Record<string, unknown>,
+): DesktopLauncherRuntimeTarget | null {
+  const environmentID = compact(candidate.environment_id);
+  const providerOriginRaw = compact(candidate.provider_origin);
+  const providerID = compact(candidate.provider_id);
+  const envPublicID = compact(candidate.env_public_id);
+  const externalLocalUIURL = compact(candidate.external_local_ui_url);
+  const label = compact(candidate.label);
+  const sshDestination = compact(candidate.ssh_destination);
+  const sshPortText = compact(candidate.ssh_port);
+  const remoteInstallDir = compact(candidate.remote_install_dir);
+  const bootstrapStrategy = compact(candidate.bootstrap_strategy);
+  const releaseBaseURL = compact(candidate.release_base_url);
+  const environmentInstanceID = compact(candidate.environment_instance_id);
+
+  let providerOrigin = '';
+  if (providerOriginRaw !== '') {
+    try {
+      providerOrigin = normalizeControlPlaneOrigin(providerOriginRaw);
+    } catch {
+      return null;
+    }
+  }
+
+  const target: DesktopLauncherRuntimeTarget = {
+    ...(environmentID !== '' ? { environment_id: environmentID } : {}),
+    ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
+    ...(providerID !== '' ? { provider_id: providerID } : {}),
+    ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
+    ...(externalLocalUIURL !== '' ? { external_local_ui_url: externalLocalUIURL } : {}),
+    ...(label !== '' ? { label } : {}),
+    ...(sshDestination !== '' ? { ssh_destination: sshDestination } : {}),
+    ...(candidate.ssh_port != null || sshPortText !== ''
+      ? {
+          ssh_port: sshPortText === ''
+            ? null
+            : Number.parseInt(sshPortText, 10),
+        }
+      : {}),
+    ...(remoteInstallDir !== '' ? { remote_install_dir: remoteInstallDir } : {}),
+    ...(bootstrapStrategy !== '' ? { bootstrap_strategy: bootstrapStrategy as DesktopSSHEnvironmentDetails['bootstrap_strategy'] } : {}),
+    ...(releaseBaseURL !== '' ? { release_base_url: releaseBaseURL } : {}),
+    ...(environmentInstanceID !== '' ? { environment_instance_id: environmentInstanceID } : {}),
+  };
+
+  if (
+    !target.environment_id
+    && !target.provider_origin
+    && !target.external_local_ui_url
+    && !target.ssh_destination
+  ) {
+    return null;
+  }
+  return target;
+}
+
 export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLauncherActionRequest | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -364,16 +455,20 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           : {}),
       };
     }
-    case 'stop_managed_environment_runtime': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
+    case 'start_environment_runtime':
+    case 'stop_environment_runtime':
+    case 'refresh_environment_runtime': {
+      const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
+      if (!target) {
         return null;
       }
       return {
         kind,
-        environment_id: environmentID,
-      };
+        ...target,
+      } as DesktopLauncherActionRequest;
     }
+    case 'refresh_all_environment_runtimes':
+      return { kind };
     case 'open_remote_environment':
       return {
         kind,

@@ -207,7 +207,7 @@ describe('DesktopWelcomeShell', () => {
       }],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(4);
+    expect(environmentLibraryCount(snapshot)).toBe(5);
     expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
     expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
@@ -218,9 +218,9 @@ describe('DesktopWelcomeShell', () => {
         managed_environment_kind: 'local',
       }),
       expect.objectContaining({
-        kind: 'provider_environment',
-        category: 'provider',
-        provider_local_serve_state: 'saved',
+        kind: 'managed_environment',
+        category: 'managed',
+        managed_environment_kind: 'controlplane',
       }),
     ]);
     expect(filterEnvironmentLibrary(snapshot, 'stag')).toEqual([
@@ -322,6 +322,10 @@ describe('DesktopWelcomeShell', () => {
       '',
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     )).toEqual([
+      expect.objectContaining({
+        kind: 'managed_environment',
+        env_public_id: 'env_demo',
+      }),
       expect.objectContaining({
         kind: 'provider_environment',
         env_public_id: 'env_demo',
@@ -486,15 +490,20 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('EnvironmentStatusIndicator');
   });
 
-  it('renders a provider split action that keeps local serve primary and remote open in a dropdown', () => {
+  it('renders split runtime actions with refresh controls and external-runtime messaging', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
+    expect(appSrc).toContain('Refresh runtime status');
+    expect(appSrc).toContain('Refresh runtime statuses');
+    expect(appSrc).toContain('primary_action_tooltip');
     expect(appSrc).toContain('props.presentation.menu_button_label');
-    expect(appSrc).toContain('openProviderEnvironment');
-    expect(appSrc).toContain('stopManagedEnvironmentRuntime');
-    expect(appSrc).toContain("case 'stop':");
+    expect(appSrc).toContain('startEnvironmentRuntime');
+    expect(appSrc).toContain('stopEnvironmentRuntime');
+    expect(appSrc).toContain("case 'start_runtime':");
+    expect(appSrc).toContain("case 'stop_runtime':");
+    expect(appSrc).toContain("case 'refresh_runtime':");
     expect(appSrc).toContain('aria-label={props.presentation.menu_button_label}');
     expect(styles).toContain('.redeven-split-action');
     expect(styles).toContain('.redeven-split-action-toggle');
@@ -553,12 +562,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Desktop opens a remote session through the Control Plane without starting a local runtime here.');
   });
 
-  it('describes managed environment actions as open-or-attach instead of implying a guaranteed local start', () => {
+  it('describes managed environment actions as window-only and runtime-decoupled', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Open or attach the selected desktop-managed environment');
-    expect(appSrc).toContain("case 'attach':");
-    expect(appSrc).not.toContain('Open the selected desktop-managed environment on this machine');
+    expect(appSrc).toContain('Open the selected desktop-managed environment window');
+    expect(appSrc).toContain("case 'start_runtime':");
+    expect(appSrc).not.toContain('Open or attach the selected desktop-managed environment');
   });
 
   it('keeps transient action feedback out of page flow by using a toast viewport', () => {
