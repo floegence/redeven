@@ -1,3 +1,9 @@
+import type {
+  DesktopConfirmationDialogModel,
+  DesktopConfirmationMetric,
+  DesktopConfirmationRuntimePreviewItem,
+} from './desktopConfirmation';
+
 export type DesktopQuitSource = 'explicit' | 'system' | 'last_window_close';
 
 export type DesktopQuitImpactRuntime = Readonly<{
@@ -24,24 +30,6 @@ export type DesktopQuitImpact = Readonly<{
   environment_window_count: number;
   desktop_owned_runtimes: readonly DesktopQuitImpactRuntime[];
   external_runtime_count: number;
-}>;
-
-export type DesktopQuitDialogCopy = Readonly<{
-  title: string;
-  message: string;
-  detail: string;
-  buttons: readonly ['Cancel', 'Quit'];
-  default_id: 1;
-  cancel_id: 0;
-}>;
-
-export type DesktopLastWindowCloseDialogCopy = Readonly<{
-  title: string;
-  message: string;
-  detail: string;
-  buttons: readonly ['Cancel', 'Close Window'];
-  default_id: 1;
-  cancel_id: 0;
 }>;
 
 const LABEL_PREVIEW_LIMIT = 4;
@@ -72,13 +60,24 @@ function joinWithAnd(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
 }
 
-function formatRuntimeLabels(runtimes: readonly DesktopQuitImpactRuntime[]): string[] {
-  const preview = runtimes.slice(0, LABEL_PREVIEW_LIMIT).map((runtime) => `- ${displayRuntimeLabel(runtime.label)}`);
-  const remaining = runtimes.length - preview.length;
-  if (remaining > 0) {
-    preview.push(`- ${remaining} more ${pluralize(remaining, 'environment')}`);
-  }
-  return preview;
+function runtimePreviewBadge(kind: DesktopQuitImpactRuntime['kind']): string {
+  return kind === 'ssh_environment' ? 'SSH Host' : 'Managed Environment';
+}
+
+function formatRuntimePreview(
+  runtimes: readonly DesktopQuitImpactRuntime[],
+): Readonly<{
+  items: readonly DesktopConfirmationRuntimePreviewItem[];
+  overflow_count: number;
+}> {
+  const items = runtimes.slice(0, LABEL_PREVIEW_LIMIT).map((runtime) => ({
+    label: displayRuntimeLabel(runtime.label),
+    badge: runtimePreviewBadge(runtime.kind),
+  }));
+  return {
+    items,
+    overflow_count: Math.max(0, runtimes.length - items.length),
+  };
 }
 
 export function buildDesktopQuitImpact(input: DesktopQuitImpactInput): DesktopQuitImpact {
@@ -137,10 +136,12 @@ export function shouldConfirmDesktopLastWindowClose(
   return impact.desktop_owned_runtimes.length > 0 || impact.environment_window_count > 0;
 }
 
-export function buildDesktopQuitDialogCopy(impact: DesktopQuitImpact): DesktopQuitDialogCopy {
+export function buildDesktopQuitConfirmationModel(impact: DesktopQuitImpact): DesktopConfirmationDialogModel {
   const runtimeCount = impact.desktop_owned_runtimes.length;
   const sessionCount = impact.environment_window_count;
+  const externalRuntimeCount = impact.external_runtime_count;
   const summary: string[] = [];
+  const runtimePreview = formatRuntimePreview(impact.desktop_owned_runtimes);
 
   if (runtimeCount > 0) {
     summary.push(
@@ -156,37 +157,75 @@ export function buildDesktopQuitDialogCopy(impact: DesktopQuitImpact): DesktopQu
   const detailLines: string[] = [];
   if (summary.length > 0) {
     detailLines.push(`Quitting now will ${joinWithAnd(summary)}.`);
-  } else {
-    detailLines.push('Redeven Desktop will quit.');
   }
 
-  if (runtimeCount > 0) {
-    detailLines.push('');
-    detailLines.push(
-      runtimeCount === 1
-        ? 'This environment may become unavailable from this machine until Redeven Desktop starts it again:'
-        : 'These environments may become unavailable from this machine until Redeven Desktop starts them again:',
-    );
-    detailLines.push(...formatRuntimeLabels(impact.desktop_owned_runtimes));
+  const message = detailLines[0] ?? 'Redeven Desktop will quit.';
+  const summaryItems: DesktopConfirmationMetric[] = [
+    {
+      value: String(runtimeCount),
+      label: runtimeCount === 1 ? 'Runtime to stop' : 'Runtimes to stop',
+      detail: runtimeCount > 0
+        ? 'Desktop-owned runtimes shut down with the app.'
+        : 'No Desktop-managed runtime will be stopped.',
+      tone: runtimeCount > 0 ? 'danger' : 'neutral',
+    },
+    {
+      value: String(sessionCount),
+      label: sessionCount === 1 ? 'Window to close' : 'Windows to close',
+      detail: sessionCount > 0
+        ? 'Every open environment window closes immediately.'
+        : 'No environment windows are currently open.',
+      tone: sessionCount > 0 ? 'warning' : 'neutral',
+    },
+  ];
+  if (externalRuntimeCount > 0) {
+    summaryItems.push({
+      value: String(externalRuntimeCount),
+      label: externalRuntimeCount === 1 ? 'Runtime unchanged' : 'Runtimes unchanged',
+      detail: 'Externally managed runtimes keep their current state.',
+      tone: 'success',
+    });
   }
 
   return {
     title: 'Quit Redeven Desktop?',
-    message: 'Quit Redeven Desktop?',
-    detail: detailLines.join('\n'),
-    buttons: ['Cancel', 'Quit'],
-    default_id: 1,
-    cancel_id: 0,
+    eyebrow: 'Redeven Desktop',
+    heading: 'Quit Redeven Desktop?',
+    message,
+    impact_label: runtimeCount > 0 ? 'Runtime impact' : 'Window impact',
+    confirm_label: 'Quit Desktop',
+    cancel_label: 'Keep Running',
+    confirm_tone: 'danger',
+    summary_items: summaryItems,
+    runtime_section_title: runtimeCount > 0 ? 'Affected environments' : undefined,
+    runtime_section_body: runtimeCount > 0
+      ? runtimeCount === 1
+        ? 'Stopping this Desktop-managed runtime may make the environment unavailable from this machine until Redeven Desktop starts it again.'
+        : 'Stopping these Desktop-managed runtimes may make the following environments unavailable from this machine until Redeven Desktop starts them again.'
+      : undefined,
+    runtime_preview: runtimePreview.items,
+    runtime_overflow_count: runtimePreview.overflow_count,
+    callout: runtimeCount > 0
+      ? {
+        eyebrow: 'Access impact',
+        body: runtimeCount === 1
+          ? 'This machine may stop serving the affected environment until Redeven Desktop starts that runtime again.'
+          : 'This machine may stop serving the affected environments until Redeven Desktop starts those runtimes again.',
+        tone: 'warning',
+      }
+      : undefined,
+    footnote: 'Press Esc to cancel, or Cmd/Ctrl+Enter to quit Desktop.',
   };
 }
 
-export function buildDesktopLastWindowCloseDialogCopy(
+export function buildDesktopLastWindowCloseConfirmationModel(
   impact: DesktopQuitImpact,
-): DesktopLastWindowCloseDialogCopy {
+): DesktopConfirmationDialogModel {
   const runtimeCount = impact.desktop_owned_runtimes.length;
   const sessionCount = impact.environment_window_count;
-  const detailLines: string[] = [];
+  const externalRuntimeCount = impact.external_runtime_count;
   const summary: string[] = [];
+  const runtimePreview = formatRuntimePreview(impact.desktop_owned_runtimes);
 
   if (sessionCount > 0) {
     summary.push(`close ${sessionCount} environment ${pluralize(sessionCount, 'window')}`);
@@ -195,31 +234,59 @@ export function buildDesktopLastWindowCloseDialogCopy(
     summary.push(`keep ${runtimeCount} Desktop-managed ${pluralize(runtimeCount, 'runtime')} running in the background`);
   }
 
-  if (summary.length > 0) {
-    detailLines.push(`Closing the last window will ${joinWithAnd(summary)}. Redeven Desktop will stay open.`);
-  } else {
-    detailLines.push('Closing the last window will keep Redeven Desktop open without any visible windows.');
+  const message = summary.length > 0
+    ? `Closing the last window will ${joinWithAnd(summary)}. Redeven Desktop will stay open.`
+    : 'Closing the last window will keep Redeven Desktop open without any visible windows.';
+  const summaryItems: DesktopConfirmationMetric[] = [
+    {
+      value: String(sessionCount),
+      label: sessionCount === 1 ? 'Window to close' : 'Windows to close',
+      detail: sessionCount > 0
+        ? 'The final visible Desktop surface will disappear.'
+        : 'Desktop has no visible environment windows to close.',
+      tone: sessionCount > 0 ? 'warning' : 'neutral',
+    },
+    {
+      value: String(runtimeCount),
+      label: runtimeCount === 1 ? 'Runtime left running' : 'Runtimes left running',
+      detail: runtimeCount > 0
+        ? 'Desktop-managed runtimes continue in the background.'
+        : 'No Desktop-managed runtime continues in the background.',
+      tone: runtimeCount > 0 ? 'success' : 'neutral',
+    },
+  ];
+  if (externalRuntimeCount > 0) {
+    summaryItems.push({
+      value: String(externalRuntimeCount),
+      label: externalRuntimeCount === 1 ? 'Runtime unchanged' : 'Runtimes unchanged',
+      detail: 'Externally managed runtimes are not affected by this window close.',
+      tone: 'success',
+    });
   }
-
-  if (runtimeCount > 0) {
-    detailLines.push('');
-    detailLines.push(
-      runtimeCount === 1
-        ? 'This environment will keep running until you quit Redeven Desktop:'
-        : 'These environments will keep running until you quit Redeven Desktop:',
-    );
-    detailLines.push(...formatRuntimeLabels(impact.desktop_owned_runtimes));
-  }
-
-  detailLines.push('');
-  detailLines.push('Reopen the launcher from the Dock or the Redeven Desktop app menu.');
 
   return {
     title: 'Close the Last Window?',
-    message: 'Close the Last Window?',
-    detail: detailLines.join('\n'),
-    buttons: ['Cancel', 'Close Window'],
-    default_id: 1,
-    cancel_id: 0,
+    eyebrow: 'Redeven Desktop',
+    heading: 'Close the Last Window?',
+    message,
+    impact_label: runtimeCount > 0 ? 'Background activity' : 'Window visibility',
+    confirm_label: 'Close Window',
+    cancel_label: 'Keep Window Open',
+    confirm_tone: 'warning',
+    summary_items: summaryItems,
+    runtime_section_title: runtimeCount > 0 ? 'Still running after the window closes' : undefined,
+    runtime_section_body: runtimeCount > 0
+      ? runtimeCount === 1
+        ? 'This environment will keep running until you quit Redeven Desktop.'
+        : 'These environments will keep running until you quit Redeven Desktop.'
+      : undefined,
+    runtime_preview: runtimePreview.items,
+    runtime_overflow_count: runtimePreview.overflow_count,
+    callout: {
+      eyebrow: 'Reopen later',
+      body: 'Redeven Desktop stays active after the final macOS window closes. Reopen the launcher from the Dock or the Redeven Desktop app menu.',
+      tone: 'info',
+    },
+    footnote: 'Press Esc to keep the window open, or Cmd/Ctrl+Enter to close it.',
   };
 }

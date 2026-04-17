@@ -6,14 +6,18 @@ import { pathToFileURL } from 'node:url';
 import { attachManagedRuntimeFromStateFile, startManagedRuntime } from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
-  buildDesktopLastWindowCloseDialogCopy,
-  buildDesktopQuitDialogCopy,
+  buildDesktopLastWindowCloseConfirmationModel,
+  buildDesktopQuitConfirmationModel,
   buildDesktopQuitImpact,
   shouldConfirmDesktopLastWindowClose,
   shouldConfirmDesktopQuit,
   type DesktopQuitImpact,
   type DesktopQuitSource,
 } from './desktopQuitImpact';
+import {
+  showDesktopConfirmationDialog,
+  type DesktopConfirmationDialogModel,
+} from './desktopConfirmation';
 import {
   describeManagedEnvironmentLocalBindConflict,
   createSafeStorageSecretCodec,
@@ -781,34 +785,6 @@ async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {
   });
 }
 
-function quitDialogOptions(impact: DesktopQuitImpact): MessageBoxOptions {
-  const copy = buildDesktopQuitDialogCopy(impact);
-  return {
-    type: 'question',
-    buttons: [...copy.buttons],
-    defaultId: copy.default_id,
-    cancelId: copy.cancel_id,
-    title: copy.title,
-    message: copy.message,
-    detail: copy.detail,
-    normalizeAccessKeys: true,
-  };
-}
-
-function finalWindowCloseDialogOptions(impact: DesktopQuitImpact): MessageBoxOptions {
-  const copy = buildDesktopLastWindowCloseDialogCopy(impact);
-  return {
-    type: 'question',
-    buttons: [...copy.buttons],
-    defaultId: copy.default_id,
-    cancelId: copy.cancel_id,
-    title: copy.title,
-    message: copy.message,
-    detail: copy.detail,
-    normalizeAccessKeys: true,
-  };
-}
-
 function requestImmediateQuit(): void {
   if (quitPhase === 'requested' || quitPhase === 'shutting_down') {
     app.quit();
@@ -816,6 +792,22 @@ function requestImmediateQuit(): void {
   }
   quitPhase = 'requested';
   app.quit();
+}
+
+async function confirmDesktopImpact(
+  model: DesktopConfirmationDialogModel,
+  parentWindow: BrowserWindow | null | undefined,
+): Promise<boolean> {
+  const liveParentWindow = parentWindow && !parentWindow.isDestroyed()
+    ? parentWindow
+    : currentParentWindow();
+  const result = await showDesktopConfirmationDialog({
+    model,
+    resolvedTheme: desktopThemeState().getSnapshot().resolvedTheme,
+    parentWindow: liveParentWindow,
+    platform: process.platform,
+  });
+  return result === 'confirm';
 }
 
 async function requestFinalWindowClose(
@@ -828,8 +820,11 @@ async function requestFinalWindowClose(
   const impact = await buildCurrentDesktopQuitImpact();
   if (shouldConfirmDesktopLastWindowClose(impact)) {
     try {
-      const result = await dialog.showMessageBox(win, finalWindowCloseDialogOptions(impact));
-      if (result.response !== 1) {
+      const confirmed = await confirmDesktopImpact(
+        buildDesktopLastWindowCloseConfirmationModel(impact),
+        win,
+      );
+      if (!confirmed) {
         return;
       }
     } catch {
@@ -856,14 +851,11 @@ async function requestQuit(
   if (shouldConfirmDesktopQuit(impact, source)) {
     quitPhase = 'confirming';
     try {
-      const options = quitDialogOptions(impact);
-      const liveParentWindow = parentWindow && !parentWindow.isDestroyed()
-        ? parentWindow
-        : currentParentWindow();
-      const result = liveParentWindow
-        ? await dialog.showMessageBox(liveParentWindow, options)
-        : await dialog.showMessageBox(options);
-      if (result.response !== 1) {
+      const confirmed = await confirmDesktopImpact(
+        buildDesktopQuitConfirmationModel(impact),
+        parentWindow,
+      );
+      if (!confirmed) {
         quitPhase = 'idle';
         return;
       }
