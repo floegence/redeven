@@ -22,14 +22,13 @@ export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launch
 export type DesktopTargetKind = 'managed_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'managed_environment' | 'remote_environment' | 'startup';
-export type DesktopLauncherSurface = 'connect_environment' | 'managed_environment_settings';
+export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings';
 export type DesktopEnvironmentEntryKind = 'managed_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Recent' | 'Saved' | 'Managed' | '';
 export type DesktopEnvironmentEntryCategory = 'managed' | 'provider' | 'open_unsaved' | DesktopSavedEnvironmentSource;
 export type DesktopManagedEnvironmentRoute = 'local_host' | 'remote_desktop';
 export type DesktopManagedLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
 export type DesktopManagedLocalCloseBehavior = 'stops_runtime' | 'detaches' | 'not_applicable';
-export type DesktopProviderLocalServeState = 'absent' | 'saved' | 'opening' | 'open' | 'blocked';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
@@ -67,6 +66,7 @@ export type DesktopLauncherActionFailureCode =
   | 'action_invalid';
 export type DesktopLauncherActionKind =
   | 'open_managed_environment'
+  | 'open_provider_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'start_environment_runtime'
@@ -78,13 +78,12 @@ export type DesktopLauncherActionKind =
   | 'set_provider_environment_pinned'
   | 'set_saved_environment_pinned'
   | 'set_saved_ssh_environment_pinned'
-  | 'open_managed_environment_settings'
+  | 'open_environment_settings'
   | 'focus_environment_window'
-  | 'open_control_plane_environment'
   | 'refresh_control_plane'
   | 'delete_control_plane'
   | 'upsert_managed_environment'
-  | 'upsert_provider_local_serve'
+  | 'upsert_provider_environment_local_runtime'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
   | 'delete_managed_environment'
@@ -149,6 +148,10 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_local_ui_bind?: string;
   provider_local_ui_password_configured?: boolean;
   provider_local_owner?: 'desktop' | 'agent' | 'unknown';
+  provider_preferred_open_route?: 'auto' | DesktopManagedEnvironmentRoute;
+  provider_default_open_route?: DesktopManagedEnvironmentRoute;
+  provider_effective_window_route?: DesktopManagedEnvironmentRoute | '';
+  provider_local_runtime_configured?: boolean;
   provider_local_runtime_state?: DesktopManagedLocalRuntimeState;
   provider_local_runtime_url?: string;
   provider_local_close_behavior?: DesktopManagedLocalCloseBehavior;
@@ -164,8 +167,6 @@ export type DesktopEnvironmentEntry = Readonly<{
   remote_route_state?: DesktopProviderRemoteRouteState;
   remote_catalog_freshness?: DesktopProviderCatalogFreshness;
   remote_state_reason?: string;
-  provider_local_serve_environment_id?: string;
-  provider_local_serve_state?: DesktopProviderLocalServeState;
   ssh_details?: DesktopSSHEnvironmentDetails;
   pinned: boolean;
   control_plane_label?: string;
@@ -204,6 +205,11 @@ export type DesktopLauncherActionRequest = Readonly<
       route?: 'auto' | DesktopManagedEnvironmentRoute;
     }
   | {
+      kind: 'open_provider_environment';
+      environment_id: string;
+      route?: 'auto' | DesktopManagedEnvironmentRoute;
+    }
+  | {
       kind: 'open_remote_environment';
       external_local_ui_url: string;
       environment_id?: string;
@@ -238,9 +244,7 @@ export type DesktopLauncherActionRequest = Readonly<
     }
   | {
       kind: 'set_provider_environment_pinned';
-      provider_origin: string;
-      provider_id: string;
-      env_public_id: string;
+      environment_id: string;
       pinned: boolean;
     }
   | {
@@ -258,18 +262,12 @@ export type DesktopLauncherActionRequest = Readonly<
     }
     & DesktopSSHEnvironmentDetails)
   | {
-      kind: 'open_managed_environment_settings';
+      kind: 'open_environment_settings';
       environment_id: string;
     }
   | {
       kind: 'focus_environment_window';
       session_key: string;
-    }
-  | {
-      kind: 'open_control_plane_environment';
-      provider_origin: string;
-      provider_id: string;
-      env_public_id: string;
     }
   | {
       kind: 'refresh_control_plane';
@@ -291,15 +289,12 @@ export type DesktopLauncherActionRequest = Readonly<
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
     }
   | {
-      kind: 'upsert_provider_local_serve';
-      environment_id?: string;
+      kind: 'upsert_provider_environment_local_runtime';
+      environment_id: string;
       label: string;
       local_ui_bind: string;
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
-      provider_origin: string;
-      provider_id: string;
-      env_public_id: string;
     }
   | {
       kind: 'upsert_saved_environment';
@@ -333,7 +328,7 @@ export type DesktopLauncherActionSuccess = Readonly<{
   ok: true;
   outcome: DesktopLauncherActionOutcome;
   session_key?: string;
-  utility_window_kind?: 'launcher' | 'managed_environment_settings';
+  utility_window_kind?: 'launcher' | 'environment_settings';
 }>;
 
 export type DesktopLauncherActionFailure = Readonly<{
@@ -434,7 +429,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'close_launcher_or_quit':
       return { kind };
     case 'open_managed_environment':
-    case 'open_managed_environment_settings': {
+    case 'open_provider_environment':
+    case 'open_environment_settings': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
         return null;
@@ -442,7 +438,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         environment_id: environmentID,
-        ...(kind === 'open_managed_environment'
+        ...((kind === 'open_managed_environment' || kind === 'open_provider_environment')
           ? {
               route: (() => {
                 const route = compact((candidate as { route?: unknown }).route);
@@ -521,23 +517,15 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       };
     }
     case 'set_provider_environment_pinned': {
-      const providerOriginRaw = compact((candidate as { provider_origin?: unknown }).provider_origin);
-      const providerID = compact((candidate as { provider_id?: unknown }).provider_id);
-      const envPublicID = compact((candidate as { env_public_id?: unknown }).env_public_id);
-      if (providerOriginRaw === '' || providerID === '' || envPublicID === '') {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
         return null;
       }
-      try {
-        return {
-          kind,
-          provider_origin: normalizeControlPlaneOrigin(providerOriginRaw),
-          provider_id: providerID,
-          env_public_id: envPublicID,
-          pinned: (candidate as { pinned?: unknown }).pinned === true,
-        };
-      } catch {
-        return null;
-      }
+      return {
+        kind,
+        environment_id: environmentID,
+        pinned: (candidate as { pinned?: unknown }).pinned === true,
+      };
     }
     case 'set_saved_environment_pinned': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
@@ -587,30 +575,21 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         ) as 'keep' | 'replace' | 'clear',
       };
     }
-    case 'upsert_provider_local_serve': {
-      const providerOriginRaw = compact((candidate as { provider_origin?: unknown }).provider_origin);
-      const providerID = compact((candidate as { provider_id?: unknown }).provider_id);
-      const envPublicID = compact((candidate as { env_public_id?: unknown }).env_public_id);
-      if (providerOriginRaw === '' || providerID === '' || envPublicID === '') {
+    case 'upsert_provider_environment_local_runtime': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
         return null;
       }
-      try {
-        return {
-          kind,
-          environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
-          label: compact((candidate as { label?: unknown }).label),
-          local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
-          local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
-          local_ui_password_mode: compact(
-            (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
-          ) as 'keep' | 'replace' | 'clear',
-          provider_origin: normalizeControlPlaneOrigin(providerOriginRaw),
-          provider_id: providerID,
-          env_public_id: envPublicID,
-        };
-      } catch {
-        return null;
-      }
+      return {
+        kind,
+        environment_id: environmentID,
+        label: compact((candidate as { label?: unknown }).label),
+        local_ui_bind: compact((candidate as { local_ui_bind?: unknown }).local_ui_bind),
+        local_ui_password: String((candidate as { local_ui_password?: unknown }).local_ui_password ?? ''),
+        local_ui_password_mode: compact(
+          (candidate as { local_ui_password_mode?: unknown }).local_ui_password_mode,
+        ) as 'keep' | 'replace' | 'clear',
+      };
     }
     case 'focus_environment_window': {
       const sessionKey = compact((candidate as { session_key?: unknown }).session_key);
@@ -622,7 +601,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         session_key: sessionKey,
       };
     }
-    case 'open_control_plane_environment':
     case 'refresh_control_plane':
     case 'delete_control_plane': {
       const providerOrigin = compact((candidate as { provider_origin?: unknown }).provider_origin);
@@ -630,22 +608,10 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (providerOrigin === '' || providerID === '') {
         return null;
       }
-      if (kind === 'delete_control_plane' || kind === 'refresh_control_plane') {
-        return {
-          kind,
-          provider_origin: providerOrigin,
-          provider_id: providerID,
-        };
-      }
-      const envPublicID = compact((candidate as { env_public_id?: unknown }).env_public_id);
-      if (envPublicID === '') {
-        return null;
-      }
       return {
         kind,
         provider_origin: providerOrigin,
         provider_id: providerID,
-        env_public_id: envPublicID,
       };
     }
     case 'upsert_saved_environment':

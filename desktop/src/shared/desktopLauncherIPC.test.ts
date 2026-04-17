@@ -17,10 +17,10 @@ describe('desktopLauncherIPC', () => {
       route: 'auto',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'open_managed_environment_settings',
+      kind: 'open_environment_settings',
       environment_id: ' local:default ',
     })).toEqual({
-      kind: 'open_managed_environment_settings',
+      kind: 'open_environment_settings',
       environment_id: 'local:default',
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -49,24 +49,19 @@ describe('desktopLauncherIPC', () => {
       local_ui_password_mode: 'replace',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_provider_local_serve',
+      kind: 'upsert_provider_environment_local_runtime',
+      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
       label: ' Demo ',
       local_ui_bind: ' localhost:23998 ',
       local_ui_password: ' secret ',
       local_ui_password_mode: ' replace ',
-      provider_origin: ' https://cp.example.invalid/root ',
-      provider_id: ' redeven_portal ',
-      env_public_id: ' env_demo ',
     })).toEqual({
-      kind: 'upsert_provider_local_serve',
-      environment_id: undefined,
+      kind: 'upsert_provider_environment_local_runtime',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       label: 'Demo',
       local_ui_bind: 'localhost:23998',
       local_ui_password: ' secret ',
       local_ui_password_mode: 'replace',
-      provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
-      env_public_id: 'env_demo',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_remote_environment',
@@ -131,15 +126,11 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_provider_environment_pinned',
-      provider_origin: ' https://cp.example.invalid/root ',
-      provider_id: ' redeven_portal ',
-      env_public_id: ' env_demo ',
+      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
       pinned: true,
     })).toEqual({
       kind: 'set_provider_environment_pinned',
-      provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
-      env_public_id: 'env_demo',
+      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
       pinned: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -235,14 +226,11 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'stop_environment_runtime', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_provider_local_serve',
-      provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
+      kind: 'upsert_provider_environment_local_runtime',
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_provider_environment_pinned',
-      provider_origin: 'https://cp.example.invalid',
-      provider_id: 'redeven_portal',
+      environment_id: '   ',
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_managed_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();

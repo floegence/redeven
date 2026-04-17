@@ -8,6 +8,7 @@ import type {
   DesktopManagedEnvironment,
   DesktopManagedEnvironmentRuntimeState,
 } from '../shared/desktopManagedEnvironment';
+import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
 
 const DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS = 200;
 
@@ -66,22 +67,29 @@ function currentRuntimeFromLocalSession(
   );
 }
 
-async function currentRuntimeFromProbe(
-  environment: DesktopManagedEnvironment,
+async function currentRuntimeFromProbeStateDir(
+  stateDir: string,
   probeTimeoutMs: number,
 ): Promise<DesktopManagedEnvironmentRuntimeState | undefined> {
-  const stateDir = compact(environment.local_hosting?.state_dir);
-  if (stateDir === '') {
+  const cleanStateDir = compact(stateDir);
+  if (cleanStateDir === '') {
     return undefined;
   }
   const startup = await loadAttachableRuntimeState(
-    path.join(stateDir, 'runtime', 'local-ui.json'),
+    path.join(cleanStateDir, 'runtime', 'local-ui.json'),
     probeTimeoutMs,
   );
   if (!startup) {
     return undefined;
   }
   return runtimeStateFromStartup(startup, startup.desktop_managed === true);
+}
+
+async function currentRuntimeFromProbe(
+  environment: DesktopManagedEnvironment,
+  probeTimeoutMs: number,
+): Promise<DesktopManagedEnvironmentRuntimeState | undefined> {
+  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', probeTimeoutMs);
 }
 
 function withCurrentRuntime(
@@ -114,6 +122,36 @@ function withCurrentRuntime(
   };
 }
 
+function withCurrentRuntimeForProviderEnvironment(
+  environment: DesktopProviderEnvironmentRecord,
+  currentRuntime: DesktopManagedEnvironmentRuntimeState | undefined,
+): DesktopProviderEnvironmentRecord {
+  if (!environment.local_runtime) {
+    return environment;
+  }
+  const existingRuntime = environment.local_runtime.current_runtime;
+  const existingURL = compact(existingRuntime?.local_ui_url);
+  const nextURL = compact(currentRuntime?.local_ui_url);
+  if (
+    existingURL === nextURL
+    && (existingRuntime?.desktop_managed ?? false) === (currentRuntime?.desktop_managed ?? false)
+    && (existingRuntime?.password_required ?? false) === (currentRuntime?.password_required ?? false)
+    && (existingRuntime?.effective_run_mode ?? '') === (currentRuntime?.effective_run_mode ?? '')
+    && (existingRuntime?.remote_enabled ?? false) === (currentRuntime?.remote_enabled ?? false)
+    && (existingRuntime?.diagnostics_enabled ?? false) === (currentRuntime?.diagnostics_enabled ?? false)
+    && (existingRuntime?.pid ?? 0) === (currentRuntime?.pid ?? 0)
+  ) {
+    return environment;
+  }
+  return {
+    ...environment,
+    local_runtime: {
+      ...environment.local_runtime,
+      current_runtime: currentRuntime,
+    },
+  };
+}
+
 export async function hydrateWelcomeManagedEnvironmentRuntimeState(
   preferences: DesktopPreferences,
   openSessions: readonly DesktopSessionSummary[],
@@ -133,8 +171,19 @@ export async function hydrateWelcomeManagedEnvironmentRuntimeState(
       return withCurrentRuntime(environment, currentRuntime);
     }),
   );
+  const nextProviderEnvironments = await Promise.all(
+    preferences.provider_environments.map(async (environment) => {
+      if (!environment.local_runtime) {
+        return environment;
+      }
+      const currentRuntime = currentRuntimeFromLocalSession(localSessionsByEnvironmentID.get(environment.id))
+        ?? await currentRuntimeFromProbeStateDir(environment.local_runtime.scope.state_dir, probeTimeoutMs);
+      return withCurrentRuntimeForProviderEnvironment(environment, currentRuntime);
+    }),
+  );
   return {
     ...preferences,
     managed_environments: nextManagedEnvironments,
+    provider_environments: nextProviderEnvironments,
   };
 }

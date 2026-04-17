@@ -411,11 +411,11 @@ describe('desktopWelcomeState', () => {
       preferences: testDesktopPreferences({
         managed_environments: [managedLocal],
       }),
-      surface: 'managed_environment_settings',
-      selectedManagedEnvironmentID: managedLocal.id,
+      surface: 'environment_settings',
+      selectedEnvironmentID: managedLocal.id,
     });
 
-    expect(snapshot.surface).toBe('managed_environment_settings');
+    expect(snapshot.surface).toBe('environment_settings');
     expect(snapshot.close_action_label).toBe('Quit');
     expect(snapshot.settings_surface.window_title).toBe('Local Default Environment Settings');
     expect(snapshot.settings_surface.save_label).toBe('Save Local Default Environment Settings');
@@ -453,8 +453,8 @@ describe('desktopWelcomeState', () => {
       openSessions: [
         testManagedSession(managedLocal, 'http://localhost:23998/'),
       ],
-      surface: 'managed_environment_settings',
-      selectedManagedEnvironmentID: managedLocal.id,
+      surface: 'environment_settings',
+      selectedEnvironmentID: managedLocal.id,
     });
 
     expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
@@ -554,9 +554,10 @@ describe('desktopWelcomeState', () => {
       open_remote_session_key: remoteTarget.session_key,
       open_session_key: localTarget.session_key,
       local_ui_url: 'http://localhost:23998/',
+      provider_effective_window_route: 'local_host',
+      provider_local_runtime_configured: true,
       provider_local_runtime_state: 'running_desktop',
       provider_local_runtime_url: 'http://localhost:23998/',
-      provider_local_serve_state: 'open',
       runtime_health: expect.objectContaining({
         status: 'online',
         source: 'local_runtime_probe',
@@ -672,8 +673,8 @@ describe('desktopWelcomeState', () => {
       label: 'Demo Environment',
       provider_id: testProvider.provider_id,
       category: 'provider',
-      provider_local_serve_environment_id: legacyEnvironment.id,
-      provider_local_serve_state: 'saved',
+      provider_local_runtime_configured: true,
+      provider_local_runtime_state: 'not_running',
       can_edit: true,
       can_delete: true,
     }));
@@ -737,8 +738,8 @@ describe('desktopWelcomeState', () => {
         id: managedControlPlane.id,
         kind: 'provider_environment',
         control_plane_sync_state: 'ready',
-        provider_local_serve_environment_id: managedControlPlane.id,
-        provider_local_serve_state: 'saved',
+        provider_local_runtime_configured: true,
+        provider_local_runtime_state: 'not_running',
         remote_route_state: 'offline',
         remote_catalog_freshness: 'fresh',
         remote_state_reason: 'The provider currently reports this environment as offline.',
@@ -798,8 +799,8 @@ describe('desktopWelcomeState', () => {
       && entry.id === managedControlPlane.id
     ))).toEqual(expect.objectContaining({
       id: managedControlPlane.id,
-      provider_local_serve_environment_id: managedControlPlane.id,
-      provider_local_serve_state: 'saved',
+      provider_local_runtime_configured: true,
+      provider_local_runtime_state: 'not_running',
       remote_route_state: 'removed',
       remote_state_reason: 'This environment is no longer published by the provider.',
     }));

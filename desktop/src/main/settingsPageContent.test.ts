@@ -29,7 +29,7 @@ describe('settingsPageContent', () => {
   });
 
   it('derives shared local network mode and describes the next start address', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', draft({
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({
       local_ui_bind: '0.0.0.0:23998',
     }), settingsOptions());
 
@@ -53,7 +53,7 @@ describe('settingsPageContent', () => {
   });
 
   it('treats non-preset binds as custom exposure', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', draft({
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({
       local_ui_bind: '10.0.0.12:25000',
       local_ui_password: 'secret',
     }), settingsOptions());
@@ -76,7 +76,7 @@ describe('settingsPageContent', () => {
   });
 
   it('treats a configured stored password as write-only keep state', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', draft({
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password_mode: 'keep',
     }), settingsOptions({
@@ -90,7 +90,7 @@ describe('settingsPageContent', () => {
   });
 
   it('describes replacing a stored password before save', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', draft({
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({
       local_ui_bind: '0.0.0.0:23998',
       local_ui_password: 'next-secret',
     }), settingsOptions({
@@ -102,7 +102,7 @@ describe('settingsPageContent', () => {
   });
 
   it('explains when the current runtime needs a password that Desktop has not stored yet', () => {
-    const snapshot = buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', draft({
+    const snapshot = buildDesktopSettingsSurfaceSnapshot('environment_settings', draft({
       local_ui_bind: '0.0.0.0:23998',
     }), settingsOptions({
       runtime_password_required: true,

@@ -2,6 +2,7 @@ import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './laun
 import {
   desktopPreferencesToDraft,
   findManagedEnvironmentByID,
+  findProviderEnvironmentByID,
   type DesktopSavedEnvironment,
   type DesktopSavedSSHEnvironment,
   type DesktopPreferences,
@@ -29,7 +30,6 @@ import {
 } from '../shared/desktopSSH';
 import {
   createManagedLocalEnvironment,
-  desktopManagedControlPlaneEnvironmentID,
   isDefaultLocalManagedEnvironment,
   managedEnvironmentKind,
   managedEnvironmentLocalAccess,
@@ -42,6 +42,10 @@ import {
   managedEnvironmentSupportsRemoteDesktop,
   type DesktopManagedEnvironment,
 } from '../shared/desktopManagedEnvironment';
+import {
+  providerEnvironmentLocalAccess,
+  type DesktopProviderEnvironmentRecord,
+} from '../shared/desktopProviderEnvironment';
 import {
   desktopProviderCatalogFreshness,
   desktopProviderRemoteRouteState,
@@ -60,7 +64,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   surface?: DesktopLauncherSurface;
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
-  selectedManagedEnvironmentID?: string;
+  selectedEnvironmentID?: string;
 }>;
 
 function diagnosticsLines(lines: readonly string[]): string {
@@ -316,30 +320,18 @@ function openSessionsByManagedEnvironment(
   return out;
 }
 
-function openSessionByProviderEnvironment(
+function openSessionsByProviderEnvironment(
   sessions: readonly DesktopSessionSummary[],
-  providerOrigin: string,
-  envPublicID: string,
-): DesktopSessionSummary | null {
-  const environmentID = desktopManagedControlPlaneEnvironmentID(providerOrigin, envPublicID);
-  return sessions.find((session) => (
-    session.target.kind === 'managed_environment'
-    && session.target.route === 'remote_desktop'
-    && session.target.environment_id === environmentID
-  )) ?? null;
-}
-
-function providerEnvironmentPreference(
-  preferences: DesktopPreferences,
-  providerOrigin: string,
-  providerID: string,
-  envPublicID: string,
-): DesktopPreferences['provider_environment_preferences'][number] | null {
-  return preferences.provider_environment_preferences.find((preference) => (
-    preference.provider_origin === providerOrigin
-    && preference.provider_id === providerID
-    && preference.env_public_id === envPublicID
-  )) ?? null;
+  environmentID: string,
+): Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>> {
+  const out: Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>> = {};
+  for (const session of sessions) {
+    if (session.target.kind !== 'managed_environment' || session.target.environment_id !== environmentID) {
+      continue;
+    }
+    out[session.target.route] = session;
+  }
+  return out;
 }
 
 function fallbackControlPlaneSummaries(
@@ -652,14 +644,6 @@ function buildManagedEnvironmentEntry(
   };
 }
 
-function providerIdentityKey(
-  providerOrigin: string,
-  providerID: string,
-  envPublicID: string,
-): string {
-  return [compact(providerOrigin), compact(providerID), compact(envPublicID)].join('\u0000');
-}
-
 function providerRemoteStateReason(remoteRouteState: DesktopProviderRemoteRouteState): string {
   switch (remoteRouteState) {
     case 'ready':
@@ -707,33 +691,26 @@ function offlineRuntimeHealthForProviderRoute(
   }
 }
 
-type ProviderEnvironmentCardSource = Readonly<{
-  provider_origin: string;
-  provider_id: string;
-  env_public_id: string;
-  control_plane: DesktopControlPlaneSummary | null;
-  provider_environment: DesktopControlPlaneSummary['environments'][number] | null;
-  local_serve_environment: DesktopManagedEnvironment | null;
-  preference: DesktopPreferences['provider_environment_preferences'][number] | null;
-}>;
-
-function buildProviderEnvironmentEntry(
-  source: ProviderEnvironmentCardSource,
-  openSessions: readonly DesktopSessionSummary[],
-): DesktopEnvironmentEntry {
-  const {
-    control_plane: controlPlane,
-    provider_environment: providerEnvironment,
-    local_serve_environment: localServeEnvironment,
-    preference,
-    provider_origin: providerOrigin,
-    provider_id: providerID,
-    env_public_id: envPublicID,
-  } = source;
-  const remoteSession = openSessionByProviderEnvironment(
-    openSessions,
-    providerOrigin,
-    envPublicID,
+function providerEnvironmentRouteDetails(
+  environment: DesktopProviderEnvironmentRecord,
+  controlPlanes: readonly DesktopControlPlaneSummary[],
+): Readonly<{
+  controlPlane: DesktopControlPlaneSummary | null;
+  providerEnvironment: DesktopControlPlaneSummary['environments'][number] | null;
+  remoteRouteState: DesktopProviderRemoteRouteState;
+  remoteCatalogFreshness: DesktopProviderCatalogFreshness;
+  remoteStateReason: string;
+}> {
+  const controlPlane = controlPlaneSummaryByIdentity(
+    controlPlanes,
+    environment.provider_origin,
+    environment.provider_id,
+  );
+  const providerEnvironment = controlPlaneEnvironmentSummary(
+    controlPlanes,
+    environment.provider_origin,
+    environment.provider_id,
+    environment.env_public_id,
   );
   const remoteRouteState = controlPlane
     ? desktopProviderRemoteRouteState({
@@ -745,115 +722,179 @@ function buildProviderEnvironmentEntry(
       lastSyncedAtMS: controlPlane.last_synced_at_ms,
     })
     : 'auth_required';
-  const remoteStateReason = providerRemoteStateReason(remoteRouteState);
-  const remoteRuntimeHealth = providerEnvironment
-    ? providerEnvironmentRuntimeHealth(providerEnvironment)
-    : offlineRuntimeHealthForProviderRoute(remoteRouteState, remoteStateReason);
-  const localServeSessions: Readonly<Partial<Record<DesktopManagedEnvironmentRoute, DesktopSessionSummary>>> = localServeEnvironment
-    ? openSessionsByManagedEnvironment(openSessions, localServeEnvironment)
-    : {};
-  const localServeSession = localServeSessions.local_host ?? null;
-  const localServeAccess = localServeEnvironment ? managedEnvironmentLocalAccess(localServeEnvironment) : null;
-  const localServeRuntimeState = localServeEnvironment
-    ? managedLocalRuntimeState(localServeEnvironment, localServeSession)
-    : 'not_running';
-  const localServeRuntimeURL = localServeEnvironment
-    ? managedLocalRuntimeURL(localServeEnvironment, localServeSession)
-    : '';
-  const localServeCloseBehavior = localServeEnvironment
-    ? managedLocalCloseBehavior(localServeEnvironment, localServeRuntimeState)
-    : 'not_applicable';
-  const localServeSessionOpen = sessionIsOpen(localServeSession);
-  const remoteSessionOpen = sessionIsOpen(remoteSession);
-  const localServeSessionOpening = sessionIsOpening(localServeSession);
-  const remoteSessionOpening = sessionIsOpening(remoteSession);
-  const localServeRuntimeHealth = localServeEnvironment
-    ? managedEnvironmentRuntimeHealth(localServeRuntimeState, localServeRuntimeURL)
+  return {
+    controlPlane,
+    providerEnvironment,
+    remoteRouteState,
+    remoteCatalogFreshness: controlPlane?.catalog_freshness ?? 'unknown',
+    remoteStateReason: providerRemoteStateReason(remoteRouteState),
+  };
+}
+
+function providerLocalRouteState(
+  environment: DesktopProviderEnvironmentRecord,
+  localSession: DesktopSessionSummary | null,
+): DesktopManagedLocalRouteState {
+  if (sessionIsOpen(localSession)) {
+    return 'open';
+  }
+  if (sessionIsOpening(localSession)) {
+    return 'opening';
+  }
+  return environment.local_runtime ? 'ready' : 'unavailable';
+}
+
+function providerLocalRuntimeState(
+  environment: DesktopProviderEnvironmentRecord,
+  localSession: DesktopSessionSummary | null,
+): DesktopManagedLocalRuntimeState {
+  if (!environment.local_runtime) {
+    return 'not_running';
+  }
+  if (localSession?.target.kind === 'managed_environment' && localSession.target.route === 'local_host') {
+    return localSession.runtime_lifecycle_owner === 'external'
+      ? 'running_external'
+      : 'running_desktop';
+  }
+  const currentRuntime = environment.local_runtime.current_runtime;
+  if (!currentRuntime?.local_ui_url) {
+    return 'not_running';
+  }
+  return currentRuntime.desktop_managed === true ? 'running_desktop' : 'running_external';
+}
+
+function providerLocalRuntimeURL(
+  environment: DesktopProviderEnvironmentRecord,
+  localSession: DesktopSessionSummary | null,
+): string {
+  if (localSession?.target.kind === 'managed_environment' && localSession.target.route === 'local_host') {
+    return compact(localSession.entry_url) || compact(localSession.startup?.local_ui_url);
+  }
+  return compact(environment.local_runtime?.current_runtime?.local_ui_url);
+}
+
+function providerLocalCloseBehavior(
+  environment: DesktopProviderEnvironmentRecord,
+  runtimeState: DesktopManagedLocalRuntimeState,
+): DesktopManagedLocalCloseBehavior {
+  if (!environment.local_runtime) {
+    return 'not_applicable';
+  }
+  return runtimeState === 'running_external' ? 'detaches' : 'stops_runtime';
+}
+
+function defaultProviderOpenRoute(
+  environment: DesktopProviderEnvironmentRecord,
+  localRouteState: DesktopManagedLocalRouteState,
+  remoteRouteState: DesktopProviderRemoteRouteState,
+): DesktopManagedEnvironmentRoute {
+  if (
+    environment.preferred_open_route === 'local_host'
+    && localRouteState !== 'unavailable'
+  ) {
+    return 'local_host';
+  }
+  if (
+    environment.preferred_open_route === 'remote_desktop'
+    && remoteRouteState === 'ready'
+  ) {
+    return 'remote_desktop';
+  }
+  if (localRouteState !== 'unavailable') {
+    return 'local_host';
+  }
+  return 'remote_desktop';
+}
+
+function buildProviderEnvironmentEntry(
+  environment: DesktopProviderEnvironmentRecord,
+  controlPlanes: readonly DesktopControlPlaneSummary[],
+  openSessions: readonly DesktopSessionSummary[],
+): DesktopEnvironmentEntry {
+  const sessions = openSessionsByProviderEnvironment(openSessions, environment.id);
+  const localSession = sessions.local_host ?? null;
+  const remoteSession = sessions.remote_desktop ?? null;
+  const routeDetails = providerEnvironmentRouteDetails(environment, controlPlanes);
+  const localAccess = providerEnvironmentLocalAccess(environment);
+  const localRuntimeState = providerLocalRuntimeState(environment, localSession);
+  const localRuntimeURL = providerLocalRuntimeURL(environment, localSession);
+  const localCloseBehavior = providerLocalCloseBehavior(environment, localRuntimeState);
+  const localRouteState = providerLocalRouteState(environment, localSession);
+  const localRuntimeHealth = environment.local_runtime
+    ? managedEnvironmentRuntimeHealth(localRuntimeState, localRuntimeURL)
     : null;
-  const effectiveRoute: 'local_host' | 'remote_desktop' | 'none' = (() => {
-    if (localServeSessionOpen || localServeSessionOpening) {
+  const remoteRuntimeHealth = routeDetails.providerEnvironment
+    ? providerEnvironmentRuntimeHealth(routeDetails.providerEnvironment)
+    : offlineRuntimeHealthForProviderRoute(routeDetails.remoteRouteState, routeDetails.remoteStateReason);
+  const defaultOpenRoute = defaultProviderOpenRoute(
+    environment,
+    localRouteState,
+    routeDetails.remoteRouteState,
+  );
+  const effectiveWindowRoute: DesktopManagedEnvironmentRoute | '' = (() => {
+    if (sessionIsOpen(localSession) || sessionIsOpening(localSession)) {
       return 'local_host';
     }
-    if (remoteSessionOpen || remoteSessionOpening) {
+    if (sessionIsOpen(remoteSession) || sessionIsOpening(remoteSession)) {
       return 'remote_desktop';
     }
-    if (remoteRuntimeHealth.status === 'online') {
-      return 'remote_desktop';
-    }
-    if (localServeRuntimeHealth?.status === 'online') {
-      return 'local_host';
-    }
-    return 'none';
+    return '';
   })();
-  const runtimeHealth = localServeRuntimeHealth?.status === 'online'
-    ? localServeRuntimeHealth
-    : remoteRuntimeHealth.status === 'online'
-      ? remoteRuntimeHealth
-      : remoteRuntimeHealth;
-  const effectiveWindowState = effectiveRoute === 'local_host'
-    ? environmentWindowState(localServeSession)
-    : effectiveRoute === 'remote_desktop'
-      ? environmentWindowState(remoteSession)
-      : 'closed';
-  const effectiveSession = effectiveRoute === 'local_host'
-    ? localServeSession
-    : effectiveRoute === 'remote_desktop'
+  const effectiveSession = effectiveWindowRoute === 'local_host'
+    ? localSession
+    : effectiveWindowRoute === 'remote_desktop'
       ? remoteSession
       : null;
-  const effectiveOpenActionLabel: DesktopEnvironmentEntry['open_action_label'] = effectiveWindowState === 'open'
-    ? 'Focus'
-    : effectiveWindowState === 'opening'
-      ? 'Opening…'
-      : 'Open';
-  const label = compact(providerEnvironment?.label)
-    || compact(localServeEnvironment?.label)
-    || envPublicID;
-  const remoteEnvironmentURL = compact(providerEnvironment?.environment_url);
-  const controlPlaneLabel = compact(controlPlane?.display_label) || providerOrigin;
-  const secondaryText = remoteEnvironmentURL || [controlPlaneLabel, envPublicID].filter(Boolean).join(' / ');
-  const lastUsedAtMS = Math.max(
-    preference?.last_used_at_ms ?? 0,
-    localServeEnvironment?.last_used_at_ms ?? 0,
-  );
+  const effectiveRoute = effectiveWindowRoute || defaultOpenRoute;
+  const runtimeHealth = localRuntimeHealth?.status === 'online'
+    ? localRuntimeHealth
+    : remoteRuntimeHealth.status === 'online'
+      ? remoteRuntimeHealth
+      : localRuntimeHealth ?? remoteRuntimeHealth;
+  const remoteEnvironmentURL = compact(routeDetails.providerEnvironment?.environment_url)
+    || compact(environment.remote_catalog_entry?.environment_url);
+  const controlPlaneLabel = compact(routeDetails.controlPlane?.display_label) || environment.provider_origin;
+  const label = compact(routeDetails.providerEnvironment?.label)
+    || compact(environment.label)
+    || environment.env_public_id;
+  const effectiveWindowState = effectiveSession
+    ? environmentWindowState(effectiveSession)
+    : 'closed';
   return {
-    id: desktopManagedControlPlaneEnvironmentID(
-      providerOrigin,
-      envPublicID,
-    ),
+    id: environment.id,
     kind: 'provider_environment',
     label,
     local_ui_url: effectiveRoute === 'local_host'
-      ? (localServeSession?.entry_url ?? localServeSession?.startup?.local_ui_url ?? localServeRuntimeURL)
-      : (remoteSession?.entry_url ?? remoteSession?.startup?.local_ui_url ?? remoteEnvironmentURL ?? localServeRuntimeURL),
-    secondary_text: secondaryText,
-    open_local_session_key: localServeSession?.session_key,
-    open_local_session_lifecycle: sessionLifecycle(localServeSession),
-    provider_local_ui_bind: localServeAccess?.local_ui_bind,
-    provider_local_ui_password_configured: localServeAccess?.local_ui_password_configured,
-    provider_local_owner: localServeEnvironment?.local_hosting?.owner,
-    provider_local_runtime_state: localServeRuntimeState,
-    provider_local_runtime_url: localServeRuntimeURL || undefined,
-    provider_local_close_behavior: localServeCloseBehavior,
-    provider_origin: providerOrigin,
-    provider_id: providerID,
-    env_public_id: envPublicID,
+      ? (localSession?.entry_url ?? localSession?.startup?.local_ui_url ?? localRuntimeURL)
+      : (remoteSession?.entry_url ?? remoteSession?.startup?.local_ui_url ?? remoteEnvironmentURL ?? localRuntimeURL),
+    secondary_text: remoteEnvironmentURL || [controlPlaneLabel, environment.env_public_id].filter(Boolean).join(' / '),
+    open_local_session_key: localSession?.session_key,
+    open_local_session_lifecycle: sessionLifecycle(localSession),
+    open_remote_session_key: remoteSession?.session_key,
+    open_remote_session_lifecycle: sessionLifecycle(remoteSession),
+    provider_local_ui_bind: localAccess.local_ui_bind,
+    provider_local_ui_password_configured: localAccess.local_ui_password_configured,
+    provider_local_owner: environment.local_runtime?.owner,
+    provider_preferred_open_route: environment.preferred_open_route,
+    provider_default_open_route: defaultOpenRoute,
+    provider_effective_window_route: effectiveWindowRoute,
+    provider_local_runtime_configured: Boolean(environment.local_runtime),
+    provider_local_runtime_state: localRuntimeState,
+    provider_local_runtime_url: localRuntimeURL || undefined,
+    provider_local_close_behavior: localCloseBehavior,
+    provider_origin: environment.provider_origin,
+    provider_id: environment.provider_id,
+    env_public_id: environment.env_public_id,
     remote_environment_url: remoteEnvironmentURL || undefined,
-    provider_status: providerEnvironment?.status,
-    provider_lifecycle_status: providerEnvironment?.lifecycle_status,
-    provider_last_seen_at_unix_ms: providerEnvironment?.last_seen_at_unix_ms,
-    control_plane_sync_state: controlPlane?.sync_state,
-    remote_route_state: remoteRouteState,
-    remote_catalog_freshness: controlPlane?.catalog_freshness ?? 'unknown',
-    remote_state_reason: remoteStateReason,
-    provider_local_serve_environment_id: localServeEnvironment?.id,
-    provider_local_serve_state: localServeEnvironment
-      ? localServeSessionOpen
-        ? 'open'
-        : localServeSessionOpening
-          ? 'opening'
-          : 'saved'
-      : 'absent',
-    pinned: preference?.pinned ?? localServeEnvironment?.pinned ?? false,
+    provider_status: routeDetails.providerEnvironment?.status ?? environment.remote_catalog_entry?.status,
+    provider_lifecycle_status: routeDetails.providerEnvironment?.lifecycle_status ?? environment.remote_catalog_entry?.lifecycle_status,
+    provider_last_seen_at_unix_ms: routeDetails.providerEnvironment?.last_seen_at_unix_ms ?? environment.remote_catalog_entry?.last_seen_at_unix_ms,
+    control_plane_sync_state: routeDetails.controlPlane?.sync_state,
+    local_route_state: localRouteState,
+    remote_route_state: routeDetails.remoteRouteState,
+    remote_catalog_freshness: routeDetails.remoteCatalogFreshness,
+    remote_state_reason: routeDetails.remoteStateReason,
+    pinned: environment.pinned,
     control_plane_label: controlPlaneLabel || undefined,
     tag: effectiveWindowState === 'open' ? 'Open' : 'Managed',
     category: 'provider',
@@ -861,16 +902,17 @@ function buildProviderEnvironmentEntry(
     is_open: effectiveWindowState === 'open',
     is_opening: effectiveWindowState === 'opening',
     runtime_health: runtimeHealth,
-    runtime_control_capability: 'observe_only',
-    open_remote_session_key: remoteSession?.session_key,
-    open_remote_session_lifecycle: sessionLifecycle(remoteSession),
+    runtime_control_capability: environment.local_runtime ? 'start_stop' : 'observe_only',
     open_session_key: effectiveSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(effectiveSession),
-    open_action_label: effectiveOpenActionLabel,
-    can_edit: localServeEnvironment !== null,
-    can_delete: localServeEnvironment !== null,
+    open_action_label: managedEnvironmentOpenActionLabel({
+      isOpen: effectiveWindowState === 'open',
+      isOpening: effectiveWindowState === 'opening',
+    }),
+    can_edit: true,
+    can_delete: Boolean(environment.local_runtime),
     can_save: false,
-    last_used_at_ms: lastUsedAtMS,
+    last_used_at_ms: environment.last_used_at_ms,
   };
 }
 
@@ -883,61 +925,6 @@ function buildEnvironmentEntries(
 ): readonly DesktopEnvironmentEntry[] {
   const openRemoteSessions = openSessions.filter((session) => session.target.kind === 'external_local_ui');
   const openSSHSessions = openSessions.filter((session) => session.target.kind === 'ssh_environment');
-  const providerSources = new Map<string, ProviderEnvironmentCardSource>();
-  for (const controlPlane of controlPlanes) {
-    for (const providerEnvironment of controlPlane.environments) {
-      const key = providerIdentityKey(
-        controlPlane.provider.provider_origin,
-        controlPlane.provider.provider_id,
-        providerEnvironment.env_public_id,
-      );
-      providerSources.set(key, {
-        provider_origin: controlPlane.provider.provider_origin,
-        provider_id: controlPlane.provider.provider_id,
-        env_public_id: providerEnvironment.env_public_id,
-        control_plane: controlPlane,
-        provider_environment: providerEnvironment,
-        local_serve_environment: providerSources.get(key)?.local_serve_environment ?? null,
-        preference: providerEnvironmentPreference(
-          preferences,
-          controlPlane.provider.provider_origin,
-          controlPlane.provider.provider_id,
-          providerEnvironment.env_public_id,
-        ),
-      });
-    }
-  }
-  for (const environment of preferences.managed_environments) {
-    if (managedEnvironmentKind(environment) !== 'controlplane' || !environment.local_hosting) {
-      continue;
-    }
-    const providerOrigin = managedEnvironmentProviderOrigin(environment);
-    const providerID = managedEnvironmentProviderID(environment);
-    const envPublicID = managedEnvironmentPublicID(environment);
-    if (providerOrigin === '' || providerID === '' || envPublicID === '') {
-      continue;
-    }
-    const key = providerIdentityKey(providerOrigin, providerID, envPublicID);
-    const existing = providerSources.get(key);
-    providerSources.set(key, {
-      provider_origin: providerOrigin,
-      provider_id: providerID,
-      env_public_id: envPublicID,
-      control_plane: existing?.control_plane ?? controlPlaneSummaryByIdentity(
-        controlPlanes,
-        providerOrigin,
-        providerID,
-      ) ?? null,
-      provider_environment: existing?.provider_environment ?? null,
-      local_serve_environment: environment,
-      preference: existing?.preference ?? providerEnvironmentPreference(
-        preferences,
-        providerOrigin,
-        providerID,
-        envPublicID,
-      ),
-    });
-  }
   const entries: DesktopEnvironmentEntry[] = [
     ...preferences.managed_environments
       .filter((environment) => managedEnvironmentKind(environment) === 'local')
@@ -948,8 +935,8 @@ function buildEnvironmentEntries(
           controlPlanes,
         )
       )),
-    ...[...providerSources.values()].map((source) => (
-      buildProviderEnvironmentEntry(source, openSessions)
+    ...preferences.provider_environments.map((environment) => (
+      buildProviderEnvironmentEntry(environment, controlPlanes, openSessions)
     )),
   ];
 
@@ -1184,19 +1171,54 @@ export function buildDesktopWelcomeSnapshot(
     args.savedExternalRuntimeHealth ?? {},
     args.savedSSHRuntimeHealth ?? {},
   );
-  const selectedManagedEnvironment = (
-    findManagedEnvironmentByID(preferences, args.selectedManagedEnvironmentID ?? '')
-    ?? preferences.managed_environments.find((environment) => Boolean(environment.local_hosting))
-    ?? preferences.managed_environments[0]
-    ?? createManagedLocalEnvironment('default')
-  );
-  const managedSessions = openSessionsByManagedEnvironment(openSessions, selectedManagedEnvironment);
-  const managedSession = (
-    (managedEnvironmentDefaultOpenRoute(selectedManagedEnvironment) === 'remote_desktop'
-      ? managedSessions.remote_desktop ?? managedSessions.local_host
-      : managedSessions.local_host ?? managedSessions.remote_desktop)
-    ?? null
-  );
+  const selectedEnvironmentID = args.selectedEnvironmentID ?? '';
+  const selectedManagedEnvironment = findManagedEnvironmentByID(preferences, selectedEnvironmentID);
+  const selectedProviderEnvironment = selectedManagedEnvironment
+    ? null
+    : findProviderEnvironmentByID(preferences, selectedEnvironmentID);
+  const selectedSettingsState = (() => {
+    if (selectedProviderEnvironment) {
+      const providerSessions = openSessionsByProviderEnvironment(openSessions, selectedProviderEnvironment.id);
+      const defaultRoute = defaultProviderOpenRoute(
+        selectedProviderEnvironment,
+        providerLocalRouteState(selectedProviderEnvironment, providerSessions.local_host ?? null),
+        providerEnvironmentRouteDetails(selectedProviderEnvironment, controlPlanes).remoteRouteState,
+      );
+      const providerSession = (
+        defaultRoute === 'remote_desktop'
+          ? providerSessions.remote_desktop ?? providerSessions.local_host
+          : providerSessions.local_host ?? providerSessions.remote_desktop
+      ) ?? null;
+      return {
+        environment_id: selectedProviderEnvironment.id,
+        environment_label: selectedProviderEnvironment.label,
+        environment_kind: 'controlplane' as const,
+        current_runtime_url: providerSession?.entry_url ?? providerSession?.startup?.local_ui_url ?? compact(selectedProviderEnvironment.local_runtime?.current_runtime?.local_ui_url),
+        local_ui_password_configured: providerEnvironmentLocalAccess(selectedProviderEnvironment).local_ui_password_configured,
+        runtime_password_required: providerSession?.startup?.password_required === true,
+      };
+    }
+    const managedEnvironment = (
+      selectedManagedEnvironment
+      ?? preferences.managed_environments.find((environment) => Boolean(environment.local_hosting))
+      ?? preferences.managed_environments[0]
+      ?? createManagedLocalEnvironment('default')
+    );
+    const managedSessions = openSessionsByManagedEnvironment(openSessions, managedEnvironment);
+    const managedSession = (
+      managedEnvironmentDefaultOpenRoute(managedEnvironment) === 'remote_desktop'
+        ? managedSessions.remote_desktop ?? managedSessions.local_host
+        : managedSessions.local_host ?? managedSessions.remote_desktop
+    ) ?? null;
+    return {
+      environment_id: managedEnvironment.id,
+      environment_label: managedEnvironment.label,
+      environment_kind: managedEnvironmentKind(managedEnvironment),
+      current_runtime_url: managedSession?.entry_url ?? managedSession?.startup?.local_ui_url ?? '',
+      local_ui_password_configured: managedEnvironmentLocalAccess(managedEnvironment).local_ui_password_configured,
+      runtime_password_required: managedSession?.startup?.password_required === true,
+    };
+  })();
 
   return {
     surface,
@@ -1207,13 +1229,6 @@ export function buildDesktopWelcomeSnapshot(
     control_planes: controlPlanes,
     suggested_remote_url: suggestedRemoteURL(issue, openSessions, environments),
     issue,
-    settings_surface: buildDesktopSettingsSurfaceSnapshot('managed_environment_settings', desktopPreferencesToDraft(preferences, selectedManagedEnvironment.id), {
-      environment_id: selectedManagedEnvironment.id,
-      environment_label: selectedManagedEnvironment.label,
-      environment_kind: managedEnvironmentKind(selectedManagedEnvironment),
-      current_runtime_url: managedSession?.entry_url ?? managedSession?.startup?.local_ui_url ?? '',
-      local_ui_password_configured: managedEnvironmentLocalAccess(selectedManagedEnvironment).local_ui_password_configured,
-      runtime_password_required: managedSession?.startup?.password_required === true,
-    }),
+    settings_surface: buildDesktopSettingsSurfaceSnapshot('environment_settings', desktopPreferencesToDraft(preferences, selectedSettingsState.environment_id), selectedSettingsState),
   };
 }

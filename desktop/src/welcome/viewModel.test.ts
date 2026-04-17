@@ -353,10 +353,13 @@ describe('buildEnvironmentCardModel', () => {
     const providerOnlySnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [testManagedLocalEnvironment('default')],
+        control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
     });
-    const providerOnlyEntry = providerOnlySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const providerOnlyEntry = providerOnlySnapshot.environments.find((environment) => (
+      environment.kind === 'provider_environment' && environment.env_public_id === 'env_demo'
+    ));
 
     expect(providerOnlyEntry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(providerOnlyEntry!)).toEqual({
@@ -375,11 +378,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'serve_runtime_locally',
-            label: 'Serve runtime locally',
+            id: 'set_up_local_runtime',
+            label: 'Set up local runtime…',
             action: {
               intent: 'serve_runtime_locally',
-              label: 'Serve runtime locally',
+              label: 'Set up local runtime…',
               enabled: true,
               variant: 'outline',
             },
@@ -404,18 +407,55 @@ describe('buildEnvironmentCardModel', () => {
     const savedLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
     });
     const savedLocalServeProviderEntry = savedLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
-    expect(savedLocalServeProviderEntry?.provider_local_serve_state).toBe('saved');
-    expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual(
-      buildProviderBackedEnvironmentActionModel(providerOnlyEntry!),
-    );
+    expect(savedLocalServeProviderEntry?.provider_local_runtime_state).toBe('not_running');
+    expect(buildProviderBackedEnvironmentActionModel(savedLocalServeProviderEntry!)).toEqual({
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
+      action_presentation: {
+        kind: 'split_button',
+        primary_action: {
+          intent: 'open',
+          label: 'Open',
+          enabled: false,
+          variant: 'default',
+          tooltip: 'serve the runtime first',
+        },
+        primary_action_tooltip: 'serve the runtime first',
+        menu_button_label: 'Runtime actions',
+        menu_actions: [
+          {
+            id: 'start_runtime',
+            label: 'Start runtime',
+            action: {
+              intent: 'start_runtime',
+              label: 'Start runtime',
+              enabled: true,
+              variant: 'outline',
+            },
+          },
+          {
+            id: 'refresh_runtime',
+            label: 'Refresh runtime status',
+            action: {
+              intent: 'refresh_runtime',
+              label: 'Refresh runtime status',
+              enabled: true,
+              variant: 'outline',
+            },
+          },
+        ],
+      },
+    });
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [testManagedLocalEnvironment('default'), localServe],
+        control_planes: [controlPlane],
       }),
       controlPlanes: [controlPlane],
       openSessions: [
@@ -423,7 +463,7 @@ describe('buildEnvironmentCardModel', () => {
       ],
     });
     const openLocalServeProviderEntry = openLocalServeSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
-    expect(openLocalServeProviderEntry?.provider_local_serve_state).toBe('open');
+    expect(openLocalServeProviderEntry?.provider_local_runtime_state).toBe('running_desktop');
     expect(buildProviderBackedEnvironmentActionModel(openLocalServeProviderEntry!)).toEqual({
       status_label: 'RUNTIME ONLINE',
       status_tone: 'success',
@@ -439,11 +479,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'serve_runtime_locally',
-            label: 'Serve runtime locally',
+            id: 'stop_runtime',
+            label: 'Stop runtime',
             action: {
-              intent: 'serve_runtime_locally',
-              label: 'Serve runtime locally',
+              intent: 'stop_runtime',
+              label: 'Stop runtime',
               enabled: true,
               variant: 'outline',
             },
@@ -469,6 +509,7 @@ describe('buildEnvironmentCardModel', () => {
     const readySnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         managed_environments: [testManagedLocalEnvironment('default')],
+        control_planes: [readyControlPlane],
       }),
       controlPlanes: [readyControlPlane],
     });
@@ -489,12 +530,12 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'runtime_managed_externally',
-            label: 'Runtime managed externally',
+            id: 'set_up_local_runtime',
+            label: 'Set up local runtime…',
             action: {
-              intent: 'unavailable',
-              label: 'Runtime managed externally',
-              enabled: false,
+              intent: 'serve_runtime_locally',
+              label: 'Set up local runtime…',
+              enabled: true,
               variant: 'outline',
             },
           },
@@ -548,11 +589,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'serve_runtime_locally',
-            label: 'Serve runtime locally',
+            id: 'stop_runtime',
+            label: 'Stop runtime',
             action: {
-              intent: 'serve_runtime_locally',
-              label: 'Serve runtime locally',
+              intent: 'stop_runtime',
+              label: 'Stop runtime',
               enabled: true,
               variant: 'outline',
             },
@@ -602,24 +643,24 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'serve_runtime_locally',
-            label: 'Serve runtime locally',
-            action: {
-              intent: 'serve_runtime_locally',
-              label: 'Serve runtime locally',
-              enabled: true,
-              variant: 'outline',
-            },
-          },
-          {
-            id: 'open_provider_window',
-            label: 'Open provider window',
+            id: 'open_via_control_plane',
+            label: 'Open via Control Plane',
             action: {
               intent: 'open',
-              label: 'Open provider window',
+              label: 'Open via Control Plane',
               enabled: true,
               variant: 'outline',
               route: 'remote_desktop',
+            },
+          },
+          {
+            id: 'stop_runtime',
+            label: 'Stop runtime',
+            action: {
+              intent: 'stop_runtime',
+              label: 'Stop runtime',
+              enabled: true,
+              variant: 'outline',
             },
           },
           {
@@ -671,11 +712,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
-            id: 'serve_runtime_locally',
-            label: 'Serve runtime locally',
+            id: 'stop_runtime',
+            label: 'Stop runtime',
             action: {
-              intent: 'serve_runtime_locally',
-              label: 'Serve runtime locally',
+              intent: 'stop_runtime',
+              label: 'Stop runtime',
               enabled: true,
               variant: 'outline',
             },

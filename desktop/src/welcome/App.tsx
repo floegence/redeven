@@ -116,11 +116,6 @@ import {
   type SSHConnectionDialogAdvancedState,
 } from './sshConnectionDialogState';
 import {
-  describeManagedEnvironmentBindingResolution,
-  resolveManagedEnvironmentBindingResolution,
-  type ManagedEnvironmentBindingResolutionView,
-} from './managedEnvironmentBindingResolution';
-import {
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
   compactSettingsFieldLabel,
@@ -181,6 +176,7 @@ declare global {
 type BusyAction =
   | ''
   | 'open_managed_environment'
+  | 'open_provider_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'start_environment_runtime'
@@ -189,8 +185,7 @@ type BusyAction =
   | 'refresh_all_environment_runtimes'
   | 'start_control_plane_connect'
   | 'focus_environment_window'
-  | 'open_managed_environment_settings'
-  | 'open_control_plane_environment'
+  | 'open_environment_settings'
   | 'refresh_control_plane'
   | 'set_managed_environment_pinned'
   | 'set_provider_environment_pinned'
@@ -199,7 +194,7 @@ type BusyAction =
   | 'delete_control_plane'
   | 'close_launcher_or_quit'
   | 'upsert_managed_environment'
-  | 'upsert_provider_local_serve'
+  | 'upsert_provider_environment_local_runtime'
   | 'save_settings'
   | 'save_environment'
   | 'delete_environment';
@@ -207,7 +202,6 @@ type BusyAction =
 type ManagedEnvironmentConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
   connection_kind: 'managed_environment';
-  managed_environment_variant: 'local_environment' | 'provider_local_serve';
   environment_id: string;
   label: string;
   environment_name: string;
@@ -215,10 +209,6 @@ type ManagedEnvironmentConnectionDialogState = Readonly<{
   local_ui_password: string;
   local_ui_password_mode: DesktopLocalUIPasswordMode;
   local_ui_password_configured: boolean;
-  use_control_plane_binding: boolean;
-  provider_origin: string;
-  provider_id: string;
-  env_public_id: string;
 }>;
 
 type ExternalURLConnectionDialogState = Readonly<{
@@ -413,25 +403,18 @@ function bindConflictsWithSuggestedLoopback(rawBind: string, port: number): bool
     || host.startsWith('127.');
 }
 
-function providerLocalServeEnvironmentID(environment: DesktopEnvironmentEntry): string {
-  return environment.kind === 'provider_environment'
-    ? trimString(environment.provider_local_serve_environment_id)
-    : '';
-}
-
 function deriveManagedEnvironmentScopeNameFromName(value: string): string {
   const clean = trimString(value);
   return clean === '' ? '' : normalizeDesktopLocalEnvironmentName(clean);
 }
 
 function shouldAutoSyncManagedEnvironmentScopeName(state: ManagedEnvironmentConnectionDialogState): boolean {
-  return state.use_control_plane_binding !== true
-    && state.mode === 'create'
+  return state.mode === 'create'
     && trimString(state.environment_id) === '';
 }
 
 function managedEnvironmentScopePreview(state: ManagedEnvironmentConnectionDialogState | null | undefined): string {
-  if (!state || state.use_control_plane_binding === true) {
+  if (!state) {
     return '';
   }
   const scopeName = trimString(state.environment_name) || deriveManagedEnvironmentScopeNameFromName(state.label);
@@ -528,23 +511,15 @@ function createManagedEnvironmentConnectionDialogState(
 ): ManagedEnvironmentConnectionDialogState {
   const passwordConfigured = overrides.local_ui_password_configured === true;
   const label = trimString(overrides.label);
-  const variant = overrides.managed_environment_variant === 'provider_local_serve'
-    ? 'provider_local_serve'
-    : 'local_environment';
-  const useControlPlaneBinding = overrides.use_control_plane_binding === true
-    || trimString(overrides.provider_origin) !== ''
-    || trimString(overrides.provider_id) !== ''
-    || trimString(overrides.env_public_id) !== '';
   const environmentName = trimString(overrides.environment_name);
   return {
     mode,
     connection_kind: 'managed_environment',
-    managed_environment_variant: variant,
     environment_id: trimString(overrides.environment_id),
     label,
     environment_name: environmentName !== ''
       ? environmentName
-      : (!useControlPlaneBinding && variant === 'local_environment' && mode === 'create'
+      : (mode === 'create'
         ? deriveManagedEnvironmentScopeNameFromName(label)
         : ''),
     local_ui_bind: trimString(overrides.local_ui_bind) || EMPTY_SETTINGS_DRAFT.local_ui_bind || 'localhost:23998',
@@ -554,10 +529,6 @@ function createManagedEnvironmentConnectionDialogState(
       passwordConfigured ? 'keep' : 'replace',
     ),
     local_ui_password_configured: passwordConfigured,
-    use_control_plane_binding: useControlPlaneBinding,
-    provider_origin: trimString(overrides.provider_origin),
-    provider_id: trimString(overrides.provider_id),
-    env_public_id: trimString(overrides.env_public_id),
   };
 }
 
@@ -608,7 +579,7 @@ function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'succe
 function busyActionForLauncherRequest(request: DesktopLauncherActionRequest): BusyAction {
   switch (request.kind) {
     case 'upsert_managed_environment':
-    case 'upsert_provider_local_serve':
+    case 'upsert_provider_environment_local_runtime':
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
       return 'save_environment';
@@ -819,11 +790,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const shellView = createMemo(() => buildDesktopWelcomeShellViewModel(snapshot(), visibleSurface()));
   const headerLogoSrc = createMemo(() => theme.resolvedTheme() === 'light' ? LOGO_LIGHT_URL : LOGO_DARK_URL);
   const settingsSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => snapshot().settings_surface);
-  const selectedManagedEnvironmentEntry = createMemo(() => (
-    snapshot().environments.find((environment) => (
-      environment.kind === 'managed_environment'
-      && environment.id === snapshot().settings_surface.environment_id
-    )) ?? snapshot().environments.find((environment) => environment.kind === 'managed_environment') ?? null
+  const selectedSettingsEnvironmentEntry = createMemo(() => (
+    snapshot().environments.find((environment) => environment.id === snapshot().settings_surface.environment_id)
+      ?? snapshot().environments.find((environment) => environment.kind === 'managed_environment')
+      ?? snapshot().environments.find((environment) => environment.kind === 'provider_environment')
+      ?? null
   ));
   const controlPlanes = createMemo(() => snapshot().control_planes);
   const libraryLocalEntryCount = createMemo(() => (
@@ -865,25 +836,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       librarySourceFilter(),
     )
   ));
-  const managedBindingResolution = createMemo(() => {
-    const state = connectionDialogState();
-    if (!state || state.connection_kind !== 'managed_environment') {
-      return null;
-    }
-    return describeManagedEnvironmentBindingResolution(
-      resolveManagedEnvironmentBindingResolution(state, snapshot().environments),
-      {
-        isCreate: state.mode === 'create',
-      },
-    );
-  });
   const deleteTargetIsManaged = createMemo(() => {
     const target = deleteTarget();
     if (!target) {
       return false;
     }
     return target.kind === 'managed_environment'
-      || providerLocalServeEnvironmentID(target) !== '';
+      || target.kind === 'provider_environment';
   });
 
   createEffect(() => {
@@ -1057,7 +1016,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  function openSettingsSurface(environmentID = selectedManagedEnvironmentEntry()?.id ?? ''): void {
+  function openSettingsSurface(environmentID = selectedSettingsEnvironmentEntry()?.id ?? ''): void {
     if (environmentID === '') {
       setSettingsError('Choose an environment first.');
       return;
@@ -1065,8 +1024,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     resetMessages();
     setConnectionDialogState(null);
     setControlPlaneDialogState(null);
-    setBusyAction('open_managed_environment_settings');
-    void props.runtime.launcher.performAction({ kind: 'open_managed_environment_settings', environment_id: environmentID })
+    setBusyAction('open_environment_settings');
+    void props.runtime.launcher.performAction({ kind: 'open_environment_settings', environment_id: environmentID })
       .catch((error) => {
         setSettingsError(getErrorMessage(error));
       })
@@ -1096,7 +1055,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (environment.kind !== 'provider_environment') {
         continue;
       }
-      if (providerLocalServeEnvironmentID(environment) === cleanExcludeEnvironmentID) {
+      if (trimString(environment.id) === cleanExcludeEnvironmentID) {
         continue;
       }
       const bind = trimString(environment.provider_local_ui_bind);
@@ -1136,7 +1095,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogState(
       preferredKind === 'managed_environment'
         ? createManagedEnvironmentConnectionDialogState('create', {
-          managed_environment_variant: 'local_environment',
           local_ui_bind: suggestManagedEnvironmentLocalBind(),
           local_ui_password_mode: 'replace',
         })
@@ -1150,50 +1108,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     );
   }
 
-  function openProviderLocalServeDialog(
-    environment: DesktopEnvironmentEntry,
-    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-  ): boolean {
-    if (environment.kind !== 'provider_environment') {
-      return false;
-    }
-    if (snapshot().surface !== 'connect_environment') {
-      showConnectEnvironment('Open the launcher to serve this provider environment locally.');
-      return false;
-    }
-    if (
-      trimString(environment.provider_origin) === ''
-      || trimString(environment.provider_id) === ''
-      || trimString(environment.env_public_id) === ''
-    ) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that provider environment.');
-      return false;
-    }
-
-    const localServeEnvironmentID = providerLocalServeEnvironmentID(environment);
-    setActiveCenterTab('environments');
-    setLibrarySourceFilter('');
-    resetMessages();
-    setControlPlaneDialogState(null);
-    setConnectionDialogState(createManagedEnvironmentConnectionDialogState(localServeEnvironmentID !== '' ? 'edit' : 'create', {
-      managed_environment_variant: 'provider_local_serve',
-      environment_id: localServeEnvironmentID,
-      label: trimString(environment.label),
-      local_ui_bind: trimString(environment.provider_local_ui_bind) || suggestManagedEnvironmentLocalBind(localServeEnvironmentID),
-      local_ui_password_configured: environment.provider_local_ui_password_configured === true,
-      use_control_plane_binding: true,
-      provider_origin: environment.provider_origin,
-      provider_id: environment.provider_id,
-      env_public_id: environment.env_public_id,
-    }));
-    return true;
-  }
-
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
     if (environment.kind === 'managed_environment') {
       openSettingsSurface(environment.id);
     } else if (environment.kind === 'provider_environment') {
-      openProviderLocalServeDialog(environment);
+      openSettingsSurface(environment.id);
     } else if (environment.kind === 'ssh_environment') {
       setConnectionDialogState(createSSHConnectionDialogState('edit', {
         environment_id: environment.id,
@@ -1268,80 +1187,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         display_label: current.display_label_touched
           ? current.display_label
           : suggestControlPlaneDisplayLabel(nextProviderOrigin),
-      };
-    });
-  }
-
-  function toggleManagedEnvironmentControlPlaneBinding(enabled: boolean): void {
-    setConnectionDialogState((current) => {
-      if (!current || current.connection_kind !== 'managed_environment') {
-        return current;
-      }
-      if (!enabled) {
-        return {
-          ...current,
-          use_control_plane_binding: false,
-          environment_name: trimString(current.environment_name) || deriveManagedEnvironmentScopeNameFromName(current.label),
-          provider_origin: '',
-          provider_id: '',
-          env_public_id: '',
-        };
-      }
-      const firstControlPlane = snapshot().control_planes[0] ?? null;
-      if (!firstControlPlane) {
-        return current;
-      }
-      const currentMatchesFirstControlPlane = (
-        current.provider_origin === firstControlPlane.provider.provider_origin
-        && current.provider_id === firstControlPlane.provider.provider_id
-      );
-      return {
-        ...current,
-        use_control_plane_binding: true,
-        provider_origin: firstControlPlane.provider.provider_origin,
-        provider_id: firstControlPlane.provider.provider_id,
-        env_public_id: currentMatchesFirstControlPlane ? current.env_public_id : '',
-      };
-    });
-  }
-
-  function selectManagedEnvironmentControlPlane(controlPlaneKey: string): void {
-    setConnectionDialogState((current) => {
-      if (!current || current.connection_kind !== 'managed_environment') {
-        return current;
-      }
-      const controlPlane = snapshot().control_planes.find((entry) => controlPlaneFilterValue(entry) === controlPlaneKey) ?? null;
-      if (!controlPlane) {
-        return {
-          ...current,
-          use_control_plane_binding: current.use_control_plane_binding,
-          provider_origin: '',
-          provider_id: '',
-          env_public_id: '',
-        };
-      }
-      const currentEnvironmentStillAvailable = (
-        current.provider_origin === controlPlane.provider.provider_origin
-        && current.provider_id === controlPlane.provider.provider_id
-        && controlPlane.environments.some((environment) => environment.env_public_id === current.env_public_id)
-      );
-      return {
-        ...current,
-        provider_origin: controlPlane.provider.provider_origin,
-        provider_id: controlPlane.provider.provider_id,
-        env_public_id: currentEnvironmentStillAvailable ? current.env_public_id : '',
-      };
-    });
-  }
-
-  function selectManagedEnvironmentProviderEnvironment(envPublicID: string): void {
-    setConnectionDialogState((current) => {
-      if (!current || current.connection_kind !== 'managed_environment') {
-        return current;
-      }
-      return {
-        ...current,
-        env_public_id: trimString(envPublicID),
       };
     });
   }
@@ -1495,12 +1340,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function openPrimaryManagedEnvironment(): Promise<void> {
-    const entry = selectedManagedEnvironmentEntry();
+    const entry = selectedSettingsEnvironmentEntry();
     if (!entry) {
-      setErrorMessage(visibleSurface() === 'managed_environment_settings' ? 'settings' : 'connect', 'Create a Local Environment or authorize a Control Plane first.');
+      setErrorMessage(visibleSurface() === 'environment_settings' ? 'settings' : 'connect', 'Create a Local Environment or authorize a Control Plane first.');
       return;
     }
-    await openManagedEnvironment(entry, visibleSurface() === 'managed_environment_settings' ? 'settings' : 'connect');
+    await openManagedEnvironment(entry, visibleSurface() === 'environment_settings' ? 'settings' : 'connect');
   }
 
   async function openRemoteEnvironment(
@@ -1538,54 +1383,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environment.kind !== 'provider_environment') {
       return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget);
     }
-    const localServeEnvironmentID = providerLocalServeEnvironmentID(environment);
     const openLocalSessionKey = trimString(environment.open_local_session_key);
     const openRemoteSessionKey = trimString(environment.open_remote_session_key);
-    const openSessionKey = trimString(environment.open_session_key);
-    const localRuntimeOnline = environment.provider_local_runtime_state === 'running_desktop'
-      || environment.provider_local_runtime_state === 'running_external';
-    const effectiveRoute: DesktopManagedEnvironmentRoute | null = route === 'local_host'
-      ? (localServeEnvironmentID !== '' ? 'local_host' : null)
-      : route === 'remote_desktop'
-        ? (trimString(environment.provider_origin) !== '' && trimString(environment.provider_id) !== '' && trimString(environment.env_public_id) !== ''
-          ? 'remote_desktop'
-          : null)
-        : openSessionKey !== '' && openSessionKey === openLocalSessionKey
-          ? 'local_host'
-          : openSessionKey !== '' && openSessionKey === openRemoteSessionKey
-            ? 'remote_desktop'
-            : environment.remote_route_state === 'ready'
-              ? 'remote_desktop'
-              : localServeEnvironmentID !== '' && localRuntimeOnline
-                ? 'local_host'
-                : null;
-    if (effectiveRoute === 'local_host') {
-      if (openLocalSessionKey !== '') {
-        return focusEnvironmentWindow(openLocalSessionKey, errorTarget);
-      }
-      if (localServeEnvironmentID === '') {
-        setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve the local serve for this environment.');
-        return false;
-      }
-      const result = await performLauncherAction({
-        kind: 'open_managed_environment',
-        environment_id: localServeEnvironmentID,
-        route: 'local_host',
-      }, errorTarget);
-      return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
+    if (route === 'local_host' && openLocalSessionKey !== '') {
+      return focusEnvironmentWindow(openLocalSessionKey, errorTarget);
     }
-    if (openRemoteSessionKey !== '') {
+    if (route === 'remote_desktop' && openRemoteSessionKey !== '') {
       return focusEnvironmentWindow(openRemoteSessionKey, errorTarget);
     }
-    if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that provider environment.');
-      return false;
+    if (route === 'auto' && trimString(environment.open_session_key) !== '') {
+      return focusEnvironmentWindow(trimString(environment.open_session_key), errorTarget);
     }
     const result = await performLauncherAction({
-      kind: 'open_control_plane_environment',
-      provider_origin: environment.provider_origin,
-      provider_id: environment.provider_id,
-      env_public_id: environment.env_public_id,
+      kind: 'open_provider_environment',
+      environment_id: environment.id,
+      route,
     }, errorTarget);
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
@@ -1608,29 +1420,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       };
     }
     if (environment.kind === 'provider_environment') {
-      const localServeEnvironmentID = providerLocalServeEnvironmentID(environment);
-      if (kind !== 'refresh_environment_runtime' && localServeEnvironmentID !== '') {
-        return {
-          kind,
-          environment_id: localServeEnvironmentID,
-          label: environment.label,
-        };
-      }
-      if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
-        return kind === 'refresh_environment_runtime' && localServeEnvironmentID !== ''
-          ? {
-            kind,
-            environment_id: localServeEnvironmentID,
-            label: environment.label,
-          }
-          : null;
-      }
       return {
         kind,
-        environment_id: localServeEnvironmentID || environment.id,
-        provider_origin: environment.provider_origin,
-        provider_id: environment.provider_id,
-        env_public_id: environment.env_public_id,
+        environment_id: environment.id,
         label: environment.label,
       };
     }
@@ -1717,8 +1509,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return false;
     }
 
-    if (providerLocalServeEnvironmentID(environment) === '') {
-      return openProviderLocalServeDialog(environment, errorTarget);
+    if (environment.provider_local_runtime_configured !== true) {
+      openSettingsSurface(environment.id);
+      return true;
     }
     const openLocalSessionKey = trimString(environment.open_local_session_key);
     if (openLocalSessionKey !== '') {
@@ -2048,50 +1841,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function buildManagedEnvironmentActionRequest(
     state: ManagedEnvironmentConnectionDialogState,
     errorTarget: 'connect' | 'dialog',
-  ): Extract<
-    DesktopLauncherActionRequest,
-    Readonly<{ kind: 'upsert_managed_environment' | 'upsert_provider_local_serve' }>
-  > | null {
-    const wantsControlPlaneBinding = state.use_control_plane_binding === true;
+  ): Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'upsert_managed_environment' }>> | null {
     const displayName = trimString(state.label);
-    const localEnvironmentName = wantsControlPlaneBinding
-      ? ''
-      : (
-        trimString(state.environment_name)
-        || (shouldAutoSyncManagedEnvironmentScopeName(state)
-          ? deriveManagedEnvironmentScopeNameFromName(displayName)
-          : '')
-      );
+    const localEnvironmentName = trimString(state.environment_name)
+      || (shouldAutoSyncManagedEnvironmentScopeName(state)
+        ? deriveManagedEnvironmentScopeNameFromName(displayName)
+        : '');
     if (displayName === '') {
       setErrorMessage(errorTarget, 'Name is required.');
       return null;
     }
-    if (wantsControlPlaneBinding) {
-      if (trimString(state.provider_origin) === '' || trimString(state.provider_id) === '') {
-        setErrorMessage(errorTarget, 'Connect a Control Plane first or turn off remote access for this environment.');
-        return null;
-      }
-      if (trimString(state.env_public_id) === '') {
-        setErrorMessage(errorTarget, 'Choose a Control Plane environment.');
-        return null;
-      }
-    } else if (localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')) {
+    if (localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')) {
       setErrorMessage(errorTarget, 'Name is required.');
       return null;
-    }
-
-    if (wantsControlPlaneBinding) {
-      return {
-        kind: 'upsert_provider_local_serve',
-        environment_id: state.environment_id || undefined,
-        label: displayName,
-        local_ui_bind: state.local_ui_bind,
-        local_ui_password: state.local_ui_password,
-        local_ui_password_mode: state.local_ui_password_mode,
-        provider_origin: state.provider_origin,
-        provider_id: state.provider_id,
-        env_public_id: state.env_public_id,
-      };
     }
 
     return {
@@ -2112,11 +1874,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     let saved = false;
     if (state.connection_kind === 'managed_environment') {
-      const bindingResolution = managedBindingResolution();
-      if (state.use_control_plane_binding === true && bindingResolution?.save_disabled) {
-        setConnectionDialogError(bindingResolution.description);
-        return;
-      }
       const managedRequest = buildManagedEnvironmentActionRequest(state, 'dialog');
       if (!managedRequest) {
         return;
@@ -2161,44 +1918,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     if (state.connection_kind === 'managed_environment') {
-      const bindingResolution = managedBindingResolution();
-      if (state.use_control_plane_binding === true && bindingResolution?.connect_disabled) {
-        setConnectionDialogError(bindingResolution.description);
-        return;
-      }
       const request = buildManagedEnvironmentActionRequest(state, 'dialog');
       if (!request) {
         return;
       }
-      const requestedEnvironmentName = request.kind === 'upsert_managed_environment'
-        ? trimString(request.environment_name)
-        : '';
+      const requestedEnvironmentName = trimString(request.environment_name);
       const saved = await performLauncherAction(request, 'dialog');
       if (!saved) {
         return;
       }
-      await refreshSnapshot();
-      const managedEntry = state.use_control_plane_binding === true
-        ? snapshot().environments.find((environment) => (
-          environment.kind === 'provider_environment'
-          && environment.provider_origin === trimString(state.provider_origin)
-          && environment.provider_id === trimString(state.provider_id)
-          && environment.env_public_id === trimString(state.env_public_id)
-        )) ?? null
-        : snapshot().environments.find((environment) => (
-          environment.kind === 'managed_environment'
-          && (
-            (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
-            || (requestedEnvironmentName !== '' && environment.managed_environment_name === requestedEnvironmentName)
-          )
-        )) ?? null;
+      const nextSnapshot = await props.runtime.launcher.getSnapshot();
+      setSnapshot(nextSnapshot);
+      const managedEntry = nextSnapshot.environments.find((environment) => (
+        environment.kind === 'managed_environment'
+        && (
+          (trimString(state.environment_id) !== '' && environment.id === trimString(state.environment_id))
+          || (requestedEnvironmentName !== '' && environment.managed_environment_name === requestedEnvironmentName)
+        )
+      )) ?? null;
       if (!managedEntry) {
         setConnectionDialogError('Desktop saved the environment, but could not reopen it yet.');
         return;
       }
-      const opened = state.use_control_plane_binding === true
-        ? await serveRuntimeLocally(managedEntry, 'dialog')
-        : await openManagedEnvironment(managedEntry, 'dialog');
+      const opened = await openManagedEnvironment(managedEntry, 'dialog');
       if (opened) {
         closeConnectionDialog();
       }
@@ -2235,15 +1977,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     if (environment.kind === 'provider_environment') {
-      if (!environment.provider_origin || !environment.provider_id || !environment.env_public_id) {
-        setErrorMessage('connect', 'Desktop could not resolve that provider environment.');
-        return;
-      }
       const result = await performLauncherAction({
         kind: 'set_provider_environment_pinned',
-        provider_origin: environment.provider_origin,
-        provider_id: environment.provider_id,
-        env_public_id: environment.env_public_id,
+        environment_id: environment.id,
         pinned: nextPinned,
       }, 'connect');
       if (result?.outcome === 'saved_environment') {
@@ -2297,21 +2033,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return;
     }
-    const providerLocalServeID = providerLocalServeEnvironmentID(target);
     setBusyAction('delete_environment');
     try {
       await props.runtime.launcher.performAction({
-        kind: target.kind === 'managed_environment' || providerLocalServeID !== ''
+        kind: target.kind === 'managed_environment' || target.kind === 'provider_environment'
           ? 'delete_managed_environment'
           : target.kind === 'ssh_environment'
             ? 'delete_saved_ssh_environment'
             : 'delete_saved_environment',
-        environment_id: providerLocalServeID || target.id,
+        environment_id: target.id,
       });
       await refreshSnapshot();
       setDeleteTarget(null);
       showActionToast(
-        target.kind === 'managed_environment' || providerLocalServeID !== ''
+        target.kind === 'managed_environment' || target.kind === 'provider_environment'
           ? 'Environment removed from this device.'
           : 'Connection removed from Environment Library.',
       );
@@ -2433,7 +2168,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       />
 
       <LocalEnvironmentSettingsDialog
-        open={snapshot().surface === 'managed_environment_settings'}
+        open={snapshot().surface === 'environment_settings'}
         snapshot={settingsSurface()}
         draft={draft()}
         busyAction={busyAction()}
@@ -2454,8 +2189,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         state={connectionDialogState()}
         error={connectionDialogError()}
         busyAction={busyAction()}
-        controlPlanes={snapshot().control_planes}
-        bindingResolution={managedBindingResolution()}
         onOpenChange={(open) => {
           if (!open) {
             closeConnectionDialog();
@@ -2463,10 +2196,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }}
         updateField={updateConnectionDialogField}
         switchKind={switchConnectionDialogKind}
-        toggleManagedEnvironmentControlPlaneBinding={toggleManagedEnvironmentControlPlaneBinding}
-        selectManagedEnvironmentControlPlane={selectManagedEnvironmentControlPlane}
-        selectManagedEnvironmentProviderEnvironment={selectManagedEnvironmentProviderEnvironment}
-        openCreateControlPlaneDialog={openCreateControlPlaneDialog}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
         onConnect={connectFromDialog}
         onSave={saveConnectionFromDialog}
@@ -3147,43 +2876,6 @@ function EnvironmentStatusIndicator(props: Readonly<{
   );
 }
 
-function ManagedEnvironmentBindingResolutionPanel(props: Readonly<{
-  resolution: ManagedEnvironmentBindingResolutionView;
-}>) {
-  return (
-    <div
-      class="rounded-md border px-3 py-3"
-      classList={{
-        'border-border/70 bg-background/80': props.resolution.tone === 'neutral',
-        'border-primary/20 bg-primary/[0.06]': props.resolution.tone === 'primary',
-        'border-emerald-500/20 bg-emerald-500/[0.08]': props.resolution.tone === 'success',
-        'border-amber-500/20 bg-amber-500/[0.08]': props.resolution.tone === 'warning',
-      }}
-    >
-      <div class="flex items-start gap-3">
-        <div
-          class="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border text-current"
-          classList={{
-            'border-border/70 bg-muted/30 text-muted-foreground': props.resolution.tone === 'neutral',
-            'border-primary/20 bg-primary/10 text-primary': props.resolution.tone === 'primary',
-            'border-emerald-500/20 bg-emerald-500/10 text-emerald-700': props.resolution.tone === 'success',
-            'border-amber-500/20 bg-amber-500/10 text-amber-700': props.resolution.tone === 'warning',
-          }}
-        >
-          <AlertCircle class="h-4 w-4" />
-        </div>
-        <div class="min-w-0 flex-1 space-y-1">
-          <div class="text-xs font-medium text-foreground">{props.resolution.title}</div>
-          <div class="text-[11px] leading-5 text-muted-foreground">{props.resolution.description}</div>
-          <Show when={trimString(props.resolution.detail) !== ''}>
-            <div class="text-[11px] leading-5 text-muted-foreground/90">{props.resolution.detail}</div>
-          </Show>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ConsoleActionIconButton(props: Readonly<{
   title: string;
   'aria-label': string;
@@ -3488,12 +3180,12 @@ function EnvironmentConnectionCard(props: Readonly<{
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const isWindowActionBusy = createMemo(() => (
     props.busyAction === 'open_managed_environment'
+    || props.busyAction === 'open_provider_environment'
     || props.busyAction === 'open_remote_environment'
     || props.busyAction === 'open_ssh_environment'
     || props.busyAction === 'focus_environment_window'
     || props.busyAction === 'refresh_control_plane'
     || props.busyAction === 'start_control_plane_connect'
-    || props.busyAction === 'open_control_plane_environment'
   ));
   const isRuntimeActionBusy = createMemo(() => (
     props.busyAction === 'start_environment_runtime'
@@ -3759,7 +3451,7 @@ function controlPlaneManagedEnvironmentStats(
   ));
   return {
     online_count: desktopProviderOnlineEnvironmentCount(controlPlane.environments),
-    local_host_count: matchedEntries.filter((environment) => providerLocalServeEnvironmentID(environment) !== '').length,
+    local_host_count: matchedEntries.filter((environment) => environment.provider_local_runtime_configured === true).length,
     open_count: matchedEntries.filter((environment) => environment.is_open).length,
   };
 }
@@ -4406,18 +4098,12 @@ function ConnectionDialog(props: Readonly<{
   state: ConnectionDialogState;
   error: string;
   busyAction: BusyAction;
-  controlPlanes: readonly DesktopControlPlaneSummary[];
-  bindingResolution: ManagedEnvironmentBindingResolutionView | null;
   onOpenChange: (open: boolean) => void;
   updateField: (
     name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
     value: string,
   ) => void;
   switchKind: (kind: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
-  toggleManagedEnvironmentControlPlaneBinding: (enabled: boolean) => void;
-  selectManagedEnvironmentControlPlane: (controlPlaneKey: string) => void;
-  selectManagedEnvironmentProviderEnvironment: (envPublicID: string) => void;
-  openCreateControlPlaneDialog: (message?: string) => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   onConnect: () => Promise<void>;
   onSave: () => Promise<void>;
@@ -4427,25 +4113,6 @@ function ConnectionDialog(props: Readonly<{
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'managed_environment');
   const managedEnvironmentState = createMemo(() => (
     props.state?.connection_kind === 'managed_environment' ? props.state : null
-  ));
-  const managedEnvironmentVariant = createMemo(() => (
-    managedEnvironmentState()?.managed_environment_variant ?? 'local_environment'
-  ));
-  const useControlPlaneBinding = createMemo(() => managedEnvironmentState()?.use_control_plane_binding === true);
-  const bindingResolution = createMemo(() => (
-    connectionKind() === 'managed_environment' && useControlPlaneBinding()
-      ? props.bindingResolution
-      : null
-  ));
-  const selectedControlPlaneKey = createMemo(() => {
-    const state = managedEnvironmentState();
-    if (!state || trimString(state.provider_origin) === '' || trimString(state.provider_id) === '') {
-      return '';
-    }
-    return desktopControlPlaneKey(state.provider_origin, state.provider_id);
-  });
-  const selectedControlPlane = createMemo(() => (
-    props.controlPlanes.find((entry) => controlPlaneFilterValue(entry) === selectedControlPlaneKey()) ?? null
   ));
   const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
     open: false,
@@ -4486,23 +4153,9 @@ function ConnectionDialog(props: Readonly<{
         return 'Deploy a Desktop-managed environment to a machine you can reach over SSH. Desktop reuses shared release artifacts on that host, but each Environment Instance stays isolated unless you explicitly reuse its Instance ID.';
       case 'managed_environment':
       default:
-        return managedEnvironmentVariant() === 'provider_local_serve'
-          ? 'Create a local serve runtime for this provider environment on this Mac. The provider card stays remote-first, and this local serve becomes its own separate Desktop card.'
-          : 'Run a Desktop-managed Redeven environment on this device. Local environments are created independently and are not bound directly to a provider environment.';
+        return 'Run a Desktop-managed Redeven environment on this device. Local environments are created independently and are not bound directly to a provider environment.';
     }
   });
-  const saveActionLabel = createMemo(() => (
-    managedEnvironmentVariant() === 'provider_local_serve'
-      ? 'Save Local Serve'
-      : (bindingResolution()?.save_label ?? compactSaveActionLabel())
-  ));
-  const connectActionLabel = createMemo(() => (
-    managedEnvironmentVariant() === 'provider_local_serve'
-      ? 'Serve Now'
-      : (bindingResolution()?.connect_label ?? 'Connect')
-  ));
-  const saveDisabled = createMemo(() => bindingResolution()?.save_disabled === true);
-  const connectDisabled = createMemo(() => bindingResolution()?.connect_disabled === true);
 
   createEffect(() => {
     setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(
@@ -4515,9 +4168,7 @@ function ConnectionDialog(props: Readonly<{
     <Dialog
       open={isOpen()}
       onOpenChange={props.onOpenChange}
-      title={isCreate()
-        ? (managedEnvironmentVariant() === 'provider_local_serve' ? 'Serve Runtime' : 'New Environment')
-        : 'Edit Environment'}
+      title={isCreate() ? 'New Environment' : 'Edit Environment'}
       class={CONNECTION_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
@@ -4528,13 +4179,12 @@ function ConnectionDialog(props: Readonly<{
             size="sm"
             variant={isCreate() ? 'outline' : 'default'}
             loading={props.busyAction === 'save_environment'}
-            disabled={saveDisabled()}
             onClick={() => {
               void props.onSave();
             }}
           >
             <Save class="mr-1 h-3.5 w-3.5" />
-            {saveActionLabel()}
+            {compactSaveActionLabel()}
           </Button>
           <Show when={isCreate()}>
             <Button
@@ -4545,19 +4195,18 @@ function ConnectionDialog(props: Readonly<{
                 || props.busyAction === 'open_remote_environment'
                 || props.busyAction === 'open_ssh_environment'
               }
-              disabled={connectDisabled()}
               onClick={() => {
                 void props.onConnect();
               }}
             >
-              {connectActionLabel()}
+              Connect
             </Button>
           </Show>
         </div>
       )}
     >
       <div class="space-y-4">
-        <Show when={isCreate() && managedEnvironmentVariant() !== 'provider_local_serve'}>
+        <Show when={isCreate()}>
           <div class="space-y-1.5">
             <label class="block text-xs font-medium text-foreground">Environment Type</label>
             <SegmentedControl
@@ -4577,9 +4226,7 @@ function ConnectionDialog(props: Readonly<{
         </Show>
 
         <div class="space-y-1.5">
-          <label for="environment-label" class="block text-xs font-medium text-foreground">
-            {managedEnvironmentVariant() === 'provider_local_serve' ? 'Local Serve Name' : 'Name'}
-          </label>
+          <label for="environment-label" class="block text-xs font-medium text-foreground">Name</label>
           <Input
             id="environment-label"
             value={props.state?.label ?? ''}
@@ -4594,42 +4241,40 @@ function ConnectionDialog(props: Readonly<{
         <Show when={connectionKind() === 'managed_environment'}>
           <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
             <div class="space-y-3">
-              <Show when={!useControlPlaneBinding()}>
-                <div class="rounded-md border border-border/70 bg-background/80 px-3 py-2.5 text-[11px] leading-5 text-muted-foreground">
-                  <Show
-                    when={managedEnvironmentState()?.mode === 'edit'}
-                    fallback={(
-                      <>
-                        Desktop will store local state under an automatic
-                        {' '}
-                        <span class="font-mono text-foreground">local/&lt;name&gt;</span>
-                        {' '}
-                        scope derived from Name.
-                        <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
-                          <span>
-                            {' '}
-                            Next scope:
-                            {' '}
-                            <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
-                            .
-                          </span>
-                        </Show>
-                      </>
-                    )}
-                  >
-                    Renaming this environment only changes how it appears in Desktop.
-                    <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
-                      <span>
-                        {' '}
-                        Local state stays under
-                        {' '}
-                        <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
-                        .
-                      </span>
-                    </Show>
+              <div class="rounded-md border border-border/70 bg-background/80 px-3 py-2.5 text-[11px] leading-5 text-muted-foreground">
+                <Show
+                  when={managedEnvironmentState()?.mode === 'edit'}
+                  fallback={(
+                    <>
+                      Desktop will store local state under an automatic
+                      {' '}
+                      <span class="font-mono text-foreground">local/&lt;name&gt;</span>
+                      {' '}
+                      scope derived from Name.
+                      <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
+                        <span>
+                          {' '}
+                          Next scope:
+                          {' '}
+                          <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
+                          .
+                        </span>
+                      </Show>
+                    </>
+                  )}
+                >
+                  Renaming this environment only changes how it appears in Desktop.
+                  <Show when={managedEnvironmentScopePreview(managedEnvironmentState()) !== ''}>
+                    <span>
+                      {' '}
+                      Local state stays under
+                      {' '}
+                      <span class="font-mono text-foreground">{managedEnvironmentScopePreview(managedEnvironmentState())}</span>
+                      .
+                    </span>
                   </Show>
-                </div>
-              </Show>
+                </Show>
+              </div>
               <div class="space-y-1.5">
                 <div class="flex items-center gap-1.5">
                   <label for="environment-local-bind" class="block text-xs font-medium text-foreground">Local UI Bind</label>
@@ -4734,36 +4379,6 @@ function ConnectionDialog(props: Readonly<{
                   Use a password for non-loopback binds. Leave this blank to keep the stored password when editing.
                 </div>
               </div>
-              <Show when={useControlPlaneBinding()}>
-                <div class="rounded-md border border-border/70 bg-background/80 px-3 py-3">
-                  <div class="space-y-1">
-                    <div class="text-xs font-medium text-foreground">Provider Environment</div>
-                    <div class="text-[11px] leading-5 text-muted-foreground">
-                      This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.
-                    </div>
-                  </div>
-                  <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                    <div class="rounded-md border border-border/60 bg-muted/15 px-3 py-2">
-                      <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Control Plane</div>
-                      <div class="mt-1 text-sm text-foreground">{selectedControlPlane()?.display_label ?? managedEnvironmentState()?.provider_origin ?? 'Unavailable'}</div>
-                    </div>
-                    <div class="rounded-md border border-border/60 bg-muted/15 px-3 py-2">
-                      <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Environment</div>
-                      <div class="mt-1 text-sm text-foreground">{managedEnvironmentState()?.env_public_id ?? 'Unavailable'}</div>
-                    </div>
-                  </div>
-                  <div class="mt-3 text-[11px] text-muted-foreground">
-                    Desktop stores the local runtime state under this provider environment scope on this device.
-                  </div>
-                  <Show when={bindingResolution()}>
-                    {(resolution) => (
-                      <div class="mt-3">
-                        <ManagedEnvironmentBindingResolutionPanel resolution={resolution()} />
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              </Show>
             </div>
           </div>
         </Show>

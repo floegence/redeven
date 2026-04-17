@@ -48,7 +48,7 @@ export type EnvironmentCardEndpointModel = Readonly<{
 }>;
 
 export type EnvironmentCardModel = Readonly<{
-  kind_label: 'Local' | 'Local Serve' | 'Provider' | 'Redeven URL' | 'SSH Host';
+  kind_label: 'Local' | 'Provider' | 'Redeven URL' | 'SSH Host';
   status_label: string;
   status_tone: EnvironmentCardTone;
   source_label: string;
@@ -210,7 +210,7 @@ export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
 }
 
 export function surfaceTitle(surface: DesktopLauncherSurface): string {
-  return surface === 'managed_environment_settings' ? 'Environment Settings' : 'Connect Environment';
+  return surface === 'environment_settings' ? 'Environment Settings' : 'Connect Environment';
 }
 
 export function shellStatus(snapshot: DesktopWelcomeSnapshot): Readonly<{
@@ -261,7 +261,7 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
     case 'provider_environment':
       return 'Provider';
     case 'managed_environment':
-      return environment.managed_environment_kind === 'controlplane' ? 'Local Serve' : 'Local';
+      return 'Local';
     case 'external_local_ui':
       return 'Redeven URL';
     default:
@@ -419,8 +419,7 @@ function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
   if (environment.kind === 'provider_environment') {
     const localRuntimeOnline = environment.provider_local_runtime_state === 'running_desktop'
       || environment.provider_local_runtime_state === 'running_external';
-    const localWindowActive = environment.provider_local_serve_state === 'open'
-      || environment.provider_local_serve_state === 'opening';
+    const localWindowActive = environment.provider_effective_window_route === 'local_host';
     if (localRuntimeOnline || localWindowActive || environment.remote_route_state !== 'ready') {
       return 'This device';
     }
@@ -436,19 +435,12 @@ export function buildEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
   if (environment.kind === 'managed_environment') {
-    return orderEnvironmentCardFacts(environment.managed_environment_kind === 'controlplane'
-      ? [
-        buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
-        buildEnvironmentCardFact('CONTROL PLANE', controlPlaneDisplayLabel(environment) || 'Unavailable'),
-        buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
-        buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
-      ]
-      : [
-        buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
-        buildPlaceholderEnvironmentCardFact('CONTROL PLANE'),
-        buildEnvironmentCardFact('SOURCE', environmentSourceLabel(environment)),
-        buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
-      ]);
+    return orderEnvironmentCardFacts([
+      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
+      buildPlaceholderEnvironmentCardFact('CONTROL PLANE'),
+      buildEnvironmentCardFact('SOURCE', environmentSourceLabel(environment)),
+      buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
+    ]);
   }
 
   if (environment.kind === 'provider_environment') {
@@ -480,25 +472,14 @@ export function buildEnvironmentCardEndpointsModel(
 ): readonly EnvironmentCardEndpointModel[] {
   if (environment.kind === 'managed_environment') {
     const localEndpoint = compact(environment.local_ui_url) || compact(environment.managed_local_ui_bind) || compact(environment.managed_environment_name);
-    const remoteEndpoint = compact(environment.remote_environment_url);
-    return [
-      localEndpoint !== ''
-        ? {
-            label: looksLikeAbsoluteURL(localEndpoint) ? 'URL' : 'LOCAL',
-            value: localEndpoint,
-            monospace: shouldUseMonospaceEndpoint(localEndpoint),
-            copy_label: 'Copy local endpoint',
-          }
-        : null,
-      environment.managed_environment_kind === 'controlplane' && remoteEndpoint !== ''
-        ? {
-            label: 'SOURCE',
-            value: remoteEndpoint,
-            monospace: shouldUseMonospaceEndpoint(remoteEndpoint),
-            copy_label: 'Copy provider URL',
-          }
-        : null,
-    ].filter((item): item is EnvironmentCardEndpointModel => item !== null);
+    return localEndpoint !== ''
+      ? [{
+        label: looksLikeAbsoluteURL(localEndpoint) ? 'URL' : 'LOCAL',
+        value: localEndpoint,
+        monospace: shouldUseMonospaceEndpoint(localEndpoint),
+        copy_label: 'Copy local endpoint',
+      }]
+      : [];
   }
 
   if (environment.kind === 'provider_environment') {
@@ -615,48 +596,40 @@ function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopMana
   if (environment.kind !== 'provider_environment') {
     return '';
   }
-  if (
-    compact(environment.open_session_key) !== ''
-    && compact(environment.open_session_key) === compact(environment.open_local_session_key)
-  ) {
-    return 'local_host';
-  }
-  if (
-    compact(environment.open_session_key) !== ''
-    && compact(environment.open_session_key) === compact(environment.open_remote_session_key)
-  ) {
-    return 'remote_desktop';
-  }
-  if (environment.remote_route_state === 'ready') {
-    return 'remote_desktop';
-  }
-  if (
-    environment.provider_local_runtime_state === 'running_desktop'
-    || environment.provider_local_runtime_state === 'running_external'
-  ) {
-    return 'local_host';
-  }
-  return '';
+  return environment.provider_effective_window_route || environment.provider_default_open_route || '';
 }
 
-function providerLocalServeMenuAction(
+function providerLocalRuntimeMenuAction(
   environment: DesktopEnvironmentEntry,
 ): EnvironmentActionMenuItemModel | null {
   if (environment.kind !== 'provider_environment') {
     return null;
   }
   const primaryRoute = providerPrimaryRoute(environment);
-  const localServeConfigured = compact(environment.provider_local_serve_environment_id) !== '';
+  const localRuntimeConfigured = environment.provider_local_runtime_configured === true;
   const localRuntimeOnline = environment.provider_local_runtime_state === 'running_desktop'
     || environment.provider_local_runtime_state === 'running_external';
 
-  if (environment.provider_local_serve_state === 'open' && primaryRoute !== 'local_host') {
+  if (!localRuntimeConfigured) {
     return {
-      id: 'focus_local_serve',
-      label: 'Focus local serve',
+      id: 'set_up_local_runtime',
+      label: 'Set up local runtime…',
+      action: {
+        intent: 'serve_runtime_locally',
+        label: 'Set up local runtime…',
+        enabled: true,
+        variant: 'outline',
+      },
+    };
+  }
+
+  if (environment.open_local_session_lifecycle === 'open' && primaryRoute !== 'local_host') {
+    return {
+      id: 'focus_local_runtime',
+      label: 'Focus local runtime',
       action: {
         intent: 'focus_local_serve',
-        label: 'Focus local serve',
+        label: 'Focus local runtime',
         enabled: true,
         variant: 'outline',
         route: 'local_host',
@@ -664,47 +637,32 @@ function providerLocalServeMenuAction(
     };
   }
 
-  if (environment.provider_local_serve_state === 'opening' && primaryRoute !== 'local_host') {
+  if (environment.open_local_session_lifecycle === 'opening' && primaryRoute !== 'local_host') {
     return {
-      id: 'local_serve_opening',
-      label: 'Local serve opening…',
+      id: 'local_runtime_opening',
+      label: 'Local runtime opening…',
       action: {
         intent: 'opening',
-        label: 'Local serve opening…',
+        label: 'Local runtime opening…',
         enabled: false,
         variant: 'outline',
       },
     };
   }
 
-  if (localRuntimeOnline && primaryRoute !== 'local_host') {
-    return {
-      id: 'open_local_serve',
-      label: 'Open local serve',
-      action: {
-        intent: 'open',
-        label: 'Open local serve',
-        enabled: true,
-        variant: 'outline',
-        route: 'local_host',
-      },
-    };
-  }
-
-  if (!localServeConfigured && environment.remote_route_state === 'ready') {
-    return null;
-  }
-
-  return {
-    id: 'serve_runtime_locally',
-    label: 'Serve runtime locally',
-    action: {
-      intent: 'serve_runtime_locally',
-      label: 'Serve runtime locally',
-      enabled: true,
-      variant: 'outline',
-    },
-  };
+  return localRuntimeOnline && primaryRoute !== 'local_host'
+    ? {
+        id: 'open_local_runtime',
+        label: 'Open locally',
+        action: {
+          intent: 'open',
+          label: 'Open locally',
+          enabled: true,
+          variant: 'outline',
+          route: 'local_host',
+        },
+      }
+    : null;
 }
 
 function providerRemoteRouteMenuAction(
@@ -715,11 +673,11 @@ function providerRemoteRouteMenuAction(
   }
   if (compact(environment.open_remote_session_key) !== '') {
     return {
-      id: 'focus_provider_window',
-      label: 'Focus provider window',
+      id: 'focus_control_plane_window',
+      label: 'Focus Control Plane window',
       action: {
         intent: 'focus',
-        label: 'Focus provider window',
+        label: 'Focus Control Plane window',
         enabled: true,
         variant: 'outline',
         route: 'remote_desktop',
@@ -728,11 +686,11 @@ function providerRemoteRouteMenuAction(
   }
   if (environment.open_remote_session_lifecycle === 'opening') {
     return {
-      id: 'provider_window_opening',
-      label: 'Provider window opening…',
+      id: 'control_plane_window_opening',
+      label: 'Control Plane window opening…',
       action: {
         intent: 'opening',
-        label: 'Provider window opening…',
+        label: 'Control Plane window opening…',
         enabled: false,
         variant: 'outline',
         route: 'remote_desktop',
@@ -741,11 +699,11 @@ function providerRemoteRouteMenuAction(
   }
   if (environment.remote_route_state === 'ready') {
     return {
-      id: 'open_provider_window',
-      label: 'Open provider window',
+      id: 'open_via_control_plane',
+      label: 'Open via Control Plane',
       action: {
         intent: 'open',
-        label: 'Open provider window',
+        label: 'Open via Control Plane',
         enabled: true,
         variant: 'outline',
         route: 'remote_desktop',
@@ -757,7 +715,7 @@ function providerRemoteRouteMenuAction(
 
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
   const items: EnvironmentActionMenuItemModel[] = [];
-  const localServeAction = providerLocalServeMenuAction(environment);
+  const localServeAction = providerLocalRuntimeMenuAction(environment);
   const remoteRouteAction = providerRemoteRouteMenuAction(environment);
   if (localServeAction) {
     items.push(localServeAction);
@@ -880,20 +838,6 @@ export function environmentStatusTone(environment: DesktopEnvironmentEntry): Env
 
 function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly EnvironmentCardMetaItem[] {
   if (environment.kind === 'managed_environment') {
-    if (environment.managed_environment_kind === 'controlplane') {
-      return [
-        {
-          label: 'Provider',
-          value: environment.provider_origin ?? '',
-          monospace: true,
-        },
-        {
-          label: 'Environment ID',
-          value: environment.env_public_id ?? '',
-          monospace: true,
-        },
-      ].filter((item) => item.value !== '');
-    }
     return [
       {
         label: 'Scope',
@@ -952,20 +896,16 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
   if (environment.kind === 'managed_environment') {
     const localEndpoint = compact(environment.local_ui_url) || compact(environment.managed_local_ui_bind) || compact(environment.managed_environment_name);
-    const remoteEndpoint = compact(environment.remote_environment_url);
-    const targetPrimary = localEndpoint || remoteEndpoint || environment.secondary_text || 'Local environment';
-    const targetSecondary = environment.managed_environment_kind === 'controlplane' && remoteEndpoint !== '' && remoteEndpoint !== targetPrimary
-      ? remoteEndpoint
-      : '';
+    const targetPrimary = localEndpoint || environment.secondary_text || 'Local environment';
     return {
       kind_label: environmentKindLabel(environment),
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
       source_label: 'Desktop-managed',
       target_primary: targetPrimary,
-      target_secondary: targetSecondary,
+      target_secondary: '',
       target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
-      target_secondary_monospace: shouldUseMonospaceEndpoint(targetSecondary),
+      target_secondary_monospace: false,
       meta: environmentCardMeta(environment),
     };
   }

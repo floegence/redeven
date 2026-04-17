@@ -25,10 +25,6 @@ function readWelcomeSource(): string {
   return fs.readFileSync(path.join(__dirname, 'App.tsx'), 'utf8');
 }
 
-function readManagedEnvironmentBindingResolutionSource(): string {
-  return fs.readFileSync(path.join(__dirname, 'managedEnvironmentBindingResolution.ts'), 'utf8');
-}
-
 function readDesktopTooltipSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopTooltip.tsx'), 'utf8');
 }
@@ -106,8 +102,8 @@ describe('DesktopWelcomeShell', () => {
       preferences: testDesktopPreferences({
         managed_environments: [managedLocal],
       }),
-      surface: 'managed_environment_settings',
-      selectedManagedEnvironmentID: managedLocal.id,
+      surface: 'environment_settings',
+      selectedEnvironmentID: managedLocal.id,
     });
 
     expect(buildDesktopWelcomeShellViewModel(snapshot)).toEqual({
@@ -356,7 +352,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('<ConnectEnvironmentSurface');
     expect(appSrc).toContain("<LocalEnvironmentSettingsDialog");
-    expect(appSrc).toContain("open={snapshot().surface === 'managed_environment_settings'}");
+    expect(appSrc).toContain("open={snapshot().surface === 'environment_settings'}");
     expect(appSrc).not.toContain('fallback={<div class="h-full min-h-0 bg-background" />}');
   });
 
@@ -486,8 +482,11 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
-    expect(appSrc).toContain('function openProviderLocalServeDialog');
     expect(appSrc).toContain('function serveRuntimeLocally');
+    expect(appSrc).not.toContain('function openProviderLocalServeDialog');
+    expect(appSrc).toContain("environment.provider_local_runtime_configured !== true");
+    expect(appSrc).toContain('openSettingsSurface(environment.id);');
+    expect(appSrc).toContain("return openProviderEnvironment(environment, errorTarget, 'local_host');");
     expect(appSrc).toContain('Refresh runtime status');
     expect(appSrc).toContain('Refresh runtime statuses');
     expect(appSrc).toContain('primary_action_tooltip');
@@ -595,13 +594,13 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: 'SSH Host'");
     expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
     expect(appSrc).toContain('Local environments are created independently and are not bound directly to a provider environment.');
-    expect(appSrc).toContain('Create a local serve runtime for this provider environment on this Mac.');
-    expect(appSrc).toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
+    expect(appSrc).not.toContain('Create a local serve runtime for this provider environment on this Mac.');
+    expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
     expect(appSrc).toContain('This is not the Control Plane URL.');
     expect(appSrc).toContain('Deploy a Desktop-managed environment to a machine you can reach over SSH.');
     expect(appSrc).toContain('Desktop reuses shared release artifacts on that host, but each Environment Instance stays isolated unless you explicitly reuse its Instance ID.');
-    expect(appSrc).toContain('keeps runtime state isolated per Environment Instance.');
+    expect(appSrc).toContain('Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and keeps runtime state isolated per Environment Instance.');
     expect(appSrc).toContain('Bootstrap Delivery');
     expect(appSrc).toContain("label: 'Automatic'");
     expect(appSrc).toContain("label: 'Desktop Upload'");
@@ -630,25 +629,18 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain("localEnvironmentName === '' && !(state.mode === 'edit' && trimString(state.environment_id) !== '')");
     expect(appSrc).toContain("environment_name: localEnvironmentName || undefined");
-    expect(appSrc).toContain("environment_name: trimString(current.environment_name) || deriveManagedEnvironmentScopeNameFromName(current.label)");
+    expect(appSrc).toContain("environment_name: shouldAutoSyncManagedEnvironmentScopeName(current)");
+    expect(appSrc).toContain("? deriveManagedEnvironmentScopeNameFromName(value)");
   });
 
-  it('shows explicit Control Plane binding-resolution guidance inside the managed environment dialog', () => {
+  it('keeps the managed environment dialog focused on local-environment creation only', () => {
     const appSrc = readWelcomeSource();
-    const bindingResolutionSrc = readManagedEnvironmentBindingResolutionSource();
 
-    expect(appSrc).toContain("import {\n  describeManagedEnvironmentBindingResolution,");
-    expect(appSrc).toContain('ManagedEnvironmentBindingResolutionPanel');
-    expect(appSrc).toContain('resolveManagedEnvironmentBindingResolution');
-    expect(appSrc).toContain('bindingResolution()');
-    expect(appSrc).toContain('saveActionLabel');
-    expect(appSrc).toContain('connectActionLabel');
-    expect(bindingResolutionSrc).toContain('Desktop will save local-serve settings for this provider environment on this device.');
-    expect(bindingResolutionSrc).toContain('The same provider environment card will keep both routes visible: local serve here, or open via Control Plane.');
-    expect(bindingResolutionSrc).toContain('Desktop already manages a Local Serve for');
-    expect(bindingResolutionSrc).toContain('Desktop cannot take over that Local Serve host from this launcher session.');
-    expect(bindingResolutionSrc).toContain('Save & Focus');
-    expect(bindingResolutionSrc).toContain('Already Opening');
+    expect(appSrc).not.toContain('ManagedEnvironmentBindingResolutionPanel');
+    expect(appSrc).not.toContain('resolveManagedEnvironmentBindingResolution');
+    expect(appSrc).not.toContain('provider_local_serve');
+    expect(appSrc).not.toContain('use_control_plane_binding');
+    expect(appSrc).toContain('Run a Desktop-managed Redeven environment on this device.');
   });
 
   it('explains Local UI Bind examples inside the managed environment form', () => {

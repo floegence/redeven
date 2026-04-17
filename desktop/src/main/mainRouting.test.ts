@@ -15,7 +15,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const utilityWindows = new Map<DesktopUtilityWindowKind, DesktopTrackedWindow>();');
     expect(mainSrc).toContain("const UTILITY_WINDOW_KINDS = ['launcher'] as const;");
     expect(mainSrc).toContain("surface: 'connect_environment'");
-    expect(mainSrc).toContain("surface: 'managed_environment_settings'");
+    expect(mainSrc).toContain("surface: 'environment_settings'");
     expect(mainSrc).toContain("return 'window:launcher';");
     expect(mainSrc).not.toContain("'window:settings'");
   });
@@ -38,7 +38,7 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain("case 'start_control_plane_connect':");
-    expect(mainSrc).toContain("case 'open_managed_environment_settings':");
+    expect(mainSrc).toContain("case 'open_environment_settings':");
     expect(mainSrc).toContain("case 'start_environment_runtime':");
     expect(mainSrc).toContain("case 'stop_environment_runtime':");
     expect(mainSrc).toContain("case 'refresh_environment_runtime':");
@@ -51,7 +51,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain('await openAdvancedSettingsWindow();');
     expect(mainSrc).toContain("return openUtilityWindow('launcher', {");
-    expect(mainSrc).toContain("surface: 'managed_environment_settings',");
+    expect(mainSrc).toContain("surface: 'environment_settings',");
     expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
   });
 

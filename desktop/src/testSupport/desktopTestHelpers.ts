@@ -16,6 +16,7 @@ import {
   createManagedEnvironmentLocalHosting,
   createManagedLocalEnvironment,
   defaultDesktopManagedEnvironmentAccess,
+  managedEnvironmentKind,
   type DesktopManagedControlPlaneEnvironment,
   type DesktopManagedEnvironment,
   type DesktopManagedEnvironmentAccess,
@@ -24,6 +25,11 @@ import {
   type DesktopManagedEnvironmentRuntimeState,
   type DesktopManagedLocalEnvironment,
 } from '../shared/desktopManagedEnvironment';
+import {
+  createDesktopProviderEnvironmentLocalRuntime,
+  createDesktopProviderEnvironmentRecord,
+  type DesktopProviderEnvironmentRecord,
+} from '../shared/desktopProviderEnvironment';
 
 type TestManagedAccessOverrides = Partial<DesktopManagedEnvironmentAccess>;
 
@@ -57,6 +63,21 @@ type TestManagedControlPlaneEnvironmentOptions = Readonly<{
 
 type TestDesktopPreferencesOptions = Readonly<Partial<DesktopPreferences> & {
   managed_environments?: readonly DesktopManagedEnvironment[];
+}>;
+
+type TestProviderEnvironmentOptions = Readonly<{
+  providerID?: string;
+  label?: string;
+  pinned?: boolean;
+  preferredOpenRoute?: DesktopManagedEnvironmentPreferredOpenRoute;
+  localRuntime?: boolean;
+  access?: TestManagedAccessOverrides;
+  stateDir?: string;
+  owner?: DesktopManagedEnvironmentLocalOwner;
+  currentRuntime?: Partial<DesktopManagedEnvironmentRuntimeState> | null;
+  createdAtMS?: number;
+  updatedAtMS?: number;
+  lastUsedAtMS?: number;
 }>;
 
 export function testManagedAccess(
@@ -120,14 +141,87 @@ export function testManagedControlPlaneEnvironment(
   });
 }
 
+export function testProviderEnvironment(
+  providerOrigin: string,
+  envPublicID: string,
+  options: TestProviderEnvironmentOptions = {},
+): DesktopProviderEnvironmentRecord {
+  const layout = controlPlaneManagedStateLayout(providerOrigin, envPublicID);
+  return createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
+    providerID: options.providerID ?? 'redeven_portal',
+    label: options.label,
+    pinned: options.pinned,
+    preferredOpenRoute: options.preferredOpenRoute,
+    createdAtMS: options.createdAtMS,
+    updatedAtMS: options.updatedAtMS,
+    lastUsedAtMS: options.lastUsedAtMS,
+    localRuntime: options.localRuntime === true
+      ? createDesktopProviderEnvironmentLocalRuntime(providerOrigin, envPublicID, {
+          access: testManagedAccess(options.access),
+          owner: options.owner ?? 'desktop',
+          stateDir: options.stateDir ?? layout.stateDir,
+          currentRuntime: options.currentRuntime,
+        })
+      : undefined,
+  });
+}
+
 export function testDesktopPreferences(
   options: TestDesktopPreferencesOptions = {},
 ): DesktopPreferences {
   const base = defaultDesktopPreferences();
+  const managedEnvironments = options.managed_environments ?? base.managed_environments;
+  const providerEnvironmentsByID = new Map(
+    (options.provider_environments ?? base.provider_environments).map((environment) => [environment.id, environment] as const),
+  );
+
+  for (const environment of managedEnvironments) {
+    if (!environment.provider_binding) {
+      continue;
+    }
+    providerEnvironmentsByID.set(environment.id, testProviderEnvironment(
+      environment.provider_binding.provider_origin,
+      environment.provider_binding.env_public_id,
+      {
+        providerID: environment.provider_binding.provider_id,
+        label: environment.label,
+        pinned: environment.pinned,
+        preferredOpenRoute: environment.preferred_open_route,
+        localRuntime: Boolean(environment.local_hosting),
+        access: environment.local_hosting?.access,
+        stateDir: environment.local_hosting?.state_dir,
+        owner: environment.local_hosting?.owner,
+        currentRuntime: environment.local_hosting?.current_runtime,
+        createdAtMS: environment.created_at_ms,
+        updatedAtMS: environment.updated_at_ms,
+        lastUsedAtMS: environment.last_used_at_ms,
+      },
+    ));
+  }
+
+  for (const controlPlane of options.control_planes ?? base.control_planes) {
+    for (const environment of controlPlane.environments) {
+      const providerEnvironment = testProviderEnvironment(
+        controlPlane.provider.provider_origin,
+        environment.env_public_id,
+        {
+          providerID: controlPlane.provider.provider_id,
+          label: environment.label,
+          createdAtMS: controlPlane.last_synced_at_ms,
+          updatedAtMS: controlPlane.last_synced_at_ms,
+        },
+      );
+      if (!providerEnvironmentsByID.has(providerEnvironment.id)) {
+        providerEnvironmentsByID.set(providerEnvironment.id, providerEnvironment);
+      }
+    }
+  }
+
   return {
     ...base,
     ...options,
-    managed_environments: options.managed_environments ?? base.managed_environments,
+    managed_environments: managedEnvironments.filter((environment) => managedEnvironmentKind(environment) === 'local'),
+    provider_environments: [...providerEnvironmentsByID.values()],
   };
 }
 
