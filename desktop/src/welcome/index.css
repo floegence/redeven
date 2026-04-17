@@ -668,10 +668,19 @@ body {
 }
 
 .redeven-split-action {
+  --redeven-split-action-primary-min-width: 7.5rem;
   position: relative;
   display: flex;
+  flex: 1 1 auto;
   min-width: 0;
   align-items: stretch;
+  min-width: min(100%, calc(var(--redeven-split-action-primary-min-width) + 2.1rem));
+}
+
+.redeven-split-action-primary {
+  display: flex;
+  min-width: min(100%, var(--redeven-split-action-primary-min-width));
+  flex: 1 1 auto;
 }
 
 .redeven-split-action-toggle {

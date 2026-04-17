@@ -495,6 +495,8 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
+    expect(appSrc).toContain('function openProviderLocalServeDialog');
+    expect(appSrc).toContain('function serveRuntimeLocally');
     expect(appSrc).toContain('Refresh runtime status');
     expect(appSrc).toContain('Refresh runtime statuses');
     expect(appSrc).toContain('primary_action_tooltip');
@@ -504,8 +506,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'start_runtime':");
     expect(appSrc).toContain("case 'stop_runtime':");
     expect(appSrc).toContain("case 'refresh_runtime':");
+    expect(appSrc).toContain("case 'serve_runtime_locally':");
+    expect(appSrc).toContain('openRuntimeMenuEnvironmentID');
     expect(appSrc).toContain('aria-label={props.presentation.menu_button_label}');
     expect(styles).toContain('.redeven-split-action');
+    expect(styles).toContain('.redeven-split-action-primary');
     expect(styles).toContain('.redeven-split-action-toggle');
     expect(styles).toContain('.redeven-split-menu');
     expect(styles).toContain('.redeven-split-menu-item');

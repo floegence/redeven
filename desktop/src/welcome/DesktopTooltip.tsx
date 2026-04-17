@@ -16,6 +16,7 @@ export type DesktopTooltipProps = Readonly<{
   placement?: DesktopTooltipPlacement;
   delay?: number;
   class?: string;
+  anchorClass?: string;
 }>;
 
 function cn(...values: Array<string | undefined | null | false>): string {
@@ -260,7 +261,7 @@ export function DesktopTooltip(props: DesktopTooltipProps) {
     <span
       ref={anchorRef}
       data-redeven-tooltip-anchor=""
-      class="relative inline-block max-w-full"
+      class={cn('relative inline-block max-w-full', props.anchorClass)}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocusIn={show}
