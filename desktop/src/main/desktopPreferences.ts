@@ -1767,8 +1767,27 @@ function updateProviderEnvironmentPreference(
       lastUsedAtMS: input.last_used_at_ms ?? existing?.last_used_at_ms ?? 0,
     },
   );
+  const nextManagedEnvironments = normalizeManagedEnvironmentCollection(
+    preferences.managed_environments.map((environment) => (
+      environment.local_hosting
+      && matchesProviderBinding(
+        environment,
+        nextPreference.provider_origin,
+        nextPreference.provider_id,
+        nextPreference.env_public_id,
+      )
+        ? {
+            ...environment,
+            pinned: input.pinned ?? environment.pinned,
+            last_used_at_ms: input.last_used_at_ms ?? environment.last_used_at_ms,
+            updated_at_ms: Date.now(),
+          }
+        : environment
+    )),
+  );
   return {
     ...preferences,
+    managed_environments: nextManagedEnvironments,
     provider_environment_preferences: normalizeProviderEnvironmentPreferenceCollection([
       nextPreference,
       ...preferences.provider_environment_preferences.filter((preference) => (
@@ -2056,6 +2075,7 @@ export function deleteSavedControlPlane(
     ...preferences.control_plane_refresh_tokens,
   };
   delete nextRefreshTokens[key];
+  const normalizedProviderOrigin = normalizeControlPlaneOrigin(providerOrigin);
   return {
     ...preferences,
     control_plane_refresh_tokens: nextRefreshTokens,
@@ -2065,11 +2085,22 @@ export function deleteSavedControlPlane(
     managed_environments: normalizeManagedEnvironmentCollection(preferences.managed_environments),
     provider_environment_preferences: normalizeProviderEnvironmentPreferenceCollection(
       preferences.provider_environment_preferences.filter((preference) => (
-        !providerEnvironmentPreferenceMatches(
+        !(
+          providerEnvironmentPreferenceMatches(
           preference,
-          normalizeControlPlaneOrigin(providerOrigin),
+          normalizedProviderOrigin,
           providerID,
           preference.env_public_id,
+          )
+          && !preferences.managed_environments.some((environment) => (
+            environment.local_hosting
+            && matchesProviderBinding(
+              environment,
+              normalizedProviderOrigin,
+              providerID,
+              preference.env_public_id,
+            )
+          ))
         )
       )),
     ),

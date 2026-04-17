@@ -207,8 +207,8 @@ describe('DesktopWelcomeShell', () => {
       }],
     });
 
-    expect(environmentLibraryCount(snapshot)).toBe(5);
-    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
+    expect(environmentLibraryCount(snapshot)).toBe(4);
+    expect(environmentLibraryCount(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
     expect(environmentLibraryCount(snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)).toBe(1);
 
     expect(filterEnvironmentLibrary(snapshot, '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)).toEqual([
@@ -216,11 +216,6 @@ describe('DesktopWelcomeShell', () => {
         id: 'local:default',
         category: 'managed',
         managed_environment_kind: 'local',
-      }),
-      expect.objectContaining({
-        kind: 'managed_environment',
-        category: 'managed',
-        managed_environment_kind: 'controlplane',
       }),
     ]);
     expect(filterEnvironmentLibrary(snapshot, 'stag')).toEqual([
@@ -322,10 +317,6 @@ describe('DesktopWelcomeShell', () => {
       '',
       desktopControlPlaneKey('https://cp.example.invalid', 'redeven_portal'),
     )).toEqual([
-      expect.objectContaining({
-        kind: 'managed_environment',
-        env_public_id: 'env_demo',
-      }),
       expect.objectContaining({
         kind: 'provider_environment',
         env_public_id: 'env_demo',
@@ -702,8 +693,9 @@ describe('DesktopWelcomeShell', () => {
   it('distinguishes managed-environment deletion copy from saved connection deletion copy', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("title={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}");
-    expect(appSrc).toContain("confirmText={deleteTarget()?.kind === 'managed_environment' ? 'Delete Environment' : 'Delete Connection'}");
+    expect(appSrc).toContain('const deleteTargetIsManaged = createMemo(() => {');
+    expect(appSrc).toContain("title={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}");
+    expect(appSrc).toContain("confirmText={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}");
     expect(appSrc).toContain("title={props.environment.kind === 'managed_environment' ? 'Delete environment' : 'Delete connection'}");
   });
 

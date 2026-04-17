@@ -1751,18 +1751,7 @@ async function resolveManagedEnvironmentBootstrap(
     envPublicID,
   );
   if (!controlPlaneState.controlPlane) {
-    throw launcherActionFailure(
-      'control_plane_missing',
-      'control_plane',
-      'Reconnect the Control Plane for this environment, then try again.',
-      {
-        environmentID: environment.id,
-        providerOrigin,
-        providerID,
-        envPublicID,
-        shouldRefreshSnapshot: true,
-      },
-    );
+    return null;
   }
 
   let synchronized = {
@@ -1778,14 +1767,48 @@ async function resolveManagedEnvironmentBootstrap(
     providerID,
     envPublicID,
   );
-  const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
-    environmentID: environment.id,
-    providerOrigin,
-    providerID,
-    envPublicID,
-  });
-  if (routeFailure) {
-    throw routeFailure;
+  if (latestState.remoteRouteState === 'auth_required') {
+    throw launcherActionFailure(
+      'control_plane_auth_required',
+      'control_plane',
+      'Reconnect this Control Plane in Desktop before serving the runtime locally.',
+      {
+        environmentID: environment.id,
+        providerOrigin,
+        providerID,
+        envPublicID,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  if (latestState.remoteRouteState === 'provider_unreachable') {
+    throw launcherActionFailure(
+      'provider_unreachable',
+      'control_plane',
+      'Desktop could not refresh this Control Plane from the current machine.',
+      {
+        environmentID: environment.id,
+        providerOrigin,
+        providerID,
+        envPublicID,
+      },
+    );
+  }
+  if (latestState.remoteRouteState === 'provider_invalid') {
+    throw launcherActionFailure(
+      'provider_invalid_response',
+      'control_plane',
+      'The Control Plane returned an invalid response while Desktop refreshed this environment.',
+      {
+        environmentID: environment.id,
+        providerOrigin,
+        providerID,
+        envPublicID,
+      },
+    );
+  }
+  if (latestState.remoteRouteState === 'removed') {
+    return null;
   }
   const authorized = await ensureControlPlaneAccessToken(synchronized.preferences, synchronized.controlPlane);
   const openSession = await requestDesktopOpenSession(
@@ -3471,6 +3494,18 @@ async function deleteControlPlaneFromLauncher(
   if (refreshToken !== '') {
     await revokeProviderDesktopAuthorization(controlPlane.provider, refreshToken);
   }
+  const remoteSessionKeys = [...sessionsByKey.values()]
+    .filter((sessionRecord) => (
+      !sessionRecord.closing
+      && sessionRecord.target.kind === 'managed_environment'
+      && sessionRecord.target.route === 'remote_desktop'
+      && sessionRecord.target.provider_origin === request.provider_origin
+      && sessionRecord.target.provider_id === request.provider_id
+    ))
+    .map((sessionRecord) => sessionRecord.session_key);
+  for (const sessionKey of remoteSessionKeys) {
+    await finalizeSessionClosure(sessionKey);
+  }
   clearControlPlaneAccessState(request.provider_origin, request.provider_id);
   clearControlPlaneSyncRecord(request.provider_origin, request.provider_id);
   providerRuntimeHealthByControlPlaneKey.delete(desktopControlPlaneKey(request.provider_origin, request.provider_id));
@@ -3803,6 +3838,7 @@ async function upsertSavedEnvironmentFromWelcome(
 function selectedProviderEnvironmentFromWelcome(
   preferences: DesktopPreferences,
   selection: Readonly<{
+    environment_id?: string;
     provider_origin?: string;
     provider_id?: string;
     env_public_id?: string;
@@ -3815,15 +3851,42 @@ function selectedProviderEnvironmentFromWelcome(
   const providerOrigin = String(selection.provider_origin ?? '').trim();
   const providerID = String(selection.provider_id ?? '').trim();
   const envPublicID = String(selection.env_public_id ?? '').trim();
+  const existing = compact(selection.environment_id) === ''
+    ? null
+    : findManagedEnvironmentByID(preferences, compact(selection.environment_id));
   if (providerOrigin === '' && providerID === '' && envPublicID === '') {
     return null;
   }
   const controlPlane = savedControlPlaneByIdentity(preferences, providerOrigin, providerID);
   if (!controlPlane) {
+    if (
+      existing
+      && managedEnvironmentProviderOrigin(existing) === providerOrigin
+      && managedEnvironmentProviderID(existing) === providerID
+      && managedEnvironmentPublicID(existing) === envPublicID
+    ) {
+      return {
+        provider_origin: providerOrigin,
+        provider_id: providerID,
+        env_public_id: envPublicID,
+      };
+    }
     throw new Error('Connect this Control Plane in Desktop before saving the environment.');
   }
   const providerEnvironment = controlPlane.environments.find((environment) => environment.env_public_id === envPublicID) ?? null;
   if (!providerEnvironment) {
+    if (
+      existing
+      && managedEnvironmentProviderOrigin(existing) === controlPlane.provider.provider_origin
+      && managedEnvironmentProviderID(existing) === controlPlane.provider.provider_id
+      && managedEnvironmentPublicID(existing) === envPublicID
+    ) {
+      return {
+        provider_origin: controlPlane.provider.provider_origin,
+        provider_id: controlPlane.provider.provider_id,
+        env_public_id: envPublicID,
+      };
+    }
     throw new Error('Desktop could not find the selected Control Plane environment in the current catalog.');
   }
   return {

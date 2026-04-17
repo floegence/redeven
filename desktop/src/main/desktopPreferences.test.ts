@@ -1159,7 +1159,7 @@ describe('desktopPreferences', () => {
     }));
   });
 
-  it('deleting a control plane removes provider-card preferences and keeps provider local serves', () => {
+  it('deleting a control plane keeps provider-card preferences that still back a local serve', () => {
     const provider = buildTestControlPlaneProvider();
     const localServe = testManagedControlPlaneEnvironment('https://cp.example.invalid', 'env_kept');
     const preferencesWithProviderState = setProviderEnvironmentPinned(
@@ -1194,7 +1194,14 @@ describe('desktopPreferences', () => {
 
     expect(next.control_planes).toEqual([]);
     expect(next.control_plane_refresh_tokens).toEqual({});
-    expect(next.provider_environment_preferences).toEqual([]);
+    expect(next.provider_environment_preferences).toEqual([
+      expect.objectContaining({
+        provider_origin: 'https://cp.example.invalid',
+        provider_id: 'redeven_portal',
+        env_public_id: 'env_kept',
+        pinned: true,
+      }),
+    ]);
     expect(next.managed_environments.map((environment) => environment.id)).toEqual([
       'cp:https%3A%2F%2Fcp.example.invalid:env:env_kept',
       'local:default',
