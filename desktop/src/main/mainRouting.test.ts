@@ -85,6 +85,21 @@ describe('main routing', () => {
     expect(mainSrc).toContain('queueSessionAskFlowerHandoff(sessionKey, payload);');
   });
 
+  it('routes explicit quit, system quit, and non-macOS last-window close through shared quit-impact logic', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain("buildDesktopQuitDialogCopy,");
+    expect(mainSrc).toContain("buildDesktopQuitImpact,");
+    expect(mainSrc).toContain("shouldConfirmDesktopQuit,");
+    expect(mainSrc).toContain("let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';");
+    expect(mainSrc).toContain('label: string;');
+    expect(mainSrc).toContain('async function buildCurrentDesktopQuitImpact(): Promise<DesktopQuitImpact> {');
+    expect(mainSrc).toContain("if (shouldConfirmDesktopQuit(impact, source)) {");
+    expect(mainSrc).toContain("void requestQuit('last_window_close', win);");
+    expect(mainSrc).toContain("void requestQuit('system');");
+    expect(mainSrc).toContain("if (process.platform !== 'darwin' && quitPhase === 'idle') {");
+  });
+
   it('parses Control Plane deep links through PKCE authorization state instead of bearer handoff tickets', () => {
     const mainSrc = readMainSource();
 
