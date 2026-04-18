@@ -26,7 +26,7 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 - Workspace context is collected at prompt-build time and exposes:
   - environment facts such as shell, runtime home, approval policy, dangerous-command blocking, web-search provider, and whether subagent delegation is available;
   - repository state such as git repository detection, worktree root, branch/upstream, ahead-behind, linked-worktree status, and a staged/unstaged/untracked summary;
-  - durable repository rule files discovered from the current worktree path (for example `AGENTS.md`, `CLAUDE.md`, `.develop.md`, `.introduce.md`) under an explicit prompt budget;
+  - durable repository rule files discovered from the current worktree path (for example `AGENTS.md`, `CLAUDE.md`, `.introduce.md`, and legacy `.develop.md`) under an explicit prompt budget;
   - active subagent/delegation state so the parent agent can see ongoing parallel work instead of redoing it.
 - Runtime gates remain authoritative for `ask_user` and `task_complete`; prompt structure guides model behavior but does not replace deterministic runtime validation.
 - `prompt_profile` is a real behavior switch, not metadata only:
