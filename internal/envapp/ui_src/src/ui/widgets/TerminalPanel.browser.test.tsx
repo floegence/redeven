@@ -242,6 +242,12 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     findPrevious = vi.fn();
     clear = vi.fn();
     getSelectionText = vi.fn(() => '');
+    hasSelection = vi.fn(() => false);
+    copySelection = vi.fn(async (source: 'shortcut' | 'command' | 'copy_event' = 'command') => ({
+      copied: false as const,
+      reason: 'empty_selection' as const,
+      source,
+    }));
   }
 
   return {

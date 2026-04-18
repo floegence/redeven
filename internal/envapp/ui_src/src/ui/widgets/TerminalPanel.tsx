@@ -53,7 +53,6 @@ import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../util
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
-import { writeTextToClipboard } from '../utils/clipboard';
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
@@ -202,11 +201,6 @@ type terminal_selection_snapshot = {
   hasSelection: boolean;
 };
 
-type terminal_copy_command_context = {
-  source: 'shortcut' | 'context_menu';
-  selection: terminal_selection_snapshot;
-};
-
 function resolveTerminalTouchScrollTarget(core: TerminalCore | null): terminal_touch_scroll_target | null {
   if (!core) return null;
   const inner = (core as unknown as { terminal?: terminal_touch_scroll_target | null }).terminal;
@@ -221,24 +215,22 @@ function readTerminalSelectionText(core: TerminalCore | null): string {
   }
 }
 
-function buildTerminalSelectionSnapshot(sessionId: string, selectionText: string): terminal_selection_snapshot {
+function buildTerminalSelectionSnapshot(sessionId: string, core: TerminalCore | null): terminal_selection_snapshot {
   const normalizedSessionId = String(sessionId ?? '').trim();
-  const normalizedSelectionText = String(selectionText ?? '');
+  const rawSelectionText = readTerminalSelectionText(core);
+  const hasSelection = (() => {
+    try {
+      return Boolean(core?.hasSelection?.() ?? false);
+    } catch {
+      return rawSelectionText.length > 0;
+    }
+  })();
+  const normalizedSelectionText = hasSelection ? rawSelectionText : '';
   return {
     sessionId: normalizedSessionId,
     selectionText: normalizedSelectionText,
-    hasSelection: normalizedSelectionText.length > 0,
+    hasSelection,
   };
-}
-
-function isPrimaryTerminalCopyShortcut(event: KeyboardEvent): boolean {
-  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return false;
-  return (event.key?.toLowerCase?.() ?? '') === 'c';
-}
-
-function isEventFromTerminalSurface(target: EventTarget | null, activeSurface: HTMLDivElement | null): boolean {
-  if (!activeSurface || !(target instanceof Node)) return false;
-  return target === activeSurface || activeSurface.contains(target);
 }
 
 function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number): string {
@@ -1716,12 +1708,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return resolveTerminalInputElement(getActiveSurfaceElement());
   };
 
-  const getActiveTerminalSelectionSnapshot = (): terminal_selection_snapshot | null => {
-    const sessionId = String(activeSessionId() ?? '').trim();
-    if (!sessionId) return null;
-    return buildTerminalSelectionSnapshot(sessionId, readTerminalSelectionText(getActiveCore()));
-  };
-
   const getTerminalTouchScrollLineHeightPx = (surface: HTMLDivElement, core: TerminalCore) => {
     const rows = Math.max(1, core.getDimensions().rows);
     const height = surface.getBoundingClientRect().height;
@@ -2050,7 +2036,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       || '';
     const homePath = normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined;
     const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
-    const selection = buildTerminalSelectionSnapshot(resolvedSession.id, readTerminalSelectionText(core));
+    const selection = buildTerminalSelectionSnapshot(resolvedSession.id, core);
     const showBrowseFiles = Boolean(workingDir) && canBrowseFiles();
 
     const pos = clampAskMenuPosition(event.clientX, event.clientY, showBrowseFiles ? 3 : 2);
@@ -2077,10 +2063,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     openTerminalAskMenu(event);
   }
 
-  const executeTerminalCopyCommand = async (context: terminal_copy_command_context): Promise<boolean> => {
-    if (!context.selection.hasSelection) return false;
-    await writeTextToClipboard(context.selection.selectionText);
-    return true;
+  const executeTerminalCopyCommand = async (context: { source: 'shortcut' | 'context_menu'; sessionId: string }): Promise<boolean> => {
+    const normalizedSessionId = String(context.sessionId ?? '').trim();
+    if (!normalizedSessionId) return false;
+
+    const core = coreRegistry.get(normalizedSessionId)
+      ?? (activeSessionId() === normalizedSessionId ? getActiveCore() : null);
+    if (!core) return false;
+
+    const result = await core.copySelection(context.source === 'shortcut' ? 'shortcut' : 'command');
+    if (result.copied) return true;
+    if (result.reason === 'clipboard_unavailable') {
+      throw new Error('Clipboard is unavailable.');
+    }
+    return false;
   };
 
   const notifyTerminalCopyFailure = (error: unknown) => {
@@ -2094,7 +2090,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!menu) return;
     void executeTerminalCopyCommand({
       source: 'context_menu',
-      selection: menu.selection,
+      sessionId: menu.selection.sessionId,
     }).catch(notifyTerminalCopyFailure);
   };
 
@@ -2318,19 +2314,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
     const key = e.key?.toLowerCase?.() ?? '';
-
-    if (isPrimaryTerminalCopyShortcut(e) && isEventFromTerminalSurface(e.target, getActiveSurfaceElement())) {
-      const selection = getActiveTerminalSelectionSnapshot();
-      if (selection?.hasSelection) {
-        e.preventDefault();
-        e.stopPropagation();
-        void executeTerminalCopyCommand({
-          source: 'shortcut',
-          selection,
-        }).catch(notifyTerminalCopyFailure);
-        return;
-      }
-    }
 
     if ((e.ctrlKey || e.metaKey) && key === 'f') {
       // Common terminal shortcut: intercept browser find.

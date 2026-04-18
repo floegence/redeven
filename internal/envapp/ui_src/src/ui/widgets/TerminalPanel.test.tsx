@@ -476,6 +476,22 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     findPrevious = vi.fn();
     clear = vi.fn();
     getSelectionText = vi.fn(() => terminalSelectionState.text);
+    hasSelection = vi.fn(() => terminalSelectionState.text.length > 0);
+    copySelection = vi.fn(async (source: 'shortcut' | 'command' | 'copy_event' = 'command') => {
+      if (terminalSelectionState.text.length <= 0) {
+        return {
+          copied: false as const,
+          reason: 'empty_selection' as const,
+          source,
+        };
+      }
+
+      return {
+        copied: true as const,
+        textLength: terminalSelectionState.text.length,
+        source,
+      };
+    });
     emitBell = () => {
       this.handlers?.onBell?.();
     };
@@ -1655,7 +1671,8 @@ describe('TerminalPanel', () => {
     copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await settleTerminalPanel();
 
-    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('  echo redeven\n');
+    expect(terminalCoreInstances).toHaveLength(1);
+    expect(terminalCoreInstances[0]?.copySelection).toHaveBeenCalledWith('command');
   });
 
   it('opens the shared file browser from the terminal context menu', async () => {
@@ -1733,7 +1750,33 @@ describe('TerminalPanel', () => {
     expect(browseButton).toBeUndefined();
   });
 
-  it('copies the active terminal selection through Cmd/Ctrl+C from the active terminal surface', async () => {
+  it('keeps terminal search as the product-owned mod+f shortcut', async () => {
+    terminalSelectionState.text = 'pnpm test';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      metaKey: true,
+      key: 'f',
+    });
+    terminalSurface?.dispatchEvent(event);
+    await settleTerminalPanel();
+
+    expect(event.defaultPrevented).toBe(true);
+    const searchInput = host.querySelector('input[placeholder="Search..."]') as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+  });
+
+  it('does not keep a product-owned Cmd/Ctrl+C copy workaround at the panel shell', async () => {
     terminalSelectionState.text = 'pnpm test';
 
     const host = document.createElement('div');
@@ -1754,58 +1797,8 @@ describe('TerminalPanel', () => {
     terminalSurface?.dispatchEvent(event);
     await settleTerminalPanel();
 
-    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('pnpm test');
-    expect(event.defaultPrevented).toBe(true);
-  });
-
-  it('does not intercept Cmd/Ctrl+C when the active terminal has no selection', async () => {
-    terminalSelectionState.text = '';
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <TerminalPanel variant="deck" />, host);
-    await settleTerminalPanel();
-
-    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
-    expect(terminalSurface).toBeTruthy();
-
-    const event = new KeyboardEvent('keydown', {
-      bubbles: true,
-      cancelable: true,
-      ctrlKey: true,
-      key: 'c',
-    });
-    terminalSurface?.dispatchEvent(event);
-    await settleTerminalPanel();
-
-    expect(writeTextToClipboardSpy).not.toHaveBeenCalled();
+    expect(terminalCoreInstances).toHaveLength(1);
+    expect(terminalCoreInstances[0]?.copySelection).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
-  });
-
-  it('does not hijack Cmd/Ctrl+C from non-terminal inputs inside the panel host', async () => {
-    terminalSelectionState.text = 'pnpm test';
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    render(() => <TerminalPanel variant="deck" />, host);
-    await settleTerminalPanel();
-
-    const terminalContent = host.querySelector('[data-testid="terminal-content"]') as HTMLDivElement | null;
-    expect(terminalContent).toBeTruthy();
-
-    const extraInput = document.createElement('input');
-    terminalContent?.appendChild(extraInput);
-
-    extraInput.dispatchEvent(new KeyboardEvent('keydown', {
-      bubbles: true,
-      cancelable: true,
-      ctrlKey: true,
-      key: 'c',
-    }));
-    await settleTerminalPanel();
-
-    expect(writeTextToClipboardSpy).not.toHaveBeenCalled();
   });
 });
