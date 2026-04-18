@@ -69,8 +69,28 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
   BottomBarItem: (props: any) => <div>{props.children}</div>,
+  DisplayModePageShell: (props: any) => (
+    <div data-testid="display-mode-page-shell">
+      {props.logo}
+      {props.title ? <div>{props.title}</div> : null}
+      {props.actions}
+      {props.children}
+    </div>
+  ),
+  DisplayModeSwitcher: (props: any) => (
+    <div data-testid="display-mode-switcher">
+      {['activity', 'deck', 'workbench'].map((mode) => (
+        <button type="button" onClick={() => props.onChange?.(mode)}>
+          {mode === 'activity' ? 'Activity' : mode === 'deck' ? 'Deck' : 'Workbench'}
+        </button>
+      ))}
+    </div>
+  ),
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
+  sanitizeDisplayMode: (value: unknown, fallback = 'activity') => (
+    value === 'activity' || value === 'deck' || value === 'workbench' ? value : fallback
+  ),
   Shell: (props: any) => <div>{props.children}</div>,
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
   TopBarIconButton: (props: any) => <button type="button" onClick={props.onClick}>{props.children}</button>,
@@ -113,6 +133,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Globe: Icon,
     Grid3x3: Icon,
     LayoutDashboard: Icon,
+    MoreVertical: Icon,
     Moon: Icon,
     Refresh: Icon,
     Search: Icon,

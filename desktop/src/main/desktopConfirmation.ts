@@ -13,7 +13,7 @@ import {
 } from '../shared/desktopConfirmationContract';
 
 function desktopConfirmationWindowHeight(model: DesktopConfirmationDialogModel): number {
-  return model.detail === '' ? 292 : 316;
+  return model.detail === '' ? 224 : 244;
 }
 
 export function buildDesktopConfirmationPageURL(args: Readonly<{

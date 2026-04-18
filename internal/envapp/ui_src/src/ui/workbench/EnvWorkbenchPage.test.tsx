@@ -15,6 +15,7 @@ const storageMocks = vi.hoisted(() => ({
 const surfaceApiMocks = vi.hoisted(() => ({
   ensureWidget: vi.fn(),
   focusWidget: vi.fn(),
+  lastWidgetDefinitions: null as any,
 }));
 
 const contextMocks = vi.hoisted(() => ({
@@ -69,8 +70,9 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
   ],
 }));
 
-vi.mock('./EnvWorkbenchSurface', () => ({
-  EnvWorkbenchSurface: (props: any) => {
+vi.mock('@floegence/floe-webapp-core/workbench', () => ({
+  WorkbenchSurface: (props: any) => {
+    surfaceApiMocks.lastWidgetDefinitions = props.widgetDefinitions;
     props.onApiReady?.({
       ensureWidget: surfaceApiMocks.ensureWidget,
       focusWidget: surfaceApiMocks.focusWidget,
@@ -78,6 +80,23 @@ vi.mock('./EnvWorkbenchSurface', () => ({
     });
     return <div data-testid="env-workbench-surface" />;
   },
+  createDefaultWorkbenchState: vi.fn(() => ({
+    version: 1,
+    widgets: [],
+    viewport: { x: 80, y: 60, scale: 1 },
+    locked: false,
+    filters: {
+      'redeven.terminal': true,
+      'redeven.files': true,
+    },
+    selectedWidgetId: null,
+  })),
+  sanitizeWorkbenchState: vi.fn((value: any, options?: any) => {
+    if (value && value.version === 1) {
+      return value;
+    }
+    return options?.createFallbackState?.();
+  }),
 }));
 
 describe('EnvWorkbenchPage', () => {
@@ -92,6 +111,7 @@ describe('EnvWorkbenchPage', () => {
     storageMocks.writeUIStorageJSON.mockReset();
     surfaceApiMocks.ensureWidget.mockReset();
     surfaceApiMocks.focusWidget.mockReset();
+    surfaceApiMocks.lastWidgetDefinitions = null;
     contextMocks.consumeWorkbenchSurfaceActivation.mockReset();
   });
 
@@ -144,5 +164,32 @@ describe('EnvWorkbenchPage', () => {
     expect(surfaceApiMocks.ensureWidget).toHaveBeenCalledWith('redeven.files', { centerViewport: false });
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(ensuredWidget, { centerViewport: false });
     expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-files');
+    expect(surfaceApiMocks.lastWidgetDefinitions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'redeven.terminal', singleton: true }),
+      expect.objectContaining({ type: 'redeven.files', singleton: true }),
+    ]));
+  });
+
+  it('ensures a widget without focusing when the activation request disables focus', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    surfaceApiMocks.ensureWidget.mockReturnValue({ id: 'widget-terminal-1' });
+
+    render(() => <EnvWorkbenchPage />, host);
+    await Promise.resolve();
+
+    setWorkbenchSurfaceActivation({
+      requestId: 'request-terminal',
+      surfaceId: 'terminal',
+      focus: false,
+      ensureVisible: true,
+    });
+    setWorkbenchSurfaceActivationSeq((value) => value + 1);
+    await Promise.resolve();
+
+    expect(surfaceApiMocks.ensureWidget).toHaveBeenCalledWith('redeven.terminal', { centerViewport: true });
+    expect(surfaceApiMocks.focusWidget).not.toHaveBeenCalled();
+    expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-terminal');
   });
 });
