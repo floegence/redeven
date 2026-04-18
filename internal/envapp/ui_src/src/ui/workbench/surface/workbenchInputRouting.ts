@@ -1,3 +1,8 @@
+import {
+  resolveSurfaceInteractionTargetRole,
+  type SurfaceInteractionTargetRole,
+} from '@floegence/floe-webapp-core/ui';
+
 export const REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR = 'data-redeven-workbench-surface-root';
 export const REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR = 'data-redeven-workbench-widget-root';
 export const REDEVEN_WORKBENCH_WIDGET_ID_ATTR = 'data-redeven-workbench-widget-id';
@@ -97,28 +102,35 @@ export function focusWorkbenchWidgetElement(
   return true;
 }
 
+export function resolveWorkbenchSurfaceTargetRole(args: {
+  target: EventTarget | null;
+  interactiveSelector: string;
+  panSurfaceSelector: string;
+}): SurfaceInteractionTargetRole {
+  const role = resolveSurfaceInteractionTargetRole({
+    target: args.target,
+    interactiveSelector: args.interactiveSelector,
+    panSurfaceSelector: args.panSurfaceSelector,
+  });
+  if (role !== 'canvas') {
+    return role;
+  }
+
+  return findWorkbenchWidgetRoot(args.target) !== null ? 'local_surface' : 'canvas';
+}
+
 export function resolveWorkbenchWheelRouting(args: {
   target: EventTarget | null;
   disablePanZoom: boolean;
   interactiveSelector: string;
   panSurfaceSelector: string;
 }): WorkbenchWheelRoutingDecision {
-  const { target, disablePanZoom, interactiveSelector, panSurfaceSelector } = args;
-  const element = target instanceof Element ? target : null;
-  if (!element) {
-    return disablePanZoom ? { kind: 'ignore' } : { kind: 'canvas_zoom' };
-  }
-
-  if (
-    isTypingElement(element) ||
-    element.closest(panSurfaceSelector) !== null ||
-    element.closest(interactiveSelector) !== null ||
-    findWorkbenchWidgetRoot(element) !== null
-  ) {
+  const targetRole = resolveWorkbenchSurfaceTargetRole(args);
+  if (targetRole !== 'canvas') {
     return { kind: 'local_surface' };
   }
 
-  return disablePanZoom ? { kind: 'ignore' } : { kind: 'canvas_zoom' };
+  return args.disablePanZoom ? { kind: 'ignore' } : { kind: 'canvas_zoom' };
 }
 
 export function shouldBypassWorkbenchGlobalHotkeys(args: {

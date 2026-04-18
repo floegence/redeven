@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 
 import { startWorkbenchHotInteraction } from './workbenchHotInteraction';
-import { isTypingElement, resolveWorkbenchWheelRouting } from './workbenchInputRouting';
+import { resolveWorkbenchSurfaceTargetRole, resolveWorkbenchWheelRouting } from './workbenchInputRouting';
 
 const DEFAULT_SCALE = 1;
 const DEFAULT_MIN_SCALE = 0.45;
@@ -140,15 +140,12 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
     }, 90);
   };
 
-  const isInteractiveTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof Element)) return false;
-    if (target.closest(interactiveSelector())) return true;
-    return isTypingElement(target);
-  };
-
-  const isPanSurfaceTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof Element)) return false;
-    return target.closest(panSurfaceSelector()) !== null;
+  const resolveTargetRole = (target: EventTarget | null) => {
+    return resolveWorkbenchSurfaceTargetRole({
+      target,
+      interactiveSelector: interactiveSelector(),
+      panSurfaceSelector: panSurfaceSelector(),
+    });
   };
 
   const releaseDrag = (pointerId?: number) => {
@@ -182,7 +179,7 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
     if (!root) return;
 
     const handleClickCapture = (event: MouseEvent) => {
-      if (!suppressPanSurfaceClick || !isPanSurfaceTarget(event.target)) return;
+      if (!suppressPanSurfaceClick || resolveTargetRole(event.target) !== 'pan_surface') return;
 
       clearPanSurfaceClickSuppression();
       event.preventDefault();
@@ -210,11 +207,11 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
 
   const handlePointerDown: JSX.EventHandler<HTMLDivElement, PointerEvent> = (event) => {
     if (event.button !== 0) return;
-    if (isTypingElement(event.target)) return;
     if (props.disablePanZoom) return;
 
-    const startedFromPanSurface = isPanSurfaceTarget(event.target);
-    if (isInteractiveTarget(event.target) && !startedFromPanSurface) return;
+    const targetRole = resolveTargetRole(event.target);
+    const startedFromPanSurface = targetRole === 'pan_surface';
+    if (targetRole === 'local_surface') return;
 
     clearWheelCommitTimer();
     clearPanSurfaceClickSuppression();
@@ -327,7 +324,7 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
   };
 
   const handleContextMenu: JSX.EventHandler<HTMLDivElement, MouseEvent> = (event) => {
-    if (isInteractiveTarget(event.target)) return;
+    if (resolveTargetRole(event.target) !== 'canvas') return;
 
     const rect = rootRef?.getBoundingClientRect();
     if (!rect) return;
