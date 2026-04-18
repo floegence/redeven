@@ -849,7 +849,6 @@ async function confirmDesktopImpact(
     : currentParentWindow();
   const result = await showDesktopConfirmationDialog({
     model,
-    resolvedTheme: desktopThemeState().getSnapshot().resolvedTheme,
     parentWindow: liveParentWindow,
     platform: process.platform,
   });

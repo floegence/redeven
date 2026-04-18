@@ -76,7 +76,3 @@ export function resolveSessionPreloadPath(args: ResolvePreloadPathArgs): string 
 export function resolveWelcomeRendererPath(args: ResolvePreloadPathArgs): string {
   return path.join(args.appPath, 'dist', 'welcome', 'index.html');
 }
-
-export function resolveConfirmationRendererPath(args: ResolvePreloadPathArgs): string {
-  return path.join(args.appPath, 'dist', 'confirmation', 'index.html');
-}

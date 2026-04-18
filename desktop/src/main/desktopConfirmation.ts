@@ -1,35 +1,58 @@
-import { pathToFileURL } from 'node:url';
+import { dialog, type BrowserWindow, type MessageBoxOptions } from 'electron';
 
-import { app, BrowserWindow } from 'electron';
-
-import { desktopPaletteForResolvedTheme } from './desktopTheme';
-import { buildDesktopWindowChromeOptions } from './windowChrome';
-import { resolveConfirmationRendererPath } from './paths';
-import type { DesktopResolvedTheme } from '../shared/desktopTheme';
-import {
-  desktopConfirmationActionFromURL,
-  type DesktopConfirmationDialogModel,
-  type DesktopConfirmationResult,
+import type {
+  DesktopConfirmationDialogModel,
+  DesktopConfirmationResult,
 } from '../shared/desktopConfirmationContract';
 
-function desktopConfirmationWindowHeight(model: DesktopConfirmationDialogModel): number {
-  return model.detail === '' ? 224 : 244;
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
 }
 
-export function buildDesktopConfirmationPageURL(args: Readonly<{
-  appPath: string;
+function platformAdjustedTitle(
+  model: DesktopConfirmationDialogModel,
+  platform: NodeJS.Platform,
+): string {
+  if (platform === 'darwin') {
+    return model.title;
+  }
+  return model.title === 'Quit Redeven Desktop?'
+    ? 'Exit Redeven Desktop?'
+    : model.title;
+}
+
+function platformAdjustedConfirmLabel(
+  model: DesktopConfirmationDialogModel,
+  platform: NodeJS.Platform,
+): string {
+  if (platform !== 'darwin' && compact(model.confirm_label) === 'Quit') {
+    return 'Exit';
+  }
+  return model.confirm_label;
+}
+
+export function buildDesktopConfirmationMessageBoxOptions(args: Readonly<{
   model: DesktopConfirmationDialogModel;
-  resolvedTheme: DesktopResolvedTheme;
-}>): string {
-  const url = pathToFileURL(resolveConfirmationRendererPath({ appPath: args.appPath }));
-  url.searchParams.set('theme', args.resolvedTheme);
-  url.searchParams.set('model', JSON.stringify(args.model));
-  return url.toString();
+  platform?: NodeJS.Platform;
+}>): MessageBoxOptions {
+  const platform = args.platform ?? process.platform;
+  const confirmLabel = platformAdjustedConfirmLabel(args.model, platform);
+  const detail = compact(args.model.detail);
+
+  return {
+    type: args.model.confirm_tone === 'danger' ? 'warning' : 'question',
+    title: platformAdjustedTitle(args.model, platform),
+    message: args.model.message,
+    detail: detail === '' ? undefined : detail,
+    buttons: [confirmLabel, args.model.cancel_label],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: platform === 'win32',
+  };
 }
 
 export async function showDesktopConfirmationDialog(args: Readonly<{
   model: DesktopConfirmationDialogModel;
-  resolvedTheme: DesktopResolvedTheme;
   parentWindow?: BrowserWindow | null;
   platform?: NodeJS.Platform;
 }>): Promise<DesktopConfirmationResult> {
@@ -37,102 +60,12 @@ export async function showDesktopConfirmationDialog(args: Readonly<{
     ? args.parentWindow
     : undefined;
   const platform = args.platform ?? process.platform;
-  const height = desktopConfirmationWindowHeight(args.model);
-  const win = new BrowserWindow({
-    width: 520,
-    height,
-    minWidth: 480,
-    minHeight: height,
-    resizable: false,
-    maximizable: false,
-    minimizable: false,
-    fullscreenable: false,
-    show: false,
-    title: args.model.title,
-    modal: Boolean(actualParent),
-    parent: actualParent,
-    autoHideMenuBar: true,
-    skipTaskbar: true,
-    ...buildDesktopWindowChromeOptions(platform, desktopPaletteForResolvedTheme(args.resolvedTheme).nativeWindow),
-    webPreferences: {
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false,
-      spellcheck: false,
-    },
+  const options = buildDesktopConfirmationMessageBoxOptions({
+    model: args.model,
+    platform,
   });
-
-  return await new Promise<DesktopConfirmationResult>((resolve) => {
-    let settled = false;
-
-    const handleClosed = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      cleanup();
-      resolve('cancel');
-    };
-
-    const cleanup = () => {
-      win.removeListener('closed', handleClosed);
-      win.webContents.removeListener('will-navigate', handleWillNavigate);
-      win.webContents.removeListener('did-fail-load', handleDidFailLoad);
-    };
-
-    const settle = (result: DesktopConfirmationResult) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      cleanup();
-      resolve(result);
-      if (!win.isDestroyed()) {
-        win.destroy();
-      }
-    };
-
-    const handleDidFailLoad = () => {
-      settle('cancel');
-    };
-
-    const handleNavigationAction = (rawURL: string): DesktopConfirmationResult | null => {
-      return desktopConfirmationActionFromURL(rawURL);
-    };
-
-    const handleWillNavigate = (event: Electron.Event, url: string) => {
-      const action = handleNavigationAction(url);
-      if (!action) {
-        return;
-      }
-      event.preventDefault();
-      settle(action);
-    };
-
-    win.on('closed', handleClosed);
-    win.webContents.on('will-navigate', handleWillNavigate);
-    win.webContents.on('did-fail-load', handleDidFailLoad);
-    win.webContents.setWindowOpenHandler(({ url }) => {
-      const action = handleNavigationAction(url);
-      if (action) {
-        settle(action);
-      }
-      return { action: 'deny' };
-    });
-    win.once('ready-to-show', () => {
-      if (!win.isDestroyed()) {
-        win.show();
-        win.focus();
-      }
-    });
-
-    const pageURL = buildDesktopConfirmationPageURL({
-      appPath: app.getAppPath(),
-      model: args.model,
-      resolvedTheme: args.resolvedTheme,
-    });
-    void win.loadURL(pageURL).catch(() => {
-      settle('cancel');
-    });
-  });
+  const result = actualParent
+    ? await dialog.showMessageBox(actualParent, options)
+    : await dialog.showMessageBox(options);
+  return result.response === 0 ? 'confirm' : 'cancel';
 }
