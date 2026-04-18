@@ -227,7 +227,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
       status_label: 'RUNTIME ONLINE',
-      source_label: 'Control Plane',
+      source_label: 'Provider',
       target_primary: 'http://127.0.0.1:24001/',
       target_secondary: 'https://cp.example.invalid/env/env_demo',
     }));
@@ -245,13 +245,13 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(buildEnvironmentCardFactsModel(localEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
-      placeholderFact('CONTROL PLANE'),
+      placeholderFact('PROVIDER'),
       defaultFact('SOURCE', 'Desktop-managed'),
       defaultFact('WINDOW', 'Open'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('RUNS ON', 'This device'),
-      defaultFact('CONTROL PLANE', 'Demo Portal'),
+      defaultFact('PROVIDER', 'Demo Portal'),
       defaultFact('SOURCE ENV', 'env_demo'),
       defaultFact('WINDOW', 'Open'),
     ]);
@@ -696,10 +696,10 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: [
           {
             id: 'open_via_control_plane',
-            label: 'Open via Control Plane',
+            label: 'Open remotely',
             action: {
               intent: 'open',
-              label: 'Open via Control Plane',
+              label: 'Open remotely',
               enabled: true,
               variant: 'outline',
               route: 'remote_desktop',

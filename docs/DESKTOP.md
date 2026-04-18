@@ -47,7 +47,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Every cold desktop launch opens the welcome launcher first.
 - The launcher always asks the user what to open in this desktop session:
   - any known desktop-managed local environment
-  - any known desktop-managed Control Plane environment
+  - any known desktop-managed provider environment
   - a remembered recent Environment
   - a saved Redeven Local UI URL
   - a saved SSH Host entry that Desktop bootstraps on demand
@@ -196,20 +196,20 @@ Visual hierarchy:
 - shell title: `Redeven Desktop`
 - shell surface title: `Connect Environment`
 - compact launcher header:
-  - `Environments / Control Planes` tabs
+  - `Environments / Providers` tabs
   - shell-wide open-window and card counts
   - add / close actions
 - `Environments` tab:
   - one shared card grid for:
     - desktop-managed local environments
-    - provider environment cards stored in `provider_environments` and refreshed from connected Control Planes
+    - provider environment cards stored in `provider_environments` and refreshed from connected providers
     - saved Redeven URL connections
     - saved SSH Host connections
-  - compact search + source filter toolbar for `All`, `Local`, `Provider`, `Redeven URL`, `SSH Host`, plus connected-Control-Plane filters
+  - compact search + source filter toolbar for `All`, `Local`, `Provider`, `Redeven URL`, `SSH Host`, plus connected-provider filters
   - when pinned entries exist, the launcher keeps explicit `Pinned` and `Environments` sections
   - those sections must still share one measured environment-library column model, so pinning only changes grouping order and never changes card width
   - provider filters and search only change which cards are shown; they must not collapse the underlying card-width system for the current library scope
-- `Control Planes` tab:
+- `Providers` tab:
   - provider action shelves only
   - provider counts, sync state, and provider-to-environment shortcuts
 - activity bar:
@@ -230,17 +230,17 @@ Interaction rules:
   - `Name`
   - `Local UI Bind`
   - `Local UI Password`
-- When the user leaves Control Plane binding off, Desktop derives the internal local scope from `Name` automatically.
+- When the user leaves Provider binding off, Desktop derives the internal local scope from `Name` automatically.
 - Editing a local-only managed environment changes only the visible `Name`; the existing local scope stays stable unless Desktop later grows an explicit scope-migration action.
 - Creating a local environment can either:
   - save the managed environment card without opening it yet
   - connect immediately and start or attach to that managed scope
-- Creating a local environment never binds it directly to a Control Plane environment.
+- Creating a local environment never binds it directly to a provider environment.
 - Provider environments stay one card:
-  - the route menu may expose `Open via Control Plane`
+  - the route menu may expose `Open remotely`
   - the route menu may expose `Set up local runtime…`
   - local runtime configuration reuses the same access/settings model as a local environment
-  - after configuration, the same provider card can `Open locally`, `Start runtime`, `Stop runtime`, or `Open via Control Plane`
+  - after configuration, the same provider card can `Open locally`, `Start runtime`, `Stop runtime`, or `Open remotely`
   - Desktop never creates a second visible card just because that provider environment also has an on-device local runtime
 - SSH Host mode keeps the same compact launcher shell but adds:
   - `Name`
@@ -254,16 +254,16 @@ Interaction rules:
 - The SSH Host `Advanced` disclosure initializes from the saved connection state once and then stays user-owned while editing, so typing in `Environment Instance ID`, `Release Base URL`, or `Remote Install Directory` does not auto-collapse the section.
 - SSH Host mode explains the actual behavior inline:
   - Desktop reuses shared release artifacts for the exact Desktop-managed version, creates an isolated remote environment instance by default, and only shares mutable state when the same `Environment Instance ID` is entered on purpose.
-- `Add Control Plane` opens a separate dialog that accepts:
+- `Add Provider` opens a separate dialog that accepts:
   - a user-owned local `Name`
   - a `Provider URL`
   - the default `Name` is derived from the provider hostname until the user edits it explicitly
 - The launcher defaults to the `Environments` tab and treats environment switching as the primary task.
-- `Control Planes` moves into its own tab so provider management does not compete with the main environment-switching path.
+- `Providers` moves into its own tab so provider management does not compete with the main environment-switching path.
 - Environment cards own the primary actions, so open sessions are reflected through `Open` / `Focus` state directly on the relevant card instead of a separate session rail.
 - Local environments, provider environments, Redeven URLs, and SSH Host entries all render in the `Environments` tab.
-- Connecting or refreshing a Control Plane updates the provider catalog immediately but does not materialize remote-only provider environments into `managed_environments`.
-- `Control Planes` stays provider-management-only. Each shelf offers `View Environments`, `Reconnect`, `Refresh`, and `Delete`.
+- Connecting or refreshing a Provider updates the provider catalog immediately but does not materialize remote-only provider environments into `managed_environments`.
+- `Providers` stays provider-management-only. Each shelf offers `View Environments`, `Reconnect`, `Refresh`, and `Delete`.
 - Environment Library cards use one fixed-height layout:
   - header with label, relative timestamp, pin/unpin icon, and status badge
   - compact facts rows tailored to the card family
@@ -292,7 +292,7 @@ Interaction rules:
   - `RUNS ON`
   - `WINDOW`
   - `BOOTSTRAP`
-- Control Plane shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
+- Provider shelves still keep the raw provider runtime details (`status`, `lifecycle_status`, `last_seen_at`) visible in the detail rows, but the primary badge stays consistent with the Environment Library.
 - Provider-backed state is freshness-aware instead of being treated as timeless cache:
   - Desktop marks provider catalogs as `fresh`, `stale`, or `unknown`
   - opening the launcher, refocusing it, and waking the machine all trigger best-effort provider refresh
@@ -305,7 +305,7 @@ Interaction rules:
     - a compact guidance popover with recovery actions such as `Start runtime locally`, `Start runtime`, or `Set up local runtime…`
     - or a simple unavailable tooltip when Desktop cannot offer a direct local recovery path
   - local environments, provider environments with a configured local runtime, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
-  - provider environments keep route selection explicit in the same menu, including `Open via Control Plane`
+- provider environments keep route selection explicit in the same menu, including `Open remotely`
   - remote-only provider and Redeven URL entries treat runtime control as observe-only and expose `Refresh runtime status` from the runtime menu
 - Runtime health probing uses dedicated contracts instead of route/access inference:
   - local environments, provider local runtimes, SSH forwards, and direct Redeven URLs probe `GET /api/local/runtime/health`
@@ -325,7 +325,7 @@ Interaction rules:
   - Desktop blocks deletion while a window for that managed environment is still open
   - the default local environment `local:default` is a protected Desktop entry and is not deletable from the launcher
   - deleting a local-only managed environment removes the managed entry and its Desktop-owned local scope state
-  - deleting a provider local runtime removes only that provider card's local runtime configuration; the provider card remains if the Control Plane still publishes that environment
+  - deleting a provider local runtime removes only that provider card's local runtime configuration; the provider card remains if the provider still publishes that environment
 - Remote library entries distinguish:
   - unsaved remote sessions that are already open
   - auto-remembered recent connections
@@ -334,8 +334,8 @@ Interaction rules:
 - Recent remote Environments stay one click away after a successful connection.
 - Saved remote Environments render in a card grid and can be opened, edited, saved, or deleted inline.
 - Saved SSH Host environments render in that same card grid, with the SSH host (`destination[:port]`) and forwarded Local UI both exposed through the Endpoint copy rows.
-- Saved Control Planes render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested per-environment card grid.
-- Control Plane shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
+- Saved Providers render in a separate tab with compact provider-level reconnect/refresh/delete shelves and no nested per-environment card grid.
+- Provider shelves show the Desktop display label as the primary title while still surfacing the provider product name, origin, published environment count, unified-catalog count, and local-host count.
 - Dense repeated controls use compact visible labels such as `Open`, `Focus`, `Add`, and `Save`; hover and accessibility metadata keep the full descriptive meaning.
 - Field-validation errors stay inline inside the active launcher dialog, while transient launcher/open failures render as toasts instead of entering page flow.
 - Expected launcher failures no longer rely on raw IPC exception text:
@@ -348,7 +348,7 @@ Interaction rules:
   - `Remote status is stale. Refresh the provider to confirm the latest state.`
   - `This environment is currently offline in the provider.`
 - Transient operation confirmations stay out of page flow:
-  - success and info feedback such as `Refreshed this Control Plane.` render as toast notifications
+  - success and info feedback such as `Refreshed this provider.` render as toast notifications
   - launcher/opening failures such as `Unable to open that Environment` also render as toasts
   - Desktop does not insert transient success/info/error banners or card-inline notices into the launcher content area
 - The shell frame remains visible before connection, but the activity bar keeps only the single `Connect Environment` entry.
@@ -407,7 +407,7 @@ Rules:
   - current password state is visible through summary chips
   - replacing a password is expressed as a queued replacement
   - removing a stored password remains an explicit action
-- Control Plane managed environments reuse the same settings surface, but the environment identity itself stays fixed. The editable part is only the local Local UI exposure that Desktop will request the next time it opens that environment.
+- Provider-managed environments reuse the same settings surface, but the environment identity itself stays fixed. The editable part is only the local Local UI exposure that Desktop will request the next time it opens that environment.
 
 ## Desktop Preferences
 
@@ -668,7 +668,7 @@ Desktop-specific outcomes from this implementation:
 - When a desktop-managed restart finishes, Env App recovers in place through the same shell-owned reconnect/access-gate flow used by other reconnect scenarios.
 - If the restarted runtime requires password verification again, the same page asks for the Local UI password instead of requiring a manual browser refresh.
 - Desktop resolves update impact before continuing:
-  - Desktop-managed local and Control Plane environments may require a Desktop restart and reopen flow
+  - Desktop-managed local and provider environments may require a Desktop restart and reopen flow
   - SSH-hosted environment instances only affect that one SSH Host entry + `environment_instance_id`
   - external Redeven URL targets stay externally managed and do not offer a Desktop-side runtime update action
 - Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.

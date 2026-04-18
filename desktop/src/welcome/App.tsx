@@ -351,7 +351,7 @@ function buildDesktopFloeConfig() {
 
 const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; label: string }>[] = [
   { value: 'environments', label: 'Environments' },
-  { value: 'control_planes', label: 'Control Planes' },
+  { value: 'control_planes', label: 'Providers' },
 ];
 
 function trimString(value: unknown): string {
@@ -1145,7 +1145,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openCreateControlPlaneDialog(message = ''): void {
     if (snapshot().surface !== 'connect_environment') {
-      showConnectEnvironment(message || 'Open the launcher to add a Control Plane.');
+      showConnectEnvironment(message || 'Open the launcher to add a Provider.');
       return;
     }
     setActiveCenterTab('control_planes');
@@ -1344,7 +1344,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openPrimaryManagedEnvironment(): Promise<void> {
     const entry = selectedSettingsEnvironmentEntry();
     if (!entry) {
-      setErrorMessage(visibleSurface() === 'environment_settings' ? 'settings' : 'connect', 'Create a Local Environment or authorize a Control Plane first.');
+      setErrorMessage(visibleSurface() === 'environment_settings' ? 'settings' : 'connect', 'Create a Local Environment or connect a Provider first.');
       return;
     }
     await openManagedEnvironment(entry, visibleSurface() === 'environment_settings' ? 'settings' : 'connect');
@@ -1629,7 +1629,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, 'control_plane_dialog');
     if (result?.outcome === 'started_control_plane_connect') {
       closeControlPlaneDialog();
-      showActionToast('Continue in your browser to finish authorizing this Control Plane.', 'info');
+      showActionToast('Continue in your browser to finish authorizing this provider.', 'info');
     }
   }
 
@@ -2074,7 +2074,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     if (result?.outcome === 'deleted_control_plane') {
       setDeleteControlPlaneTarget(null);
-      showActionToast('Control Plane removed from Desktop.');
+      showActionToast('Provider removed from Desktop.');
     }
   }
 
@@ -2250,7 +2250,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               when={deleteTargetIsManaged()}
               fallback={'This only removes the saved Desktop entry. It does not stop the remote Environment.'}
             >
-              Desktop will remove the local managed state for this device. If this environment is bound to a Control Plane, the remote environment will remain available there.
+              Desktop will remove the local managed state for this device. If this environment is bound to a provider, the remote environment will remain available there.
             </Show>
           </p>
         </div>
@@ -2263,8 +2263,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteControlPlaneTarget(null);
           }
         }}
-        title="Delete Control Plane"
-        confirmText="Delete Control Plane"
+        title="Remove Provider"
+        confirmText="Remove Provider"
         variant="destructive"
         loading={busyAction() === 'delete_control_plane'}
         onConfirm={() => void deleteControlPlane()}
@@ -3507,7 +3507,7 @@ function ControlPlanesPanel(props: Readonly<{
           <div class="redeven-control-plane-grid">
             <div class="redeven-control-plane-card">
               <QuickCreateConnectionCard
-                title="Add Control Plane"
+                title="Add Provider"
                 badge="Provider"
                 detail="Authorize a compatible provider."
                 actionLabel="Connect Provider"
@@ -3771,10 +3771,10 @@ function ControlPlaneShelf(props: Readonly<{
           </Button>
           <div class="flex-1" />
           <ConsoleActionIconButton
-            title="Delete Control Plane"
+            title="Remove Provider"
             danger
             onClick={() => props.deleteControlPlane(props.controlPlane)}
-            aria-label={`Delete ${controlPlaneName(props.controlPlane)}`}
+            aria-label={`Remove ${controlPlaneName(props.controlPlane)}`}
           >
             <Trash class="h-4 w-4" />
           </ConsoleActionIconButton>
@@ -4247,7 +4247,7 @@ function ConnectionDialog(props: Readonly<{
           <>
             Connect straight to a Redeven runtime that already exposes its own Environment URL, such as a runtime on this machine or a host on your local network.
             {' '}
-            <span class="font-medium text-foreground">This is not the Control Plane URL.</span>
+            <span class="font-medium text-foreground">This is not the Provider URL.</span>
           </>
         );
       case 'ssh_environment':
@@ -4649,7 +4649,7 @@ function ControlPlaneDialog(props: Readonly<{
     <Dialog
       open={isOpen()}
       onOpenChange={props.onOpenChange}
-      title="Add Control Plane"
+      title="Add Provider"
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
@@ -4682,7 +4682,7 @@ function ControlPlaneDialog(props: Readonly<{
           />
         </div>
         <div class="space-y-1.5">
-          <label for="control-plane-origin" class="block text-xs font-medium text-foreground">Control Plane URL</label>
+          <label for="control-plane-origin" class="block text-xs font-medium text-foreground">Provider URL</label>
           <Input
             id="control-plane-origin"
             value={props.state?.provider_origin ?? ''}
@@ -4695,7 +4695,7 @@ function ControlPlaneDialog(props: Readonly<{
           />
         </div>
         <div class="text-xs text-muted-foreground">
-          Desktop will open your browser, use your current Portal session to authorize this Control Plane, and store only a revocable desktop authorization locally.
+          Desktop will open your browser, use your current Portal session to authorize this provider, and store only a revocable desktop authorization locally.
         </div>
         <Show when={props.error}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">

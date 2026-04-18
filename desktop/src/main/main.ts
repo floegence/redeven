@@ -581,7 +581,7 @@ function launcherActionFailureFromProviderAuthError(
     return launcherActionFailure(
       'control_plane_auth_required',
       'control_plane',
-      'Reconnect the Control Plane in your browser, then try again.',
+      'Reconnect the provider in your browser, then try again.',
       {
         environmentID: options.environmentID,
         providerOrigin: options.providerOrigin || error.providerOrigin,
@@ -599,7 +599,7 @@ function launcherActionFailureFromUnexpectedError(error: unknown): DesktopLaunch
       return launcherActionFailure(
         'control_plane_auth_required',
         'control_plane',
-        'Reconnect the Control Plane in your browser, then try again.',
+        'Reconnect the provider in your browser, then try again.',
         {
           providerOrigin: error.providerOrigin,
         },
@@ -618,7 +618,7 @@ function launcherActionFailureFromUnexpectedError(error: unknown): DesktopLaunch
     return launcherActionFailure(
       'provider_unreachable',
       'control_plane',
-      error.message || 'Desktop could not reach the Control Plane.',
+      error.message || 'Desktop could not reach the provider.',
       {
         providerOrigin: error.providerOrigin,
       },
@@ -1579,10 +1579,10 @@ async function createSessionRecord(
     target.kind === 'managed_environment'
       ? options.attached === true
         ? target.managed_environment_kind === 'controlplane'
-          ? 'desktop attached to an existing Control Plane environment runtime'
+          ? 'desktop attached to an existing Provider environment runtime'
           : 'desktop attached to an existing Local Environment runtime'
         : target.managed_environment_kind === 'controlplane'
-          ? 'desktop opened a desktop-managed Control Plane environment session'
+          ? 'desktop opened a desktop-managed Provider environment session'
           : 'desktop opened a desktop-managed Local Environment session'
       : target.kind === 'ssh_environment'
         ? 'desktop opened an SSH-bootstrapped environment session'
@@ -1951,7 +1951,7 @@ async function resolveManagedEnvironmentBootstrap(
     throw launcherActionFailure(
       'control_plane_auth_required',
       'control_plane',
-      'Reconnect this Control Plane in Desktop before serving the runtime locally.',
+      'Reconnect this provider in Desktop before serving the runtime locally.',
       {
         environmentID: environment.id,
         providerOrigin,
@@ -1965,7 +1965,7 @@ async function resolveManagedEnvironmentBootstrap(
     throw launcherActionFailure(
       'provider_unreachable',
       'control_plane',
-      'Desktop could not refresh this Control Plane from the current machine.',
+      'Desktop could not refresh this provider from the current machine.',
       {
         environmentID: environment.id,
         providerOrigin,
@@ -1978,7 +1978,7 @@ async function resolveManagedEnvironmentBootstrap(
     throw launcherActionFailure(
       'provider_invalid_response',
       'control_plane',
-      'The Control Plane returned an invalid response while Desktop refreshed this environment.',
+      'The provider returned an invalid response while Desktop refreshed this environment.',
       {
         environmentID: environment.id,
         providerOrigin,
@@ -2274,7 +2274,7 @@ function defaultControlPlaneSyncRecord(controlPlane: DesktopSavedControlPlane): 
       sync_state: 'auth_required',
       last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
       last_sync_error_code: 'authorization_expired',
-      last_sync_error_message: 'Reconnect this Control Plane in your browser to restore access.',
+      last_sync_error_message: 'Reconnect this provider in your browser to restore access.',
     };
   }
   return {
@@ -2405,7 +2405,7 @@ async function refreshProviderEnvironmentRuntimeHealth(
   const preferences = await loadDesktopPreferencesCached();
   const controlPlane = savedControlPlaneByIdentity(preferences, providerOrigin, providerID);
   if (!controlPlane) {
-    throw new Error('This Control Plane is no longer saved in Desktop.');
+    throw new Error('This provider is no longer saved in Desktop.');
   }
   const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
   const runtimeHealth = await queryProviderEnvironmentRuntimeHealth(
@@ -2471,7 +2471,7 @@ function controlPlaneAuthorizationNeedsReconnect(error: unknown): boolean {
     return true;
   }
   return error instanceof Error
-    && error.message === 'Desktop authorization is missing. Reconnect this Control Plane in your browser.';
+    && error.message === 'Desktop authorization is missing. Reconnect this provider in your browser.';
 }
 
 async function startControlPlaneAuthorization(args: Readonly<{
@@ -2535,7 +2535,7 @@ async function saveAuthorizedControlPlane(
   });
   const controlPlane = savedControlPlaneByIdentity(nextPreferences, provider.provider_origin, provider.provider_id);
   if (!controlPlane) {
-    throw new Error('Desktop failed to save the Control Plane account.');
+    throw new Error('Desktop failed to save the provider account.');
   }
   upsertProviderRuntimeHealth(
     provider.provider_origin,
@@ -2565,7 +2565,7 @@ async function syncSavedControlPlaneAccount(
 }>> {
   const refreshToken = controlPlaneRefreshToken(preferences, providerOrigin, providerID);
   if (refreshToken === '') {
-    throw new Error('Desktop authorization is missing. Reconnect this Control Plane in your browser.');
+    throw new Error('Desktop authorization is missing. Reconnect this provider in your browser.');
   }
 
   const provider = await fetchProviderDiscovery(providerOrigin);
@@ -2595,7 +2595,7 @@ async function syncSavedControlPlaneAccount(
   });
   const controlPlane = savedControlPlaneByIdentity(nextPreferences, provider.provider_origin, provider.provider_id);
   if (!controlPlane) {
-    throw new Error('Desktop failed to save the Control Plane account.');
+    throw new Error('Desktop failed to save the provider account.');
   }
   upsertProviderRuntimeHealth(
     provider.provider_origin,
@@ -2627,7 +2627,7 @@ async function syncSavedControlPlaneAccountWithState(
     const preferences = await loadDesktopPreferencesCached();
     const controlPlane = savedControlPlaneByIdentity(preferences, providerOrigin, providerID);
     if (!controlPlane) {
-      throw new Error('This Control Plane is no longer saved in Desktop.');
+      throw new Error('This provider is no longer saved in Desktop.');
     }
 
     const summary = controlPlaneSummary(controlPlane);
@@ -2697,7 +2697,7 @@ async function ensureControlPlaneAccessToken(
     controlPlane.provider.provider_id,
   );
   if (refreshToken === '') {
-    throw new Error('Desktop authorization is missing. Reconnect this Control Plane in your browser.');
+    throw new Error('Desktop authorization is missing. Reconnect this provider in your browser.');
   }
 
   const refreshed = await refreshProviderDesktopAccessToken(controlPlane.provider, refreshToken);
@@ -2841,7 +2841,7 @@ function launcherActionFailureForRemoteRouteState(
       return launcherActionFailure(
         'control_plane_auth_required',
         'control_plane',
-        'Reconnect the Control Plane in your browser, then try again.',
+        'Reconnect the provider in your browser, then try again.',
         {
           environmentID: options.environmentID,
           providerOrigin: options.providerOrigin,
@@ -3142,7 +3142,7 @@ async function openProviderEnvironmentWithOpenSession(args: Readonly<{
     }
   }
   if (providerID === '') {
-    throw new Error('Desktop could not resolve the Control Plane provider ID.');
+    throw new Error('Desktop could not resolve the provider ID.');
   }
   const remoteSessionURL = compact(args.remoteSessionURL);
   if (remoteSessionURL === '') {
@@ -3733,7 +3733,7 @@ async function refreshControlPlaneFromLauncher(
     return launcherActionFailure(
       'control_plane_missing',
       'control_plane',
-      'This Control Plane is no longer saved in Desktop.',
+      'This provider is no longer saved in Desktop.',
       {
         providerOrigin: request.provider_origin,
         providerID: request.provider_id,
@@ -3758,7 +3758,7 @@ async function refreshControlPlaneFromLauncher(
     }) ?? launcherActionFailure(
       'provider_unreachable',
       'control_plane',
-      controlPlaneIssueForError(error, 'Desktop failed to refresh this Control Plane.').message,
+      controlPlaneIssueForError(error, 'Desktop failed to refresh this provider.').message,
       {
         providerOrigin: controlPlane.provider.provider_origin,
         providerID: controlPlane.provider.provider_id,
@@ -3776,7 +3776,7 @@ async function deleteControlPlaneFromLauncher(
     return launcherActionFailure(
       'control_plane_missing',
       'control_plane',
-      'This Control Plane is no longer saved in Desktop.',
+      'This provider is no longer saved in Desktop.',
       {
         providerOrigin: request.provider_origin,
         providerID: request.provider_id,
@@ -3868,7 +3868,7 @@ async function openProviderEnvironmentFromLauncher(
     return launcherActionFailure(
       'control_plane_missing',
       'control_plane',
-      'Reconnect the Control Plane for this environment, then try again.',
+      'Reconnect the provider for this environment, then try again.',
       {
         environmentID: environment.id,
         providerOrigin: environment.provider_origin,
@@ -3993,7 +3993,7 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
       return {
         ok: false,
         started: false,
-        message: 'Reconnect the Control Plane before restarting this environment.',
+        message: 'Reconnect the provider before restarting this environment.',
       };
     }
     const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
@@ -4131,10 +4131,10 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
   }
 
   const environmentKindLabel = sessionRecord.target.managed_environment_kind === 'controlplane'
-    ? 'Control Plane environment'
+    ? 'Provider environment'
     : 'Local environment';
   const detail = sessionRecord.target.managed_environment_kind === 'controlplane'
-    ? 'Desktop will keep this environment in the same control-plane scope and may need a newer desktop release before redeploying the managed runtime.'
+    ? 'Desktop will keep this environment in the same provider-backed scope and may need a newer desktop release before redeploying the managed runtime.'
     : 'Desktop will keep this environment in the same local scope and may need a newer desktop release before restarting the managed runtime.';
   const dialogOptions: MessageBoxOptions = {
     type: 'info',
@@ -4811,10 +4811,10 @@ async function completeControlPlaneAuthorizationFromDeepLink(
 ): Promise<void> {
   const pendingAuthorization = consumePendingControlPlaneAuthorization(request.state);
   if (!pendingAuthorization) {
-    throw new Error('Desktop failed to match the Control Plane authorization state.');
+    throw new Error('Desktop failed to match the provider authorization state.');
   }
   if (normalizeControlPlaneOrigin(request.provider_origin) !== pendingAuthorization.provider_origin) {
-    throw new Error('Desktop failed to match the Control Plane authorization provider.');
+    throw new Error('Desktop failed to match the provider authorization target.');
   }
 
   const preferences = await loadDesktopPreferencesCached();
@@ -4860,7 +4860,7 @@ async function handleDesktopDeepLink(rawURL: string): Promise<void> {
   if (!request) {
     await openDesktopWelcomeWindow({
       entryReason: 'connect_failed',
-      issue: buildControlPlaneIssue('control_plane_invalid', 'Desktop received an invalid Control Plane deep link.'),
+      issue: buildControlPlaneIssue('control_plane_invalid', 'Desktop received an invalid provider link.'),
       stealAppFocus: true,
     });
     return;
@@ -4883,7 +4883,7 @@ async function handleDesktopDeepLink(rawURL: string): Promise<void> {
       entryReason: 'connect_failed',
       issue: controlPlaneIssueForError(
         error,
-        'Desktop failed to process the Control Plane deep link.',
+        'Desktop failed to process the provider link.',
       ),
       stealAppFocus: true,
     });

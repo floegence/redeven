@@ -37,9 +37,9 @@ describe('launcherActionFeedback', () => {
       ok: false,
       code: 'control_plane_missing',
       scope: 'control_plane',
-      message: 'This Control Plane is no longer saved in Desktop.',
+      message: 'This provider is no longer saved in Desktop.',
     })).toEqual({
-      message: 'This Control Plane is no longer saved in Desktop.',
+      message: 'This provider is no longer saved in Desktop.',
       tone: 'warning',
       refresh_snapshot: false,
       delivery: 'toast',

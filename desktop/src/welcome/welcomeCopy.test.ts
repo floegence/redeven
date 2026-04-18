@@ -32,7 +32,7 @@ describe('welcomeCopy', () => {
   it('detects redundant field labels inside matching settings cards', () => {
     expect(isRedundantSettingsFieldLabel('Local UI bind address', 'Bind address')).toBe(true);
     expect(isRedundantSettingsFieldLabel('Local UI password', 'Password')).toBe(true);
-    expect(isRedundantSettingsFieldLabel('Control Plane URL', 'Advanced')).toBe(false);
+    expect(isRedundantSettingsFieldLabel('Provider URL', 'Advanced')).toBe(false);
     expect(isRedundantSettingsFieldLabel('Release Base URL')).toBe(false);
   });
 

@@ -158,7 +158,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
   if (hasCode(TLS_ERROR_CODES) || includesMessage('certificate')) {
     return new DesktopProviderRequestError(
       'provider_tls_untrusted',
-      'Desktop could not verify the Control Plane certificate. Trust that certificate on this machine, then try again.',
+      'Desktop could not verify the provider certificate. Trust that certificate on this machine, then try again.',
       { providerOrigin, cause: error },
     );
   }
@@ -166,7 +166,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
   if (hasCode(DNS_ERROR_CODES) || includesMessage('name not resolved') || includesMessage('dns')) {
     return new DesktopProviderRequestError(
       'provider_dns_failed',
-      'Desktop could not resolve the Control Plane host. Check the hostname and local DNS or hosts configuration, then try again.',
+      'Desktop could not resolve the provider host. Check the hostname and local DNS or hosts configuration, then try again.',
       { providerOrigin, cause: error },
     );
   }
@@ -174,7 +174,7 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
   if (includesMessage('aborterror') || includesMessage('timed out') || includesMessage('timeout')) {
     return new DesktopProviderRequestError(
       'provider_timeout',
-      'Desktop timed out waiting for the Control Plane to respond.',
+      'Desktop timed out waiting for the provider to respond.',
       { providerOrigin, cause: error },
     );
   }
@@ -182,14 +182,14 @@ function normalizeTransportFailure(url: string, error: unknown): DesktopProvider
   if (hasCode(CONNECTION_ERROR_CODES) || includesMessage('connection refused') || includesMessage('connection reset')) {
     return new DesktopProviderRequestError(
       'provider_connection_failed',
-      'Desktop could not reach the Control Plane. Make sure it is running and reachable from this machine, then try again.',
+      'Desktop could not reach the provider. Make sure it is running and reachable from this machine, then try again.',
       { providerOrigin, cause: error },
     );
   }
 
   return new DesktopProviderRequestError(
     'provider_request_failed',
-    'Desktop failed to talk to the Control Plane.',
+    'Desktop failed to talk to the provider.',
     { providerOrigin, cause: error },
   );
 }
@@ -225,7 +225,7 @@ export const electronDesktopProviderTransport: DesktopProviderTransport = async 
   } catch (error) {
     throw new DesktopProviderRequestError(
       'provider_invalid_response',
-      'Desktop could not read the Control Plane response.',
+      'Desktop could not read the provider response.',
       {
         providerOrigin: providerOriginFromURL(request.url),
         status: response.status,

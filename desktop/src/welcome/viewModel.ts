@@ -296,7 +296,7 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
     case 'managed':
       return 'Desktop-managed';
     case 'provider':
-      return 'Control Plane';
+      return 'Provider';
     case 'open_unsaved':
       return 'Open window';
     case 'recent_auto':
@@ -403,7 +403,7 @@ function buildPlaceholderEnvironmentCardFact(
 
 const ENVIRONMENT_CARD_FACT_ORDER = [
   'RUNS ON',
-  'CONTROL PLANE',
+  'PROVIDER',
   'SOURCE ENV',
   'SOURCE',
   'BOOTSTRAP',
@@ -459,7 +459,7 @@ export function buildEnvironmentCardFactsModel(
   if (environment.kind === 'managed_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
-      buildPlaceholderEnvironmentCardFact('CONTROL PLANE'),
+      buildPlaceholderEnvironmentCardFact('PROVIDER'),
       buildEnvironmentCardFact('SOURCE', environmentSourceLabel(environment)),
       buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
     ]);
@@ -469,7 +469,7 @@ export function buildEnvironmentCardFactsModel(
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('WINDOW', environmentWindowLabel(environment)),
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment)),
-      buildEnvironmentCardFact('CONTROL PLANE', controlPlaneDisplayLabel(environment) || 'Unavailable'),
+      buildEnvironmentCardFact('PROVIDER', controlPlaneDisplayLabel(environment) || 'Unavailable'),
       buildEnvironmentCardFact('SOURCE ENV', environment.env_public_id ?? 'Unknown'),
     ]);
   }
@@ -686,10 +686,10 @@ function providerRemoteRouteMenuAction(
   if (compact(environment.open_remote_session_key) !== '') {
     return {
       id: 'focus_control_plane_window',
-      label: 'Focus Control Plane window',
+      label: 'Focus remote window',
       action: {
         intent: 'focus',
-        label: 'Focus Control Plane window',
+        label: 'Focus remote window',
         enabled: true,
         variant: 'outline',
         route: 'remote_desktop',
@@ -699,10 +699,10 @@ function providerRemoteRouteMenuAction(
   if (environment.open_remote_session_lifecycle === 'opening') {
     return {
       id: 'control_plane_window_opening',
-      label: 'Control Plane window opening…',
+      label: 'Remote window opening…',
       action: {
         intent: 'opening',
-        label: 'Control Plane window opening…',
+        label: 'Remote window opening…',
         enabled: false,
         variant: 'outline',
         route: 'remote_desktop',
@@ -712,10 +712,10 @@ function providerRemoteRouteMenuAction(
   if (environment.remote_route_state === 'ready') {
     return {
       id: 'open_via_control_plane',
-      label: 'Open via Control Plane',
+      label: 'Open remotely',
       action: {
         intent: 'open',
-        label: 'Open via Control Plane',
+        label: 'Open remotely',
         enabled: true,
         variant: 'outline',
         route: 'remote_desktop',

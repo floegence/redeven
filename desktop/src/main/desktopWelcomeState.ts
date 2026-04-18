@@ -138,18 +138,18 @@ export function buildControlPlaneIssue(
     code,
     title: (() => {
       if (code === 'control_plane_invalid') {
-        return 'Control Plane configuration is invalid';
+        return 'Provider configuration is invalid';
       }
       if (code === 'provider_tls_untrusted') {
-        return 'Trust the Control Plane certificate';
+        return 'Trust the provider certificate';
       }
       if (code === 'provider_dns_failed' || code === 'provider_connection_failed' || code === 'provider_timeout') {
-        return 'Control Plane is unreachable';
+        return 'Provider is unreachable';
       }
       if (code === 'provider_invalid_json' || code === 'provider_invalid_response') {
-        return 'Control Plane returned an invalid response';
+        return 'Provider returned an invalid response';
       }
-      return 'Unable to use that Control Plane';
+      return 'Unable to use that provider';
     })(),
     message,
     diagnostics_copy: diagnosticsLines([
@@ -503,7 +503,7 @@ function managedRemoteRouteDetails(
       providerEnvironment: null,
       remoteRouteState: 'auth_required',
       remoteCatalogFreshness: 'unknown',
-      remoteStateReason: 'Reconnect this Control Plane in Desktop to restore remote access.',
+      remoteStateReason: 'Reconnect this provider in Desktop to restore remote access.',
     };
   }
 
@@ -533,7 +533,7 @@ function managedRemoteRouteDetails(
       case 'removed':
         return 'This environment is no longer published by the provider.';
       case 'auth_required':
-        return 'Reconnect this Control Plane in your browser to restore access.';
+        return 'Reconnect this provider in Desktop to restore access.';
       case 'provider_unreachable':
         return 'Desktop could not refresh this provider from the current machine.';
       case 'provider_invalid':
@@ -655,7 +655,7 @@ function providerRemoteStateReason(remoteRouteState: DesktopProviderRemoteRouteS
     case 'removed':
       return 'This environment is no longer published by the provider.';
     case 'auth_required':
-      return 'Reconnect this Control Plane in Desktop to restore remote access.';
+      return 'Reconnect this provider in Desktop to restore remote access.';
     case 'provider_unreachable':
       return 'Desktop could not refresh this provider from the current machine.';
     case 'provider_invalid':

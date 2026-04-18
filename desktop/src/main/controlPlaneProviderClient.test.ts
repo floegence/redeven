@@ -61,7 +61,7 @@ describe('controlPlaneProviderClient', () => {
       code: 'provider_invalid_json',
       providerOrigin: 'https://dev.redeven.test',
       status: 200,
-      message: 'The Control Plane returned invalid JSON for the provider discovery document.',
+      message: 'The provider returned invalid JSON for the provider discovery document.',
     } satisfies Partial<DesktopProviderRequestError>);
   });
 
@@ -109,7 +109,7 @@ describe('controlPlaneProviderClient', () => {
       name: 'DesktopProviderRequestError',
       code: 'provider_invalid_response',
       providerOrigin: 'https://dev.redeven.test',
-      message: 'The Control Plane environment list is invalid.',
+      message: 'The provider environment list is invalid.',
     } satisfies Partial<DesktopProviderRequestError>);
   });
 

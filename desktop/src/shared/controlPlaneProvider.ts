@@ -97,24 +97,24 @@ export function normalizeControlPlaneDisplayLabel(value: unknown, providerOrigin
 export function normalizeControlPlaneOrigin(rawURL: string): string {
   const clean = compact(rawURL);
   if (clean === '') {
-    throw new Error('Control Plane URL is required.');
+    throw new Error('Provider URL is required.');
   }
 
   let parsed: URL;
   try {
     parsed = new URL(clean);
   } catch {
-    throw new Error('Control Plane URL must be a valid absolute URL.');
+    throw new Error('Provider URL must be a valid absolute URL.');
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('Control Plane URL must start with http:// or https://.');
+    throw new Error('Provider URL must start with http:// or https://.');
   }
   if (compact(parsed.hostname) === '') {
-    throw new Error('Control Plane URL must include a host.');
+    throw new Error('Provider URL must include a host.');
   }
   if (parsed.username || parsed.password) {
-    throw new Error('Control Plane URL must not include embedded credentials.');
+    throw new Error('Provider URL must not include embedded credentials.');
   }
 
   parsed.pathname = '';

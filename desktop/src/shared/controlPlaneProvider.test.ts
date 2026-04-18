@@ -20,12 +20,12 @@ describe('controlPlaneProvider', () => {
   });
 
   it('rejects invalid provider origins', () => {
-    expect(() => normalizeControlPlaneOrigin('')).toThrow('Control Plane URL is required.');
+    expect(() => normalizeControlPlaneOrigin('')).toThrow('Provider URL is required.');
     expect(() => normalizeControlPlaneOrigin('cp.example.invalid')).toThrow(
-      'Control Plane URL must be a valid absolute URL.',
+      'Provider URL must be a valid absolute URL.',
     );
     expect(() => normalizeControlPlaneOrigin('ftp://cp.example.invalid')).toThrow(
-      'Control Plane URL must start with http:// or https://.',
+      'Provider URL must start with http:// or https://.',
     );
   });
 

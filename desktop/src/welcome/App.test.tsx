@@ -457,7 +457,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('Connect Environment');
     expect(appSrc).toContain('Environments');
-    expect(appSrc).toContain('Control Planes');
+    expect(appSrc).toContain('Providers');
     expect(appSrc).toContain('Search environments...');
     expect(appSrc).toContain('Local Environment');
     expect(appSrc).toContain('<EnvironmentConnectionCard');
@@ -528,8 +528,8 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('Control Planes');
-    expect(appSrc).toContain('Add Control Plane');
+    expect(appSrc).toContain('Providers');
+    expect(appSrc).toContain('Add Provider');
     expect(appSrc).toContain('View Environments');
     expect(appSrc).toContain('All Sources');
     expect(appSrc).toContain('Local');
@@ -615,7 +615,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Create a local serve runtime for this provider environment on this Mac.');
     expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
     expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
-    expect(appSrc).toContain('This is not the Control Plane URL.');
+    expect(appSrc).toContain('This is not the Provider URL.');
     expect(appSrc).toContain('Deploy a Desktop-managed environment to a machine you can reach over SSH.');
     expect(appSrc).toContain('Desktop reuses shared release artifacts on that host, but each Environment Instance stays isolated unless you explicitly reuse its Instance ID.');
     expect(appSrc).toContain('Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and keeps runtime state isolated per Environment Instance.');

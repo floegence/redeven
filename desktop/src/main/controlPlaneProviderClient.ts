@@ -129,7 +129,7 @@ async function readResponseJSON(
   } catch {
     throw new DesktopProviderRequestError(
       'provider_invalid_json',
-      `The Control Plane returned invalid JSON for ${operationLabel}.`,
+      `The provider returned invalid JSON for ${operationLabel}.`,
       {
         providerOrigin,
         status: response.status,
@@ -146,7 +146,7 @@ function providerErrorMessage(status: number, body: unknown): string {
       return message;
     }
   }
-  return `Control Plane request failed (${status}).`;
+  return `Provider request failed (${status}).`;
 }
 
 async function fetchProviderJSON(
@@ -223,7 +223,7 @@ function normalizeProviderDesktopTokenRefreshResponse(
   if (!body || typeof body !== 'object') {
     throw invalidProviderResponseError(
       providerOrigin,
-      'The Control Plane desktop token refresh response is invalid.',
+      'The provider desktop token refresh response is invalid.',
     );
   }
 
@@ -232,7 +232,7 @@ function normalizeProviderDesktopTokenRefreshResponse(
   if (accessToken === '') {
     throw invalidProviderResponseError(
       providerOrigin,
-      'The Control Plane desktop token refresh response is invalid.',
+      'The provider desktop token refresh response is invalid.',
     );
   }
   return {
@@ -240,12 +240,12 @@ function normalizeProviderDesktopTokenRefreshResponse(
     access_expires_at_unix_ms: normalizeProviderUnixMS(
       providerOrigin,
       candidate.access_expires_at_unix_ms,
-      'The Control Plane desktop token refresh response is invalid.',
+      'The provider desktop token refresh response is invalid.',
     ),
     authorization_expires_at_unix_ms: normalizeProviderUnixMS(
       providerOrigin,
       candidate.authorization_expires_at_unix_ms,
-      'The Control Plane desktop token refresh response is invalid.',
+      'The provider desktop token refresh response is invalid.',
     ),
   };
 }
@@ -257,7 +257,7 @@ function normalizeProviderDesktopConnectExchangeResponse(
   if (!body || typeof body !== 'object') {
     throw invalidProviderResponseError(
       provider.provider_origin,
-      'The Control Plane desktop connect response is invalid.',
+      'The provider desktop connect response is invalid.',
     );
   }
 
@@ -267,12 +267,12 @@ function normalizeProviderDesktopConnectExchangeResponse(
   const authorizationExpiresAtUnixMS = normalizeProviderUnixMS(
     provider.provider_origin,
     candidate.authorization_expires_at_unix_ms,
-    'The Control Plane desktop connect response is invalid.',
+    'The provider desktop connect response is invalid.',
   );
   if (accessToken === '' || refreshToken === '') {
     throw invalidProviderResponseError(
       provider.provider_origin,
-      'The Control Plane desktop connect response is invalid.',
+      'The provider desktop connect response is invalid.',
     );
   }
 
@@ -285,7 +285,7 @@ function normalizeProviderDesktopConnectExchangeResponse(
   if (!account) {
     throw invalidProviderResponseError(
       provider.provider_origin,
-      'The Control Plane desktop connect response is invalid.',
+      'The provider desktop connect response is invalid.',
     );
   }
 
@@ -294,7 +294,7 @@ function normalizeProviderDesktopConnectExchangeResponse(
     access_expires_at_unix_ms: normalizeProviderUnixMS(
       provider.provider_origin,
       candidate.access_expires_at_unix_ms,
-      'The Control Plane desktop connect response is invalid.',
+      'The provider desktop connect response is invalid.',
     ),
     refresh_token: refreshToken,
     authorization_expires_at_unix_ms: authorizationExpiresAtUnixMS,
@@ -318,7 +318,7 @@ export async function fetchProviderDiscovery(
   if (!provider) {
     throw invalidProviderResponseError(
       normalizedOrigin,
-      'The Control Plane provider discovery document is invalid.',
+      'The provider discovery document is invalid.',
     );
   }
   return provider;
@@ -398,7 +398,7 @@ export async function fetchProviderAccount(
   if (!account) {
     throw invalidProviderResponseError(
       provider.provider_origin,
-      'The Control Plane account summary is invalid.',
+      'The provider account summary is invalid.',
     );
   }
   return account;
@@ -420,7 +420,7 @@ export async function fetchProviderEnvironments(
   if (!body || typeof body !== 'object' || !Array.isArray((body as { environments?: unknown }).environments)) {
     throw invalidProviderResponseError(
       provider.provider_origin,
-      'The Control Plane environment list is invalid.',
+      'The provider environment list is invalid.',
     );
   }
   return normalizeDesktopProviderEnvironmentList(body, { provider });
@@ -453,7 +453,7 @@ export async function queryProviderEnvironmentRuntimeHealth(
   if (!body || typeof body !== 'object' || !Array.isArray((body as { environments?: unknown }).environments)) {
     throw invalidProviderResponseError(
       provider.provider_origin,
-      'The Control Plane runtime health response is invalid.',
+      'The provider runtime health response is invalid.',
     );
   }
   return normalizeDesktopProviderEnvironmentRuntimeHealthList(body);
@@ -484,7 +484,7 @@ export async function requestDesktopOpenSession(
   return normalizeProviderOpenSessionResponse(
     provider.provider_origin,
     body,
-    'The Control Plane desktop open session response is invalid.',
+    'The provider desktop open session response is invalid.',
   );
 }
 
