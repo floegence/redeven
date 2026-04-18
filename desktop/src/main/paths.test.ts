@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   bundledRuntimeExecutableName,
+  resolveConfirmationRendererPath,
   resolveBundledRuntimePath,
   resolveSessionPreloadPath,
   resolveUtilityPreloadPath,
@@ -61,5 +62,11 @@ describe('paths', () => {
     expect(resolveWelcomeRendererPath({
       appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
     })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/welcome/index.html');
+  });
+
+  it('resolves the bundled confirmation renderer path', () => {
+    expect(resolveConfirmationRendererPath({
+      appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
+    })).toBe('/Applications/Redeven Desktop.app/Contents/Resources/app.asar/dist/confirmation/index.html');
   });
 });

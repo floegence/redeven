@@ -86,46 +86,15 @@ describe('desktopQuitImpact', () => {
 
     expect(model).toEqual({
       title: 'Quit Redeven Desktop?',
-      eyebrow: 'Redeven Desktop',
-      heading: 'Quit Redeven Desktop?',
-      message: 'Quitting now will stop 2 Desktop-managed runtimes and close 2 environment windows.',
-      impact_label: 'Will stop runtimes',
+      message: 'This will stop 2 Desktop-managed runtimes and close 2 environment windows.',
+      detail: '1 externally managed runtime will keep running.',
       confirm_label: 'Quit',
       cancel_label: 'Cancel',
       confirm_tone: 'danger',
-      summary_items: [
-        {
-          value: '2',
-          label: 'Runtimes to stop',
-          detail: 'Desktop-owned runtimes shut down with the app.',
-          tone: 'danger',
-        },
-        {
-          value: '2',
-          label: 'Windows to close',
-          detail: 'Every open environment window closes immediately.',
-          tone: 'warning',
-        },
-        {
-          value: '1',
-          label: 'Runtime unchanged',
-          detail: 'Externally managed runtimes keep their current state.',
-          tone: 'success',
-        },
-      ],
-      runtime_section_title: 'Affected environments',
-      runtime_section_body: 'Affected environments may become unavailable from this machine until Redeven Desktop starts them again.',
-      runtime_preview: [
-        { label: 'Alpha', badge: 'Managed Environment' },
-        { label: 'SSH Lab', badge: 'SSH Host' },
-      ],
-      runtime_overflow_count: 0,
-      callout: undefined,
-      footnote: 'Esc cancels. Cmd/Ctrl+Enter confirms.',
     });
   });
 
-  it('summarizes long environment lists without dropping the runtime risk context', () => {
+  it('keeps long runtime-only quit models concise', () => {
     const model = buildDesktopQuitConfirmationModel(buildDesktopQuitImpact({
       environment_window_count: 0,
       managed_environment_runtimes: [
@@ -138,15 +107,14 @@ describe('desktopQuitImpact', () => {
       ssh_runtimes: [],
     }));
 
-    expect(model.message).toBe('Quitting now will stop 5 Desktop-managed runtimes.');
-    expect(model.runtime_preview).toEqual([
-      { label: 'Alpha', badge: 'Managed Environment' },
-      { label: 'Bravo', badge: 'Managed Environment' },
-      { label: 'Charlie', badge: 'Managed Environment' },
-      { label: 'Delta', badge: 'Managed Environment' },
-    ]);
-    expect(model.runtime_overflow_count).toBe(1);
-    expect(model.callout).toBeUndefined();
+    expect(model).toEqual({
+      title: 'Quit Redeven Desktop?',
+      message: 'This will stop 5 Desktop-managed runtimes.',
+      detail: '',
+      confirm_label: 'Quit',
+      cancel_label: 'Cancel',
+      confirm_tone: 'danger',
+    });
   });
 
   it('builds a macOS last-window-close confirmation model that preserves close semantics', () => {
@@ -160,61 +128,28 @@ describe('desktopQuitImpact', () => {
 
     expect(model).toEqual({
       title: 'Close the Last Window?',
-      eyebrow: 'Redeven Desktop',
-      heading: 'Close the Last Window?',
-      message: 'Closing the last window will close 1 environment window and keep 1 Desktop-managed runtime running in the background. Redeven Desktop will stay open.',
-      impact_label: 'Keeps app running',
+      message: 'The last window will close, but 1 Desktop-managed runtime will keep running in the background.',
+      detail: 'Reopen the launcher from the Dock or app menu.',
       confirm_label: 'Close Window',
       cancel_label: 'Cancel',
       confirm_tone: 'warning',
-      summary_items: [
-        {
-          value: '1',
-          label: 'Window to close',
-          detail: 'The final visible Desktop surface will disappear.',
-          tone: 'warning',
-        },
-        {
-          value: '1',
-          label: 'Runtime left running',
-          detail: 'Desktop-managed runtimes continue in the background.',
-          tone: 'success',
-        },
-      ],
-      runtime_section_title: 'Still running after the window closes',
-      runtime_section_body: 'These environments keep running until you quit Redeven Desktop.',
-      runtime_preview: [
-        { label: 'Alpha', badge: 'Managed Environment' },
-      ],
-      runtime_overflow_count: 0,
-      callout: undefined,
-      footnote: 'You can reopen the launcher from the Dock or app menu.',
     });
   });
 
-  it('keeps the macOS last-window-close model concise when only the environment window disappears', () => {
+  it('keeps the macOS last-window-close model concise when only the window disappears', () => {
     const model = buildDesktopLastWindowCloseConfirmationModel(buildDesktopQuitImpact({
       environment_window_count: 1,
       managed_environment_runtimes: [],
       ssh_runtimes: [],
     }));
 
-    expect(model.message).toBe('Closing the last window will close 1 environment window. Redeven Desktop will stay open.');
-    expect(model.runtime_section_title).toBeUndefined();
-    expect(model.runtime_preview).toEqual([]);
-    expect(model.summary_items).toEqual([
-      {
-        value: '1',
-        label: 'Window to close',
-        detail: 'The final visible Desktop surface will disappear.',
-        tone: 'warning',
-      },
-      {
-        value: '0',
-        label: 'Runtimes left running',
-        detail: 'No Desktop-managed runtime continues in the background.',
-        tone: 'neutral',
-      },
-    ]);
+    expect(model).toEqual({
+      title: 'Close the Last Window?',
+      message: 'The last window will close, but Redeven Desktop will keep running in the background.',
+      detail: 'Reopen the launcher from the Dock or app menu.',
+      confirm_label: 'Close Window',
+      cancel_label: 'Cancel',
+      confirm_tone: 'warning',
+    });
   });
 });

@@ -1,44 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
+import { buildDesktopConfirmationPageURL } from './desktopConfirmation';
 import {
-  buildDesktopConfirmationPageHTML,
   desktopConfirmationActionFromURL,
   isDesktopConfirmationActionURL,
+  normalizeDesktopConfirmationDialogModel,
   type DesktopConfirmationDialogModel,
-} from './desktopConfirmation';
+} from '../shared/desktopConfirmationContract';
 
 const baseModel: DesktopConfirmationDialogModel = {
   title: 'Quit Redeven Desktop?',
-  eyebrow: 'Redeven Desktop',
-  heading: 'Quit Redeven Desktop?',
-  message: 'Quitting now will stop 2 Desktop-managed runtimes and close 1 environment window.',
-  impact_label: 'Will stop runtimes',
+  message: 'This will stop 2 Desktop-managed runtimes and close 1 environment window.',
+  detail: '1 externally managed runtime will keep running.',
   confirm_label: 'Quit',
   cancel_label: 'Cancel',
   confirm_tone: 'danger',
-  summary_items: [
-    {
-      value: '2',
-      label: 'Runtimes to stop',
-      detail: 'Desktop-owned runtimes shut down with the app.',
-      tone: 'danger',
-    },
-    {
-      value: '1',
-      label: 'Window to close',
-      detail: 'Every open environment window closes immediately.',
-      tone: 'warning',
-    },
-  ],
-  runtime_section_title: 'Affected environments',
-  runtime_section_body: 'Stopping these runtimes may make the environments unavailable from this machine until Redeven Desktop starts them again.',
-  runtime_preview: [
-    { label: 'Alpha', badge: 'Managed Environment' },
-    { label: 'SSH Lab', badge: 'SSH Host' },
-  ],
-  runtime_overflow_count: 1,
-  callout: undefined,
-  footnote: 'Esc cancels. Cmd/Ctrl+Enter confirms.',
 };
 
 describe('desktopConfirmation', () => {
@@ -50,25 +26,36 @@ describe('desktopConfirmation', () => {
     expect(desktopConfirmationActionFromURL('https://redeven-desktop.invalid/confirmation/unknown')).toBeNull();
   });
 
-  it('renders a compact confirmation page with concise runtime context and keyboard guidance', () => {
-    const html = buildDesktopConfirmationPageHTML(baseModel, 'light', 'darwin');
-
-    expect(html).toContain('width: min(600px, 100%);');
-    expect(html).toContain('Will stop runtimes');
-    expect(html).toContain('Affected environments');
-    expect(html).toContain('+1 more environment');
-    expect(html).toContain('button-confirm-danger');
-    expect(html).toContain('summary-strip');
-    expect(html).toContain('runtime-chip');
-    expect(html).toContain('Esc cancels. Cmd/Ctrl+Enter confirms.');
-    expect(html).toContain('window.location.href = confirmButton.href;');
+  it('normalizes the shared confirmation dialog contract', () => {
+    expect(normalizeDesktopConfirmationDialogModel({
+      title: ' Quit Redeven Desktop? ',
+      message: ' This will stop 2 Desktop-managed runtimes. ',
+      detail: '  ',
+      confirm_label: ' Quit ',
+      cancel_label: ' Cancel ',
+      confirm_tone: 'warning',
+    })).toEqual({
+      title: 'Quit Redeven Desktop?',
+      message: 'This will stop 2 Desktop-managed runtimes.',
+      detail: '',
+      confirm_label: 'Quit',
+      cancel_label: 'Cancel',
+      confirm_tone: 'warning',
+    });
+    expect(normalizeDesktopConfirmationDialogModel({ title: '', message: '', confirm_label: '', cancel_label: '' })).toBeNull();
   });
 
-  it('switches the page chrome to dark mode when the resolved theme is dark', () => {
-    const html = buildDesktopConfirmationPageHTML(baseModel, 'dark', 'linux');
+  it('builds the confirmation renderer URL with the theme and serialized model', () => {
+    const rawURL = buildDesktopConfirmationPageURL({
+      appPath: '/Applications/Redeven Desktop.app/Contents/Resources/app.asar',
+      model: baseModel,
+      resolvedTheme: 'dark',
+    });
 
-    expect(html).toContain('color-scheme: dark;');
-    expect(html).toContain('background: color-mix(in srgb, var(--surface-muted) 55%, var(--bg));');
-    expect(html).toContain('body data-tone="danger"');
+    const url = new URL(rawURL);
+    expect(url.protocol).toBe('file:');
+    expect(url.pathname).toBe('/Applications/Redeven%20Desktop.app/Contents/Resources/app.asar/dist/confirmation/index.html');
+    expect(url.searchParams.get('theme')).toBe('dark');
+    expect(JSON.parse(String(url.searchParams.get('model') ?? 'null'))).toEqual(baseModel);
   });
 });

@@ -16,8 +16,8 @@ import {
 } from './desktopQuitImpact';
 import {
   showDesktopConfirmationDialog,
-  type DesktopConfirmationDialogModel,
 } from './desktopConfirmation';
+import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmationContract';
 import {
   describeManagedEnvironmentLocalBindConflict,
   createSafeStorageSecretCodec,
