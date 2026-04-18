@@ -98,7 +98,6 @@ import {
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
   SSH_ENVIRONMENT_LIBRARY_FILTER,
   URL_ENVIRONMENT_LIBRARY_FILTER,
-  splitPinnedEnvironmentEntries,
   type EnvironmentActionModel,
   type EnvironmentActionMenuItemModel,
   type EnvironmentCardEndpointModel,
@@ -149,6 +148,10 @@ import {
   openEnvironmentLibraryOverlayState,
   reconcileEnvironmentLibraryOverlayState,
 } from './environmentLibraryOverlayState';
+import {
+  environmentLibraryEntryRecord,
+  splitPinnedEnvironmentEntryIDs,
+} from './environmentLibraryProjection';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -2696,7 +2699,10 @@ function EnvironmentCardsPanel(props: Readonly<{
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
   const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
   const [activeEnvironmentOverlayState, setActiveEnvironmentOverlayState] = createSignal(closedEnvironmentLibraryOverlayState());
-  const groupedEntries = createMemo(() => splitPinnedEnvironmentEntries(props.entries));
+  // Render cards by stable environment id so snapshot refreshes update data in place instead of remounting the card subtree.
+  const projectedEntriesByID = createMemo(() => environmentLibraryEntryRecord(props.entries));
+  const projectedEntryIDs = createMemo<readonly string[]>(() => props.entries.map((entry) => entry.id));
+  const groupedEntryIDs = createMemo(() => splitPinnedEnvironmentEntryIDs(projectedEntryIDs(), projectedEntriesByID()));
   // Keep transient provider/search filters from collapsing the shared environment column system.
   const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
     visible_card_count: props.visibleCardCount,
@@ -2727,6 +2733,8 @@ function EnvironmentCardsPanel(props: Readonly<{
         : closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', environmentID)
     ));
   };
+
+  const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry => projectedEntriesByID()[environmentID]!;
 
   createEffect(() => {
     const element = environmentLibraryElement();
@@ -2785,17 +2793,17 @@ function EnvironmentCardsPanel(props: Readonly<{
           data-density={layoutModel().density}
           style={environmentGridStyle()}
         >
-          <Show when={groupedEntries().pinned_entries.length > 0}>
+          <Show when={groupedEntryIDs().pinned_entry_ids.length > 0}>
             <EnvironmentLibrarySection title="Pinned">
-              <For each={groupedEntries().pinned_entries}>
-                {(environment) => (
+              <For each={groupedEntryIDs().pinned_entry_ids}>
+                {(environmentID) => (
                   <EnvironmentConnectionCard
-                    environment={environment}
+                    environment={projectedEnvironment(environmentID)}
                     busyAction={props.busyAction}
-                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environment.id)}
-                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environment.id, open)}
-                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environment.id)}
-                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environment.id, open)}
+                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
+                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
+                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
+                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
@@ -2809,19 +2817,19 @@ function EnvironmentCardsPanel(props: Readonly<{
               </For>
             </EnvironmentLibrarySection>
           </Show>
-          <Show when={groupedEntries().regular_entries.length > 0 || props.showQuickAddCards}>
+          <Show when={groupedEntryIDs().regular_entry_ids.length > 0 || props.showQuickAddCards}>
             <EnvironmentLibrarySection
-              title={groupedEntries().pinned_entries.length > 0 ? 'Environments' : undefined}
+              title={groupedEntryIDs().pinned_entry_ids.length > 0 ? 'Environments' : undefined}
             >
-              <For each={groupedEntries().regular_entries}>
-                {(environment) => (
+              <For each={groupedEntryIDs().regular_entry_ids}>
+                {(environmentID) => (
                   <EnvironmentConnectionCard
-                    environment={environment}
+                    environment={projectedEnvironment(environmentID)}
                     busyAction={props.busyAction}
-                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environment.id)}
-                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environment.id, open)}
-                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environment.id)}
-                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environment.id, open)}
+                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
+                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
+                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
+                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}

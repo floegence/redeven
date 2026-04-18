@@ -303,7 +303,7 @@ Interaction rules:
   - the primary button never starts or stops a runtime implicitly
   - blocked `Open` states can surface either:
     - a compact guidance popover with recovery actions such as `Start runtime locally`, `Start runtime`, or `Set up local runtime…`
-    - the guidance popover is interaction-state controlled by the launcher and stays open across background status refreshes while the same environment still needs that guidance
+    - the guidance popover is interaction-state controlled by the launcher, and environment cards render by stable `environment.id`, so background status refreshes update the same card in place instead of blinking the guidance overlay
     - or a simple unavailable tooltip when Desktop cannot offer a direct local recovery path
   - local environments, provider environments with a configured local runtime, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
 - provider environments keep route selection explicit in the same menu, including `Open remotely`
