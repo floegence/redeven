@@ -21,17 +21,7 @@ import {
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import { CodexNavigationIcon } from './icons/CodexIcon';
-import {
-  BottomBarItem,
-  DisplayModePageShell,
-  DisplayModeSwitcher,
-  Panel,
-  PanelContent,
-  Shell,
-  StatusIndicator,
-  TopBarIconButton,
-  type ActivityBarItem,
-} from '@floegence/floe-webapp-core/layout';
+import { BottomBarItem, Panel, PanelContent, Shell, StatusIndicator, TopBarIconButton, type ActivityBarItem } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
   createArtifactDirectReconnectConfig,
@@ -82,6 +72,7 @@ import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { RuntimeUpdateFloatingPrompt } from './widgets/RuntimeUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
+import { EnvTopBarModeSwitcher } from './EnvTopBarModeSwitcher';
 import { EnvTopBarOverflowMenu } from './EnvTopBarOverflowMenu';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
@@ -2353,6 +2344,20 @@ export function EnvAppShell() {
     closeBrowser: fileBrowserSurfaceController.closeSurface,
   } as const;
 
+  const availableDeckSurfaces = createMemo<EnvSurfaceId[]>(() => {
+    const surfaces: EnvSurfaceId[] = ['terminal', 'monitor', 'files', 'codespaces'];
+    if (!isLocalMode()) {
+      surfaces.push('ports');
+    }
+    if (canUseFlower()) {
+      surfaces.push('ai');
+    }
+    if (canUseCodex()) {
+      surfaces.push('codex');
+    }
+    return surfaces;
+  });
+
   const topBarOverflowItems = createMemo(() => {
     const items: Array<{ id: string; label: string; icon?: () => any; separator?: boolean }> = [];
     if (desktopShellBridgeAvailable()) {
@@ -2415,57 +2420,7 @@ export function EnvAppShell() {
     );
   };
 
-  const ShellLogo = () => (
-    <TopBarBrandButton
-      label="Back to dashboard"
-      tooltip={topBarTooltip('Back to dashboard')}
-      onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
-    >
-      <img
-        src={headerLogoSrc()}
-        alt="Redeven"
-        class="h-6 w-6 object-contain"
-        data-redeven-logo-theme={theme.resolvedTheme()}
-      />
-    </TopBarBrandButton>
-  );
-
-  const HeaderActions = () => (
-    <div class="flex items-center gap-1">
-      <Show when={!layout.isMobile()}>
-        <DisplayModeSwitcher
-          mode={viewMode()}
-          onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'activity' })}
-        />
-      </Show>
-      <EnvTopBarOverflowMenu items={topBarOverflowItems()} onSelect={handleTopBarOverflowSelect} />
-      <TopBarIconButton
-        label="Notes overlay"
-        tooltip={topBarTooltip(`Notes overlay (${notesOverlayShortcutLabel()})`)}
-        onClick={toggleNotesOverlay}
-      >
-        <NotesOverlayIcon class="w-4 h-4" />
-      </TopBarIconButton>
-      <TopBarIconButton
-        label="Toggle theme"
-        tooltip={topBarTooltip('Toggle theme')}
-        onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
-      >
-        {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
-      </TopBarIconButton>
-    </div>
-  );
-
-  const renderNotesOverlay = () => (
-    <NotesOverlay
-      open={notesOverlayOpen()}
-      onClose={closeNotesOverlay}
-      viewportHosts={notesViewportHosts()}
-      toggleKeybind={NOTES_OVERLAY_KEYBIND}
-    />
-  );
-
-  const renderActivityShell = () => (
+  const renderMainShell = () => (
     <Shell
       sidebarMode={viewMode() === 'activity' ? 'auto' : 'hidden'}
       slotClassNames={{
@@ -2480,9 +2435,46 @@ export function EnvAppShell() {
             ? <CodexSidebar />
             : <></>
       }
-      logo={<ShellLogo />}
+      logo={
+        <TopBarBrandButton
+          label="Back to dashboard"
+          tooltip={topBarTooltip('Back to dashboard')}
+          onClick={() => window.location.assign(`${consoleOrigin()}/dashboard`)}
+        >
+          <img
+            src={headerLogoSrc()}
+            alt="Redeven"
+            class="h-6 w-6 object-contain"
+            data-redeven-logo-theme={theme.resolvedTheme()}
+          />
+        </TopBarBrandButton>
+      }
       activityItems={viewMode() === 'activity' ? activityItems() : []}
-      topBarActions={<HeaderActions />}
+      topBarActions={
+        <div class="flex items-center gap-1">
+          <Show when={!layout.isMobile()}>
+            <EnvTopBarModeSwitcher
+              value={viewMode()}
+              onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'activity' })}
+            />
+          </Show>
+          <EnvTopBarOverflowMenu items={topBarOverflowItems()} onSelect={handleTopBarOverflowSelect} />
+          <TopBarIconButton
+            label="Notes overlay"
+            tooltip={topBarTooltip(`Notes overlay (${notesOverlayShortcutLabel()})`)}
+            onClick={toggleNotesOverlay}
+          >
+            <NotesOverlayIcon class="w-4 h-4" />
+          </TopBarIconButton>
+          <TopBarIconButton
+            label="Toggle theme"
+            tooltip={topBarTooltip('Toggle theme')}
+            onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
+          >
+            {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
+          </TopBarIconButton>
+        </div>
+      }
       bottomBarItems={
         <>
           <div class="flex items-center gap-2 min-w-0">
@@ -2533,7 +2525,18 @@ export function EnvAppShell() {
                 <Show when={viewMode() === 'activity'}>
                   <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
                 </Show>
-                {renderNotesOverlay()}
+                <Show when={viewMode() === 'deck'}>
+                  <EnvDeckPage availableSurfaces={availableDeckSurfaces()} />
+                </Show>
+                <Show when={viewMode() === 'workbench'}>
+                  <EnvWorkbenchPage />
+                </Show>
+                <NotesOverlay
+                  open={notesOverlayOpen()}
+                  onClose={closeNotesOverlay}
+                  viewportHosts={notesViewportHosts()}
+                  toggleKeybind={NOTES_OVERLAY_KEYBIND}
+                />
               </>
             }
           >
@@ -2561,42 +2564,6 @@ export function EnvAppShell() {
       <DebugConsoleWindow controller={debugConsole} />
     </Shell>
   );
-
-  const renderDisplayModeContent = (mode: 'deck' | 'workbench') => (
-    <div ref={setNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden">
-      <Show
-        when={accessGateVisible()}
-        fallback={(
-          <>
-            {mode === 'deck' ? <EnvDeckPage /> : <EnvWorkbenchPage />}
-            {renderNotesOverlay()}
-          </>
-        )}
-      >
-        {accessGatePanel()}
-      </Show>
-    </div>
-  );
-
-  const renderMainShell = () => {
-    if (viewMode() === 'deck') {
-      return (
-        <DisplayModePageShell logo={<ShellLogo />} title={envName()} actions={<HeaderActions />}>
-          {renderDisplayModeContent('deck')}
-        </DisplayModePageShell>
-      );
-    }
-
-    if (viewMode() === 'workbench') {
-      return (
-        <DisplayModePageShell logo={<ShellLogo />} title={envName()} actions={<HeaderActions />}>
-          {renderDisplayModeContent('workbench')}
-        </DisplayModePageShell>
-      );
-    }
-
-    return renderActivityShell();
-  };
 
   return (
     <EnvContext.Provider

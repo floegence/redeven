@@ -105,32 +105,8 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
   BottomBarItem: (props: any) => <button type="button" class={props.class} onClick={props.onClick}>{props.children}</button>,
-  DisplayModePageShell: (props: any) => (
-    <div data-testid="display-mode-page-shell">
-      {props.logo}
-      {props.title ? <div>{props.title}</div> : null}
-      {props.actions}
-      {props.children}
-    </div>
-  ),
-  DisplayModeSwitcher: (props: any) => (
-    <div data-testid="display-mode-switcher">
-      {['activity', 'deck', 'workbench'].map((mode) => (
-        <button
-          type="button"
-          aria-selected={props.mode === mode}
-          onClick={() => props.onChange?.(mode)}
-        >
-          {mode === 'activity' ? 'Activity' : mode === 'deck' ? 'Deck' : 'Workbench'}
-        </button>
-      ))}
-    </div>
-  ),
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
-  sanitizeDisplayMode: (value: unknown, fallback = 'activity') => (
-    value === 'activity' || value === 'deck' || value === 'workbench' ? value : fallback
-  ),
   Shell: (props: any) => (
     <div data-floe-shell="">
       {props.logo}
@@ -576,17 +552,16 @@ describe('EnvAppShell top bar affordances', () => {
       await flushAsync();
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]') as HTMLButtonElement | null;
-      const displayModeShell = host.querySelector('[data-testid="display-mode-page-shell"]') as HTMLElement | null;
+      const shellSidebar = host.querySelector('[data-floe-shell-slot="sidebar"]') as HTMLElement | null;
+      const shellMain = host.querySelector('[data-floe-shell-slot="main"]') as HTMLElement | null;
       expect(notesButton).toBeTruthy();
       expect(notesOverlayState.lastProps?.open).toBe(false);
-      expect(notesOverlayState.lastProps?.viewportHosts).toHaveLength(1);
-      expect(displayModeShell?.contains(notesOverlayState.lastProps?.viewportHosts?.[0] ?? null)).toBe(true);
+      expect(notesOverlayState.lastProps?.viewportHosts).toEqual([shellSidebar, shellMain]);
 
       notesButton?.click();
       await flushAsync();
       expect(notesOverlayState.lastProps?.open).toBe(true);
-      expect(notesOverlayState.lastProps?.viewportHosts).toHaveLength(1);
-      expect(displayModeShell?.contains(notesOverlayState.lastProps?.viewportHosts?.[0] ?? null)).toBe(true);
+      expect(notesOverlayState.lastProps?.viewportHosts).toEqual([shellSidebar, shellMain]);
 
       notesOverlayState.lastProps?.onClose();
       await flushAsync();
@@ -596,7 +571,7 @@ describe('EnvAppShell top bar affordances', () => {
     }
   });
 
-  it('binds Notes to the full-page display shell viewport while deck mode is active', async () => {
+  it('binds Notes to the shared shell sidebar + main viewport hosts instead of a local main-only ref', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
@@ -609,11 +584,12 @@ describe('EnvAppShell top bar affordances', () => {
     try {
       await flushAsync();
 
-      const displayModeShell = host.querySelector('[data-testid="display-mode-page-shell"]') as HTMLElement | null;
+      const shellSidebar = host.querySelector('[data-floe-shell-slot="sidebar"]') as HTMLElement | null;
+      const shellMain = host.querySelector('[data-floe-shell-slot="main"]') as HTMLElement | null;
 
-      expect(displayModeShell).toBeTruthy();
-      expect(notesOverlayState.lastProps?.viewportHosts).toHaveLength(1);
-      expect(displayModeShell?.contains(notesOverlayState.lastProps?.viewportHosts?.[0] ?? null)).toBe(true);
+      expect(shellSidebar).toBeTruthy();
+      expect(shellMain).toBeTruthy();
+      expect(notesOverlayState.lastProps?.viewportHosts).toEqual([shellSidebar, shellMain]);
     } finally {
       dispose();
     }
@@ -871,7 +847,7 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(findButtonByText(host, 'Retry now')).toBeTruthy();
+      expect(host.textContent).toContain('Waiting for runtime');
 
       await vi.advanceTimersByTimeAsync(12_000);
       await flushAsync();
@@ -907,7 +883,7 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(findButtonByText(host, 'Retry now')).toBeTruthy();
+      expect(host.textContent).toContain('Waiting for runtime');
 
       await vi.advanceTimersByTimeAsync(12_000);
       await flushAsync();
@@ -1390,6 +1366,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
+      expect(host.textContent).toContain('Waiting for runtime');
       expect(findButtonByText(host, 'Retry now')).toBeTruthy();
 
       await vi.advanceTimersByTimeAsync(2_000);
@@ -1410,9 +1387,6 @@ describe('EnvAppShell remote access gate', () => {
 
   it('switches between activity, deck, and workbench mode from the header mode switcher on desktop', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    const storage = createStorageMock();
-    storage.setItem('redeven_envapp_desktop_view_mode', 'deck');
-    vi.stubGlobal('localStorage', storage);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1421,7 +1395,6 @@ describe('EnvAppShell remote access gate', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushAsync();
       await flushAsync();
       await flushAsync();
 

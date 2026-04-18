@@ -1,6 +1,4 @@
-import type { DisplayMode } from '@floegence/floe-webapp-core/layout';
-
-export type EnvViewMode = DisplayMode;
+export type EnvViewMode = 'activity' | 'deck' | 'workbench';
 export type LegacyEnvViewMode = 'tab' | 'deck' | 'infinite_map';
 
 export type EnvSurfaceId =
@@ -67,10 +65,8 @@ export const ENV_SURFACE_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
   codex: 'redeven.codex',
 };
 
-const VALID_ENV_VIEW_MODES = new Set<EnvViewMode>(['activity', 'deck', 'workbench']);
-
 export function isEnvViewMode(value: unknown): value is EnvViewMode {
-  return typeof value === 'string' && VALID_ENV_VIEW_MODES.has(value as EnvViewMode);
+  return value === 'activity' || value === 'deck' || value === 'workbench';
 }
 
 export function isLegacyEnvViewMode(value: unknown): value is LegacyEnvViewMode {
@@ -78,13 +74,19 @@ export function isLegacyEnvViewMode(value: unknown): value is LegacyEnvViewMode 
 }
 
 export function normalizePersistedEnvViewMode(value: unknown): EnvViewMode | null {
+  if (isEnvViewMode(value)) {
+    return value;
+  }
   if (value === 'tab') {
     return 'activity';
   }
   if (value === 'infinite_map') {
     return 'workbench';
   }
-  return isEnvViewMode(value) ? value : null;
+  if (value === 'deck') {
+    return 'deck';
+  }
+  return null;
 }
 
 export function isEnvSurfaceId(value: unknown): value is EnvSurfaceId {
