@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { GripVertical, X } from '@floegence/floe-webapp-core/icons';
-import type { WorkbenchWidgetDefinition, WorkbenchWidgetItem } from '@floegence/floe-webapp-core/workbench';
+import type { WorkbenchWidgetDefinition, WorkbenchWidgetItem, WorkbenchWidgetType } from '@floegence/floe-webapp-core/workbench';
 
 import { startWorkbenchHotInteraction } from './workbenchHotInteraction';
 import {
@@ -41,7 +41,15 @@ const MIN_HEIGHT = 160;
 
 export interface RedevenWorkbenchWidgetProps {
   definition: WorkbenchWidgetDefinition;
-  item: WorkbenchWidgetItem;
+  widgetId: string;
+  widgetTitle: string;
+  widgetType: WorkbenchWidgetType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  zIndex: number;
+  itemSnapshot: () => WorkbenchWidgetItem;
   selected: boolean;
   optimisticFront: boolean;
   topZIndex: number;
@@ -78,13 +86,13 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
 
   const livePosition = createMemo(() => {
     const current = dragState();
-    if (!current) return { x: props.item.x, y: props.item.y };
+    if (!current) return { x: props.x, y: props.y };
     return { x: current.worldX, y: current.worldY };
   });
 
   const liveSize = createMemo(() => {
     const current = resizeState();
-    if (!current) return { width: props.item.width, height: props.item.height };
+    if (!current) return { width: props.width, height: props.height };
     return { width: current.width, height: current.height };
   });
 
@@ -98,12 +106,12 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       commitMove &&
       (Math.abs(next.x - start.x) > 1 || Math.abs(next.y - start.y) > 1);
 
-    // Commit position FIRST so props.item.{x,y} reflects the final value
+    // Commit position FIRST so the parent snapshot reflects the final value
     // before we release the local drag state. Otherwise livePosition would
     // snap back to stale props for a frame.
-    props.onCommitFront(props.item.id);
+    props.onCommitFront(props.widgetId);
     if (shouldCommitMove) {
-      props.onCommitMove(props.item.id, next);
+      props.onCommitMove(props.widgetId, next);
     }
 
     current.stopInteraction();
@@ -118,7 +126,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     event.preventDefault();
     event.stopPropagation();
     dragAbortController?.abort();
-    props.onStartOptimisticFront(props.item.id);
+    props.onStartOptimisticFront(props.widgetId);
 
     const stopInteraction = startWorkbenchHotInteraction({ kind: 'drag', cursor: 'grabbing' });
     const scale = Math.max(props.viewportScale, 0.001);
@@ -127,10 +135,10 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY,
-      startWorldX: props.item.x,
-      startWorldY: props.item.y,
-      worldX: props.item.x,
-      worldY: props.item.y,
+      startWorldX: props.x,
+      startWorldY: props.y,
+      worldX: props.x,
+      worldY: props.y,
       moved: false,
       scale,
       stopInteraction,
@@ -183,7 +191,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       Math.abs(current.height - current.startHeight) > 1;
 
     if (commit && changed) {
-      props.onCommitResize(props.item.id, nextSize);
+      props.onCommitResize(props.widgetId, nextSize);
     }
 
     current.stopInteraction();
@@ -198,7 +206,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     event.preventDefault();
     event.stopPropagation();
     resizeAbortController?.abort();
-    props.onStartOptimisticFront(props.item.id);
+    props.onStartOptimisticFront(props.widgetId);
 
     const stopInteraction = startWorkbenchHotInteraction({ kind: 'drag', cursor: 'nwse-resize' });
     const scale = Math.max(props.viewportScale, 0.001);
@@ -207,10 +215,10 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY,
-      startWidth: props.item.width,
-      startHeight: props.item.height,
-      width: props.item.width,
-      height: props.item.height,
+      startWidth: props.width,
+      startHeight: props.height,
+      width: props.width,
+      height: props.height,
       scale,
       stopInteraction,
     });
@@ -269,13 +277,12 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         'is-resizing': isResizing(),
         'is-filtered-out': props.filtered,
       }}
-      data-floe-workbench-widget-id={props.item.id}
+      data-floe-workbench-widget-id={props.widgetId}
       {...{ [REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR]: 'true' }}
-      {...{ [REDEVEN_WORKBENCH_WIDGET_ID_ATTR]: props.item.id }}
+      {...{ [REDEVEN_WORKBENCH_WIDGET_ID_ATTR]: props.widgetId }}
       tabIndex={0}
       onFocus={() => {
-        props.onSelect(props.item.id);
-        props.onCommitFront(props.item.id);
+        props.onSelect(props.widgetId);
       }}
       onMouseDown={(event) => {
         if (!shouldFocusWidgetRootFromPointer(event.target)) return;
@@ -284,11 +291,11 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        props.onContextMenu(event, props.item);
+        props.onContextMenu(event, props.itemSnapshot());
       }}
       onClick={() => {
-        props.onSelect(props.item.id);
-        props.onCommitFront(props.item.id);
+        props.onSelect(props.widgetId);
+        props.onCommitFront(props.widgetId);
       }}
       style={{
         transform: `translate(${livePosition().x}px, ${livePosition().y}px)`,
@@ -297,7 +304,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         'z-index':
           isDragging() || isResizing() || props.optimisticFront
             ? `${props.topZIndex + 1}`
-            : `${props.item.z_index}`,
+            : `${props.zIndex}`,
       }}
     >
       <header class="workbench-widget__header">
@@ -315,7 +322,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
             const Icon = props.definition.icon;
             return <Icon class="w-3.5 h-3.5" />;
           })()}
-          <span class="workbench-widget__title">{props.item.title}</span>
+          <span class="workbench-widget__title">{props.widgetTitle}</span>
         </div>
         <button
           type="button"
@@ -326,7 +333,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
           onClick={(event) => {
             event.stopPropagation();
             event.preventDefault();
-            props.onRequestDelete(props.item.id);
+            props.onRequestDelete(props.widgetId);
           }}
         >
           <X class="w-3 h-3" />
@@ -337,9 +344,9 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
           const Body = props.definition.body;
           return (
             <Body
-              widgetId={props.item.id}
-              title={props.item.title}
-              type={props.item.type}
+              widgetId={props.widgetId}
+              title={props.widgetTitle}
+              type={props.widgetType}
             />
           );
         })()}

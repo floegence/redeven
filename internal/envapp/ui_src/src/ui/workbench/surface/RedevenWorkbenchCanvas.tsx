@@ -1,4 +1,4 @@
-import { For } from 'solid-js';
+import { For, createMemo } from 'solid-js';
 import {
   getWidgetEntry,
   type WorkbenchViewport,
@@ -34,7 +34,67 @@ export interface RedevenWorkbenchCanvasProps {
   onRequestDelete: (widgetId: string) => void;
 }
 
+interface RedevenWorkbenchCanvasWidgetSlotProps {
+  widgetId: string;
+  widgetDefinitions: readonly WorkbenchWidgetDefinition[];
+  widgetById: () => Map<string, WorkbenchWidgetItem>;
+  selectedWidgetId: string | null;
+  optimisticFrontWidgetId: string | null;
+  topZIndex: number;
+  viewportScale: number;
+  locked: boolean;
+  filters: Record<WorkbenchWidgetType, boolean>;
+  onSelectWidget: (widgetId: string) => void;
+  onWidgetContextMenu: (event: MouseEvent, item: WorkbenchWidgetItem) => void;
+  onStartOptimisticFront: (widgetId: string) => void;
+  onCommitFront: (widgetId: string) => void;
+  onCommitMove: (widgetId: string, position: { x: number; y: number }) => void;
+  onCommitResize: (widgetId: string, size: { width: number; height: number }) => void;
+  onRequestDelete: (widgetId: string) => void;
+}
+
+function RedevenWorkbenchCanvasWidgetSlot(props: RedevenWorkbenchCanvasWidgetSlotProps) {
+  const item = createMemo<WorkbenchWidgetItem>((previous) => {
+    const current = props.widgetById().get(props.widgetId);
+    if (current) return current;
+    if (previous) return previous;
+    throw new Error(`Redeven workbench widget ${props.widgetId} is missing from the render map.`);
+  });
+  const definition = createMemo(() => getWidgetEntry(item().type, props.widgetDefinitions));
+
+  return (
+    <RedevenWorkbenchWidget
+      definition={definition()}
+      widgetId={props.widgetId}
+      widgetTitle={item().title}
+      widgetType={item().type}
+      x={item().x}
+      y={item().y}
+      width={item().width}
+      height={item().height}
+      zIndex={item().z_index}
+      itemSnapshot={item}
+      selected={props.selectedWidgetId === props.widgetId}
+      optimisticFront={props.optimisticFrontWidgetId === props.widgetId}
+      topZIndex={props.topZIndex}
+      viewportScale={props.viewportScale}
+      locked={props.locked}
+      filtered={!props.filters[item().type]}
+      onSelect={props.onSelectWidget}
+      onContextMenu={props.onWidgetContextMenu}
+      onStartOptimisticFront={props.onStartOptimisticFront}
+      onCommitFront={props.onCommitFront}
+      onCommitMove={props.onCommitMove}
+      onCommitResize={props.onCommitResize}
+      onRequestDelete={props.onRequestDelete}
+    />
+  );
+}
+
 export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
+  const widgetIds = createMemo(() => props.widgets.map((item) => item.id));
+  const widgetById = createMemo(() => new Map(props.widgets.map((item) => [item.id, item] as const)));
+
   return (
     <div
       class="workbench-canvas"
@@ -51,19 +111,21 @@ export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
       >
         <div class="workbench-canvas__field">
           <div class="workbench-canvas__grid" aria-hidden="true" />
-          <For each={props.widgets}>
-            {(item) => (
-              <RedevenWorkbenchWidget
-                definition={getWidgetEntry(item.type, props.widgetDefinitions)}
-                item={item}
-                selected={props.selectedWidgetId === item.id}
-                optimisticFront={props.optimisticFrontWidgetId === item.id}
+          {/* Preserve business widget ownership by widget.id so selection/front changes do not remount surface bodies. */}
+          <For each={widgetIds()}>
+            {(widgetId) => (
+              <RedevenWorkbenchCanvasWidgetSlot
+                widgetId={widgetId}
+                widgetDefinitions={props.widgetDefinitions}
+                widgetById={widgetById}
+                selectedWidgetId={props.selectedWidgetId}
+                optimisticFrontWidgetId={props.optimisticFrontWidgetId}
                 topZIndex={props.topZIndex}
                 viewportScale={props.viewport.scale}
                 locked={props.locked}
-                filtered={!props.filters[item.type]}
-                onSelect={props.onSelectWidget}
-                onContextMenu={props.onWidgetContextMenu}
+                filters={props.filters}
+                onSelectWidget={props.onSelectWidget}
+                onWidgetContextMenu={props.onWidgetContextMenu}
                 onStartOptimisticFront={props.onStartOptimisticFront}
                 onCommitFront={props.onCommitFront}
                 onCommitMove={props.onCommitMove}
