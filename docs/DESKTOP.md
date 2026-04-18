@@ -302,8 +302,11 @@ Interaction rules:
   - the primary button is window-only and uses `Open`, `Opening…`, or `Focus`
   - the primary button never starts or stops a runtime implicitly
   - blocked `Open` states can surface either:
-    - a compact guidance popover with recovery actions such as `Start runtime locally`, `Start runtime`, or `Set up local runtime…`
-    - the guidance popover is interaction-state controlled by the launcher, and environment cards render by stable `environment.id`, so background status refreshes update the same card in place instead of blinking the guidance overlay
+    - a click-driven guidance action panel with recovery actions such as `Start runtime locally`, `Start runtime`, or `Set up local runtime…`
+    - the guidance panel keeps transient inline feedback for `Refresh status` and recovery actions instead of closing through hover/focus loss
+    - opening the guidance panel moves keyboard focus into the first recovery action so the panel works as a real interactive surface instead of a hover-only overlay
+    - the launcher keeps a dedicated guidance-session state per active blocked environment, so a refresh can stay in context and either show `Runtime is still offline`, render an inline failure, or dismiss itself once `Open` becomes available
+    - the launcher also scopes busy state to the affected environment or control plane, so unrelated cards do not inherit disabled/loading affordances during another card's action
     - or a simple unavailable tooltip when Desktop cannot offer a direct local recovery path
   - local environments, provider environments with a configured local runtime, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
 - provider environments keep route selection explicit in the same menu, including `Open remotely`

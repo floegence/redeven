@@ -797,6 +797,48 @@ body {
   color: var(--muted-foreground);
 }
 
+.redeven-action-popover__notice {
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  background: color-mix(in srgb, var(--background) 78%, var(--popover));
+}
+
+.redeven-action-popover__notice[data-tone='info'] {
+  border-color: color-mix(in srgb, var(--primary) 24%, transparent);
+  background: color-mix(in srgb, var(--primary) 7%, var(--popover));
+}
+
+.redeven-action-popover__notice[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 24%, transparent);
+  background: color-mix(in srgb, var(--warning) 9%, var(--popover));
+}
+
+.redeven-action-popover__notice[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--error) 26%, transparent);
+  background: color-mix(in srgb, var(--error) 9%, var(--popover));
+}
+
+.redeven-action-popover__notice[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--success) 24%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, var(--popover));
+}
+
+.redeven-action-popover__notice-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--popover-foreground);
+}
+
+.redeven-action-popover__notice-detail {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
 .redeven-action-popover__actions {
   display: grid;
   gap: 0.5rem;
