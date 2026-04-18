@@ -57,7 +57,7 @@ export interface GitWorkbenchProps {
   selectedWorkspaceItem?: GitWorkspaceChange | null;
   onSelectWorkspaceItem?: (item: GitWorkspaceChange) => void;
   busyWorkspaceKey?: string;
-  busyWorkspaceAction?: 'stage' | 'unstage' | '';
+  busyWorkspaceAction?: 'stage' | 'unstage' | 'discard' | '';
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -110,7 +110,9 @@ export interface GitWorkbenchProps {
   onCommit?: (message: string) => void;
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
+  onDiscardSelected?: (item: GitWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onDiscardAll?: (section: GitWorkspaceViewSection) => void;
   onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   onOpenCommitDialog?: () => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
@@ -332,7 +334,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               commitBusy={props.commitBusy}
               onStageSelected={props.onStageSelected}
               onUnstageSelected={props.onUnstageSelected}
+              onDiscardSelected={props.onDiscardSelected}
               onBulkAction={props.onBulkAction}
+              onDiscardAll={props.onDiscardAll}
               onLoadMoreWorkspaceSection={props.onLoadMoreWorkspaceSection}
               onOpenCommitDialog={props.onOpenCommitDialog}
               onOpenStash={props.onOpenStash}

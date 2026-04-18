@@ -38,6 +38,7 @@ export const redevenV1TypeIds = {
     previewDropStash: 1126,
     dropStash: 1127,
     listWorkspacePage: 1128,
+    discardWorkspace: 1129,
   },
   terminal: {
     sessionCreate: 2001,

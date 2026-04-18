@@ -171,6 +171,16 @@ export type wire_git_unstage_workspace_resp = {
   repo_root_path: string;
 };
 
+export type wire_git_discard_workspace_req = {
+  repo_root_path: string;
+  section?: string;
+  paths?: string[];
+};
+
+export type wire_git_discard_workspace_resp = {
+  repo_root_path: string;
+};
+
 export type wire_git_preview_apply_stash_req = {
   repo_root_path: string;
   id: string;

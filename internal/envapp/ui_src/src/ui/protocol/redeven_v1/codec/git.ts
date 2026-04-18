@@ -5,6 +5,8 @@ import type {
   GitCheckoutBranchResponse,
   GitDropStashRequest,
   GitDropStashResponse,
+  GitDiscardWorkspaceRequest,
+  GitDiscardWorkspaceResponse,
   GitDeleteLinkedWorktreePreview,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
@@ -79,6 +81,8 @@ import type {
   wire_git_checkout_branch_resp,
   wire_git_drop_stash_req,
   wire_git_drop_stash_resp,
+  wire_git_discard_workspace_req,
+  wire_git_discard_workspace_resp,
   wire_git_delete_linked_worktree_preview,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
@@ -537,6 +541,20 @@ export function toWireGitUnstageWorkspaceRequest(req: GitUnstageWorkspaceRequest
 }
 
 export function fromWireGitUnstageWorkspaceResponse(resp: wire_git_unstage_workspace_resp): GitUnstageWorkspaceResponse {
+  return {
+    repoRootPath: String(resp?.repo_root_path ?? ''),
+  };
+}
+
+export function toWireGitDiscardWorkspaceRequest(req: GitDiscardWorkspaceRequest): wire_git_discard_workspace_req {
+  return {
+    repo_root_path: req.repoRootPath,
+    section: typeof req.section === 'string' ? req.section : undefined,
+    paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
+  };
+}
+
+export function fromWireGitDiscardWorkspaceResponse(resp: wire_git_discard_workspace_resp): GitDiscardWorkspaceResponse {
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
   };

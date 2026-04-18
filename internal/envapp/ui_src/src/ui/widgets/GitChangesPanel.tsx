@@ -1,6 +1,6 @@
 import { Show, createEffect, createSignal } from 'solid-js';
 import { Folder, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
@@ -60,7 +60,7 @@ export interface GitChangesPanelProps {
   selectedItem?: GitSeededWorkspaceChange | null;
   onSelectItem?: (item: GitSeededWorkspaceChange) => void;
   busyWorkspaceKey?: string;
-  busyWorkspaceAction?: 'stage' | 'unstage' | '';
+  busyWorkspaceAction?: 'stage' | 'unstage' | 'discard' | '';
   loading?: boolean;
   error?: string;
   commitMessage?: string;
@@ -69,7 +69,9 @@ export interface GitChangesPanelProps {
   commitBusy?: boolean;
   onStageSelected?: (item: GitSeededWorkspaceChange) => void;
   onUnstageSelected?: (item: GitSeededWorkspaceChange) => void;
+  onDiscardSelected?: (item: GitSeededWorkspaceChange) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
+  onDiscardAll?: (section: GitWorkspaceViewSection) => void;
   onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   onOpenCommitDialog?: () => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
@@ -84,6 +86,10 @@ function itemPath(item: GitSeededWorkspaceChange): string {
 
 function listItemActionLabel(item: GitSeededWorkspaceChange): string {
   return item.section === 'staged' ? 'Unstage' : '+ Stage';
+}
+
+function isDiscardableWorkspaceItem(item: GitSeededWorkspaceChange | null | undefined): boolean {
+  return item?.section === 'unstaged' || item?.section === 'untracked';
 }
 
 function sectionItems(workspace: GitSeededWorkspaceChangesResponse | null | undefined, section: GitWorkspaceViewSection): GitSeededWorkspaceChange[] {
@@ -113,9 +119,10 @@ interface WorkspaceTableProps {
   onSelectItem?: (item: GitSeededWorkspaceChange) => void;
   onOpenDiff?: (item: GitSeededWorkspaceChange) => void;
   onAction?: (item: GitSeededWorkspaceChange) => void;
+  onDiscard?: (item: GitSeededWorkspaceChange) => void;
   onLoadMore?: () => void;
   busyWorkspaceKey?: string;
-  busyWorkspaceAction?: 'stage' | 'unstage' | '';
+  busyWorkspaceAction?: 'stage' | 'unstage' | 'discard' | '';
 }
 
 function WorkspaceTable(props: WorkspaceTableProps) {
@@ -143,10 +150,9 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           renderRow={(item) => {
             const active = () => props.selectedKey === workspaceEntryKey(item);
             const action = () => (item.section === 'staged' ? 'unstage' : 'stage');
-            const busy = () => (
-              (props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === workspaceViewSectionActionKey(props.section))
-              && props.busyWorkspaceAction === action()
-            );
+            const busyScope = () => props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === workspaceViewSectionActionKey(props.section);
+            const busy = (name: 'stage' | 'unstage' | 'discard') => busyScope() && props.busyWorkspaceAction === name;
+            const actionsDisabled = () => busyScope() && Boolean(props.busyWorkspaceAction);
             return (
               <tr
                 aria-selected={active()}
@@ -176,16 +182,31 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
                 <td class={gitChangedFilesStickyCellClass(active())}>
-                  <GitChangedFilesActionButton
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      props.onAction?.(item);
-                    }}
-                    busy={busy()}
-                    disabled={busy()}
-                  >
-                    {listItemActionLabel(item)}
-                  </GitChangedFilesActionButton>
+                  <div class="flex items-center justify-end gap-3 whitespace-nowrap">
+                    <GitChangedFilesActionButton
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        props.onAction?.(item);
+                      }}
+                      busy={busy(action())}
+                      disabled={actionsDisabled()}
+                    >
+                      {listItemActionLabel(item)}
+                    </GitChangedFilesActionButton>
+                    <Show when={isDiscardableWorkspaceItem(item)}>
+                      <GitChangedFilesActionButton
+                        class="text-destructive hover:text-destructive"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          props.onDiscard?.(item);
+                        }}
+                        busy={busy('discard')}
+                        disabled={actionsDisabled()}
+                      >
+                        Discard...
+                      </GitChangedFilesActionButton>
+                    </Show>
+                  </div>
                 </td>
               </tr>
             );
@@ -211,11 +232,16 @@ function WorkspaceTable(props: WorkspaceTableProps) {
 }
 
 const EMPTY_WORKSPACE_PAGE_STATE = createEmptyWorkspaceViewPageState();
+type WorkspaceDiscardTarget =
+  | { kind: 'item'; item: GitSeededWorkspaceChange }
+  | { kind: 'section'; section: GitWorkspaceViewSection }
+  | null;
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededWorkspaceChange | null>(null);
+  const [discardTarget, setDiscardTarget] = createSignal<WorkspaceDiscardTarget>(null);
 
   const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceViewSection(props.workspace);
   const summary = () => props.workspace?.summary ?? props.repoSummary?.workspaceSummary ?? null;
@@ -255,6 +281,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const bulkActionLabel = () => workspaceViewBulkActionLabel(selectedSection());
   const bulkAction = () => (selectedSection() === 'staged' ? 'unstage' : 'stage');
   const bulkActionBusy = () => props.busyWorkspaceKey === workspaceViewSectionActionKey(selectedSection()) && props.busyWorkspaceAction === bulkAction();
+  const discardActionBusy = () => props.busyWorkspaceKey === workspaceViewSectionActionKey(selectedSection()) && props.busyWorkspaceAction === 'discard';
+  const canDiscardAll = () => selectedSection() === 'changes' && Boolean(props.onDiscardAll);
   const canAskFlower = () => Boolean(props.onAskFlower && repoRootPath() && visibleItems().length > 0);
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && repoShortcutRequest());
@@ -281,6 +309,20 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     setDiffDialogOpen(false);
   });
 
+  const discardTitle = () => discardTarget()?.kind === 'section' ? 'Discard pending changes' : 'Discard file changes';
+  const discardConfirmText = () => discardTarget()?.kind === 'section' ? 'Discard All' : 'Discard';
+  const discardDescription = () => {
+    const target = discardTarget();
+    if (!target) return '';
+    if (target.kind === 'section') {
+      return `Discard all ${visibleCount()} file${visibleCount() === 1 ? '' : 's'} in Changes? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.`;
+    }
+    if (target.item.section === 'untracked') {
+      return `Delete the untracked file "${itemPath(target.item)}" from the working tree? Git cannot restore untracked files after they are discarded.`;
+    }
+    return `Restore "${itemPath(target.item)}" to the last Git state and drop its unstaged edits? Any staged snapshot for this file will stay intact.`;
+  };
+
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
@@ -300,7 +342,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     <div class="max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[34rem]">
                       {selectedSection() === 'staged'
                         ? 'Review the staged snapshot, then commit it from the dialog.'
-                        : 'Stage the files you want from this table, then commit them from the staged dialog.'}
+                        : 'Stage the files you want from this table, discard the rest when needed, then commit from the staged dialog.'}
                     </div>
                   </GitLabelBlock>
                   <div class="flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:flex-col lg:items-end lg:justify-start">
@@ -376,12 +418,24 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                           Stash...
                         </Button>
                       </Show>
+                      <Show when={canDiscardAll()}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          class={`w-full rounded-md text-destructive hover:text-destructive sm:w-auto ${redevenSurfaceRoleClass('control')}`}
+                          onClick={() => setDiscardTarget({ kind: 'section', section: selectedSection() })}
+                          disabled={visibleCount() === 0 || bulkActionBusy() || discardActionBusy()}
+                          loading={discardActionBusy()}
+                        >
+                          Discard All...
+                        </Button>
+                      </Show>
                       <Button
                         size="sm"
                         variant="outline"
                         class={`w-full rounded-md sm:w-auto ${redevenSurfaceRoleClass('control')}`}
                         onClick={() => props.onBulkAction?.(selectedSection())}
-                        disabled={visibleCount() === 0 || bulkActionBusy()}
+                        disabled={visibleCount() === 0 || bulkActionBusy() || discardActionBusy()}
                         loading={bulkActionBusy()}
                       >
                         {bulkActionLabel()}
@@ -421,6 +475,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     if (item.section === 'staged') props.onUnstageSelected?.(item);
                     else props.onStageSelected?.(item);
                   }}
+                  onDiscard={(item) => setDiscardTarget({ kind: 'item', item })}
                   onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
                   busyWorkspaceKey={props.busyWorkspaceKey}
                   busyWorkspaceAction={props.busyWorkspaceAction}
@@ -462,6 +517,25 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         description={diffItem() ? changeSecondaryPath(diffItem()) : 'Review the selected workspace change.'}
         emptyMessage="Select a workspace file to inspect its diff."
       />
+
+      <ConfirmDialog
+        open={Boolean(discardTarget())}
+        onOpenChange={(open) => {
+          if (!open) setDiscardTarget(null);
+        }}
+        title={discardTitle()}
+        confirmText={discardConfirmText()}
+        variant="destructive"
+        onConfirm={() => {
+          const target = discardTarget();
+          if (!target) return;
+          if (target.kind === 'section') props.onDiscardAll?.(target.section);
+          else props.onDiscardSelected?.(target.item);
+          setDiscardTarget(null);
+        }}
+      >
+        <div class="text-sm leading-relaxed text-foreground">{discardDescription()}</div>
+      </ConfirmDialog>
     </div>
   );
 }

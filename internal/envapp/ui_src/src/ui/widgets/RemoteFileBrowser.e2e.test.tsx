@@ -137,6 +137,7 @@ const mockRpc = vi.hoisted(() => ({
     applyStash: vi.fn(),
     previewDropStash: vi.fn(),
     dropStash: vi.fn(),
+    discardWorkspace: vi.fn(),
     fetchRepo: vi.fn(),
     pullRepo: vi.fn(),
     pushRepo: vi.fn(),

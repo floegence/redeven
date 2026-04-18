@@ -97,6 +97,110 @@ func (s *Service) unstageWorkspacePaths(ctx context.Context, repo repoContext, p
 	return err
 }
 
+func workspaceChangeMatchesWanted(change gitWorkspaceChange, wanted map[string]struct{}) bool {
+	for _, candidate := range []string{
+		strings.TrimSpace(change.Path),
+		strings.TrimSpace(change.NewPath),
+		strings.TrimSpace(change.OldPath),
+	} {
+		if candidate == "" {
+			continue
+		}
+		if _, ok := wanted[candidate]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func workspaceDiscardTargetPath(change gitWorkspaceChange) string {
+	return firstNonEmptyPath(change.Path, change.NewPath, change.OldPath, change.DisplayPath)
+}
+
+func requestedWorkspaceDiscardPaths(status workspaceStatusSnapshot, pathspecs []string) ([]string, []string) {
+	if len(pathspecs) == 0 {
+		return nil, nil
+	}
+	wanted := make(map[string]struct{}, len(pathspecs))
+	for _, pathspec := range pathspecs {
+		trimmed := strings.TrimSpace(pathspec)
+		if trimmed == "" {
+			continue
+		}
+		wanted[trimmed] = struct{}{}
+	}
+	if len(wanted) == 0 {
+		return nil, nil
+	}
+
+	tracked := make([]string, 0, len(status.Unstaged))
+	trackedSeen := make(map[string]struct{}, len(status.Unstaged))
+	for _, item := range status.Unstaged {
+		if !workspaceChangeMatchesWanted(item, wanted) {
+			continue
+		}
+		targetPath := workspaceDiscardTargetPath(item)
+		if targetPath == "" {
+			continue
+		}
+		if _, ok := trackedSeen[targetPath]; ok {
+			continue
+		}
+		trackedSeen[targetPath] = struct{}{}
+		tracked = append(tracked, targetPath)
+	}
+
+	untracked := make([]string, 0, len(status.Untracked))
+	untrackedSeen := make(map[string]struct{}, len(status.Untracked))
+	for _, item := range status.Untracked {
+		if !workspaceChangeMatchesWanted(item, wanted) {
+			continue
+		}
+		targetPath := workspaceDiscardTargetPath(item)
+		if targetPath == "" {
+			continue
+		}
+		if _, ok := untrackedSeen[targetPath]; ok {
+			continue
+		}
+		untrackedSeen[targetPath] = struct{}{}
+		untracked = append(untracked, targetPath)
+	}
+
+	return tracked, untracked
+}
+
+func (s *Service) discardWorkspacePaths(ctx context.Context, repo repoContext, paths []string) error {
+	pathspecs, err := normalizeGitPathspecs(paths)
+	if err != nil {
+		return err
+	}
+	if len(pathspecs) == 0 {
+		return nil
+	}
+
+	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
+	if err != nil {
+		return err
+	}
+	trackedPaths, untrackedPaths := requestedWorkspaceDiscardPaths(status, pathspecs)
+	if len(trackedPaths) > 0 {
+		args := []string{"restore", "--worktree", "--"}
+		args = append(args, trackedPaths...)
+		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+			return err
+		}
+	}
+	if len(untrackedPaths) > 0 {
+		args := []string{"clean", "-f", "-d", "--"}
+		args = append(args, untrackedPaths...)
+		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Service) commitWorkspace(ctx context.Context, repo repoContext, message string) (*commitWorkspaceResp, error) {
 	message = strings.TrimSpace(message)
 	if message == "" {

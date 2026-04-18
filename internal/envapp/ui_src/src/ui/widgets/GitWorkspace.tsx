@@ -50,13 +50,15 @@ export interface GitWorkspaceProps {
   onSelectWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onStageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onUnstageWorkspaceItem?: (item: GitWorkspaceChange) => void;
+  onDiscardWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onBulkWorkspaceAction?: (section: GitWorkspaceViewSection) => void;
+  onDiscardWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: GitAskFlowerRequest) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
   busyWorkspaceKey?: string;
-  busyWorkspaceAction?: 'stage' | 'unstage' | '';
+  busyWorkspaceAction?: 'stage' | 'unstage' | 'discard' | '';
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -262,7 +264,9 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onCommit={props.onCommit}
               onStageSelected={props.onStageWorkspaceItem}
               onUnstageSelected={props.onUnstageWorkspaceItem}
+              onDiscardSelected={props.onDiscardWorkspaceItem}
               onBulkAction={props.onBulkWorkspaceAction}
+              onDiscardAll={props.onDiscardWorkspaceSection}
               onLoadMoreWorkspaceSection={props.onLoadMoreWorkspaceSection}
               onOpenCommitDialog={props.onOpenCommitDialog}
               onOpenStash={props.onOpenStash}

@@ -446,6 +446,107 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('opens a discard confirmation for a pending file and emits the selected item on confirm', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onDiscardSelected = vi.fn();
+
+    const item = {
+      section: 'unstaged' as const,
+      changeType: 'modified',
+      path: 'src/next.ts',
+      displayPath: 'src/next.ts',
+      additions: 4,
+      deletions: 2,
+    };
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [item],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="changes"
+                onDiscardSelected={onDiscardSelected}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const discardButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard...');
+      expect(discardButton).toBeTruthy();
+      discardButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(document.body.textContent).toContain('Discard file changes');
+      expect(document.body.textContent).toContain('src/next.ts');
+
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard');
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onDiscardSelected).toHaveBeenCalledWith(item);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('shows a discard-all confirmation for Changes and emits the current section on confirm', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onDiscardAll = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 1, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts' }],
+                  untracked: [{ section: 'untracked', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' }],
+                  conflicted: [],
+                }}
+                selectedSection="changes"
+                onDiscardAll={onDiscardAll}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const discardAllButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard All...');
+      expect(discardAllButton).toBeTruthy();
+      discardAllButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(document.body.textContent).toContain('Discard pending changes');
+      expect(document.body.textContent).toContain('Discard all 2 files in Changes?');
+
+      const confirmButton = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard All');
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onDiscardAll).toHaveBeenCalledWith('changes');
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows the section-specific empty state copy', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

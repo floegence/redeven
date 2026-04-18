@@ -238,6 +238,16 @@ export type GitUnstageWorkspaceResponse = {
   repoRootPath: string;
 };
 
+export type GitDiscardWorkspaceRequest = {
+  repoRootPath: string;
+  section?: GitWorkspacePageSection;
+  paths?: string[];
+};
+
+export type GitDiscardWorkspaceResponse = {
+  repoRootPath: string;
+};
+
 export type GitCommitWorkspaceRequest = {
   repoRootPath: string;
   message: string;

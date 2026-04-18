@@ -32,6 +32,8 @@ import type {
   GitCheckoutBranchResponse,
   GitCommitWorkspaceRequest,
   GitCommitWorkspaceResponse,
+  GitDiscardWorkspaceRequest,
+  GitDiscardWorkspaceResponse,
   GitDeleteBranchRequest,
   GitDeleteBranchResponse,
   GitDropStashRequest,
@@ -120,6 +122,7 @@ import {
   fromWireGitApplyStashResponse,
   fromWireGitCheckoutBranchResponse,
   fromWireGitCommitWorkspaceResponse,
+  fromWireGitDiscardWorkspaceResponse,
   fromWireGitDeleteBranchResponse,
   fromWireGitDropStashResponse,
   fromWireGitGetStashDetailResponse,
@@ -148,6 +151,7 @@ import {
   toWireGitApplyStashRequest,
   toWireGitCheckoutBranchRequest,
   toWireGitCommitWorkspaceRequest,
+  toWireGitDiscardWorkspaceRequest,
   toWireGitDeleteBranchRequest,
   toWireGitDropStashRequest,
   toWireGitGetStashDetailRequest,
@@ -214,6 +218,8 @@ import type {
   wire_git_checkout_branch_resp,
   wire_git_commit_workspace_req,
   wire_git_commit_workspace_resp,
+  wire_git_discard_workspace_req,
+  wire_git_discard_workspace_resp,
   wire_git_delete_branch_req,
   wire_git_delete_branch_resp,
   wire_git_drop_stash_req,
@@ -295,6 +301,7 @@ export type RedevenV1Rpc = {
     getStashDetail: (req: GitGetStashDetailRequest) => Promise<GitGetStashDetailResponse>;
     stageWorkspace: (req: GitStageWorkspaceRequest) => Promise<GitStageWorkspaceResponse>;
     unstageWorkspace: (req: GitUnstageWorkspaceRequest) => Promise<GitUnstageWorkspaceResponse>;
+    discardWorkspace: (req: GitDiscardWorkspaceRequest) => Promise<GitDiscardWorkspaceResponse>;
     commitWorkspace: (req: GitCommitWorkspaceRequest) => Promise<GitCommitWorkspaceResponse>;
     saveStash: (req: GitSaveStashRequest) => Promise<GitSaveStashResponse>;
     fetchRepo: (req: GitFetchRepoRequest) => Promise<GitFetchRepoResponse>;
@@ -468,6 +475,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireGitUnstageWorkspaceRequest(req);
         const resp = await call<wire_git_unstage_workspace_req, wire_git_unstage_workspace_resp>(redevenV1TypeIds.git.unstageWorkspace, payload);
         return fromWireGitUnstageWorkspaceResponse(resp);
+      },
+      discardWorkspace: async (req) => {
+        const payload = toWireGitDiscardWorkspaceRequest(req);
+        const resp = await call<wire_git_discard_workspace_req, wire_git_discard_workspace_resp>(redevenV1TypeIds.git.discardWorkspace, payload);
+        return fromWireGitDiscardWorkspaceResponse(resp);
       },
       commitWorkspace: async (req) => {
         const payload = toWireGitCommitWorkspaceRequest(req);

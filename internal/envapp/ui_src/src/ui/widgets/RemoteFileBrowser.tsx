@@ -199,6 +199,7 @@ const STASH_NOT_FOUND_ERROR_FRAGMENT = 'stash not found';
 type GitMutationScope =
   | 'stage'
   | 'unstage'
+  | 'discard'
   | 'commit'
   | 'fetch'
   | 'pull'
@@ -1405,9 +1406,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   });
 
-  const busyWorkspaceAction = (): 'stage' | 'unstage' | '' => {
+  const busyWorkspaceAction = (): 'stage' | 'unstage' | 'discard' | '' => {
     const scope = gitMutationScope();
-    return scope === 'stage' || scope === 'unstage' ? scope : '';
+    return scope === 'stage' || scope === 'unstage' || scope === 'discard' ? scope : '';
   };
 
   const formatGitFileCountLabel = (count: number): string => (count === 1 ? '1 file' : `${count} files`);
@@ -1448,6 +1449,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           ? 'Stage failed'
           : scope === 'unstage'
             ? 'Unstage failed'
+            : scope === 'discard'
+              ? 'Discard failed'
             : scope === 'fetch'
               ? 'Fetch failed'
               : scope === 'pull'
@@ -1528,6 +1531,30 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const handleUnstageWorkspaceItem = (item: GitWorkspaceChange) => void handleUnstageWorkspacePaths(workspaceMutationPaths(item), workspaceEntryKey(item), 1);
 
+  const handleDiscardWorkspacePaths = async (paths: string[], key: string, count: number) => {
+    const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
+    if (!repoRootPath) return;
+    await runGitMutation(
+      'discard',
+      key,
+      () => rpc.git.discardWorkspace({
+        repoRootPath,
+        section: paths.length === 0 ? 'changes' : undefined,
+        paths: paths.length > 0 ? paths : undefined,
+      }),
+      async () => {
+        await refreshGitWorkspaceSectionsAfterMutation(repoRootPath, ['changes']);
+        notification.success('Discarded', `${formatGitFileCountLabel(count)} removed from pending changes.`);
+      },
+    );
+  };
+
+  const handleDiscardWorkspaceItem = (item: GitWorkspaceChange) => {
+    if (!isGitWorkspaceSection(item.section) || (item.section !== 'unstaged' && item.section !== 'untracked')) return;
+    setSelectedGitWorkspaceSection(workspaceViewSectionForItem(item));
+    void handleDiscardWorkspacePaths(workspaceMutationPaths(item), workspaceEntryKey(item), 1);
+  };
+
   const handleBulkWorkspaceAction = (section: GitWorkspaceViewSection) => {
     const count = workspaceViewSectionCount(gitWorkspace()?.summary ?? gitRepoSummary()?.workspaceSummary, section);
     if (count <= 0) return;
@@ -1541,6 +1568,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
     void handleStageWorkspacePaths(['conflicted'], [], workspaceViewSectionActionKey(section), count);
+  };
+
+  const handleBulkDiscardWorkspaceSection = (section: GitWorkspaceViewSection) => {
+    if (section !== 'changes') return;
+    const count = workspaceViewSectionCount(gitWorkspace()?.summary ?? gitRepoSummary()?.workspaceSummary, section);
+    if (count <= 0) return;
+    setSelectedGitWorkspaceSection(section);
+    void handleDiscardWorkspacePaths([], workspaceViewSectionActionKey(section), count);
   };
 
   const handleCommitWorkspace = async (message: string) => {
@@ -4324,7 +4359,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onSelectWorkspaceItem={selectGitWorkspaceItem}
                       onStageWorkspaceItem={handleStageWorkspaceItem}
                       onUnstageWorkspaceItem={handleUnstageWorkspaceItem}
+                      onDiscardWorkspaceItem={handleDiscardWorkspaceItem}
                       onBulkWorkspaceAction={handleBulkWorkspaceAction}
+                      onDiscardWorkspaceSection={handleBulkDiscardWorkspaceSection}
                       onOpenStash={openGitStashWindow}
                       onAskFlower={handleGitAskFlower}
                       onOpenInTerminal={ctx.env()?.permissions?.can_execute ? handleGitOpenInTerminal : undefined}

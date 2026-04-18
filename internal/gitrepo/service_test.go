@@ -1200,6 +1200,105 @@ func TestUnstageAllWorkspacePaths_BeforeFirstCommit(t *testing.T) {
 	t.Fatalf("expected tracked path to move back into untracked items: %+v", untrackedPaths)
 }
 
+func TestDiscardWorkspacePaths_RemovesPendingChangesButKeepsStagedSnapshot(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	changePaths, err := svc.resolveWorkspaceMutationPaths(context.Background(), repo, "changes")
+	if err != nil {
+		t.Fatalf("resolveWorkspaceMutationPaths(changes): %v", err)
+	}
+	if err := svc.discardWorkspacePaths(context.Background(), repo, changePaths); err != nil {
+		t.Fatalf("discardWorkspacePaths: %v", err)
+	}
+
+	resp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after discard): %v", err)
+	}
+	if resp.Summary.StagedCount != 1 || resp.Summary.UnstagedCount != 0 || resp.Summary.UntrackedCount != 0 {
+		t.Fatalf("unexpected workspace summary after discard: %+v", resp.Summary)
+	}
+
+	data, err := os.ReadFile(filepath.Join(fixture.Root, filepath.FromSlash(workspace.TrackedPath)))
+	if err != nil {
+		t.Fatalf("read tracked path: %v", err)
+	}
+	if string(data) != "one\ntwo\nstaged\n" {
+		t.Fatalf("tracked file content=%q, want staged snapshot", string(data))
+	}
+	if _, err := os.Stat(filepath.Join(fixture.Root, filepath.FromSlash(workspace.UntrackedPath))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("untracked file still exists or unexpected stat error: %v", err)
+	}
+}
+
+func TestDiscardWorkspacePaths_BeforeFirstCommitRestoresIndexVersion(t *testing.T) {
+	t.Parallel()
+	root := createUnbornRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, root)
+	svc := NewService(root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	changePaths, err := svc.resolveWorkspaceMutationPaths(context.Background(), repo, "changes")
+	if err != nil {
+		t.Fatalf("resolveWorkspaceMutationPaths(changes): %v", err)
+	}
+	if err := svc.discardWorkspacePaths(context.Background(), repo, changePaths); err != nil {
+		t.Fatalf("discardWorkspacePaths: %v", err)
+	}
+
+	resp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after discard): %v", err)
+	}
+	if resp.Summary.StagedCount != 1 || resp.Summary.UnstagedCount != 0 || resp.Summary.UntrackedCount != 0 {
+		t.Fatalf("unexpected workspace summary after discard: %+v", resp.Summary)
+	}
+
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(workspace.TrackedPath)))
+	if err != nil {
+		t.Fatalf("read tracked path: %v", err)
+	}
+	if string(data) != "one\ntwo\nstaged\n" {
+		t.Fatalf("tracked file content=%q, want index snapshot", string(data))
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(workspace.UntrackedPath))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("untracked file still exists or unexpected stat error: %v", err)
+	}
+}
+
+func TestDiscardWorkspacePaths_WithExplicitUntrackedPathOnly(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	if err := svc.discardWorkspacePaths(context.Background(), repo, []string{workspace.UntrackedPath}); err != nil {
+		t.Fatalf("discardWorkspacePaths(untracked): %v", err)
+	}
+
+	resp, err := svc.listWorkspaceChanges(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("listWorkspaceChanges(after discard): %v", err)
+	}
+	if resp.Summary.StagedCount != 1 || resp.Summary.UnstagedCount != 1 || resp.Summary.UntrackedCount != 0 {
+		t.Fatalf("unexpected workspace summary after untracked discard: %+v", resp.Summary)
+	}
+}
+
 func TestCommitWorkspace_UsesStagedChanges(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)

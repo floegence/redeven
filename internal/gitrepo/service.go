@@ -44,6 +44,7 @@ const (
 	TypeID_GIT_PREVIEW_DROP        uint32 = 1126
 	TypeID_GIT_DROP_STASH          uint32 = 1127
 	TypeID_GIT_LIST_WORKSPACE_PAGE uint32 = 1128
+	TypeID_GIT_DISCARD_WORKSPACE   uint32 = 1129
 
 	defaultCommitPageSize = 50
 	maxCommitPageSize     = 200
@@ -365,6 +366,30 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			return nil, classifyGitMutationRPCError(err)
 		}
 		return &unstageWorkspaceResp{RepoRootPath: repo.repoRootReal}, nil
+	})
+
+	accessgate.RegisterTyped[discardWorkspaceReq, discardWorkspaceResp](r, TypeID_GIT_DISCARD_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *discardWorkspaceReq) (*discardWorkspaceResp, error) {
+		if meta == nil || !meta.CanWrite {
+			return nil, &rpc.Error{Code: 403, Message: "write permission denied"}
+		}
+		if req == nil {
+			req = &discardWorkspaceReq{}
+		}
+		repo, err := s.resolveExplicitRepo(ctx, req.RepoRootPath)
+		if err != nil {
+			return nil, classifyRepoRPCError(err)
+		}
+		paths := req.Paths
+		if len(paths) == 0 && strings.TrimSpace(req.Section) != "" {
+			paths, err = s.resolveWorkspaceMutationPaths(ctx, repo, req.Section)
+			if err != nil {
+				return nil, classifyGitMutationRPCError(err)
+			}
+		}
+		if err := s.discardWorkspacePaths(ctx, repo, paths); err != nil {
+			return nil, classifyGitMutationRPCError(err)
+		}
+		return &discardWorkspaceResp{RepoRootPath: repo.repoRootReal}, nil
 	})
 
 	accessgate.RegisterTyped[commitWorkspaceReq, commitWorkspaceResp](r, TypeID_GIT_COMMIT_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *commitWorkspaceReq) (*commitWorkspaceResp, error) {
@@ -1131,6 +1156,16 @@ type unstageWorkspaceReq struct {
 }
 
 type unstageWorkspaceResp struct {
+	RepoRootPath string `json:"repo_root_path"`
+}
+
+type discardWorkspaceReq struct {
+	RepoRootPath string   `json:"repo_root_path"`
+	Section      string   `json:"section,omitempty"`
+	Paths        []string `json:"paths,omitempty"`
+}
+
+type discardWorkspaceResp struct {
 	RepoRootPath string `json:"repo_root_path"`
 }
 

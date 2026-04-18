@@ -896,6 +896,61 @@ func TestE2E_GitRepoRPC_ForceDeleteBranch(t *testing.T) {
 	}
 }
 
+func TestE2E_GitRepoRPC_DiscardWorkspace(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	workspace := createWorkspaceChangesFixture(t, fixture.Root)
+	svc := NewService(fixture.Root)
+	client, closeServer := startGitRepoRPCSession(t, svc)
+	defer closeServer()
+
+	discardPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DISCARD_WORKSPACE, mustMarshalJSON(t, discardWorkspaceReq{
+		RepoRootPath: fixture.Root,
+		Section:      "changes",
+	}))
+	if err != nil {
+		t.Fatalf("discard workspace call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("discard workspace rpc error: %+v", rpcErr)
+	}
+	var discardResp discardWorkspaceResp
+	if err := json.Unmarshal(discardPayload, &discardResp); err != nil {
+		t.Fatalf("unmarshal discard workspace: %v", err)
+	}
+	if mustEvalPathE2E(t, discardResp.RepoRootPath) != mustEvalPathE2E(t, fixture.Root) {
+		t.Fatalf("discard repo_root_path=%q, want %q", discardResp.RepoRootPath, fixture.Root)
+	}
+
+	workspacePayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_LIST_WORKSPACE, mustMarshalJSON(t, listWorkspaceChangesReq{
+		RepoRootPath: fixture.Root,
+	}))
+	if err != nil {
+		t.Fatalf("list workspace call: %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("list workspace rpc error: %+v", rpcErr)
+	}
+	var workspaceResp listWorkspaceChangesResp
+	if err := json.Unmarshal(workspacePayload, &workspaceResp); err != nil {
+		t.Fatalf("unmarshal workspace: %v", err)
+	}
+	if workspaceResp.Summary.StagedCount != 1 || workspaceResp.Summary.UnstagedCount != 0 || workspaceResp.Summary.UntrackedCount != 0 {
+		t.Fatalf("unexpected workspace summary after discard: %+v", workspaceResp.Summary)
+	}
+
+	data, err := os.ReadFile(filepath.Join(fixture.Root, filepath.FromSlash(workspace.TrackedPath)))
+	if err != nil {
+		t.Fatalf("read tracked path: %v", err)
+	}
+	if string(data) != "one\ntwo\nstaged\n" {
+		t.Fatalf("tracked file content=%q, want staged snapshot", string(data))
+	}
+	if _, err := os.Stat(filepath.Join(fixture.Root, filepath.FromSlash(workspace.UntrackedPath))); !os.IsNotExist(err) {
+		t.Fatalf("untracked file still exists or unexpected stat error: %v", err)
+	}
+}
+
 func TestE2E_GitRepoRPC_PreviewMergeBranch(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
