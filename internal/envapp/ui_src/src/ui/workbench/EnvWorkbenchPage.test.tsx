@@ -71,15 +71,6 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/workbench', () => ({
-  WorkbenchSurface: (props: any) => {
-    surfaceApiMocks.lastWidgetDefinitions = props.widgetDefinitions;
-    props.onApiReady?.({
-      ensureWidget: surfaceApiMocks.ensureWidget,
-      focusWidget: surfaceApiMocks.focusWidget,
-      findWidgetByType: vi.fn(() => null),
-    });
-    return <div data-testid="env-workbench-surface" />;
-  },
   createDefaultWorkbenchState: vi.fn(() => ({
     version: 1,
     widgets: [],
@@ -97,6 +88,18 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
     }
     return options?.createFallbackState?.();
   }),
+}));
+
+vi.mock('./surface/RedevenWorkbenchSurface', () => ({
+  RedevenWorkbenchSurface: (props: any) => {
+    surfaceApiMocks.lastWidgetDefinitions = props.widgetDefinitions;
+    props.onApiReady?.({
+      ensureWidget: surfaceApiMocks.ensureWidget,
+      focusWidget: surfaceApiMocks.focusWidget,
+      findWidgetByType: vi.fn(() => null),
+    });
+    return <div data-testid="env-workbench-surface" />;
+  },
 }));
 
 describe('EnvWorkbenchPage', () => {

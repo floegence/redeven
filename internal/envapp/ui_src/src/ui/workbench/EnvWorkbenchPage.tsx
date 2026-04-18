@@ -1,10 +1,8 @@
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 import {
-  WorkbenchSurface,
   createDefaultWorkbenchState,
   sanitizeWorkbenchState,
   type WorkbenchState,
-  type WorkbenchSurfaceApi,
 } from '@floegence/floe-webapp-core/workbench';
 import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 
@@ -12,6 +10,7 @@ import { envWidgetTypeForSurface } from '../envViewMode';
 import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
+import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './surface/RedevenWorkbenchSurface';
 import { redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
@@ -33,7 +32,7 @@ export function EnvWorkbenchPage() {
     desktopStateStorageAvailable: isDesktopStateStorageAvailable(),
   }).workbenchStorageKey);
   const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>(readPersistedWorkbenchState(storageKey()));
-  const [surfaceApi, setSurfaceApi] = createSignal<WorkbenchSurfaceApi | null>(null);
+  const [surfaceApi, setSurfaceApi] = createSignal<RedevenWorkbenchSurfaceApi | null>(null);
 
   createEffect(() => {
     setWorkbenchState(readPersistedWorkbenchState(storageKey()));
@@ -78,7 +77,7 @@ export function EnvWorkbenchPage() {
 
   return (
     <div class="relative h-full min-h-0 overflow-hidden">
-      <WorkbenchSurface
+      <RedevenWorkbenchSurface
         state={workbenchState}
         setState={setWorkbenchState}
         widgetDefinitions={redevenWorkbenchWidgets}
