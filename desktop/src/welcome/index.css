@@ -760,6 +760,48 @@ body {
   opacity: 0.75;
 }
 
+.redeven-action-popover {
+  display: grid;
+  gap: 0.7rem;
+  min-width: min(20rem, calc(100vw - 1rem));
+  padding: 0.85rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--warning) 6%, var(--popover)), var(--popover));
+}
+
+.redeven-action-popover__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
+  border-radius: 9999px;
+  padding: 0.16rem 0.46rem;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--warning) 76%, var(--foreground));
+}
+
+.redeven-action-popover__title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--popover-foreground);
+}
+
+.redeven-action-popover__detail {
+  font-size: 0.77rem;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+
+.redeven-action-popover__actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
 /* ── Provider shelf ── */
 
 .redeven-launcher-head,

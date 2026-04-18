@@ -301,8 +301,9 @@ Interaction rules:
   - every Environment card shows `RUNTIME ONLINE` or `RUNTIME OFFLINE`
   - the primary button is window-only and uses `Open`, `Opening…`, or `Focus`
   - the primary button never starts or stops a runtime implicitly
-  - offline local / provider-with-local-runtime / SSH entries keep a disabled `Open` button with the tooltip `serve the runtime first`
-  - offline provider / Redeven URL entries keep a disabled `Open` button with the tooltip `the runtime offline / unavailable`
+  - blocked `Open` states can surface either:
+    - a compact guidance popover with recovery actions such as `Start runtime locally`, `Start runtime`, or `Set up local runtime…`
+    - or a simple unavailable tooltip when Desktop cannot offer a direct local recovery path
   - local environments, provider environments with a configured local runtime, and SSH Host entries expose `Start runtime` / `Stop runtime` plus `Refresh runtime status` from the adjacent runtime menu
   - provider environments keep route selection explicit in the same menu, including `Open via Control Plane`
   - remote-only provider and Redeven URL entries treat runtime control as observe-only and expose `Refresh runtime status` from the runtime menu

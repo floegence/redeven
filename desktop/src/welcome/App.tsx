@@ -105,6 +105,7 @@ import {
   type EnvironmentCardFactModel,
   type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
+  type EnvironmentPrimaryActionOverlayModel,
   shouldUseSpaciousEnvironmentGrid,
   shellStatus,
 } from './viewModel';
@@ -140,6 +141,7 @@ import {
   type DesktopActionToastTone,
 } from './actionToastModel';
 import { normalizeDesktopLocalEnvironmentName } from '../shared/desktopManagedEnvironment';
+import { DesktopPopover } from './DesktopPopover';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -1403,9 +1405,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function runtimeUnavailableMessage(environment: DesktopEnvironmentEntry): string {
+    if (environment.kind === 'provider_environment' && environment.provider_local_runtime_configured !== true) {
+      return 'Set up a local runtime first to continue.';
+    }
     return environment.runtime_control_capability === 'start_stop'
-      ? 'serve the runtime first'
-      : 'the runtime offline / unavailable';
+      ? 'Start the runtime first to continue.'
+      : 'This runtime is offline or unavailable right now.';
   }
 
   function runtimeActionRequest(
@@ -3007,14 +3012,77 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
   );
 }
 
+function isEnvironmentActionBusy(action: EnvironmentActionModel, busyAction: BusyAction | undefined): boolean {
+  switch (action.intent) {
+    case 'start_runtime':
+      return busyAction === 'start_environment_runtime';
+    case 'stop_runtime':
+      return busyAction === 'stop_environment_runtime';
+    case 'refresh_runtime':
+      return busyAction === 'refresh_environment_runtime' || busyAction === 'refresh_all_environment_runtimes';
+    case 'serve_runtime_locally':
+      return busyAction === 'upsert_provider_environment_local_runtime';
+    default:
+      return false;
+  }
+}
+
+function blockedPrimaryActionAnchorLabel(label: string): string {
+  return `${label} is unavailable until the runtime is ready.`;
+}
+
+function EnvironmentPrimaryActionPopoverCard(props: Readonly<{
+  overlay: Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>>;
+  busyAction?: BusyAction;
+  disabled?: boolean;
+  onRunAction: (action: EnvironmentActionModel) => void;
+}>) {
+  return (
+    <div class="redeven-action-popover">
+      <div class="redeven-action-popover__eyebrow">{props.overlay.eyebrow}</div>
+      <div class="redeven-action-popover__title">{props.overlay.title}</div>
+      <div class="redeven-action-popover__detail">{props.overlay.detail}</div>
+      <div class="redeven-action-popover__actions">
+        <For each={props.overlay.actions}>
+          {(item) => (
+            <Button
+              size="sm"
+              variant={item.emphasis === 'primary' ? 'default' : 'outline'}
+              class="w-full justify-center"
+              loading={isEnvironmentActionBusy(item.action, props.busyAction)}
+              disabled={props.disabled}
+              onClick={() => props.onRunAction(item.action)}
+            >
+              {item.label}
+            </Button>
+          )}
+        </For>
+      </div>
+    </div>
+  );
+}
+
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
+  busyAction?: BusyAction;
   loading?: boolean;
   onRunAction: (action: EnvironmentActionModel) => void;
 }>) {
   const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0);
+  const primaryActionOverlay = createMemo(() => props.presentation.primary_action_overlay);
+  const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
+    const overlay = primaryActionOverlay();
+    return overlay?.kind === 'tooltip' ? overlay : undefined;
+  });
+  const popoverOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>> | undefined>(() => {
+    const overlay = primaryActionOverlay();
+    return overlay?.kind === 'popover' ? overlay : undefined;
+  });
+  const primaryActionLoading = createMemo(() => (
+    props.presentation.primary_action.enabled && props.loading
+  ));
   let rootRef: HTMLDivElement | undefined;
 
   const closeMenu = () => props.onMenuOpenChange(false);
@@ -3050,7 +3118,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
       variant={props.presentation.primary_action.variant}
       class={cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')}
       style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
-      loading={props.loading}
+      loading={primaryActionLoading()}
       disabled={!props.presentation.primary_action.enabled}
       onClick={() => {
         closeMenu();
@@ -3064,17 +3132,49 @@ function EnvironmentSplitActionButton(props: Readonly<{
   return (
     <div ref={rootRef} class="redeven-split-action flex-1">
       <div class="redeven-split-action-primary">
-        <Show
-          when={trimString(props.presentation.primary_action_tooltip) !== ''}
-          fallback={primaryButton}
-        >
-          <DesktopTooltip
-            content={props.presentation.primary_action_tooltip!}
-            placement="top"
-            anchorClass="flex w-full"
+        <Show when={primaryActionOverlay()} fallback={primaryButton}>
+          <Show
+            when={popoverOverlay()}
+            fallback={(
+              <DesktopTooltip
+                content={tooltipOverlay()!.message}
+                placement="top"
+                anchorClass="flex w-full"
+                anchorTabIndex={0}
+                anchorRole="button"
+                anchorAriaLabel={blockedPrimaryActionAnchorLabel(props.presentation.primary_action.label)}
+                anchorAriaDisabled
+              >
+                {primaryButton}
+              </DesktopTooltip>
+            )}
           >
-            {primaryButton}
-          </DesktopTooltip>
+            {(overlay) => (
+              <DesktopPopover
+                content={(
+                  <EnvironmentPrimaryActionPopoverCard
+                    overlay={overlay()}
+                    busyAction={props.busyAction}
+                    disabled={props.loading}
+                    onRunAction={(action) => {
+                      closeMenu();
+                      props.onRunAction(action);
+                    }}
+                  />
+                )}
+                placement="top"
+                anchorClass="flex w-full"
+                anchorTabIndex={0}
+                anchorRole="button"
+                anchorAriaLabel={blockedPrimaryActionAnchorLabel(props.presentation.primary_action.label)}
+                anchorAriaDisabled
+                anchorHasPopup="dialog"
+                popoverAriaLabel={overlay().title}
+              >
+                {primaryButton}
+              </DesktopPopover>
+            )}
+          </Show>
         </Show>
       </div>
       <Show when={hasMenuActions()}>
@@ -3264,6 +3364,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           presentation={environmentActionPresentation()}
           menuOpen={props.runtimeMenuOpen}
           onMenuOpenChange={props.onRuntimeMenuOpenChange}
+          busyAction={props.busyAction}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           onRunAction={(action) => {
             void props.runManagedEnvironmentAction(

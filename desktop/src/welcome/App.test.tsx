@@ -29,6 +29,10 @@ function readDesktopTooltipSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopTooltip.tsx'), 'utf8');
 }
 
+function readDesktopPopoverSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'DesktopPopover.tsx'), 'utf8');
+}
+
 function readWelcomeStyles(): string {
   return fs.readFileSync(path.join(__dirname, 'index.css'), 'utf8');
 }
@@ -438,6 +442,16 @@ describe('DesktopWelcomeShell', () => {
     expect(tooltipSrc).toContain('fixed z-[220]');
   });
 
+  it('renders interactive desktop popovers through a body-level portal so blocked actions can offer guided recovery', () => {
+    const popoverSrc = readDesktopPopoverSource();
+
+    expect(popoverSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(popoverSrc).toContain('data-redeven-popover-anchor=""');
+    expect(popoverSrc).toContain('<Portal>');
+    expect(popoverSrc).toContain('role="dialog"');
+    expect(popoverSrc).toContain('pointer-events-auto fixed z-[225]');
+  });
+
   it('includes compact environment-card launcher copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
@@ -482,6 +496,7 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
+    expect(appSrc).toContain('function EnvironmentPrimaryActionPopoverCard');
     expect(appSrc).toContain('function serveRuntimeLocally');
     expect(appSrc).not.toContain('function openProviderLocalServeDialog');
     expect(appSrc).toContain("environment.provider_local_runtime_configured !== true");
@@ -489,7 +504,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("return openProviderEnvironment(environment, errorTarget, 'local_host');");
     expect(appSrc).toContain('Refresh runtime status');
     expect(appSrc).toContain('Refresh runtime statuses');
-    expect(appSrc).toContain('primary_action_tooltip');
+    expect(appSrc).toContain('primary_action_overlay');
+    expect(appSrc).toContain('<DesktopPopover');
     expect(appSrc).toContain('props.presentation.menu_button_label');
     expect(appSrc).toContain('startEnvironmentRuntime');
     expect(appSrc).toContain('stopEnvironmentRuntime');
@@ -504,6 +520,8 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-split-action-toggle');
     expect(styles).toContain('.redeven-split-menu');
     expect(styles).toContain('.redeven-split-menu-item');
+    expect(styles).toContain('.redeven-action-popover');
+    expect(styles).toContain('.redeven-action-popover__actions');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {

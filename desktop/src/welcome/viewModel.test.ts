@@ -372,9 +372,36 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: false,
           variant: 'default',
-          tooltip: 'the runtime offline / unavailable',
         },
-        primary_action_tooltip: 'the runtime offline / unavailable',
+        primary_action_overlay: {
+          kind: 'popover',
+          tone: 'warning',
+          eyebrow: 'Runtime offline',
+          title: 'Set up local runtime to continue',
+          detail: 'Open becomes available after you finish local runtime setup for this environment.',
+          actions: [
+            {
+              label: 'Set up local runtime…',
+              emphasis: 'primary',
+              action: {
+                intent: 'serve_runtime_locally',
+                label: 'Set up local runtime…',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+            {
+              label: 'Refresh status',
+              emphasis: 'secondary',
+              action: {
+                intent: 'refresh_runtime',
+                label: 'Refresh runtime status',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+          ],
+        },
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -423,9 +450,36 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: false,
           variant: 'default',
-          tooltip: 'serve the runtime first',
         },
-        primary_action_tooltip: 'serve the runtime first',
+        primary_action_overlay: {
+          kind: 'popover',
+          tone: 'warning',
+          eyebrow: 'Runtime offline',
+          title: 'Start the local runtime to continue',
+          detail: 'Open becomes available once the runtime is ready on this device.',
+          actions: [
+            {
+              label: 'Start runtime locally',
+              emphasis: 'primary',
+              action: {
+                intent: 'start_runtime',
+                label: 'Start runtime',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+            {
+              label: 'Refresh status',
+              emphasis: 'secondary',
+              action: {
+                intent: 'refresh_runtime',
+                label: 'Refresh runtime status',
+                enabled: true,
+                variant: 'outline',
+              },
+            },
+          ],
+        },
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -475,7 +529,7 @@ describe('buildEnvironmentCardModel', () => {
           enabled: true,
           variant: 'default',
         },
-        primary_action_tooltip: undefined,
+        primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -524,9 +578,8 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: true,
           variant: 'default',
-          tooltip: undefined,
         },
-        primary_action_tooltip: undefined,
+        primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -583,9 +636,8 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Open',
           enabled: true,
           variant: 'default',
-          tooltip: undefined,
         },
-        primary_action_tooltip: undefined,
+        primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -639,7 +691,7 @@ describe('buildEnvironmentCardModel', () => {
           enabled: true,
           variant: 'default',
         },
-        primary_action_tooltip: undefined,
+        primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {
@@ -708,7 +760,7 @@ describe('buildEnvironmentCardModel', () => {
           enabled: false,
           variant: 'default',
         },
-        primary_action_tooltip: undefined,
+        primary_action_overlay: undefined,
         menu_button_label: 'Runtime actions',
         menu_actions: [
           {

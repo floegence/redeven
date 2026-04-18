@@ -75,7 +75,6 @@ export type EnvironmentActionModel = Readonly<{
   label: string;
   enabled: boolean;
   variant: 'default' | 'outline';
-  tooltip?: string;
   route?: DesktopManagedEnvironmentRoute;
 }>;
 
@@ -85,10 +84,33 @@ export type EnvironmentActionMenuItemModel = Readonly<{
   action: EnvironmentActionModel;
 }>;
 
+export type EnvironmentActionOverlayTone = 'neutral' | 'warning';
+
+export type EnvironmentGuidanceActionModel = Readonly<{
+  label: string;
+  emphasis: 'primary' | 'secondary';
+  action: EnvironmentActionModel;
+}>;
+
+export type EnvironmentPrimaryActionOverlayModel =
+  | Readonly<{
+      kind: 'tooltip';
+      tone: EnvironmentActionOverlayTone;
+      message: string;
+    }>
+  | Readonly<{
+      kind: 'popover';
+      tone: EnvironmentActionOverlayTone;
+      eyebrow: string;
+      title: string;
+      detail: string;
+      actions: readonly EnvironmentGuidanceActionModel[];
+    }>;
+
 export type EnvironmentActionPresentation = Readonly<{
   kind: 'split_button';
   primary_action: EnvironmentActionModel;
-  primary_action_tooltip?: string;
+  primary_action_overlay?: EnvironmentPrimaryActionOverlayModel;
   menu_button_label: string;
   menu_actions: readonly EnvironmentActionMenuItemModel[];
 }>;
@@ -557,15 +579,6 @@ function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCar
   return environment.runtime_health.status === 'online' ? 'success' : 'warning';
 }
 
-function environmentPrimaryTooltip(environment: DesktopEnvironmentEntry): string {
-  if (environment.window_state !== 'closed' || environment.runtime_health.status === 'online') {
-    return '';
-  }
-  return environment.runtime_control_capability === 'start_stop'
-    ? 'serve the runtime first'
-    : 'the runtime offline / unavailable';
-}
-
 function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
   if (environment.window_state === 'open') {
     return {
@@ -588,7 +601,6 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     label: 'Open',
     enabled: environment.runtime_health.status === 'online',
     variant: 'default',
-    tooltip: environmentPrimaryTooltip(environment) || undefined,
   };
 }
 
@@ -760,20 +772,115 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   return items;
 }
 
+function blockedPrimaryActionGuidanceAction(
+  environment: DesktopEnvironmentEntry,
+  menuActions: readonly EnvironmentActionMenuItemModel[],
+): EnvironmentGuidanceActionModel | null {
+  const recoveryAction = menuActions.find((item) => (
+    item.action.intent === 'start_runtime'
+      || item.action.intent === 'serve_runtime_locally'
+  ));
+  if (!recoveryAction) {
+    return null;
+  }
+  if (recoveryAction.action.intent === 'serve_runtime_locally') {
+    return {
+      label: 'Set up local runtime…',
+      emphasis: 'primary',
+      action: recoveryAction.action,
+    };
+  }
+  return {
+    label: environment.kind === 'ssh_environment' ? 'Start runtime' : 'Start runtime locally',
+    emphasis: 'primary',
+    action: recoveryAction.action,
+  };
+}
+
+function blockedPrimaryActionRefreshGuidanceAction(
+  menuActions: readonly EnvironmentActionMenuItemModel[],
+): EnvironmentGuidanceActionModel | null {
+  const refreshAction = menuActions.find((item) => item.action.intent === 'refresh_runtime');
+  if (!refreshAction) {
+    return null;
+  }
+  return {
+    label: 'Refresh status',
+    emphasis: 'secondary',
+    action: refreshAction.action,
+  };
+}
+
+function blockedPrimaryActionTitle(
+  environment: DesktopEnvironmentEntry,
+  action: EnvironmentActionModel,
+): string {
+  if (action.intent === 'serve_runtime_locally') {
+    return 'Set up local runtime to continue';
+  }
+  return environment.kind === 'ssh_environment'
+    ? 'Start the runtime to continue'
+    : 'Start the local runtime to continue';
+}
+
+function blockedPrimaryActionDetail(
+  environment: DesktopEnvironmentEntry,
+  action: EnvironmentActionModel,
+): string {
+  if (action.intent === 'serve_runtime_locally') {
+    return 'Open becomes available after you finish local runtime setup for this environment.';
+  }
+  return environment.kind === 'ssh_environment'
+    ? 'Open becomes available once the runtime is ready on this SSH host.'
+    : 'Open becomes available once the runtime is ready on this device.';
+}
+
+function primaryActionOverlay(
+  environment: DesktopEnvironmentEntry,
+  menuActions: readonly EnvironmentActionMenuItemModel[],
+): EnvironmentPrimaryActionOverlayModel | undefined {
+  if (environment.window_state !== 'closed' || environment.runtime_health.status === 'online') {
+    return undefined;
+  }
+
+  const recoveryAction = blockedPrimaryActionGuidanceAction(environment, menuActions);
+  if (recoveryAction) {
+    const refreshAction = blockedPrimaryActionRefreshGuidanceAction(menuActions);
+    return {
+      kind: 'popover',
+      tone: 'warning',
+      eyebrow: 'Runtime offline',
+      title: blockedPrimaryActionTitle(environment, recoveryAction.action),
+      detail: blockedPrimaryActionDetail(environment, recoveryAction.action),
+      actions: [
+        recoveryAction,
+        ...(refreshAction ? [refreshAction] : []),
+      ],
+    };
+  }
+
+  return {
+    kind: 'tooltip',
+    tone: 'warning',
+    message: 'Runtime is offline or unavailable right now. Start it from its source, then refresh status.',
+  };
+}
+
 export function buildProviderBackedEnvironmentActionModel(
   environment: DesktopEnvironmentEntry,
   _controlPlaneSyncState: DesktopControlPlaneSyncState = environment.control_plane_sync_state ?? 'ready',
 ): ProviderBackedEnvironmentActionModel {
   const primaryAction = primaryWindowAction(environment);
+  const menuActions = runtimeMenuActions(environment);
   return {
     status_label: runtimeStatusLabel(environment),
     status_tone: runtimeStatusTone(environment),
     action_presentation: {
       kind: 'split_button',
       primary_action: primaryAction,
-      primary_action_tooltip: primaryAction.tooltip,
+      primary_action_overlay: primaryActionOverlay(environment, menuActions),
       menu_button_label: 'Runtime actions',
-      menu_actions: runtimeMenuActions(environment),
+      menu_actions: menuActions,
     },
   };
 }

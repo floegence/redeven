@@ -1,14 +1,14 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import {
+  desktopOverlayArrowClass,
+  desktopOverlayArrowStyle,
+  resolveDesktopAnchoredOverlayPosition,
+  type DesktopAnchoredOverlayPosition,
+  type DesktopOverlayPlacement,
+} from './desktopOverlayPosition';
 
-export type DesktopTooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
-
-type OverlayPosition = Readonly<{
-  placement: DesktopTooltipPlacement;
-  left: number;
-  top: number;
-  arrowOffset: number;
-}>;
+export type DesktopTooltipPlacement = DesktopOverlayPlacement;
 
 export type DesktopTooltipProps = Readonly<{
   content: string | JSX.Element;
@@ -17,128 +17,19 @@ export type DesktopTooltipProps = Readonly<{
   delay?: number;
   class?: string;
   anchorClass?: string;
+  anchorTabIndex?: number;
+  anchorRole?: JSX.HTMLAttributes<HTMLSpanElement>['role'];
+  anchorAriaLabel?: string;
+  anchorAriaDisabled?: boolean;
 }>;
 
 function cn(...values: Array<string | undefined | null | false>): string {
   return values.filter(Boolean).join(' ');
 }
 
-function clamp(value: number, min: number, max: number): number {
-  if (max < min) {
-    return min;
-  }
-  return Math.min(Math.max(value, min), max);
-}
-
-function oppositePlacement(placement: DesktopTooltipPlacement): DesktopTooltipPlacement {
-  switch (placement) {
-    case 'top':
-      return 'bottom';
-    case 'bottom':
-      return 'top';
-    case 'left':
-      return 'right';
-    case 'right':
-    default:
-      return 'left';
-  }
-}
-
-function resolveOverlayPosition(options: Readonly<{
-  anchorRect: DOMRect;
-  overlayWidth: number;
-  overlayHeight: number;
-  viewportWidth: number;
-  viewportHeight: number;
-  preferredPlacement?: DesktopTooltipPlacement;
-}>): OverlayPosition {
-  const preferredPlacement = options.preferredPlacement ?? 'top';
-  const margin = 8;
-  const gap = 8;
-  const arrowInset = 12;
-  const anchorCenterX = options.anchorRect.left + (options.anchorRect.width / 2);
-  const anchorCenterY = options.anchorRect.top + (options.anchorRect.height / 2);
-
-  const availableSpace = {
-    top: options.anchorRect.top - margin - gap,
-    bottom: options.viewportHeight - options.anchorRect.bottom - margin - gap,
-    left: options.anchorRect.left - margin - gap,
-    right: options.viewportWidth - options.anchorRect.right - margin - gap,
-  } satisfies Record<DesktopTooltipPlacement, number>;
-
-  const orderedPlacements = [
-    preferredPlacement,
-    oppositePlacement(preferredPlacement),
-    preferredPlacement === 'top' || preferredPlacement === 'bottom' ? 'right' : 'bottom',
-    preferredPlacement === 'top' || preferredPlacement === 'bottom' ? 'left' : 'top',
-  ] as const;
-
-  const placement = orderedPlacements.find((candidate) => {
-    const requiredSpace = candidate === 'top' || candidate === 'bottom'
-      ? options.overlayHeight
-      : options.overlayWidth;
-    return availableSpace[candidate] >= requiredSpace;
-  }) ?? orderedPlacements.slice().sort((left, right) => availableSpace[right] - availableSpace[left])[0];
-
-  let left = 0;
-  let top = 0;
-
-  switch (placement) {
-    case 'top':
-      left = anchorCenterX - (options.overlayWidth / 2);
-      top = options.anchorRect.top - gap - options.overlayHeight;
-      break;
-    case 'bottom':
-      left = anchorCenterX - (options.overlayWidth / 2);
-      top = options.anchorRect.bottom + gap;
-      break;
-    case 'left':
-      left = options.anchorRect.left - gap - options.overlayWidth;
-      top = anchorCenterY - (options.overlayHeight / 2);
-      break;
-    case 'right':
-      left = options.anchorRect.right + gap;
-      top = anchorCenterY - (options.overlayHeight / 2);
-      break;
-  }
-
-  left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
-  top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
-
-  return {
-    placement,
-    left,
-    top,
-    arrowOffset: placement === 'top' || placement === 'bottom'
-      ? clamp(anchorCenterX - left, arrowInset, options.overlayWidth - arrowInset)
-      : clamp(anchorCenterY - top, arrowInset, options.overlayHeight - arrowInset),
-  };
-}
-
-function arrowClass(placement: DesktopTooltipPlacement): string {
-  switch (placement) {
-    case 'top':
-      return 'left-0 top-full -translate-x-1/2 border-x-4 border-t-4 border-x-transparent border-t-popover border-b-0';
-    case 'bottom':
-      return 'left-0 bottom-full -translate-x-1/2 border-x-4 border-b-4 border-x-transparent border-b-popover border-t-0';
-    case 'left':
-      return 'left-full top-0 -translate-y-1/2 border-y-4 border-l-4 border-y-transparent border-l-popover border-r-0';
-    case 'right':
-    default:
-      return 'right-full top-0 -translate-y-1/2 border-y-4 border-r-4 border-y-transparent border-r-popover border-l-0';
-  }
-}
-
-function arrowStyle(position: OverlayPosition): JSX.CSSProperties {
-  if (position.placement === 'top' || position.placement === 'bottom') {
-    return { left: `${position.arrowOffset}px` };
-  }
-  return { top: `${position.arrowOffset}px` };
-}
-
 export function DesktopTooltip(props: DesktopTooltipProps) {
   const [visible, setVisible] = createSignal(false);
-  const [position, setPosition] = createSignal<OverlayPosition | null>(null);
+  const [position, setPosition] = createSignal<DesktopAnchoredOverlayPosition | null>(null);
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -175,7 +66,7 @@ export function DesktopTooltip(props: DesktopTooltipProps) {
     const viewportOffsetLeft = viewport?.offsetLeft ?? 0;
     const viewportOffsetTop = viewport?.offsetTop ?? 0;
 
-    const nextPosition = resolveOverlayPosition({
+    const nextPosition = resolveDesktopAnchoredOverlayPosition({
       anchorRect,
       overlayWidth: tooltipRect.width,
       overlayHeight: tooltipRect.height,
@@ -262,6 +153,10 @@ export function DesktopTooltip(props: DesktopTooltipProps) {
       ref={anchorRef}
       data-redeven-tooltip-anchor=""
       class={cn('relative inline-block max-w-full', props.anchorClass)}
+      tabIndex={props.anchorTabIndex}
+      role={props.anchorRole}
+      aria-label={props.anchorAriaLabel}
+      aria-disabled={props.anchorAriaDisabled === true ? true : undefined}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocusIn={show}
@@ -294,8 +189,8 @@ export function DesktopTooltip(props: DesktopTooltipProps) {
           >
             {props.content}
             <div
-              class={cn('absolute h-0 w-0', arrowClass(resolvedPlacement()))}
-              style={position() ? arrowStyle(position()!) : undefined}
+              class={cn('absolute h-0 w-0', desktopOverlayArrowClass(resolvedPlacement()))}
+              style={position() ? desktopOverlayArrowStyle(position()!) : undefined}
             />
           </div>
         </Portal>
