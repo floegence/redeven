@@ -476,7 +476,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('buildEnvironmentCardFactsModel');
     expect(appSrc).not.toContain('buildControlPlaneEnvironmentFactsModel');
     expect(appSrc).toContain('buildEnvironmentCardEndpointsModel');
-    expect(appSrc).toContain('splitPinnedEnvironmentEntries');
+    expect(appSrc).toContain('splitPinnedEnvironmentEntryIDs');
+    expect(appSrc).toContain('environmentLibraryEntryRecord');
+    expect(appSrc).not.toContain('splitPinnedEnvironmentEntries(props.entries)');
     expect(appSrc).toContain('function EnvironmentLibrarySection');
     expect(appSrc).toContain('function EnvironmentCardFactsBlock');
     expect(appSrc).toContain('function EnvironmentCardEndpointBlock');
@@ -512,6 +514,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<DesktopPopover');
     expect(appSrc).toContain('activeEnvironmentOverlayState');
     expect(appSrc).toContain('reconcileEnvironmentLibraryOverlayState');
+    expect(appSrc).toContain('projectedEntriesByID');
+    expect(appSrc).toContain('projectedEntryIDs');
+    expect(appSrc).toContain('<For each={groupedEntryIDs().pinned_entry_ids}>');
+    expect(appSrc).toContain('environment={projectedEnvironment(environmentID)}');
     expect(appSrc).toContain('guidanceOpen={props.primaryActionGuidanceOpen}');
     expect(appSrc).toContain('props.presentation.menu_button_label');
     expect(appSrc).toContain('startEnvironmentRuntime');
