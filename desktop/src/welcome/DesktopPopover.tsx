@@ -11,6 +11,8 @@ import {
 export type DesktopPopoverProps = Readonly<{
   content: JSX.Element;
   children: JSX.Element;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   placement?: DesktopOverlayPlacement;
   delay?: number;
   closeDelay?: number;
@@ -36,7 +38,6 @@ function firstFocusableElement(root: HTMLElement | undefined): HTMLElement | nul
 }
 
 export function DesktopPopover(props: DesktopPopoverProps) {
-  const [visible, setVisible] = createSignal(false);
   const [position, setPosition] = createSignal<DesktopAnchoredOverlayPosition | null>(null);
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
 
@@ -107,32 +108,40 @@ export function DesktopPopover(props: DesktopPopoverProps) {
 
   const open = () => {
     clearTimer();
+    if (props.open) {
+      return;
+    }
     const delay = props.delay ?? 0;
     if (delay <= 0) {
-      setVisible(true);
+      props.onOpenChange(true);
       return;
     }
     timer = setTimeout(() => {
       timer = undefined;
-      setVisible(true);
+      props.onOpenChange(true);
     }, delay);
   };
 
   const hide = () => {
     clearTimer();
-    setVisible(false);
+    if (!props.open) {
+      return;
+    }
+    props.onOpenChange(false);
   };
 
   const scheduleHide = () => {
     clearTimer();
     const delay = props.closeDelay ?? 120;
     if (delay <= 0) {
-      setVisible(false);
+      if (props.open) {
+        props.onOpenChange(false);
+      }
       return;
     }
     timer = setTimeout(() => {
       timer = undefined;
-      setVisible(false);
+      props.onOpenChange(false);
     }, delay);
   };
 
@@ -144,7 +153,7 @@ export function DesktopPopover(props: DesktopPopoverProps) {
   };
 
   createEffect(() => {
-    if (!visible()) {
+    if (!props.open) {
       clearFrame();
       setPosition(null);
       return;
@@ -209,7 +218,7 @@ export function DesktopPopover(props: DesktopPopoverProps) {
       aria-label={props.anchorAriaLabel}
       aria-disabled={props.anchorAriaDisabled === true ? true : undefined}
       aria-haspopup={props.anchorHasPopup}
-      aria-expanded={props.anchorHasPopup ? visible() : undefined}
+      aria-expanded={props.anchorHasPopup ? props.open : undefined}
       onMouseEnter={open}
       onMouseLeave={(event) => {
         if (containsTarget(event.relatedTarget)) {
@@ -233,7 +242,7 @@ export function DesktopPopover(props: DesktopPopoverProps) {
     >
       {props.children}
 
-      <Show when={visible()}>
+      <Show when={props.open}>
         <Portal>
           <div
             ref={popoverRef}

@@ -142,6 +142,13 @@ import {
 } from './actionToastModel';
 import { normalizeDesktopLocalEnvironmentName } from '../shared/desktopManagedEnvironment';
 import { DesktopPopover } from './DesktopPopover';
+import {
+  closeEnvironmentLibraryOverlayState,
+  closedEnvironmentLibraryOverlayState,
+  environmentLibraryOverlayOpenFor,
+  openEnvironmentLibraryOverlayState,
+  reconcileEnvironmentLibraryOverlayState,
+} from './environmentLibraryOverlayState';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -2688,7 +2695,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   const [environmentLibraryElement, setEnvironmentLibraryElement] = createSignal<HTMLDivElement>();
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
   const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
-  const [openRuntimeMenuEnvironmentID, setOpenRuntimeMenuEnvironmentID] = createSignal('');
+  const [activeEnvironmentOverlayState, setActiveEnvironmentOverlayState] = createSignal(closedEnvironmentLibraryOverlayState());
   const groupedEntries = createMemo(() => splitPinnedEnvironmentEntries(props.entries));
   // Keep transient provider/search filters from collapsing the shared environment column system.
   const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
@@ -2702,14 +2709,24 @@ function EnvironmentCardsPanel(props: Readonly<{
   }));
 
   createEffect(() => {
-    const openID = trimString(openRuntimeMenuEnvironmentID());
-    if (openID === '') {
-      return;
-    }
-    if (!props.entries.some((environment) => environment.id === openID)) {
-      setOpenRuntimeMenuEnvironmentID('');
-    }
+    setActiveEnvironmentOverlayState((current) => reconcileEnvironmentLibraryOverlayState(current, props.entries));
   });
+
+  const setRuntimeMenuOpen = (environmentID: string, open: boolean) => {
+    setActiveEnvironmentOverlayState((current) => (
+      open
+        ? openEnvironmentLibraryOverlayState('runtime_menu', environmentID)
+        : closeEnvironmentLibraryOverlayState(current, 'runtime_menu', environmentID)
+    ));
+  };
+
+  const setPrimaryActionGuidanceOpen = (environmentID: string, open: boolean) => {
+    setActiveEnvironmentOverlayState((current) => (
+      open
+        ? openEnvironmentLibraryOverlayState('primary_action_guidance', environmentID)
+        : closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', environmentID)
+    ));
+  };
 
   createEffect(() => {
     const element = environmentLibraryElement();
@@ -2775,8 +2792,10 @@ function EnvironmentCardsPanel(props: Readonly<{
                   <EnvironmentConnectionCard
                     environment={environment}
                     busyAction={props.busyAction}
-                    runtimeMenuOpen={openRuntimeMenuEnvironmentID() === environment.id}
-                    onRuntimeMenuOpenChange={(open) => setOpenRuntimeMenuEnvironmentID(open ? environment.id : '')}
+                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environment.id)}
+                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environment.id, open)}
+                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environment.id)}
+                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environment.id, open)}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
@@ -2799,8 +2818,10 @@ function EnvironmentCardsPanel(props: Readonly<{
                   <EnvironmentConnectionCard
                     environment={environment}
                     busyAction={props.busyAction}
-                    runtimeMenuOpen={openRuntimeMenuEnvironmentID() === environment.id}
-                    onRuntimeMenuOpenChange={(open) => setOpenRuntimeMenuEnvironmentID(open ? environment.id : '')}
+                    runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environment.id)}
+                    onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environment.id, open)}
+                    primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environment.id)}
+                    onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environment.id, open)}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
@@ -3066,6 +3087,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
+  guidanceOpen: boolean;
+  onGuidanceOpenChange: (open: boolean) => void;
   busyAction?: BusyAction;
   loading?: boolean;
   onRunAction: (action: EnvironmentActionModel) => void;
@@ -3151,6 +3174,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
           >
             {(overlay) => (
               <DesktopPopover
+                open={props.guidanceOpen}
+                onOpenChange={(open) => {
+                  if (open) {
+                    closeMenu();
+                  }
+                  props.onGuidanceOpenChange(open);
+                }}
                 content={(
                   <EnvironmentPrimaryActionPopoverCard
                     overlay={overlay()}
@@ -3252,6 +3282,8 @@ function EnvironmentConnectionCard(props: Readonly<{
   busyAction: BusyAction;
   runtimeMenuOpen: boolean;
   onRuntimeMenuOpenChange: (open: boolean) => void;
+  primaryActionGuidanceOpen: boolean;
+  onPrimaryActionGuidanceOpenChange: (open: boolean) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -3364,6 +3396,8 @@ function EnvironmentConnectionCard(props: Readonly<{
           presentation={environmentActionPresentation()}
           menuOpen={props.runtimeMenuOpen}
           onMenuOpenChange={props.onRuntimeMenuOpenChange}
+          guidanceOpen={props.primaryActionGuidanceOpen}
+          onGuidanceOpenChange={props.onPrimaryActionGuidanceOpenChange}
           busyAction={props.busyAction}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           onRunAction={(action) => {

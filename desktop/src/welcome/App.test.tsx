@@ -450,6 +450,10 @@ describe('DesktopWelcomeShell', () => {
     expect(popoverSrc).toContain('<Portal>');
     expect(popoverSrc).toContain('role="dialog"');
     expect(popoverSrc).toContain('pointer-events-auto fixed z-[225]');
+    expect(popoverSrc).toContain('open: boolean;');
+    expect(popoverSrc).toContain('onOpenChange: (open: boolean) => void;');
+    expect(popoverSrc).toContain('props.onOpenChange(true);');
+    expect(popoverSrc).not.toContain("const [visible, setVisible] = createSignal(false);");
   });
 
   it('includes compact environment-card launcher copy inside the source', () => {
@@ -506,6 +510,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Refresh runtime statuses');
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopPopover');
+    expect(appSrc).toContain('activeEnvironmentOverlayState');
+    expect(appSrc).toContain('reconcileEnvironmentLibraryOverlayState');
+    expect(appSrc).toContain('guidanceOpen={props.primaryActionGuidanceOpen}');
     expect(appSrc).toContain('props.presentation.menu_button_label');
     expect(appSrc).toContain('startEnvironmentRuntime');
     expect(appSrc).toContain('stopEnvironmentRuntime');
@@ -513,7 +520,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'stop_runtime':");
     expect(appSrc).toContain("case 'refresh_runtime':");
     expect(appSrc).toContain("case 'serve_runtime_locally':");
-    expect(appSrc).toContain('openRuntimeMenuEnvironmentID');
+    expect(appSrc).toContain('openEnvironmentLibraryOverlayState');
+    expect(appSrc).not.toContain('openRuntimeMenuEnvironmentID');
     expect(appSrc).toContain('aria-label={props.presentation.menu_button_label}');
     expect(styles).toContain('.redeven-split-action');
     expect(styles).toContain('.redeven-split-action-primary');
