@@ -1,9 +1,29 @@
+import type { JSX } from 'solid-js';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'solid-js/web';
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Dialog: (props: {
+    children?: JSX.Element;
+    class?: string;
+    footer?: JSX.Element;
+    onOpenChange?: (open: boolean) => void;
+    open?: boolean;
+    title?: string;
+  }) => (
+    <div
+      data-dialog="true"
+      data-open={props.open ? 'true' : 'false'}
+      data-dialog-class={props.class}
+    >
+      <div data-dialog-title>{props.title}</div>
+      <div data-dialog-body>{props.children}</div>
+      <div data-dialog-footer>{props.footer}</div>
+      <button type="button" data-dialog-close onClick={() => props.onOpenChange?.(false)}>close</button>
+    </div>
+  ),
   Button: (props: {
-    children?: string;
+    children?: JSX.Element;
     class?: string;
     onClick?: () => void;
     type?: 'button';
@@ -24,7 +44,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
 }));
 
 describe('DesktopConfirmationApp', () => {
-  it('renders a single-sheet confirmation layout instead of nesting a dialog inside the window', async () => {
+  it('renders the warning inside the shared dialog structure', async () => {
     const { DesktopConfirmationApp } = await import('./App');
 
     const html = renderToString(() => (
@@ -41,11 +61,11 @@ describe('DesktopConfirmationApp', () => {
     ));
 
     expect(html).toContain('class="redeven-confirmation-window"');
-    expect(html).toContain('class="redeven-confirmation-sheet"');
-    expect(html).toContain('redeven-confirmation-header');
-    expect(html).toContain('redeven-confirmation-footer');
-    expect(html).toContain('aria-label="Cancel confirmation"');
-    expect(html).not.toContain('dialog-content');
-    expect(html).not.toContain('data-slot="dialog');
+    expect(html).toContain('data-dialog="true"');
+    expect(html).toContain('data-dialog-class="redeven-confirmation-dialog w-[min(26rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)]"');
+    expect(html).toContain('data-dialog-title');
+    expect(html).toContain('data-dialog-footer');
+    expect(html).toContain('redeven-confirmation-body');
+    expect(html).toContain('data-icon="alert-triangle"');
   });
 });
