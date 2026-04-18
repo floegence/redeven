@@ -612,7 +612,7 @@ Non-goals:
 - `Quit Redeven Desktop` resolves the current quit impact before shutdown instead of relying on a generic fixed warning.
 - If Desktop still owns one or more managed runtimes, the quit confirmation states the concrete shutdown impact in one concise sentence and only keeps a short secondary note when externally managed runtimes remain unaffected.
 - On macOS, closing the final Desktop window keeps the app running, but Desktop now warns before the last window disappears when that close would hide the active environment surface or leave Desktop-managed runtimes running in the background.
-- Desktop-owned quit and final-window-close confirmations now render through a dedicated `floe-webapp` dialog surface instead of a main-process HTML sheet, so the warning stays visually consistent with the rest of the Desktop UI.
+- Desktop-owned quit and final-window-close confirmations now use the platform-native system dialog surface, so macOS, Windows, and Linux each keep their expected shutdown affordances.
 - On non-macOS platforms, closing the final Desktop window uses that same quit-impact protection before the app is allowed to exit and stop Desktop-owned runtimes.
 - Shell window aliases such as `connect` route to the same welcome launcher.
 - Compatible providers may also enter through the registered `redeven://` deep-link scheme.
