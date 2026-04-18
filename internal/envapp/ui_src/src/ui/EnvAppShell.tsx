@@ -4,7 +4,6 @@ import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-co
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
   Activity,
-  ArrowRightLeft,
   Code,
   Copy,
   Files,
@@ -82,7 +81,6 @@ import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
 import { RuntimeUpdateFloatingPrompt } from './widgets/RuntimeUpdateFloatingPrompt';
 import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
-import { EnvTopBarOverflowMenu } from './EnvTopBarOverflowMenu';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
@@ -2076,6 +2074,15 @@ export function EnvAppShell() {
         execute: () => window.location.assign(`${consoleOrigin()}/dashboard`),
       },
       {
+        id: 'redeven.env.openRuntimeSettings',
+        title: 'Open Runtime Settings',
+        description: 'Open runtime settings',
+        category: 'Environment',
+        keybind: 'mod+,',
+        icon: Settings,
+        execute: () => openSettings(),
+      },
+      {
         id: 'redeven.env.reconnect',
         title: 'Reconnect',
         description: 'Reconnect to the environment tunnel',
@@ -2151,6 +2158,17 @@ export function EnvAppShell() {
         execute: () => cmd.open(),
       },
     );
+
+    if (canViewAudit()) {
+      list.push({
+        id: 'redeven.env.openAuditLog',
+        title: 'Open Audit Log',
+        description: 'Review recent environment activity',
+        category: 'Environment',
+        icon: Activity,
+        execute: () => setAuditOpen(true),
+      });
+    }
 
     const unregister = cmd.registerAll(list as any);
     onCleanup(() => unregister());
@@ -2353,55 +2371,6 @@ export function EnvAppShell() {
     closeBrowser: fileBrowserSurfaceController.closeSurface,
   } as const;
 
-  const topBarOverflowItems = createMemo(() => {
-    const items: Array<{ id: string; label: string; icon?: () => any; separator?: boolean }> = [];
-    if (desktopShellBridgeAvailable()) {
-      items.push({
-        id: 'switch-environment',
-        label: 'Switch Environment',
-        icon: ArrowRightLeft,
-      });
-    }
-    items.push({
-      id: 'runtime-settings',
-      label: 'Runtime Settings',
-      icon: Settings,
-    });
-    items.push({
-      id: 'reconnect-runtime',
-      label: reconnectLabel(),
-      icon: Refresh,
-    });
-    if (canViewAudit()) {
-      items.push({ id: 'divider-audit', label: '', separator: true });
-      items.push({
-        id: 'audit-log',
-        label: 'Audit Log',
-      });
-    }
-    return items;
-  });
-
-  const handleTopBarOverflowSelect = (id: string) => {
-    if (id === 'switch-environment') {
-      void openConnectionCenter();
-      return;
-    }
-    if (id === 'runtime-settings') {
-      openSettings();
-      return;
-    }
-    if (id === 'reconnect-runtime') {
-      if (!reconnectDisabled()) {
-        void triggerReconnect();
-      }
-      return;
-    }
-    if (id === 'audit-log' && canViewAudit()) {
-      setAuditOpen(true);
-    }
-  };
-
   const renderDetachedSurface = () => {
     const surface = detachedSurface();
     if (!surface) return null;
@@ -2438,7 +2407,6 @@ export function EnvAppShell() {
           onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'activity' })}
         />
       </Show>
-      <EnvTopBarOverflowMenu items={topBarOverflowItems()} onSelect={handleTopBarOverflowSelect} />
       <TopBarIconButton
         label="Notes overlay"
         tooltip={topBarTooltip(`Notes overlay (${notesOverlayShortcutLabel()})`)}
@@ -2581,7 +2549,7 @@ export function EnvAppShell() {
   const renderMainShell = () => {
     if (viewMode() === 'deck') {
       return (
-        <DisplayModePageShell logo={<ShellLogo />} title={envName()} actions={<HeaderActions />}>
+        <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
           {renderDisplayModeContent('deck')}
         </DisplayModePageShell>
       );
@@ -2589,7 +2557,7 @@ export function EnvAppShell() {
 
     if (viewMode() === 'workbench') {
       return (
-        <DisplayModePageShell logo={<ShellLogo />} title={envName()} actions={<HeaderActions />}>
+        <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
           {renderDisplayModeContent('workbench')}
         </DisplayModePageShell>
       );
