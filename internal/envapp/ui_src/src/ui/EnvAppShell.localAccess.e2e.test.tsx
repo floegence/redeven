@@ -106,7 +106,7 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
   BottomBarItem: (props: any) => <button type="button" class={props.class} onClick={props.onClick}>{props.children}</button>,
   DisplayModePageShell: (props: any) => (
-    <div data-testid="display-mode-page-shell">
+    <div data-testid="display-mode-page-shell" data-title={props.title ?? ''}>
       {props.logo}
       {props.title ? <div>{props.title}</div> : null}
       {props.actions}
@@ -439,7 +439,7 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell top bar affordances', () => {
-  it('surfaces Runtime Settings through the shared header overflow menu', async () => {
+  it('keeps Runtime Settings in the command palette without rendering a header overflow trigger', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -449,15 +449,23 @@ describe('EnvAppShell top bar affordances', () => {
     try {
       await flushAsync();
       await flushAsync();
-      const runtimeSettingsAction = host.querySelector('[data-dropdown-item-id="runtime-settings"]');
-      expect(runtimeSettingsAction).toBeTruthy();
-      expect(runtimeSettingsAction?.textContent).toContain('Runtime Settings');
+      const runtimeSettingsCommand = commandState.commands.find((command) => command.id === 'redeven.env.openRuntimeSettings') as
+        | undefined
+        | {
+            title?: string;
+            keybind?: string;
+          };
+
+      expect(runtimeSettingsCommand).toBeTruthy();
+      expect(runtimeSettingsCommand?.title).toBe('Open Runtime Settings');
+      expect(runtimeSettingsCommand?.keybind).toBe('mod+,');
+      expect(host.querySelector('button[aria-label="Open environment actions"]')).toBeNull();
     } finally {
       dispose();
     }
   }, 10000);
 
-  it('routes Switch Environment through the shared header overflow menu when the desktop bridge is available', async () => {
+  it('routes Switch Environment through the command palette when the desktop bridge is available', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const openConnectionCenterMock = vi.fn().mockResolvedValue(undefined);
@@ -472,10 +480,14 @@ describe('EnvAppShell top bar affordances', () => {
       await flushAsync();
       await flushAsync();
 
-      const switchEnvironmentButton = host.querySelector('[data-dropdown-item-id="switch-environment"]');
-      expect(switchEnvironmentButton).toBeTruthy();
+      const switchEnvironmentCommand = commandState.commands.find((command) => command.id === 'redeven.desktop.openEnvironment') as
+        | undefined
+        | {
+            execute: () => Promise<void>;
+          };
+      expect(switchEnvironmentCommand).toBeTruthy();
 
-      (switchEnvironmentButton as HTMLButtonElement).click();
+      await switchEnvironmentCommand?.execute();
       await flushAsync();
 
       expect(openConnectionCenterMock).toHaveBeenCalledTimes(1);
@@ -525,6 +537,28 @@ describe('EnvAppShell top bar affordances', () => {
       expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
       expect(toggleThemeButton).toBeTruthy();
       expect(toggleThemeButton?.getAttribute('data-tooltip')).toBe('Toggle theme');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('omits the environment name from the full-page header shell title slot', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const displayModeShell = host.querySelector('[data-testid="display-mode-page-shell"]');
+      expect(displayModeShell).toBeTruthy();
+      expect(displayModeShell?.getAttribute('data-title')).toBe('');
+      expect(host.querySelector('button[aria-label="Open environment actions"]')).toBeNull();
     } finally {
       dispose();
     }
