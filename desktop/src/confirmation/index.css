@@ -16,6 +16,7 @@
 html,
 body,
 #root {
+  height: 100vh;
   min-height: 100vh;
 }
 
@@ -25,30 +26,116 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--background);
+  background: color-mix(in srgb, var(--card) 96%, var(--background));
   color: var(--foreground);
+  overflow: hidden;
 }
 
-.redeven-confirmation-surface {
-  background:
-    radial-gradient(circle at top, color-mix(in srgb, var(--primary) 10%, transparent), transparent 48%),
-    radial-gradient(circle at bottom left, color-mix(in srgb, var(--info) 7%, transparent), transparent 46%),
-    linear-gradient(180deg, color-mix(in srgb, var(--background) 96%, var(--card) 4%), var(--background));
+.redeven-confirmation-window {
+  min-height: 100vh;
+  background: color-mix(in srgb, var(--card) 97%, var(--background));
 }
 
-.dark .redeven-confirmation-surface,
+.dark .redeven-confirmation-window,
 .dark [role='dialog'][aria-modal='true'] {
   --border: hsl(220 15% 26%);
   --input: hsl(220 18% 22%);
 }
 
-.redeven-confirmation-dialog {
-  background: color-mix(in srgb, var(--card) 96%, transparent);
-  border-color: color-mix(in srgb, var(--border) 88%, transparent);
-  box-shadow:
-    0 22px 52px color-mix(in srgb, var(--foreground) 16%, transparent),
-    0 4px 18px color-mix(in srgb, var(--foreground) 10%, transparent);
-  backdrop-filter: blur(16px);
+.redeven-confirmation-sheet {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--card) 98%, var(--background));
+}
+
+.redeven-confirmation-header,
+.redeven-confirmation-body,
+.redeven-confirmation-footer {
+  padding-inline: 1.25rem;
+}
+
+.redeven-confirmation-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1.125rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+}
+
+.redeven-confirmation-title {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.45;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.redeven-confirmation-close {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.redeven-confirmation-close:hover {
+  background: color-mix(in srgb, var(--accent) 52%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--accent));
+  color: var(--foreground);
+}
+
+.redeven-confirmation-close:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.redeven-confirmation-close-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.redeven-confirmation-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+}
+
+.redeven-confirmation-message {
+  margin: 0;
+  font-size: 0.965rem;
+  line-height: 1.65;
+  color: var(--foreground);
+}
+
+.redeven-confirmation-detail {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+
+.redeven-confirmation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
 }
 
 .redeven-confirmation-icon {
@@ -61,4 +148,16 @@ body {
   border-style: solid;
   border-radius: 0.75rem;
   flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .redeven-confirmation-header,
+  .redeven-confirmation-body,
+  .redeven-confirmation-footer {
+    padding-inline: 1rem;
+  }
+
+  .redeven-confirmation-title {
+    font-size: 1rem;
+  }
 }
