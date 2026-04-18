@@ -1733,7 +1733,7 @@ describe('TerminalPanel', () => {
     expect(browseButton).toBeUndefined();
   });
 
-  it('does not route Cmd/Ctrl+C through a local keydown workaround', async () => {
+  it('copies the active terminal selection through Cmd/Ctrl+C from the active terminal surface', async () => {
     terminalSelectionState.text = 'pnpm test';
 
     const host = document.createElement('div');
@@ -1745,15 +1745,42 @@ describe('TerminalPanel', () => {
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
     expect(terminalSurface).toBeTruthy();
 
-    terminalSurface?.dispatchEvent(new KeyboardEvent('keydown', {
+    const event = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      metaKey: true,
+      key: 'c',
+    });
+    terminalSurface?.dispatchEvent(event);
+    await settleTerminalPanel();
+
+    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('pnpm test');
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('does not intercept Cmd/Ctrl+C when the active terminal has no selection', async () => {
+    terminalSelectionState.text = '';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    const event = new KeyboardEvent('keydown', {
       bubbles: true,
       cancelable: true,
       ctrlKey: true,
       key: 'c',
-    }));
+    });
+    terminalSurface?.dispatchEvent(event);
     await settleTerminalPanel();
 
     expect(writeTextToClipboardSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('does not hijack Cmd/Ctrl+C from non-terminal inputs inside the panel host', async () => {

@@ -196,6 +196,17 @@ type terminal_touch_scroll_target = {
   input?: (data: string, wasUserInput?: boolean) => void;
 };
 
+type terminal_selection_snapshot = {
+  sessionId: string;
+  selectionText: string;
+  hasSelection: boolean;
+};
+
+type terminal_copy_command_context = {
+  source: 'shortcut' | 'context_menu';
+  selection: terminal_selection_snapshot;
+};
+
 function resolveTerminalTouchScrollTarget(core: TerminalCore | null): terminal_touch_scroll_target | null {
   if (!core) return null;
   const inner = (core as unknown as { terminal?: terminal_touch_scroll_target | null }).terminal;
@@ -208,6 +219,26 @@ function readTerminalSelectionText(core: TerminalCore | null): string {
   } catch {
     return '';
   }
+}
+
+function buildTerminalSelectionSnapshot(sessionId: string, selectionText: string): terminal_selection_snapshot {
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  const normalizedSelectionText = String(selectionText ?? '');
+  return {
+    sessionId: normalizedSessionId,
+    selectionText: normalizedSelectionText,
+    hasSelection: normalizedSelectionText.length > 0,
+  };
+}
+
+function isPrimaryTerminalCopyShortcut(event: KeyboardEvent): boolean {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return false;
+  return (event.key?.toLowerCase?.() ?? '') === 'c';
+}
+
+function isEventFromTerminalSurface(target: EventTarget | null, activeSurface: HTMLDivElement | null): boolean {
+  if (!activeSurface || !(target instanceof Node)) return false;
+  return target === activeSurface || activeSurface.contains(target);
 }
 
 function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number): string {
@@ -780,7 +811,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     y: number;
     workingDir: string;
     homePath?: string;
-    selection: string;
+    selection: terminal_selection_snapshot;
     showBrowseFiles: boolean;
   } | null>(null);
   let terminalAskMenuEl: HTMLDivElement | null = null;
@@ -1685,6 +1716,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return resolveTerminalInputElement(getActiveSurfaceElement());
   };
 
+  const getActiveTerminalSelectionSnapshot = (): terminal_selection_snapshot | null => {
+    const sessionId = String(activeSessionId() ?? '').trim();
+    if (!sessionId) return null;
+    return buildTerminalSelectionSnapshot(sessionId, readTerminalSelectionText(getActiveCore()));
+  };
+
   const getTerminalTouchScrollLineHeightPx = (surface: HTMLDivElement, core: TerminalCore) => {
     const rows = Math.max(1, core.getDimensions().rows);
     const height = surface.getBoundingClientRect().height;
@@ -2013,7 +2050,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       || '';
     const homePath = normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined;
     const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
-    const selection = readTerminalSelectionText(core);
+    const selection = buildTerminalSelectionSnapshot(resolvedSession.id, readTerminalSelectionText(core));
     const showBrowseFiles = Boolean(workingDir) && canBrowseFiles();
 
     const pos = clampAskMenuPosition(event.clientX, event.clientY, showBrowseFiles ? 3 : 2);
@@ -2040,20 +2077,25 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     openTerminalAskMenu(event);
   }
 
-  const copyTerminalSelection = async (selectionText?: string): Promise<boolean> => {
-    const selection = String(selectionText ?? readTerminalSelectionText(getActiveCore()) ?? '');
-    if (selection.length === 0) return false;
-    await writeTextToClipboard(selection);
+  const executeTerminalCopyCommand = async (context: terminal_copy_command_context): Promise<boolean> => {
+    if (!context.selection.hasSelection) return false;
+    await writeTextToClipboard(context.selection.selectionText);
     return true;
+  };
+
+  const notifyTerminalCopyFailure = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    notify.error('Copy failed', message || 'Failed to copy text to clipboard.');
   };
 
   const handleCopyTerminalSelection = () => {
     const menu = terminalAskMenu();
     setTerminalAskMenu(null);
-    void copyTerminalSelection(menu?.selection).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      notify.error('Copy failed', message || 'Failed to copy text to clipboard.');
-    });
+    if (!menu) return;
+    void executeTerminalCopyCommand({
+      source: 'context_menu',
+      selection: menu.selection,
+    }).catch(notifyTerminalCopyFailure);
   };
 
   const handleBrowseFilesFromTerminal = () => {
@@ -2072,7 +2114,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!menu) return;
     setTerminalAskMenu(null);
 
-    const selection = String(menu.selection ?? '');
+    const selection = menu.selection.selectionText;
     const trimmedSelection = selection.trim();
     const pendingAttachments: File[] = [];
     const notes: string[] = [];
@@ -2160,7 +2202,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       label: 'Copy selection',
       icon: Copy,
       onSelect: handleCopyTerminalSelection,
-      disabled: String(menu.selection ?? '').length === 0,
+      disabled: !menu.selection.hasSelection,
     });
 
     return items;
@@ -2276,6 +2318,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
     const key = e.key?.toLowerCase?.() ?? '';
+
+    if (isPrimaryTerminalCopyShortcut(e) && isEventFromTerminalSurface(e.target, getActiveSurfaceElement())) {
+      const selection = getActiveTerminalSelectionSnapshot();
+      if (selection?.hasSelection) {
+        e.preventDefault();
+        e.stopPropagation();
+        void executeTerminalCopyCommand({
+          source: 'shortcut',
+          selection,
+        }).catch(notifyTerminalCopyFailure);
+        return;
+      }
+    }
 
     if ((e.ctrlKey || e.metaKey) && key === 'f') {
       // Common terminal shortcut: intercept browser find.
