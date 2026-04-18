@@ -1,6 +1,7 @@
 export const REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR = 'data-redeven-workbench-surface-root';
 export const REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR = 'data-redeven-workbench-widget-root';
 export const REDEVEN_WORKBENCH_WIDGET_ID_ATTR = 'data-redeven-workbench-widget-id';
+export const FLOE_DIALOG_SURFACE_HOST_ATTR = 'data-floe-dialog-surface-host';
 
 export type WorkbenchCanvasOwnerReason =
   | 'initial'

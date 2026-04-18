@@ -4,6 +4,7 @@ import type { WorkbenchWidgetDefinition, WorkbenchWidgetItem, WorkbenchWidgetTyp
 
 import { startWorkbenchHotInteraction } from './workbenchHotInteraction';
 import {
+  FLOE_DIALOG_SURFACE_HOST_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
   isFocusableElement,
@@ -277,6 +278,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         'is-resizing': isResizing(),
         'is-filtered-out': props.filtered,
       }}
+      {...{ [FLOE_DIALOG_SURFACE_HOST_ATTR]: 'true' }}
       data-floe-workbench-widget-id={props.widgetId}
       {...{ [REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR]: 'true' }}
       {...{ [REDEVEN_WORKBENCH_WIDGET_ID_ATTR]: props.widgetId }}
@@ -286,7 +288,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       }}
       onMouseDown={(event) => {
         if (!shouldFocusWidgetRootFromPointer(event.target)) return;
-        queueMicrotask(focusWidgetRoot);
+        focusWidgetRoot();
       }}
       onContextMenu={(event) => {
         event.preventDefault();
