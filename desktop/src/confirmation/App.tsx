@@ -1,6 +1,6 @@
 import { createMemo, onCleanup, onMount, Show } from 'solid-js';
 import { AlertTriangle } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 
 import {
   desktopConfirmationActionURL,
@@ -15,8 +15,8 @@ export function DesktopConfirmationApp(props: Readonly<{
 
   const toneClass = createMemo(() => (
     props.model.confirm_tone === 'danger'
-      ? 'border-error/30 bg-error/10 text-error'
-      : 'border-warning/40 bg-warning/15 text-warning'
+      ? 'text-error'
+      : 'text-warning'
   ));
 
   const confirmVariant = createMemo(() => (
@@ -50,47 +50,16 @@ export function DesktopConfirmationApp(props: Readonly<{
 
   return (
     <main class="redeven-confirmation-window">
-      <section
-        class="redeven-confirmation-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="redeven-confirmation-title"
-        aria-describedby="redeven-confirmation-message"
-      >
-        <header class="redeven-confirmation-header">
-          <h1 id="redeven-confirmation-title" class="redeven-confirmation-title">
-            {props.model.title}
-          </h1>
-          <button
-            type="button"
-            class="redeven-confirmation-close"
-            aria-label="Cancel confirmation"
-            onClick={() => submit('cancel')}
-          >
-            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" class="redeven-confirmation-close-icon">
-              <path d="M4 4L12 12" />
-              <path d="M12 4L4 12" />
-            </svg>
-          </button>
-        </header>
-
-        <div class="redeven-confirmation-body">
-          <div class={`redeven-confirmation-icon ${toneClass()}`}>
-            <AlertTriangle class="h-4 w-4" />
-          </div>
-          <div class="min-w-0 space-y-1.5">
-            <p id="redeven-confirmation-message" class="redeven-confirmation-message">
-              {props.model.message}
-            </p>
-            <Show when={props.model.detail !== ''}>
-              <p class="redeven-confirmation-detail">
-                {props.model.detail}
-              </p>
-            </Show>
-          </div>
-        </div>
-
-        <footer class="redeven-confirmation-footer">
+      <Dialog
+        open={true}
+        onOpenChange={(open) => {
+          if (!open) {
+            submit('cancel');
+          }
+        }}
+        title={props.model.title}
+        class="redeven-confirmation-dialog w-[min(26rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)]"
+        footer={(
           <div class="flex w-full items-center justify-end gap-2">
             <Button
               ref={(element) => {
@@ -112,8 +81,24 @@ export function DesktopConfirmationApp(props: Readonly<{
               {props.model.confirm_label}
             </Button>
           </div>
-        </footer>
-      </section>
+        )}
+      >
+        <div class="redeven-confirmation-body">
+          <div class={`redeven-confirmation-icon ${toneClass()}`}>
+            <AlertTriangle class="h-4 w-4" />
+          </div>
+          <div class="min-w-0 space-y-1.5">
+            <p id="redeven-confirmation-message" class="redeven-confirmation-message">
+              {props.model.message}
+            </p>
+            <Show when={props.model.detail !== ''}>
+              <p class="redeven-confirmation-detail">
+                {props.model.detail}
+              </p>
+            </Show>
+          </div>
+        </div>
+      </Dialog>
     </main>
   );
 }

@@ -26,14 +26,15 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: color-mix(in srgb, var(--card) 96%, var(--background));
+  background: color-mix(in srgb, var(--background) 92%, var(--card));
   color: var(--foreground);
   overflow: hidden;
 }
 
 .redeven-confirmation-window {
   min-height: 100vh;
-  background: color-mix(in srgb, var(--card) 97%, var(--background));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 94%, var(--card)), color-mix(in srgb, var(--background) 98%, var(--card)));
 }
 
 .dark .redeven-confirmation-window,
@@ -42,122 +43,40 @@ body {
   --input: hsl(220 18% 22%);
 }
 
-.redeven-confirmation-sheet {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in srgb, var(--card) 98%, var(--background));
-}
-
-.redeven-confirmation-header,
-.redeven-confirmation-body,
-.redeven-confirmation-footer {
-  padding-inline: 1.25rem;
-}
-
-.redeven-confirmation-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-top: 1.125rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-}
-
-.redeven-confirmation-title {
-  margin: 0;
-  font-size: 1.1rem;
-  line-height: 1.45;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.redeven-confirmation-close {
-  flex-shrink: 0;
-  width: 2rem;
-  height: 2rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.625rem;
-  border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-  background: transparent;
-  color: var(--muted-foreground);
-  cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
-}
-
-.redeven-confirmation-close:hover {
-  background: color-mix(in srgb, var(--accent) 52%, transparent);
-  border-color: color-mix(in srgb, var(--border) 70%, var(--accent));
-  color: var(--foreground);
-}
-
-.redeven-confirmation-close:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--ring) 60%, transparent);
-  outline-offset: 2px;
-}
-
-.redeven-confirmation-close-icon {
-  width: 0.95rem;
-  height: 0.95rem;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
+.redeven-confirmation-dialog {
+  border-radius: 0.375rem;
+  border-color: color-mix(in srgb, var(--border) 90%, transparent);
+  box-shadow:
+    0 16px 32px color-mix(in srgb, var(--foreground) 12%, transparent),
+    0 2px 8px color-mix(in srgb, var(--foreground) 8%, transparent);
 }
 
 .redeven-confirmation-body {
   display: flex;
   align-items: flex-start;
-  gap: 0.875rem;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  gap: 0.75rem;
 }
 
 .redeven-confirmation-message {
   margin: 0;
-  font-size: 0.965rem;
+  font-size: 0.875rem;
   line-height: 1.65;
   color: var(--foreground);
 }
 
 .redeven-confirmation-detail {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   line-height: 1.55;
   color: var(--muted-foreground);
-}
-
-.redeven-confirmation-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-top: 1rem;
-  padding-bottom: 1rem;
 }
 
 .redeven-confirmation-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-width: 1px;
-  border-style: solid;
-  border-radius: 0.75rem;
+  width: 1rem;
+  height: 1rem;
   flex-shrink: 0;
-}
-
-@media (max-width: 520px) {
-  .redeven-confirmation-header,
-  .redeven-confirmation-body,
-  .redeven-confirmation-footer {
-    padding-inline: 1rem;
-  }
-
-  .redeven-confirmation-title {
-    font-size: 1rem;
-  }
+  margin-top: 0.2rem;
 }
