@@ -1,11 +1,17 @@
 import { createEffect } from 'solid-js';
 import { deferAfterPaint, useDeckDrag } from '@floegence/floe-webapp-core';
-import { DeckGrid, DeckTopBar } from '@floegence/floe-webapp-core/deck';
+import { DeckGrid } from '@floegence/floe-webapp-core/deck';
 import { LoadingOverlay } from '@floegence/floe-webapp-core/loading';
 
+import { EnvDeckTopBar } from '../deck/EnvDeckTopBar';
+import type { EnvSurfaceId } from '../envViewMode';
 import { useEnvContext } from './EnvContext';
 
-export function EnvDeckPage() {
+export interface EnvDeckPageProps {
+  availableSurfaces: readonly EnvSurfaceId[];
+}
+
+export function EnvDeckPage(props: EnvDeckPageProps) {
   const env = useEnvContext();
   useDeckDrag();
 
@@ -28,8 +34,12 @@ export function EnvDeckPage() {
   });
 
   return (
-    <div class="flex h-full min-h-0 flex-col bg-background">
-      <DeckTopBar />
+    <div class="flex h-full min-h-0 flex-col">
+      <EnvDeckTopBar
+        availableSurfaces={props.availableSurfaces}
+        onAddSurface={(surfaceId) => env.openSurface(surfaceId, { reason: 'direct_navigation', focus: true, ensureVisible: true })}
+      />
+
       <div class="relative min-h-0 flex-1 overflow-hidden">
         <DeckGrid class="p-0" />
         <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />

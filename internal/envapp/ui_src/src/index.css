@@ -4,6 +4,7 @@
 @import '@floegence/floe-webapp-core/tailwind';
 @import './ui/chat/chat.css';
 @import './ui/codex/codex.css';
+@import './ui/workbench/workbench.css';
 @import './styles/redeven.css';
 
 @source './**/*.{ts,tsx,html}';

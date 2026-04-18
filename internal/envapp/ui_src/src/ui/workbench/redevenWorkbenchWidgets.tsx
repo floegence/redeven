@@ -1,7 +1,3 @@
-import type {
-  WorkbenchWidgetBodyProps,
-  WorkbenchWidgetDefinition,
-} from '@floegence/floe-webapp-core/workbench';
 import { Activity, Code, Files, Globe, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Show, type JSX } from 'solid-js';
 
@@ -18,6 +14,7 @@ import { CodexSidebarShell } from '../codex/CodexSidebarShell';
 import { RemoteFileBrowser } from '../widgets/RemoteFileBrowser';
 import { RuntimeMonitorPanel } from '../widgets/RuntimeMonitorPanel';
 import { TerminalPanel } from '../widgets/TerminalPanel';
+import type { EnvWorkbenchWidgetBodyProps, EnvWorkbenchWidgetDefinition } from './types';
 import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
 
 function WorkbenchBodyNotice(props: {
@@ -95,7 +92,7 @@ function PortsWidget() {
   );
 }
 
-function FlowerWidget(_props: WorkbenchWidgetBodyProps) {
+function FlowerWidget(_props: EnvWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 
@@ -119,7 +116,7 @@ function FlowerWidget(_props: WorkbenchWidgetBodyProps) {
   );
 }
 
-function CodexWidget(_props: WorkbenchWidgetBodyProps) {
+function CodexWidget(_props: EnvWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 
@@ -143,7 +140,7 @@ function CodexWidget(_props: WorkbenchWidgetBodyProps) {
   );
 }
 
-export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
+export const redevenWorkbenchWidgets: readonly EnvWorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.files',
     label: 'Files',
