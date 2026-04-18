@@ -140,7 +140,7 @@ import {
   type DesktopActionToastTone,
 } from './actionToastModel';
 import { normalizeDesktopLocalEnvironmentName } from '../shared/desktopManagedEnvironment';
-import { DesktopPopover } from './DesktopPopover';
+import { DesktopActionPopover } from './DesktopActionPopover';
 import {
   closeEnvironmentLibraryOverlayState,
   closedEnvironmentLibraryOverlayState,
@@ -152,6 +152,25 @@ import {
   environmentLibraryEntryRecord,
   splitPinnedEnvironmentEntryIDs,
 } from './environmentLibraryProjection';
+import {
+  completeEnvironmentGuidanceRefresh,
+  failEnvironmentGuidanceIntent,
+  guidanceSessionNotice,
+  isEnvironmentGuidancePendingIntent,
+  openEnvironmentGuidanceSession,
+  reconcileEnvironmentGuidanceSession,
+  startEnvironmentGuidanceIntent,
+  type EnvironmentGuidanceSessionState,
+} from './environmentGuidanceSession';
+import {
+  busyStateForLauncherRequest,
+  busyStateMatchesAction,
+  busyStateMatchesAnyAction,
+  busyStateMatchesControlPlane,
+  busyStateMatchesEnvironment,
+  IDLE_LAUNCHER_BUSY_STATE,
+  type DesktopLauncherBusyState,
+} from './launcherBusyState';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -184,32 +203,6 @@ declare global {
     }>;
   }
 }
-
-type BusyAction =
-  | ''
-  | 'open_managed_environment'
-  | 'open_provider_environment'
-  | 'open_remote_environment'
-  | 'open_ssh_environment'
-  | 'start_environment_runtime'
-  | 'stop_environment_runtime'
-  | 'refresh_environment_runtime'
-  | 'refresh_all_environment_runtimes'
-  | 'start_control_plane_connect'
-  | 'focus_environment_window'
-  | 'open_environment_settings'
-  | 'refresh_control_plane'
-  | 'set_managed_environment_pinned'
-  | 'set_provider_environment_pinned'
-  | 'set_saved_environment_pinned'
-  | 'set_saved_ssh_environment_pinned'
-  | 'delete_control_plane'
-  | 'close_launcher_or_quit'
-  | 'upsert_managed_environment'
-  | 'upsert_provider_environment_local_runtime'
-  | 'save_settings'
-  | 'save_environment'
-  | 'delete_environment';
 
 type ManagedEnvironmentConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
@@ -275,6 +268,11 @@ type ControlPlaneDialogState = Readonly<{
   display_label_touched: boolean;
   provider_origin: string;
 }> | null;
+
+type EnvironmentGuidanceActionResolution = Readonly<{
+  close_panel: boolean;
+  next_session: EnvironmentGuidanceSessionState;
+}>;
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
@@ -588,22 +586,6 @@ function environmentKindTagVariant(kind: string): 'neutral' | 'primary' | 'succe
   }
 }
 
-function busyActionForLauncherRequest(request: DesktopLauncherActionRequest): BusyAction {
-  switch (request.kind) {
-    case 'upsert_managed_environment':
-    case 'upsert_provider_environment_local_runtime':
-    case 'upsert_saved_environment':
-    case 'upsert_saved_ssh_environment':
-      return 'save_environment';
-    case 'delete_managed_environment':
-    case 'delete_saved_environment':
-    case 'delete_saved_ssh_environment':
-      return 'delete_environment';
-    default:
-      return request.kind;
-  }
-}
-
 function passwordStateTagVariant(
   tone: DesktopSettingsSurfaceSnapshot['password_state_tone'],
 ): 'neutral' | 'warning' | 'success' {
@@ -784,7 +766,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
   const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
-  const [busyAction, setBusyAction] = createSignal<BusyAction>('');
+  const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
   const [draft, setDraft] = createSignal<DesktopSettingsDraft>(props.snapshot.settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
   const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
@@ -927,9 +909,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  async function refreshSnapshot(): Promise<void> {
+  async function refreshSnapshot(): Promise<DesktopWelcomeSnapshot> {
     const nextSnapshot = await props.runtime.launcher.getSnapshot();
     setSnapshot(nextSnapshot);
+    return nextSnapshot;
   }
 
   function dismissActionToast(toastID: number): void {
@@ -1001,6 +984,49 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function performLauncherActionSilently(
+    request: DesktopLauncherActionRequest,
+  ): Promise<
+    | Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>>
+    | Readonly<{ ok: false; message: string }>
+  > {
+    setBusyState(busyStateForLauncherRequest(request));
+    try {
+      const result = await props.runtime.launcher.performAction(request);
+      if (isDesktopLauncherActionFailure(result)) {
+        const presentation = launcherActionFailurePresentation(result);
+        if (presentation.refresh_snapshot) {
+          try {
+            await refreshSnapshot();
+          } catch (error) {
+            return {
+              ok: false,
+              message: getErrorMessage(error),
+            };
+          }
+        }
+        return {
+          ok: false,
+          message: presentation.message || 'Desktop could not complete that action.',
+        };
+      }
+      if (isDesktopLauncherActionSuccess(result)) {
+        return result;
+      }
+      return {
+        ok: false,
+        message: 'Desktop returned an unexpected launcher result.',
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        message: getErrorMessage(error),
+      };
+    } finally {
+      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
+    }
+  }
+
   function resetMessages(): void {
     setSettingsError('');
     setConnectionDialogError('');
@@ -1036,13 +1062,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     resetMessages();
     setConnectionDialogState(null);
     setControlPlaneDialogState(null);
-    setBusyAction('open_environment_settings');
+    setBusyState({
+      action: 'open_environment_settings',
+      environment_id: environmentID,
+      provider_origin: '',
+      provider_id: '',
+    });
     void props.runtime.launcher.performAction({ kind: 'open_environment_settings', environment_id: environmentID })
       .catch((error) => {
         setSettingsError(getErrorMessage(error));
       })
       .finally(() => {
-        setBusyAction('');
+        setBusyState(IDLE_LAUNCHER_BUSY_STATE);
       });
   }
 
@@ -1296,7 +1327,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' = 'connect',
   ): Promise<Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | null> {
     resetMessages();
-    setBusyAction(busyActionForLauncherRequest(request));
+    setBusyState(busyStateForLauncherRequest(request));
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
@@ -1312,7 +1343,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage(errorTarget, getErrorMessage(error));
       return null;
     } finally {
-      setBusyAction('');
+      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -1465,9 +1496,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     };
   }
 
+  async function loadLatestEnvironmentEntry(environmentID: string): Promise<DesktopEnvironmentEntry | null> {
+    const nextSnapshot = await refreshSnapshot();
+    return nextSnapshot.environments.find((entry) => entry.id === environmentID) ?? null;
+  }
+
   async function startEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    options: Readonly<{ announceSuccess?: boolean }> = {},
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'start_environment_runtime');
     if (!request) {
@@ -1476,7 +1513,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction(request, errorTarget);
     const started = result?.outcome === 'started_environment_runtime';
-    if (started) {
+    if (started && options.announceSuccess !== false) {
       showActionToast(`Runtime started for ${environment.label}.`);
     }
     return started;
@@ -1502,6 +1539,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function refreshEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    options: Readonly<{ announceSuccess?: boolean }> = {},
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'refresh_environment_runtime');
     if (!request) {
@@ -1510,7 +1548,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherAction(request, errorTarget);
     const refreshed = result?.outcome === 'refreshed_environment_runtime';
-    if (refreshed) {
+    if (refreshed && options.announceSuccess !== false) {
       showActionToast(`Runtime status refreshed for ${environment.label}.`, 'info');
     }
     return refreshed;
@@ -1627,6 +1665,153 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function runEnvironmentGuidanceAction(
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+  ): Promise<EnvironmentGuidanceActionResolution> {
+    const currentSession = isEnvironmentGuidancePendingIntent(action.intent)
+      ? startEnvironmentGuidanceIntent(null, environment.id, action.intent)
+      : openEnvironmentGuidanceSession(environment.id);
+
+    if (action.intent === 'refresh_runtime') {
+      const request = runtimeActionRequest(environment, 'refresh_environment_runtime');
+      if (!request) {
+        return {
+          close_panel: false,
+          next_session: failEnvironmentGuidanceIntent(
+            currentSession,
+            'Desktop could not resolve that runtime target.',
+          ),
+        };
+      }
+      const result = await performLauncherActionSilently(request);
+      if (!result.ok) {
+        return {
+          close_panel: false,
+          next_session: failEnvironmentGuidanceIntent(currentSession, result.message),
+        };
+      }
+
+      const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
+      if (!nextEnvironment) {
+        showActionToast(`Runtime is ready for ${environment.label}.`, 'success');
+        return {
+          close_panel: true,
+          next_session: null,
+        };
+      }
+
+      const nextSession = completeEnvironmentGuidanceRefresh(currentSession, nextEnvironment);
+      if (!nextSession) {
+        showActionToast(`Runtime is ready for ${environment.label}.`, 'success');
+        return {
+          close_panel: true,
+          next_session: null,
+        };
+      }
+      return {
+        close_panel: false,
+        next_session: nextSession,
+      };
+    }
+
+    if (action.intent === 'start_runtime') {
+      const request = runtimeActionRequest(environment, 'start_environment_runtime');
+      if (!request) {
+        return {
+          close_panel: false,
+          next_session: failEnvironmentGuidanceIntent(
+            currentSession,
+            'Desktop could not resolve that runtime target.',
+          ),
+        };
+      }
+      const result = await performLauncherActionSilently(request);
+      if (!result.ok) {
+        return {
+          close_panel: false,
+          next_session: failEnvironmentGuidanceIntent(currentSession, result.message),
+        };
+      }
+
+      const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
+      if (!nextEnvironment || !reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])) {
+        showActionToast(`Runtime started for ${environment.label}.`);
+        return {
+          close_panel: true,
+          next_session: null,
+        };
+      }
+      return {
+        close_panel: false,
+        next_session: {
+          ...currentSession,
+          pending_intent: null,
+          feedback: {
+            tone: 'info',
+            title: 'Runtime start requested',
+            detail: 'Desktop started the local runtime and is waiting for the next status update.',
+          },
+        },
+      };
+    }
+
+    if (action.intent === 'serve_runtime_locally' || action.intent === 'focus_local_serve') {
+      const requiresSettings = environment.kind === 'provider_environment'
+        && environment.provider_local_runtime_configured !== true;
+      const canOpenLocalWindow = trimString(environment.open_local_session_key) !== ''
+        || environment.provider_local_runtime_state === 'running_desktop'
+        || environment.provider_local_runtime_state === 'running_external';
+      const served = await serveRuntimeLocally(environment, 'connect');
+      if (!served) {
+        return {
+          close_panel: false,
+          next_session: failEnvironmentGuidanceIntent(
+            currentSession,
+            'Desktop could not continue with the local runtime flow.',
+          ),
+        };
+      }
+      if (requiresSettings || canOpenLocalWindow) {
+        return {
+          close_panel: true,
+          next_session: null,
+        };
+      }
+
+      const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
+      if (!nextEnvironment || !reconcileEnvironmentGuidanceSession(currentSession, [nextEnvironment])) {
+        return {
+          close_panel: true,
+          next_session: null,
+        };
+      }
+      return {
+        close_panel: false,
+        next_session: {
+          ...currentSession,
+          pending_intent: null,
+          feedback: {
+            tone: 'info',
+            title: 'Local runtime start requested',
+            detail: 'Desktop is waiting for the provider-backed local runtime to report ready status.',
+          },
+        },
+      };
+    }
+
+    const completed = await triggerManagedEnvironmentAction(environment, action, 'connect');
+    return {
+      close_panel: completed,
+      next_session: completed
+        ? null
+        : failEnvironmentGuidanceIntent(
+          currentSession,
+          `Desktop could not complete "${action.label}".`,
+        ),
+    };
+  }
+
   async function connectControlPlaneFromDialog(): Promise<void> {
     const state = controlPlaneDialogState();
     if (!state) {
@@ -1729,7 +1914,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function saveSettings(): Promise<void> {
     setSettingsError('');
-    setBusyAction('save_settings');
+    setBusyState({
+      action: 'save_settings',
+      environment_id: '',
+      provider_origin: '',
+      provider_id: '',
+    });
     try {
       const result = await props.runtime.settings.save(draft());
       if (!result.ok) {
@@ -1741,7 +1931,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     } catch (error) {
       setSettingsError(getErrorMessage(error));
     } finally {
-      setBusyAction('');
+      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -1766,7 +1956,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     setConnectionDialogError('');
-    setBusyAction('save_environment');
+    setBusyState({
+      action: 'save_environment',
+      environment_id: trimString(request.environment_id),
+      provider_origin: '',
+      provider_id: '',
+    });
     try {
       await props.runtime.launcher.performAction({
         kind: 'upsert_saved_environment',
@@ -1781,7 +1976,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage(request.errorTarget, getErrorMessage(error));
       return false;
     } finally {
-      setBusyAction('');
+      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -1795,7 +1990,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }>,
   ): Promise<boolean> {
     setConnectionDialogError('');
-    setBusyAction('save_environment');
+    setBusyState({
+      action: 'save_environment',
+      environment_id: trimString(request.environment_id),
+      provider_origin: '',
+      provider_id: '',
+    });
     try {
       await props.runtime.launcher.performAction({
         kind: 'upsert_saved_ssh_environment',
@@ -1815,7 +2015,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage(request.errorTarget, getErrorMessage(error));
       return false;
     } finally {
-      setBusyAction('');
+      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -2048,7 +2248,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return;
     }
-    setBusyAction('delete_environment');
+    setBusyState({
+      action: 'delete_environment',
+      environment_id: target.id,
+      provider_origin: '',
+      provider_id: '',
+    });
     try {
       await props.runtime.launcher.performAction({
         kind: target.kind === 'managed_environment' || target.kind === 'provider_environment'
@@ -2068,7 +2273,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     } catch (error) {
       setErrorMessage('connect', getErrorMessage(error));
     } finally {
-      setBusyAction('');
+      setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
   }
 
@@ -2146,7 +2351,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       >
         <ConnectEnvironmentSurface
           snapshot={snapshot()}
-          busyAction={busyAction()}
+          busyState={busyState()}
           activeTab={activeCenterTab()}
           setActiveTab={setActiveCenterTab}
           librarySourceFilter={librarySourceFilter()}
@@ -2164,6 +2369,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           openEnvironment={openEnvironment}
           runManagedEnvironmentAction={triggerManagedEnvironmentAction}
           refreshEnvironmentRuntime={refreshEnvironmentRuntime}
+          runEnvironmentGuidanceAction={runEnvironmentGuidanceAction}
           toggleEnvironmentPinned={toggleEnvironmentPinned}
           copyEnvironmentValue={copyEnvironmentValue}
           saveEnvironmentFromLibrary={saveEnvironmentFromLibrary}
@@ -2186,7 +2392,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         open={snapshot().surface === 'environment_settings'}
         snapshot={settingsSurface()}
         draft={draft()}
-        busyAction={busyAction()}
+        busyState={busyState()}
         settingsError={settingsError()}
         settingsErrorRef={(value) => {
           settingsErrorRef = value;
@@ -2203,7 +2409,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <ConnectionDialog
         state={connectionDialogState()}
         error={connectionDialogError()}
-        busyAction={busyAction()}
+        busyState={busyState()}
         onOpenChange={(open) => {
           if (!open) {
             closeConnectionDialog();
@@ -2219,7 +2425,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <ControlPlaneDialog
         state={controlPlaneDialogState()}
         error={controlPlaneDialogError()}
-        busyAction={busyAction()}
+        busyState={busyState()}
         onOpenChange={(open) => {
           if (!open) {
             closeControlPlaneDialog();
@@ -2239,7 +2445,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         title={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}
         confirmText={deleteTargetIsManaged() ? 'Delete Environment' : 'Delete Connection'}
         variant="destructive"
-        loading={busyAction() === 'delete_environment'}
+        loading={busyStateMatchesAction(busyState(), 'delete_environment')}
         onConfirm={() => void deleteEnvironment()}
       >
         <div class="space-y-2">
@@ -2276,7 +2482,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         title="Remove Provider"
         confirmText="Remove Provider"
         variant="destructive"
-        loading={busyAction() === 'delete_control_plane'}
+        loading={busyStateMatchesAction(busyState(), 'delete_control_plane')}
         onConfirm={() => void deleteControlPlane()}
       >
         <div class="space-y-2">
@@ -2345,7 +2551,7 @@ function DesktopActionToastViewport(props: Readonly<{
 
 function ConnectEnvironmentSurface(props: Readonly<{
   snapshot: DesktopWelcomeSnapshot;
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   activeTab: EnvironmentCenterTab;
   setActiveTab: (value: EnvironmentCenterTab) => void;
   librarySourceFilter: string;
@@ -2382,6 +2588,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  runEnvironmentGuidanceAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+  ) => Promise<EnvironmentGuidanceActionResolution>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   saveEnvironmentFromLibrary: (environment: DesktopEnvironmentEntry) => Promise<void>;
@@ -2516,7 +2726,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                         size="sm"
                         variant="outline"
                         class="px-2.5"
-                        disabled={props.busyAction === 'refresh_all_environment_runtimes'}
+                        disabled={busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')}
                         onClick={() => {
                           void props.refreshAllEnvironmentRuntimes();
                         }}
@@ -2634,7 +2844,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               fallback={(
                 <ControlPlanesPanel
                   controlPlanes={props.controlPlanes}
-                  busyAction={props.busyAction}
+                  busyState={props.busyState}
                   openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
                   environments={props.snapshot.environments}
                   viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
@@ -2649,11 +2859,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 showQuickAddCards={showQuickAddCards()}
                 visibleCardCount={visibleEnvironmentCardCount()}
                 layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
-                busyAction={props.busyAction}
+                busyState={props.busyState}
                 openCreateConnectionDialog={props.openCreateConnectionDialog}
                 openEnvironment={props.openEnvironment}
                 runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                 refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
+                runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                 copyEnvironmentValue={props.copyEnvironmentValue}
                 saveEnvironment={props.saveEnvironmentFromLibrary}
@@ -2673,7 +2884,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   showQuickAddCards: boolean;
   visibleCardCount: number;
   layoutReferenceCardCount: number;
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   openCreateConnectionDialog: (message?: string, preferredKind?: 'managed_environment' | 'external_local_ui' | 'ssh_environment') => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
@@ -2689,6 +2900,10 @@ function EnvironmentCardsPanel(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  runEnvironmentGuidanceAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+  ) => Promise<EnvironmentGuidanceActionResolution>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
@@ -2699,6 +2914,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
   const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
   const [activeEnvironmentOverlayState, setActiveEnvironmentOverlayState] = createSignal(closedEnvironmentLibraryOverlayState());
+  const [guidanceSessionState, setGuidanceSessionState] = createSignal<EnvironmentGuidanceSessionState>(null);
   // Render cards by stable environment id so snapshot refreshes update data in place instead of remounting the card subtree.
   const projectedEntriesByID = createMemo(() => environmentLibraryEntryRecord(props.entries));
   const projectedEntryIDs = createMemo<readonly string[]>(() => props.entries.map((entry) => entry.id));
@@ -2716,6 +2932,7 @@ function EnvironmentCardsPanel(props: Readonly<{
 
   createEffect(() => {
     setActiveEnvironmentOverlayState((current) => reconcileEnvironmentLibraryOverlayState(current, props.entries));
+    setGuidanceSessionState((current) => reconcileEnvironmentGuidanceSession(current, props.entries));
   });
 
   const setRuntimeMenuOpen = (environmentID: string, open: boolean) => {
@@ -2727,14 +2944,24 @@ function EnvironmentCardsPanel(props: Readonly<{
   };
 
   const setPrimaryActionGuidanceOpen = (environmentID: string, open: boolean) => {
-    setActiveEnvironmentOverlayState((current) => (
-      open
+    setActiveEnvironmentOverlayState((current) => {
+      const nextState = open
         ? openEnvironmentLibraryOverlayState('primary_action_guidance', environmentID)
-        : closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', environmentID)
-    ));
+        : closeEnvironmentLibraryOverlayState(current, 'primary_action_guidance', environmentID);
+      setGuidanceSessionState((session) => {
+        if (open) {
+          return openEnvironmentGuidanceSession(environmentID);
+        }
+        return session?.environment_id === environmentID ? null : session;
+      });
+      return nextState;
+    });
   };
 
   const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry => projectedEntriesByID()[environmentID]!;
+  const guidanceSessionForEnvironment = (environmentID: string): EnvironmentGuidanceSessionState => (
+    guidanceSessionState()?.environment_id === environmentID ? guidanceSessionState() : null
+  );
 
   createEffect(() => {
     const element = environmentLibraryElement();
@@ -2799,19 +3026,22 @@ function EnvironmentCardsPanel(props: Readonly<{
                 {(environmentID) => (
                   <EnvironmentConnectionCard
                     environment={projectedEnvironment(environmentID)}
-                    busyAction={props.busyAction}
+                    busyState={props.busyState}
                     runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
                     primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
+                    guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
+                    runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     saveEnvironment={props.saveEnvironment}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
+                    setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                   />
                 )}
               </For>
@@ -2825,19 +3055,22 @@ function EnvironmentCardsPanel(props: Readonly<{
                 {(environmentID) => (
                   <EnvironmentConnectionCard
                     environment={projectedEnvironment(environmentID)}
-                    busyAction={props.busyAction}
+                    busyState={props.busyState}
                     runtimeMenuOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'runtime_menu', environmentID)}
                     onRuntimeMenuOpenChange={(open) => setRuntimeMenuOpen(environmentID, open)}
                     primaryActionGuidanceOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'primary_action_guidance', environmentID)}
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
+                    guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
                     runManagedEnvironmentAction={props.runManagedEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
+                    runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
                     saveEnvironment={props.saveEnvironment}
                     editEnvironment={props.editEnvironment}
                     deleteEnvironment={props.deleteEnvironment}
+                    setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                   />
                 )}
               </For>
@@ -3041,36 +3274,56 @@ function EnvironmentCardEndpointBlock(props: Readonly<{
   );
 }
 
-function isEnvironmentActionBusy(action: EnvironmentActionModel, busyAction: BusyAction | undefined): boolean {
+function isEnvironmentActionBusy(
+  action: EnvironmentActionModel,
+  busyState: DesktopLauncherBusyState | undefined,
+  environmentID: string,
+): boolean {
+  if (!busyState) {
+    return false;
+  }
   switch (action.intent) {
     case 'start_runtime':
-      return busyAction === 'start_environment_runtime';
+      return busyStateMatchesEnvironment(busyState, environmentID, ['start_environment_runtime']);
     case 'stop_runtime':
-      return busyAction === 'stop_environment_runtime';
+      return busyStateMatchesEnvironment(busyState, environmentID, ['stop_environment_runtime']);
     case 'refresh_runtime':
-      return busyAction === 'refresh_environment_runtime' || busyAction === 'refresh_all_environment_runtimes';
+      return busyStateMatchesEnvironment(busyState, environmentID, ['refresh_environment_runtime'])
+        || busyStateMatchesAction(busyState, 'refresh_all_environment_runtimes');
     case 'serve_runtime_locally':
-      return busyAction === 'upsert_provider_environment_local_runtime';
+      return busyStateMatchesEnvironment(busyState, environmentID, ['upsert_provider_environment_local_runtime']);
     default:
       return false;
   }
 }
 
-function blockedPrimaryActionAnchorLabel(label: string): string {
-  return `${label} is unavailable until the runtime is ready.`;
+function blockedPrimaryActionTriggerLabel(label: string): string {
+  return `Show recovery options for ${label}`;
 }
 
-function EnvironmentPrimaryActionPopoverCard(props: Readonly<{
+function EnvironmentPrimaryActionPanel(props: Readonly<{
   overlay: Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>>;
-  busyAction?: BusyAction;
-  disabled?: boolean;
+  environmentID: string;
+  busyState?: DesktopLauncherBusyState;
+  session: EnvironmentGuidanceSessionState;
   onRunAction: (action: EnvironmentActionModel) => void;
 }>) {
+  const notice = createMemo(() => guidanceSessionNotice(props.session));
+  const panelBusy = createMemo(() => props.session?.pending_intent !== null);
+
   return (
-    <div class="redeven-action-popover">
+    <div class="redeven-action-popover" tabIndex={-1}>
       <div class="redeven-action-popover__eyebrow">{props.overlay.eyebrow}</div>
       <div class="redeven-action-popover__title">{props.overlay.title}</div>
       <div class="redeven-action-popover__detail">{props.overlay.detail}</div>
+      <Show when={notice()}>
+        {(currentNotice) => (
+          <div class="redeven-action-popover__notice" data-tone={currentNotice().tone}>
+            <div class="redeven-action-popover__notice-title">{currentNotice().title}</div>
+            <div class="redeven-action-popover__notice-detail">{currentNotice().detail}</div>
+          </div>
+        )}
+      </Show>
       <div class="redeven-action-popover__actions">
         <For each={props.overlay.actions}>
           {(item) => (
@@ -3078,8 +3331,8 @@ function EnvironmentPrimaryActionPopoverCard(props: Readonly<{
               size="sm"
               variant={item.emphasis === 'primary' ? 'default' : 'outline'}
               class="w-full justify-center"
-              loading={isEnvironmentActionBusy(item.action, props.busyAction)}
-              disabled={props.disabled}
+              loading={isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
+              disabled={panelBusy() && !isEnvironmentActionBusy(item.action, props.busyState, props.environmentID)}
               onClick={() => props.onRunAction(item.action)}
             >
               {item.label}
@@ -3093,13 +3346,16 @@ function EnvironmentPrimaryActionPopoverCard(props: Readonly<{
 
 function EnvironmentSplitActionButton(props: Readonly<{
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
+  environmentID: string;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   guidanceOpen: boolean;
   onGuidanceOpenChange: (open: boolean) => void;
-  busyAction?: BusyAction;
+  guidanceSession: EnvironmentGuidanceSessionState;
+  busyState?: DesktopLauncherBusyState;
   loading?: boolean;
   onRunAction: (action: EnvironmentActionModel) => void;
+  onRunGuidanceAction: (action: EnvironmentActionModel) => void;
 }>) {
   const hasMenuActions = createMemo(() => props.presentation.menu_actions.length > 0);
   const primaryActionOverlay = createMemo(() => props.presentation.primary_action_overlay);
@@ -3171,17 +3427,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 content={tooltipOverlay()!.message}
                 placement="top"
                 anchorClass="flex w-full"
-                anchorTabIndex={0}
-                anchorRole="button"
-                anchorAriaLabel={blockedPrimaryActionAnchorLabel(props.presentation.primary_action.label)}
-                anchorAriaDisabled
               >
                 {primaryButton}
               </DesktopTooltip>
             )}
           >
             {(overlay) => (
-              <DesktopPopover
+              <DesktopActionPopover
                 open={props.guidanceOpen}
                 onOpenChange={(open) => {
                   if (open) {
@@ -3190,27 +3442,38 @@ function EnvironmentSplitActionButton(props: Readonly<{
                   props.onGuidanceOpenChange(open);
                 }}
                 content={(
-                  <EnvironmentPrimaryActionPopoverCard
+                  <EnvironmentPrimaryActionPanel
                     overlay={overlay()}
-                    busyAction={props.busyAction}
-                    disabled={props.loading}
+                    environmentID={props.environmentID}
+                    busyState={props.busyState}
+                    session={props.guidanceSession}
                     onRunAction={(action) => {
                       closeMenu();
-                      props.onRunAction(action);
+                      props.onRunGuidanceAction(action);
                     }}
                   />
                 )}
                 placement="top"
                 anchorClass="flex w-full"
-                anchorTabIndex={0}
-                anchorRole="button"
-                anchorAriaLabel={blockedPrimaryActionAnchorLabel(props.presentation.primary_action.label)}
-                anchorAriaDisabled
-                anchorHasPopup="dialog"
                 popoverAriaLabel={overlay().title}
               >
-                {primaryButton}
-              </DesktopPopover>
+                <Button
+                  size="sm"
+                  variant={props.presentation.primary_action.variant}
+                  class={cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')}
+                  style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
+                  disabled={props.loading}
+                  aria-haspopup="dialog"
+                  aria-expanded={props.guidanceOpen}
+                  aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}
+                  onClick={() => {
+                    closeMenu();
+                    props.onGuidanceOpenChange(!props.guidanceOpen);
+                  }}
+                >
+                  {props.presentation.primary_action.label}
+                </Button>
+              </DesktopActionPopover>
             )}
           </Show>
         </Show>
@@ -3287,11 +3550,13 @@ function QuickCreateConnectionCard(props: Readonly<{
 
 function EnvironmentConnectionCard(props: Readonly<{
   environment: DesktopEnvironmentEntry;
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   runtimeMenuOpen: boolean;
   onRuntimeMenuOpenChange: (open: boolean) => void;
   primaryActionGuidanceOpen: boolean;
   onPrimaryActionGuidanceOpenChange: (open: boolean) => void;
+  guidanceSession: EnvironmentGuidanceSessionState;
+  setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -3306,6 +3571,10 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  runEnvironmentGuidanceAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+  ) => Promise<EnvironmentGuidanceActionResolution>;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   saveEnvironment: (environment: DesktopEnvironmentEntry) => Promise<void>;
@@ -3319,25 +3588,29 @@ function EnvironmentConnectionCard(props: Readonly<{
   const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
   const isCardOpen = createMemo(() => props.environment.window_state === 'open');
   const isWindowActionBusy = createMemo(() => (
-    props.busyAction === 'open_managed_environment'
-    || props.busyAction === 'open_provider_environment'
-    || props.busyAction === 'open_remote_environment'
-    || props.busyAction === 'open_ssh_environment'
-    || props.busyAction === 'focus_environment_window'
-    || props.busyAction === 'refresh_control_plane'
-    || props.busyAction === 'start_control_plane_connect'
+    busyStateMatchesEnvironment(props.busyState, props.environment.id, [
+      'open_managed_environment',
+      'open_provider_environment',
+      'open_remote_environment',
+      'open_ssh_environment',
+      'focus_environment_window',
+    ])
   ));
   const isRuntimeActionBusy = createMemo(() => (
-    props.busyAction === 'start_environment_runtime'
-    || props.busyAction === 'stop_environment_runtime'
-    || props.busyAction === 'refresh_environment_runtime'
-    || props.busyAction === 'refresh_all_environment_runtimes'
+    busyStateMatchesEnvironment(props.busyState, props.environment.id, [
+      'start_environment_runtime',
+      'stop_environment_runtime',
+      'refresh_environment_runtime',
+    ])
+    || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
   ));
   const isPinBusy = createMemo(() => (
-    props.busyAction === 'set_managed_environment_pinned'
-    || props.busyAction === 'set_provider_environment_pinned'
-    || props.busyAction === 'set_saved_environment_pinned'
-    || props.busyAction === 'set_saved_ssh_environment_pinned'
+    busyStateMatchesEnvironment(props.busyState, props.environment.id, [
+      'set_managed_environment_pinned',
+      'set_provider_environment_pinned',
+      'set_saved_environment_pinned',
+      'set_saved_ssh_environment_pinned',
+    ])
   ));
 
   return (
@@ -3402,11 +3675,13 @@ function EnvironmentConnectionCard(props: Readonly<{
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
         <EnvironmentSplitActionButton
           presentation={environmentActionPresentation()}
+          environmentID={props.environment.id}
           menuOpen={props.runtimeMenuOpen}
           onMenuOpenChange={props.onRuntimeMenuOpenChange}
           guidanceOpen={props.primaryActionGuidanceOpen}
           onGuidanceOpenChange={props.onPrimaryActionGuidanceOpenChange}
-          busyAction={props.busyAction}
+          guidanceSession={props.guidanceSession}
+          busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           onRunAction={(action) => {
             void props.runManagedEnvironmentAction(
@@ -3414,6 +3689,22 @@ function EnvironmentConnectionCard(props: Readonly<{
               action,
               'connect',
             );
+          }}
+          onRunGuidanceAction={(action) => {
+            void (async () => {
+              if (isEnvironmentGuidancePendingIntent(action.intent)) {
+                props.setGuidanceSession(startEnvironmentGuidanceIntent(
+                  props.guidanceSession,
+                  props.environment.id,
+                  action.intent,
+                ));
+              }
+              const resolution = await props.runEnvironmentGuidanceAction(props.environment, action);
+              props.setGuidanceSession(resolution.next_session);
+              if (resolution.close_panel) {
+                props.onPrimaryActionGuidanceOpenChange(false);
+              }
+            })();
           }}
         />
         <div class="flex items-center gap-0.5">
@@ -3534,7 +3825,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
 function ControlPlanesPanel(props: Readonly<{
   controlPlanes: readonly DesktopControlPlaneSummary[];
   environments: readonly DesktopEnvironmentEntry[];
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   openCreateControlPlaneDialog: (message?: string) => void;
   viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
@@ -3565,7 +3856,7 @@ function ControlPlanesPanel(props: Readonly<{
               <ControlPlaneShelf
                 controlPlane={controlPlane}
                 environments={props.environments}
-                busyAction={props.busyAction}
+                busyState={props.busyState}
                 viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
                 reconnectControlPlane={props.reconnectControlPlane}
                 refreshControlPlane={props.refreshControlPlane}
@@ -3715,7 +4006,7 @@ function ControlPlaneMetricTile(props: Readonly<{
 function ControlPlaneShelf(props: Readonly<{
   controlPlane: DesktopControlPlaneSummary;
   environments: readonly DesktopEnvironmentEntry[];
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
@@ -3731,6 +4022,18 @@ function ControlPlaneShelf(props: Readonly<{
     environments.sort((left, right) => right.last_seen_at_unix_ms - left.last_seen_at_unix_ms);
     return environments[0] ?? null;
   });
+  const isReconnectBusy = createMemo(() => busyStateMatchesControlPlane(
+    props.busyState,
+    props.controlPlane.provider.provider_origin,
+    props.controlPlane.provider.provider_id,
+    ['start_control_plane_connect'],
+  ));
+  const isRefreshBusy = createMemo(() => busyStateMatchesControlPlane(
+    props.busyState,
+    props.controlPlane.provider.provider_origin,
+    props.controlPlane.provider.provider_id,
+    ['refresh_control_plane'],
+  ));
 
   return (
     <section class="redeven-control-plane-card space-y-2.5">
@@ -3793,7 +4096,7 @@ function ControlPlaneShelf(props: Readonly<{
           <Button
             size="sm"
             variant="outline"
-            loading={props.busyAction === 'start_control_plane_connect'}
+            loading={isReconnectBusy()}
             onClick={() => {
               void props.reconnectControlPlane(props.controlPlane);
             }}
@@ -3803,7 +4106,7 @@ function ControlPlaneShelf(props: Readonly<{
           <Button
             size="sm"
             variant="outline"
-            loading={props.busyAction === 'refresh_control_plane'}
+            loading={isRefreshBusy()}
             disabled={props.controlPlane.sync_state === 'syncing'}
             onClick={() => {
               void props.refreshControlPlane(props.controlPlane);
@@ -3944,7 +4247,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
   draft: DesktopSettingsDraft;
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   settingsError: string;
   settingsErrorRef: (value: HTMLElement) => void;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
@@ -3996,7 +4299,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'save_settings'}
+            loading={busyStateMatchesAction(props.busyState, 'save_settings')}
             aria-label={props.snapshot.save_label}
             title={props.snapshot.save_label}
             onClick={() => {
@@ -4240,7 +4543,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
 function ConnectionDialog(props: Readonly<{
   state: ConnectionDialogState;
   error: string;
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (
     name: 'label' | 'environment_name' | 'local_ui_bind' | 'local_ui_password' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'remote_install_dir' | 'release_base_url' | 'environment_instance_id',
@@ -4321,7 +4624,7 @@ function ConnectionDialog(props: Readonly<{
           <Button
             size="sm"
             variant={isCreate() ? 'outline' : 'default'}
-            loading={props.busyAction === 'save_environment'}
+            loading={busyStateMatchesAction(props.busyState, 'save_environment')}
             onClick={() => {
               void props.onSave();
             }}
@@ -4333,11 +4636,11 @@ function ConnectionDialog(props: Readonly<{
             <Button
               size="sm"
               variant="default"
-              loading={
-                props.busyAction === 'open_managed_environment'
-                || props.busyAction === 'open_remote_environment'
-                || props.busyAction === 'open_ssh_environment'
-              }
+              loading={busyStateMatchesAnyAction(props.busyState, [
+                'open_managed_environment',
+                'open_remote_environment',
+                'open_ssh_environment',
+              ])}
               onClick={() => {
                 void props.onConnect();
               }}
@@ -4679,7 +4982,7 @@ function ConnectionDialog(props: Readonly<{
 function ControlPlaneDialog(props: Readonly<{
   state: ControlPlaneDialogState;
   error: string;
-  busyAction: BusyAction;
+  busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
   updateField: (name: 'display_label' | 'provider_origin', value: string) => void;
   onConnect: () => Promise<void>;
@@ -4700,7 +5003,7 @@ function ControlPlaneDialog(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={props.busyAction === 'start_control_plane_connect'}
+            loading={busyStateMatchesAction(props.busyState, 'start_control_plane_connect')}
             onClick={() => {
               void props.onConnect();
             }}

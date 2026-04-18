@@ -33,6 +33,14 @@ function readDesktopPopoverSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopPopover.tsx'), 'utf8');
 }
 
+function readDesktopActionPopoverSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'DesktopActionPopover.tsx'), 'utf8');
+}
+
+function readDesktopAnchoredOverlaySurfaceSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'DesktopAnchoredOverlaySurface.tsx'), 'utf8');
+}
+
 function readWelcomeStyles(): string {
   return fs.readFileSync(path.join(__dirname, 'index.css'), 'utf8');
 }
@@ -434,26 +442,32 @@ describe('DesktopWelcomeShell', () => {
 
   it('renders desktop tooltips through a body-level portal so dialogs do not clip them', () => {
     const tooltipSrc = readDesktopTooltipSource();
+    const anchoredSurfaceSrc = readDesktopAnchoredOverlaySurfaceSource();
 
-    expect(tooltipSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(tooltipSrc).toContain("import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';");
     expect(tooltipSrc).toContain('data-redeven-tooltip-anchor=""');
-    expect(tooltipSrc).toContain('<Portal>');
     expect(tooltipSrc).toContain('role="tooltip"');
-    expect(tooltipSrc).toContain('fixed z-[220]');
+    expect(tooltipSrc).toContain("z-[220]");
+    expect(anchoredSurfaceSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(anchoredSurfaceSrc).toContain('<Portal>');
+    expect(anchoredSurfaceSrc).toContain('fixed animate-in fade-in zoom-in-95');
   });
 
   it('renders interactive desktop popovers through a body-level portal so blocked actions can offer guided recovery', () => {
     const popoverSrc = readDesktopPopoverSource();
+    const actionPopoverSrc = readDesktopActionPopoverSource();
 
-    expect(popoverSrc).toContain("import { Portal } from 'solid-js/web';");
+    expect(popoverSrc).toContain("import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';");
     expect(popoverSrc).toContain('data-redeven-popover-anchor=""');
-    expect(popoverSrc).toContain('<Portal>');
     expect(popoverSrc).toContain('role="dialog"');
-    expect(popoverSrc).toContain('pointer-events-auto fixed z-[225]');
+    expect(popoverSrc).toContain("z-[225]");
     expect(popoverSrc).toContain('open: boolean;');
     expect(popoverSrc).toContain('onOpenChange: (open: boolean) => void;');
     expect(popoverSrc).toContain('props.onOpenChange(true);');
     expect(popoverSrc).not.toContain("const [visible, setVisible] = createSignal(false);");
+    expect(actionPopoverSrc).toContain('data-redeven-action-popover-anchor=""');
+    expect(actionPopoverSrc).toContain("document.addEventListener('focusin', handleFocusIn);");
+    expect(actionPopoverSrc).toContain("event.key === 'Escape'");
   });
 
   it('includes compact environment-card launcher copy inside the source', () => {
@@ -502,7 +516,7 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
-    expect(appSrc).toContain('function EnvironmentPrimaryActionPopoverCard');
+    expect(appSrc).toContain('function EnvironmentPrimaryActionPanel');
     expect(appSrc).toContain('function serveRuntimeLocally');
     expect(appSrc).not.toContain('function openProviderLocalServeDialog');
     expect(appSrc).toContain("environment.provider_local_runtime_configured !== true");
@@ -511,9 +525,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Refresh runtime status');
     expect(appSrc).toContain('Refresh runtime statuses');
     expect(appSrc).toContain('primary_action_overlay');
-    expect(appSrc).toContain('<DesktopPopover');
+    expect(appSrc).toContain('<DesktopActionPopover');
     expect(appSrc).toContain('activeEnvironmentOverlayState');
+    expect(appSrc).toContain('guidanceSessionState');
     expect(appSrc).toContain('reconcileEnvironmentLibraryOverlayState');
+    expect(appSrc).toContain('reconcileEnvironmentGuidanceSession');
     expect(appSrc).toContain('projectedEntriesByID');
     expect(appSrc).toContain('projectedEntryIDs');
     expect(appSrc).toContain('<For each={groupedEntryIDs().pinned_entry_ids}>');
@@ -536,6 +552,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-split-menu-item');
     expect(styles).toContain('.redeven-action-popover');
     expect(styles).toContain('.redeven-action-popover__actions');
+    expect(styles).toContain('.redeven-action-popover__notice');
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {

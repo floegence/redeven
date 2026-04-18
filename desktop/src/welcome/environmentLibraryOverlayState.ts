@@ -1,5 +1,5 @@
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import { buildProviderBackedEnvironmentActionModel } from './viewModel';
+import { environmentSupportsGuidancePopover } from './environmentGuidanceSession';
 
 export type EnvironmentLibraryOverlayKind = 'runtime_menu' | 'primary_action_guidance';
 
@@ -40,8 +40,7 @@ export function closeEnvironmentLibraryOverlayState(
 }
 
 function entrySupportsPrimaryActionGuidance(environment: DesktopEnvironmentEntry): boolean {
-  const overlay = buildProviderBackedEnvironmentActionModel(environment).action_presentation.primary_action_overlay;
-  return overlay?.kind === 'popover';
+  return environmentSupportsGuidancePopover(environment);
 }
 
 export function reconcileEnvironmentLibraryOverlayState(
