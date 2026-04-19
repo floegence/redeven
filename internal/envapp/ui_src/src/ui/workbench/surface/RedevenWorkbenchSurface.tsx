@@ -33,11 +33,17 @@ export interface RedevenWorkbenchSurfaceApi {
     type: WorkbenchWidgetType,
     options?: { centerViewport?: boolean; worldX?: number; worldY?: number },
   ) => WorkbenchWidgetItem | null;
+  createWidget: (
+    type: WorkbenchWidgetType,
+    options?: { centerViewport?: boolean; worldX?: number; worldY?: number },
+  ) => WorkbenchWidgetItem | null;
   focusWidget: (
     widget: WorkbenchWidgetItem,
     options?: { centerViewport?: boolean },
   ) => WorkbenchWidgetItem;
   findWidgetByType: (type: WorkbenchWidgetType) => WorkbenchWidgetItem | null;
+  findWidgetById: (widgetId: string) => WorkbenchWidgetItem | null;
+  updateWidgetTitle: (widgetId: string, title: string) => void;
 }
 
 export interface RedevenWorkbenchSurfaceProps {
@@ -97,8 +103,35 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   };
 
   createEffect(() => {
+    const viewportWorldCenter = () => {
+      const frameEl = surfaceRootEl()?.querySelector(
+        '[data-floe-workbench-canvas-frame="true"]'
+      ) as HTMLElement | null;
+      const vp = model.viewport();
+      const rect = frameEl?.getBoundingClientRect();
+      const width = rect?.width ?? 0;
+      const height = rect?.height ?? 0;
+
+      return {
+        worldX: width > 0 ? (width / 2 - vp.x) / vp.scale : 240,
+        worldY: height > 0 ? (height / 2 - vp.y) / vp.scale : 180,
+      };
+    };
+
     props.onApiReady?.({
       ensureWidget: (type, options) => model.widgetActions.ensureWidget(type, options) ?? null,
+      createWidget: (type, options) => {
+        const center = viewportWorldCenter();
+        const widget = model.widgetActions.addWidgetAtCursor(
+          type,
+          options?.worldX ?? center.worldX,
+          options?.worldY ?? center.worldY,
+        ) ?? null;
+        if (widget && options?.centerViewport !== false) {
+          model.navigation.centerOnWidget(widget);
+        }
+        return widget;
+      },
       focusWidget: (widget, options) => {
         const focusedWidget = model.navigation.focusWidget(widget, options);
         queueMicrotask(() => {
@@ -108,6 +141,23 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         return focusedWidget;
       },
       findWidgetByType: (type) => model.queries.findWidgetByType(type),
+      findWidgetById: (widgetId) => model.queries.findWidgetById(widgetId),
+      updateWidgetTitle: (widgetId, title) => {
+        const normalizedWidgetId = String(widgetId ?? '').trim();
+        const normalizedTitle = String(title ?? '').trim();
+        if (!normalizedWidgetId || !normalizedTitle) {
+          return;
+        }
+
+        props.setState((previous) => ({
+          ...previous,
+          widgets: previous.widgets.map((widget) =>
+            widget.id === normalizedWidgetId && widget.title !== normalizedTitle
+              ? { ...widget, title: normalizedTitle }
+              : widget
+          ),
+        }));
+      },
     });
 
     onCleanup(() => {

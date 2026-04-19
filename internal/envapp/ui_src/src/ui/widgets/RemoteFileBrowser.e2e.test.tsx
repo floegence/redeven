@@ -110,6 +110,7 @@ const fileBrowserSurfaceStore = vi.hoisted(() => ({
 
 const envActionSpies = vi.hoisted(() => ({
   openTerminalInDirectory: vi.fn(),
+  openFileBrowserAtPath: vi.fn(async () => undefined),
   openAskFlowerComposer: vi.fn(),
 }));
 
@@ -928,6 +929,7 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     openTerminalInDirectoryRequestSeq: () => 0,
     openTerminalInDirectoryRequest: () => null,
     openTerminalInDirectory: envActionSpies.openTerminalInDirectory,
+    openFileBrowserAtPath: envActionSpies.openFileBrowserAtPath,
     consumeOpenTerminalInDirectoryRequest: () => {},
     aiThreadFocusSeq: () => 0,
     aiThreadFocusId: () => null,
@@ -2576,8 +2578,7 @@ describe('RemoteFileBrowser persistence', () => {
       const intent = envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0];
       expect(intent?.contextItems?.[0]?.content ?? '').toContain('Context: Git workspace changes');
       expect(envActionSpies.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/repo', { preferredName: 'repo' });
-      expect(fileBrowserSurfaceStore.openBrowser).toHaveBeenCalledWith({
-        path: '/workspace/repo',
+      expect(envActionSpies.openFileBrowserAtPath).toHaveBeenCalledWith('/workspace/repo', {
         homePath: '/workspace',
         title: 'Repo',
       });

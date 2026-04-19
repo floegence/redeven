@@ -53,7 +53,6 @@ import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../util
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
-import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
@@ -65,6 +64,11 @@ type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_hi
 
 export type TerminalPanelVariant = 'panel' | 'deck' | 'workbench';
 
+export type TerminalPanelSessionGroupState = Readonly<{
+  sessionIds: string[];
+  activeSessionId: string | null;
+}>;
+
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
   openSessionRequest?: {
@@ -74,6 +78,9 @@ export interface TerminalPanelProps {
     targetMode?: 'activity' | 'deck' | 'workbench';
   } | null;
   onOpenSessionRequestHandled?: (requestId: string) => void;
+  sessionGroupState?: TerminalPanelSessionGroupState;
+  onSessionGroupStateChange?: (next: TerminalPanelSessionGroupState) => void;
+  onTitleChange?: (title: string) => void;
 }
 
 type TerminalPanelInnerProps = TerminalPanelProps & {
@@ -102,6 +109,21 @@ function writeActiveSessionId(storageKey: string, id: string | null) {
     sessionStorage.removeItem(storageKey);
   } catch {
   }
+}
+
+function sameSessionIdList(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+}
+
+function sameTerminalPanelSessionGroupState(
+  left: TerminalPanelSessionGroupState,
+  right: TerminalPanelSessionGroupState,
+): boolean {
+  return left.activeSessionId === right.activeSessionId
+    && sameSessionIdList(left.sessionIds, right.sessionIds);
 }
 
 function pickPreferredActiveId(list: TerminalSessionInfo[], preferredId: string | null): string | null {
@@ -235,6 +257,24 @@ function buildTerminalSelectionSnapshot(sessionId: string, core: TerminalCore | 
 
 function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number): string {
   return session.name?.trim() ? session.name.trim() : `Terminal ${index + 1}`;
+}
+
+function buildTerminalPanelTitle(session: TerminalSessionInfo | null): string {
+  const sessionName = String(session?.name ?? '').trim();
+  if (sessionName) {
+    return `Terminal · ${sessionName}`;
+  }
+
+  const workingDir = normalizeAskFlowerAbsolutePath(String(session?.workingDir ?? '').trim());
+  if (workingDir && workingDir !== '/') {
+    const parts = workingDir.split('/').filter(Boolean);
+    const basename = parts[parts.length - 1] ?? '';
+    if (basename) {
+      return `Terminal · ${basename}`;
+    }
+  }
+
+  return 'Terminal';
 }
 
 const TerminalTabStatusIcon = (props: { state: 'none' | 'running' | 'unread' }) => {
@@ -758,7 +798,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const env = useEnvContext();
-  const fileBrowserSurface = useFileBrowserSurfaceContext();
   const filePreview = useFilePreviewContext();
   const layout = useLayout();
   const notify = useNotification();
@@ -790,6 +829,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return wid ? `deck:${wid}` : 'terminal_page';
   })();
   const activeSessionStorageKey = buildActiveSessionStorageKey(panelId);
+  const sessionGroupState = createMemo<TerminalPanelSessionGroupState | null>(() => props.sessionGroupState ?? null);
 
   const [searchOpen, setSearchOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -958,9 +998,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     } as Record<string, string>;
   });
 
-  const [sessions, setSessions] = createSignal<TerminalSessionInfo[]>([]);
+  const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([]);
   const [sessionsLoading, setSessionsLoading] = createSignal(false);
-  const [activeSessionId, setActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
+  const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
   const [error, setError] = createSignal<string | null>(null);
   const [creating, setCreating] = createSignal(false);
@@ -1006,6 +1046,79 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [coreRegistrySeq, setCoreRegistrySeq] = createSignal(0);
   const [surfaceRegistrySeq, setSurfaceRegistrySeq] = createSignal(0);
   let mobileKeyboardInsetSyncRaf: number | null = null;
+
+  const updateSessionGroupState = (
+    updater: (previous: TerminalPanelSessionGroupState) => TerminalPanelSessionGroupState,
+  ): boolean => {
+    const current = sessionGroupState();
+    if (!current || !props.onSessionGroupStateChange) {
+      return false;
+    }
+
+    const next = updater(current);
+    if (sameTerminalPanelSessionGroupState(current, next)) {
+      return true;
+    }
+
+    props.onSessionGroupStateChange(next);
+    return true;
+  };
+
+  const sessions = createMemo<TerminalSessionInfo[]>(() => {
+    const list = allSessions();
+    const group = sessionGroupState();
+    if (!group) {
+      return list;
+    }
+
+    const sessionsById = new Map(list.map((session) => [session.id, session]));
+    const orderedVisibleSessions: TerminalSessionInfo[] = [];
+    for (const sessionId of group.sessionIds) {
+      const session = sessionsById.get(sessionId);
+      if (session) {
+        orderedVisibleSessions.push(session);
+      }
+    }
+    return orderedVisibleSessions;
+  });
+
+  const activeSessionId = createMemo<string | null>(() => {
+    const group = sessionGroupState();
+    if (group) {
+      return group.activeSessionId;
+    }
+    return localActiveSessionId();
+  });
+
+  const setActiveSessionId = (value: string | null) => {
+    const normalizedValue = String(value ?? '').trim() || null;
+    if (!updateSessionGroupState((previous) => ({
+      sessionIds: previous.sessionIds,
+      activeSessionId: normalizedValue === null
+        ? null
+        : previous.sessionIds.includes(normalizedValue)
+          ? normalizedValue
+          : previous.activeSessionId,
+    }))) {
+      setLocalActiveSessionId(normalizedValue);
+    }
+  };
+
+  const ensureSessionInGroup = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) {
+      return;
+    }
+
+    updateSessionGroupState((previous) => (
+      previous.sessionIds.includes(normalizedSessionId)
+        ? previous
+        : {
+          sessionIds: [...previous.sessionIds, normalizedSessionId],
+          activeSessionId: previous.activeSessionId,
+        }
+    ));
+  };
 
   onCleanup(() => {
     tabActivityTracker.dispose();
@@ -1066,16 +1179,36 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const prev = prevSessionsSnapshot;
     prevSessionsSnapshot = next;
 
-    setSessions(next);
+    setAllSessions(next);
+
+    const group = sessionGroupState();
+    if (group && props.onSessionGroupStateChange) {
+      const nextVisibleIds = group.sessionIds.filter((sessionId) => next.some((session) => session.id === sessionId));
+      const visibleSessions = nextVisibleIds
+        .map((sessionId) => next.find((session) => session.id === sessionId) ?? null)
+        .filter((session): session is TerminalSessionInfo => session !== null);
+      const preferredActiveSessionId = group.activeSessionId && nextVisibleIds.includes(group.activeSessionId)
+        ? group.activeSessionId
+        : null;
+      const resolvedActiveSessionId = preferredActiveSessionId ?? pickPreferredActiveId(visibleSessions, null);
+      const nextGroupState: TerminalPanelSessionGroupState = {
+        sessionIds: nextVisibleIds,
+        activeSessionId: resolvedActiveSessionId,
+      };
+      if (!sameTerminalPanelSessionGroupState(group, nextGroupState)) {
+        props.onSessionGroupStateChange(nextGroupState);
+      }
+      return;
+    }
 
     const currentActive = activeSessionId();
-    if (currentActive && next.some((s) => s.id === currentActive)) {
+    if (currentActive && next.some((session) => session.id === currentActive)) {
       return;
     }
 
     let nextActive: string | null = null;
     if (currentActive) {
-      const prevIdx = prev.findIndex((s) => s.id === currentActive);
+      const prevIdx = prev.findIndex((session) => session.id === currentActive);
       if (prevIdx >= 0) {
         nextActive = next[prevIdx]?.id ?? next[prevIdx - 1]?.id ?? null;
       }
@@ -1181,6 +1314,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const sid = activeSessionId();
     if (!sid) return null;
     return sessions().find((session) => session.id === sid) ?? null;
+  });
+
+  createEffect(() => {
+    props.onTitleChange?.(buildTerminalPanelTitle(activeSession()));
   });
 
   const activeSessionWorkingDir = createMemo(() => {
@@ -1461,6 +1598,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) return;
 
+    ensureSessionInGroup(normalizedSessionId);
     setActiveSessionId(normalizedSessionId);
     setMountedSessionIds((prev) => {
       if (prev.has(normalizedSessionId)) return prev;
@@ -1494,8 +1632,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const requestId = String(request?.requestId ?? '').trim();
     if (!requestId || requestId === lastHandledOpenSessionRequestId) return;
     if (!connected()) return;
-    const targetMode = request?.targetMode ?? 'activity';
     const currentMode = variant === 'deck' ? 'deck' : variant === 'workbench' ? 'workbench' : 'activity';
+    const targetMode = request?.targetMode ?? currentMode;
     if (targetMode !== currentMode) return;
 
     const workingDir = normalizeAskFlowerAbsolutePath(String(request?.workingDir ?? '').trim());
@@ -2099,9 +2237,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!menu || !menu.showBrowseFiles) return;
     setTerminalAskMenu(null);
 
-    void fileBrowserSurface.openBrowser({
-      path: menu.workingDir,
+    void env.openFileBrowserAtPath(menu.workingDir, {
       homePath: menu.homePath,
+    });
+  };
+
+  const handleBrowseFilesInNewWindowFromTerminal = () => {
+    const menu = terminalAskMenu();
+    if (!menu || !menu.showBrowseFiles) return;
+    setTerminalAskMenu(null);
+
+    void env.openFileBrowserAtPath(menu.workingDir, {
+      homePath: menu.homePath,
+      openStrategy: 'create_new',
     });
   };
 
@@ -2186,6 +2334,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         icon: Folder,
         onSelect: handleBrowseFilesFromTerminal,
       });
+      if (env.viewMode() === 'workbench') {
+        items.push({
+          id: 'browse-files-new-window',
+          kind: 'action',
+          label: 'Open in New File Window',
+          icon: Folder,
+          onSelect: handleBrowseFilesInNewWindowFromTerminal,
+        });
+      }
     }
 
     items.push({

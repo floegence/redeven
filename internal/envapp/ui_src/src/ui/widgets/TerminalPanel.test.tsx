@@ -78,6 +78,7 @@ const notificationMocks = vi.hoisted(() => ({
 const writeTextToClipboardSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const openBrowserSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openPreviewSpy = vi.hoisted(() => vi.fn(async () => undefined));
+const openFileBrowserAtPathSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const terminalEnvPermissionsState = vi.hoisted(() => ({
   canRead: true,
   canExecute: true,
@@ -574,10 +575,12 @@ vi.mock('../pages/EnvContext', () => {
   return {
     useEnvContext: () => ({
       env: envAccessor,
+      viewMode: () => 'activity',
       openAskFlowerComposer: vi.fn(),
       openTerminalInDirectoryRequestSeq: () => 0,
       openTerminalInDirectoryRequest: () => null,
       openTerminalInDirectory: vi.fn(),
+      openFileBrowserAtPath: openFileBrowserAtPathSpy,
       consumeOpenTerminalInDirectoryRequest: vi.fn(),
     }),
   };
@@ -695,6 +698,7 @@ describe('TerminalPanel', () => {
     notificationMocks.success.mockClear();
     writeTextToClipboardSpy.mockClear();
     openBrowserSpy.mockClear();
+    openFileBrowserAtPathSpy.mockClear();
     openPreviewSpy.mockClear();
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
@@ -957,6 +961,68 @@ describe('TerminalPanel', () => {
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
     expect(handledSpy).toHaveBeenCalledWith('request-deck');
+  });
+
+  it('keeps workbench terminal session groups isolated and appends new sessions into the owning widget group', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-extra',
+        name: 'Server logs',
+        workingDir: '/workspace/logs',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const handledSpy = vi.fn();
+    const groupStateSpy = vi.fn();
+
+    render(() => (
+      (() => {
+        const [groupState, setGroupState] = createSignal({
+          sessionIds: ['session-1'],
+          activeSessionId: 'session-1' as string | null,
+        });
+
+        return (
+          <TerminalPanel
+            variant="workbench"
+            sessionGroupState={groupState()}
+            onSessionGroupStateChange={(next) => {
+              groupStateSpy(next);
+              setGroupState(next);
+            }}
+            openSessionRequest={{
+              requestId: 'request-workbench-group',
+              workingDir: '/workspace/repo',
+              preferredName: 'repo',
+            }}
+            onOpenSessionRequestHandled={handledSpy}
+          />
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    expect(host.textContent).toContain('Terminal 1');
+    expect(host.textContent).not.toContain('Server logs');
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
+    expect(groupStateSpy).toHaveBeenCalledWith({
+      sessionIds: ['session-1', 'session-2'],
+      activeSessionId: 'session-2',
+    });
+    expect(handledSpy).toHaveBeenCalledWith('request-workbench-group');
   });
 
   it('creates a new terminal session without sending a fixed 80x24 create size', async () => {
@@ -1710,8 +1776,7 @@ describe('TerminalPanel', () => {
     browseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await settleTerminalPanel();
 
-    expect(openBrowserSpy).toHaveBeenCalledWith({
-      path: '/workspace',
+    expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace', {
       homePath: '/workspace',
     });
   });

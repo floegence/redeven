@@ -36,6 +36,7 @@ import { useEnvContext } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
 import { resolveEnvironmentStorageScopeID } from '../services/desktopSessionContext';
 import {
+  basenameFromAbsolutePath,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
@@ -50,7 +51,6 @@ import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
 import { buildGitAskFlowerIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
 import { useFilePreviewContext } from './FilePreviewContext';
-import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
@@ -358,8 +358,17 @@ const ClipboardIcon = (props: { class?: string }) => (
 export interface RemoteFileBrowserProps {
   widgetId?: string;
   stateScope?: string;
+  persistenceTarget?: 'page' | 'deck' | 'workbench';
   initialPathOverride?: string;
   homePathOverride?: string;
+  openPathRequest?: {
+    requestId: string;
+    path: string;
+    homePath?: string;
+    title?: string;
+  } | null;
+  onOpenPathRequestHandled?: (requestId: string) => void;
+  onTitleChange?: (title: string) => void;
 }
 
 function normalizeBrowserStateScope(value: unknown): string {
@@ -470,6 +479,20 @@ function createMissingGitBranchMessage(branch: GitBranchSummary | null | undefin
   };
 }
 
+function buildRemoteFileBrowserTitle(path: string, preferredTitle?: string): string {
+  const normalizedPreferredTitle = String(preferredTitle ?? '').trim();
+  if (normalizedPreferredTitle) {
+    return `Files · ${normalizedPreferredTitle}`;
+  }
+
+  const normalizedPath = normalizeAbsolutePath(path);
+  if (!normalizedPath || normalizedPath === '/') {
+    return 'Files';
+  }
+
+  return `Files · ${basenameFromAbsolutePath(normalizedPath)}`;
+}
+
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -479,10 +502,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const layout = useLayout();
   const notification = useNotification();
   const filePreview = useFilePreviewContext();
-  const fileBrowserSurface = useFileBrowserSurfaceContext();
 
   const envId = () => resolveEnvironmentStorageScopeID(ctx.env_id() ?? '');
-  const useExternalMobileSidebarToggle = () => !props.widgetId;
+  const persistenceTarget = () => props.persistenceTarget ?? (props.widgetId ? 'deck' : 'page');
+  const embeddedWidgetId = () => String(props.widgetId ?? '').trim();
+  const deckWidgetId = () => (persistenceTarget() === 'deck' ? embeddedWidgetId() : '');
+  const hasEmbeddedWidget = () => persistenceTarget() !== 'page' && Boolean(embeddedWidgetId());
+  const useExternalMobileSidebarToggle = () => !hasEmbeddedWidget();
   const browserStateScope = () => normalizeBrowserStateScope(props.stateScope);
   const initialPathOverride = () => normalizeAbsolutePath(props.initialPathOverride ?? '');
   const homePathOverride = () => normalizeAbsolutePath(props.homePathOverride ?? '');
@@ -496,16 +522,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     browserStateScope() === 'page' ? `files:${id}` : `files:${browserStateScope()}:${id}`
   );
   const workspaceInstanceId = (id: string): string => (
-    props.widgetId
-      ? `redeven-files:${id}:${props.widgetId}`
+    embeddedWidgetId()
+      ? `redeven-files:${id}:${embeddedWidgetId()}`
       : browserStateScope() === 'page'
         ? `redeven-files:${id}`
         : `redeven-files:${browserStateScope()}:${id}`
   );
 
   function readPersistedSidebarWidth(): number {
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       return normalizePageSidebarWidth((state as any)[WIDGET_SIDEBAR_WIDTH_STATE_KEY]);
     }
 
@@ -517,8 +544,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   function writePersistedSidebarWidth(value: number): void {
     const next = normalizePageSidebarWidth(value);
 
-    if (props.widgetId) {
-      deck.updateWidgetState(props.widgetId, WIDGET_SIDEBAR_WIDTH_STATE_KEY, next);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      deck.updateWidgetState(currentDeckWidgetId, WIDGET_SIDEBAR_WIDTH_STATE_KEY, next);
       return;
     }
 
@@ -552,6 +580,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const [currentBrowserPath, setCurrentBrowserPath] = createSignal('');
   const [lastLoadedBrowserPath, setLastLoadedBrowserPath] = createSignal('');
+  const [requestedHomePathOverride, setRequestedHomePathOverride] = createSignal('');
+  const [titleOverridePath, setTitleOverridePath] = createSignal('');
+  const [titleOverride, setTitleOverride] = createSignal('');
 
   const [agentHomePathAbs, setAgentHomePathAbs] = createSignal('');
   const [showHidden, setShowHidden] = createSignal(false);
@@ -779,8 +810,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const override = initialPathOverride();
     if (override) return override;
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const byEnv = (state as any).lastPathByEnv;
       if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
         const saved = (byEnv as any)[eid];
@@ -798,14 +830,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!eid) return;
     const next = normalizePath(path);
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const prevRaw = (state as any).lastPathByEnv;
       const prev =
         prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
           ? (prevRaw as Record<string, string>)
           : {};
-      deck.updateWidgetState(props.widgetId, 'lastPathByEnv', { ...prev, [eid]: next });
+      deck.updateWidgetState(currentDeckWidgetId, 'lastPathByEnv', { ...prev, [eid]: next });
       return;
     }
 
@@ -816,8 +849,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return false;
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const byEnv = (state as any).showHiddenByEnv;
       if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
         return normalizeShowHidden((byEnv as any)[eid]);
@@ -833,14 +867,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!eid) return;
     const next = normalizeShowHidden(value);
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const prevRaw = (state as any).showHiddenByEnv;
       const prev =
         prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
           ? (prevRaw as Record<string, boolean>)
           : {};
-      deck.updateWidgetState(props.widgetId, 'showHiddenByEnv', { ...prev, [eid]: next });
+      deck.updateWidgetState(currentDeckWidgetId, 'showHiddenByEnv', { ...prev, [eid]: next });
       return;
     }
 
@@ -852,8 +887,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return 'files';
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const byEnv = (state as any).pageModeByEnv;
       if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
         return normalizeBrowserPageMode((byEnv as any)[eid]);
@@ -869,14 +905,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!eid) return;
     const next = normalizeBrowserPageMode(mode);
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const prevRaw = (state as any).pageModeByEnv;
       const prev =
         prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
           ? (prevRaw as Record<string, BrowserPageMode>)
           : {};
-      deck.updateWidgetState(props.widgetId, 'pageModeByEnv', { ...prev, [eid]: next });
+      deck.updateWidgetState(currentDeckWidgetId, 'pageModeByEnv', { ...prev, [eid]: next });
       return;
     }
 
@@ -887,8 +924,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return 'changes';
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const byEnv = (state as any).gitSubviewByEnv;
       if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
         return normalizeGitSubview((byEnv as any)[eid]);
@@ -904,14 +942,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!eid) return;
     const next = normalizeGitSubview(view);
 
-    if (props.widgetId) {
-      const state = deck.getWidgetState(props.widgetId);
+    const currentDeckWidgetId = deckWidgetId();
+    if (currentDeckWidgetId) {
+      const state = deck.getWidgetState(currentDeckWidgetId);
       const prevRaw = (state as any).gitSubviewByEnv;
       const prev =
         prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
           ? (prevRaw as Record<string, GitWorkbenchSubview>)
           : {};
-      deck.updateWidgetState(props.widgetId, 'gitSubviewByEnv', { ...prev, [eid]: next });
+      deck.updateWidgetState(currentDeckWidgetId, 'gitSubviewByEnv', { ...prev, [eid]: next });
       return;
     }
 
@@ -925,6 +964,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const resolveFsRootAbs = async (): Promise<string> => {
+    const requestedOverride = normalizeAbsolutePath(requestedHomePathOverride());
+    if (requestedOverride) {
+      setAgentHomePathAbs(requestedOverride);
+      return requestedOverride;
+    }
+
     const override = homePathOverride();
     if (override) {
       setAgentHomePathAbs(override);
@@ -3817,6 +3862,58 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
+    const currentPath = normalizeAbsolutePath(currentBrowserPath());
+    const overridePath = normalizeAbsolutePath(titleOverridePath());
+    if (overridePath && currentPath && currentPath !== overridePath) {
+      setTitleOverridePath('');
+      setTitleOverride('');
+    }
+    props.onTitleChange?.(buildRemoteFileBrowserTitle(currentPath, currentPath === overridePath ? titleOverride() : ''));
+  });
+
+  let lastHandledOpenPathRequestId = '';
+  createEffect(() => {
+    const request = props.openPathRequest;
+    const requestId = String(request?.requestId ?? '').trim();
+    if (!requestId || requestId === lastHandledOpenPathRequestId) {
+      return;
+    }
+    if (!protocol.client()) {
+      return;
+    }
+
+    const requestedPath = normalizeAbsolutePath(request?.path ?? '');
+    if (!requestedPath) {
+      lastHandledOpenPathRequestId = requestId;
+      props.onOpenPathRequestHandled?.(requestId);
+      notification.error('Browse files unavailable', 'Could not resolve a valid directory path.');
+      return;
+    }
+
+    const requestedHomePath = normalizeAbsolutePath(request?.homePath ?? '');
+    const requestedTitle = String(request?.title ?? '').trim();
+
+    lastHandledOpenPathRequestId = requestId;
+    setRequestedHomePathOverride(requestedHomePath);
+    setTitleOverridePath(requestedPath);
+    setTitleOverride(requestedTitle);
+
+    void (async () => {
+      try {
+        await requestDirectoryNavigation(requestedPath, {
+          fallbackPath: lastLoadedBrowserPath() || requestedHomePath || agentHomePathAbs(),
+          showBlockingOverlay: lastLoadedBrowserPath() === '',
+          persistEnvId: envId(),
+          persistOnReady: true,
+          targetPolicy: 'force_reload',
+        });
+      } finally {
+        props.onOpenPathRequestHandled?.(requestId);
+      }
+    })();
+  });
+
+  createEffect(() => {
     const id = envId();
     const client = protocol.client();
     const mode = pageMode();
@@ -4040,8 +4137,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    await fileBrowserSurface.openBrowser({
-      path,
+    await ctx.openFileBrowserAtPath(path, {
       homePath,
       title: request.title,
     });
@@ -4179,6 +4275,25 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       path: directory.path,
       preferredName: directory.preferredName,
       openTerminalInDirectory: ctx.openTerminalInDirectory,
+      onInvalidDirectory: () => {
+        notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
+      },
+    });
+  };
+
+  const handleOpenDirectoryContextInNewTerminalWindow = (event?: ContextMenuEvent | null) => {
+    const directory = resolveDirectoryContextTarget(event);
+    if (!directory) return;
+
+    openDirectoryInTerminal({
+      path: directory.path,
+      preferredName: directory.preferredName,
+      openTerminalInDirectory: (workingDir, options) => {
+        ctx.openTerminalInDirectory(workingDir, {
+          preferredName: options?.preferredName,
+          openStrategy: 'create_new',
+        });
+      },
       onInvalidDirectory: () => {
         notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
       },
@@ -4349,6 +4464,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
   });
 
+  const buildOpenInNewTerminalWindowMenuItem = (): ContextMenuItem => ({
+    id: 'open-in-new-terminal-window',
+    label: 'Open in New Terminal Window',
+    type: 'custom',
+    icon: (props) => <Terminal class={props.class} />,
+    onAction: (_items, event) => {
+      handleOpenDirectoryContextInNewTerminalWindow(event);
+    },
+  });
+
   const buildNewContextMenuItem = (separator = false): ContextMenuItem => ({
     id: 'new',
     label: 'New',
@@ -4389,6 +4514,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ];
       if (canOpenDirectoryContextInTerminal(event)) {
         backgroundItems.push(buildOpenInTerminalMenuItem());
+        if (ctx.viewMode() === 'workbench') {
+          backgroundItems.push(buildOpenInNewTerminalWindowMenuItem());
+        }
       }
       backgroundItems.push(buildNewContextMenuItem());
       return backgroundItems;
@@ -4400,6 +4528,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ];
       if (canOpenDirectoryContextInTerminal(event)) {
         folderItems.push(buildOpenInTerminalMenuItem());
+        if (ctx.viewMode() === 'workbench') {
+          folderItems.push(buildOpenInNewTerminalWindowMenuItem());
+        }
       }
       folderItems.push(buildNewContextMenuItem(true));
       return [...folderItems, ...filterSecondaryContextMenuItems(singleSelectSecondaryContextMenuItemIds)];
@@ -4440,7 +4571,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onModeChange={handlePageModeChange}
                       gitHistoryDisabled={!canEnterGitHistory()}
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
-                      captureTypingFromPage={!props.widgetId}
+                      captureTypingFromPage={!hasEmbeddedWidget()}
                       files={files()}
                       currentPath={currentBrowserPath()}
                       initialPath={readPersistedLastPath(id)}
@@ -4453,7 +4584,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       resizable
                       onResize={(delta) => commitBrowserSidebarWidth(browserSidebarWidth() + delta)}
                       onClose={closePageSidebar}
-                      showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
+                      showMobileSidebarButton={layout.isMobile() && hasEmbeddedWidget()}
                       onToggleSidebar={togglePageSidebar}
                       pathEditRequestKey={pathEditorRequestKey()}
                       toolbarEndActions={fileBrowserToolbarEndActions()}
@@ -4607,7 +4738,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onCloseDeleteReview={closeGitDeleteReview}
                       onRetryDeletePreview={(branch) => { void handleDeleteBranch(branch); }}
                       onConfirmDeleteBranch={(branch, options) => { void handleConfirmDeleteBranch(branch, options); }}
-                      showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}
+                      showMobileSidebarButton={layout.isMobile() && hasEmbeddedWidget()}
                       onToggleSidebar={togglePageSidebar}
                       onRefresh={() => { void refreshGitWorkbench(); }}
                       shellLoadingMessage={gitShellLoadingMessage()}

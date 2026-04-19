@@ -411,7 +411,7 @@ describe('browser workspace layout wiring', () => {
     expect(browserSrc).toContain('ctx.filesSidebarOpen()');
     expect(browserSrc).toContain('ctx.setFilesSidebarOpen(open);');
     expect(browserSrc).toContain('const togglePageSidebar = () => setMobileSidebarOpen(!mobileSidebarOpen());');
-    expect(browserSrc).toContain('showMobileSidebarButton={layout.isMobile() && Boolean(props.widgetId)}');
+    expect(browserSrc).toContain('showMobileSidebarButton={layout.isMobile() && hasEmbeddedWidget()}');
     expect(browserSrc).toContain('onToggleSidebar={togglePageSidebar}');
     expect(browserSrc).not.toContain("mobileSidebarToggleMode={props.widgetId ? 'internal' : 'external'}");
     expect(browserSrc).not.toContain('showSidebarToggle={layout.isMobile() && Boolean(props.widgetId)}');

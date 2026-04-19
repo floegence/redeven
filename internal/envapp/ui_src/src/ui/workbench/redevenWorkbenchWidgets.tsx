@@ -18,7 +18,9 @@ import { CodexSidebarShell } from '../codex/CodexSidebarShell';
 import { RemoteFileBrowser } from '../widgets/RemoteFileBrowser';
 import { RuntimeMonitorPanel } from '../widgets/RuntimeMonitorPanel';
 import { TerminalPanel } from '../widgets/TerminalPanel';
+import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
+import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
 function WorkbenchBodyNotice(props: {
   title: string;
@@ -42,21 +44,40 @@ function WorkbenchBodyNotice(props: {
   );
 }
 
-function FilesWidget() {
+function FilesWidget(props: WorkbenchWidgetBodyProps) {
+  const workbench = useEnvWorkbenchInstancesContext();
   return (
     <div class="h-full min-h-0 bg-background">
-      <RemoteFileBrowser />
+      <RemoteFileBrowser
+        widgetId={props.widgetId}
+        persistenceTarget="workbench"
+        stateScope={buildWorkbenchFileBrowserStateScope(props.widgetId)}
+        openPathRequest={workbench.fileBrowserOpenRequest(props.widgetId)}
+        onOpenPathRequestHandled={workbench.consumeFileBrowserOpenRequest}
+        onTitleChange={(title) => {
+          workbench.updateWidgetTitle(props.widgetId, title);
+        }}
+      />
     </div>
   );
 }
 
-function TerminalWidget() {
-  const env = useEnvContext();
+function TerminalWidget(props: WorkbenchWidgetBodyProps) {
+  const workbench = useEnvWorkbenchInstancesContext();
+  const panelState = () => workbench.terminalPanelState(props.widgetId);
+
   return (
     <TerminalPanel
       variant="workbench"
-      openSessionRequest={env.openTerminalInDirectoryRequest()}
-      onOpenSessionRequestHandled={env.consumeOpenTerminalInDirectoryRequest}
+      openSessionRequest={workbench.terminalOpenRequest(props.widgetId)}
+      onOpenSessionRequestHandled={workbench.consumeTerminalOpenRequest}
+      sessionGroupState={panelState()}
+      onSessionGroupStateChange={(next) => {
+        workbench.updateTerminalPanelState(props.widgetId, () => next);
+      }}
+      onTitleChange={(title) => {
+        workbench.updateWidgetTitle(props.widgetId, title);
+      }}
     />
   );
 }
@@ -152,7 +173,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultTitle: 'Files',
     defaultSize: { width: 760, height: 560 },
     group: 'workspace',
-    singleton: true,
+    singleton: false,
   },
   {
     type: 'redeven.terminal',
@@ -162,7 +183,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultTitle: 'Terminal',
     defaultSize: { width: 840, height: 500 },
     group: 'runtime',
-    singleton: true,
+    singleton: false,
   },
   {
     type: 'redeven.monitor',
