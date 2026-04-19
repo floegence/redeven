@@ -3375,6 +3375,16 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const primaryButtonClass = createMemo(() => (
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
   ));
+  const primaryButtonContent = createMemo<JSX.Element>(() => (
+    blockedPrimaryActionDisabled()
+      ? (
+        <span class="redeven-split-action-trigger__content">
+          <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+          <span>{props.presentation.primary_action.label}</span>
+        </span>
+      )
+      : <>{props.presentation.primary_action.label}</>
+  ));
   let rootRef: HTMLDivElement | undefined;
 
   const closeMenu = () => props.onMenuOpenChange(false);
@@ -3417,7 +3427,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
         props.onRunAction(props.presentation.primary_action);
       }}
     >
-      {props.presentation.primary_action.label}
+      {primaryButtonContent()}
     </Button>
   );
 
@@ -3480,7 +3490,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     props.onGuidanceOpenChange(!props.guidanceOpen);
                   }}
                 >
-                  {props.presentation.primary_action.label}
+                  {primaryButtonContent()}
                 </Button>
               </DesktopActionPopover>
             )}

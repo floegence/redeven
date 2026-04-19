@@ -683,27 +683,52 @@ body {
   flex: 1 1 auto;
 }
 
+.redeven-split-action-trigger__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.redeven-split-action-trigger__icon {
+  flex-shrink: 0;
+  opacity: 0.76;
+}
+
 .redeven-split-action-trigger--blocked {
   cursor: pointer;
-  border-color: color-mix(in srgb, var(--border) 84%, transparent);
-  background: color-mix(in srgb, var(--muted) 24%, var(--card));
-  color: var(--muted-foreground);
-  box-shadow: none;
-  opacity: 0.78;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--warning) 16%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--muted) 46%, var(--card)), color-mix(in srgb, var(--muted) 30%, var(--card))),
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--warning) 9%, transparent) 0 10px, transparent 10px 20px);
+  color: color-mix(in srgb, var(--foreground) 18%, var(--muted-foreground));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--background) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 14%, transparent);
+  opacity: 1;
 }
 
 .redeven-split-action-trigger--blocked:hover {
-  border-color: color-mix(in srgb, var(--border) 88%, transparent);
-  background: color-mix(in srgb, var(--muted) 28%, var(--card));
-  color: var(--muted-foreground);
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--warning) 22%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--muted) 50%, var(--card)), color-mix(in srgb, var(--muted) 34%, var(--card))),
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--warning) 12%, transparent) 0 10px, transparent 10px 20px);
+  color: color-mix(in srgb, var(--foreground) 10%, var(--muted-foreground));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--background) 26%, transparent),
+    0 8px 16px -14px color-mix(in srgb, var(--foreground) 24%, transparent);
 }
 
 .redeven-split-action-trigger--blocked[aria-expanded='true'] {
-  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
-  background: color-mix(in srgb, var(--warning) 10%, var(--card));
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--warning) 16%, var(--card)), color-mix(in srgb, var(--warning) 11%, var(--card))),
+    repeating-linear-gradient(-45deg, color-mix(in srgb, var(--warning) 14%, transparent) 0 10px, transparent 10px 20px);
   color: color-mix(in srgb, var(--warning) 72%, var(--foreground));
-  opacity: 1;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--warning) 12%, transparent),
+    0 10px 20px -16px color-mix(in srgb, var(--warning) 38%, transparent);
 }
 
 .redeven-split-action-toggle {
