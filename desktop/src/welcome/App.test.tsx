@@ -527,6 +527,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopActionPopover');
     expect(appSrc).toContain('const blockedPrimaryActionDisabled = createMemo(() => (');
+    expect(appSrc).toContain('const primaryButtonContent = createMemo<JSX.Element>(() => (');
+    expect(appSrc).toContain('redeven-split-action-trigger__content');
+    expect(appSrc).toContain('<Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />');
     expect(appSrc).toContain("'redeven-split-action-trigger--blocked'");
     expect(appSrc).toContain('aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}');
     expect(appSrc).toContain('return `${label} is unavailable. Show recovery options.`;');
@@ -551,7 +554,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('aria-label={props.presentation.menu_button_label}');
     expect(styles).toContain('.redeven-split-action');
     expect(styles).toContain('.redeven-split-action-primary');
+    expect(styles).toContain('.redeven-split-action-trigger__content');
+    expect(styles).toContain('.redeven-split-action-trigger__icon');
     expect(styles).toContain('.redeven-split-action-trigger--blocked');
+    expect(styles).toContain('border-style: dashed;');
+    expect(styles).toContain('repeating-linear-gradient(-45deg');
     expect(styles).toContain(".redeven-split-action-trigger--blocked[aria-expanded='true']");
     expect(styles).toContain('.redeven-split-action-toggle');
     expect(styles).toContain('.redeven-split-menu');
