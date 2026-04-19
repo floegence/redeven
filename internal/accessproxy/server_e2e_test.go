@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/session"
@@ -90,6 +91,56 @@ func TestServer_E2E_LockedUntilUnlock(t *testing.T) {
 	defer allowedResp.Body.Close()
 	if allowedResp.StatusCode != http.StatusOK {
 		t.Fatalf("unlocked status = %d, want %d", allowedResp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestServer_E2E_UnlockRateLimitsRepeatedFailures(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	gate := accessgate.New(accessgate.Options{
+		Password: "secret",
+		AttemptPolicy: accessgate.AttemptPolicy{
+			Steps: []accessgate.AttemptPolicyStep{
+				{Failures: 2, Cooldown: 30 * time.Second},
+			},
+			Retention: time.Minute,
+		},
+	})
+	meta := session.Meta{ChannelID: "ch-test"}
+	gate.RegisterChannel(meta)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, err := New(Options{Gate: gate, Meta: meta, Upstream: upstream.URL})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+	if err := srv.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		resp, err := http.Post(srv.URL()+"/_redeven_proxy/api/access/unlock", "application/json", strings.NewReader(`{"password":"wrong"}`))
+		if err != nil {
+			t.Fatalf("POST wrong unlock %d error = %v", i+1, err)
+		}
+		if i == 0 && resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("first wrong unlock status = %d, want %d", resp.StatusCode, http.StatusUnauthorized)
+		}
+		if i == 1 {
+			if resp.StatusCode != http.StatusTooManyRequests {
+				t.Fatalf("second wrong unlock status = %d, want %d", resp.StatusCode, http.StatusTooManyRequests)
+			}
+			if got := resp.Header.Get("Retry-After"); got == "" {
+				t.Fatalf("Retry-After header missing on rate limit response")
+			}
+		}
+		resp.Body.Close()
 	}
 }
 

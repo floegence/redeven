@@ -344,6 +344,37 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	}
 }
 
+func TestServer_LocalAccessUnlockRateLimitsRepeatedFailures(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{
+		Password: "secret",
+		AttemptPolicy: accessgate.AttemptPolicy{
+			Steps: []accessgate.AttemptPolicyStep{
+				{Failures: 2, Cooldown: 30 * time.Second},
+			},
+			Retention: time.Minute,
+		},
+	})
+	s := newTestServer(t, gate)
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/access/unlock", bytes.NewBufferString(`{"password":"wrong"}`))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		s.handleAccessUnlock(res, req)
+
+		expectedStatus := http.StatusUnauthorized
+		if i == 1 {
+			expectedStatus = http.StatusTooManyRequests
+			if got := res.Result().Header.Get("Retry-After"); got == "" {
+				t.Fatalf("Retry-After header missing on rate limit response")
+			}
+		}
+		if res.Result().StatusCode != expectedStatus {
+			t.Fatalf("attempt %d status = %d, want %d", i+1, res.Result().StatusCode, expectedStatus)
+		}
+	}
+}
+
 func TestServer_LocalAccessRejectsInvalidResumeToken(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)

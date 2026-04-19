@@ -4,6 +4,7 @@ import { assertConnectArtifact, type ConnectArtifact } from '@floegence/flowerse
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
 import { portalOriginFromSandboxLocation } from './sandboxOrigins';
+import { AccessUnlockError, normalizeRetryAfterMs } from './accessUnlockError';
 
 export interface Environment {
   public_id: string;
@@ -127,6 +128,10 @@ function parseStatusCodeBestEffort(v: unknown): number {
 
 function asString(v: unknown): string {
   return String(v ?? '').trim();
+}
+
+function retryAfterMsFromErrorPayload(data: any): number {
+  return normalizeRetryAfterMs(data?.error?.retry_after_ms ?? data?.data?.retry_after_ms);
 }
 
 function isEnvSessionUnauthorizedError(e: unknown): boolean {
@@ -268,12 +273,30 @@ async function fetchJSON<T>(input: RequestInfo | URL, init: RequestInit & { bear
   if (!resp.ok) {
     const msg = asString(data?.error?.message) || `HTTP ${resp.status}`;
     const code = asString(data?.error?.code) || 'HTTP_ERROR';
+    const retryAfterMs = retryAfterMsFromErrorPayload(data);
+    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+      throw new AccessUnlockError({
+        status: parseStatusCodeBestEffort(resp.status),
+        code,
+        message: msg,
+        retryAfterMs,
+      });
+    }
     throw new APIError({ status: parseStatusCodeBestEffort(resp.status), code, message: msg });
   }
 
   if (data?.success === false) {
     const msg = asString(data?.error?.message) || 'Request failed';
     const code = asString(data?.error?.code) || 'REQUEST_FAILED';
+    const retryAfterMs = retryAfterMsFromErrorPayload(data);
+    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+      throw new AccessUnlockError({
+        status: parseStatusCodeBestEffort(resp.status) || 400,
+        code,
+        message: msg,
+        retryAfterMs,
+      });
+    }
     throw new APIError({ status: parseStatusCodeBestEffort(resp.status) || 400, code, message: msg });
   }
 

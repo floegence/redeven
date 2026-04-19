@@ -113,6 +113,7 @@ import {
   unlockGatewayAccess,
   type GatewayAccessStatus,
 } from './services/gatewayApi';
+import { formatAccessUnlockRetryAfter, getAccessUnlockRetryAfterMs } from './services/accessUnlockError';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from './services/localAccessAuth';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
@@ -335,6 +336,7 @@ export function EnvAppShell() {
   const [localAccessUnlocking, setLocalAccessUnlocking] = createSignal(false);
   const [localAccessChannelReady, setLocalAccessChannelReady] = createSignal(false);
   const [localAccessResumeToken, setLocalAccessResumeToken] = createSignal(initialAccessResumeToken);
+  const [localAccessRetryUntilMs, setLocalAccessRetryUntilMs] = createSignal(0);
 
   const [remoteAccessStatus, setRemoteAccessStatus] = createSignal<GatewayAccessStatus | null>(null);
   const [remoteAccessChecked, setRemoteAccessChecked] = createSignal(false);
@@ -343,6 +345,8 @@ export function EnvAppShell() {
   const [remoteAccessUnlocking, setRemoteAccessUnlocking] = createSignal(false);
   const [remoteAccessChannelReady, setRemoteAccessChannelReady] = createSignal(false);
   const [remoteAccessResumeToken, setRemoteAccessResumeToken] = createSignal(initialAccessResumeToken);
+  const [remoteAccessRetryUntilMs, setRemoteAccessRetryUntilMs] = createSignal(0);
+  const [accessRetryNowMs, setAccessRetryNowMs] = createSignal(Date.now());
 
   let accessPasswordInput: HTMLInputElement | undefined;
 
@@ -353,6 +357,9 @@ export function EnvAppShell() {
   const accessUnlocking = createMemo(() => (isLocalMode() ? localAccessUnlocking() : remoteAccessUnlocking()));
   const accessChannelReady = createMemo(() => (isLocalMode() ? localAccessChannelReady() : remoteAccessChannelReady()));
   const accessResumeToken = createMemo(() => (isLocalMode() ? localAccessResumeToken() : remoteAccessResumeToken()));
+  const accessRetryUntilMs = createMemo(() => (isLocalMode() ? localAccessRetryUntilMs() : remoteAccessRetryUntilMs()));
+  const accessRetryRemainingMs = createMemo(() => Math.max(0, accessRetryUntilMs() - accessRetryNowMs()));
+  const accessRetryActive = createMemo(() => accessRetryRemainingMs() > 0);
   const accessPasswordRequired = createMemo(() => Boolean(accessStatus()?.password_required));
   const accessServerUnlocked = createMemo(() => Boolean(accessStatus()?.unlocked));
   const accessPending = createMemo(() => !accessChecked());
@@ -378,9 +385,10 @@ export function EnvAppShell() {
   const setCurrentAccessPassword = (value: string) => {
     if (isLocalMode()) {
       setLocalAccessPassword(value);
-      return;
+    } else {
+      setRemoteAccessPassword(value);
     }
-    setRemoteAccessPassword(value);
+    setCurrentAccessError(null);
   };
 
   const setCurrentAccessError = (value: string | null) => {
@@ -416,6 +424,16 @@ export function EnvAppShell() {
     setRemoteAccessResumeToken(value);
   };
 
+  const setCurrentAccessRetryUntil = (value: number) => {
+    const next = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    setAccessRetryNowMs(Date.now());
+    if (isLocalMode()) {
+      setLocalAccessRetryUntilMs(next);
+      return;
+    }
+    setRemoteAccessRetryUntilMs(next);
+  };
+
   const markCurrentAccessLocked = (message: string) => {
     if (isLocalMode()) {
       setLocalAccessStatus({ password_required: true, unlocked: false });
@@ -427,6 +445,7 @@ export function EnvAppShell() {
     }
     setCurrentAccessChannelReady(false);
     setCurrentAccessResumeToken('');
+    setCurrentAccessRetryUntil(0);
     setCurrentAccessError(message);
   };
 
@@ -450,6 +469,12 @@ export function EnvAppShell() {
       setManualError(message);
     }
   };
+
+  createEffect(() => {
+    if (accessRetryRemainingMs() <= 0) return;
+    const handle = window.setInterval(() => setAccessRetryNowMs(Date.now()), 1_000);
+    onCleanup(() => window.clearInterval(handle));
+  });
 
   const probeRemoteRuntimeAvailability = async (): Promise<ReconnectAvailability> => {
     const id = envId();
@@ -1258,9 +1283,11 @@ export function EnvAppShell() {
   const submitAccessUnlock = async (event?: SubmitEvent) => {
     event?.preventDefault();
     if (accessUnlocking()) return;
+    if (accessRetryRemainingMs() > 0) return;
 
     setCurrentAccessUnlocking(true);
     setCurrentAccessError(null);
+    setCurrentAccessRetryUntil(0);
     setManualError(null);
 
     try {
@@ -1290,6 +1317,8 @@ export function EnvAppShell() {
       await connect();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const retryAfterMs = getAccessUnlockRetryAfterMs(error);
+      setCurrentAccessRetryUntil(retryAfterMs > 0 ? Date.now() + retryAfterMs : 0);
       setCurrentAccessError(message || 'Unlock failed.');
       queueMicrotask(() => {
         accessPasswordInput?.focus();
@@ -2207,11 +2236,20 @@ export function EnvAppShell() {
   const accessGateCheckingLabel = createMemo(() => 'Checking secure access...');
   const accessGateResumeHint = createMemo(() => 'The page stays blocked until the direct runtime session confirms the password for this environment page.');
   const accessGatePasswordLabel = createMemo(() => 'Access password');
-  const accessGatePasswordHelp = createMemo(() => (
-    isLocalMode()
+  const accessGatePasswordHelp = createMemo(() => {
+    const base = isLocalMode()
       ? 'Use the full Local UI password configured for this local runtime.'
-      : 'Use the full Local UI password configured for this environment page.'
-  ));
+      : 'Use the full Local UI password configured for this environment page.';
+    if (accessRetryActive()) {
+      return `${base} Too many incorrect attempts. Try again in ${formatAccessUnlockRetryAfter(accessRetryRemainingMs())}.`;
+    }
+    return base;
+  });
+  const accessGateUnlockLabel = createMemo(() => {
+    if (accessUnlocking()) return 'Unlocking...';
+    if (accessRetryActive()) return `Retry in ${formatAccessUnlockRetryAfter(accessRetryRemainingMs())}`;
+    return 'Unlock';
+  });
   const accessGateRegionDescribedBy = createMemo(() => {
     const ids: string[] = [ACCESS_GATE_IDS.description, ACCESS_GATE_IDS.notice];
     if (accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked') {
@@ -2270,10 +2308,10 @@ export function EnvAppShell() {
                 </div>
                 <button
                   type="submit"
-                  disabled={accessPending() || accessUnlocking() || !accessPassword()}
+                  disabled={accessPending() || accessUnlocking() || accessRetryActive() || !accessPassword()}
                   class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {accessUnlocking() ? 'Unlocking...' : 'Unlock'}
+                  {accessGateUnlockLabel()}
                 </button>
               </form>
             </Show>

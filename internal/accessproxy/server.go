@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,11 +44,52 @@ type apiResp struct {
 }
 
 type apiError struct {
-	Message string `json:"message"`
+	Code         string `json:"code,omitempty"`
+	Message      string `json:"message"`
+	RetryAfterMs int64  `json:"retry_after_ms,omitempty"`
 }
 
 type unlockReq struct {
 	Password string `json:"password"`
+}
+
+func unlockAttemptSubject(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	// Use the direct peer address for throttling. Trusting forwarded headers here
+	// would let untrusted clients rotate the subject and sidestep the cooldown.
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil && strings.TrimSpace(host) != "" {
+		return strings.TrimSpace(host)
+	}
+	return strings.TrimSpace(r.RemoteAddr)
+}
+
+func writeUnlockError(w http.ResponseWriter, err error) {
+	if w == nil || err == nil {
+		return
+	}
+	retryAfter := accessgate.RetryAfter(err)
+	if retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.FormatInt(int64((retryAfter+time.Second-1)/time.Second), 10))
+		writeJSON(w, http.StatusTooManyRequests, apiResp{
+			OK: false,
+			Error: &apiError{
+				Code:         "ACCESS_PASSWORD_RETRY_LATER",
+				Message:      fmt.Sprintf("Too many incorrect password attempts. Retry in %s.", retryAfter.Round(time.Second)),
+				RetryAfterMs: retryAfter.Milliseconds(),
+			},
+		})
+		return
+	}
+	writeJSON(w, http.StatusUnauthorized, apiResp{
+		OK: false,
+		Error: &apiError{
+			Code:    "ACCESS_PASSWORD_INVALID",
+			Message: err.Error(),
+		},
+	})
 }
 
 func New(opts Options) (*Server, error) {
@@ -185,14 +228,18 @@ func (s *Server) handleAccessAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: &apiError{Message: "method not allowed"}})
 			return
 		}
+		if s.gate == nil || !s.gate.Enabled() {
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"unlocked": true}})
+			return
+		}
 		var req unlockReq
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Message: "invalid json"}})
 			return
 		}
-		res, err := s.gate.UnlockChannel(strings.TrimSpace(s.meta.ChannelID), req.Password)
+		res, err := s.gate.UnlockChannelWithSubject(strings.TrimSpace(s.meta.ChannelID), req.Password, unlockAttemptSubject(r))
 		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, apiResp{OK: false, Error: &apiError{Message: err.Error()}})
+			writeUnlockError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: res})

@@ -9,6 +9,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+function errorResponse(message: string, status: number, extras?: Record<string, unknown>): Response {
+  return new Response(JSON.stringify({ error: { message, ...extras } }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 describe('controlplaneApi local access flow', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -104,6 +111,22 @@ describe('controlplaneApi local access flow', () => {
     const out = await mod.unlockLocalAccess('secret');
 
     expect(out).toEqual({ unlocked: true, resume_token: 'resume123' });
+  });
+
+  it('preserves retry-after metadata for unlock cooldown responses', async () => {
+    const fetchMock = vi.fn(async () => errorResponse('Too many incorrect password attempts.', 429, {
+      code: 'ACCESS_PASSWORD_RETRY_LATER',
+      retry_after_ms: 30_000,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    await expect(mod.unlockLocalAccess('wrong')).rejects.toMatchObject({
+      message: 'Too many incorrect password attempts.',
+      retryAfterMs: 30_000,
+      status: 429,
+      code: 'ACCESS_PASSWORD_RETRY_LATER',
+    });
   });
 
   it('uses same-origin credentials when minting local direct connect artifacts', async () => {

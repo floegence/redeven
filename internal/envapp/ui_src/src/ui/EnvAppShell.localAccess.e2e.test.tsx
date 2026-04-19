@@ -853,6 +853,51 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
+  it('shows the retry countdown and disables unlock while access retries are cooling down', async () => {
+    vi.useFakeTimers();
+    const { AccessUnlockError } = await import('./services/accessUnlockError');
+    unlockLocalAccessMock.mockRejectedValueOnce(new AccessUnlockError({
+      message: 'Too many incorrect password attempts.',
+      status: 429,
+      code: 'ACCESS_PASSWORD_RETRY_LATER',
+      retryAfterMs: 30_000,
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const input = host.querySelector('#redeven-access-password') as HTMLInputElement | null;
+      input!.value = 'bad-secret';
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      const help = host.querySelector('#redeven-access-password-help');
+      const button = host.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+
+      expect(help?.textContent).toContain('Try again in 30s');
+      expect(button?.disabled).toBe(true);
+      expect(button?.textContent).toContain('Retry in 30s');
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await flushAsync();
+
+      expect(help?.textContent).not.toContain('Try again in');
+      expect(button?.disabled).toBe(false);
+      expect(button?.textContent).toContain('Unlock');
+    } finally {
+      dispose();
+    }
+  });
+
   it('reuses an existing unlocked local session without prompting for password', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: true });
 

@@ -1,6 +1,7 @@
 package accessgate
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -193,8 +194,43 @@ func TestGate_UnlockRejectsWrongPassword(t *testing.T) {
 	gate := New(Options{Password: "secret"})
 	gate.RegisterChannel(session.Meta{ChannelID: "ch-1"})
 
-	if _, err := gate.UnlockChannel("ch-1", "wrong"); err == nil {
-		t.Fatalf("UnlockChannel() expected error for wrong password")
+	if _, err := gate.UnlockChannel("ch-1", "wrong"); !errors.Is(err, ErrInvalidPassword) {
+		t.Fatalf("UnlockChannel() error = %v, want ErrInvalidPassword", err)
+	}
+}
+
+func TestGate_UnlockRateLimitsRepeatedFailuresBySubject(t *testing.T) {
+	gate := New(Options{
+		Password: "secret",
+		AttemptPolicy: AttemptPolicy{
+			Steps: []AttemptPolicyStep{
+				{Failures: 2, Cooldown: 20 * time.Millisecond},
+			},
+			Retention: time.Minute,
+		},
+	})
+	gate.RegisterChannel(session.Meta{ChannelID: "ch-1"})
+
+	if _, err := gate.UnlockChannelWithSubject("ch-1", "wrong", "203.0.113.4"); !errors.Is(err, ErrInvalidPassword) {
+		t.Fatalf("first failure error = %v, want ErrInvalidPassword", err)
+	}
+
+	if _, err := gate.UnlockChannelWithSubject("ch-1", "wrong", "203.0.113.4"); !IsRateLimited(err) {
+		t.Fatalf("second failure error = %v, want rate limit", err)
+	}
+
+	if _, err := gate.UnlockChannelWithSubject("ch-1", "secret", "203.0.113.4"); !IsRateLimited(err) {
+		t.Fatalf("locked correct password error = %v, want rate limit", err)
+	}
+
+	time.Sleep(25 * time.Millisecond)
+
+	result, err := gate.UnlockChannelWithSubject("ch-1", "secret", "203.0.113.4")
+	if err != nil {
+		t.Fatalf("UnlockChannelWithSubject() after cooldown error = %v", err)
+	}
+	if result == nil || !result.Unlocked {
+		t.Fatalf("UnlockChannelWithSubject() after cooldown = %#v, want unlocked", result)
 	}
 }
 

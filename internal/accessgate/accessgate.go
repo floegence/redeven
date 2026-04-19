@@ -25,6 +25,7 @@ type Options struct {
 	Password        string
 	ResumeTTL       time.Duration
 	LocalSessionTTL time.Duration
+	AttemptPolicy   AttemptPolicy
 }
 
 type Status struct {
@@ -72,17 +73,25 @@ type localSessionState struct {
 	expiresAt time.Time
 }
 
+type failedAttemptState struct {
+	failures      int
+	lastFailedAt  time.Time
+	cooldownUntil time.Time
+}
+
 type Gate struct {
 	log             *slog.Logger
 	enabled         bool
 	passwordDigest  [32]byte
 	resumeTTL       time.Duration
 	localSessionTTL time.Duration
+	attemptPolicy   AttemptPolicy
 
-	mu            sync.Mutex
-	channels      map[string]*channelState
-	resumeTokens  map[string]*resumeTokenState
-	localSessions map[string]*localSessionState
+	mu             sync.Mutex
+	channels       map[string]*channelState
+	resumeTokens   map[string]*resumeTokenState
+	localSessions  map[string]*localSessionState
+	failedAttempts map[string]*failedAttemptState
 }
 
 func New(opts Options) *Gate {
@@ -103,6 +112,7 @@ func New(opts Options) *Gate {
 	password := opts.Password
 	enabled := password != ""
 	digest := sha256.Sum256([]byte(password))
+	attemptPolicy := normalizeAttemptPolicy(opts.AttemptPolicy)
 
 	return &Gate{
 		log:             logger,
@@ -110,9 +120,11 @@ func New(opts Options) *Gate {
 		passwordDigest:  digest,
 		resumeTTL:       resumeTTL,
 		localSessionTTL: localSessionTTL,
+		attemptPolicy:   attemptPolicy,
 		channels:        make(map[string]*channelState),
 		resumeTokens:    make(map[string]*resumeTokenState),
 		localSessions:   make(map[string]*localSessionState),
+		failedAttempts:  make(map[string]*failedAttemptState),
 	}
 }
 
@@ -194,6 +206,10 @@ func (g *Gate) IsChannelUnlocked(channelID string) bool {
 }
 
 func (g *Gate) UnlockChannel(channelID string, password string) (*UnlockResult, error) {
+	return g.UnlockChannelWithSubject(channelID, password, "")
+}
+
+func (g *Gate) UnlockChannelWithSubject(channelID string, password string, subject string) (*UnlockResult, error) {
 	if g == nil || !g.enabled {
 		return &UnlockResult{Unlocked: true}, nil
 	}
@@ -201,8 +217,8 @@ func (g *Gate) UnlockChannel(channelID string, password string) (*UnlockResult, 
 	if channelID == "" {
 		return nil, errors.New("missing channel_id")
 	}
-	if !g.VerifyPassword(password) {
-		return nil, errors.New("invalid password")
+	if err := g.verifyPasswordForSubject(password, subject); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -229,11 +245,15 @@ func (g *Gate) UnlockChannel(channelID string, password string) (*UnlockResult, 
 }
 
 func (g *Gate) MintLocalSession(password string) (*LocalSessionResult, error) {
+	return g.MintLocalSessionWithSubject(password, "")
+}
+
+func (g *Gate) MintLocalSessionWithSubject(password string, subject string) (*LocalSessionResult, error) {
 	if g == nil || !g.enabled {
 		return &LocalSessionResult{Unlocked: true}, nil
 	}
-	if !g.VerifyPassword(password) {
-		return nil, errors.New("invalid password")
+	if err := g.verifyPasswordForSubject(password, subject); err != nil {
+		return nil, err
 	}
 	now := time.Now()
 	g.mu.Lock()
@@ -392,6 +412,18 @@ func (g *Gate) cleanupExpiredLocked(now time.Time) {
 			delete(g.localSessions, token)
 		}
 	}
+	for subject, st := range g.failedAttempts {
+		if st == nil {
+			delete(g.failedAttempts, subject)
+			continue
+		}
+		if !st.cooldownUntil.IsZero() && now.Before(st.cooldownUntil) {
+			continue
+		}
+		if st.lastFailedAt.IsZero() || now.Sub(st.lastFailedAt) >= g.attemptPolicy.Retention {
+			delete(g.failedAttempts, subject)
+		}
+	}
 }
 
 func shouldMintResumeTokenLocked(meta session.Meta) bool {
@@ -466,4 +498,63 @@ func randomToken(n int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func (g *Gate) verifyPasswordForSubject(password string, subject string) error {
+	if g == nil || !g.enabled {
+		return nil
+	}
+
+	now := time.Now()
+	subjectKey := normalizeAttemptSubject(subject)
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cleanupExpiredLocked(now)
+
+	if retryAfter := g.retryAfterLocked(now, subjectKey); retryAfter > 0 {
+		return &RateLimitError{RetryAfter: retryAfter}
+	}
+	if g.VerifyPassword(password) {
+		delete(g.failedAttempts, subjectKey)
+		return nil
+	}
+	return g.recordFailedAttemptLocked(now, subjectKey)
+}
+
+func (g *Gate) retryAfterLocked(now time.Time, subject string) time.Duration {
+	st := g.failedAttempts[subject]
+	if st == nil || st.cooldownUntil.IsZero() || !now.Before(st.cooldownUntil) {
+		return 0
+	}
+	return st.cooldownUntil.Sub(now)
+}
+
+func (g *Gate) recordFailedAttemptLocked(now time.Time, subject string) error {
+	st := g.failedAttempts[subject]
+	if st == nil {
+		st = &failedAttemptState{}
+		g.failedAttempts[subject] = st
+	}
+	st.failures++
+	st.lastFailedAt = now
+
+	cooldown := g.cooldownForFailuresLocked(st.failures)
+	if cooldown <= 0 {
+		st.cooldownUntil = time.Time{}
+		return ErrInvalidPassword
+	}
+	st.cooldownUntil = now.Add(cooldown)
+	return &RateLimitError{RetryAfter: cooldown}
+}
+
+func (g *Gate) cooldownForFailuresLocked(failures int) time.Duration {
+	cooldown := time.Duration(0)
+	for _, step := range g.attemptPolicy.Steps {
+		if failures < step.Failures {
+			break
+		}
+		cooldown = step.Cooldown
+	}
+	return cooldown
 }

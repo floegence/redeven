@@ -16,6 +16,19 @@ function errorResponse(message: string, status: number): Response {
   });
 }
 
+function errorResponseWithRetry(message: string, status: number, retryAfterMs: number): Response {
+  return new Response(JSON.stringify({
+    error: {
+      message,
+      code: 'ACCESS_PASSWORD_RETRY_LATER',
+      retry_after_ms: retryAfterMs,
+    },
+  }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 describe('gatewayApi access credentials', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -164,5 +177,18 @@ describe('gatewayApi access credentials', () => {
 
     const mod = await import('./gatewayApi');
     await expect(mod.unlockGatewayAccess('wrong')).rejects.toThrow('invalid password');
+  });
+
+  it('preserves retry-after metadata for gateway unlock cooldown responses', async () => {
+    const fetchMock = vi.fn(async () => errorResponseWithRetry('Too many incorrect password attempts.', 429, 30_000));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./gatewayApi');
+    await expect(mod.unlockGatewayAccess('wrong')).rejects.toMatchObject({
+      message: 'Too many incorrect password attempts.',
+      retryAfterMs: 30_000,
+      status: 429,
+      code: 'ACCESS_PASSWORD_RETRY_LATER',
+    });
   });
 });

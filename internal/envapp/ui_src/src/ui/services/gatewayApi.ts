@@ -1,4 +1,5 @@
 import { getLocalRuntime } from './controlplaneApi';
+import { AccessUnlockError, normalizeRetryAfterMs } from './accessUnlockError';
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
 
 export type GatewayAccessStatus = {
@@ -22,6 +23,14 @@ function gatewayErrorMessage(data: any, status: number): string {
   const flat = String(data?.error ?? '').trim();
   if (flat && flat !== '[object Object]') return flat;
   return `HTTP ${status}`;
+}
+
+function gatewayErrorCode(data: any): string {
+  return String(data?.error?.code ?? '').trim();
+}
+
+function gatewayRetryAfterMs(data: any): number {
+  return normalizeRetryAfterMs(data?.error?.retry_after_ms ?? data?.data?.retry_after_ms);
 }
 
 function shouldSetJSONContentType(body: BodyInit | null | undefined): boolean {
@@ -71,8 +80,24 @@ export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promi
   } catch {
     // ignore
   }
-  if (!resp.ok) throw new Error(gatewayErrorMessage(data, resp.status));
-  if (data?.ok === false) throw new Error(gatewayErrorMessage(data, resp.status || 400));
+  if (!resp.ok) {
+    const message = gatewayErrorMessage(data, resp.status);
+    const code = gatewayErrorCode(data) || 'HTTP_ERROR';
+    const retryAfterMs = gatewayRetryAfterMs(data);
+    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+      throw new AccessUnlockError({ message, status: resp.status, code, retryAfterMs });
+    }
+    throw new Error(message);
+  }
+  if (data?.ok === false) {
+    const message = gatewayErrorMessage(data, resp.status || 400);
+    const code = gatewayErrorCode(data) || 'REQUEST_FAILED';
+    const retryAfterMs = gatewayRetryAfterMs(data);
+    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+      throw new AccessUnlockError({ message, status: resp.status || 400, code, retryAfterMs });
+    }
+    throw new Error(message);
+  }
   return (data?.data ?? data) as T;
 }
 
