@@ -527,9 +527,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopActionPopover');
     expect(appSrc).toContain('const blockedPrimaryActionDisabled = createMemo(() => (');
-    expect(appSrc).toContain('const primaryButtonContent = createMemo<JSX.Element>(() => (');
     expect(appSrc).toContain('redeven-split-action-trigger__content');
     expect(appSrc).toContain('<Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />');
+    expect(appSrc).toContain('fallback={props.presentation.primary_action.label}');
     expect(appSrc).toContain("'redeven-split-action-trigger--blocked'");
     expect(appSrc).toContain('aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}');
     expect(appSrc).toContain('return `${label} is unavailable. Show recovery options.`;');
