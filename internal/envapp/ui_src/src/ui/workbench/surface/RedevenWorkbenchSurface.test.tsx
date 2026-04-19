@@ -182,12 +182,10 @@ describe('RedevenWorkbenchSurface', () => {
     const widgetRoot = host.querySelector('[data-redeven-workbench-widget-root="true"]');
     expect(document.activeElement).toBe(widgetRoot);
     expect(modelMocks.focusWidget).toHaveBeenCalledWith(modelMocks.widget, { centerViewport: false });
-    expect(modelMocks.setCanvasFrameRef).toHaveBeenCalledWith(
-      host.querySelector('.workbench-canvas')
-    );
+    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
   });
 
-  it('refreshes the canvas measurement before the surface api ensures a widget', async () => {
+  it('delegates ensureWidget without an extra canvas measurement refresh', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -216,9 +214,7 @@ describe('RedevenWorkbenchSurface', () => {
     const api = capturedApi!;
     api.ensureWidget('redeven.files', { centerViewport: true });
 
-    expect(modelMocks.setCanvasFrameRef).toHaveBeenCalledWith(
-      host.querySelector('.workbench-canvas')
-    );
+    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
     expect(modelMocks.ensureWidget).toHaveBeenCalledWith('redeven.files', { centerViewport: true });
   });
 
@@ -261,7 +257,7 @@ describe('RedevenWorkbenchSurface', () => {
     expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
   });
 
-  it('refreshes the canvas measurement before global arrow navigation runs', async () => {
+  it('delegates global arrow navigation without an extra canvas measurement refresh', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -283,9 +279,7 @@ describe('RedevenWorkbenchSurface', () => {
     modelMocks.setCanvasFrameRef.mockClear();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
 
-    expect(modelMocks.setCanvasFrameRef).toHaveBeenCalledWith(
-      host.querySelector('.workbench-canvas')
-    );
+    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
     expect(modelMocks.handleArrowNavigation).toHaveBeenCalledWith('right');
   });
 });
