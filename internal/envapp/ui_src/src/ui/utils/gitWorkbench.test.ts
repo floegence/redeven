@@ -76,8 +76,8 @@ describe('gitWorkbench helpers', () => {
       untracked: [],
       conflicted: [],
     };
-    expect(workspaceEntryKey(workspace.staged[0])).toBe('staged:modified:src/app.ts::');
-    expect(findWorkspaceChangeByKey(workspace, 'staged:modified:src/app.ts::')?.path).toBe('src/app.ts');
+    expect(workspaceEntryKey(workspace.staged[0])).toBe('staged::modified:src/app.ts::');
+    expect(findWorkspaceChangeByKey(workspace, 'staged::modified:src/app.ts::')?.path).toBe('src/app.ts');
 
     const branches = {
       repoRootPath: '/',
