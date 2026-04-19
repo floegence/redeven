@@ -11,7 +11,6 @@ import {
   Lock,
   Moon,
   Pin,
-  Pencil,
   Plus,
   Refresh,
   Save,
@@ -3739,17 +3738,17 @@ function EnvironmentConnectionCard(props: Readonly<{
           </Show>
           <Show when={props.environment.can_edit}>
             <DesktopTooltip
-              content={props.environment.kind === 'managed_environment' ? 'Settings' : 'Edit'}
+              content="Settings"
               placement="top"
             >
               <ConsoleActionIconButton
-                title={props.environment.kind === 'managed_environment' ? 'Environment settings' : 'Edit connection'}
-                aria-label={props.environment.kind === 'managed_environment' ? `Settings for ${props.environment.label}` : `Edit ${props.environment.label}`}
+                title={props.environment.kind === 'managed_environment' ? 'Environment settings' : 'Connection settings'}
+                aria-label={props.environment.kind === 'managed_environment'
+                  ? `Settings for ${props.environment.label}`
+                  : `Connection settings for ${props.environment.label}`}
                 onClick={() => props.editEnvironment(props.environment)}
               >
-                {props.environment.kind === 'managed_environment'
-                  ? <Settings class="h-3.5 w-3.5" />
-                  : <Pencil class="h-3.5 w-3.5" />}
+                <Settings class="h-3.5 w-3.5" />
               </ConsoleActionIconButton>
             </DesktopTooltip>
           </Show>

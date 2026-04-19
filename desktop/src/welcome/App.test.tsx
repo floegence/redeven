@@ -606,6 +606,16 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Desktop opens a remote session through the Control Plane without starting a local runtime here.');
   });
 
+  it('uses a settings affordance for every editable environment card', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('content="Settings"');
+    expect(appSrc).toContain("title={props.environment.kind === 'managed_environment' ? 'Environment settings' : 'Connection settings'}");
+    expect(appSrc).toContain('Connection settings for ${props.environment.label}');
+    expect(appSrc).toContain('<Settings class="h-3.5 w-3.5" />');
+    expect(appSrc).not.toContain('<Pencil class="h-3.5 w-3.5" />');
+  });
+
   it('describes managed environment actions as window-only and runtime-decoupled', () => {
     const appSrc = readWelcomeSource();
 
