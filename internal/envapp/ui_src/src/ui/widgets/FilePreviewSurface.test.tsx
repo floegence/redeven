@@ -15,44 +15,48 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   }),
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: any) => (
-    <button
-      type="button"
-      class={props.class}
-      disabled={props.disabled}
-      onClick={props.onClick}
-    >
-      {props.children}
-    </button>
-  ),
-  Dialog: (props: any) => (
-    props.open ? (
-      <div data-testid="dialog" class={props.class}>
-        <div>{props.title}</div>
-        <div>{props.children}</div>
-        <div>{props.footer}</div>
-      </div>
-    ) : null
-  ),
-  FloatingWindow: (props: any) => (
-    props.open ? (
-      <div data-testid="floating-window" class={props.class}>
-        <div>{props.title}</div>
-        <div>{props.children}</div>
-        <div>{props.footer}</div>
-      </div>
-    ) : null
-  ),
-  ConfirmDialog: (props: any) => (
-    props.open ? (
-      <div data-testid="confirm-dialog">
-        <div>{props.title}</div>
-        <div>{props.description}</div>
-      </div>
-    ) : null
-  ),
-}));
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>();
+  return {
+    ...actual,
+    Button: (props: any) => (
+      <button
+        type="button"
+        class={props.class}
+        disabled={props.disabled}
+        onClick={props.onClick}
+      >
+        {props.children}
+      </button>
+    ),
+    Dialog: (props: any) => (
+      props.open ? (
+        <div data-testid="dialog" class={props.class}>
+          <div>{props.title}</div>
+          <div>{props.children}</div>
+          <div>{props.footer}</div>
+        </div>
+      ) : null
+    ),
+    FloatingWindow: (props: any) => (
+      props.open ? (
+        <div data-testid="floating-window" class={props.class}>
+          <div>{props.title}</div>
+          <div>{props.children}</div>
+          <div>{props.footer}</div>
+        </div>
+      ) : null
+    ),
+    ConfirmDialog: (props: any) => (
+      props.open ? (
+        <div data-testid="confirm-dialog">
+          <div>{props.title}</div>
+          <div>{props.description}</div>
+        </div>
+      ) : null
+    ),
+  };
+});
 
 vi.mock('./FilePreviewContent', () => ({
   FilePreviewContent: (props: any) => (
