@@ -21,10 +21,28 @@ export type EnvSurfaceOpenReason =
   | 'permission_fallback'
   | 'placeholder_fallback';
 
+export type EnvWorkbenchSurfaceOpenStrategy =
+  | 'focus_latest_or_create'
+  | 'create_new';
+
+export type EnvTerminalSurfacePayload = {
+  workingDir?: string;
+  preferredName?: string;
+};
+
+export type EnvFileBrowserSurfacePayload = {
+  path: string;
+  homePath?: string;
+  title?: string;
+};
+
 export type EnvOpenSurfaceOptions = {
   reason?: EnvSurfaceOpenReason;
   focus?: boolean;
   ensureVisible?: boolean;
+  openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+  terminalPayload?: EnvTerminalSurfacePayload;
+  fileBrowserPayload?: EnvFileBrowserSurfacePayload;
 };
 
 export const ENV_DESKTOP_VIEW_MODES = ['activity', 'deck', 'workbench'] as const satisfies readonly EnvViewMode[];

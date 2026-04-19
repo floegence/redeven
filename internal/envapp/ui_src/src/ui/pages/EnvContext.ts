@@ -1,7 +1,14 @@
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { AskFlowerIntent } from './askFlowerIntent';
-import type { EnvOpenSurfaceOptions, EnvSurfaceId, EnvViewMode } from '../envViewMode';
+import type {
+  EnvFileBrowserSurfacePayload,
+  EnvOpenSurfaceOptions,
+  EnvSurfaceId,
+  EnvTerminalSurfacePayload,
+  EnvViewMode,
+  EnvWorkbenchSurfaceOpenStrategy,
+} from '../envViewMode';
 
 export type EnvSettingsSection =
   | 'config'
@@ -41,6 +48,9 @@ export type EnvWorkbenchSurfaceActivationRequest = {
   focus?: boolean;
   ensureVisible?: boolean;
   centerViewport?: boolean;
+  openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+  terminalPayload?: EnvTerminalSurfacePayload;
+  fileBrowserPayload?: EnvFileBrowserSurfacePayload;
 };
 
 export type OpenTerminalInDirectoryRequest = {
@@ -91,7 +101,21 @@ export type EnvContextValue = {
   openAskFlowerComposer: (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => void;
   openTerminalInDirectoryRequestSeq: () => number;
   openTerminalInDirectoryRequest: () => OpenTerminalInDirectoryRequest | null;
-  openTerminalInDirectory: (workingDir: string, options?: { preferredName?: string }) => void;
+  openTerminalInDirectory: (
+    workingDir: string,
+    options?: {
+      preferredName?: string;
+      openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+    },
+  ) => void;
+  openFileBrowserAtPath: (
+    path: string,
+    options?: {
+      homePath?: string;
+      title?: string;
+      openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+    },
+  ) => Promise<void>;
   consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;
 
   aiThreadFocusSeq: () => number;

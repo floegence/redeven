@@ -658,7 +658,13 @@ export function EnvAppShell() {
     setAskFlowerComposerOpen(true);
   };
 
-  const openTerminalInDirectory = (workingDir: string, options?: { preferredName?: string }) => {
+  const openTerminalInDirectory = (
+    workingDir: string,
+    options?: {
+      preferredName?: string;
+      openStrategy?: 'focus_latest_or_create' | 'create_new';
+    },
+  ) => {
     const normalizedWorkingDir = normalizeAbsolutePath(workingDir);
     if (!normalizedWorkingDir) {
       notify.error('Invalid directory', 'Could not resolve a terminal working directory.');
@@ -667,14 +673,66 @@ export function EnvAppShell() {
 
     const preferredName = String(options?.preferredName ?? '').trim();
     const targetMode = viewMode();
-    setOpenTerminalInDirectoryRequest({
-      requestId: createClientId(),
-      workingDir: normalizedWorkingDir,
-      preferredName: preferredName || basenameFromAbsolutePath(normalizedWorkingDir),
-      targetMode,
+    if (targetMode !== 'workbench') {
+      setOpenTerminalInDirectoryRequest({
+        requestId: createClientId(),
+        workingDir: normalizedWorkingDir,
+        preferredName: preferredName || basenameFromAbsolutePath(normalizedWorkingDir),
+        targetMode,
+      });
+      setOpenTerminalInDirectoryRequestSeq((n) => n + 1);
+    }
+    openSurface('terminal', {
+      reason: 'handoff_open_terminal',
+      focus: true,
+      ensureVisible: true,
+      openStrategy: options?.openStrategy,
+      terminalPayload: {
+        workingDir: normalizedWorkingDir,
+        preferredName: preferredName || basenameFromAbsolutePath(normalizedWorkingDir),
+      },
     });
-    setOpenTerminalInDirectoryRequestSeq((n) => n + 1);
-    openSurface('terminal', { reason: 'handoff_open_terminal', focus: true, ensureVisible: true });
+  };
+
+  const openFileBrowserAtPath = async (
+    path: string,
+    options?: {
+      homePath?: string;
+      title?: string;
+      openStrategy?: 'focus_latest_or_create' | 'create_new';
+    },
+  ): Promise<void> => {
+    const normalizedPath = normalizeAbsolutePath(path);
+    if (!normalizedPath) {
+      notify.error('Browse files unavailable', 'Could not resolve a valid directory path.');
+      return;
+    }
+
+    const normalizedHomePath = normalizeAbsolutePath(options?.homePath ?? '');
+    const normalizedTitle = String(options?.title ?? '').trim();
+    if (viewMode() === 'workbench') {
+      openSurface('files', {
+        reason: 'handoff_browse_files',
+        focus: true,
+        ensureVisible: true,
+        openStrategy: options?.openStrategy,
+        fileBrowserPayload: {
+          path: normalizedPath,
+          homePath: normalizedHomePath || undefined,
+          title: normalizedTitle || undefined,
+        },
+      });
+      return;
+    }
+
+    await openFileBrowserSurface({
+      input: {
+        path: normalizedPath,
+        homePath: normalizedHomePath || undefined,
+        title: normalizedTitle || undefined,
+      },
+      controller: fileBrowserSurfaceController,
+    });
   };
 
   const closeAskFlowerComposer = () => {
@@ -1699,8 +1757,28 @@ export function EnvAppShell() {
       focus: options?.focus ?? true,
       ensureVisible: options?.ensureVisible ?? true,
       centerViewport: options?.ensureVisible ?? true,
+      openStrategy: options?.openStrategy,
+      terminalPayload: options?.terminalPayload,
+      fileBrowserPayload: options?.fileBrowserPayload,
     });
     setWorkbenchSurfaceActivationSeq((n) => n + 1);
+  };
+
+  const openSurfaceInWorkbench = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
+    if (layout.isMobile()) {
+      openSurface(surfaceId, options);
+      return;
+    }
+
+    if (viewMode() === 'workbench') {
+      openSurface(surfaceId, options);
+      return;
+    }
+
+    setViewMode('workbench', { surfaceId, focusSurface: false });
+    queueMicrotask(() => {
+      openSurface(surfaceId, options);
+    });
   };
 
   const setViewMode = (mode: EnvViewMode, options?: { surfaceId?: EnvSurfaceId; focusSurface?: boolean }) => {
@@ -1923,6 +2001,19 @@ export function EnvAppShell() {
         icon: Terminal,
         execute: () => openSurface('terminal', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
+      ...(!layout.isMobile() ? [{
+        id: 'redeven.env.newTerminalWindow',
+        title: 'New Terminal Window',
+        description: 'Create a new terminal window in workbench',
+        category: 'Navigation',
+        icon: Terminal,
+        execute: () => openSurfaceInWorkbench('terminal', {
+          reason: 'direct_navigation',
+          focus: true,
+          ensureVisible: true,
+          openStrategy: 'create_new',
+        }),
+      }] : []),
       {
         id: 'redeven.env.goToMonitoring',
         title: 'Go to Monitoring',
@@ -1941,6 +2032,19 @@ export function EnvAppShell() {
         icon: Files,
         execute: () => openSurface('files', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
+      ...(!layout.isMobile() ? [{
+        id: 'redeven.env.newFileWindow',
+        title: 'New File Window',
+        description: 'Create a new file window in workbench',
+        category: 'Navigation',
+        icon: Files,
+        execute: () => openSurfaceInWorkbench('files', {
+          reason: 'direct_navigation',
+          focus: true,
+          ensureVisible: true,
+          openStrategy: 'create_new',
+        }),
+      }] : []),
       {
         id: 'redeven.env.goToCodespaces',
         title: 'Go to Codespaces',
@@ -2531,6 +2635,7 @@ export function EnvAppShell() {
         openTerminalInDirectoryRequestSeq,
         openTerminalInDirectoryRequest,
         openTerminalInDirectory,
+        openFileBrowserAtPath,
         consumeOpenTerminalInDirectoryRequest,
         aiThreadFocusSeq,
         aiThreadFocusId,

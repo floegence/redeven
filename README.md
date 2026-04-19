@@ -70,7 +70,7 @@ Provider implementers should use the `redeven-portal` repository as the Control 
 
 | Surface | What users get | Why it matters | Docs |
 | --- | --- | --- | --- |
-| `Env App` 🗂️ | Deck, terminal, monitoring, file browser, codespaces, port forwarding, Runtime Settings | One secure workspace view for day-to-day endpoint operations | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
+| `Env App` 🗂️ | Deck, workbench, terminal, monitoring, file browser, codespaces, port forwarding, Runtime Settings | One secure workspace view for day-to-day endpoint operations, including multi-window Terminal and Files workflows inside workbench mode | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
 | `Code App` 💻 | code-server over Flowersec E2EE proxying for HTTP and WebSocket traffic | Browser IDE access without exposing the editor directly to the control plane | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
 | `Desktop Shell` 🖥️ | Native Electron app that keeps a singleton launcher/settings shell plus multiple deduplicated Environment windows | Local UX, chooser-first environment selection, SSH Host bootstrap without preinstalling Redeven manually, per-instance remote state isolation, offline-friendly desktop-upload bootstrap for restricted targets, multi-environment desktop sessions, compatible Control Plane providers, blocked-state recovery, and diagnostics in a desktop wrapper | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
 | `Flower` (optional) 🌸 | AI workflows that can start from terminal, file, and monitoring context | AI assistance stays attached to the same endpoint runtime and permission model | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |

@@ -314,10 +314,12 @@ vi.mock('../pages/EnvContext', () => ({
       }),
       { state: 'ready' },
     ),
+    viewMode: () => 'activity',
     openAskFlowerComposer: vi.fn(),
     openTerminalInDirectoryRequestSeq: () => 0,
     openTerminalInDirectoryRequest: () => null,
     openTerminalInDirectory: vi.fn(),
+    openFileBrowserAtPath: vi.fn(async () => undefined),
     consumeOpenTerminalInDirectoryRequest: vi.fn(),
   }),
 }));

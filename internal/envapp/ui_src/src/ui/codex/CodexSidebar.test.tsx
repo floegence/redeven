@@ -341,6 +341,7 @@ function renderSurface(host: HTMLDivElement) {
         openTerminalInDirectoryRequestSeq: () => 0,
         openTerminalInDirectoryRequest: () => null,
         openTerminalInDirectory: () => undefined,
+        openFileBrowserAtPath: async () => undefined,
         consumeOpenTerminalInDirectoryRequest: () => undefined,
         aiThreadFocusSeq: () => 0,
         aiThreadFocusId: () => null,

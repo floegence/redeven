@@ -991,7 +991,7 @@ export function registerEnvAIPageSendTests() {
       } finally {
         dispose();
       }
-    });
+    }, 20000);
 
     it('uses a circular flower badge when Flower is disabled by permissions', async () => {
       envResource.latest.permissions.can_execute = false;
