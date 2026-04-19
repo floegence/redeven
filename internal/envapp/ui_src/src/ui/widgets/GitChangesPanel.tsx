@@ -1,6 +1,6 @@
-import { For, Show, createEffect, createSignal } from 'solid-js';
-import { Folder, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Folder, MoreHorizontal, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
@@ -18,7 +18,6 @@ import {
   workspaceViewSectionCount,
   workspaceViewSectionActionKey,
   workspaceViewSectionItems,
-  workspaceViewSectionLabel,
   type GitStashWindowRequest,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
@@ -52,6 +51,13 @@ import type { GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitVirtualTable } from './GitVirtualTable';
+import { GitChangesBreadcrumb } from './GitChangesBreadcrumb';
+import {
+  buildGitChangesHeaderPresentation,
+  resolveGitChangesHeaderDensity,
+  type GitChangesBreadcrumbSegment,
+  type GitChangesHeaderActionId,
+} from './gitChangesHeaderLayout';
 
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -306,6 +312,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededWorkspaceChange | null>(null);
   const [discardTarget, setDiscardTarget] = createSignal<WorkspaceDiscardTarget>(null);
+  const [headerElement, setHeaderElement] = createSignal<HTMLDivElement>();
+  const [headerWidth, setHeaderWidth] = createSignal(0);
 
   const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceViewSection(props.workspace);
   const summary = () => props.workspace?.summary ?? props.repoSummary?.workspaceSummary ?? null;
@@ -348,7 +356,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const visibleLoadingMore = () => Boolean(selectedPageState().loading && selectedPageState().initialized);
   const stagedLoadingItems = () => Boolean(stagedPageState().loading && !props.commitBusy);
   const selectedTone = () => workspaceSectionTone(selectedSection());
-  const visibleSectionLabel = () => workspaceViewSectionLabel(selectedSection());
   const activeDirectoryPath = () => selectedSection() === 'changes' ? String(selectedPageState().directoryPath ?? '').trim() : '';
   const activeBreadcrumbs = () => selectedSection() === 'changes' ? selectedPageState().breadcrumbs ?? [] : [];
   const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
@@ -377,13 +384,80 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && repoShortcutRequest());
   const canOpenStash = () => Boolean(props.onOpenStash && repoRootPath());
-  const repoShortcutDisabledReason = () => (repoShortcutRequest() ? '' : 'Repository path is unavailable.');
-  const askFlowerDisabledReason = () => {
-    if (canAskFlower()) return '';
-    if (!repoRootPath()) return 'Repository path is unavailable.';
-    if (visibleItems().length === 0) return 'No files in this section.';
-    return 'Ask Flower is unavailable right now.';
+  const headerDensity = createMemo(() => resolveGitChangesHeaderDensity(headerWidth()));
+  const headerPresentation = createMemo(() => buildGitChangesHeaderPresentation({
+    density: headerDensity(),
+    selectedSection: selectedSection(),
+    visibleCount: visibleCount(),
+    stagedCount: stagedCount(),
+    activeDirectoryPath: activeDirectoryPath(),
+    canBulkAction: Boolean(props.onBulkAction) && visibleCount() > 0,
+    canDiscardAll: canDiscardAll() && visibleCount() > 0,
+    canOpenStash: canOpenStash(),
+    canOpenInTerminal: canOpenInTerminal(),
+    canBrowseFiles: canBrowseFiles(),
+    canAskFlower: canAskFlower(),
+  }));
+  const headerTone = () => headerPresentation().isCleanState ? 'success' : selectedTone();
+  const breadcrumbSegments = createMemo<GitChangesBreadcrumbSegment[]>(() => activeBreadcrumbs().map((crumb) => ({
+    label: String(crumb.label ?? '').trim() || 'Folder',
+    path: String(crumb.path ?? '').trim(),
+  })));
+  const headerPrimaryActions = () => headerPresentation().primaryActionIds;
+  const headerUtilityActions = () => headerPresentation().utilityActionIds;
+  const overflowItems = createMemo<DropdownItem[]>(() => headerPresentation().overflowActionIds.map((actionId) => ({
+    id: actionId,
+    label: actionId === 'discard'
+      ? (activeDirectoryPath() ? 'Discard folder changes' : 'Discard all changes')
+      : actionId === 'terminal'
+        ? 'Open in Terminal'
+        : actionId === 'files'
+          ? 'Browse Files'
+          : 'Ask Flower',
+  })));
+  const showActionRow = () => headerPrimaryActions().length > 0 || headerUtilityActions().length > 0 || overflowItems().length > 0;
+  const headerTopRowClass = () => (
+    headerDensity() === 'comfortable'
+      ? 'grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start'
+      : 'grid gap-2.5 grid-cols-1'
+  );
+  const headerActionRowClass = () => {
+    if (headerDensity() === 'comfortable') return 'flex flex-wrap items-center justify-end gap-2';
+    return 'grid gap-2 grid-cols-[minmax(0,1fr)_auto] items-start';
   };
+  const headerPrimaryActionRailClass = () => (
+    headerDensity() === 'collapsed'
+      ? 'flex min-w-0 flex-wrap items-center gap-1.5'
+      : 'flex min-w-0 flex-wrap items-center gap-2'
+  );
+  const headerSecondaryActionRailClass = () => (
+    headerDensity() === 'collapsed'
+      ? 'flex items-center justify-end gap-1.5'
+      : 'flex min-w-0 items-center justify-end gap-1.5'
+  );
+
+  createEffect(() => {
+    const element = headerElement();
+    if (!element) {
+      setHeaderWidth(0);
+      return;
+    }
+
+    const syncHeaderWidth = () => {
+      setHeaderWidth(element.offsetWidth ?? 0);
+    };
+
+    syncHeaderWidth();
+
+    if (typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      syncHeaderWidth();
+    });
+    observer.observe(element);
+
+    onCleanup(() => observer.disconnect());
+  });
 
   createEffect(() => {
     if (!commitDialogOpen()) return;
@@ -433,6 +507,109 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     return `Restore "${itemPath(target.item)}" to the last Git state and drop its unstaged edits? Any staged snapshot for this file will stay intact.`;
   };
 
+  const runHeaderAction = (actionId: GitChangesHeaderActionId) => {
+    switch (actionId) {
+      case 'commit':
+        props.onOpenCommitDialog?.();
+        setCommitDialogOpen(true);
+        return;
+      case 'bulk':
+        props.onBulkAction?.(selectedSection());
+        return;
+      case 'stash': {
+        const repoRoot = repoRootPath();
+        if (!repoRoot) return;
+        props.onOpenStash?.({
+          tab: 'save',
+          repoRootPath: repoRoot,
+          source: 'changes',
+        });
+        return;
+      }
+      case 'discard':
+        setDiscardTarget({ kind: 'section', section: selectedSection() });
+        return;
+      case 'terminal': {
+        const request = repoShortcutRequest();
+        if (!request) return;
+        props.onOpenInTerminal?.(request);
+        return;
+      }
+      case 'files': {
+        const request = repoShortcutRequest();
+        if (!request) return;
+        void props.onBrowseFiles?.(request);
+        return;
+      }
+      case 'flower':
+        props.onAskFlower?.({
+          kind: 'workspace_section',
+          repoRootPath: repoRootPath(),
+          headRef: props.repoSummary?.headRef,
+          section: selectedSection(),
+          items: visibleItems(),
+        });
+        return;
+    }
+  };
+
+  const renderUtilityAction = (actionId: GitChangesHeaderActionId) => (
+    <Show when={actionId === 'flower' || actionId === 'terminal' || actionId === 'files'}>
+      <GitShortcutOrbButton
+        label={actionId === 'flower' ? 'Ask Flower' : actionId === 'terminal' ? 'Terminal' : 'Files'}
+        tone={actionId === 'flower' ? 'flower' : actionId === 'terminal' ? 'terminal' : 'files'}
+        icon={actionId === 'flower' ? FlowerIcon : actionId === 'terminal' ? Terminal : Folder}
+        onClick={() => runHeaderAction(actionId)}
+      />
+    </Show>
+  );
+
+  const primaryActionVariant = (actionId: GitChangesHeaderActionId) => actionId === 'commit' ? 'default' : 'outline';
+  const primaryActionClass = (actionId: GitChangesHeaderActionId) => {
+    if (actionId === 'discard') {
+      return `rounded-md text-destructive hover:text-destructive ${redevenSurfaceRoleClass('control')}`;
+    }
+    return actionId === 'commit'
+      ? 'rounded-md'
+      : `rounded-md ${redevenSurfaceRoleClass('control')}`;
+  };
+  const primaryActionLabel = (actionId: GitChangesHeaderActionId) => {
+    switch (actionId) {
+      case 'commit':
+        return 'Commit...';
+      case 'bulk':
+        return bulkActionLabel();
+      case 'stash':
+        return 'Stash...';
+      case 'discard':
+        return activeDirectoryPath() ? 'Discard Folder...' : 'Discard All...';
+      default:
+        return '';
+    }
+  };
+  const primaryActionDisabled = (actionId: GitChangesHeaderActionId) => {
+    switch (actionId) {
+      case 'bulk':
+        return visibleCount() === 0 || bulkActionBusy() || discardActionBusy();
+      case 'discard':
+        return visibleCount() === 0 || bulkActionBusy() || discardActionBusy();
+      case 'commit':
+        return stagedCount() === 0;
+      default:
+        return false;
+    }
+  };
+  const primaryActionLoading = (actionId: GitChangesHeaderActionId) => {
+    switch (actionId) {
+      case 'bulk':
+        return bulkActionBusy();
+      case 'discard':
+        return discardActionBusy();
+      default:
+        return false;
+    }
+  };
+
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
@@ -440,153 +617,94 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
             <div class="flex min-h-0 flex-1 flex-col gap-3">
               <GitPanelFrame class="shrink-0">
-                <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-                  <GitLabelBlock class="min-w-0 flex-1" label="Workspace" tone={selectedTone()}>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <GitPrimaryTitle>{visibleSectionLabel()}</GitPrimaryTitle>
-                      <GitMetaPill tone={selectedTone()}>{visibleCount()} file{visibleCount() === 1 ? '' : 's'}</GitMetaPill>
-                      <Show when={stagedCount() > 0}>
-                        <GitMetaPill tone="success">{stagedCount()} staged</GitMetaPill>
+                <div
+                  ref={setHeaderElement}
+                  data-git-changes-header-density={headerPresentation().density}
+                  class="flex flex-col gap-2.5"
+                >
+                  <div class={headerTopRowClass()}>
+                    <GitLabelBlock class="min-w-0" label="Workspace" tone={headerTone()}>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <GitPrimaryTitle>{headerPresentation().title}</GitPrimaryTitle>
+                        <GitMetaPill tone={headerPresentation().isCleanState ? 'success' : headerTone()}>
+                          {headerPresentation().countBadgeLabel}
+                        </GitMetaPill>
+                        <Show when={stagedCount() > 0}>
+                          <GitMetaPill tone="success">{headerPresentation().stagedBadgeLabel}</GitMetaPill>
+                        </Show>
+                      </div>
+                      <Show when={headerPresentation().showSummaryCopy}>
+                        <div class="max-w-full text-[11px] leading-relaxed text-muted-foreground line-clamp-2 sm:max-w-[32rem]">
+                          {headerPresentation().summaryCopy}
+                        </div>
                       </Show>
-                    </div>
-                    <div class="max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[34rem]">
-                      {selectedSection() === 'staged'
-                        ? 'Review the staged snapshot, then commit it from the dialog.'
-                        : activeDirectoryPath()
-                          ? `Review the current folder, then stage or discard this scope without leaving the Changes view.`
-                          : 'Stage the files you want from this table, discard the rest when needed, then commit from the staged dialog.'}
-                    </div>
-                    <Show when={selectedSection() === 'changes' && activeBreadcrumbs().length > 0}>
-                      <div class="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
-                        <For each={activeBreadcrumbs()}>
-                          {(crumb, index) => (
-                            <>
-                              <Show when={index() > 0}>
-                                <span aria-hidden="true">/</span>
-                              </Show>
-                              <button
-                                type="button"
-                                class="cursor-pointer rounded-sm px-1 py-0.5 text-left text-foreground/90 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-                                disabled={!props.onNavigateDirectory}
-                                onClick={() => props.onNavigateDirectory?.(String(crumb.path ?? '').trim())}
-                              >
-                                {String(crumb.label ?? '').trim() || 'Folder'}
-                              </button>
-                            </>
+                    </GitLabelBlock>
+
+                    <Show when={headerPresentation().density === 'comfortable' && headerUtilityActions().length > 0}>
+                      <GitShortcutOrbDock class="justify-end">
+                        <For each={headerUtilityActions()}>
+                          {(actionId) => renderUtilityAction(actionId)}
+                        </For>
+                      </GitShortcutOrbDock>
+                    </Show>
+                  </div>
+
+                  <Show when={showActionRow()}>
+                    <div class={headerActionRowClass()}>
+                      <div class={headerPrimaryActionRailClass()}>
+                        <For each={headerPrimaryActions()}>
+                          {(actionId) => (
+                            <Button
+                              size="sm"
+                              variant={primaryActionVariant(actionId)}
+                              class={primaryActionClass(actionId)}
+                              onClick={() => runHeaderAction(actionId)}
+                              disabled={primaryActionDisabled(actionId)}
+                              loading={primaryActionLoading(actionId)}
+                            >
+                              {primaryActionLabel(actionId)}
+                            </Button>
                           )}
                         </For>
                       </div>
-                    </Show>
-                  </GitLabelBlock>
-                  <div class="flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:flex-col lg:items-end lg:justify-start">
-                    <Show when={props.onAskFlower || props.onOpenInTerminal || props.onBrowseFiles}>
-                      <GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">
-                        <Show when={props.onAskFlower}>
-                          <GitShortcutOrbButton
-                            label="Ask Flower"
-                            tone="flower"
-                            icon={FlowerIcon}
-                            disabled={!canAskFlower()}
-                            disabledReason={askFlowerDisabledReason()}
-                            onClick={() => {
-                              if (!canAskFlower()) return;
-                              props.onAskFlower?.({
-                                kind: 'workspace_section',
-                                repoRootPath: repoRootPath(),
-                                headRef: props.repoSummary?.headRef,
-                                section: selectedSection(),
-                                items: visibleItems(),
-                              });
-                            }}
-                          />
-                        </Show>
-                        <Show when={props.onOpenInTerminal}>
-                          <GitShortcutOrbButton
-                            label="Terminal"
-                            tone="terminal"
-                            icon={Terminal}
-                            disabled={!canOpenInTerminal()}
-                            disabledReason={repoShortcutDisabledReason()}
-                            onClick={() => {
-                              const request = repoShortcutRequest();
-                              if (!request) return;
-                              props.onOpenInTerminal?.(request);
-                            }}
-                          />
-                        </Show>
-                        <Show when={props.onBrowseFiles}>
-                          <GitShortcutOrbButton
-                            label="Files"
-                            tone="files"
-                            icon={Folder}
-                            disabled={!canBrowseFiles()}
-                            disabledReason={repoShortcutDisabledReason()}
-                            onClick={() => {
-                              const request = repoShortcutRequest();
-                              if (!request) return;
-                              void props.onBrowseFiles?.(request);
-                            }}
-                          />
-                        </Show>
-                      </GitShortcutOrbDock>
-                    </Show>
 
-                    <div class="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
-                      <Show when={props.onOpenStash}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          class={`w-full rounded-md sm:w-auto ${redevenSurfaceRoleClass('control')}`}
-                          disabled={!canOpenStash()}
-                          onClick={() => {
-                            const repoRoot = repoRootPath();
-                            if (!repoRoot) return;
-                            props.onOpenStash?.({
-                              tab: 'save',
-                              repoRootPath: repoRoot,
-                              source: 'changes',
-                            });
-                          }}
-                        >
-                          Stash...
-                        </Button>
-                      </Show>
-                      <Show when={canDiscardAll()}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          class={`w-full rounded-md text-destructive hover:text-destructive sm:w-auto ${redevenSurfaceRoleClass('control')}`}
-                          onClick={() => setDiscardTarget({ kind: 'section', section: selectedSection() })}
-                          disabled={visibleCount() === 0 || bulkActionBusy() || discardActionBusy()}
-                          loading={discardActionBusy()}
-                        >
-                          {activeDirectoryPath() ? 'Discard Folder...' : 'Discard All...'}
-                        </Button>
-                      </Show>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        class={`w-full rounded-md sm:w-auto ${redevenSurfaceRoleClass('control')}`}
-                        onClick={() => props.onBulkAction?.(selectedSection())}
-                        disabled={visibleCount() === 0 || bulkActionBusy() || discardActionBusy()}
-                        loading={bulkActionBusy()}
-                      >
-                        {bulkActionLabel()}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="default"
-                        class="w-full rounded-md sm:w-auto"
-                        onClick={() => {
-                          props.onOpenCommitDialog?.();
-                          setCommitDialogOpen(true);
-                        }}
-                        disabled={stagedCount() === 0}
-                      >
-                        Commit...
-                      </Button>
+                      <div class={headerSecondaryActionRailClass()}>
+                        <Show when={headerPresentation().density !== 'comfortable' && headerUtilityActions().length > 0}>
+                          <GitShortcutOrbDock class="justify-end">
+                            <For each={headerUtilityActions()}>
+                              {(actionId) => renderUtilityAction(actionId)}
+                            </For>
+                          </GitShortcutOrbDock>
+                        </Show>
+                        <Show when={overflowItems().length > 0}>
+                          <Dropdown
+                            trigger={(
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                class={`rounded-md ${redevenSurfaceRoleClass('control')}`}
+                                aria-label="More actions"
+                                title="More actions"
+                              >
+                                <MoreHorizontal class="size-3.5" />
+                              </Button>
+                            )}
+                            items={overflowItems()}
+                            onSelect={(itemId) => runHeaderAction(itemId as GitChangesHeaderActionId)}
+                            align="end"
+                          />
+                        </Show>
+                      </div>
                     </div>
-                  </div>
+                  </Show>
+
+                  <Show when={selectedSection() === 'changes' && breadcrumbSegments().length > 0}>
+                    <GitChangesBreadcrumb
+                      segments={breadcrumbSegments()}
+                      onSelect={props.onNavigateDirectory ? (segment) => props.onNavigateDirectory?.(segment.path) : undefined}
+                      class="pt-0.5"
+                    />
+                  </Show>
                 </div>
               </GitPanelFrame>
 

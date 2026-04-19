@@ -8,6 +8,69 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { redevenV1Contract } from '../protocol/redeven_v1';
 import { GitChangesPanel } from './GitChangesPanel';
 
+const resizeObserverState = {
+  observers: [] as Array<{
+    callback: ResizeObserverCallback;
+    elements: Element[];
+  }>,
+};
+
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function defineElementWidth(element: Element, width: number) {
+  Object.defineProperty(element, 'offsetWidth', {
+    configurable: true,
+    get: () => width,
+  });
+}
+
+function triggerResizeObservers() {
+  for (const observer of resizeObserverState.observers) {
+    observer.callback(
+      observer.elements.map((element) => ({
+        target: element,
+        contentRect: {
+          width: (element as HTMLElement).offsetWidth ?? 0,
+          height: 0,
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: (element as HTMLElement).offsetWidth ?? 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        },
+      }) as ResizeObserverEntry),
+      {} as ResizeObserver,
+    );
+  }
+}
+
+async function setHeaderWidth(host: HTMLElement, width: number) {
+  const header = host.querySelector('[data-git-changes-header-density]') as HTMLElement | null;
+  expect(header).toBeTruthy();
+  defineElementWidth(header!, width);
+  triggerResizeObservers();
+  await flush();
+  return header;
+}
+
+async function clickDropdownMenuItem(trigger: HTMLButtonElement | null | undefined, label: string) {
+  expect(trigger).toBeTruthy();
+  trigger!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+
+  const menuItem = Array.from(document.body.querySelectorAll('[role="menu"] button'))
+    .find((node) => node.textContent?.trim() === label) as HTMLButtonElement | undefined;
+  expect(menuItem).toBeTruthy();
+  menuItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+}
+
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -22,20 +85,45 @@ beforeEach(() => {
       dispatchEvent: () => false,
     })),
   });
+
+  resizeObserverState.observers.length = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    return window.setTimeout(() => callback(performance.now()), 0);
+  });
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
+    window.clearTimeout(handle);
+  });
+  vi.stubGlobal('ResizeObserver', class {
+    private readonly record: {
+      callback: ResizeObserverCallback;
+      elements: Element[];
+    };
+
+    constructor(callback: ResizeObserverCallback) {
+      this.record = {
+        callback,
+        elements: [],
+      };
+      resizeObserverState.observers.push(this.record);
+    }
+
+    observe(element: Element) {
+      this.record.elements.push(element);
+    }
+
+    unobserve(element: Element) {
+      this.record.elements = this.record.elements.filter((entry) => entry !== element);
+    }
+
+    disconnect() {
+      this.record.elements = [];
+    }
+  });
 });
 
 afterEach(() => {
   document.body.innerHTML = '';
 });
-
-async function revealTooltipForButton(button: HTMLButtonElement | null | undefined): Promise<HTMLElement | null> {
-  const host = button?.closest('[data-redeven-tooltip-anchor]') as HTMLElement | null;
-  expect(host).toBeTruthy();
-  host!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-  await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
-}
 
 function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement | null {
   const labelNode = Array.from(container.querySelectorAll('div')).find((node) => (
@@ -93,7 +181,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('keeps the workspace header actions stacked for mobile widths instead of squeezing the summary copy', () => {
+  it('switches the workspace header between collapsed, compact, and comfortable densities based on container width', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -130,19 +218,78 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const dock = host.querySelector('[data-git-shortcut-dock]') as HTMLElement | null;
-      const stashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stash...')) as HTMLButtonElement | undefined;
-      const stageAllButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stage All')) as HTMLButtonElement | undefined;
-      const commitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...')) as HTMLButtonElement | undefined;
+      const header = await setHeaderWidth(host, 560);
+      expect(header?.getAttribute('data-git-changes-header-density')).toBe('collapsed');
+      expect(host.querySelector('button[aria-label="Ask Flower"]')).toBeNull();
+      expect(host.querySelector('button[aria-label="Terminal"]')).toBeNull();
+      expect(host.querySelector('button[aria-label="Files"]')).toBeNull();
+      expect(host.querySelector('button[aria-label="More actions"]')).toBeTruthy();
 
-      expect(dock).toBeTruthy();
-      expect(dock?.className).toContain('w-full justify-start');
-      expect(stashButton).toBeTruthy();
-      expect(stashButton?.className).toContain('w-full');
-      expect(stageAllButton).toBeTruthy();
-      expect(stageAllButton?.className).toContain('w-full');
-      expect(commitButton).toBeTruthy();
-      expect(commitButton?.className).toContain('w-full');
+      await setHeaderWidth(host, 720);
+      expect(header?.getAttribute('data-git-changes-header-density')).toBe('compact');
+      expect(host.querySelector('button[aria-label="Ask Flower"]')).toBeNull();
+      expect(host.querySelector('button[aria-label="Terminal"]')).toBeTruthy();
+      expect(host.querySelector('button[aria-label="Files"]')).toBeTruthy();
+      expect(host.querySelector('button[aria-label="More actions"]')).toBeTruthy();
+
+      await setHeaderWidth(host, 960);
+      expect(header?.getAttribute('data-git-changes-header-density')).toBe('comfortable');
+      expect(host.querySelector('button[aria-label="Ask Flower"]')).toBeTruthy();
+      expect(host.querySelector('button[aria-label="Terminal"]')).toBeTruthy();
+      expect(host.querySelector('button[aria-label="Files"]')).toBeTruthy();
+      expect(host.querySelector('button[aria-label="More actions"]')).toBeNull();
+      expect(host.textContent).toContain('Stage what you want to keep, then commit.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps overflow actions wired to the same commands when the header collapses', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onOpenInTerminal = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  workspaceSummary: { stagedCount: 0, unstagedCount: 19, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 19, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                selectedSection="changes"
+                onAskFlower={() => undefined}
+                onOpenInTerminal={onOpenInTerminal}
+                onBrowseFiles={() => undefined}
+                onOpenStash={() => undefined}
+                onBulkAction={() => undefined}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await setHeaderWidth(host, 560);
+      const moreActionsButton = host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null;
+      await clickDropdownMenuItem(moreActionsButton, 'Open in Terminal');
+
+      expect(onOpenInTerminal).toHaveBeenCalledWith({
+        path: '/workspace/repo',
+        preferredName: 'repo',
+      });
     } finally {
       dispose();
     }
@@ -501,7 +648,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('shows a discard-all confirmation for Changes and emits the current section on confirm', () => {
+  it('shows a discard-all confirmation for Changes and emits the current section on confirm', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onDiscardAll = vi.fn();
@@ -530,6 +677,7 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
+      await setHeaderWidth(host, 960);
       const discardAllButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard All...');
       expect(discardAllButton).toBeTruthy();
       discardAllButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -600,6 +748,7 @@ describe('GitChangesPanel interactions', () => {
                   },
                 }}
                 selectedSection="changes"
+                onBulkAction={() => undefined}
                 onNavigateDirectory={onNavigateDirectory}
               />
             </div>
@@ -718,7 +867,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('exposes Ask Flower, Terminal, and Files from the workspace card', () => {
+  it('exposes Ask Flower, Terminal, and Files from the workspace card', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const onAskFlower = vi.fn();
@@ -756,6 +905,7 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
+      await setHeaderWidth(host, 960);
       const shortcutDock = host.querySelector('[data-git-shortcut-dock]');
       const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
       const openInTerminalButton = host.querySelector('button[aria-label="Terminal"]') as HTMLButtonElement | null;
@@ -812,7 +962,7 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
-  it('shows a tooltip when Ask Flower is disabled for an empty section', async () => {
+  it('keeps clean-state headers quiet by hiding irrelevant disabled actions', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -835,8 +985,12 @@ describe('GitChangesPanel interactions', () => {
                   untracked: [],
                   conflicted: [],
                 }}
-                selectedSection="conflicted"
+                selectedSection="changes"
                 onAskFlower={() => {}}
+                onOpenInTerminal={() => {}}
+                onBrowseFiles={() => {}}
+                onOpenStash={() => {}}
+                onBulkAction={() => {}}
               />
             </div>
           </ProtocolProvider>
@@ -845,11 +999,107 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
-      const askFlowerButton = host.querySelector('button[aria-label="Ask Flower"]') as HTMLButtonElement | null;
-      expect(askFlowerButton?.disabled).toBe(true);
+      await setHeaderWidth(host, 960);
 
-      const tooltip = await revealTooltipForButton(askFlowerButton);
-      expect(tooltip?.textContent).toContain('No files in this section.');
+      expect(host.textContent).toContain('Clean');
+      expect(host.textContent).toContain('No pending changes');
+      expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stage All'))).toBeFalsy();
+      expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Commit...'))).toBeFalsy();
+      expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Discard All...'))).toBeFalsy();
+      expect(host.querySelector('button[aria-label="Ask Flower"]')).toBeNull();
+      expect(host.querySelector('button[aria-label="Terminal"]')).toBeTruthy();
+      expect(host.querySelector('button[aria-label="Files"]')).toBeTruthy();
+      expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stash...'))).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('collapses breadcrumb middle segments when the header rail is narrow and keeps hidden segments navigable', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onNavigateDirectory = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 5, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  changes: {
+                    items: [],
+                    totalCount: 5,
+                    scopeFileCount: 5,
+                    nextOffset: 5,
+                    hasMore: false,
+                    loading: false,
+                    error: '',
+                    initialized: true,
+                    directoryPath: 'desktop/workbench/dialogs/routing',
+                    breadcrumbs: [
+                      { label: 'repo', path: '' },
+                      { label: 'desktop', path: 'desktop' },
+                      { label: 'workbench', path: 'desktop/workbench' },
+                      { label: 'dialogs', path: 'desktop/workbench/dialogs' },
+                      { label: 'routing', path: 'desktop/workbench/dialogs/routing' },
+                    ],
+                  },
+                }}
+                selectedSection="changes"
+                onNavigateDirectory={onNavigateDirectory}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await setHeaderWidth(host, 720);
+
+      const breadcrumb = host.querySelector('nav[aria-label="Breadcrumb"]') as HTMLElement | null;
+      expect(breadcrumb).toBeTruthy();
+
+      const hiddenMeasure = breadcrumb?.querySelector('div[aria-hidden="true"]') as HTMLDivElement | null;
+      expect(hiddenMeasure).toBeTruthy();
+
+      defineElementWidth(breadcrumb!, 276);
+      const measureChildren = Array.from(hiddenMeasure!.children);
+      const segmentWidths = [40, 68, 84, 72, 60];
+      for (const [index, width] of segmentWidths.entries()) {
+        defineElementWidth(measureChildren[index]!, width);
+      }
+      defineElementWidth(measureChildren[segmentWidths.length]!, 12);
+      defineElementWidth(measureChildren[segmentWidths.length + 1]!, 28);
+
+      triggerResizeObservers();
+      await flush();
+
+      const visibleButtons = Array.from(breadcrumb!.querySelectorAll('button'))
+        .filter((node) => node.closest('[aria-hidden="true"]') === null)
+        .map((node) => node.textContent?.trim())
+        .filter(Boolean);
+
+      expect(visibleButtons).toContain('repo');
+      expect(visibleButtons).toContain('dialogs');
+      expect(visibleButtons).toContain('routing');
+      expect(visibleButtons).toContain('…');
+      expect(visibleButtons).not.toContain('desktop');
+      expect(visibleButtons).not.toContain('workbench');
+
+      const ellipsisButton = Array.from(breadcrumb!.querySelectorAll('button'))
+        .find((node) => node.closest('[aria-hidden="true"]') === null && node.textContent?.trim() === '…') as HTMLButtonElement | undefined;
+      await clickDropdownMenuItem(ellipsisButton, 'workbench');
+      expect(onNavigateDirectory).toHaveBeenCalledWith('desktop/workbench');
     } finally {
       dispose();
     }

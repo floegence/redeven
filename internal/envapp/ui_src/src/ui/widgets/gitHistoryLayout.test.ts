@@ -256,6 +256,7 @@ describe('browser workspace layout wiring', () => {
   it('keeps overview and changes panels on the same compact vertical rhythm', () => {
     const overviewSrc = read('./GitOverviewPanel.tsx');
     const changesSrc = read('./GitChangesPanel.tsx');
+    const changesHeaderLayoutSrc = read('./gitChangesHeaderLayout.ts');
     const primitivesSrc = read('./GitWorkbenchPrimitives.tsx');
 
     expect(overviewSrc).toContain('Workspace Summary');
@@ -274,12 +275,26 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('Status');
     expect(changesSrc).toContain('GitCommitDialog');
     expect(changesSrc).toContain('GitDiffDialog');
+    expect(changesSrc).toContain('GitChangesBreadcrumb');
+    expect(changesSrc).toContain('resolveGitChangesHeaderDensity');
+    expect(changesSrc).toContain('buildGitChangesHeaderPresentation');
+    expect(changesSrc).toContain('Dropdown');
+    expect(changesSrc).toContain('MoreHorizontal');
+    expect(changesSrc).toContain('data-git-changes-header-density');
+    expect(changesSrc).toContain('line-clamp-2');
     expect(changesSrc).toContain('GIT_CHANGED_FILES_TABLE_CLASS');
     expect(changesSrc).toContain('GitChangedFilesActionButton');
-    expect(changesSrc).toContain('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between');
-    expect(changesSrc).toContain('flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:flex-col lg:items-end lg:justify-start');
-    expect(changesSrc).toContain('grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end');
+    expect(changesSrc).toContain("'grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start'");
+    expect(changesSrc).toContain("'grid gap-2 grid-cols-[minmax(0,1fr)_auto] items-start'");
+    expect(changesSrc).toContain("'flex flex-wrap items-center justify-end gap-2'");
+    expect(changesSrc).toContain("'flex min-w-0 flex-wrap items-center gap-2'");
+    expect(changesSrc).toContain("'flex min-w-0 flex-wrap items-center gap-1.5'");
     expect(changesSrc).toContain('min-w-[34rem] sm:min-w-[42rem] md:min-w-0');
+    expect(changesHeaderLayoutSrc).toContain("export type GitChangesHeaderDensity = 'comfortable' | 'compact' | 'collapsed'");
+    expect(changesHeaderLayoutSrc).toContain('GIT_CHANGES_HEADER_COMPACT_MIN_WIDTH = 620');
+    expect(changesHeaderLayoutSrc).toContain('GIT_CHANGES_HEADER_COMFORTABLE_MIN_WIDTH = 860');
+    expect(changesHeaderLayoutSrc).toContain('resolveGitChangesBreadcrumbLayout');
+    expect(changesHeaderLayoutSrc).toContain('buildGitChangesHeaderPresentation');
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEAD_CLASS = 'sticky top-0 z-10 bg-muted/30 backdrop-blur';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';");
@@ -292,6 +307,8 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain("return <div class={cn('break-words text-[13px] font-bold leading-5 tracking-tight text-foreground', props.class)}>{props.children}</div>;");
     expect(primitivesSrc).toContain("sticky right-0 z-10 border-l bg-muted/40 px-2.5 py-1 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)]");
     expect(changesSrc).not.toContain('border-b border-border/70 px-3 py-2');
+    expect(changesSrc).not.toContain('flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between');
+    expect(changesSrc).not.toContain('grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end');
     expect(changesSrc).not.toContain('text-[24px] font-semibold tracking-tight');
   });
 
@@ -496,11 +513,13 @@ describe('browser workspace layout wiring', () => {
   it('keeps git empty-state copy aligned with the compact review language', () => {
     const overviewSrc = read('./GitOverviewPanel.tsx');
     const changesSrc = read('./GitChangesPanel.tsx');
+    const changesHeaderLayoutSrc = read('./gitChangesHeaderLayout.ts');
     const branchesSrc = read('./GitBranchesPanel.tsx');
     const historySrc = read('./GitHistoryBrowser.tsx');
 
     expect(changesSrc).toContain('No staged files yet. Stage files from the pending sections, then open the commit dialog.');
     expect(changesSrc).toContain('No pending files in this repository.');
+    expect(changesHeaderLayoutSrc).toContain("'No pending changes'");
     expect(changesSrc).not.toContain('Choose a file from the staged or pending lists to inspect its patch.');
 
     expect(overviewSrc).toContain('Choose a branch from the sidebar to load compare context.');
