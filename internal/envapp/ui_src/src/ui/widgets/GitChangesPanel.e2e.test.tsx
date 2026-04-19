@@ -1010,6 +1010,9 @@ describe('GitChangesPanel interactions', () => {
       expect(host.querySelector('button[aria-label="Terminal"]')).toBeTruthy();
       expect(host.querySelector('button[aria-label="Files"]')).toBeTruthy();
       expect(Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Stash...'))).toBeTruthy();
+      expect(host.querySelector('[data-git-changes-header-actions="inline"]')).toBeTruthy();
+      expect(host.querySelector('[data-git-changes-header-actions="separate"]')).toBeNull();
+      expect(host.querySelector('nav[aria-label="Breadcrumb"]')).toBeNull();
     } finally {
       dispose();
     }
