@@ -1,6 +1,7 @@
 import { createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 
 import { startWorkbenchHotInteraction } from './workbenchHotInteraction';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR } from './workbenchWheelInteractive';
 import { resolveWorkbenchSurfaceTargetRole, resolveWorkbenchWheelRouting } from './workbenchInputRouting';
 
 const DEFAULT_SCALE = 1;
@@ -35,6 +36,7 @@ export interface RedevenInfiniteCanvasProps {
   contentClass?: string;
   interactiveSelector?: string;
   panSurfaceSelector?: string;
+  wheelInteractiveSelector?: string;
   minScale?: number;
   maxScale?: number;
   wheelZoomSpeed?: number;
@@ -83,6 +85,8 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
   const interactiveSelector = () =>
     props.interactiveSelector ?? '[data-floe-canvas-interactive="true"]';
   const panSurfaceSelector = () => props.panSurfaceSelector ?? DEFAULT_PAN_SURFACE_SELECTOR;
+  const wheelInteractiveSelector = () =>
+    props.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR;
   const minScale = () => props.minScale ?? DEFAULT_MIN_SCALE;
   const maxScale = () => props.maxScale ?? DEFAULT_MAX_SCALE;
   const wheelZoomSpeed = () => props.wheelZoomSpeed ?? DEFAULT_WHEEL_ZOOM_SPEED;
@@ -290,8 +294,7 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
     const routing = resolveWorkbenchWheelRouting({
       target: event.target,
       disablePanZoom: !!props.disablePanZoom,
-      interactiveSelector: interactiveSelector(),
-      panSurfaceSelector: panSurfaceSelector(),
+      wheelInteractiveSelector: wheelInteractiveSelector(),
     });
     if (routing.kind !== 'canvas_zoom') {
       return;

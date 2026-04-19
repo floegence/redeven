@@ -1,10 +1,14 @@
 import {
+  DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
   resolveSurfaceInteractionTargetRole,
   resolveWorkbenchWidgetEventOwnership,
   WORKBENCH_WIDGET_SHELL_ATTR,
   type SurfaceInteractionTargetRole,
   type WorkbenchWidgetEventOwnership,
 } from '@floegence/floe-webapp-core/ui';
+import {
+  REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
+} from './workbenchWheelInteractive';
 
 export const REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR = 'data-redeven-workbench-surface-root';
 export const REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR = 'data-redeven-workbench-widget-root';
@@ -22,6 +26,10 @@ export type WorkbenchCanvasOwnerReason =
   | 'widget_removed';
 
 export type WorkbenchWidgetOwnerReason = 'pointer' | 'focus' | 'activation';
+export type WorkbenchWheelLocalReason =
+  | 'typing_element'
+  | 'local_interaction_surface'
+  | 'wheel_interactive';
 
 export type WorkbenchInputOwner =
   | { kind: 'canvas'; reason: WorkbenchCanvasOwnerReason }
@@ -29,8 +37,8 @@ export type WorkbenchInputOwner =
 
 export type WorkbenchWheelRoutingDecision =
   | { kind: 'canvas_zoom' }
-  | { kind: 'local_surface' }
-  | { kind: 'ignore' };
+  | { kind: 'local_surface'; reason: WorkbenchWheelLocalReason }
+  | { kind: 'ignore'; reason: 'pan_zoom_disabled' };
 
 export const INITIAL_WORKBENCH_INPUT_OWNER: WorkbenchInputOwner = {
   kind: 'canvas',
@@ -141,15 +149,30 @@ export function resolveRedevenWorkbenchWidgetEventOwnership(args: {
 export function resolveWorkbenchWheelRouting(args: {
   target: EventTarget | null;
   disablePanZoom: boolean;
-  interactiveSelector: string;
-  panSurfaceSelector: string;
+  wheelInteractiveSelector?: string;
 }): WorkbenchWheelRoutingDecision {
-  const targetRole = resolveWorkbenchSurfaceTargetRole(args);
-  if (targetRole !== 'canvas') {
-    return { kind: 'local_surface' };
+  const element = args.target instanceof Element ? args.target : null;
+  if (element) {
+    if (isTypingElement(element)) {
+      return { kind: 'local_surface', reason: 'typing_element' };
+    }
+
+    if (element.closest(DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR) !== null) {
+      return { kind: 'local_surface', reason: 'local_interaction_surface' };
+    }
+
+    if (
+      element.closest(
+        args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR
+      ) !== null
+    ) {
+      return { kind: 'local_surface', reason: 'wheel_interactive' };
+    }
   }
 
-  return args.disablePanZoom ? { kind: 'ignore' } : { kind: 'canvas_zoom' };
+  return args.disablePanZoom
+    ? { kind: 'ignore', reason: 'pan_zoom_disabled' }
+    : { kind: 'canvas_zoom' };
 }
 
 export function shouldBypassWorkbenchGlobalHotkeys(args: {

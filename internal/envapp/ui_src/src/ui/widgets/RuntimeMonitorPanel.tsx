@@ -18,6 +18,7 @@ import {
   getMonitorProcessMemoryUsagePresentation,
 } from '../utils/monitorProcessUsageTone';
 import { isPermissionDeniedError } from '../utils/permission';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 
@@ -557,7 +558,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const inactiveSortClass = 'text-muted-foreground hover:text-foreground hover:bg-muted/50';
 
   return (
-    <div class={containerClass()}>
+    <div {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS} class={containerClass()}>
       <Show
         when={!noExecute()}
         fallback={

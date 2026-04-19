@@ -22,6 +22,7 @@ import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitc
 import { useFileBrowserTypeToFilter } from './fileBrowserTypeToFilter';
 import { resolveFileBrowserToolbarLayout } from './fileBrowserPathLayout';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { formatFileBrowserPathInputValue, parseFileBrowserPathInput } from '../utils/fileBrowserPathInput';
 import {
   mapContextMenuCallbacksToAbsolute,
@@ -449,6 +450,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
             ref={(el) => {
               treeScrollEl = el;
             }}
+            {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
             data-testid="file-tree-scroll-region"
             class="min-h-0 flex-1 overflow-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
           >
@@ -496,6 +498,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               contentScrollEl = el;
               browser.setScrollContainer(el);
             }}
+            {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
             data-testid="file-browser-content-scroll-region"
             class="min-h-0 flex-1 overflow-auto bg-background"
             onContextMenu={handleWorkspaceBackgroundContextMenu}
