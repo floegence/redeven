@@ -1,6 +1,10 @@
 import { createEffect, createMemo, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { FloatingWindow, type FloatingWindowProps } from '@floegence/floe-webapp-core/ui';
+import {
+  FloatingWindow,
+  LOCAL_INTERACTION_SURFACE_ATTR,
+  type FloatingWindowProps,
+} from '@floegence/floe-webapp-core/ui';
 import { readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 
 type PersistentFloatingWindowRect = Readonly<{
@@ -103,6 +107,29 @@ function findGeometryRootForMarker(markerClass: string): HTMLElement | null {
 
 export type PersistentFloatingWindowSurfaceRef = (element: HTMLElement | null) => void;
 
+type PersistentFloatingWindowDomBinding = Readonly<{
+  geometryRoot: HTMLElement | null;
+  interactionSurface: HTMLElement | null;
+}>;
+
+function findInteractionSurfaceForMarker(markerClass: string): HTMLElement | null {
+  const marker = document.querySelector(`.${markerClass}`);
+  return marker instanceof HTMLElement ? marker : null;
+}
+
+function resolvePersistentFloatingWindowDomBinding(markerClass: string): PersistentFloatingWindowDomBinding {
+  return {
+    geometryRoot: findGeometryRootForMarker(markerClass),
+    interactionSurface: findInteractionSurfaceForMarker(markerClass),
+  };
+}
+
+function applyLocalInteractionSurfaceContract(binding: PersistentFloatingWindowDomBinding): void {
+  for (const element of [binding.geometryRoot, binding.interactionSurface]) {
+    element?.setAttribute(LOCAL_INTERACTION_SURFACE_ATTR, 'true');
+  }
+}
+
 export interface PersistentFloatingWindowProps extends FloatingWindowProps {
   persistenceKey?: string;
   contentClass?: string;
@@ -119,6 +146,36 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       return null;
     }
     return readPersistentRect(key);
+  });
+
+  createEffect(() => {
+    if (!props.open || typeof document === 'undefined') {
+      return;
+    }
+
+    let disposed = false;
+    let cancelBind: (() => void) | null = null;
+
+    const bindSurfaceContract = () => {
+      if (disposed) {
+        return;
+      }
+
+      const binding = resolvePersistentFloatingWindowDomBinding(markerClass);
+      if (!binding.geometryRoot || !binding.interactionSurface) {
+        cancelBind = scheduleAfterFrame(bindSurfaceContract);
+        return;
+      }
+
+      applyLocalInteractionSurfaceContract(binding);
+    };
+
+    bindSurfaceContract();
+
+    onCleanup(() => {
+      disposed = true;
+      cancelBind?.();
+    });
   });
 
   createEffect(() => {
@@ -208,7 +265,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
       if (disposed) {
         return;
       }
-      const root = findGeometryRootForMarker(markerClass);
+      const root = resolvePersistentFloatingWindowDomBinding(markerClass).geometryRoot;
       if (!root) {
         cancelBind = scheduleAfterFrame(bindSurface);
         return;

@@ -5,12 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createUIStorageAdapter, readUIStorageJSON, removeUIStorageItem, writeUIStorageJSON } from '../services/uiStorage';
 import { PersistentFloatingWindow, floatingWindowStorageKey } from './PersistentFloatingWindow';
+import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  LOCAL_INTERACTION_SURFACE_ATTR: 'data-floe-local-interaction-surface',
   FloatingWindow: (props: any) => (
     props.open ? (
       <div
@@ -26,7 +28,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
           height: `${props.defaultSize?.height ?? 300}px`,
         }}
       >
-        <div class={props.class}>
+        <div data-testid="floating-surface" class={props.class}>
           <div data-testid="floating-titlebar">{props.title}</div>
           <div data-testid="floating-content">{props.children}</div>
           {props.footer ? <div data-testid="floating-footer">{props.footer}</div> : null}
@@ -159,5 +161,25 @@ describe('PersistentFloatingWindow', () => {
     const root = host.querySelector('[data-testid="floating-root"]') as HTMLDivElement | null;
     expect(root).toBeTruthy();
     expect(surfaceRef).toHaveBeenCalledWith(root);
+  });
+
+  it('marks both the geometry root and the visible floating surface as local interaction surfaces', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <PersistentFloatingWindow open onOpenChange={() => undefined} title="Demo" persistenceKey="demo">
+        <div>content</div>
+      </PersistentFloatingWindow>
+    ), host);
+
+    await Promise.resolve();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+
+    const root = host.querySelector('[data-testid="floating-root"]') as HTMLDivElement | null;
+    const surface = host.querySelector('[data-testid="floating-surface"]') as HTMLDivElement | null;
+    expect(root?.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
+    expect(surface?.getAttribute(LOCAL_INTERACTION_SURFACE_ATTR)).toBe('true');
   });
 });
