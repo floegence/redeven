@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createContext } from 'solid-js';
+import { createContext, useContext } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -59,6 +59,23 @@ const setSidebarActiveTabMock = vi.fn((tab: string) => {
   sidebarActiveTabValue = tab;
 });
 const setSidebarCollapsedMock = vi.fn();
+const EnvContextMock = createContext({} as any);
+
+function MockDisplayModeSurface(props: Readonly<{ testId: string }>) {
+  const env = useContext(EnvContextMock as any) as {
+    connectionOverlayVisible?: () => boolean;
+    connectionOverlayMessage?: () => string;
+  } | undefined;
+  const overlayVisible = Boolean(env?.connectionOverlayVisible?.());
+  const overlayMessage = String(env?.connectionOverlayMessage?.() ?? '');
+
+  return (
+    <div>
+      <div data-testid={props.testId} />
+      {overlayVisible ? <div data-testid={`${props.testId}-overlay`}>{overlayMessage}</div> : null}
+    </div>
+  );
+}
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
@@ -300,8 +317,8 @@ vi.mock('./accessResume', () => ({
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
-vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div data-testid="deck-page" /> }));
-vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <div data-testid="workbench-page" /> }));
+vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <MockDisplayModeSurface testId="deck-page" /> }));
+vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <MockDisplayModeSurface testId="workbench-page" /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
@@ -332,7 +349,7 @@ vi.mock('./services/gatewayApi', () => ({
   unlockGatewayAccess: unlockGatewayAccessMock,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
-vi.mock('./pages/EnvContext', () => ({ EnvContext: createContext({}) }));
+vi.mock('./pages/EnvContext', () => ({ EnvContext: EnvContextMock }));
 vi.mock('./pages/AIChatContext', () => ({
   AIChatContext: createContext({}),
   createAIChatContextValue: () => ({}),
@@ -346,6 +363,18 @@ async function flushAsync(): Promise<void> {
     return;
   }
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function flushUntil(predicate: () => boolean, attempts = 12): Promise<void> {
+  for (let index = 0; index < attempts; index += 1) {
+    if (predicate()) {
+      return;
+    }
+    await flushAsync();
+  }
+  if (!predicate()) {
+    throw new Error('Condition did not become true in time.');
+  }
 }
 
 function deferred<T>() {
@@ -950,14 +979,17 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(findButtonByText(host, 'Retry now')).toBeTruthy();
+      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="deck-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
+      expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(12_000);
-      await flushAsync();
+      await flushUntil(() => reconnectMock.mock.calls.length === 1);
 
       expect(getLocalAccessStatusMock.mock.calls.length).toBeGreaterThanOrEqual(3);
       expect(reconnectMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.textContent).not.toContain('Waiting for runtime...');
     } finally {
       dispose();
     }
@@ -986,10 +1018,11 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(findButtonByText(host, 'Retry now')).toBeTruthy();
+      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="deck-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
 
       await vi.advanceTimersByTimeAsync(12_000);
-      await flushAsync();
+      await flushUntil(() => host.textContent?.includes('Unlock local runtime') ?? false);
 
       expect(host.textContent).toContain('Unlock local runtime');
       expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
@@ -1151,9 +1184,11 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       expect(host.textContent).toContain('Timed out while preparing the secure session');
-      expect(findButtonByText(host, 'Retry connection')?.disabled).toBe(false);
+      const retryButton = findButtonByText(host, 'Retry connection');
+      expect(retryButton).toBeTruthy();
+      expect(retryButton?.disabled).toBe(false);
       expect(findButtonByText(host, 'Reload page')).toBeTruthy();
-      expect(Array.from(host.querySelectorAll('button')).filter((node) => node.textContent?.includes('Retry connection')).length).toBeGreaterThanOrEqual(2);
+      expect(Array.from(host.querySelectorAll('button')).filter((node) => node.textContent?.includes('Retry connection')).length).toBe(1);
 
       findButtonByText(host, 'Reload page')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(reloadCurrentPageMock).toHaveBeenCalledTimes(1);
@@ -1206,15 +1241,15 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       expect(connectMock).toHaveBeenCalledTimes(1);
-      expect(findButtonByText(host, 'Retry connection')?.disabled).toBe(false);
-
-      const retryButtons = Array.from(host.querySelectorAll('button')).filter((node) => node.textContent?.includes('Retry connection')) as HTMLButtonElement[];
-      expect(retryButtons.length).toBeGreaterThanOrEqual(2);
-      retryButtons[retryButtons.length - 1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      const retryButton = findButtonByText(host, 'Retry connection');
+      expect(retryButton).toBeTruthy();
+      expect(retryButton?.disabled).toBe(false);
+      retryButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
       await Promise.resolve();
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(0);
+      await flushUntil(() => connectMock.mock.calls.length === 2);
 
       expect(disconnectMock).toHaveBeenCalled();
       expect(connectMock).toHaveBeenCalledTimes(2);
@@ -1469,7 +1504,9 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(findButtonByText(host, 'Retry now')).toBeTruthy();
+      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="deck-page-overlay"]')?.textContent).toBe('Connecting to runtime...');
+      expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(2_000);
       await flushAsync();
@@ -1478,7 +1515,7 @@ describe('EnvAppShell remote access gate', () => {
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(3_000);
-      await flushAsync();
+      await flushUntil(() => reconnectMock.mock.calls.length === 1);
 
       expect(reconnectMock).toHaveBeenCalledTimes(1);
       expect(protocolStatus).toBe('connected');
@@ -1500,26 +1537,24 @@ describe('EnvAppShell remote access gate', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushAsync();
-      await flushAsync();
-      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="deck-page"]')), 40);
 
       expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
 
       findButtonByText(host, 'Activity')?.click();
-      await flushAsync();
+      await flushUntil(() => host.textContent?.includes('activity main') ?? false);
 
       expect(host.textContent).toContain('activity main');
       expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
 
       findButtonByText(host, 'Deck')?.click();
-      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="deck-page"]')));
 
       expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
 
       findButtonByText(host, 'Workbench')?.click();
-      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')));
 
       expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();

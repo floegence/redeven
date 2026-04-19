@@ -2,7 +2,7 @@
 
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvContext } from '../pages/EnvContext';
 import { CodexPage } from './CodexPage';
@@ -361,12 +361,53 @@ function renderSurface(host: HTMLDivElement) {
   };
 }
 
+function resetSidebarTestMocks(): void {
+  fetchCodexStatusMock.mockReset();
+  fetchCodexCapabilitiesMock.mockReset();
+  listCodexThreadsMock.mockReset();
+  openCodexThreadMock.mockReset();
+  startCodexThreadMock.mockReset();
+  startCodexTurnMock.mockReset();
+  steerCodexTurnMock.mockReset();
+  archiveCodexThreadMock.mockReset();
+  unarchiveCodexThreadMock.mockReset();
+  forkCodexThreadMock.mockReset();
+  interruptCodexTurnMock.mockReset();
+  startCodexReviewMock.mockReset();
+  respondToCodexRequestMock.mockReset();
+  connectCodexEventStreamMock.mockReset();
+  markCodexThreadReadMock.mockReset();
+  rpcMocks.fs.list.mockReset();
+  fileBrowserSurfaceState.open.mockReset();
+  fileBrowserSurfaceState.openBrowser.mockReset();
+  notification.success.mockReset();
+  notification.error.mockReset();
+  notification.info.mockReset();
+
+  markCodexThreadReadMock.mockImplementation(async (args: any) => ({
+    is_unread: false,
+    snapshot: {
+      updated_at_unix_s: Math.max(0, Math.floor(Number(args?.snapshot?.updated_at_unix_s ?? 0) || 0)),
+      activity_signature: String(args?.snapshot?.activity_signature ?? '').trim() || undefined,
+    },
+    read_state: {
+      last_read_updated_at_unix_s: Math.max(0, Math.floor(Number(args?.snapshot?.updated_at_unix_s ?? 0) || 0)),
+      last_seen_activity_signature: String(args?.snapshot?.activity_signature ?? '').trim() || undefined,
+    },
+  }));
+}
+
+beforeEach(() => {
+  resetSidebarTestMocks();
+});
+
 afterEach(() => {
   document.body.innerHTML = '';
   desktopStorageState.clear();
   animationFrameCallbacks.clear();
   nextAnimationFrameHandle = 1;
-  vi.clearAllMocks();
+  requestAnimationFrameMock.mockClear();
+  cancelAnimationFrameMock.mockClear();
   vi.useRealTimers();
 });
 
