@@ -47,7 +47,8 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
-import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
+import { PreviewWindow } from './PreviewWindow';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 export type { GitStashReviewState } from '../utils/gitStashReview';
 
@@ -58,7 +59,7 @@ type StashPatchErrorState = {
 
 type StashActionTooltipKey = 'apply' | 'applyRemove' | 'delete';
 
-const STASH_DIFF_DIALOG_Z_INDEX = PREVIEW_WINDOW_Z_INDEX + 10;
+const STASH_DIFF_DIALOG_Z_INDEX = ENV_APP_FLOATING_LAYER.floatingWindowModal;
 const STASH_ACTION_TOOLTIP_COPY: Record<StashActionTooltipKey, string> = {
   apply: 'Review and apply this stash to the current workspace. After confirmation, the stash entry stays available.',
   applyRemove: 'Review and apply this stash to the current workspace. After a successful confirmation, the stash entry is removed.',

@@ -2,13 +2,14 @@ import { Show, createMemo, createSignal, onCleanup, onMount, type JSX } from 'so
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { PersistentFloatingWindow, type PersistentFloatingWindowSurfaceRef } from './PersistentFloatingWindow';
+import { ENV_APP_FLOATING_LAYER, ENV_APP_FLOATING_LAYER_CLASS } from '../utils/envAppLayers';
 
 const PREVIEW_WINDOW_MARGIN_DESKTOP = 16;
 const PREVIEW_WINDOW_DEFAULT_WIDTH = 1040;
 const PREVIEW_WINDOW_DEFAULT_HEIGHT = 760;
 const PREVIEW_WINDOW_MIN_WIDTH = 420;
 const PREVIEW_WINDOW_MIN_HEIGHT = 320;
-export const PREVIEW_WINDOW_Z_INDEX = 150;
+export const PREVIEW_WINDOW_Z_INDEX = ENV_APP_FLOATING_LAYER.previewWindow;
 
 type ViewportSize = {
   width: number;
@@ -127,14 +128,15 @@ export function PreviewWindow(props: PreviewWindowProps) {
         </PersistentFloatingWindow>
       )}
     >
-      <Dialog
-        open={props.open}
-        onOpenChange={props.onOpenChange}
-        title={props.title}
+        <Dialog
+          open={props.open}
+          onOpenChange={props.onOpenChange}
+          title={props.title}
         description={props.description}
         footer={props.footer}
         class={cn(
-          'z-[150] flex max-w-none flex-col overflow-hidden rounded-md p-0',
+          ENV_APP_FLOATING_LAYER_CLASS.previewWindow,
+          'flex max-w-none flex-col overflow-hidden rounded-md p-0',
           '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
           '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:!overflow-hidden [&>div:nth-child(2)]:!p-0',
           'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none',

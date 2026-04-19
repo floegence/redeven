@@ -57,4 +57,34 @@ describe('WindowModal', () => {
     backdrop?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it('only closes on Escape when focus is inside the current floating host', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const outsideButton = document.createElement('button');
+    document.body.appendChild(outsideButton);
+    const onOpenChange = vi.fn();
+
+    render(() => (
+      <WindowModal
+        open
+        host={host}
+        title="Discard changes"
+        onOpenChange={onOpenChange}
+        footer={<button type="button" data-testid="inside-action">Confirm</button>}
+      />
+    ), document.createElement('div'));
+
+    await Promise.resolve();
+
+    outsideButton.focus();
+    outsideButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    const insideAction = host.querySelector('[data-testid="inside-action"]') as HTMLButtonElement | null;
+    expect(insideAction).toBeTruthy();
+    insideAction?.focus();
+    insideAction?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
 });

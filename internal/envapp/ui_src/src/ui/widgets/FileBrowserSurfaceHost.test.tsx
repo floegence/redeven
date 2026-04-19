@@ -18,6 +18,7 @@ vi.mock('./PersistentFloatingWindow', () => ({
         <div
           data-testid="floating-window"
           data-persistence-key={props.persistenceKey}
+          data-z-index={String(props.zIndex ?? '')}
         >
           <div data-testid="floating-window-title">{String(props.title ?? '')}</div>
           {props.children}
@@ -86,6 +87,8 @@ describe('FileBrowserSurfaceHost', () => {
     await flush();
 
     const firstBrowser = host.querySelector('[data-testid="remote-file-browser"]') as HTMLDivElement | null;
+    const floatingWindow = host.querySelector('[data-testid="floating-window"]') as HTMLDivElement | null;
+    expect(floatingWindow?.getAttribute('data-z-index')).toBe('144');
     expect(firstBrowser?.getAttribute('data-mount-id')).toBe('1');
     expect(firstBrowser?.getAttribute('data-path')).toBe('/workspace');
     expect(firstBrowser?.getAttribute('data-home-path')).toBe('/Users/demo');

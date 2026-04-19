@@ -15,6 +15,7 @@ describe('file preview wiring', () => {
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
     const textPaneSrc = read('./TextFilePreviewPane.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
+    const envAppLayersSrc = read('../utils/envAppLayers.ts');
     const previewWindowSrc = read('./PreviewWindow.tsx');
     const askFlowerComposerSrc = read('./AskFlowerComposerWindow.tsx');
     const codePreviewPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), './CodePreviewPane.tsx');
@@ -83,18 +84,24 @@ describe('file preview wiring', () => {
     expect(surfaceSrc).not.toContain('[&>div:last-child]:!w-full');
     expect(surfaceSrc).not.toContain('[&>div>div:last-child]:!w-full');
 
+    expect(envAppLayersSrc).toContain('fileBrowserSurface: 144');
+    expect(envAppLayersSrc).toContain('previewWindow: 150');
+    expect(envAppLayersSrc).toContain('askFlowerComposer: 160');
+    expect(envAppLayersSrc).toContain("previewWindow: 'z-[150]'");
+
     expect(previewWindowSrc).toContain("import { Dialog } from '@floegence/floe-webapp-core/ui';");
     expect(previewWindowSrc).toContain("from './PersistentFloatingWindow';");
+    expect(previewWindowSrc).toContain("from '../utils/envAppLayers';");
     expect(previewWindowSrc).toContain('layout.isMobile()');
     expect(previewWindowSrc).toContain('<Dialog');
     expect(previewWindowSrc).toContain('<PersistentFloatingWindow');
     expect(previewWindowSrc).toContain('surfaceRef={props.surfaceRef}');
     expect(previewWindowSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(previewWindowSrc).toContain('file-preview-floating-window');
-    expect(previewWindowSrc).toContain('PREVIEW_WINDOW_Z_INDEX = 150');
-    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_COMPOSER_Z_INDEX = PREVIEW_WINDOW_Z_INDEX + 10;');
-    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX = ASK_FLOWER_COMPOSER_Z_INDEX + 1;');
-    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX = ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX + 1;');
+    expect(previewWindowSrc).toContain('PREVIEW_WINDOW_Z_INDEX = ENV_APP_FLOATING_LAYER.previewWindow');
+    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_COMPOSER_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerComposer;');
+    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerContextBrowser;');
+    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerContextPreview;');
     expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_COMPOSER_Z_INDEX}');
     expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX}');
     expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX}');

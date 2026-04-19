@@ -7,8 +7,8 @@ import {
   FLOE_DIALOG_SURFACE_HOST_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
-  isFocusableElement,
-  isTypingElement,
+  WORKBENCH_WIDGET_SHELL_ATTR,
+  resolveRedevenWorkbenchWidgetEventOwnership,
 } from './workbenchInputRouting';
 
 interface LocalDragState {
@@ -49,11 +49,11 @@ export interface RedevenWorkbenchWidgetProps {
   y: number;
   width: number;
   height: number;
-  zIndex: number;
+  renderLayer: number;
   itemSnapshot: () => WorkbenchWidgetItem;
   selected: boolean;
   optimisticFront: boolean;
-  topZIndex: number;
+  topRenderLayer: number;
   viewportScale: number;
   locked: boolean;
   filtered: boolean;
@@ -84,6 +84,20 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
 
   const isDragging = () => dragState() !== null;
   const isResizing = () => resizeState() !== null;
+  const resolveEventOwnership = (target: EventTarget | null) =>
+    resolveRedevenWorkbenchWidgetEventOwnership({
+      target,
+      widgetRoot: widgetRootEl ?? null,
+    });
+  const handlePointerDown: JSX.EventHandler<HTMLElement, PointerEvent> = (event) => {
+    if (event.button !== 0) return;
+
+    props.onSelect(props.widgetId);
+    props.onCommitFront(props.widgetId);
+
+    if (resolveEventOwnership(event.target) !== 'widget_shell') return;
+    widgetRootEl?.focus({ preventScroll: true });
+  };
 
   const livePosition = createMemo(() => {
     const current = dragState();
@@ -257,17 +271,6 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     window.addEventListener('pointercancel', cancel, { once: true, signal: controller.signal });
   };
 
-  const focusWidgetRoot = () => {
-    widgetRootEl?.focus({ preventScroll: true });
-  };
-
-  const shouldFocusWidgetRootFromPointer = (target: EventTarget | null): boolean => {
-    const element = target instanceof Element ? target : null;
-    if (isTypingElement(element)) return false;
-    if (isFocusableElement(element)) return false;
-    return true;
-  };
-
   return (
     <article
       ref={widgetRootEl}
@@ -283,21 +286,15 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       {...{ [REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR]: 'true' }}
       {...{ [REDEVEN_WORKBENCH_WIDGET_ID_ATTR]: props.widgetId }}
       tabIndex={0}
+      onPointerDown={handlePointerDown}
       onFocus={() => {
         props.onSelect(props.widgetId);
       }}
-      onMouseDown={(event) => {
-        if (!shouldFocusWidgetRootFromPointer(event.target)) return;
-        focusWidgetRoot();
-      }}
       onContextMenu={(event) => {
+        if (resolveEventOwnership(event.target) !== 'widget_shell') return;
         event.preventDefault();
         event.stopPropagation();
         props.onContextMenu(event, props.itemSnapshot());
-      }}
-      onClick={() => {
-        props.onSelect(props.widgetId);
-        props.onCommitFront(props.widgetId);
       }}
       style={{
         transform: `translate(${livePosition().x}px, ${livePosition().y}px)`,
@@ -305,11 +302,14 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         height: `${liveSize().height}px`,
         'z-index':
           isDragging() || isResizing() || props.optimisticFront
-            ? `${props.topZIndex + 1}`
-            : `${props.zIndex}`,
+            ? `${props.topRenderLayer + 1}`
+            : `${props.renderLayer}`,
       }}
     >
-      <header class="workbench-widget__header">
+      <header
+        class="workbench-widget__header"
+        {...{ [WORKBENCH_WIDGET_SHELL_ATTR]: 'true' }}
+      >
         <button
           type="button"
           class="workbench-widget__drag"

@@ -9,6 +9,8 @@ Key points:
 - Env details features live here (Deck/Terminal/Monitor/File Browser/Codespaces/Ports/Flower/Codex/Notes overlay).
 - Notes overlay now consumes the released shared floe-webapp Notes surface (`@floegence/floe-webapp-core/notes`); Redeven keeps snapshot fetch, API mutations, SSE projection, and controller glue as the product-owned runtime layer.
 - Desktop view modes now also follow the same upstream-first split: `DisplayModeSwitcher`, `DisplayModePageShell`, `DeckTopBar`, and `WorkbenchSurface` come from released floe-webapp packages, while Redeven only owns environment surface routing, permission gates, persistence wiring, and business widget bodies.
+- Workbench widget interaction ownership is intentionally split: floe-webapp owns the generic shell-vs-local event contract, while Redeven marks only widget header chrome as shell-owned so text selection, component context menus, local dialogs, dropdowns, and floating descendants inside widget bodies stay component-owned.
+- App-level floating windows also follow a product-owned layer contract: Redeven centralizes semantic layer tokens in `src/ui/utils/envAppLayers.ts`, while floe-webapp normalizes workbench widget render layers from persisted `z_index` ordering so long-lived bring-to-front history cannot visually cover cross-widget floating windows.
 - Notes overlay shell integration is also product-owned: Env App measures the shell-safe workspace viewport (the shared sidebar + main surface, excluding top bar / activity bar / bottom bar / terminal panel) and publishes a small body-level CSS geometry contract so the shared Notes overlay plus its body-portal flyouts/backdrops stay inside the actual workspace area instead of the raw desktop window viewport.
 - Notes overlay keyboard ownership is split deliberately: shared floe-webapp Notes now owns note numbering, overlay-wide digit-to-copy capture, copied-state feedback, and related toasts, while Env App forwards only its single shell-owned Notes toggle keybind (`mod+.`) into the shared floating allowlist so the overlay can still close after canvas or note interactions without reopening the rest of the shell hotkey surface.
 - Monitor `Top Processes` severity coloring is semantic and threshold-driven: CPU uses muted/success/warning/error tiers at `<20`, `20-49.9`, `50-99.9`, and `>=100`, while memory uses muted/success/warning tiers at `<1 GiB`, `1-9.9 GiB`, and `>=10 GiB`.
@@ -102,6 +104,16 @@ Env App now exposes a product-owned **Notes overlay** that floats above the curr
   - `DELETE /_redeven_proxy/api/notes/trash/items/:note_id` permanently removes one trashed note and emits `item.removed`.
   - `DELETE /_redeven_proxy/api/notes/trash/topics/:topic_id` clears all trashed notes for one topic and emits `trash.topic_cleared`.
   - When the last trashed note of a deleted topic is permanently removed, the runtime removes that deleted topic row as part of the same ordered event flow.
+
+## Workbench surface ownership
+
+Deck and Workbench reuse released floe-webapp layout/workbench primitives, but Redeven still owns the business-widget interaction boundary.
+
+- Widget shell chrome is explicit. `RedevenWorkbenchWidget` only marks header chrome with `WORKBENCH_WIDGET_SHELL_ATTR`, so shell focus and workbench context-menu interception happen only from shell-owned affordances instead of the entire widget subtree.
+- Widget bodies are local interaction surfaces. Pointer, wheel, context-menu, and backdrop routing yield to `data-floe-local-interaction-surface="true"` descendants, so component-owned selection, menus, dialogs, and floating descendants keep their own interaction model without auto-closing when another widget is clicked.
+- Keyboard dismissal stays focus-scoped. `Escape` may close a local dialog/modal only when focus currently lives inside that widget-owned host boundary; it must not broadcast across unrelated widgets or global surfaces.
+- Workbench persistence order and CSS stacking stay separated. Persisted `z_index` remains the long-lived ordering key in workbench state, while rendering consumes floe-webapp's normalized dense render layers so app-owned floating surfaces can keep stable semantic layers above widgets even after many bring-to-front operations.
+- App-owned floating surfaces such as Preview, File Browser, Ask Flower, stash confirmations, runtime update prompts, and Debug Console must use the centralized `ENV_APP_FLOATING_LAYER` contract instead of raw per-file `z-index` literals.
 
 ## Accessibility baseline
 

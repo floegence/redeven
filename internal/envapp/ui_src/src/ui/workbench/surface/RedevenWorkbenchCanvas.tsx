@@ -1,5 +1,6 @@
 import { For, createMemo } from 'solid-js';
 import {
+  createWorkbenchRenderLayerMap,
   getWidgetEntry,
   type WorkbenchViewport,
   type WorkbenchWidgetDefinition,
@@ -19,7 +20,6 @@ export interface RedevenWorkbenchCanvasProps {
   viewport: WorkbenchViewport;
   selectedWidgetId: string | null;
   optimisticFrontWidgetId: string | null;
-  topZIndex: number;
   locked: boolean;
   filters: Record<WorkbenchWidgetType, boolean>;
   setCanvasFrameRef: (el: HTMLDivElement | undefined) => void;
@@ -38,9 +38,9 @@ interface RedevenWorkbenchCanvasWidgetSlotProps {
   widgetId: string;
   widgetDefinitions: readonly WorkbenchWidgetDefinition[];
   widgetById: () => Map<string, WorkbenchWidgetItem>;
+  renderLayers: () => ReturnType<typeof createWorkbenchRenderLayerMap>;
   selectedWidgetId: string | null;
   optimisticFrontWidgetId: string | null;
-  topZIndex: number;
   viewportScale: number;
   locked: boolean;
   filters: Record<WorkbenchWidgetType, boolean>;
@@ -72,11 +72,11 @@ function RedevenWorkbenchCanvasWidgetSlot(props: RedevenWorkbenchCanvasWidgetSlo
       y={item().y}
       width={item().width}
       height={item().height}
-      zIndex={item().z_index}
+      renderLayer={props.renderLayers().byWidgetId.get(props.widgetId) ?? 1}
       itemSnapshot={item}
       selected={props.selectedWidgetId === props.widgetId}
       optimisticFront={props.optimisticFrontWidgetId === props.widgetId}
-      topZIndex={props.topZIndex}
+      topRenderLayer={props.renderLayers().topRenderLayer}
       viewportScale={props.viewportScale}
       locked={props.locked}
       filtered={!props.filters[item().type]}
@@ -94,6 +94,7 @@ function RedevenWorkbenchCanvasWidgetSlot(props: RedevenWorkbenchCanvasWidgetSlo
 export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
   const widgetIds = createMemo(() => props.widgets.map((item) => item.id));
   const widgetById = createMemo(() => new Map(props.widgets.map((item) => [item.id, item] as const)));
+  const renderLayers = createMemo(() => createWorkbenchRenderLayerMap(props.widgets));
 
   return (
     <div
@@ -118,9 +119,9 @@ export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
                 widgetId={widgetId}
                 widgetDefinitions={props.widgetDefinitions}
                 widgetById={widgetById}
+                renderLayers={renderLayers}
                 selectedWidgetId={props.selectedWidgetId}
                 optimisticFrontWidgetId={props.optimisticFrontWidgetId}
-                topZIndex={props.topZIndex}
                 viewportScale={props.viewport.scale}
                 locked={props.locked}
                 filters={props.filters}

@@ -6,8 +6,7 @@ import {
 import { useFileBrowserSurfaceContext } from './FileBrowserSurfaceContext';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
-
-const FILE_BROWSER_SURFACE_Z_INDEX = 44;
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 export function FileBrowserSurfaceHost() {
   const fileBrowserSurface = useFileBrowserSurfaceContext();
@@ -20,7 +19,7 @@ export function FileBrowserSurfaceHost() {
       persistenceKey={fileBrowserSurface.controller.surface()?.persistenceKey ?? DEFAULT_FILE_BROWSER_SURFACE_PERSISTENCE_KEY}
       defaultSize={{ width: 760, height: 580 }}
       minSize={{ width: 420, height: 320 }}
-      zIndex={FILE_BROWSER_SURFACE_Z_INDEX}
+      zIndex={ENV_APP_FLOATING_LAYER.fileBrowserSurface}
     >
       <div class="h-full min-h-0 overflow-hidden bg-background">
         <Show when={fileBrowserSurface.controller.surface()} keyed>
