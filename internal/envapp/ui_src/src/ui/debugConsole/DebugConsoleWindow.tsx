@@ -1,4 +1,5 @@
 import { For, Index, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
+import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { SettingsPill } from '../pages/settings/SettingsPrimitives';
@@ -9,6 +10,7 @@ import {
   type DiagnosticsSummaryItem,
 } from '../services/diagnosticsApi';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
+import { ENV_APP_FLOATING_LAYER, ENV_APP_FLOATING_LAYER_CLASS } from '../utils/envAppLayers';
 import type { DebugConsoleController, DebugConsoleTrace } from './createDebugConsoleController';
 
 type DebugConsoleTab = 'requests' | 'traces' | 'ui' | 'runtime' | 'export';
@@ -1271,7 +1273,10 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
       <Show when={props.controller.enabled() && props.controller.minimized()}>
         <button
           type="button"
-          class="fixed bottom-4 right-4 z-[145] inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25"
+          class={cn(
+            'fixed bottom-4 right-4 inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25',
+            ENV_APP_FLOATING_LAYER_CLASS.debugConsole,
+          )}
           onClick={props.controller.restore}
           style={semanticInteractiveStyle(props.controller.streamConnected() ? 'success' : 'warning', 'strong')}
         >
@@ -1298,7 +1303,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
           minSize={{ width: 760, height: 520 }}
           class="debug-console-window border-border/80 shadow-[0_38px_92px_-56px_rgba(15,23,42,0.56)]"
           contentClass="!p-0"
-          zIndex={145}
+          zIndex={ENV_APP_FLOATING_LAYER.debugConsole}
           footer={<DebugConsoleFooter controller={props.controller} />}
         >
           <DebugConsolePanel

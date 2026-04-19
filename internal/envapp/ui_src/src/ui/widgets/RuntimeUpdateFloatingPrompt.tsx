@@ -3,6 +3,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { Refresh, X } from '@floegence/floe-webapp-core/icons';
 
 import type { RuntimeUpdatePromptMode } from '../maintenance/createRuntimeUpdatePromptCoordinator';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
 
 const WINDOW_MARGIN_DESKTOP = 16;
@@ -144,7 +145,7 @@ export function RuntimeUpdateFloatingPrompt(props: RuntimeUpdateFloatingPromptPr
         minSize={{ width: width(), height: WINDOW_HEIGHT }}
         maxSize={{ width: width(), height: WINDOW_HEIGHT }}
         class="runtime-update-floating-prompt"
-        zIndex={140}
+        zIndex={ENV_APP_FLOATING_LAYER.runtimeUpdatePrompt}
         footer={footer()}
       >
         <div class="flex h-full min-h-0 flex-col gap-4 px-1 py-1">

@@ -48,6 +48,18 @@ const widgetDefinitions: readonly WorkbenchWidgetDefinition[] = [
   },
 ];
 
+function dispatchPointerDown(target: EventTarget): void {
+  const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+  const event = new EventCtor('pointerdown', {
+    bubbles: true,
+    button: 0,
+  });
+  if (!('pointerId' in event)) {
+    Object.defineProperty(event, 'pointerId', { configurable: true, value: 1 });
+  }
+  target.dispatchEvent(event);
+}
+
 function createInitialState(): WorkbenchState {
   return {
     version: 1,
@@ -60,7 +72,7 @@ function createInitialState(): WorkbenchState {
         y: 24,
         width: 360,
         height: 240,
-        z_index: 1,
+        z_index: 42,
         created_at_unix_ms: 1,
       },
       {
@@ -71,7 +83,7 @@ function createInitialState(): WorkbenchState {
         y: 64,
         width: 360,
         height: 240,
-        z_index: 2,
+        z_index: 420,
         created_at_unix_ms: 2,
       },
     ],
@@ -111,7 +123,6 @@ function renderCanvasHarness(host: HTMLDivElement) {
         viewport={state().viewport}
         selectedWidgetId={state().selectedWidgetId}
         optimisticFrontWidgetId={null}
-        topZIndex={topZIndex()}
         locked={state().locked}
         filters={state().filters}
         setCanvasFrameRef={() => {}}
@@ -186,7 +197,7 @@ describe('RedevenWorkbenchCanvas widget instance identity', () => {
 
     const widget = host.querySelector('[data-floe-workbench-widget-id="widget-primary"]') as HTMLElement | null;
     expect(widget).toBeTruthy();
-    widget!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    dispatchPointerDown(widget!);
     await Promise.resolve();
 
     expect(bodyLifecycle.mounts.get('widget-primary')).toBe(1);
@@ -211,6 +222,21 @@ describe('RedevenWorkbenchCanvas widget instance identity', () => {
 
     expect(bodyLifecycle.mounts.get('widget-primary')).toBe(1);
     expect(bodyLifecycle.cleanups.get('widget-primary') ?? 0).toBe(0);
+
+    dispose();
+  });
+
+  it('renders normalized widget layers instead of leaking persisted z-index values', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { dispose } = renderCanvasHarness(host);
+    await Promise.resolve();
+
+    const primaryWidget = host.querySelector('[data-floe-workbench-widget-id="widget-primary"]') as HTMLElement | null;
+    const secondaryWidget = host.querySelector('[data-floe-workbench-widget-id="widget-secondary"]') as HTMLElement | null;
+    expect(primaryWidget?.style.zIndex).toBe('1');
+    expect(secondaryWidget?.style.zIndex).toBe('2');
 
     dispose();
   });

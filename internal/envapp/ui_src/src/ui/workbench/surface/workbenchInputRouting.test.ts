@@ -7,8 +7,10 @@ import {
   INITIAL_WORKBENCH_INPUT_OWNER,
   REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
+  WORKBENCH_WIDGET_SHELL_ATTR,
   createWidgetInputOwner,
   focusWorkbenchWidgetElement,
+  resolveRedevenWorkbenchWidgetEventOwnership,
   resolveWorkbenchSurfaceTargetRole,
   resolveWorkbenchWheelRouting,
   shouldBypassWorkbenchGlobalHotkeys,
@@ -61,6 +63,36 @@ describe('workbenchInputRouting', () => {
       interactiveSelector: '[data-floe-canvas-interactive="true"]',
       panSurfaceSelector: '[data-floe-canvas-pan-surface="true"]',
     })).toEqual({ kind: 'local_surface' });
+  });
+
+  it('distinguishes shell-owned widget chrome from widget-local interaction surfaces', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const header = document.createElement('header');
+    header.setAttribute(WORKBENCH_WIDGET_SHELL_ATTR, 'true');
+    const title = document.createElement('span');
+    header.appendChild(title);
+
+    const body = document.createElement('div');
+    body.setAttribute('data-floe-canvas-interactive', 'true');
+    const button = document.createElement('button');
+    body.appendChild(button);
+
+    widget.appendChild(header);
+    widget.appendChild(body);
+    document.body.appendChild(widget);
+
+    expect(resolveRedevenWorkbenchWidgetEventOwnership({
+      target: title,
+      widgetRoot: widget,
+    })).toBe('widget_shell');
+
+    expect(resolveRedevenWorkbenchWidgetEventOwnership({
+      target: button,
+      widgetRoot: widget,
+    })).toBe('widget_local');
   });
 
   it('keeps blank canvas wheel gestures as canvas zoom when pan/zoom is enabled', () => {

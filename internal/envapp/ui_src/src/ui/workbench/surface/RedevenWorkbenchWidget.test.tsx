@@ -10,6 +10,18 @@ import {
   REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
 } from './workbenchInputRouting';
 
+function dispatchPointerDown(target: EventTarget): void {
+  const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+  const event = new EventCtor('pointerdown', {
+    bubbles: true,
+    button: 0,
+  });
+  if (!('pointerId' in event)) {
+    Object.defineProperty(event, 'pointerId', { configurable: true, value: 1 });
+  }
+  target.dispatchEvent(event);
+}
+
 describe('RedevenWorkbenchWidget', () => {
   let dispose: (() => void) | undefined;
 
@@ -19,11 +31,12 @@ describe('RedevenWorkbenchWidget', () => {
     document.body.innerHTML = '';
   });
 
-  it('marks the widget root as the local dialog surface host and focuses it from non-focusable presses', async () => {
+  it('keeps local body presses component-owned while shell presses still focus the widget root', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     const onSelect = vi.fn();
+    const onCommitFront = vi.fn();
 
     dispose = render(() => (
       <RedevenWorkbenchWidget
@@ -38,7 +51,7 @@ describe('RedevenWorkbenchWidget', () => {
         y={0}
         width={480}
         height={320}
-        zIndex={1}
+        renderLayer={1}
         itemSnapshot={() => ({
           id: 'widget-files-1',
           type: 'redeven.files',
@@ -52,14 +65,14 @@ describe('RedevenWorkbenchWidget', () => {
         } as any)}
         selected={false}
         optimisticFront={false}
-        topZIndex={1}
+        topRenderLayer={1}
         viewportScale={1}
         locked={false}
         filtered={false}
         onSelect={onSelect}
         onContextMenu={() => {}}
         onStartOptimisticFront={() => {}}
-        onCommitFront={() => {}}
+        onCommitFront={onCommitFront}
         onCommitMove={() => {}}
         onCommitResize={() => {}}
         onRequestDelete={() => {}}
@@ -67,16 +80,28 @@ describe('RedevenWorkbenchWidget', () => {
     ), host);
 
     const widgetRoot = host.querySelector(`[${REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR}="true"]`) as HTMLElement | null;
+    const widgetHeader = host.querySelector('.workbench-widget__header') as HTMLElement | null;
     const widgetBody = host.querySelector('[data-testid="widget-body"]') as HTMLElement | null;
     expect(widgetRoot).toBeTruthy();
+    expect(widgetHeader).toBeTruthy();
     expect(widgetBody).toBeTruthy();
     expect(widgetRoot?.getAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR)).toBe('widget-files-1');
     expect(widgetRoot?.getAttribute(FLOE_DIALOG_SURFACE_HOST_ATTR)).toBe('true');
 
-    widgetBody!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    const outsideInput = document.createElement('input');
+    document.body.appendChild(outsideInput);
+    outsideInput.focus();
+
+    dispatchPointerDown(widgetBody!);
+    await Promise.resolve();
+
+    expect(document.activeElement).toBe(outsideInput);
+    expect(onSelect).toHaveBeenCalledWith('widget-files-1');
+    expect(onCommitFront).toHaveBeenCalledWith('widget-files-1');
+
+    dispatchPointerDown(widgetHeader!);
     await Promise.resolve();
 
     expect(document.activeElement).toBe(widgetRoot);
-    expect(onSelect).toHaveBeenCalledWith('widget-files-1');
   });
 });

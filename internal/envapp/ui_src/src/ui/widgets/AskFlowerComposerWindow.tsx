@@ -23,8 +23,9 @@ import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown'
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewContent } from './FilePreviewContent';
 import { PersistentFloatingWindow } from './PersistentFloatingWindow';
-import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';
+import { PreviewWindow } from './PreviewWindow';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
+import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
@@ -41,9 +42,9 @@ const INLINE_FILE_PREVIEW_MAX_BYTES = 160 * 1024;
 const INLINE_TEXT_PREVIEW_MAX_CHARS = 120_000;
 const CONTEXT_PREVIEW_DEFAULT_SIZE = { width: 880, height: 640 };
 const CONTEXT_PREVIEW_MIN_SIZE = { width: 380, height: 280 };
-const ASK_FLOWER_COMPOSER_Z_INDEX = PREVIEW_WINDOW_Z_INDEX + 10;
-const ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX = ASK_FLOWER_COMPOSER_Z_INDEX + 1;
-const ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX = ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX + 1;
+const ASK_FLOWER_COMPOSER_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerComposer;
+const ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerContextBrowser;
+const ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerContextPreview;
 
 type AskFlowerComposerWindowProps = {
   open: boolean;

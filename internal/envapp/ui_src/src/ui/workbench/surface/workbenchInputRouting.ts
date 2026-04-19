@@ -1,12 +1,19 @@
 import {
   resolveSurfaceInteractionTargetRole,
+  resolveWorkbenchWidgetEventOwnership,
+  WORKBENCH_WIDGET_SHELL_ATTR,
   type SurfaceInteractionTargetRole,
+  type WorkbenchWidgetEventOwnership,
 } from '@floegence/floe-webapp-core/ui';
 
 export const REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR = 'data-redeven-workbench-surface-root';
 export const REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR = 'data-redeven-workbench-widget-root';
 export const REDEVEN_WORKBENCH_WIDGET_ID_ATTR = 'data-redeven-workbench-widget-id';
 export const FLOE_DIALOG_SURFACE_HOST_ATTR = 'data-floe-dialog-surface-host';
+export const REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR = '[data-floe-canvas-interactive="true"]';
+export const REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR = '[data-floe-canvas-pan-surface="true"]';
+
+export { WORKBENCH_WIDGET_SHELL_ATTR };
 
 export type WorkbenchCanvasOwnerReason =
   | 'initial'
@@ -117,6 +124,18 @@ export function resolveWorkbenchSurfaceTargetRole(args: {
   }
 
   return findWorkbenchWidgetRoot(args.target) !== null ? 'local_surface' : 'canvas';
+}
+
+export function resolveRedevenWorkbenchWidgetEventOwnership(args: {
+  target: EventTarget | null;
+  widgetRoot: Element | EventTarget | null;
+}): WorkbenchWidgetEventOwnership {
+  return resolveWorkbenchWidgetEventOwnership({
+    target: args.target,
+    widgetRoot: args.widgetRoot,
+    interactiveSelector: REDEVEN_WORKBENCH_INTERACTIVE_SELECTOR,
+    panSurfaceSelector: REDEVEN_WORKBENCH_PAN_SURFACE_SELECTOR,
+  });
 }
 
 export function resolveWorkbenchWheelRouting(args: {
