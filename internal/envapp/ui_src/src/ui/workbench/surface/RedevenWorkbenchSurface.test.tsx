@@ -24,6 +24,7 @@ const modelMocks = vi.hoisted(() => {
     focusWidget: vi.fn((nextWidget: any) => nextWidget),
     ensureWidget: vi.fn(() => widget),
     deleteSelected: vi.fn(),
+    setCanvasFrameRef: vi.fn(),
   };
 });
 
@@ -92,7 +93,7 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
       findWidgetByType: vi.fn(() => modelMocks.widget),
       findWidgetById: vi.fn(() => modelMocks.widget),
     },
-    setCanvasFrameRef: vi.fn(),
+    setCanvasFrameRef: modelMocks.setCanvasFrameRef,
     handleCloseRequest: vi.fn(),
   }),
 }));
@@ -100,6 +101,7 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
 vi.mock('./RedevenWorkbenchCanvas', () => ({
   RedevenWorkbenchCanvas: (props: any) => (
     <div
+      class="workbench-canvas"
       ref={(el) => {
         props.setCanvasFrameRef?.(el);
       }}
@@ -138,6 +140,7 @@ describe('RedevenWorkbenchSurface', () => {
     modelMocks.ensureWidget.mockReset();
     modelMocks.ensureWidget.mockImplementation(() => modelMocks.widget);
     modelMocks.deleteSelected.mockReset();
+    modelMocks.setCanvasFrameRef.mockReset();
   });
 
   afterEach(() => {
@@ -172,12 +175,51 @@ describe('RedevenWorkbenchSurface', () => {
 
     expect(capturedApi).toBeTruthy();
     const api = capturedApi!;
+    modelMocks.setCanvasFrameRef.mockClear();
     api.focusWidget(modelMocks.widget, { centerViewport: false });
     await Promise.resolve();
 
     const widgetRoot = host.querySelector('[data-redeven-workbench-widget-root="true"]');
     expect(document.activeElement).toBe(widgetRoot);
     expect(modelMocks.focusWidget).toHaveBeenCalledWith(modelMocks.widget, { centerViewport: false });
+    expect(modelMocks.setCanvasFrameRef).toHaveBeenCalledWith(
+      host.querySelector('.workbench-canvas')
+    );
+  });
+
+  it('refreshes the canvas measurement before the surface api ensures a widget', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    let capturedApi: RedevenWorkbenchSurfaceApi | null = null;
+
+    dispose = render(() => (
+      <RedevenWorkbenchSurface
+        state={() => ({
+          version: 1,
+          widgets: [],
+          viewport: { x: 0, y: 0, scale: 1 },
+          locked: false,
+          filters: TEST_WORKBENCH_FILTERS,
+          selectedWidgetId: null,
+        })}
+        setState={() => {}}
+        widgetDefinitions={[]}
+        onApiReady={(api) => {
+          capturedApi = api;
+        }}
+      />
+    ), host);
+
+    modelMocks.setCanvasFrameRef.mockClear();
+
+    const api = capturedApi!;
+    api.ensureWidget('redeven.files', { centerViewport: true });
+
+    expect(modelMocks.setCanvasFrameRef).toHaveBeenCalledWith(
+      host.querySelector('.workbench-canvas')
+    );
+    expect(modelMocks.ensureWidget).toHaveBeenCalledWith('redeven.files', { centerViewport: true });
   });
 
   it('does not trigger global arrow navigation when a widget root owns focus', async () => {
@@ -212,8 +254,38 @@ describe('RedevenWorkbenchSurface', () => {
     expect(widgetRoot).toBeTruthy();
     widgetRoot!.focus();
     widgetRoot!.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    modelMocks.setCanvasFrameRef.mockClear();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
 
     expect(modelMocks.handleArrowNavigation).not.toHaveBeenCalled();
+    expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
+  });
+
+  it('refreshes the canvas measurement before global arrow navigation runs', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    dispose = render(() => (
+      <RedevenWorkbenchSurface
+        state={() => ({
+          version: 1,
+          widgets: [],
+          viewport: { x: 0, y: 0, scale: 1 },
+          locked: false,
+          filters: TEST_WORKBENCH_FILTERS,
+          selectedWidgetId: null,
+        })}
+        setState={() => {}}
+        widgetDefinitions={[]}
+      />
+    ), host);
+
+    modelMocks.setCanvasFrameRef.mockClear();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+
+    expect(modelMocks.setCanvasFrameRef).toHaveBeenCalledWith(
+      host.querySelector('.workbench-canvas')
+    );
+    expect(modelMocks.handleArrowNavigation).toHaveBeenCalledWith('right');
   });
 });
