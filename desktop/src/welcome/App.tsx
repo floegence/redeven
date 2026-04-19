@@ -3297,7 +3297,7 @@ function isEnvironmentActionBusy(
 }
 
 function blockedPrimaryActionTriggerLabel(label: string): string {
-  return `Show recovery options for ${label}`;
+  return `${label} is unavailable. Show recovery options.`;
 }
 
 function EnvironmentPrimaryActionPanel(props: Readonly<{
@@ -3369,6 +3369,12 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const primaryActionLoading = createMemo(() => (
     props.presentation.primary_action.enabled && props.loading
   ));
+  const blockedPrimaryActionDisabled = createMemo(() => (
+    popoverOverlay() !== undefined && !props.presentation.primary_action.enabled
+  ));
+  const primaryButtonClass = createMemo(() => (
+    cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
+  ));
   let rootRef: HTMLDivElement | undefined;
 
   const closeMenu = () => props.onMenuOpenChange(false);
@@ -3402,7 +3408,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
     <Button
       size="sm"
       variant={props.presentation.primary_action.variant}
-      class={cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')}
+      class={primaryButtonClass()}
       style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
       loading={primaryActionLoading()}
       disabled={!props.presentation.primary_action.enabled}
@@ -3459,9 +3465,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
                 <Button
                   size="sm"
                   variant={props.presentation.primary_action.variant}
-                  class={cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')}
+                  class={cn(
+                    primaryButtonClass(),
+                    blockedPrimaryActionDisabled() && 'redeven-split-action-trigger--blocked',
+                  )}
                   style={{ 'min-width': 'var(--redeven-split-action-primary-min-width)' }}
                   disabled={props.loading}
+                  aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
                   aria-haspopup="dialog"
                   aria-expanded={props.guidanceOpen}
                   aria-label={blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label)}

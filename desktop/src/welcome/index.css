@@ -683,6 +683,29 @@ body {
   flex: 1 1 auto;
 }
 
+.redeven-split-action-trigger--blocked {
+  cursor: pointer;
+  border-color: color-mix(in srgb, var(--border) 84%, transparent);
+  background: color-mix(in srgb, var(--muted) 24%, var(--card));
+  color: var(--muted-foreground);
+  box-shadow: none;
+  opacity: 0.78;
+}
+
+.redeven-split-action-trigger--blocked:hover {
+  border-color: color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--muted) 28%, var(--card));
+  color: var(--muted-foreground);
+  box-shadow: none;
+}
+
+.redeven-split-action-trigger--blocked[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+  background: color-mix(in srgb, var(--warning) 10%, var(--card));
+  color: color-mix(in srgb, var(--warning) 72%, var(--foreground));
+  opacity: 1;
+}
+
 .redeven-split-action-toggle {
   cursor: pointer;
   display: inline-flex;
