@@ -3,6 +3,9 @@ package gitrepo
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -186,7 +189,7 @@ func clampWorkspaceIndex(value int, max int) int {
 	}
 }
 
-func (s *Service) listWorkspacePage(ctx context.Context, repo repoContext, section string, offset int, limit int) (*listWorkspacePageResp, error) {
+func (s *Service) listWorkspacePage(ctx context.Context, repo repoContext, section string, directoryPath string, offset int, limit int) (*listWorkspacePageResp, error) {
 	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
 	if err != nil {
 		return nil, err
@@ -199,6 +202,10 @@ func (s *Service) listWorkspacePage(ctx context.Context, repo repoContext, secti
 	pageOffset := normalizeWorkspacePageOffset(offset)
 	pageLimit := normalizeWorkspacePageLimit(limit)
 	summary := status.Summary()
+
+	if pageSection == "changes" {
+		return s.listWorkspaceChangesDirectoryPage(ctx, repo.repoRootReal, status, directoryPath, summary, pageOffset, pageLimit)
+	}
 
 	var (
 		totalCount int
@@ -243,15 +250,177 @@ func (s *Service) listWorkspacePage(ctx context.Context, repo repoContext, secti
 	}
 
 	return &listWorkspacePageResp{
-		RepoRootPath: repo.repoRootReal,
-		Section:      pageSection,
-		Summary:      summary,
-		TotalCount:   totalCount,
-		Offset:       pageOffset,
-		NextOffset:   nextOffset,
-		HasMore:      hasMore,
-		Items:        items,
+		RepoRootPath:   repo.repoRootReal,
+		Section:        pageSection,
+		Summary:        summary,
+		ScopeFileCount: totalCount,
+		TotalCount:     totalCount,
+		Offset:         pageOffset,
+		NextOffset:     nextOffset,
+		HasMore:        hasMore,
+		Items:          items,
 	}, nil
+}
+
+type workspaceDirectoryBucket struct {
+	path                string
+	descendantFileCount int
+	containsUntracked   bool
+	containsUnstaged    bool
+}
+
+func (s *Service) listWorkspaceChangesDirectoryPage(ctx context.Context, repoRoot string, status workspaceStatusSnapshot, directoryPath string, summary gitWorkspaceSummary, offset int, limit int) (*listWorkspacePageResp, error) {
+	normalizedDirectoryPath, err := normalizeGitDirectoryPath(directoryPath)
+	if err != nil {
+		return nil, err
+	}
+
+	unstagedDirect, unstagedDeferred := partitionWorkspaceDirectoryItems(status.Unstaged, normalizedDirectoryPath)
+	untrackedDirect, untrackedDeferred := partitionWorkspaceDirectoryItems(status.Untracked, normalizedDirectoryPath)
+
+	fileItems := make([]gitWorkspaceChange, 0, len(unstagedDirect)+len(untrackedDirect))
+	unstagedItems, err := s.readWorkspaceSectionChangesPage(ctx, repoRoot, "unstaged", unstagedDirect)
+	if err != nil {
+		return nil, err
+	}
+	untrackedItems, err := s.readUntrackedWorkspaceChanges(ctx, repoRoot, untrackedDirect)
+	if err != nil {
+		return nil, err
+	}
+	fileItems = append(fileItems, unstagedItems...)
+	fileItems = append(fileItems, untrackedItems...)
+	sortWorkspaceChanges(fileItems)
+
+	directoryItems := buildWorkspaceDirectoryEntries(append(unstagedDeferred, untrackedDeferred...), normalizedDirectoryPath)
+	items := append(directoryItems, fileItems...)
+	sortWorkspaceChanges(items)
+
+	start, end, nextOffset, hasMore := workspacePageBounds(len(items), offset, limit)
+	pageItems := make([]gitWorkspaceChange, 0, maxWorkspaceSliceSize(start, end))
+	if start < end {
+		pageItems = append(pageItems, items[start:end]...)
+	}
+
+	return &listWorkspacePageResp{
+		RepoRootPath:   repoRoot,
+		Section:        "changes",
+		DirectoryPath:  normalizedDirectoryPath,
+		Breadcrumbs:    buildWorkspaceBreadcrumbs(repoRoot, normalizedDirectoryPath),
+		Summary:        summary,
+		ScopeFileCount: len(unstagedDirect) + len(untrackedDirect) + len(unstagedDeferred) + len(untrackedDeferred),
+		TotalCount:     len(items),
+		Offset:         offset,
+		NextOffset:     nextOffset,
+		HasMore:        hasMore,
+		Items:          pageItems,
+	}, nil
+}
+
+func partitionWorkspaceDirectoryItems(items []gitWorkspaceChange, directoryPath string) ([]gitWorkspaceChange, []gitWorkspaceChange) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	direct := make([]gitWorkspaceChange, 0, len(items))
+	deferred := make([]gitWorkspaceChange, 0, len(items))
+	for _, item := range items {
+		browsePath := workspaceChangeBrowsePath(item)
+		if browsePath == "" || !workspacePathWithinDirectory(browsePath, directoryPath) {
+			continue
+		}
+		if workspaceChangeParentPath(item) == directoryPath {
+			direct = append(direct, item)
+			continue
+		}
+		deferred = append(deferred, item)
+	}
+	return direct, deferred
+}
+
+func buildWorkspaceDirectoryEntries(items []gitWorkspaceChange, parentPath string) []gitWorkspaceChange {
+	if len(items) == 0 {
+		return nil
+	}
+	buckets := make(map[string]*workspaceDirectoryBucket, len(items))
+	for _, item := range items {
+		browsePath := workspaceChangeBrowsePath(item)
+		childDirectoryPath := workspaceImmediateChildPath(browsePath, parentPath)
+		if childDirectoryPath == "" || childDirectoryPath == browsePath {
+			continue
+		}
+		bucket := buckets[childDirectoryPath]
+		if bucket == nil {
+			bucket = &workspaceDirectoryBucket{path: childDirectoryPath}
+			buckets[childDirectoryPath] = bucket
+		}
+		bucket.descendantFileCount += 1
+		switch strings.TrimSpace(item.Section) {
+		case "untracked":
+			bucket.containsUntracked = true
+		case "unstaged":
+			bucket.containsUnstaged = true
+		}
+	}
+	if len(buckets) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(buckets))
+	for key := range buckets {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := make([]gitWorkspaceChange, 0, len(keys))
+	for _, key := range keys {
+		bucket := buckets[key]
+		out = append(out, gitWorkspaceChange{
+			Section:             "changes",
+			EntryKind:           "directory",
+			ParentPath:          parentPath,
+			DirectoryPath:       bucket.path,
+			DescendantFileCount: bucket.descendantFileCount,
+			ContainsUntracked:   bucket.containsUntracked,
+			ContainsUnstaged:    bucket.containsUnstaged,
+			gitDiffFileSummary: gitDiffFileSummary{
+				Path:        bucket.path,
+				DisplayPath: bucket.path,
+			},
+		})
+	}
+	return out
+}
+
+func buildWorkspaceBreadcrumbs(repoRoot string, directoryPath string) []gitWorkspaceBreadcrumb {
+	rootLabel := strings.TrimSpace(filepath.Base(repoRoot))
+	if rootLabel == "" || rootLabel == "." || rootLabel == string(filepath.Separator) {
+		rootLabel = "Repository"
+	}
+	breadcrumbs := []gitWorkspaceBreadcrumb{{Label: rootLabel, Path: ""}}
+	if strings.TrimSpace(directoryPath) == "" {
+		return breadcrumbs
+	}
+	accumulated := ""
+	for _, segment := range strings.Split(directoryPath, "/") {
+		segment = strings.TrimSpace(segment)
+		if segment == "" {
+			continue
+		}
+		if accumulated == "" {
+			accumulated = segment
+		} else {
+			accumulated = accumulated + "/" + segment
+		}
+		breadcrumbs = append(breadcrumbs, gitWorkspaceBreadcrumb{
+			Label: segment,
+			Path:  accumulated,
+		})
+	}
+	return breadcrumbs
+}
+
+func maxWorkspaceSliceSize(start int, end int) int {
+	if end <= start {
+		return 0
+	}
+	return end - start
 }
 
 func workspaceMetadataArgs(section string) ([]string, error) {
@@ -275,8 +444,7 @@ func workspaceSectionPathspecs(statusItems []gitWorkspaceChange) []string {
 	seen := make(map[string]struct{}, len(statusItems)*3)
 	pathspecs := make([]string, 0, len(statusItems))
 	for _, item := range statusItems {
-		for _, pathValue := range []string{item.Path, item.NewPath, item.OldPath} {
-			pathValue = strings.TrimSpace(pathValue)
+		for _, pathValue := range workspaceChangePathCandidates(item) {
 			if pathValue == "" {
 				continue
 			}
@@ -329,6 +497,7 @@ func (s *Service) readWorkspaceSectionChangesWithPathspecs(ctx context.Context, 
 	for _, item := range statusItems {
 		change := item
 		change.Section = section
+		change.EntryKind = "file"
 		if section == "conflicted" {
 			change.ChangeType = "conflicted"
 		}
@@ -349,8 +518,11 @@ func (s *Service) readWorkspaceSectionChangesWithPathspecs(ctx context.Context, 
 			change.IsBinary = entry.IsBinary
 			break
 		}
+		change.ParentPath = workspaceChangeParentPath(change)
+		change.MutationPaths = workspaceChangePathCandidates(change)
 		changes = append(changes, change)
 	}
+	sortWorkspaceChanges(changes)
 	return changes, nil
 }
 
@@ -365,8 +537,9 @@ func workspaceSectionMatchKeys(item gitWorkspaceChange) []string {
 
 func decorateUntrackedWorkspaceChange(item gitWorkspaceChange) gitWorkspaceChange {
 	pathValue := firstNonEmptyPath(item.Path, item.NewPath, item.DisplayPath, item.OldPath)
-	return gitWorkspaceChange{
-		Section: "untracked",
+	change := gitWorkspaceChange{
+		Section:   "untracked",
+		EntryKind: "file",
 		gitDiffFileSummary: gitDiffFileSummary{
 			ChangeType:  "added",
 			Path:        pathValue,
@@ -374,6 +547,9 @@ func decorateUntrackedWorkspaceChange(item gitWorkspaceChange) gitWorkspaceChang
 			DisplayPath: firstNonEmptyPath(item.DisplayPath, pathValue, item.NewPath, item.OldPath),
 		},
 	}
+	change.ParentPath = workspaceChangeParentPath(change)
+	change.MutationPaths = workspaceChangePathCandidates(change)
+	return change
 }
 
 func (s *Service) readUntrackedWorkspaceChanges(ctx context.Context, repoRoot string, statusItems []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
@@ -389,6 +565,7 @@ func (s *Service) readUntrackedWorkspaceChanges(ctx context.Context, repoRoot st
 		}
 		changes = append(changes, change)
 	}
+	sortWorkspaceChanges(changes)
 	return changes, nil
 }
 
@@ -476,7 +653,13 @@ func (s *Service) readWorkspaceStatus(ctx context.Context, repoRoot string) (wor
 	if err != nil {
 		return workspaceStatusSnapshot{}, err
 	}
-	return parseWorkspaceStatusPorcelainV2(out), nil
+	snapshot := parseWorkspaceStatusPorcelainV2(out)
+	expandedUntracked, err := expandWorkspaceUntrackedStatusItems(repoRoot, snapshot.Untracked)
+	if err != nil {
+		return workspaceStatusSnapshot{}, err
+	}
+	snapshot.Untracked = expandedUntracked
+	return snapshot, nil
 }
 
 func parseWorkspaceStatusPorcelainV2(out []byte) workspaceStatusSnapshot {
@@ -495,16 +678,17 @@ func parseWorkspaceStatusPorcelainV2(out []byte) workspaceStatusSnapshot {
 			if len(fields) < 9 {
 				continue
 			}
-			applyTrackedWorkspaceRecord(&snapshot, fields[1], strings.TrimSpace(fields[8]), "", strings.TrimSpace(fields[8]))
+			pathValue := normalizeWorkspaceStatusPath(fields[8])
+			applyTrackedWorkspaceRecord(&snapshot, fields[1], pathValue, "", pathValue)
 		case strings.HasPrefix(token, "2 "):
 			fields := strings.SplitN(token, " ", 10)
 			if len(fields) < 10 {
 				continue
 			}
-			newPath := strings.TrimSpace(fields[9])
+			newPath := normalizeWorkspaceStatusPath(fields[9])
 			oldPath := ""
 			if index+1 < len(tokens) {
-				oldPath = strings.TrimSpace(strings.TrimSuffix(tokens[index+1], "\n"))
+				oldPath = normalizeWorkspaceStatusPath(tokens[index+1])
 				index += 1
 			}
 			applyTrackedWorkspaceRecord(&snapshot, fields[1], preferredWorkspacePath(oldPath, newPath), oldPath, newPath)
@@ -513,9 +697,10 @@ func parseWorkspaceStatusPorcelainV2(out []byte) workspaceStatusSnapshot {
 			if len(fields) < 11 {
 				continue
 			}
-			pathValue := strings.TrimSpace(fields[10])
+			pathValue := normalizeWorkspaceStatusPath(fields[10])
 			snapshot.Conflicted = append(snapshot.Conflicted, gitWorkspaceChange{
-				Section: "conflicted",
+				Section:   "conflicted",
+				EntryKind: "file",
 				gitDiffFileSummary: gitDiffFileSummary{
 					ChangeType:  "conflicted",
 					Path:        pathValue,
@@ -523,9 +708,10 @@ func parseWorkspaceStatusPorcelainV2(out []byte) workspaceStatusSnapshot {
 				},
 			})
 		case strings.HasPrefix(token, "? "):
-			pathValue := strings.TrimSpace(token[2:])
+			pathValue := normalizeWorkspaceStatusPath(token[2:])
 			snapshot.Untracked = append(snapshot.Untracked, gitWorkspaceChange{
-				Section: "untracked",
+				Section:   "untracked",
+				EntryKind: "file",
 				gitDiffFileSummary: gitDiffFileSummary{
 					ChangeType:  "added",
 					Path:        pathValue,
@@ -574,7 +760,8 @@ func applyTrackedWorkspaceRecord(snapshot *workspaceStatusSnapshot, xy string, p
 	worktreeStatus := xy[1]
 	if indexStatus == 'U' || worktreeStatus == 'U' {
 		snapshot.Conflicted = append(snapshot.Conflicted, gitWorkspaceChange{
-			Section: "conflicted",
+			Section:   "conflicted",
+			EntryKind: "file",
 			gitDiffFileSummary: gitDiffFileSummary{
 				ChangeType:  "conflicted",
 				Path:        pathValue,
@@ -587,7 +774,8 @@ func applyTrackedWorkspaceRecord(snapshot *workspaceStatusSnapshot, xy string, p
 	}
 	if indexStatus != '.' {
 		snapshot.Staged = append(snapshot.Staged, gitWorkspaceChange{
-			Section: "staged",
+			Section:   "staged",
+			EntryKind: "file",
 			gitDiffFileSummary: gitDiffFileSummary{
 				ChangeType:  workspaceChangeType(indexStatus, oldPath, newPath),
 				Path:        pathValue,
@@ -599,7 +787,8 @@ func applyTrackedWorkspaceRecord(snapshot *workspaceStatusSnapshot, xy string, p
 	}
 	if worktreeStatus != '.' {
 		snapshot.Unstaged = append(snapshot.Unstaged, gitWorkspaceChange{
-			Section: "unstaged",
+			Section:   "unstaged",
+			EntryKind: "file",
 			gitDiffFileSummary: gitDiffFileSummary{
 				ChangeType:  workspaceChangeType(worktreeStatus, oldPath, newPath),
 				Path:        pathValue,
@@ -641,6 +830,96 @@ func preferredWorkspacePath(oldPath string, newPath string) string {
 		return strings.TrimSpace(newPath)
 	}
 	return strings.TrimSpace(oldPath)
+}
+
+func normalizeWorkspaceStatusPath(value string) string {
+	cleaned, err := normalizeGitPathspec(strings.TrimSpace(strings.TrimSuffix(value, "\n")))
+	if err != nil {
+		return strings.TrimSpace(strings.TrimSuffix(value, "\n"))
+	}
+	return cleaned
+}
+
+func expandWorkspaceUntrackedStatusItems(repoRoot string, items []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]gitWorkspaceChange, 0, len(items))
+	for _, item := range items {
+		expanded, err := expandWorkspaceUntrackedStatusItem(repoRoot, item)
+		if err != nil {
+			return nil, err
+		}
+		for _, expandedItem := range expanded {
+			browsePath := workspaceChangeBrowsePath(expandedItem)
+			if browsePath == "" {
+				continue
+			}
+			if _, ok := seen[browsePath]; ok {
+				continue
+			}
+			seen[browsePath] = struct{}{}
+			out = append(out, expandedItem)
+		}
+	}
+	sortWorkspaceChanges(out)
+	return out, nil
+}
+
+func expandWorkspaceUntrackedStatusItem(repoRoot string, item gitWorkspaceChange) ([]gitWorkspaceChange, error) {
+	pathValue := workspaceChangeBrowsePath(item)
+	if pathValue == "" {
+		return nil, nil
+	}
+	absPath := filepath.Join(repoRoot, filepath.FromSlash(pathValue))
+	info, err := os.Lstat(absPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []gitWorkspaceChange{decorateUntrackedWorkspaceChange(item)}, nil
+		}
+		return nil, err
+	}
+	if !info.IsDir() {
+		return []gitWorkspaceChange{decorateUntrackedWorkspaceChange(item)}, nil
+	}
+
+	paths := make([]string, 0, 8)
+	if walkErr := filepath.WalkDir(absPath, func(current string, entry os.DirEntry, entryErr error) error {
+		if entryErr != nil {
+			return entryErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relativePath, relErr := filepath.Rel(repoRoot, current)
+		if relErr != nil {
+			return relErr
+		}
+		cleaned, cleanErr := normalizeGitPathspec(filepath.ToSlash(relativePath))
+		if cleanErr != nil || cleaned == "" {
+			return cleanErr
+		}
+		paths = append(paths, cleaned)
+		return nil
+	}); walkErr != nil {
+		return nil, walkErr
+	}
+	sort.Strings(paths)
+	out := make([]gitWorkspaceChange, 0, len(paths))
+	for _, expandedPath := range paths {
+		out = append(out, decorateUntrackedWorkspaceChange(gitWorkspaceChange{
+			Section:   "untracked",
+			EntryKind: "file",
+			gitDiffFileSummary: gitDiffFileSummary{
+				ChangeType:  "added",
+				Path:        expandedPath,
+				NewPath:     expandedPath,
+				DisplayPath: expandedPath,
+			},
+		}))
+	}
+	return out, nil
 }
 
 func readStashCount(ctx context.Context, repoRoot string) int {

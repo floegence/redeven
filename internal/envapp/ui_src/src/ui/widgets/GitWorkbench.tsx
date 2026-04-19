@@ -111,6 +111,7 @@ export interface GitWorkbenchProps {
   onStageSelected?: (item: GitWorkspaceChange) => void;
   onUnstageSelected?: (item: GitWorkspaceChange) => void;
   onDiscardSelected?: (item: GitWorkspaceChange) => void;
+  onNavigateWorkspaceDirectory?: (directoryPath: string) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
   onDiscardAll?: (section: GitWorkspaceViewSection) => void;
   onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
@@ -335,6 +336,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onStageSelected={props.onStageSelected}
               onUnstageSelected={props.onUnstageSelected}
               onDiscardSelected={props.onDiscardSelected}
+              onNavigateDirectory={props.onNavigateWorkspaceDirectory}
               onBulkAction={props.onBulkAction}
               onDiscardAll={props.onDiscardAll}
               onLoadMoreWorkspaceSection={props.onLoadMoreWorkspaceSection}

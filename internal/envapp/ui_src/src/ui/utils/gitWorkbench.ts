@@ -9,6 +9,7 @@ import type {
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
   GitStashDetail,
+  GitWorkspaceBreadcrumb,
   GitWorkspaceChange,
   GitWorkspacePageSection,
   GitWorkspaceSection,
@@ -91,11 +92,14 @@ export type GitSeededWorkspaceChangesResponse = Omit<
 export type GitWorkspaceViewPageState = {
   items: GitWorkspaceChange[];
   totalCount: number;
+  scopeFileCount?: number;
   nextOffset: number;
   hasMore: boolean;
   loading: boolean;
   error: string;
   initialized: boolean;
+  directoryPath?: string;
+  breadcrumbs?: GitWorkspaceBreadcrumb[];
 };
 export type GitSeededStashDetail = Omit<GitStashDetail, "files"> & {
   files: GitSeededCommitFileSummary[];
@@ -195,11 +199,14 @@ export function createEmptyWorkspaceViewPageState(): GitWorkspaceViewPageState {
   return {
     items: [],
     totalCount: 0,
+    scopeFileCount: 0,
     nextOffset: 0,
     hasMore: false,
     loading: false,
     error: "",
     initialized: false,
+    directoryPath: "",
+    breadcrumbs: [],
   };
 }
 
@@ -393,7 +400,12 @@ export function workspaceSectionActionKey(
 
 export function workspaceViewSectionActionKey(
   section: GitWorkspaceViewSection,
+  directoryPath?: string | null,
 ): string {
+  const normalizedDirectoryPath = String(directoryPath ?? "").trim();
+  if (section === "changes" && normalizedDirectoryPath) {
+    return `section:${section}:${normalizedDirectoryPath}`;
+  }
   return `section:${section}`;
 }
 
@@ -582,7 +594,39 @@ export function workspaceEntryKey(
   item: GitWorkspaceChange | null | undefined,
 ): string {
   if (!item) return "";
-  return `${item.section || ""}:${gitDiffEntryIdentity(item)}`;
+  return `${item.section || ""}:${String(item.entryKind ?? "").trim()}:${gitDiffEntryIdentity(item)}`;
+}
+
+export function isGitWorkspaceDirectoryEntry(
+  item: GitWorkspaceChange | null | undefined,
+): boolean {
+  return String(item?.entryKind ?? "").trim() === "directory";
+}
+
+export function workspaceDirectoryPath(
+  item: GitWorkspaceChange | null | undefined,
+): string {
+  return String(
+    item?.directoryPath ?? item?.displayPath ?? item?.path ?? "",
+  ).trim();
+}
+
+export function workspacePageItems(
+  workspace: GitListWorkspaceChangesResponse | null | undefined,
+  section: GitWorkspaceViewSection,
+  state: GitWorkspaceViewPageState | null | undefined,
+): GitWorkspaceChange[] {
+  if (state?.initialized) return state.items;
+  return workspaceViewSectionItems(workspace, section);
+}
+
+export function findWorkspaceChangeByKeyInItems(
+  items: GitWorkspaceChange[] | null | undefined,
+  key: string | null | undefined,
+): GitWorkspaceChange | null {
+  const wanted = String(key ?? "").trim();
+  if (!wanted) return null;
+  return items?.find((item) => workspaceEntryKey(item) === wanted) ?? null;
 }
 
 export function pickDefaultWorkspaceChange(
@@ -789,7 +833,10 @@ export function workspaceMutationPaths(
   change: GitWorkspaceChange | null | undefined,
 ): string[] {
   if (!change) return [];
-  const values = [change.path, change.newPath, change.oldPath]
+  const explicitValues = Array.isArray(change.mutationPaths)
+    ? change.mutationPaths
+    : [];
+  const values = [...explicitValues, change.path, change.newPath, change.oldPath]
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
   return Array.from(new Set(values));

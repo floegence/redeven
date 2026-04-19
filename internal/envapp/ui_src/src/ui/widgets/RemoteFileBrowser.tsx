@@ -66,6 +66,8 @@ import {
   createEmptyWorkspaceViewPageStateRecord,
   findGitBranchByKey,
   findWorkspaceChangeByKey,
+  findWorkspaceChangeByKeyInItems,
+  isGitWorkspaceDirectoryEntry,
   isGitWorkspaceSection,
   shortGitHash,
   summarizeWorkspaceCount,
@@ -80,11 +82,12 @@ import {
   pickDefaultGitBranch,
   pickDefaultWorkspaceChange,
   pickDefaultWorkspaceViewSection,
+  workspaceDirectoryPath,
+  workspacePageItems,
   workspaceViewSectionCount,
   workspaceViewSectionActionKey,
   workspaceViewSectionForItem,
   workspaceViewSectionHasItem,
-  workspaceViewSectionItems,
   workspaceEntryKey,
   workspaceMutationPaths,
   type GitWorkbenchSubview,
@@ -240,6 +243,7 @@ type GitWorkspaceLoadOptions = GitLoadOptions & {
   append?: boolean;
   offset?: number;
   force?: boolean;
+  directoryPath?: string;
 };
 
 type GitCommitContextScope = 'repo' | 'branch';
@@ -1104,6 +1108,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return state.loading && !state.initialized;
   });
 
+  const gitWorkspaceVisibleItems = (
+    section: GitWorkspaceViewSection,
+    workspace = gitWorkspace(),
+    state = gitWorkspacePageState(section),
+  ) => workspacePageItems(workspace, section, state);
+
   const syncGitWorkspaceSelection = (nextWorkspace: GitListWorkspaceChangesResponse | null | undefined) => {
     if (!nextWorkspace) {
       setSelectedGitWorkspaceKey('');
@@ -1112,10 +1122,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const nextSection = selectedGitWorkspaceSection() || pickDefaultWorkspaceViewSection(nextWorkspace);
     setSelectedGitWorkspaceSection(nextSection);
     const currentKey = selectedGitWorkspaceKey();
-    const scopedCurrentItem = findWorkspaceChangeByKey(nextWorkspace, currentKey);
+    const scopedCurrentItem = nextSection === 'changes'
+      ? findWorkspaceChangeByKeyInItems(gitWorkspaceVisibleItems('changes', nextWorkspace, gitWorkspacePageState('changes')), currentKey)
+      : findWorkspaceChangeByKey(nextWorkspace, currentKey);
+    const nextItems = gitWorkspaceVisibleItems(nextSection, nextWorkspace, gitWorkspacePageState(nextSection));
     const nextItem = workspaceViewSectionHasItem(nextSection, scopedCurrentItem)
       ? scopedCurrentItem
-      : workspaceViewSectionItems(nextWorkspace, nextSection)[0] ?? pickDefaultWorkspaceChange(nextWorkspace);
+      : nextItems[0] ?? pickDefaultWorkspaceChange(nextWorkspace);
     setSelectedGitWorkspaceKey(workspaceEntryKey(nextItem));
   };
 
@@ -1136,11 +1149,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ...state,
       items: options.append ? [...state.items, ...page.items] : [...page.items],
       totalCount: Number(page.totalCount ?? 0),
+      scopeFileCount: Number(page.scopeFileCount ?? page.totalCount ?? 0),
       nextOffset: Number(page.nextOffset ?? 0),
       hasMore: Boolean(page.hasMore),
       loading: false,
       error: '',
       initialized: true,
+      directoryPath: String(page.directoryPath ?? '').trim(),
+      breadcrumbs: Array.isArray(page.breadcrumbs) ? [...page.breadcrumbs] : [],
     }));
     syncGitWorkspaceSelection(nextWorkspace);
   };
@@ -1210,7 +1226,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     resetGitStashState();
   };
 
-  const selectedGitWorkspaceItem = () => findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey());
+  const selectedGitWorkspaceItem = () => (
+    selectedGitWorkspaceSection() === 'changes'
+      ? findWorkspaceChangeByKeyInItems(gitWorkspaceVisibleItems('changes'), selectedGitWorkspaceKey())
+      : findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey())
+  );
   const activeStashRepoRootPath = () => String(stashWindowContext()?.repoRootPath ?? '').trim();
   const activeStashSource = () => stashWindowContext()?.source ?? 'header';
   const selectedStashSummary = createMemo<GitStashSummary | GitStashDetail | null>(() => {
@@ -1231,17 +1251,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const focusGitWorkspaceSection = (section: GitWorkspaceViewSection, workspace = gitWorkspace()) => {
     setGitSubview('changes');
     setSelectedGitWorkspaceSection(section);
-    const firstItem = workspaceViewSectionItems(workspace, section)[0] ?? null;
+    const firstItem = gitWorkspaceVisibleItems(section, workspace)[0] ?? null;
     setSelectedGitWorkspaceKey(workspaceEntryKey(firstItem));
   };
 
   const selectGitWorkspaceSection = (section: GitWorkspaceViewSection) => {
     setSelectedGitWorkspaceSection(section);
-    const firstItem = workspaceViewSectionItems(gitWorkspace(), section)[0] ?? null;
+    const firstItem = gitWorkspaceVisibleItems(section)[0] ?? null;
     setSelectedGitWorkspaceKey(workspaceEntryKey(firstItem));
     if (layout.isMobile()) {
       closePageSidebar();
     }
+  };
+
+  const navigateGitChangesDirectory = (directoryPath: string) => {
+    setGitSubview('changes');
+    setSelectedGitWorkspaceSection('changes');
+    setSelectedGitWorkspaceKey('');
+    void loadGitWorkspaceSection('changes', {
+      directoryPath,
+      force: true,
+      silent: Boolean(gitWorkspace()),
+    });
   };
 
   const selectGitBranch = (branch: GitBranchSummary | null | undefined) => {
@@ -1412,6 +1443,49 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const formatGitFileCountLabel = (count: number): string => (count === 1 ? '1 file' : `${count} files`);
+  const activeChangesDirectoryPath = () => String(gitWorkspacePageState('changes').directoryPath ?? '').trim();
+  const activeChangesPageCount = () => {
+    const state = gitWorkspacePageState('changes');
+    return state.initialized
+      ? Number(state.scopeFileCount ?? state.totalCount ?? 0)
+      : workspaceViewSectionCount(gitWorkspace()?.summary ?? gitRepoSummary()?.workspaceSummary, 'changes');
+  };
+
+  const firstWorkspaceMutationWarning = (warnings: string[] | null | undefined): string => (
+    Array.isArray(warnings)
+      ? (warnings.find((item) => String(item ?? '').trim().length > 0) ?? '')
+      : ''
+  );
+
+  const notifyWorkspaceMutationResult = (params: {
+    result: {
+      affectedCount?: number;
+      remainingCount?: number;
+      warnings?: string[];
+    } | null | undefined;
+    fallbackCount: number;
+    successTitle: string;
+    successMessage: (count: number) => string;
+    noopTitle: string;
+    noopMessage: string;
+    partialTitle: string;
+  }) => {
+    const affectedCount = Math.max(0, Number(params.result?.affectedCount ?? params.fallbackCount ?? 0));
+    const remainingCount = Math.max(0, Number(params.result?.remainingCount ?? 0));
+    const warning = firstWorkspaceMutationWarning(params.result?.warnings);
+    if (affectedCount <= 0) {
+      notification.warning(params.noopTitle, warning || params.noopMessage);
+      return;
+    }
+    const message = warning
+      ? `${params.successMessage(affectedCount)} ${warning}`.trim()
+      : params.successMessage(affectedCount);
+    if (remainingCount > 0) {
+      notification.warning(params.partialTitle, message);
+      return;
+    }
+    notification.success(params.successTitle, message);
+  };
 
   const refreshGitWorkspaceSectionsAfterMutation = async (repoRootPath: string, sections: GitWorkspaceViewSection[]) => {
     const wanted = Array.from(new Set(sections));
@@ -1480,102 +1554,202 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const handleStageWorkspacePaths = async (sourceSections: GitWorkspaceSection[], paths: string[], key: string, count: number) => {
+  const handleStageWorkspaceSelection = async (params: {
+    sourceSections: GitWorkspaceSection[];
+    paths?: string[];
+    directoryPath?: string;
+    key: string;
+    count: number;
+  }) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
-    const uniqueSourceSections = Array.from(new Set(sourceSections));
+    const uniqueSourceSections = Array.from(new Set(params.sourceSections));
+    const paths = Array.isArray(params.paths) ? params.paths : [];
+    const directoryPath = String(params.directoryPath ?? '').trim();
     await runGitMutation(
       'stage',
-      key,
+      params.key,
       () => rpc.git.stageWorkspace({
         repoRootPath,
         section: paths.length === 0 ? (uniqueSourceSections[0] === 'conflicted' ? 'conflicted' : 'changes') : undefined,
+        directoryPath: paths.length === 0 && directoryPath ? directoryPath : undefined,
         paths: paths.length > 0 ? paths : undefined,
       }),
-      async () => {
+      async (resp) => {
         const impactedSections: GitWorkspaceViewSection[] = uniqueSourceSections.length === 1 && uniqueSourceSections[0] === 'conflicted'
           ? ['conflicted', 'staged']
           : ['changes', 'staged'];
         await refreshGitWorkspaceSectionsAfterMutation(repoRootPath, impactedSections);
-        notification.success(
-          uniqueSourceSections.length === 1 && uniqueSourceSections[0] === 'untracked' ? 'Tracked' : 'Staged',
-          `${formatGitFileCountLabel(count)} moved into the index.`,
-        );
+        notifyWorkspaceMutationResult({
+          result: resp.result,
+          fallbackCount: params.count,
+          successTitle: uniqueSourceSections.length === 1 && uniqueSourceSections[0] === 'untracked' ? 'Tracked' : 'Staged',
+          successMessage: (count) => `${formatGitFileCountLabel(count)} moved into the index.`,
+          noopTitle: 'Nothing staged',
+          noopMessage: 'No current pending files matched this request.',
+          partialTitle: 'Partially staged',
+        });
       },
     );
   };
 
-  const handleUnstageWorkspacePaths = async (paths: string[], key: string, count: number) => {
+  const handleUnstageWorkspaceSelection = async (params: {
+    paths?: string[];
+    directoryPath?: string;
+    key: string;
+    count: number;
+  }) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
+    const paths = Array.isArray(params.paths) ? params.paths : [];
+    const directoryPath = String(params.directoryPath ?? '').trim();
     await runGitMutation(
       'unstage',
-      key,
+      params.key,
       () => rpc.git.unstageWorkspace({
         repoRootPath,
         section: paths.length === 0 ? 'staged' : undefined,
+        directoryPath: paths.length === 0 && directoryPath ? directoryPath : undefined,
         paths: paths.length > 0 ? paths : undefined,
       }),
-      async () => {
+      async (resp) => {
         await refreshGitWorkspaceSectionsAfterMutation(repoRootPath, ['changes', 'staged']);
-        notification.success('Unstaged', `${formatGitFileCountLabel(count)} moved back to pending changes.`);
+        notifyWorkspaceMutationResult({
+          result: resp.result,
+          fallbackCount: params.count,
+          successTitle: 'Unstaged',
+          successMessage: (count) => `${formatGitFileCountLabel(count)} moved back to pending changes.`,
+          noopTitle: 'Nothing unstaged',
+          noopMessage: 'No current staged files matched this request.',
+          partialTitle: 'Partially unstaged',
+        });
       },
     );
   };
 
   const handleStageWorkspaceItem = (item: GitWorkspaceChange) => {
+    if (isGitWorkspaceDirectoryEntry(item)) {
+      const directoryPath = workspaceDirectoryPath(item);
+      if (!directoryPath) return;
+      setSelectedGitWorkspaceSection('changes');
+      void handleStageWorkspaceSelection({
+        sourceSections: ['unstaged', 'untracked'],
+        directoryPath,
+        key: workspaceEntryKey(item),
+        count: Number(item.descendantFileCount ?? 0) || 1,
+      });
+      return;
+    }
     const sourceSection = isGitWorkspaceSection(item.section) ? item.section : 'unstaged';
     setSelectedGitWorkspaceSection(workspaceViewSectionForItem(item));
-    void handleStageWorkspacePaths([sourceSection], workspaceMutationPaths(item), workspaceEntryKey(item), 1);
+    void handleStageWorkspaceSelection({
+      sourceSections: [sourceSection],
+      paths: workspaceMutationPaths(item),
+      key: workspaceEntryKey(item),
+      count: 1,
+    });
   };
 
-  const handleUnstageWorkspaceItem = (item: GitWorkspaceChange) => void handleUnstageWorkspacePaths(workspaceMutationPaths(item), workspaceEntryKey(item), 1);
+  const handleUnstageWorkspaceItem = (item: GitWorkspaceChange) => void handleUnstageWorkspaceSelection({
+    paths: workspaceMutationPaths(item),
+    key: workspaceEntryKey(item),
+    count: 1,
+  });
 
-  const handleDiscardWorkspacePaths = async (paths: string[], key: string, count: number) => {
+  const handleDiscardWorkspaceSelection = async (params: {
+    paths?: string[];
+    directoryPath?: string;
+    key: string;
+    count: number;
+  }) => {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
+    const paths = Array.isArray(params.paths) ? params.paths : [];
+    const directoryPath = String(params.directoryPath ?? '').trim();
     await runGitMutation(
       'discard',
-      key,
+      params.key,
       () => rpc.git.discardWorkspace({
         repoRootPath,
         section: paths.length === 0 ? 'changes' : undefined,
+        directoryPath: paths.length === 0 && directoryPath ? directoryPath : undefined,
         paths: paths.length > 0 ? paths : undefined,
       }),
-      async () => {
+      async (resp) => {
         await refreshGitWorkspaceSectionsAfterMutation(repoRootPath, ['changes']);
-        notification.success('Discarded', `${formatGitFileCountLabel(count)} removed from pending changes.`);
+        notifyWorkspaceMutationResult({
+          result: resp.result,
+          fallbackCount: params.count,
+          successTitle: 'Discarded',
+          successMessage: (count) => `${formatGitFileCountLabel(count)} removed from pending changes.`,
+          noopTitle: 'Nothing discarded',
+          noopMessage: 'No current pending files matched this request.',
+          partialTitle: 'Partially discarded',
+        });
       },
     );
   };
 
   const handleDiscardWorkspaceItem = (item: GitWorkspaceChange) => {
+    if (isGitWorkspaceDirectoryEntry(item)) {
+      const directoryPath = workspaceDirectoryPath(item);
+      if (!directoryPath) return;
+      setSelectedGitWorkspaceSection('changes');
+      void handleDiscardWorkspaceSelection({
+        directoryPath,
+        key: workspaceEntryKey(item),
+        count: Number(item.descendantFileCount ?? 0) || 1,
+      });
+      return;
+    }
     if (!isGitWorkspaceSection(item.section) || (item.section !== 'unstaged' && item.section !== 'untracked')) return;
     setSelectedGitWorkspaceSection(workspaceViewSectionForItem(item));
-    void handleDiscardWorkspacePaths(workspaceMutationPaths(item), workspaceEntryKey(item), 1);
+    void handleDiscardWorkspaceSelection({
+      paths: workspaceMutationPaths(item),
+      key: workspaceEntryKey(item),
+      count: 1,
+    });
   };
 
   const handleBulkWorkspaceAction = (section: GitWorkspaceViewSection) => {
-    const count = workspaceViewSectionCount(gitWorkspace()?.summary ?? gitRepoSummary()?.workspaceSummary, section);
+    const count = section === 'changes'
+      ? activeChangesPageCount()
+      : workspaceViewSectionCount(gitWorkspace()?.summary ?? gitRepoSummary()?.workspaceSummary, section);
     if (count <= 0) return;
     setSelectedGitWorkspaceSection(section);
     if (section === 'staged') {
-      void handleUnstageWorkspacePaths([], workspaceViewSectionActionKey(section), count);
+      void handleUnstageWorkspaceSelection({
+        key: workspaceViewSectionActionKey(section),
+        count,
+      });
       return;
     }
     if (section === 'changes') {
-      void handleStageWorkspacePaths(['unstaged', 'untracked'], [], workspaceViewSectionActionKey(section), count);
+      void handleStageWorkspaceSelection({
+        sourceSections: ['unstaged', 'untracked'],
+        directoryPath: activeChangesDirectoryPath(),
+        key: workspaceViewSectionActionKey(section, activeChangesDirectoryPath()),
+        count,
+      });
       return;
     }
-    void handleStageWorkspacePaths(['conflicted'], [], workspaceViewSectionActionKey(section), count);
+    void handleStageWorkspaceSelection({
+      sourceSections: ['conflicted'],
+      key: workspaceViewSectionActionKey(section),
+      count,
+    });
   };
 
   const handleBulkDiscardWorkspaceSection = (section: GitWorkspaceViewSection) => {
     if (section !== 'changes') return;
-    const count = workspaceViewSectionCount(gitWorkspace()?.summary ?? gitRepoSummary()?.workspaceSummary, section);
+    const count = activeChangesPageCount();
     if (count <= 0) return;
     setSelectedGitWorkspaceSection(section);
-    void handleDiscardWorkspacePaths([], workspaceViewSectionActionKey(section), count);
+    void handleDiscardWorkspaceSelection({
+      directoryPath: activeChangesDirectoryPath(),
+      key: workspaceViewSectionActionKey(section, activeChangesDirectoryPath()),
+      count,
+    });
   };
 
   const handleCommitWorkspace = async (message: string) => {
@@ -2465,6 +2639,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
     const currentState = gitWorkspacePageState(section);
     const append = Boolean(options.append);
+    const directoryPath = section === 'changes'
+      ? String(options.directoryPath ?? currentState.directoryPath ?? '').trim()
+      : '';
     const offset = typeof options.offset === 'number'
       ? Math.max(0, options.offset)
       : (append ? currentState.nextOffset : 0);
@@ -2495,6 +2672,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const resp = await rpc.git.listWorkspacePage({
         repoRootPath,
         section,
+        directoryPath: section === 'changes' && directoryPath ? directoryPath : undefined,
         offset,
         limit: GIT_WORKSPACE_PAGE_SIZE,
       });
@@ -4360,6 +4538,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onStageWorkspaceItem={handleStageWorkspaceItem}
                       onUnstageWorkspaceItem={handleUnstageWorkspaceItem}
                       onDiscardWorkspaceItem={handleDiscardWorkspaceItem}
+                      onNavigateWorkspaceDirectory={navigateGitChangesDirectory}
                       onBulkWorkspaceAction={handleBulkWorkspaceAction}
                       onDiscardWorkspaceSection={handleBulkDiscardWorkspaceSection}
                       onOpenStash={openGitStashWindow}

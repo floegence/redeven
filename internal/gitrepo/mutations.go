@@ -3,7 +3,6 @@ package gitrepo
 import (
 	"context"
 	"errors"
-	"path"
 	"strings"
 
 	"github.com/floegence/redeven/internal/gitutil"
@@ -18,94 +17,87 @@ type deleteBranchTarget struct {
 	LocalName string
 }
 
-func normalizeGitPathspecs(paths []string) ([]string, error) {
-	if len(paths) == 0 {
-		return nil, nil
-	}
-	seen := make(map[string]struct{}, len(paths))
-	out := make([]string, 0, len(paths))
-	for _, raw := range paths {
-		item := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
-		if item == "" {
-			continue
-		}
-		cleaned := path.Clean(item)
-		switch {
-		case cleaned == ".":
-			continue
-		case strings.HasPrefix(cleaned, "/"):
-			return nil, errors.New("invalid git path")
-		case cleaned == "..":
-			return nil, errors.New("invalid git path")
-		case strings.HasPrefix(cleaned, "../"):
-			return nil, errors.New("invalid git path")
-		}
-		if _, ok := seen[cleaned]; ok {
-			continue
-		}
-		seen[cleaned] = struct{}{}
-		out = append(out, cleaned)
-	}
-	return out, nil
+type workspaceMutationSelection struct {
+	Section       string
+	DirectoryPath string
+	Paths         []string
 }
 
 func (s *Service) resolveWorkspaceMutationPaths(ctx context.Context, repo repoContext, section string) ([]string, error) {
-	pageSection, err := normalizeWorkspacePageSection(section)
+	selectedItems, _, _, err := s.resolveWorkspaceMutationScope(ctx, repo, workspaceMutationSelection{Section: section}, "section")
 	if err != nil {
 		return nil, err
 	}
-	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
-	if err != nil {
-		return nil, err
-	}
-	switch pageSection {
-	case "staged":
-		return normalizeGitPathspecs(workspaceSectionPathspecs(status.Staged))
-	case "conflicted":
-		return normalizeGitPathspecs(workspaceSectionPathspecs(status.Conflicted))
-	default:
-		return normalizeGitPathspecs(workspaceSectionPathspecs(append(append([]gitWorkspaceChange{}, status.Unstaged...), status.Untracked...)))
-	}
+	return normalizeGitPathspecs(workspaceSectionPathspecs(selectedItems))
 }
 
 func (s *Service) stageWorkspacePaths(ctx context.Context, repo repoContext, paths []string) error {
-	pathspecs, err := normalizeGitPathspecs(paths)
+	_, err := s.stageWorkspace(ctx, repo, workspaceMutationSelection{Paths: paths})
+	return err
+}
+
+func (s *Service) stageWorkspace(ctx context.Context, repo repoContext, selection workspaceMutationSelection) (gitWorkspaceMutationResult, error) {
+	selectedItems, normalizedPaths, normalizedDirectoryPath, err := s.resolveWorkspaceMutationScope(ctx, repo, selection, "stage")
 	if err != nil {
-		return err
+		return gitWorkspaceMutationResult{}, err
+	}
+	result := buildWorkspaceMutationResult(selection, selectedItems, nil)
+	if result.MatchedCount == 0 {
+		return result, nil
 	}
 	args := []string{"add", "-A"}
-	if len(pathspecs) > 0 {
+	switch {
+	case len(normalizedPaths) > 0:
 		args = append(args, "--")
-		args = append(args, pathspecs...)
+		args = append(args, normalizedPaths...)
+	case normalizedDirectoryPath != "":
+		args = append(args, "--", normalizedDirectoryPath)
 	}
-	_, err = gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...)
-	return err
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+		return gitWorkspaceMutationResult{}, err
+	}
+	remainingItems, err := s.resolveWorkspaceMutationRemaining(ctx, repo, selection, "stage", selectedItems)
+	if err != nil {
+		return gitWorkspaceMutationResult{}, err
+	}
+	return buildWorkspaceMutationResult(selection, selectedItems, remainingItems), nil
 }
 
 func (s *Service) unstageWorkspacePaths(ctx context.Context, repo repoContext, paths []string) error {
-	pathspecs, err := normalizeGitPathspecs(paths)
-	if err != nil {
-		return err
-	}
-	args := []string{"reset", "--quiet", "--"}
-	if len(pathspecs) == 0 {
-		args = append(args, ".")
-	} else {
-		args = append(args, pathspecs...)
-	}
-	_, err = gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...)
+	_, err := s.unstageWorkspace(ctx, repo, workspaceMutationSelection{Paths: paths})
 	return err
 }
 
+func (s *Service) unstageWorkspace(ctx context.Context, repo repoContext, selection workspaceMutationSelection) (gitWorkspaceMutationResult, error) {
+	selectedItems, normalizedPaths, normalizedDirectoryPath, err := s.resolveWorkspaceMutationScope(ctx, repo, selection, "unstage")
+	if err != nil {
+		return gitWorkspaceMutationResult{}, err
+	}
+	result := buildWorkspaceMutationResult(selection, selectedItems, nil)
+	if result.MatchedCount == 0 {
+		return result, nil
+	}
+	args := []string{"reset", "--quiet", "--"}
+	switch {
+	case len(normalizedPaths) > 0:
+		args = append(args, normalizedPaths...)
+	case normalizedDirectoryPath != "":
+		args = append(args, normalizedDirectoryPath)
+	default:
+		args = append(args, ".")
+	}
+	if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
+		return gitWorkspaceMutationResult{}, err
+	}
+	remainingItems, err := s.resolveWorkspaceMutationRemaining(ctx, repo, selection, "unstage", selectedItems)
+	if err != nil {
+		return gitWorkspaceMutationResult{}, err
+	}
+	return buildWorkspaceMutationResult(selection, selectedItems, remainingItems), nil
+}
+
 func workspaceChangeMatchesWanted(change gitWorkspaceChange, wanted map[string]struct{}) bool {
-	for _, candidate := range []string{
-		strings.TrimSpace(change.Path),
-		strings.TrimSpace(change.NewPath),
-		strings.TrimSpace(change.OldPath),
-	} {
-		if candidate == "" {
-			continue
-		}
+	for _, candidate := range workspaceChangePathCandidates(change) {
 		if _, ok := wanted[candidate]; ok {
 			return true
 		}
@@ -114,91 +106,218 @@ func workspaceChangeMatchesWanted(change gitWorkspaceChange, wanted map[string]s
 }
 
 func workspaceDiscardTargetPath(change gitWorkspaceChange) string {
-	return firstNonEmptyPath(change.Path, change.NewPath, change.OldPath, change.DisplayPath)
-}
-
-func requestedWorkspaceDiscardPaths(status workspaceStatusSnapshot, pathspecs []string) ([]string, []string) {
-	if len(pathspecs) == 0 {
-		return nil, nil
-	}
-	wanted := make(map[string]struct{}, len(pathspecs))
-	for _, pathspec := range pathspecs {
-		trimmed := strings.TrimSpace(pathspec)
-		if trimmed == "" {
-			continue
-		}
-		wanted[trimmed] = struct{}{}
-	}
-	if len(wanted) == 0 {
-		return nil, nil
-	}
-
-	tracked := make([]string, 0, len(status.Unstaged))
-	trackedSeen := make(map[string]struct{}, len(status.Unstaged))
-	for _, item := range status.Unstaged {
-		if !workspaceChangeMatchesWanted(item, wanted) {
-			continue
-		}
-		targetPath := workspaceDiscardTargetPath(item)
-		if targetPath == "" {
-			continue
-		}
-		if _, ok := trackedSeen[targetPath]; ok {
-			continue
-		}
-		trackedSeen[targetPath] = struct{}{}
-		tracked = append(tracked, targetPath)
-	}
-
-	untracked := make([]string, 0, len(status.Untracked))
-	untrackedSeen := make(map[string]struct{}, len(status.Untracked))
-	for _, item := range status.Untracked {
-		if !workspaceChangeMatchesWanted(item, wanted) {
-			continue
-		}
-		targetPath := workspaceDiscardTargetPath(item)
-		if targetPath == "" {
-			continue
-		}
-		if _, ok := untrackedSeen[targetPath]; ok {
-			continue
-		}
-		untrackedSeen[targetPath] = struct{}{}
-		untracked = append(untracked, targetPath)
-	}
-
-	return tracked, untracked
+	return firstNonEmptyPath(workspaceChangePathCandidates(change)...)
 }
 
 func (s *Service) discardWorkspacePaths(ctx context.Context, repo repoContext, paths []string) error {
-	pathspecs, err := normalizeGitPathspecs(paths)
-	if err != nil {
-		return err
-	}
-	if len(pathspecs) == 0 {
-		return nil
-	}
+	_, err := s.discardWorkspace(ctx, repo, workspaceMutationSelection{Paths: paths})
+	return err
+}
 
-	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
+func (s *Service) discardWorkspace(ctx context.Context, repo repoContext, selection workspaceMutationSelection) (gitWorkspaceMutationResult, error) {
+	selectedItems, _, _, err := s.resolveWorkspaceMutationScope(ctx, repo, selection, "discard")
 	if err != nil {
-		return err
+		return gitWorkspaceMutationResult{}, err
 	}
-	trackedPaths, untrackedPaths := requestedWorkspaceDiscardPaths(status, pathspecs)
+	result := buildWorkspaceMutationResult(selection, selectedItems, nil)
+	if result.MatchedCount == 0 {
+		return result, nil
+	}
+	trackedPaths, untrackedPaths := workspaceDiscardPaths(selectedItems)
 	if len(trackedPaths) > 0 {
 		args := []string{"restore", "--worktree", "--"}
 		args = append(args, trackedPaths...)
 		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
-			return err
+			return gitWorkspaceMutationResult{}, err
 		}
 	}
 	if len(untrackedPaths) > 0 {
 		args := []string{"clean", "-f", "-d", "--"}
 		args = append(args, untrackedPaths...)
 		if _, err := gitutil.RunCombinedOutput(ctx, repo.repoRootReal, nil, args...); err != nil {
-			return err
+			return gitWorkspaceMutationResult{}, err
 		}
 	}
-	return nil
+	remainingItems, err := s.resolveWorkspaceMutationRemaining(ctx, repo, selection, "discard", selectedItems)
+	if err != nil {
+		return gitWorkspaceMutationResult{}, err
+	}
+	return buildWorkspaceMutationResult(selection, selectedItems, remainingItems), nil
+}
+
+func (s *Service) resolveWorkspaceMutationScope(ctx context.Context, repo repoContext, selection workspaceMutationSelection, action string) ([]gitWorkspaceChange, []string, string, error) {
+	normalizedPaths, err := normalizeGitPathspecs(selection.Paths)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	normalizedDirectoryPath, err := normalizeGitDirectoryPath(selection.DirectoryPath)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	sourceItems, err := workspaceMutationSourceItems(status, selection.Section, action)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return filterWorkspaceMutationItems(sourceItems, normalizedPaths, normalizedDirectoryPath), normalizedPaths, normalizedDirectoryPath, nil
+}
+
+func (s *Service) resolveWorkspaceMutationRemaining(ctx context.Context, repo repoContext, selection workspaceMutationSelection, action string, selectedItems []gitWorkspaceChange) ([]gitWorkspaceChange, error) {
+	if len(selectedItems) == 0 {
+		return nil, nil
+	}
+	status, err := s.readWorkspaceStatus(ctx, repo.repoRootReal)
+	if err != nil {
+		return nil, err
+	}
+	sourceItems, err := workspaceMutationSourceItems(status, selection.Section, action)
+	if err != nil {
+		return nil, err
+	}
+	wanted := workspaceCanonicalMatchSet(workspaceSectionPathspecs(selectedItems))
+	if len(wanted) == 0 {
+		return nil, nil
+	}
+	remaining := make([]gitWorkspaceChange, 0, len(sourceItems))
+	for _, item := range sourceItems {
+		if workspaceChangeMatchesWanted(item, wanted) {
+			remaining = append(remaining, item)
+		}
+	}
+	return remaining, nil
+}
+
+func workspaceMutationSourceItems(status workspaceStatusSnapshot, section string, action string) ([]gitWorkspaceChange, error) {
+	normalizedSection := strings.TrimSpace(section)
+	switch action {
+	case "stage":
+		switch normalizedSection {
+		case "", "changes":
+			return append(append([]gitWorkspaceChange{}, status.Unstaged...), status.Untracked...), nil
+		case "conflicted":
+			return append([]gitWorkspaceChange{}, status.Conflicted...), nil
+		default:
+			return nil, errors.New("invalid workspace page section")
+		}
+	case "unstage":
+		switch normalizedSection {
+		case "", "staged":
+			return append([]gitWorkspaceChange{}, status.Staged...), nil
+		default:
+			return nil, errors.New("invalid workspace page section")
+		}
+	case "discard":
+		switch normalizedSection {
+		case "", "changes":
+			return append(append([]gitWorkspaceChange{}, status.Unstaged...), status.Untracked...), nil
+		default:
+			return nil, errors.New("invalid workspace page section")
+		}
+	case "section":
+		pageSection, err := normalizeWorkspacePageSection(normalizedSection)
+		if err != nil {
+			return nil, err
+		}
+		switch pageSection {
+		case "staged":
+			return append([]gitWorkspaceChange{}, status.Staged...), nil
+		case "conflicted":
+			return append([]gitWorkspaceChange{}, status.Conflicted...), nil
+		default:
+			return append(append([]gitWorkspaceChange{}, status.Unstaged...), status.Untracked...), nil
+		}
+	default:
+		return nil, errors.New("invalid workspace mutation action")
+	}
+}
+
+func filterWorkspaceMutationItems(items []gitWorkspaceChange, normalizedPaths []string, normalizedDirectoryPath string) []gitWorkspaceChange {
+	if len(items) == 0 {
+		return nil
+	}
+	if len(normalizedPaths) == 0 && normalizedDirectoryPath == "" {
+		return append([]gitWorkspaceChange{}, items...)
+	}
+	wanted := workspaceCanonicalMatchSet(normalizedPaths)
+	filtered := make([]gitWorkspaceChange, 0, len(items))
+	for _, item := range items {
+		if len(wanted) > 0 {
+			if workspaceChangeMatchesWanted(item, wanted) {
+				filtered = append(filtered, item)
+			}
+			continue
+		}
+		if workspacePathWithinDirectory(workspaceChangeBrowsePath(item), normalizedDirectoryPath) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func buildWorkspaceMutationResult(selection workspaceMutationSelection, matchedItems []gitWorkspaceChange, remainingItems []gitWorkspaceChange) gitWorkspaceMutationResult {
+	result := gitWorkspaceMutationResult{
+		RequestedCount: len(matchedItems),
+		MatchedCount:   len(matchedItems),
+		AffectedCount:  len(matchedItems) - len(remainingItems),
+		RemainingCount: len(remainingItems),
+	}
+	if result.AffectedCount < 0 {
+		result.AffectedCount = 0
+	}
+	if result.MatchedCount == 0 {
+		result.Warnings = []string{workspaceMutationNoMatchWarning(selection)}
+		return result
+	}
+	if result.RemainingCount > 0 {
+		result.Warnings = []string{"Some selected files still match the requested scope after the Git operation."}
+	}
+	return result
+}
+
+func workspaceMutationNoMatchWarning(selection workspaceMutationSelection) string {
+	switch {
+	case strings.TrimSpace(selection.DirectoryPath) != "":
+		return "No current files matched the selected folder."
+	case len(selection.Paths) > 0:
+		return "No current files matched the selected file scope."
+	default:
+		return "No current files matched the selected workspace section."
+	}
+}
+
+func workspaceDiscardPaths(items []gitWorkspaceChange) ([]string, []string) {
+	trackedPaths := make([]string, 0, len(items))
+	untrackedPaths := make([]string, 0, len(items))
+	trackedSeen := make(map[string]struct{}, len(items)*2)
+	untrackedSeen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Section) == "untracked" {
+			targetPath := workspaceDiscardTargetPath(item)
+			if targetPath == "" {
+				continue
+			}
+			if _, ok := untrackedSeen[targetPath]; ok {
+				continue
+			}
+			untrackedSeen[targetPath] = struct{}{}
+			untrackedPaths = append(untrackedPaths, targetPath)
+			continue
+		}
+		for _, targetPath := range workspaceChangePathCandidates(item) {
+			if targetPath == "" {
+				continue
+			}
+			if _, ok := trackedSeen[targetPath]; ok {
+				continue
+			}
+			trackedSeen[targetPath] = struct{}{}
+			trackedPaths = append(trackedPaths, targetPath)
+		}
+	}
+	return trackedPaths, untrackedPaths
 }
 
 func (s *Service) commitWorkspace(ctx context.Context, repo repoContext, message string) (*commitWorkspaceResp, error) {

@@ -547,6 +547,89 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('renders breadcrumbs for nested folders and navigates when a directory row is opened', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onNavigateDirectory = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 3, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  changes: {
+                    items: [
+                      {
+                        section: 'changes',
+                        entryKind: 'directory',
+                        path: 'desktop/diagnostics',
+                        displayPath: 'desktop/diagnostics',
+                        directoryPath: 'desktop/diagnostics',
+                        descendantFileCount: 2,
+                        containsUntracked: true,
+                      },
+                      {
+                        section: 'untracked',
+                        entryKind: 'file',
+                        path: 'desktop/readme.md',
+                        displayPath: 'desktop/readme.md',
+                      },
+                    ],
+                    totalCount: 2,
+                    scopeFileCount: 3,
+                    nextOffset: 2,
+                    hasMore: false,
+                    loading: false,
+                    error: '',
+                    initialized: true,
+                    directoryPath: 'desktop',
+                    breadcrumbs: [
+                      { label: 'repo', path: '' },
+                      { label: 'desktop', path: 'desktop' },
+                    ],
+                  },
+                }}
+                selectedSection="changes"
+                onNavigateDirectory={onNavigateDirectory}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('Stage Folder');
+      expect(host.textContent).toContain('repo');
+      expect(host.textContent).toContain('desktop');
+      expect(host.textContent).toContain('Folder');
+      expect(host.textContent).toContain('3 files');
+
+      const rootCrumb = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'repo');
+      expect(rootCrumb).toBeTruthy();
+      rootCrumb!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      const directoryButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('diagnostics'));
+      expect(directoryButton).toBeTruthy();
+      directoryButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(onNavigateDirectory).toHaveBeenNthCalledWith(1, '');
+      expect(onNavigateDirectory).toHaveBeenNthCalledWith(2, 'desktop/diagnostics');
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows the section-specific empty state copy', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

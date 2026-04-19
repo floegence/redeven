@@ -953,7 +953,7 @@ func TestListWorkspaceChanges_ReportsOnlyRealConflictsInConflictedSection(t *tes
 	}
 }
 
-func TestListWorkspacePage_SlicesPendingChangesAcrossSections(t *testing.T) {
+func TestListWorkspacePage_ChangesPagesImmediateChildren(t *testing.T) {
 	t.Parallel()
 	fixture := createTestRepoFixture(t)
 	writeFixtureFile(t, fixture.Root, "src/second.txt", []byte("tracked\n"))
@@ -969,24 +969,24 @@ func TestListWorkspacePage_SlicesPendingChangesAcrossSections(t *testing.T) {
 		t.Fatalf("resolveExplicitRepo: %v", err)
 	}
 
-	resp, err := svc.listWorkspacePage(context.Background(), repo, "changes", 1, 2)
+	resp, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 1, 2)
 	if err != nil {
 		t.Fatalf("listWorkspacePage(changes): %v", err)
 	}
 	if resp.Section != "changes" {
 		t.Fatalf("Section=%q, want changes", resp.Section)
 	}
-	if resp.TotalCount != 4 || resp.Offset != 1 || resp.NextOffset != 3 || !resp.HasMore {
+	if resp.TotalCount != 3 || resp.Offset != 1 || resp.NextOffset != 3 || resp.HasMore {
 		t.Fatalf("unexpected page window: %+v", resp)
 	}
 	if len(resp.Items) != 2 {
 		t.Fatalf("len(items)=%d, want 2", len(resp.Items))
 	}
-	if resp.Items[0].Section != "unstaged" || resp.Items[1].Section != "untracked" {
-		t.Fatalf("expected changes page to cross the unstaged/untracked boundary: %+v", resp.Items)
+	if resp.Items[0].EntryKind != "file" || resp.Items[1].EntryKind != "file" {
+		t.Fatalf("expected file rows after paging past the root directory row: %+v", resp.Items)
 	}
-	if resp.Items[1].Path != workspace.UntrackedPath && resp.Items[1].Path != "scratch.txt" {
-		t.Fatalf("unexpected untracked item: %+v", resp.Items[1])
+	if resp.Items[0].Path != "scratch.txt" || resp.Items[1].Path != workspace.UntrackedPath {
+		t.Fatalf("unexpected immediate children page: %+v", resp.Items)
 	}
 }
 
@@ -1004,7 +1004,7 @@ func TestListWorkspacePage_StagesAndConflictsRemainSectionScoped(t *testing.T) {
 		t.Fatalf("stageWorkspacePaths: %v", err)
 	}
 
-	stagedPage, err := svc.listWorkspacePage(context.Background(), repo, "staged", 0, 1)
+	stagedPage, err := svc.listWorkspacePage(context.Background(), repo, "staged", "", 0, 1)
 	if err != nil {
 		t.Fatalf("listWorkspacePage(staged): %v", err)
 	}
@@ -1025,7 +1025,7 @@ func TestListWorkspacePage_StagesAndConflictsRemainSectionScoped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveExplicitRepo(conflict): %v", err)
 	}
-	conflictedPage, err := conflictSvc.listWorkspacePage(context.Background(), conflictRepo, "conflicted", 0, 10)
+	conflictedPage, err := conflictSvc.listWorkspacePage(context.Background(), conflictRepo, "conflicted", "", 0, 10)
 	if err != nil {
 		t.Fatalf("listWorkspacePage(conflicted): %v", err)
 	}
@@ -1040,6 +1040,62 @@ func TestListWorkspacePage_StagesAndConflictsRemainSectionScoped(t *testing.T) {
 	}
 	if conflictedPage.Items[0].ChangeType != "conflicted" {
 		t.Fatalf("ChangeType=%q, want conflicted", conflictedPage.Items[0].ChangeType)
+	}
+}
+
+func TestListWorkspacePage_ChangesSupportsDirectoryBrowsing(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	createWorkspaceChangesFixture(t, fixture.Root)
+	writeFixtureFile(t, fixture.Root, "desktop/diagnostics/report.txt", []byte("report\n"))
+	writeFixtureFile(t, fixture.Root, "desktop/diagnostics/logs/error.txt", []byte("error\n"))
+	writeFixtureFile(t, fixture.Root, "desktop/readme.md", []byte("desktop\n"))
+
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	rootPage, err := svc.listWorkspacePage(context.Background(), repo, "changes", "", 0, 20)
+	if err != nil {
+		t.Fatalf("listWorkspacePage(root): %v", err)
+	}
+	if rootPage.DirectoryPath != "" {
+		t.Fatalf("DirectoryPath=%q, want root", rootPage.DirectoryPath)
+	}
+	var desktopDir *gitWorkspaceChange
+	for index := range rootPage.Items {
+		if rootPage.Items[index].EntryKind == "directory" && rootPage.Items[index].DirectoryPath == "desktop" {
+			desktopDir = &rootPage.Items[index]
+			break
+		}
+	}
+	if desktopDir == nil {
+		t.Fatalf("expected desktop directory entry in root page: %+v", rootPage.Items)
+	}
+	if desktopDir.DescendantFileCount != 3 || !desktopDir.ContainsUntracked || desktopDir.ContainsUnstaged {
+		t.Fatalf("unexpected desktop directory aggregate: %+v", desktopDir)
+	}
+
+	desktopPage, err := svc.listWorkspacePage(context.Background(), repo, "changes", "desktop/", 0, 20)
+	if err != nil {
+		t.Fatalf("listWorkspacePage(desktop): %v", err)
+	}
+	if desktopPage.DirectoryPath != "desktop" {
+		t.Fatalf("DirectoryPath=%q, want desktop", desktopPage.DirectoryPath)
+	}
+	if len(desktopPage.Breadcrumbs) != 2 || desktopPage.Breadcrumbs[1].Path != "desktop" {
+		t.Fatalf("unexpected breadcrumbs: %+v", desktopPage.Breadcrumbs)
+	}
+	if len(desktopPage.Items) != 2 {
+		t.Fatalf("len(desktop items)=%d, want 2", len(desktopPage.Items))
+	}
+	if desktopPage.Items[0].EntryKind != "directory" || desktopPage.Items[0].DirectoryPath != "desktop/diagnostics" {
+		t.Fatalf("unexpected first desktop item: %+v", desktopPage.Items[0])
+	}
+	if desktopPage.Items[1].EntryKind != "file" || desktopPage.Items[1].Path != "desktop/readme.md" {
+		t.Fatalf("unexpected second desktop item: %+v", desktopPage.Items[1])
 	}
 }
 
@@ -1296,6 +1352,47 @@ func TestDiscardWorkspacePaths_WithExplicitUntrackedPathOnly(t *testing.T) {
 	}
 	if resp.Summary.StagedCount != 1 || resp.Summary.UnstagedCount != 1 || resp.Summary.UntrackedCount != 0 {
 		t.Fatalf("unexpected workspace summary after untracked discard: %+v", resp.Summary)
+	}
+}
+
+func TestDiscardWorkspace_DirectorySelectionReportsTruthfully(t *testing.T) {
+	t.Parallel()
+	fixture := createTestRepoFixture(t)
+	createWorkspaceChangesFixture(t, fixture.Root)
+	writeFixtureFile(t, fixture.Root, "desktop/diagnostics/report.txt", []byte("report\n"))
+	writeFixtureFile(t, fixture.Root, "desktop/diagnostics/logs/error.txt", []byte("error\n"))
+	svc := NewService(fixture.Root)
+	repo, err := svc.resolveExplicitRepo(context.Background(), fixture.Root)
+	if err != nil {
+		t.Fatalf("resolveExplicitRepo: %v", err)
+	}
+
+	result, err := svc.discardWorkspace(context.Background(), repo, workspaceMutationSelection{
+		Section:       "changes",
+		DirectoryPath: "desktop/diagnostics/",
+	})
+	if err != nil {
+		t.Fatalf("discardWorkspace(directory): %v", err)
+	}
+	if result.RequestedCount != 2 || result.MatchedCount != 2 || result.AffectedCount != 2 || result.RemainingCount != 0 {
+		t.Fatalf("unexpected discard result: %+v", result)
+	}
+	if _, statErr := os.Stat(filepath.Join(fixture.Root, "desktop", "diagnostics", "report.txt")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected report.txt to be removed, got: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(fixture.Root, "desktop", "diagnostics", "logs", "error.txt")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected error.txt to be removed, got: %v", statErr)
+	}
+
+	noopResult, err := svc.discardWorkspace(context.Background(), repo, workspaceMutationSelection{
+		Section:       "changes",
+		DirectoryPath: "desktop/diagnostics/",
+	})
+	if err != nil {
+		t.Fatalf("discardWorkspace(directory second pass): %v", err)
+	}
+	if noopResult.RequestedCount != 0 || noopResult.MatchedCount != 0 || noopResult.AffectedCount != 0 || len(noopResult.Warnings) == 0 {
+		t.Fatalf("expected warning-only no-op result, got: %+v", noopResult)
 	}
 }
 

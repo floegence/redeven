@@ -71,6 +71,8 @@ import type {
   GitResolveRepoRequest,
   GitResolveRepoResponse,
   GitWorkspaceChange,
+  GitWorkspaceBreadcrumb,
+  GitWorkspaceMutationResult,
   GitWorkspacePageSection,
   GitWorkspaceSummary,
 } from '../sdk/git';
@@ -146,7 +148,9 @@ import type {
   wire_git_push_repo_resp,
   wire_git_resolve_repo_req,
   wire_git_resolve_repo_resp,
+  wire_git_workspace_breadcrumb,
   wire_git_workspace_change,
+  wire_git_workspace_mutation_result,
   wire_git_workspace_summary,
 } from '../wire/git';
 
@@ -204,7 +208,33 @@ function fromWireGitCommitDiffPresentation(resp: wire_git_commit_diff_presentati
 function fromWireGitWorkspaceChange(resp: wire_git_workspace_change): GitWorkspaceChange {
   return {
     section: typeof resp?.section === 'string' ? resp.section : undefined,
+    entryKind: typeof resp?.entry_kind === 'string' ? resp.entry_kind : undefined,
+    parentPath: typeof resp?.parent_path === 'string' ? resp.parent_path : undefined,
+    directoryPath: typeof resp?.directory_path === 'string' ? resp.directory_path : undefined,
+    descendantFileCount: typeof resp?.descendant_file_count === 'number' ? resp.descendant_file_count : undefined,
+    containsUntracked: typeof resp?.contains_untracked === 'boolean' ? resp.contains_untracked : undefined,
+    containsUnstaged: typeof resp?.contains_unstaged === 'boolean' ? resp.contains_unstaged : undefined,
+    mutationPaths: Array.isArray(resp?.mutation_paths) ? resp.mutation_paths.map((item) => String(item ?? '')) : undefined,
     ...fromWireGitDiffFileSummary(resp),
+  };
+}
+
+function fromWireGitWorkspaceBreadcrumb(resp: wire_git_workspace_breadcrumb | undefined): GitWorkspaceBreadcrumb | undefined {
+  if (!resp) return undefined;
+  return {
+    label: typeof resp?.label === 'string' ? resp.label : undefined,
+    path: typeof resp?.path === 'string' ? resp.path : undefined,
+  };
+}
+
+function fromWireGitWorkspaceMutationResult(resp: wire_git_workspace_mutation_result | undefined): GitWorkspaceMutationResult | undefined {
+  if (!resp) return undefined;
+  return {
+    requestedCount: typeof resp?.requested_count === 'number' ? resp.requested_count : undefined,
+    matchedCount: typeof resp?.matched_count === 'number' ? resp.matched_count : undefined,
+    affectedCount: typeof resp?.affected_count === 'number' ? resp.affected_count : undefined,
+    remainingCount: typeof resp?.remaining_count === 'number' ? resp.remaining_count : undefined,
+    warnings: Array.isArray(resp?.warnings) ? resp.warnings.map((item) => String(item ?? '')) : undefined,
   };
 }
 
@@ -379,6 +409,7 @@ export function toWireGitListWorkspacePageRequest(req: GitListWorkspacePageReque
   return {
     repo_root_path: req.repoRootPath,
     section: typeof req.section === 'string' ? req.section : undefined,
+    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
     offset: typeof req.offset === 'number' ? req.offset : undefined,
     limit: typeof req.limit === 'number' ? req.limit : undefined,
   };
@@ -391,7 +422,12 @@ export function fromWireGitListWorkspacePageResponse(resp: wire_git_list_workspa
     section: section === 'changes' || section === 'staged' || section === 'conflicted'
       ? (section as GitWorkspacePageSection)
       : undefined,
+    directoryPath: typeof resp?.directory_path === 'string' ? resp.directory_path : undefined,
+    breadcrumbs: Array.isArray(resp?.breadcrumbs)
+      ? resp.breadcrumbs.map((item) => fromWireGitWorkspaceBreadcrumb(item)).filter((item): item is GitWorkspaceBreadcrumb => Boolean(item))
+      : undefined,
     summary: fromWireGitWorkspaceSummary(resp?.summary),
+    scopeFileCount: typeof resp?.scope_file_count === 'number' ? resp.scope_file_count : undefined,
     totalCount: typeof resp?.total_count === 'number' ? resp.total_count : undefined,
     offset: typeof resp?.offset === 'number' ? resp.offset : undefined,
     nextOffset: typeof resp?.next_offset === 'number' ? resp.next_offset : undefined,
@@ -522,6 +558,7 @@ export function toWireGitStageWorkspaceRequest(req: GitStageWorkspaceRequest): w
   return {
     repo_root_path: req.repoRootPath,
     section: typeof req.section === 'string' ? req.section : undefined,
+    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
     paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
   };
 }
@@ -529,6 +566,7 @@ export function toWireGitStageWorkspaceRequest(req: GitStageWorkspaceRequest): w
 export function fromWireGitStageWorkspaceResponse(resp: wire_git_stage_workspace_resp): GitStageWorkspaceResponse {
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
+    result: fromWireGitWorkspaceMutationResult(resp?.result),
   };
 }
 
@@ -536,6 +574,7 @@ export function toWireGitUnstageWorkspaceRequest(req: GitUnstageWorkspaceRequest
   return {
     repo_root_path: req.repoRootPath,
     section: typeof req.section === 'string' ? req.section : undefined,
+    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
     paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
   };
 }
@@ -543,6 +582,7 @@ export function toWireGitUnstageWorkspaceRequest(req: GitUnstageWorkspaceRequest
 export function fromWireGitUnstageWorkspaceResponse(resp: wire_git_unstage_workspace_resp): GitUnstageWorkspaceResponse {
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
+    result: fromWireGitWorkspaceMutationResult(resp?.result),
   };
 }
 
@@ -550,6 +590,7 @@ export function toWireGitDiscardWorkspaceRequest(req: GitDiscardWorkspaceRequest
   return {
     repo_root_path: req.repoRootPath,
     section: typeof req.section === 'string' ? req.section : undefined,
+    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
     paths: Array.isArray(req.paths) ? req.paths.map((item) => String(item)) : undefined,
   };
 }
@@ -557,6 +598,7 @@ export function toWireGitDiscardWorkspaceRequest(req: GitDiscardWorkspaceRequest
 export function fromWireGitDiscardWorkspaceResponse(resp: wire_git_discard_workspace_resp): GitDiscardWorkspaceResponse {
   return {
     repoRootPath: String(resp?.repo_root_path ?? ''),
+    result: fromWireGitWorkspaceMutationResult(resp?.result),
   };
 }
 

@@ -371,7 +371,7 @@ func TestE2E_GitRepoRPC_WorkbenchEndpoints(t *testing.T) {
 	if workspacePageResp.Section != "changes" || workspacePageResp.TotalCount != 2 || workspacePageResp.NextOffset != 1 || !workspacePageResp.HasMore {
 		t.Fatalf("unexpected workspace page response: %+v", workspacePageResp)
 	}
-	if len(workspacePageResp.Items) != 1 || workspacePageResp.Items[0].Section != "unstaged" {
+	if len(workspacePageResp.Items) != 1 || workspacePageResp.Items[0].EntryKind != "directory" || workspacePageResp.Items[0].DirectoryPath != "src" {
 		t.Fatalf("unexpected workspace page items: %+v", workspacePageResp.Items)
 	}
 	stagedDiffPayload, rpcErr, err := client.Call(context.Background(), TypeID_GIT_DIFF_CONTENT, mustMarshalJSON(t, getDiffContentReq{

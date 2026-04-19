@@ -217,7 +217,7 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		resp, err := s.listWorkspacePage(ctx, repo, req.Section, req.Offset, req.Limit)
+		resp, err := s.listWorkspacePage(ctx, repo, req.Section, req.DirectoryPath, req.Offset, req.Limit)
 		if err != nil {
 			return nil, classifyGitRPCError(err)
 		}
@@ -331,17 +331,18 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		paths := req.Paths
-		if len(paths) == 0 && strings.TrimSpace(req.Section) != "" {
-			paths, err = s.resolveWorkspaceMutationPaths(ctx, repo, req.Section)
-			if err != nil {
-				return nil, classifyGitMutationRPCError(err)
-			}
-		}
-		if err := s.stageWorkspacePaths(ctx, repo, paths); err != nil {
+		result, err := s.stageWorkspace(ctx, repo, workspaceMutationSelection{
+			Section:       req.Section,
+			DirectoryPath: req.DirectoryPath,
+			Paths:         req.Paths,
+		})
+		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
-		return &stageWorkspaceResp{RepoRootPath: repo.repoRootReal}, nil
+		return &stageWorkspaceResp{
+			RepoRootPath: repo.repoRootReal,
+			Result:       result,
+		}, nil
 	})
 
 	accessgate.RegisterTyped[unstageWorkspaceReq, unstageWorkspaceResp](r, TypeID_GIT_UNSTAGE_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *unstageWorkspaceReq) (*unstageWorkspaceResp, error) {
@@ -355,17 +356,18 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		paths := req.Paths
-		if len(paths) == 0 && strings.TrimSpace(req.Section) != "" {
-			paths, err = s.resolveWorkspaceMutationPaths(ctx, repo, req.Section)
-			if err != nil {
-				return nil, classifyGitMutationRPCError(err)
-			}
-		}
-		if err := s.unstageWorkspacePaths(ctx, repo, paths); err != nil {
+		result, err := s.unstageWorkspace(ctx, repo, workspaceMutationSelection{
+			Section:       req.Section,
+			DirectoryPath: req.DirectoryPath,
+			Paths:         req.Paths,
+		})
+		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
-		return &unstageWorkspaceResp{RepoRootPath: repo.repoRootReal}, nil
+		return &unstageWorkspaceResp{
+			RepoRootPath: repo.repoRootReal,
+			Result:       result,
+		}, nil
 	})
 
 	accessgate.RegisterTyped[discardWorkspaceReq, discardWorkspaceResp](r, TypeID_GIT_DISCARD_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *discardWorkspaceReq) (*discardWorkspaceResp, error) {
@@ -379,17 +381,18 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		if err != nil {
 			return nil, classifyRepoRPCError(err)
 		}
-		paths := req.Paths
-		if len(paths) == 0 && strings.TrimSpace(req.Section) != "" {
-			paths, err = s.resolveWorkspaceMutationPaths(ctx, repo, req.Section)
-			if err != nil {
-				return nil, classifyGitMutationRPCError(err)
-			}
-		}
-		if err := s.discardWorkspacePaths(ctx, repo, paths); err != nil {
+		result, err := s.discardWorkspace(ctx, repo, workspaceMutationSelection{
+			Section:       req.Section,
+			DirectoryPath: req.DirectoryPath,
+			Paths:         req.Paths,
+		})
+		if err != nil {
 			return nil, classifyGitMutationRPCError(err)
 		}
-		return &discardWorkspaceResp{RepoRootPath: repo.repoRootReal}, nil
+		return &discardWorkspaceResp{
+			RepoRootPath: repo.repoRootReal,
+			Result:       result,
+		}, nil
 	})
 
 	accessgate.RegisterTyped[commitWorkspaceReq, commitWorkspaceResp](r, TypeID_GIT_COMMIT_WORKSPACE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *commitWorkspaceReq) (*commitWorkspaceResp, error) {
@@ -1140,33 +1143,39 @@ type getCommitDetailReq struct {
 }
 
 type stageWorkspaceReq struct {
-	RepoRootPath string   `json:"repo_root_path"`
-	Section      string   `json:"section,omitempty"`
-	Paths        []string `json:"paths,omitempty"`
+	RepoRootPath  string   `json:"repo_root_path"`
+	Section       string   `json:"section,omitempty"`
+	DirectoryPath string   `json:"directory_path,omitempty"`
+	Paths         []string `json:"paths,omitempty"`
 }
 
 type stageWorkspaceResp struct {
-	RepoRootPath string `json:"repo_root_path"`
+	RepoRootPath string                     `json:"repo_root_path"`
+	Result       gitWorkspaceMutationResult `json:"result"`
 }
 
 type unstageWorkspaceReq struct {
-	RepoRootPath string   `json:"repo_root_path"`
-	Section      string   `json:"section,omitempty"`
-	Paths        []string `json:"paths,omitempty"`
+	RepoRootPath  string   `json:"repo_root_path"`
+	Section       string   `json:"section,omitempty"`
+	DirectoryPath string   `json:"directory_path,omitempty"`
+	Paths         []string `json:"paths,omitempty"`
 }
 
 type unstageWorkspaceResp struct {
-	RepoRootPath string `json:"repo_root_path"`
+	RepoRootPath string                     `json:"repo_root_path"`
+	Result       gitWorkspaceMutationResult `json:"result"`
 }
 
 type discardWorkspaceReq struct {
-	RepoRootPath string   `json:"repo_root_path"`
-	Section      string   `json:"section,omitempty"`
-	Paths        []string `json:"paths,omitempty"`
+	RepoRootPath  string   `json:"repo_root_path"`
+	Section       string   `json:"section,omitempty"`
+	DirectoryPath string   `json:"directory_path,omitempty"`
+	Paths         []string `json:"paths,omitempty"`
 }
 
 type discardWorkspaceResp struct {
-	RepoRootPath string `json:"repo_root_path"`
+	RepoRootPath string                     `json:"repo_root_path"`
+	Result       gitWorkspaceMutationResult `json:"result"`
 }
 
 type commitWorkspaceReq struct {
