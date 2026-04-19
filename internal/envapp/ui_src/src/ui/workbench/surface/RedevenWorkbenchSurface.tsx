@@ -27,6 +27,7 @@ import {
 } from './workbenchInputRouting';
 
 const WORKBENCH_CANVAS_INTERACTIVE_SELECTOR = '[data-floe-canvas-interactive="true"]';
+const WORKBENCH_CANVAS_MEASUREMENT_SELECTOR = '.workbench-canvas';
 
 export interface RedevenWorkbenchSurfaceApi {
   ensureWidget: (
@@ -96,10 +97,22 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
     }
   };
 
+  const refreshCanvasFrameMeasurement = (): HTMLDivElement | null => {
+    const canvasEl = surfaceRootEl()?.querySelector(WORKBENCH_CANVAS_MEASUREMENT_SELECTOR) as HTMLDivElement | null;
+    if (canvasEl) {
+      model.setCanvasFrameRef(canvasEl);
+    }
+    return canvasEl;
+  };
+
   createEffect(() => {
     props.onApiReady?.({
-      ensureWidget: (type, options) => model.widgetActions.ensureWidget(type, options) ?? null,
+      ensureWidget: (type, options) => {
+        refreshCanvasFrameMeasurement();
+        return model.widgetActions.ensureWidget(type, options) ?? null;
+      },
       focusWidget: (widget, options) => {
+        refreshCanvasFrameMeasurement();
         const focusedWidget = model.navigation.focusWidget(widget, options);
         queueMicrotask(() => {
           focusWorkbenchWidgetElement(surfaceRootEl(), focusedWidget.id);
@@ -176,18 +189,22 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       switch (event.key) {
         case 'ArrowUp':
           event.preventDefault();
+          refreshCanvasFrameMeasurement();
           model.navigation.handleArrowNavigation('up');
           break;
         case 'ArrowDown':
           event.preventDefault();
+          refreshCanvasFrameMeasurement();
           model.navigation.handleArrowNavigation('down');
           break;
         case 'ArrowLeft':
           event.preventDefault();
+          refreshCanvasFrameMeasurement();
           model.navigation.handleArrowNavigation('left');
           break;
         case 'ArrowRight':
           event.preventDefault();
+          refreshCanvasFrameMeasurement();
           model.navigation.handleArrowNavigation('right');
           break;
         case 'Delete':
@@ -208,9 +225,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   // Returns null when the cursor is outside the canvas frame, so callers can
   // distinguish "dropped on canvas" from "dropped outside".
   const clientToWorld = (clientX: number, clientY: number) => {
-    const frameEl = surfaceRootEl()?.querySelector(
-      '[data-floe-workbench-canvas-frame="true"]'
-    ) as HTMLElement | null;
+    const frameEl = refreshCanvasFrameMeasurement();
     if (!frameEl) return null;
     const rect = frameEl.getBoundingClientRect();
     if (
