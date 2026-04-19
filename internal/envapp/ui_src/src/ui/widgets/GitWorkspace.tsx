@@ -51,6 +51,7 @@ export interface GitWorkspaceProps {
   onStageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onUnstageWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onDiscardWorkspaceItem?: (item: GitWorkspaceChange) => void;
+  onNavigateWorkspaceDirectory?: (directoryPath: string) => void;
   onBulkWorkspaceAction?: (section: GitWorkspaceViewSection) => void;
   onDiscardWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
@@ -265,6 +266,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onStageSelected={props.onStageWorkspaceItem}
               onUnstageSelected={props.onUnstageWorkspaceItem}
               onDiscardSelected={props.onDiscardWorkspaceItem}
+              onNavigateWorkspaceDirectory={props.onNavigateWorkspaceDirectory}
               onBulkAction={props.onBulkWorkspaceAction}
               onDiscardAll={props.onDiscardWorkspaceSection}
               onLoadMoreWorkspaceSection={props.onLoadMoreWorkspaceSection}

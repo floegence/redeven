@@ -71,6 +71,18 @@ export type wire_git_commit_diff_presentation = {
 
 export type wire_git_workspace_change = wire_git_diff_file_summary & {
   section?: string;
+  entry_kind?: string;
+  parent_path?: string;
+  directory_path?: string;
+  descendant_file_count?: number;
+  contains_untracked?: boolean;
+  contains_unstaged?: boolean;
+  mutation_paths?: string[];
+};
+
+export type wire_git_workspace_breadcrumb = {
+  label?: string;
+  path?: string;
 };
 
 export type wire_git_list_workspace_changes_req = {
@@ -89,6 +101,7 @@ export type wire_git_list_workspace_changes_resp = {
 export type wire_git_list_workspace_page_req = {
   repo_root_path: string;
   section?: string;
+  directory_path?: string;
   offset?: number;
   limit?: number;
 };
@@ -96,7 +109,10 @@ export type wire_git_list_workspace_page_req = {
 export type wire_git_list_workspace_page_resp = {
   repo_root_path: string;
   section?: string;
+  directory_path?: string;
+  breadcrumbs?: wire_git_workspace_breadcrumb[];
   summary: wire_git_workspace_summary;
+  scope_file_count?: number;
   total_count?: number;
   offset?: number;
   next_offset?: number;
@@ -154,31 +170,45 @@ export type wire_git_save_stash_resp = {
 export type wire_git_stage_workspace_req = {
   repo_root_path: string;
   section?: string;
+  directory_path?: string;
   paths?: string[];
+};
+
+export type wire_git_workspace_mutation_result = {
+  requested_count?: number;
+  matched_count?: number;
+  affected_count?: number;
+  remaining_count?: number;
+  warnings?: string[];
 };
 
 export type wire_git_stage_workspace_resp = {
   repo_root_path: string;
+  result?: wire_git_workspace_mutation_result;
 };
 
 export type wire_git_unstage_workspace_req = {
   repo_root_path: string;
   section?: string;
+  directory_path?: string;
   paths?: string[];
 };
 
 export type wire_git_unstage_workspace_resp = {
   repo_root_path: string;
+  result?: wire_git_workspace_mutation_result;
 };
 
 export type wire_git_discard_workspace_req = {
   repo_root_path: string;
   section?: string;
+  directory_path?: string;
   paths?: string[];
 };
 
 export type wire_git_discard_workspace_resp = {
   repo_root_path: string;
+  result?: wire_git_workspace_mutation_result;
 };
 
 export type wire_git_preview_apply_stash_req = {

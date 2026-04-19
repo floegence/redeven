@@ -53,8 +53,20 @@ type gitDiffFileContent struct {
 }
 
 type gitWorkspaceChange struct {
-	Section string `json:"section,omitempty"`
+	Section             string   `json:"section,omitempty"`
+	EntryKind           string   `json:"entry_kind,omitempty"`
+	ParentPath          string   `json:"parent_path,omitempty"`
+	DirectoryPath       string   `json:"directory_path,omitempty"`
+	DescendantFileCount int      `json:"descendant_file_count,omitempty"`
+	ContainsUntracked   bool     `json:"contains_untracked,omitempty"`
+	ContainsUnstaged    bool     `json:"contains_unstaged,omitempty"`
+	MutationPaths       []string `json:"mutation_paths,omitempty"`
 	gitDiffFileSummary
+}
+
+type gitWorkspaceBreadcrumb struct {
+	Label string `json:"label,omitempty"`
+	Path  string `json:"path,omitempty"`
 }
 
 type listWorkspaceChangesReq struct {
@@ -71,21 +83,25 @@ type listWorkspaceChangesResp struct {
 }
 
 type listWorkspacePageReq struct {
-	RepoRootPath string `json:"repo_root_path"`
-	Section      string `json:"section,omitempty"`
-	Offset       int    `json:"offset,omitempty"`
-	Limit        int    `json:"limit,omitempty"`
+	RepoRootPath  string `json:"repo_root_path"`
+	Section       string `json:"section,omitempty"`
+	DirectoryPath string `json:"directory_path,omitempty"`
+	Offset        int    `json:"offset,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
 }
 
 type listWorkspacePageResp struct {
-	RepoRootPath string               `json:"repo_root_path"`
-	Section      string               `json:"section,omitempty"`
-	Summary      gitWorkspaceSummary  `json:"summary"`
-	TotalCount   int                  `json:"total_count,omitempty"`
-	Offset       int                  `json:"offset,omitempty"`
-	NextOffset   int                  `json:"next_offset,omitempty"`
-	HasMore      bool                 `json:"has_more,omitempty"`
-	Items        []gitWorkspaceChange `json:"items,omitempty"`
+	RepoRootPath   string                   `json:"repo_root_path"`
+	Section        string                   `json:"section,omitempty"`
+	DirectoryPath  string                   `json:"directory_path,omitempty"`
+	Breadcrumbs    []gitWorkspaceBreadcrumb `json:"breadcrumbs,omitempty"`
+	Summary        gitWorkspaceSummary      `json:"summary"`
+	ScopeFileCount int                      `json:"scope_file_count,omitempty"`
+	TotalCount     int                      `json:"total_count,omitempty"`
+	Offset         int                      `json:"offset,omitempty"`
+	NextOffset     int                      `json:"next_offset,omitempty"`
+	HasMore        bool                     `json:"has_more,omitempty"`
+	Items          []gitWorkspaceChange     `json:"items,omitempty"`
 }
 
 type listStashesReq struct {
@@ -134,6 +150,14 @@ type saveStashResp struct {
 	HeadRef      string           `json:"head_ref,omitempty"`
 	HeadCommit   string           `json:"head_commit,omitempty"`
 	Created      *gitStashSummary `json:"created,omitempty"`
+}
+
+type gitWorkspaceMutationResult struct {
+	RequestedCount int      `json:"requested_count,omitempty"`
+	MatchedCount   int      `json:"matched_count,omitempty"`
+	AffectedCount  int      `json:"affected_count,omitempty"`
+	RemainingCount int      `json:"remaining_count,omitempty"`
+	Warnings       []string `json:"warnings,omitempty"`
 }
 
 type previewApplyStashReq struct {

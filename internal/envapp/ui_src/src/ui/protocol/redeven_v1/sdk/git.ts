@@ -49,6 +49,7 @@ export type GitRepoSummaryResponse = {
 
 export type GitWorkspaceSection = 'staged' | 'unstaged' | 'untracked' | 'conflicted';
 export type GitWorkspacePageSection = 'changes' | 'staged' | 'conflicted';
+export type GitWorkspaceEntryKind = 'file' | 'directory';
 
 export type GitDiffFileSummary = {
   changeType?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'conflicted' | string;
@@ -73,7 +74,19 @@ export type GitCommitDiffPresentation = {
 };
 
 export type GitWorkspaceChange = GitDiffFileSummary & {
-  section?: GitWorkspaceSection | string;
+  section?: GitWorkspaceSection | GitWorkspacePageSection | string;
+  entryKind?: GitWorkspaceEntryKind | string;
+  parentPath?: string;
+  directoryPath?: string;
+  descendantFileCount?: number;
+  containsUntracked?: boolean;
+  containsUnstaged?: boolean;
+  mutationPaths?: string[];
+};
+
+export type GitWorkspaceBreadcrumb = {
+  label?: string;
+  path?: string;
 };
 
 export type GitLinkedWorktreeSnapshot = {
@@ -101,6 +114,7 @@ export type GitListWorkspaceChangesResponse = {
 export type GitListWorkspacePageRequest = {
   repoRootPath: string;
   section?: GitWorkspacePageSection;
+  directoryPath?: string;
   offset?: number;
   limit?: number;
 };
@@ -108,7 +122,10 @@ export type GitListWorkspacePageRequest = {
 export type GitListWorkspacePageResponse = {
   repoRootPath: string;
   section?: GitWorkspacePageSection;
+  directoryPath?: string;
+  breadcrumbs?: GitWorkspaceBreadcrumb[];
   summary: GitWorkspaceSummary;
+  scopeFileCount?: number;
   totalCount?: number;
   offset?: number;
   nextOffset?: number;
@@ -221,31 +238,45 @@ export type GitDropStashResponse = {
 export type GitStageWorkspaceRequest = {
   repoRootPath: string;
   section?: GitWorkspacePageSection;
+  directoryPath?: string;
   paths?: string[];
+};
+
+export type GitWorkspaceMutationResult = {
+  requestedCount?: number;
+  matchedCount?: number;
+  affectedCount?: number;
+  remainingCount?: number;
+  warnings?: string[];
 };
 
 export type GitStageWorkspaceResponse = {
   repoRootPath: string;
+  result?: GitWorkspaceMutationResult;
 };
 
 export type GitUnstageWorkspaceRequest = {
   repoRootPath: string;
   section?: GitWorkspacePageSection;
+  directoryPath?: string;
   paths?: string[];
 };
 
 export type GitUnstageWorkspaceResponse = {
   repoRootPath: string;
+  result?: GitWorkspaceMutationResult;
 };
 
 export type GitDiscardWorkspaceRequest = {
   repoRootPath: string;
   section?: GitWorkspacePageSection;
+  directoryPath?: string;
   paths?: string[];
 };
 
 export type GitDiscardWorkspaceResponse = {
   repoRootPath: string;
+  result?: GitWorkspaceMutationResult;
 };
 
 export type GitCommitWorkspaceRequest = {

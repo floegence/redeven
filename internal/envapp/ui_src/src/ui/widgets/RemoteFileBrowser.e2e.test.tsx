@@ -610,6 +610,7 @@ vi.mock('./GitWorkspace', () => ({
       items: Array<{ section: 'staged' | 'unstaged' | 'untracked' | 'conflicted'; changeType: string; path: string; displayPath: string }>;
     }) => void;
     onOpenStash?: (request?: { tab?: 'save' | 'stashes'; repoRootPath?: string; source?: 'header' | 'changes' | 'branch_status' | 'merge_blocker' }) => void;
+    onDiscardWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onOpenInTerminal?: (request: { path: string; preferredName?: string }) => void;
     onBrowseFiles?: (request: { path: string; preferredName?: string; title?: string }) => void | Promise<void>;
     onConfirmMergeBranch?: (
@@ -666,6 +667,7 @@ vi.mock('./GitWorkspace', () => ({
         <button type="button" onClick={() => props.onSubviewChange?.('history')}>mock-to-history</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onRefresh?.()}>mock-refresh</button>
+        <button type="button" onClick={() => props.onDiscardWorkspaceSection?.('changes')}>mock-discard-changes</button>
         <button type="button" onClick={() => props.onSelectBranchSubview?.('status')}>mock-branch-status</button>
         <button type="button" onClick={() => props.onSelectBranchSubview?.('history')}>mock-branch-history</button>
         <button type="button" onClick={() => props.onSelectBranch?.({ name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local' })}>mock-select-feature-branch</button>
@@ -3451,6 +3453,92 @@ describe('RemoteFileBrowser persistence', () => {
 
       resolveRefreshWorkspacePage(refreshedWorkspacePage);
       await flush();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('passes the active folder scope to discard and shows a no-op warning when nothing changed', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    mockRpc.git.listWorkspacePage.mockReset();
+    mockRpc.git.listWorkspacePage.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      section: 'changes',
+      directoryPath: 'desktop/diagnostics',
+      breadcrumbs: [
+        { label: 'repo', path: '' },
+        { label: 'desktop', path: 'desktop' },
+        { label: 'diagnostics', path: 'desktop/diagnostics' },
+      ],
+      summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 3, conflictedCount: 0 },
+      scopeFileCount: 3,
+      totalCount: 2,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: false,
+      items: [
+        {
+          section: 'changes',
+          entryKind: 'directory',
+          path: 'desktop/diagnostics/logs',
+          displayPath: 'desktop/diagnostics/logs',
+          directoryPath: 'desktop/diagnostics/logs',
+          descendantFileCount: 2,
+          containsUntracked: true,
+        },
+        {
+          section: 'untracked',
+          entryKind: 'file',
+          path: 'desktop/diagnostics/readme.md',
+          displayPath: 'desktop/diagnostics/readme.md',
+        },
+      ],
+    });
+    mockRpc.git.discardWorkspace.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo',
+      result: {
+        requestedCount: 0,
+        matchedCount: 0,
+        affectedCount: 0,
+        remainingCount: 0,
+        warnings: ['No current files matched the selected folder.'],
+      },
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const discardButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-discard-changes') as HTMLButtonElement | undefined;
+      expect(discardButton).toBeTruthy();
+      discardButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.discardWorkspace).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        section: 'changes',
+        directoryPath: 'desktop/diagnostics',
+        paths: undefined,
+      });
+      expect(notificationStore.warning).toContainEqual({
+        title: 'Nothing discarded',
+        message: 'No current files matched the selected folder.',
+      });
     } finally {
       dispose();
     }

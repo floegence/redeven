@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal } from 'solid-js';
+import { For, Show, createEffect, createSignal } from 'solid-js';
 import { Folder, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -6,11 +6,13 @@ import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
   createEmptyWorkspaceViewPageState,
   changeSecondaryPath,
+  isGitWorkspaceDirectoryEntry,
   pickDefaultWorkspaceViewSection,
   repoDisplayName,
   type GitSeededWorkspaceChange,
   type GitSeededWorkspaceChangesResponse,
   type GitWorkspaceViewPageState,
+  workspaceDirectoryPath,
   workspaceEntryKey,
   workspaceViewBulkActionLabel,
   workspaceViewSectionCount,
@@ -70,6 +72,7 @@ export interface GitChangesPanelProps {
   onStageSelected?: (item: GitSeededWorkspaceChange) => void;
   onUnstageSelected?: (item: GitSeededWorkspaceChange) => void;
   onDiscardSelected?: (item: GitSeededWorkspaceChange) => void;
+  onNavigateDirectory?: (directoryPath: string) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
   onDiscardAll?: (section: GitWorkspaceViewSection) => void;
   onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
@@ -84,11 +87,26 @@ function itemPath(item: GitSeededWorkspaceChange): string {
   return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
 }
 
+function itemPrimaryLabel(item: GitSeededWorkspaceChange): string {
+  const pathValue = isGitWorkspaceDirectoryEntry(item)
+    ? workspaceDirectoryPath(item)
+    : itemPath(item);
+  const parts = pathValue.split('/').filter(Boolean);
+  return parts[parts.length - 1] || pathValue || '(unknown path)';
+}
+
+function itemDirectorySummary(item: GitSeededWorkspaceChange): string {
+  const count = Number(item.descendantFileCount ?? 0);
+  return count === 1 ? '1 file' : `${count} files`;
+}
+
 function listItemActionLabel(item: GitSeededWorkspaceChange): string {
+  if (isGitWorkspaceDirectoryEntry(item)) return 'Stage';
   return item.section === 'staged' ? 'Unstage' : '+ Stage';
 }
 
 function isDiscardableWorkspaceItem(item: GitSeededWorkspaceChange | null | undefined): boolean {
+  if (isGitWorkspaceDirectoryEntry(item)) return true;
   return item?.section === 'unstaged' || item?.section === 'untracked';
 }
 
@@ -118,14 +136,17 @@ interface WorkspaceTableProps {
   selectedKey?: string;
   onSelectItem?: (item: GitSeededWorkspaceChange) => void;
   onOpenDiff?: (item: GitSeededWorkspaceChange) => void;
+  onOpenDirectory?: (directoryPath: string) => void;
   onAction?: (item: GitSeededWorkspaceChange) => void;
   onDiscard?: (item: GitSeededWorkspaceChange) => void;
   onLoadMore?: () => void;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | 'discard' | '';
+  sectionActionKey?: string;
 }
 
 function WorkspaceTable(props: WorkspaceTableProps) {
+  const summaryUnit = () => props.section === 'changes' ? 'item' : 'file';
   return (
     <GitTableFrame class="flex h-full min-h-0 flex-col">
       <Show
@@ -150,37 +171,80 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           renderRow={(item) => {
             const active = () => props.selectedKey === workspaceEntryKey(item);
             const action = () => (item.section === 'staged' ? 'unstage' : 'stage');
-            const busyScope = () => props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === workspaceViewSectionActionKey(props.section);
+            const busyScope = () => props.busyWorkspaceKey === workspaceEntryKey(item) || props.busyWorkspaceKey === props.sectionActionKey;
             const busy = (name: 'stage' | 'unstage' | 'discard') => busyScope() && props.busyWorkspaceAction === name;
             const actionsDisabled = () => busyScope() && Boolean(props.busyWorkspaceAction);
             return (
               <tr
                 aria-selected={active()}
                 class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                onClick={() => props.onSelectItem?.(item)}
+                onClick={() => {
+                  if (isGitWorkspaceDirectoryEntry(item)) {
+                    const directoryPath = workspaceDirectoryPath(item);
+                    if (directoryPath) props.onOpenDirectory?.(directoryPath);
+                    return;
+                  }
+                  props.onSelectItem?.(item);
+                }}
               >
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                   <div class="min-w-0">
                     <button
                       type="button"
                       class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
-                      title={changeSecondaryPath(item)}
+                      title={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : changeSecondaryPath(item)}
                       onClick={(event) => {
                         event.stopPropagation();
+                        if (isGitWorkspaceDirectoryEntry(item)) {
+                          const directoryPath = workspaceDirectoryPath(item);
+                          if (directoryPath) props.onOpenDirectory?.(directoryPath);
+                          return;
+                        }
                         props.onOpenDiff?.(item);
                       }}
                     >
-                      {itemPath(item)}
+                      <Show
+                        when={isGitWorkspaceDirectoryEntry(item)}
+                        fallback={itemPath(item)}
+                      >
+                        <span class="inline-flex items-center gap-1.5">
+                          <Folder class="size-3.5 shrink-0" />
+                          <span class="truncate">{itemPrimaryLabel(item)}</span>
+                        </span>
+                      </Show>
                     </button>
-                    <Show when={changeSecondaryPath(item) !== itemPath(item)}>
+                    <Show when={isGitWorkspaceDirectoryEntry(item)}>
+                      <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={workspaceDirectoryPath(item)}>{workspaceDirectoryPath(item)}</div>
+                    </Show>
+                    <Show when={!isGitWorkspaceDirectoryEntry(item) && changeSecondaryPath(item) !== itemPath(item)}>
                       <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
                     </Show>
                   </div>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <GitChangeStatusPill change={item.changeType} />
+                  <Show
+                    when={isGitWorkspaceDirectoryEntry(item)}
+                    fallback={<GitChangeStatusPill change={item.changeType} />}
+                  >
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <GitMetaPill tone="neutral">Folder</GitMetaPill>
+                      <Show when={item.containsUnstaged}>
+                        <GitMetaPill tone="warning">Unstaged</GitMetaPill>
+                      </Show>
+                      <Show when={item.containsUntracked}>
+                        <GitMetaPill tone="brand">Untracked</GitMetaPill>
+                      </Show>
+                    </div>
+                  </Show>
                 </td>
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
+                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                  <Show
+                    when={isGitWorkspaceDirectoryEntry(item)}
+                    fallback={<GitChangeMetrics additions={item.additions} deletions={item.deletions} />}
+                  >
+                    <div class="text-[11px] font-medium text-muted-foreground">{itemDirectorySummary(item)}</div>
+                  </Show>
+                </td>
                 <td class={gitChangedFilesStickyCellClass(active())}>
                   <div class="flex items-center justify-end gap-3 whitespace-nowrap">
                     <GitChangedFilesActionButton
@@ -217,7 +281,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
             summary={(
               <>
                 Showing <span class="font-semibold tabular-nums text-foreground/90">{props.items.length}</span> of{' '}
-                <span class="font-semibold tabular-nums text-foreground/90">{props.totalCount}</span> file{props.totalCount === 1 ? '' : 's'}.
+                <span class="font-semibold tabular-nums text-foreground/90">{props.totalCount}</span> {summaryUnit()}{props.totalCount === 1 ? '' : 's'}.
               </>
             )}
             onLoadMore={props.onLoadMore}
@@ -248,12 +312,31 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const pageStateFor = (section: GitWorkspaceViewSection) => props.workspacePages?.[section] ?? EMPTY_WORKSPACE_PAGE_STATE;
   const selectedPageState = () => pageStateFor(selectedSection());
   const stagedPageState = () => pageStateFor('staged');
-  const visibleItems = () => sectionItems(props.workspace, selectedSection());
-  const stagedItems = () => sectionItems(props.workspace, 'staged');
-  const visibleCount = () => (
+  const visibleItems = () => {
+    const fallbackItems = sectionItems(props.workspace, selectedSection());
+    if (selectedSection() === 'changes') {
+      return selectedPageState().initialized
+        ? (selectedPageState().items as GitSeededWorkspaceChange[])
+        : fallbackItems;
+    }
+    return selectedPageState().items.length > 0
+      ? (selectedPageState().items as GitSeededWorkspaceChange[])
+      : fallbackItems;
+  };
+  const stagedItems = () => (
+    stagedPageState().items.length > 0
+      ? (stagedPageState().items as GitSeededWorkspaceChange[])
+      : sectionItems(props.workspace, 'staged')
+  );
+  const visibleItemCount = () => (
     selectedPageState().initialized
       ? selectedPageState().totalCount
       : workspaceViewSectionCount(summary(), selectedSection())
+  );
+  const visibleCount = () => (
+    selectedSection() === 'changes' && selectedPageState().initialized
+      ? Number(selectedPageState().scopeFileCount ?? selectedPageState().totalCount ?? 0)
+      : visibleItemCount()
   );
   const stagedCount = () => (
     stagedPageState().initialized
@@ -266,6 +349,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const stagedLoadingItems = () => Boolean(stagedPageState().loading && !props.commitBusy);
   const selectedTone = () => workspaceSectionTone(selectedSection());
   const visibleSectionLabel = () => workspaceViewSectionLabel(selectedSection());
+  const activeDirectoryPath = () => selectedSection() === 'changes' ? String(selectedPageState().directoryPath ?? '').trim() : '';
+  const activeBreadcrumbs = () => selectedSection() === 'changes' ? selectedPageState().breadcrumbs ?? [] : [];
   const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
   const repoShortcutRequest = (): GitDirectoryShortcutRequest | null => {
     const path = repoRootPath();
@@ -278,10 +363,15 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const diffItem = () => diffDialogItem() ?? props.selectedItem ?? null;
   const selectedKey = () => workspaceEntryKey(diffItem());
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
-  const bulkActionLabel = () => workspaceViewBulkActionLabel(selectedSection());
+  const bulkActionLabel = () => (
+    selectedSection() === 'changes' && activeDirectoryPath()
+      ? 'Stage Folder'
+      : workspaceViewBulkActionLabel(selectedSection())
+  );
   const bulkAction = () => (selectedSection() === 'staged' ? 'unstage' : 'stage');
-  const bulkActionBusy = () => props.busyWorkspaceKey === workspaceViewSectionActionKey(selectedSection()) && props.busyWorkspaceAction === bulkAction();
-  const discardActionBusy = () => props.busyWorkspaceKey === workspaceViewSectionActionKey(selectedSection()) && props.busyWorkspaceAction === 'discard';
+  const sectionActionKey = () => workspaceViewSectionActionKey(selectedSection(), activeDirectoryPath());
+  const bulkActionBusy = () => props.busyWorkspaceKey === sectionActionKey() && props.busyWorkspaceAction === bulkAction();
+  const discardActionBusy = () => props.busyWorkspaceKey === sectionActionKey() && props.busyWorkspaceAction === 'discard';
   const canDiscardAll = () => selectedSection() === 'changes' && Boolean(props.onDiscardAll);
   const canAskFlower = () => Boolean(props.onAskFlower && repoRootPath() && visibleItems().length > 0);
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
@@ -309,13 +399,33 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     setDiffDialogOpen(false);
   });
 
-  const discardTitle = () => discardTarget()?.kind === 'section' ? 'Discard pending changes' : 'Discard file changes';
-  const discardConfirmText = () => discardTarget()?.kind === 'section' ? 'Discard All' : 'Discard';
+  const discardTitle = () => {
+    const target = discardTarget();
+    if (target?.kind === 'section') {
+      return activeDirectoryPath() ? 'Discard folder changes' : 'Discard pending changes';
+    }
+    if (target?.kind === 'item' && isGitWorkspaceDirectoryEntry(target.item)) {
+      return 'Discard folder changes';
+    }
+    return 'Discard file changes';
+  };
+  const discardConfirmText = () => {
+    const target = discardTarget();
+    if (target?.kind === 'section') return activeDirectoryPath() ? 'Discard Folder' : 'Discard All';
+    if (target?.kind === 'item' && isGitWorkspaceDirectoryEntry(target.item)) return 'Discard Folder';
+    return 'Discard';
+  };
   const discardDescription = () => {
     const target = discardTarget();
     if (!target) return '';
     if (target.kind === 'section') {
+      if (activeDirectoryPath()) {
+        return `Discard all ${visibleCount()} file${visibleCount() === 1 ? '' : 's'} inside "${activeDirectoryPath()}"? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.`;
+      }
       return `Discard all ${visibleCount()} file${visibleCount() === 1 ? '' : 's'} in Changes? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.`;
+    }
+    if (isGitWorkspaceDirectoryEntry(target.item)) {
+      return `Discard all ${itemDirectorySummary(target.item)} inside "${workspaceDirectoryPath(target.item)}"? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.`;
     }
     if (target.item.section === 'untracked') {
       return `Delete the untracked file "${itemPath(target.item)}" from the working tree? Git cannot restore untracked files after they are discarded.`;
@@ -342,8 +452,31 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     <div class="max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[34rem]">
                       {selectedSection() === 'staged'
                         ? 'Review the staged snapshot, then commit it from the dialog.'
-                        : 'Stage the files you want from this table, discard the rest when needed, then commit from the staged dialog.'}
+                        : activeDirectoryPath()
+                          ? `Review the current folder, then stage or discard this scope without leaving the Changes view.`
+                          : 'Stage the files you want from this table, discard the rest when needed, then commit from the staged dialog.'}
                     </div>
+                    <Show when={selectedSection() === 'changes' && activeBreadcrumbs().length > 0}>
+                      <div class="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
+                        <For each={activeBreadcrumbs()}>
+                          {(crumb, index) => (
+                            <>
+                              <Show when={index() > 0}>
+                                <span aria-hidden="true">/</span>
+                              </Show>
+                              <button
+                                type="button"
+                                class="cursor-pointer rounded-sm px-1 py-0.5 text-left text-foreground/90 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                disabled={!props.onNavigateDirectory}
+                                onClick={() => props.onNavigateDirectory?.(String(crumb.path ?? '').trim())}
+                              >
+                                {String(crumb.label ?? '').trim() || 'Folder'}
+                              </button>
+                            </>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                   </GitLabelBlock>
                   <div class="flex w-full flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:w-auto lg:flex-col lg:items-end lg:justify-start">
                     <Show when={props.onAskFlower || props.onOpenInTerminal || props.onBrowseFiles}>
@@ -427,7 +560,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                           disabled={visibleCount() === 0 || bulkActionBusy() || discardActionBusy()}
                           loading={discardActionBusy()}
                         >
-                          Discard All...
+                          {activeDirectoryPath() ? 'Discard Folder...' : 'Discard All...'}
                         </Button>
                       </Show>
                       <Button
@@ -461,7 +594,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                 <WorkspaceTable
                   section={selectedSection()}
                   items={visibleItems()}
-                  totalCount={visibleCount()}
+                  totalCount={visibleItemCount()}
                   hasMore={selectedPageState().hasMore}
                   loadingMore={visibleLoadingMore()}
                   selectedKey={selectedKey()}
@@ -471,6 +604,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     props.onSelectItem?.(item);
                     setDiffDialogOpen(true);
                   }}
+                  onOpenDirectory={(directoryPath) => props.onNavigateDirectory?.(directoryPath)}
                   onAction={(item) => {
                     if (item.section === 'staged') props.onUnstageSelected?.(item);
                     else props.onStageSelected?.(item);
@@ -479,6 +613,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                   onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
                   busyWorkspaceKey={props.busyWorkspaceKey}
                   busyWorkspaceAction={props.busyWorkspaceAction}
+                  sectionActionKey={sectionActionKey()}
                 />
               </div>
             </div>
