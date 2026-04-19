@@ -281,6 +281,7 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain('Dropdown');
     expect(changesSrc).toContain('MoreHorizontal');
     expect(changesSrc).toContain('data-git-changes-header-density');
+    expect(changesSrc).toContain('data-git-changes-header-actions');
     expect(changesSrc).toContain('line-clamp-2');
     expect(changesSrc).toContain('GIT_CHANGED_FILES_TABLE_CLASS');
     expect(changesSrc).toContain('GitChangedFilesActionButton');
@@ -291,10 +292,12 @@ describe('browser workspace layout wiring', () => {
     expect(changesSrc).toContain("'flex min-w-0 flex-wrap items-center gap-1.5'");
     expect(changesSrc).toContain('min-w-[34rem] sm:min-w-[42rem] md:min-w-0');
     expect(changesHeaderLayoutSrc).toContain("export type GitChangesHeaderDensity = 'comfortable' | 'compact' | 'collapsed'");
+    expect(changesHeaderLayoutSrc).toContain("export type GitChangesHeaderLayoutMode = 'default' | 'quiet_inline'");
     expect(changesHeaderLayoutSrc).toContain('GIT_CHANGES_HEADER_COMPACT_MIN_WIDTH = 620');
     expect(changesHeaderLayoutSrc).toContain('GIT_CHANGES_HEADER_COMFORTABLE_MIN_WIDTH = 860');
     expect(changesHeaderLayoutSrc).toContain('resolveGitChangesBreadcrumbLayout');
     expect(changesHeaderLayoutSrc).toContain('buildGitChangesHeaderPresentation');
+    expect(changesHeaderLayoutSrc).toContain("layoutMode: isCleanState ? 'quiet_inline' : 'default'");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEAD_CLASS = 'sticky top-0 z-10 bg-muted/30 backdrop-blur';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';");
     expect(primitivesSrc).toContain("export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';");

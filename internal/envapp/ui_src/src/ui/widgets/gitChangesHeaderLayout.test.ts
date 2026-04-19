@@ -56,6 +56,7 @@ describe('gitChangesHeaderLayout', () => {
 
     expect(presentation.title).toBe('Clean')
     expect(presentation.countBadgeLabel).toBe('No pending changes')
+    expect(presentation.layoutMode).toBe('quiet_inline')
     expect(presentation.primaryActionIds).toEqual(['stash'])
     expect(presentation.utilityActionIds).toEqual(['terminal', 'files'])
     expect(presentation.overflowActionIds).toEqual([])
@@ -76,6 +77,7 @@ describe('gitChangesHeaderLayout', () => {
       canAskFlower: true,
     })
 
+    expect(compact.layoutMode).toBe('default')
     expect(compact.primaryActionIds).toEqual(['commit', 'bulk', 'stash'])
     expect(compact.utilityActionIds).toEqual(['terminal', 'files'])
     expect(compact.overflowActionIds).toEqual(['discard', 'flower'])
@@ -93,6 +95,7 @@ describe('gitChangesHeaderLayout', () => {
       canAskFlower: true,
     })
 
+    expect(collapsed.layoutMode).toBe('default')
     expect(collapsed.primaryActionIds).toEqual(['commit', 'bulk', 'stash'])
     expect(collapsed.utilityActionIds).toEqual([])
     expect(collapsed.overflowActionIds).toEqual(['discard', 'terminal', 'files', 'flower'])

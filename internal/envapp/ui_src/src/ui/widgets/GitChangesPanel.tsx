@@ -416,8 +416,25 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           : 'Ask Flower',
   })));
   const showActionRow = () => headerPrimaryActions().length > 0 || headerUtilityActions().length > 0 || overflowItems().length > 0;
-  const headerTopRowClass = () => (
+  const showBreadcrumbRail = () => (
+    selectedSection() === 'changes'
+    && Boolean(activeDirectoryPath())
+    && breadcrumbSegments().length > 0
+  );
+  const useInlineQuietHeaderActions = () => (
     headerDensity() === 'comfortable'
+    && headerPresentation().layoutMode === 'quiet_inline'
+  );
+  const showSeparateActionRow = () => showActionRow() && !useInlineQuietHeaderActions();
+  const headerContainerClass = () => (
+    useInlineQuietHeaderActions()
+      ? 'flex flex-col gap-1.5'
+      : 'flex flex-col gap-2.5'
+  );
+  const headerTopRowClass = () => (
+    useInlineQuietHeaderActions()
+      ? 'grid gap-2 grid-cols-[minmax(0,1fr)_auto] items-start'
+      : headerDensity() === 'comfortable'
       ? 'grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start'
       : 'grid gap-2.5 grid-cols-1'
   );
@@ -609,6 +626,56 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         return false;
     }
   };
+  const renderPrimaryAction = (actionId: GitChangesHeaderActionId) => (
+    <Button
+      size="sm"
+      variant={primaryActionVariant(actionId)}
+      class={primaryActionClass(actionId)}
+      onClick={() => runHeaderAction(actionId)}
+      disabled={primaryActionDisabled(actionId)}
+      loading={primaryActionLoading(actionId)}
+    >
+      {primaryActionLabel(actionId)}
+    </Button>
+  );
+  const renderOverflowAction = () => (
+    <Show when={overflowItems().length > 0}>
+      <Dropdown
+        trigger={(
+          <Button
+            size="sm"
+            variant="outline"
+            class={`rounded-md ${redevenSurfaceRoleClass('control')}`}
+            aria-label="More actions"
+            title="More actions"
+          >
+            <MoreHorizontal class="size-3.5" />
+          </Button>
+        )}
+        items={overflowItems()}
+        onSelect={(itemId) => runHeaderAction(itemId as GitChangesHeaderActionId)}
+        align="end"
+      />
+    </Show>
+  );
+  const renderInlineHeaderActions = () => (
+    <div
+      data-git-changes-header-actions="inline"
+      class="flex flex-wrap items-center justify-end gap-2"
+    >
+      <Show when={headerUtilityActions().length > 0}>
+        <GitShortcutOrbDock class="justify-end">
+          <For each={headerUtilityActions()}>
+            {(actionId) => renderUtilityAction(actionId)}
+          </For>
+        </GitShortcutOrbDock>
+      </Show>
+      <For each={headerPrimaryActions()}>
+        {(actionId) => renderPrimaryAction(actionId)}
+      </For>
+      {renderOverflowAction()}
+    </div>
+  );
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
@@ -620,7 +687,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                 <div
                   ref={setHeaderElement}
                   data-git-changes-header-density={headerPresentation().density}
-                  class="flex flex-col gap-2.5"
+                  class={headerContainerClass()}
                 >
                   <div class={headerTopRowClass()}>
                     <GitLabelBlock class="min-w-0" label="Workspace" tone={headerTone()}>
@@ -640,31 +707,27 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                       </Show>
                     </GitLabelBlock>
 
-                    <Show when={headerPresentation().density === 'comfortable' && headerUtilityActions().length > 0}>
-                      <GitShortcutOrbDock class="justify-end">
-                        <For each={headerUtilityActions()}>
-                          {(actionId) => renderUtilityAction(actionId)}
-                        </For>
-                      </GitShortcutOrbDock>
+                    <Show when={useInlineQuietHeaderActions()} fallback={(
+                      <Show when={headerPresentation().density === 'comfortable' && headerUtilityActions().length > 0}>
+                        <GitShortcutOrbDock class="justify-end">
+                          <For each={headerUtilityActions()}>
+                            {(actionId) => renderUtilityAction(actionId)}
+                          </For>
+                        </GitShortcutOrbDock>
+                      </Show>
+                    )}>
+                      {renderInlineHeaderActions()}
                     </Show>
                   </div>
 
-                  <Show when={showActionRow()}>
-                    <div class={headerActionRowClass()}>
+                  <Show when={showSeparateActionRow()}>
+                    <div
+                      data-git-changes-header-actions="separate"
+                      class={headerActionRowClass()}
+                    >
                       <div class={headerPrimaryActionRailClass()}>
                         <For each={headerPrimaryActions()}>
-                          {(actionId) => (
-                            <Button
-                              size="sm"
-                              variant={primaryActionVariant(actionId)}
-                              class={primaryActionClass(actionId)}
-                              onClick={() => runHeaderAction(actionId)}
-                              disabled={primaryActionDisabled(actionId)}
-                              loading={primaryActionLoading(actionId)}
-                            >
-                              {primaryActionLabel(actionId)}
-                            </Button>
-                          )}
+                          {(actionId) => renderPrimaryAction(actionId)}
                         </For>
                       </div>
 
@@ -676,29 +739,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                             </For>
                           </GitShortcutOrbDock>
                         </Show>
-                        <Show when={overflowItems().length > 0}>
-                          <Dropdown
-                            trigger={(
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                class={`rounded-md ${redevenSurfaceRoleClass('control')}`}
-                                aria-label="More actions"
-                                title="More actions"
-                              >
-                                <MoreHorizontal class="size-3.5" />
-                              </Button>
-                            )}
-                            items={overflowItems()}
-                            onSelect={(itemId) => runHeaderAction(itemId as GitChangesHeaderActionId)}
-                            align="end"
-                          />
-                        </Show>
+                        {renderOverflowAction()}
                       </div>
                     </div>
                   </Show>
 
-                  <Show when={selectedSection() === 'changes' && breadcrumbSegments().length > 0}>
+                  <Show when={showBreadcrumbRail()}>
                     <GitChangesBreadcrumb
                       segments={breadcrumbSegments()}
                       onSelect={props.onNavigateDirectory ? (segment) => props.onNavigateDirectory?.(segment.path) : undefined}

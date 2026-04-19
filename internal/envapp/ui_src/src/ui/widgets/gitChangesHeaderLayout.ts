@@ -1,6 +1,7 @@
 import { workspaceViewSectionLabel, type GitWorkspaceViewSection } from '../utils/gitWorkbench'
 
 export type GitChangesHeaderDensity = 'comfortable' | 'compact' | 'collapsed'
+export type GitChangesHeaderLayoutMode = 'default' | 'quiet_inline'
 
 export const GIT_CHANGES_HEADER_COMPACT_MIN_WIDTH = 620
 export const GIT_CHANGES_HEADER_COMFORTABLE_MIN_WIDTH = 860
@@ -51,6 +52,7 @@ export interface GitChangesHeaderPresentationOptions {
 
 export interface GitChangesHeaderPresentation {
   density: GitChangesHeaderDensity
+  layoutMode: GitChangesHeaderLayoutMode
   title: string
   countBadgeLabel: string
   stagedBadgeLabel: string
@@ -196,6 +198,7 @@ export function buildGitChangesHeaderPresentation(options: GitChangesHeaderPrese
   if (options.density === 'comfortable') {
     return {
       density: options.density,
+      layoutMode: isCleanState ? 'quiet_inline' : 'default',
       title: isCleanState ? 'Clean' : workspaceViewSectionLabel(options.selectedSection),
       countBadgeLabel: isCleanState ? 'No pending changes' : fileCountLabel(options.visibleCount),
       stagedBadgeLabel: `${options.stagedCount} staged`,
@@ -211,6 +214,7 @@ export function buildGitChangesHeaderPresentation(options: GitChangesHeaderPrese
   if (options.density === 'compact') {
     return {
       density: options.density,
+      layoutMode: 'default',
       title: isCleanState ? 'Clean' : workspaceViewSectionLabel(options.selectedSection),
       countBadgeLabel: isCleanState ? 'No pending changes' : fileCountLabel(options.visibleCount),
       stagedBadgeLabel: `${options.stagedCount} staged`,
@@ -225,6 +229,7 @@ export function buildGitChangesHeaderPresentation(options: GitChangesHeaderPrese
 
   return {
     density: options.density,
+    layoutMode: 'default',
     title: isCleanState ? 'Clean' : workspaceViewSectionLabel(options.selectedSection),
     countBadgeLabel: isCleanState ? 'No pending changes' : fileCountLabel(options.visibleCount),
     stagedBadgeLabel: `${options.stagedCount} staged`,
