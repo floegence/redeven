@@ -526,6 +526,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('Refresh runtime statuses');
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopActionPopover');
+    expect(appSrc).toContain('const blockedPrimaryActionDisabled = createMemo(() => (');
+    expect(appSrc).toContain("'redeven-split-action-trigger--blocked'");
+    expect(appSrc).toContain('aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}');
+    expect(appSrc).toContain('return `${label} is unavailable. Show recovery options.`;');
     expect(appSrc).toContain('activeEnvironmentOverlayState');
     expect(appSrc).toContain('guidanceSessionState');
     expect(appSrc).toContain('reconcileEnvironmentLibraryOverlayState');
@@ -547,6 +551,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('aria-label={props.presentation.menu_button_label}');
     expect(styles).toContain('.redeven-split-action');
     expect(styles).toContain('.redeven-split-action-primary');
+    expect(styles).toContain('.redeven-split-action-trigger--blocked');
+    expect(styles).toContain(".redeven-split-action-trigger--blocked[aria-expanded='true']");
     expect(styles).toContain('.redeven-split-action-toggle');
     expect(styles).toContain('.redeven-split-menu');
     expect(styles).toContain('.redeven-split-menu-item');
