@@ -1,5 +1,6 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { ChevronLeft, Menu } from '@floegence/floe-webapp-core/icons';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from './surface/workbenchWheelInteractive';
 
 const INLINE_RAIL_COMPACT_BREAKPOINT_PX = 960;
 
@@ -34,6 +35,7 @@ export function EnvWorkbenchConversationShell(props: {
   return (
     <div
       ref={setHostEl}
+      {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
       class="relative flex h-full min-h-0 overflow-hidden bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background)_92%,var(--muted)_8%),color-mix(in_srgb,var(--background)_98%,transparent))]"
     >
       <Show when={showOverlayRail()}>

@@ -15,13 +15,16 @@ import {
   resolveWorkbenchWheelRouting,
   shouldBypassWorkbenchGlobalHotkeys,
 } from './workbenchInputRouting';
+import {
+  REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
+} from './workbenchWheelInteractive';
 
 describe('workbenchInputRouting', () => {
   afterEach(() => {
     document.body.innerHTML = '';
   });
 
-  it('routes wheel events inside a widget subtree to the local surface instead of canvas zoom', () => {
+  it('keeps ordinary interactive widget regions zoomable until they opt into local wheel ownership', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -34,9 +37,25 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchWheelRouting({
       target: body,
       disablePanZoom: false,
-      interactiveSelector: '[data-floe-canvas-interactive="true"]',
-      panSurfaceSelector: '[data-floe-canvas-pan-surface="true"]',
-    })).toEqual({ kind: 'local_surface' });
+    })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('routes wheel events to local consumers when a widget region explicitly opts into wheel ownership', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const wheelRegion = document.createElement('div');
+    wheelRegion.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    const button = document.createElement('button');
+    wheelRegion.appendChild(button);
+    widget.appendChild(wheelRegion);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: button,
+      disablePanZoom: false,
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
   });
 
   it('treats local dialog overlay surfaces inside a widget host as local surfaces', () => {
@@ -60,9 +79,7 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchWheelRouting({
       target: dialogAction,
       disablePanZoom: false,
-      interactiveSelector: '[data-floe-canvas-interactive="true"]',
-      panSurfaceSelector: '[data-floe-canvas-pan-surface="true"]',
-    })).toEqual({ kind: 'local_surface' });
+    })).toEqual({ kind: 'local_surface', reason: 'local_interaction_surface' });
   });
 
   it('distinguishes shell-owned widget chrome from widget-local interaction surfaces', () => {
@@ -102,8 +119,6 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchWheelRouting({
       target: canvasBackground,
       disablePanZoom: false,
-      interactiveSelector: '[data-floe-canvas-interactive="true"]',
-      panSurfaceSelector: '[data-floe-canvas-pan-surface="true"]',
     })).toEqual({ kind: 'canvas_zoom' });
   });
 
@@ -114,9 +129,7 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchWheelRouting({
       target: canvasBackground,
       disablePanZoom: true,
-      interactiveSelector: '[data-floe-canvas-interactive="true"]',
-      panSurfaceSelector: '[data-floe-canvas-pan-surface="true"]',
-    })).toEqual({ kind: 'ignore' });
+    })).toEqual({ kind: 'ignore', reason: 'pan_zoom_disabled' });
   });
 
   it('focuses the resolved widget root and uses that focus to bypass global widget navigation hotkeys', () => {

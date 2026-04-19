@@ -58,6 +58,7 @@ import { fileItemFromPath } from '../utils/filePreviewItem';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { createTerminalTabActivityTracker, type TerminalTabVisualState } from '../services/terminalTabActivity';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FLOATING_CONTEXT_MENU_WIDTH_PX, FloatingContextMenu, estimateFloatingContextMenuHeight, type FloatingContextMenuItem } from './FloatingContextMenu';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
@@ -760,6 +761,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
           container = n;
           props.registerSurfaceElement(sessionId(), n);
         }}
+        {...REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS}
         class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
         style={{
           transition: 'opacity 0.15s ease-out',
