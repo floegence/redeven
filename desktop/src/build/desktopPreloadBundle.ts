@@ -34,8 +34,8 @@ function resolveDesktopPreloadEntries(options: DesktopPreloadBuildOptions = {}):
 }
 
 // Electron sandboxed preload execution does not provide normal relative runtime module
-// resolution. We bundle preload entrypoints into self-contained files so detached child
-// windows receive the same bridges as the main desktop window.
+// resolution. We bundle preload entrypoints into self-contained files so every session
+// child window receives the same bridges as the main desktop window.
 export async function buildDesktopPreloads(options: DesktopPreloadBuildOptions = {}): Promise<void> {
   const entries = resolveDesktopPreloadEntries(options);
   const firstEntry = entries[0];

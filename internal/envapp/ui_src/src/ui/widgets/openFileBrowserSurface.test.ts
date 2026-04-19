@@ -1,14 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createFileBrowserSurfaceController } from './createFileBrowserSurfaceController';
 import { openFileBrowserSurface } from './openFileBrowserSurface';
 
 describe('openFileBrowserSurface', () => {
-  it('keeps the browser on the shared floating surface for desktop-managed runtime', async () => {
+  it('opens the shared floating browser surface for an absolute path', async () => {
     const controller = createFileBrowserSurfaceController({
       createRequestId: () => 'req-1',
     });
-    const openDetachedWindow = vi.fn(() => true);
-    const resolveLocalRuntime = vi.fn(async () => null);
 
     const opened = await openFileBrowserSurface({
       input: {
@@ -16,14 +14,9 @@ describe('openFileBrowserSurface', () => {
         homePath: '/Users/demo',
       },
       controller,
-      localRuntime: () => ({ mode: 'local', env_public_id: 'env-1', desktop_managed: true }),
-      resolveLocalRuntime,
-      openDetachedWindow,
     });
 
     expect(opened).toBe(true);
-    expect(openDetachedWindow).not.toHaveBeenCalled();
-    expect(resolveLocalRuntime).not.toHaveBeenCalled();
     expect(controller.surface()).toMatchObject({
       path: '/workspace',
       homePath: '/Users/demo',
@@ -34,8 +27,6 @@ describe('openFileBrowserSurface', () => {
     const controller = createFileBrowserSurfaceController({
       createRequestId: () => 'req-1',
     });
-    const openDetachedWindow = vi.fn(() => false);
-    const resolveLocalRuntime = vi.fn(async () => null);
 
     const opened = await openFileBrowserSurface({
       input: {
@@ -44,18 +35,30 @@ describe('openFileBrowserSurface', () => {
         title: 'Browser',
       },
       controller,
-      localRuntime: () => ({ mode: 'local', env_public_id: 'env-1', desktop_managed: true }),
-      resolveLocalRuntime,
-      openDetachedWindow,
     });
 
     expect(opened).toBe(true);
-    expect(openDetachedWindow).not.toHaveBeenCalled();
-    expect(resolveLocalRuntime).not.toHaveBeenCalled();
     expect(controller.surface()).toMatchObject({
       path: '/workspace/project',
       homePath: '/Users/demo',
       title: 'Browser',
     });
+  });
+
+  it('rejects non-absolute paths instead of opening a browser surface', async () => {
+    const controller = createFileBrowserSurfaceController({
+      createRequestId: () => 'req-1',
+    });
+
+    const opened = await openFileBrowserSurface({
+      input: {
+        path: 'workspace/project',
+        homePath: '/Users/demo/',
+      },
+      controller,
+    });
+
+    expect(opened).toBe(false);
+    expect(controller.surface()).toBeNull();
   });
 });

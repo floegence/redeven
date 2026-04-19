@@ -154,12 +154,6 @@ import {
 } from '../shared/desktopThemeIPC';
 import { DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL } from '../shared/windowChromeIPC';
 import {
-  DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL,
-  DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL,
-  normalizeDesktopAskFlowerHandoffPayload,
-  type DesktopAskFlowerHandoffPayload,
-} from '../shared/askFlowerHandoffIPC';
-import {
   DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
   normalizeDesktopShellOpenWindowRequest,
 } from '../shared/desktopShellWindowIPC';
@@ -239,7 +233,6 @@ type DesktopSessionRecord = {
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
   diagnostics: DesktopDiagnosticsRecorder;
-  pending_handoffs: DesktopAskFlowerHandoffPayload[];
   runtime_handle: DesktopSessionRuntimeHandle | null;
   stop_runtime_on_close: boolean;
   lifecycle: DesktopSessionLifecycle;
@@ -933,12 +926,9 @@ function childWindowIdentity(frameName: string, targetURL: string): string {
   }
   try {
     const url = new URL(targetURL);
-    const detachedSurface = String(url.searchParams.get('redeven_detached_surface') ?? '').trim();
-    return detachedSurface !== ''
-      ? `detached:${detachedSurface}:${url.pathname}`
-      : `detached:${url.pathname}${url.search}`;
+    return `child:${url.pathname}${url.search}`;
   } catch {
-    return `detached:${targetURL}`;
+    return `child:${targetURL}`;
   }
 }
 
@@ -1371,40 +1361,6 @@ function openSessionChildWindow(
   return childWindow.browserWindow;
 }
 
-function flushPendingSessionAskFlowerHandoffs(sessionKey: DesktopSessionKey): void {
-  const sessionRecord = sessionsByKey.get(sessionKey);
-  const rootWindow = sessionRecord ? liveTrackedBrowserWindow(sessionRecord.root_window) : null;
-  if (!sessionRecord || !rootWindow) {
-    return;
-  }
-  if (rootWindow.webContents.isLoadingMainFrame() || sessionRecord.pending_handoffs.length <= 0) {
-    return;
-  }
-
-  const queue = sessionRecord.pending_handoffs.splice(0, sessionRecord.pending_handoffs.length);
-  for (const payload of queue) {
-    rootWindow.webContents.send(DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL, payload);
-  }
-}
-
-function queueSessionAskFlowerHandoff(sessionKey: DesktopSessionKey, payload: DesktopAskFlowerHandoffPayload): void {
-  const sessionRecord = sessionsByKey.get(sessionKey);
-  if (!sessionRecord) {
-    return;
-  }
-  sessionRecord.pending_handoffs.push(payload);
-  flushPendingSessionAskFlowerHandoffs(sessionKey);
-}
-
-async function handoffAskFlowerToOwningSession(senderWebContentsID: number, payload: DesktopAskFlowerHandoffPayload): Promise<void> {
-  const sessionKey = sessionKeyByWebContentsID.get(senderWebContentsID);
-  if (!sessionKey) {
-    return;
-  }
-  queueSessionAskFlowerHandoff(sessionKey, payload);
-  focusEnvironmentSession(sessionKey, { stealAppFocus: true });
-}
-
 function sessionOpenFailureMessage(targetURL: string, errorDescription: string): string {
   const cleanDescription = compact(errorDescription);
   if (cleanDescription !== '') {
@@ -1543,7 +1499,6 @@ async function createSessionRecord(
     root_window: rootWindow,
     child_windows: new Map(),
     diagnostics,
-    pending_handoffs: [],
     runtime_handle: options.runtimeHandle ?? null,
     stop_runtime_on_close: options.stopRuntimeOnClose === true,
     lifecycle: 'opening',
@@ -1562,9 +1517,6 @@ async function createSessionRecord(
   rootWindow.browserWindow.on('closed', () => {
     sessionKeyByWebContentsID.delete(rootWindow.webContentsID);
     void finalizeSessionClosure(target.session_key);
-  });
-  rootWindow.browserWindow.webContents.on('did-finish-load', () => {
-    flushPendingSessionAskFlowerHandoffs(target.session_key);
   });
 
   recordWindowLifecycle(
@@ -5131,13 +5083,6 @@ if (!app.requestSingleInstanceLock()) {
       surface: 'connect_environment',
     });
     void emitDesktopWelcomeSnapshot('launcher');
-  });
-  ipcMain.on(DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL, (event, payload) => {
-    const normalized = normalizeDesktopAskFlowerHandoffPayload(payload);
-    if (!normalized) {
-      return;
-    }
-    void handoffAskFlowerToOwningSession(event.sender.id, normalized);
   });
 
   app.whenReady().then(async () => {

@@ -87,28 +87,24 @@ describe('EnvDebugConsoleSettingsPanel', () => {
     expect(switchButton?.getAttribute('aria-checked')).toBe('true');
   });
 
-  it('switches to a detached-window action row for desktop-managed sessions', () => {
+  it('disables the switch when the session cannot interact', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const onOpen = vi.fn();
+    const onEnabledChange = vi.fn();
 
     render(() => (
       <EnvDebugConsoleSettingsPanel
-        presentation="detached"
-        canInteract
-        onOpen={onOpen}
+        enabled={false}
+        canInteract={false}
+        onEnabledChange={onEnabledChange}
       />
     ), host);
 
-    expect(host.textContent).toContain('Desktop detached');
-    expect(host.textContent).toContain('Session scoped');
-    expect(host.textContent).toContain('dedicated native window');
-    expect(host.textContent).toContain('Open Debug Console');
-    expect(host.querySelector('button[role="switch"]')).toBeNull();
+    const switchButton = host.querySelector('button[role="switch"]') as HTMLButtonElement | null;
+    expect(switchButton).not.toBeNull();
+    expect(switchButton?.disabled).toBe(true);
+    switchButton?.click();
 
-    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open Debug Console'));
-    expect(openButton).toBeTruthy();
-    openButton?.click();
-    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onEnabledChange).not.toHaveBeenCalled();
   });
 });

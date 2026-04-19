@@ -20,7 +20,7 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("'window:settings'");
   });
 
-  it('tracks environment windows by session key and scopes detached windows per session', () => {
+  it('tracks environment windows by session key and scopes child windows per session', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('const sessionsByKey = new Map<DesktopSessionKey, DesktopSessionRecord>();');
@@ -74,15 +74,17 @@ describe('main routing', () => {
     expect(mainSrc).toContain('protectedManagedEnvironmentDeleteFailure');
   });
 
-  it('broadcasts launcher snapshots per utility window and scopes Ask Flower handoff by sender ownership', () => {
+  it('broadcasts launcher snapshots per utility window and keeps session child identities stable', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL');
     expect(mainSrc).toContain('function emitDesktopWelcomeSnapshot(kind: DesktopUtilityWindowKind): Promise<void>');
     expect(mainSrc).toContain('function broadcastDesktopWelcomeSnapshots(): void {');
     expect(mainSrc).toContain('function senderUtilityWindowKind(webContentsID: number): DesktopUtilityWindowKind {');
-    expect(mainSrc).toContain('function handoffAskFlowerToOwningSession(senderWebContentsID: number, payload: DesktopAskFlowerHandoffPayload): Promise<void> {');
-    expect(mainSrc).toContain('queueSessionAskFlowerHandoff(sessionKey, payload);');
+    expect(mainSrc).toContain('function childWindowIdentity(frameName: string, targetURL: string): string {');
+    expect(mainSrc).toContain("return `child:${url.pathname}${url.search}`;");
+    expect(mainSrc).not.toContain('handoffAskFlowerToOwningSession');
+    expect(mainSrc).not.toContain('queueSessionAskFlowerHandoff');
   });
 
   it('routes explicit quit, system quit, and non-macOS last-window close through shared quit-impact logic', () => {

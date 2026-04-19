@@ -55,6 +55,13 @@ export function dirnameAbsolute(path: string): string {
   return dirname(normalized);
 }
 
+export function basenameFromAbsolutePath(path: string): string {
+  const normalized = normalizeAbsolutePath(path);
+  if (!normalized || normalized === '/') return 'File';
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[parts.length - 1] || 'File';
+}
+
 export function commonAncestorAbsolute(paths: string[]): string {
   return commonAncestor(paths, '/');
 }

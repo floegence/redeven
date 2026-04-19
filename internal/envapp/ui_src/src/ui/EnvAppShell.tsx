@@ -87,19 +87,16 @@ import { NotesOverlay } from './notes/NotesOverlay';
 import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
-import { DetachedSurfaceScene } from './widgets/DetachedSurfaceScene';
 import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';
 import { FileBrowserSurfaceHost } from './widgets/FileBrowserSurfaceHost';
 import { FilePreviewContext } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
-import { normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
+import { basenameFromAbsolutePath, normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
 import { createClientId } from './utils/clientId';
-import { buildFilePreviewAskFlowerIntent } from './utils/filePreviewAskFlower';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar, type EnvSidebarVisibilityMotion } from './envSidebarVisibilityMotion';
-import { subscribeDesktopAskFlowerMainWindowHandoff, type DesktopAskFlowerMainWindowHandoff } from './services/desktopAskFlowerBridge';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
@@ -133,15 +130,6 @@ import {
   type LocalAccessStatus,
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
-import {
-  basenameFromAbsolutePath,
-  buildDetachedDebugConsoleSurface,
-  buildDetachedFilePreviewSurface,
-  isDesktopManagedRuntime,
-  openDetachedSurfaceWindow,
-  parseDetachedSurfaceFromURL,
-  shouldOpenDetachedSurface,
-} from './services/detachedSurface';
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { portalOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeEnvironmentOwnedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
@@ -321,9 +309,6 @@ export function EnvAppShell() {
 
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
-  const detachedSurface = createMemo(() => (
-    typeof window === 'undefined' ? null : parseDetachedSurfaceFromURL(window.location)
-  ));
   const initialAccessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
   if (initialAccessResumeToken) {
     writeLocalAccessResumeToken(initialAccessResumeToken);
@@ -562,7 +547,6 @@ export function EnvAppShell() {
   const toggleNotesOverlay = () => setNotesOverlayOpen((open) => !open);
   const [openTerminalInDirectoryRequestSeq, setOpenTerminalInDirectoryRequestSeq] = createSignal(0);
   const [openTerminalInDirectoryRequest, setOpenTerminalInDirectoryRequest] = createSignal<OpenTerminalInDirectoryRequest | null>(null);
-  let pendingMainWindowAskFlowerComposerIntent: AskFlowerIntent | null = null;
   const activeSurface = createMemo<EnvSurfaceId>(() => {
     if (viewMode() === 'activity') {
       const activeTab = layout.sidebarActiveTab();
@@ -573,10 +557,8 @@ export function EnvAppShell() {
 
   const [settingsSeq, setSettingsSeq] = createSignal(0);
   const bumpSettingsSeq = () => setSettingsSeq((n) => n + 1);
-  const debugConsoleDetached = createMemo(() => shouldOpenDetachedSurface({ runtime: localRuntime(), kind: 'debug_console' }));
   const debugConsole = createDebugConsoleController({
     protocolStatus: () => protocol.status(),
-    uiEnabled: () => !debugConsoleDetached(),
   });
 
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
@@ -613,19 +595,7 @@ export function EnvAppShell() {
   };
 
   const openDebugConsole = () => {
-    void (async () => {
-      try {
-        const runtime = localRuntime() ?? await getLocalRuntime();
-        if (shouldOpenDetachedSurface({ runtime, kind: 'debug_console' })) {
-          openDetachedSurfaceWindow(buildDetachedDebugConsoleSurface());
-          return;
-        }
-      } catch {
-        // Fall back to the in-app console when runtime inspection fails.
-      }
-
-      debugConsole.show();
-    })();
+    debugConsole.show();
   };
 
   const setDebugConsoleEnabled = (enabled: boolean) => {
@@ -711,46 +681,6 @@ export function EnvAppShell() {
     setAskFlowerComposerOpen(false);
     setAskFlowerComposerIntent(null);
     setAskFlowerComposerAnchor(null);
-  };
-
-  const flushPendingMainWindowAskFlowerComposerIntent = () => {
-    if (!canUseFlower() || !pendingMainWindowAskFlowerComposerIntent) {
-      return;
-    }
-    const intent = pendingMainWindowAskFlowerComposerIntent;
-    pendingMainWindowAskFlowerComposerIntent = null;
-    openAskFlowerComposer(intent);
-  };
-
-  const handleDesktopAskFlowerMainWindowHandoff = (payload: DesktopAskFlowerMainWindowHandoff) => {
-    const item: FileItem = {
-      id: payload.path,
-      name: basenameFromAbsolutePath(payload.path),
-      path: payload.path,
-      type: 'file',
-    };
-    const result = buildFilePreviewAskFlowerIntent({
-      item,
-      selectionText: payload.selectionText,
-    });
-    if (result.error) {
-      notify.error('Ask Flower unavailable', result.error);
-      return;
-    }
-    if (!result.intent) {
-      return;
-    }
-
-    if (!canUseFlower()) {
-      if (env.state === 'ready') {
-        notify.error('Permission denied', 'Read/write/execute permission required.');
-        return;
-      }
-      pendingMainWindowAskFlowerComposerIntent = result.intent;
-      return;
-    }
-
-    openAskFlowerComposer(result.intent);
   };
 
   const uploadAskFlowerAttachment = async (file: File): Promise<string> => {
@@ -1099,7 +1029,7 @@ export function EnvAppShell() {
 
   const startRuntimeRestart = async () => {
     const runtime = localRuntime();
-    if (runtime && isDesktopManagedRuntime(runtime)) {
+    if (runtime && runtime.desktop_managed === true) {
       const result = await restartDesktopManagedRuntime();
       if (!result) {
         return {
@@ -1633,15 +1563,8 @@ export function EnvAppShell() {
     };
 
     window.addEventListener('message', onMessage);
-    const unsubscribeAskFlowerHandoff = subscribeDesktopAskFlowerMainWindowHandoff((payload) => {
-      if (detachedSurface()) {
-        return;
-      }
-      handleDesktopAskFlowerMainWindowHandoff(payload);
-    });
     onCleanup(() => {
       window.removeEventListener('message', onMessage);
-      unsubscribeAskFlowerHandoff();
     });
   });
 
@@ -1840,13 +1763,6 @@ export function EnvAppShell() {
     if (initialActivitySurface && layout.sidebarActiveTab() !== initialActivitySurface) return;
     setPendingAutoOpenCodex(false);
     openSurface('codex', { reason: 'mode_restore', focus: true, ensureVisible: true });
-  });
-
-  createEffect(() => {
-    if (env.state !== 'ready' || !canUseFlower()) {
-      return;
-    }
-    flushPendingMainWindowAskFlowerComposerIntent();
   });
 
   createEffect(() => {
@@ -2372,22 +2288,7 @@ export function EnvAppShell() {
 
   const filePreviewContextValue = {
     controller: filePreviewController,
-    openPreview: async (item: FileItem) => {
-      try {
-        const runtime = localRuntime() ?? await getLocalRuntime();
-        if (shouldOpenDetachedSurface({ runtime, kind: 'file_preview' })) {
-          const surface = buildDetachedFilePreviewSurface(item);
-          if (surface) {
-            openDetachedSurfaceWindow(surface);
-            return;
-          }
-        }
-      } catch {
-        // Fall back to the in-app preview surface when local runtime inspection fails.
-      }
-
-      await filePreviewController.openPreview(item);
-    },
+    openPreview: async (item: FileItem) => filePreviewController.openPreview(item),
     closePreview: filePreviewController.closePreview,
   } as const;
   const fileBrowserSurfaceContextValue = {
@@ -2402,25 +2303,10 @@ export function EnvAppShell() {
       await openFileBrowserSurface({
         input: params,
         controller: fileBrowserSurfaceController,
-        localRuntime,
-        resolveLocalRuntime: getLocalRuntime,
       });
     },
     closeBrowser: fileBrowserSurfaceController.closeSurface,
   } as const;
-
-  const renderDetachedSurface = () => {
-    const surface = detachedSurface();
-    if (!surface) return null;
-    return (
-      <DetachedSurfaceScene
-        surface={surface}
-        accessGateVisible={accessGateVisible()}
-        accessGatePanel={accessGatePanel()}
-        connectError={connectError()}
-      />
-    );
-  };
 
   const ShellLogo = () => (
     <TopBarBrandButton
@@ -2661,11 +2547,7 @@ export function EnvAppShell() {
           >
             <FloeRegistryRuntime components={components()}>
               <AIChatProviderBridge>
-                <CodexProvider>
-                  <Show when={detachedSurface()} fallback={renderMainShell()}>
-                    {renderDetachedSurface()}
-                  </Show>
-                </CodexProvider>
+                <CodexProvider>{renderMainShell()}</CodexProvider>
                 <AskFlowerComposerWindow
                   open={askFlowerComposerOpen()}
                   intent={askFlowerComposerIntent()}

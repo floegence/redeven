@@ -23,8 +23,6 @@ describe('desktop persistence wiring', () => {
     expect(utilityPreloadSrc).not.toContain('bootstrapDesktopAskFlowerHandoffBridge');
     expect(utilityPreloadSrc).not.toContain('bootstrapDesktopSessionContextBridge');
 
-    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopAskFlowerHandoffBridge } from './askFlowerHandoff';");
-    expect(sessionPreloadSrc).toContain('bootstrapDesktopAskFlowerHandoffBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopEmbeddedDragHostBridge } from './desktopEmbeddedDragHost';");
     expect(sessionPreloadSrc).toContain('bootstrapDesktopEmbeddedDragHostBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopSessionContextBridge } from './desktopSessionContext';");
@@ -33,6 +31,9 @@ describe('desktop persistence wiring', () => {
     expect(sessionPreloadSrc).toContain('bootstrapDesktopShellBridge();');
     expect(sessionPreloadSrc).toContain("import { bootstrapDesktopStateStorageBridge } from './desktopStateStorage';");
     expect(sessionPreloadSrc).toContain('bootstrapDesktopStateStorageBridge();');
+    expect(sessionPreloadSrc).toContain("import { bootstrapDesktopThemeBridge } from './windowTheme';");
+    expect(sessionPreloadSrc).toContain('bootstrapDesktopThemeBridge();');
+    expect(sessionPreloadSrc).not.toContain('bootstrapDesktopAskFlowerHandoffBridge');
     expect(sessionPreloadSrc).not.toContain('bootstrapDesktopLauncherBridge');
     expect(sessionPreloadSrc).not.toContain('bootstrapDesktopSettingsBridge');
   });
@@ -52,9 +53,6 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_REMOVE_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_STATE_KEYS_CHANNEL');
     expect(mainSrc).toContain('ipcMain.on(DESKTOP_SESSION_CONTEXT_GET_CHANNEL');
-    expect(mainSrc).toContain('DESKTOP_ASK_FLOWER_HANDOFF_REQUEST_CHANNEL');
-    expect(mainSrc).toContain('DESKTOP_ASK_FLOWER_HANDOFF_DELIVER_CHANNEL');
-    expect(mainSrc).toContain('normalizeDesktopAskFlowerHandoffPayload');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL');
@@ -81,8 +79,9 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain("stateKey: utilityWindowStateKey()");
     expect(mainSrc).toContain("stateKey: sessionWindowStateKey(sessionKey)");
     expect(mainSrc).toContain('sessionChildWindowStateKey(sessionKey, childKey)');
-    expect(mainSrc).toContain('void handoffAskFlowerToOwningSession(event.sender.id, normalized);');
+    expect(mainSrc).toContain('child_windows: Map<string, DesktopTrackedWindow>;');
     expect(mainSrc).toContain("setLauncherViewState({");
     expect(mainSrc).toContain("surface: 'connect_environment',");
+    expect(mainSrc).not.toContain('handoffAskFlowerToOwningSession');
   });
 });

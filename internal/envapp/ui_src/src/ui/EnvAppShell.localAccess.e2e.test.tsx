@@ -335,11 +335,24 @@ vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/RuntimeUpdateFloatingPrompt', () => ({ RuntimeUpdateFloatingPrompt: () => <div /> }));
 vi.mock('./widgets/AskFlowerComposerWindow', () => ({ AskFlowerComposerWindow: () => <div /> }));
-vi.mock('./widgets/DetachedSurfaceScene', () => ({ DetachedSurfaceScene: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
 vi.mock('./utils/askFlowerContextTemplate', () => ({ buildAskFlowerDraftMarkdown: () => '' }));
-vi.mock('./utils/askFlowerPath', () => ({ resolveSuggestedWorkingDirAbsolute: () => '' }));
+vi.mock('./utils/askFlowerPath', () => ({
+  basenameFromAbsolutePath: (value: string) => {
+    const normalized = String(value ?? '').trim().replace(/\/+$/, '');
+    if (!normalized || normalized === '/') return 'File';
+    const parts = normalized.split('/').filter(Boolean);
+    return parts[parts.length - 1] || 'File';
+  },
+  normalizeAbsolutePath: (value: string) => {
+    const raw = String(value ?? '').trim().replace(/\\+/g, '/');
+    if (!raw.startsWith('/')) return '';
+    if (raw === '/') return '/';
+    return raw.replace(/\/+$/, '') || '/';
+  },
+  resolveSuggestedWorkingDirAbsolute: () => '',
+}));
 vi.mock('./utils/windowNavigation', () => ({ reloadCurrentPage: reloadCurrentPageMock }));
 vi.mock('./services/gatewayApi', () => ({
   fetchGatewayJSON: vi.fn(),

@@ -683,7 +683,7 @@ describe('createDebugConsoleController', () => {
     dispose();
   });
 
-  it('can stay forced-open for detached windows without minimize persistence', async () => {
+  it('can stay forced-open when minimize persistence is disabled', async () => {
     const store = installStorageBridge();
     setConsoleVisible(false, true);
 

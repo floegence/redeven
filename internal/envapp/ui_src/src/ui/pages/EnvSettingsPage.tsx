@@ -22,7 +22,6 @@ import { isReleaseVersion } from '../maintenance/agentVersion';
 import { formatAgentStatusLabel, formatUnknownError } from '../maintenance/shared';
 import { manageDesktopUpdate, openExternalURLInDesktopShell } from '../services/desktopShellBridge';
 import { fetchGatewayJSON } from '../services/gatewayApi';
-import { shouldOpenDetachedSurface } from '../services/detachedSurface';
 import {
   cancelCodeRuntimeOperation,
   detachCodeRuntimeSelection,
@@ -325,9 +324,6 @@ export function EnvSettingsPage() {
   const canInteract = createMemo(() => protocol.status() === 'connected' && !settings.loading && !settings.error);
   const canManageCodeRuntime = createMemo(() => Boolean(env.env()?.permissions?.can_read && env.env()?.permissions?.can_write && env.env()?.permissions?.can_execute));
   const debugConsoleEnabled = createMemo(() => env.debugConsoleEnabled());
-  const debugConsolePresentation = createMemo(() => (
-    shouldOpenDetachedSurface({ runtime: env.localRuntime(), kind: 'debug_console' }) ? 'detached' : 'floating'
-  ));
 
   // Settings quick-jump directory (sidebar/select).
   const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('config');
@@ -3725,17 +3721,13 @@ export function EnvSettingsPage() {
             <SettingsCard
               icon={RefreshIcon}
               title="Debug Console"
-              description={debugConsolePresentation() === 'detached'
-                ? 'Frontend diagnostics open in a dedicated desktop window for this session.'
-                : 'Frontend-only diagnostics controls for the floating request and UI-performance console.'}
+              description="Frontend-only diagnostics controls for the floating request and UI-performance console."
               actions={<SettingsPill tone="success">Local UI state</SettingsPill>}
             >
               <EnvDebugConsoleSettingsPanel
-                presentation={debugConsolePresentation()}
                 enabled={debugConsoleEnabled()}
                 canInteract={canInteract()}
                 onEnabledChange={(value) => env.setDebugConsoleEnabled(value)}
-                onOpen={env.openDebugConsole}
               />
             </SettingsCard>
           </div>

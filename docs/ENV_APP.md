@@ -16,7 +16,7 @@ Key points:
 - Monitor `Top Processes` severity coloring is semantic and threshold-driven: CPU uses muted/success/warning/error tiers at `<20`, `20-49.9`, `50-99.9`, and `>=100`, while memory uses muted/success/warning tiers at `<1 GiB`, `1-9.9 GiB`, and `>=10 GiB`.
 - In Redeven Desktop, the command palette also exposes a shell-owned `Open Environment...` action through the Desktop browser bridge; that action stays separate from runtime settings ownership.
 - In Redeven Desktop, Env App also follows a shell-owned theme contract: Electron main resolves `system` / `light` / `dark`, preload exposes `window.redevenDesktopTheme`, and Env App routes only its Floe `theme` persistence key through that shell bridge while leaving other UI persistence in the normal Env App namespace.
-- Desktop theme changes triggered from Env App must update the current document theme, native window chrome, and detached child windows together instead of leaving Env App as an independent theme authority.
+- Desktop theme changes triggered from Env App must update the current document theme, native window chrome, and any session child windows together instead of leaving Env App as an independent theme authority.
 - Runtime Settings uses an explicit information architecture so users can find endpoint controls by intent rather than by implementation detail:
   - `Overview`: `Config File`, `Connection`, `Runtime Status`
   - `Runtime Configuration`: `Shell & Workspace`, `Logging`
@@ -73,10 +73,10 @@ Key points:
 - Large Git file tables use shared virtualization in the Env App (`Changes`, `Branches -> Compare`, `Branches -> Status`, `Graph` commit files, and stash changed-file review), while stash review stays summary-first and opens single-file diffs through the shared dialog flow on demand.
 - CSS, HTML, SCSS, Less, TOML, Makefile-family files, Vue/Svelte-class files, and other text formats now stay on the same Monaco-backed preview/edit path instead of splitting by language support tables.
 - File preview no longer uses a separate Shiki renderer. The only remaining preview fallbacks are a plain-text truncated view and a plain-text emergency view when Monaco fails outside edit mode.
-- Desktop-managed runs can still promote selected serializable overlay surfaces into dedicated desktop child windows by reopening the same Env App entrypoint in a detached-scene mode (`file_preview` and `debug_console` today); shared file-browser entry points stay on the in-page floating browser surface instead of opening a second desktop window.
-- The page browser, Ask Flower linked-directory browser, Flower chat floating browser, Codex transcript browser, and explicit detached file-browser scene all reuse the same `RemoteFileBrowser` surface; product-specific code only owns the shell behavior that opens it.
+- Desktop-managed runs keep Preview, File Browser, and Debug Console inside the same Env App window. Those tools now always reuse the in-app floating surface controllers instead of reopening the Env App entrypoint in a second desktop child window.
+- The page browser, Ask Flower linked-directory browser, Flower chat floating browser, and Codex transcript browser all reuse the same `RemoteFileBrowser` surface; product-specific code only owns the shell behavior that opens it.
 - Codex transcript now reuses that same floating browser shell as well, seeded from the resolved Codex working directory instead of introducing a Codex-specific file-browser surface.
-- Env App now keeps the reusable chat/terminal/Codex floating browser shell at the root level, so cross-surface entry points share the same floating-window persistence, explicit browser-seed handling, and `RemoteFileBrowser` rendering path; file preview keeps detached desktop promotion separately.
+- Env App now keeps the reusable chat/terminal/Codex floating browser shell at the root level, so cross-surface entry points share the same floating-window persistence, explicit browser-seed handling, and `RemoteFileBrowser` rendering path; file preview and debug console follow that same single-window floating model.
 
 ## Notes overlay
 
@@ -188,26 +188,25 @@ Contract:
 Implications:
 
 - Env App theme toggles behave like shell-wide toggles, not page-local overrides.
-- Detached desktop child windows inherit the same theme snapshot and document-class synchronization path as the main Env App window.
+- Session child windows opened through allowed app navigation inherit the same theme snapshot and document-class synchronization path as the main Env App window.
 - Eliminating independent page authority for native window colors avoids light flashes during dark-mode open, close, and aggressive resize transitions.
 - Renderer CSS may still use richer theme tokens, but native window colors remain a shell-owned hex contract instead of flowing arbitrary CSS color syntax back into Electron.
 
-## Detached Desktop Window Frame
+## Desktop Floating Surface Model
 
-Detached desktop child windows no longer mount business content directly against the document origin.
+Desktop Env App surfaces now follow one canonical in-app presentation model for product-owned tools.
 
 Contract:
 
-- `DetachedSurfaceScene` maps each detached surface into a shared frame model with `title`, `subtitle`, `headerActions`, `body`, and optional `footer`.
-- `DesktopDetachedWindowFrame` owns the chrome-safe titlebar reservation and consumes the shell-published titlebar hooks instead of re-deriving per-platform spacing inside scene components.
-- File preview uses that shared frame header for file identity plus copy/edit/save/discard actions, while `FilePreviewContent` switches into a content-only mode for detached native windows.
-- Debug Console also plugs into that shared frame, but keeps its request/trace/UI-performance content inside the detached child window so page dialogs and floating windows never cover it in desktop-managed sessions.
-- Detached file browser keeps its existing workspace behavior, but now starts below the shared frame instead of assuming the page can render at the top edge of the document.
+- File preview always renders through `FilePreviewHost` inside the main Env App shell and keeps copy/edit/save/discard plus Ask Flower in the same renderer tree.
+- Debug Console always renders through the shared in-app `DebugConsoleWindow`, so enable/minimize/restore stays local to the active Env App shell.
+- File Browser keeps using the shared floating browser surface host instead of a second presentation path.
+- Ask Flower from preview now stays entirely in-process inside the root Env App shell instead of handing off through Electron IPC between windows.
 
 Implications:
 
-- Future detached desktop surfaces should plug content into the shared frame rather than writing a new top-level window layout.
-- Native control avoidance stays centralized in desktop preload + shared renderer frame code instead of scattering padding fixes across individual features.
+- Product-owned floating tools have one renderer path per feature instead of a parallel in-app plus child-window split.
+- Desktop child windows remain available only for legitimate top-level navigation flows that belong to separate browser windows, not for internal floating tools.
 
 ## Git browse stash workflow
 

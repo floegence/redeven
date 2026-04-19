@@ -18,8 +18,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Desktop keeps one singleton shell-owned utility window:
   - `Connect Environment` launcher
 - `Environment Settings` renders as a launcher-owned modal dialog instead of a second native window.
-- Each opened Environment owns its own top-level session window, plus any detached child windows it spawns.
-- Detached child windows are session-scoped tools rather than global shell utilities. File preview and Debug Console are current examples.
+- Each opened Environment owns its own top-level session window, plus any session child windows opened by allowed in-app navigation.
 - Session deduplication happens in Electron main through a canonical session key:
   - `env:<environment_id>:local_host` for a locally hosted managed environment window
   - `env:<environment_id>:remote_desktop` for a remote desktop window opened through a Control Plane provider
@@ -360,22 +359,20 @@ Interaction rules:
   - `Quit` when no environment is open yet
   - `Close Launcher` when one or more Environment windows are already open
 
-## Detached Session Windows
+## Session Child Windows
 
-Desktop-managed Env App sessions can promote selected tools into detached native child windows when the interaction should stay independent from page dialogs and floating overlays.
+Desktop session child windows are reserved for legitimate browser-window navigation flows that still belong to the same Environment session.
 
-Current detached session windows:
+Current rules:
 
-- `File Preview`
-- `Debug Console`
+- Preview, File Browser, and Debug Console stay inside the main Env App window as floating surfaces.
+- Session child windows stay owned by the current Environment session instead of becoming shell-global utility windows.
+- Focusing or reopening a child window reuses the same session child window identity instead of spawning duplicates.
+- Desktop captures a stable window ownership record when each session child window is created, so close/restart cleanup can remove session routing state without touching destroyed Electron objects.
 
-Rules:
+Implication:
 
-- Detached tools stay owned by the current Environment session instead of becoming shell-global utility windows.
-- Focusing or reopening a detached tool reuses the same session child window identity instead of spawning duplicates.
-- Desktop captures a stable window ownership record when each detached child window is created, so close/restart cleanup can remove session routing state without touching destroyed Electron objects.
-- Ordinary page dialogs in the main Env App window do not cover detached tools, because Electron manages them as separate native windows.
-- Debug Console therefore remains available while the main Env App shows ordinary page-level dialogs or floating-window-local confirmation flows.
+- Product-owned Env App tools no longer depend on a second native window contract just to stay above page-level dialogs or floating-window-local confirmation flows.
 
 ## Environment Settings
 
@@ -587,7 +584,7 @@ Behavior:
   - `--redeven-desktop-titlebar-height`
   - `--redeven-desktop-titlebar-start-inset`
   - `--redeven-desktop-titlebar-end-inset`
-- Preload also publishes generic detached-window titlebar hooks so renderer shells can consume the same contract without per-scene platform logic:
+- Preload also publishes generic desktop-window titlebar hooks so renderer shells can consume the same contract without per-scene platform logic:
   - `[data-redeven-desktop-window-titlebar='true']`
   - `[data-redeven-desktop-window-titlebar-content='true']`
 - Floe shell top bars and desktop-owned launcher chrome both receive drag / no-drag semantics from preload so BrowserWindow movement keeps working after the app takes over the title bar area.
@@ -597,17 +594,17 @@ Behavior:
   - the session preload running in the top-level Desktop document turns those rectangles into transparent top-level `app-region: drag` overlays;
   - Electron window movement always stays owned by the top-level session document, never by iframe DOM alone.
 - The drag-overlay bridge is exposed only from the top-level session document. Electron loads the same preload into same-window iframes too, so subframes must publish drag intent upward instead of trying to own native drag hit-testing themselves.
-- Detached desktop child windows render through a shared chrome-safe frame in Env App, so title, subtitle, banner, footer, and scene body can evolve independently while native control reservations still come only from the shell contract.
+- Session child windows still render through the same shell-owned chrome and theme bridge contract as their owning Environment window.
 - Welcome and desktop Env App route only the Floe `theme` persistence key through the shell bridge; other UI state stays in their normal storage namespaces.
 - Welcome and Env App each keep an explicit entry-document background fallback (`html` / `body` / `#root`) so the first renderer frame matches the shell-owned native window background even before business UI mounts.
-- Theme toggles from either welcome or Env App update native chrome and all registered renderer windows together, including detached desktop child windows.
+- Theme toggles from either welcome or Env App update native chrome and all registered renderer windows together, including session child windows.
 - When the stored source is `system`, Electron main rebroadcasts a fresh snapshot whenever the OS theme changes.
 
 Non-goals:
 
 - Native window colors must not depend on DOM color sampling from the current page.
 - Native window colors must not use renderer-only CSS syntaxes that are not part of the desktop shell’s native hex-color contract.
-- Desktop should not maintain one-off per-surface theme patches for welcome, Env App, or detached child windows.
+- Desktop should not maintain one-off per-surface theme patches for welcome, Env App, or session child windows.
 
 ## User Entry Points
 
@@ -641,7 +638,7 @@ Non-goals:
   - Desktop tears down the failed opening session, preserves the SSH Host entry and instance context in diagnostics, and reports the failure through toast feedback
 - Desktop-managed startup blocked
   - Desktop returns to the launcher with structured recovery state and toast feedback instead of opening a blank Environment window
-- Detached child windows and Ask Flower handoff stay session-scoped during recovery; only the owning Environment window receives those callbacks
+- Session child windows stay session-scoped during recovery, while Ask Flower and other floating-tool actions stay in the owning Environment window
 - The normal product flow is launcher-first recovery through the launcher window, its dialogs, and toast feedback rather than page-inserted recovery banners
 
 ## Accessibility Behavior
@@ -675,8 +672,8 @@ Desktop-specific outcomes from this implementation:
   - Desktop-managed local and provider environments may require a Desktop restart and reopen flow
   - SSH-hosted environment instances only affect that one SSH Host entry + `environment_instance_id`
   - external Redeven URL targets stay externally managed and do not offer a Desktop-side runtime update action
-- Detached desktop child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.
-- Shell-owned utility windows and session-owned detached child windows both clear their routing ownership from the same stable window record, so normal close actions stay silent instead of surfacing Electron lifecycle errors.
+- Session child windows keep using the same Env App runtime, access gate, and Flowersec protocol path; only the shell-owned launcher/options surfaces differ.
+- Shell-owned utility windows and session-owned child windows both clear their routing ownership from the same stable window record, so normal close actions stay silent instead of surfacing Electron lifecycle errors.
 
 ## Release Assets
 

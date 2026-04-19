@@ -95,7 +95,7 @@ describe('desktop preload runtime', () => {
   });
 
   it('extracts the marked runtime payload from noisy stdout', () => {
-    const payload = '{"main":{"hasAskFlowerBridge":true},"child":{"hasAskFlowerBridge":true}}';
+    const payload = '{"main":{"hasDesktopShellBridge":true},"child":{"hasDesktopShellBridge":true}}';
     expect(
       extractElectronRuntimePayload(
         `noise before\n${electronRuntimePayloadStartMarker}${payload}${electronRuntimePayloadEndMarker}\nnoise after`,
@@ -164,9 +164,6 @@ ipcMain.on('redeven-desktop:window-chrome-get-snapshot', (event) => {
 
 function snapshotBridgeState() {
   return JSON.stringify({
-    hasAskFlowerBridge: typeof window.redevenDesktopAskFlowerHandoff === 'object'
-      && typeof window.redevenDesktopAskFlowerHandoff?.requestMainWindowHandoff === 'function'
-      && typeof window.redevenDesktopAskFlowerHandoff?.onMainWindowHandoff === 'function',
     hasDesktopLauncherBridge: typeof window.redevenDesktopLauncher === 'object'
       && typeof window.redevenDesktopLauncher?.performAction === 'function'
       && typeof window.redevenDesktopLauncher?.getSnapshot === 'function',
@@ -227,13 +224,12 @@ app.whenReady().then(async () => {
   });
 
   await mainWindow.loadURL('data:text/html,<html><body>main</body></html>');
-  await mainWindow.webContents.executeJavaScript('window.open("data:text/html,<html><body>child</body></html>", "redeven_detached_file_preview", "noopener,noreferrer")');
+  await mainWindow.webContents.executeJavaScript('window.open("data:text/html,<html><body>child</body></html>", "redeven_session_child_preview", "noopener,noreferrer")');
 });
 `, 'utf8');
 
     type RuntimeBridgeSnapshot = {
       main: {
-        hasAskFlowerBridge: boolean;
         hasDesktopLauncherBridge: boolean;
         hasDesktopSettingsBridge: boolean;
         hasDesktopSessionContextBridge: boolean;
@@ -244,7 +240,6 @@ app.whenReady().then(async () => {
         hasDesktopWindowChromeBridge: boolean;
       };
       child: {
-        hasAskFlowerBridge: boolean;
         hasDesktopLauncherBridge: boolean;
         hasDesktopSettingsBridge: boolean;
         hasDesktopSessionContextBridge: boolean;
@@ -281,7 +276,6 @@ app.whenReady().then(async () => {
     const utility = await runSnapshot(path.join(outDir, 'utility.js'));
     expect(utility.main.hasDesktopLauncherBridge).toBe(true);
     expect(utility.main.hasDesktopSettingsBridge).toBe(true);
-    expect(utility.main.hasAskFlowerBridge).toBe(false);
     expect(utility.main.hasDesktopSessionContextBridge).toBe(false);
     expect(utility.main.hasDesktopEmbeddedDragBridge).toBe(false);
     expect(utility.main.hasDesktopShellBridge).toBe(true);
@@ -293,7 +287,6 @@ app.whenReady().then(async () => {
     const session = await runSnapshot(path.join(outDir, 'session.js'));
     expect(session.main.hasDesktopLauncherBridge).toBe(false);
     expect(session.main.hasDesktopSettingsBridge).toBe(false);
-    expect(session.main.hasAskFlowerBridge).toBe(true);
     expect(session.main.hasDesktopSessionContextBridge).toBe(true);
     expect(session.main.hasDesktopEmbeddedDragBridge).toBe(true);
     expect(session.main.hasDesktopShellBridge).toBe(true);
