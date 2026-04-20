@@ -1,8 +1,9 @@
 import type {
   WorkbenchWidgetBodyProps,
   WorkbenchWidgetDefinition,
+  WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
-import { Activity, Code, Files, Globe, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Activity, Code, Files, Globe, Search, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Show, type JSX } from 'solid-js';
 
 import { CodexNavigationIcon } from '../icons/CodexIcon';
@@ -20,6 +21,7 @@ import { RuntimeMonitorPanel } from '../widgets/RuntimeMonitorPanel';
 import { TerminalPanel } from '../widgets/TerminalPanel';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
+import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
 function WorkbenchBodyNotice(props: {
@@ -186,6 +188,16 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     singleton: false,
   },
   {
+    type: 'redeven.preview',
+    label: 'Preview',
+    icon: Search,
+    body: WorkbenchFilePreviewWidget,
+    defaultTitle: 'Preview',
+    defaultSize: { width: 900, height: 620 },
+    group: 'workspace',
+    singleton: false,
+  },
+  {
     type: 'redeven.monitor',
     label: 'Monitoring',
     icon: Activity,
@@ -235,4 +247,14 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     group: 'assistant',
     singleton: true,
   },
+];
+
+export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[] = [
+  'redeven.files',
+  'redeven.terminal',
+  'redeven.monitor',
+  'redeven.codespaces',
+  'redeven.ports',
+  'redeven.ai',
+  'redeven.codex',
 ];

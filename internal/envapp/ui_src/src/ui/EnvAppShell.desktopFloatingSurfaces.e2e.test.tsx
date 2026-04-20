@@ -27,6 +27,7 @@ const connectArtifactEntryMock = vi.fn();
 let debugConsoleEnabled = false;
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
 let protocolClient: unknown = null;
+let desktopViewMode: 'activity' | 'workbench' = 'activity';
 
 const connectMock = vi.fn(async () => {
   protocolStatus = 'connected';
@@ -69,10 +70,10 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
           type="button"
           data-testid="open-preview"
           onClick={() => void filePreview.openPreview({
+            id: '/workspace/demo.txt',
             type: 'file',
             name: 'demo.txt',
             path: '/workspace/demo.txt',
-            isDirectory: false,
             size: 12,
           })}
         >
@@ -226,7 +227,32 @@ vi.mock('./TopBarBrandButton', () => ({
 
 vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div /> }));
 
-vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <div /> }));
+vi.mock('./workbench/EnvWorkbenchPage', () => ({
+  EnvWorkbenchPage: () => {
+    const env = useContext(EnvContextMock);
+    const filePreview = useContext(FilePreviewContextMock);
+    return (
+      <div>
+        <button
+          type="button"
+          data-testid="workbench-open-preview"
+          onClick={() => void filePreview.openPreview({
+            id: '/workspace/demo.txt',
+            type: 'file',
+            name: 'demo.txt',
+            path: '/workspace/demo.txt',
+            size: 12,
+          })}
+        >
+          Open Workbench Preview
+        </button>
+        <div data-testid="workbench-preview-activation">
+          {env.workbenchFilePreviewActivation?.()?.item?.path ?? ''}
+        </div>
+      </div>
+    );
+  },
+}));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
@@ -330,7 +356,7 @@ vi.mock('./services/desktopTheme', () => ({
 }));
 vi.mock('./services/sandboxOrigins', () => ({ portalOriginFromSandboxLocation: () => 'https://console.example.com' }));
 vi.mock('./services/uiStorage', () => ({
-  readUIStorageItem: vi.fn((key: string) => (key === 'redeven_envapp_desktop_view_mode' ? 'activity' : null)),
+  readUIStorageItem: vi.fn((key: string) => (key === 'redeven_envapp_desktop_view_mode' ? desktopViewMode : null)),
   writeEnvironmentOwnedUIStorageItem: vi.fn(),
   writeUIStorageItem: vi.fn(),
 }));
@@ -358,6 +384,7 @@ beforeEach(() => {
   debugConsoleEnabled = false;
   protocolStatus = 'disconnected';
   protocolClient = null;
+  desktopViewMode = 'activity';
   window.open = windowOpenMock as typeof window.open;
   getLocalRuntimeMock.mockResolvedValue({
     mode: 'local',
@@ -438,6 +465,29 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       expect(debugConsoleShowMock).toHaveBeenCalledTimes(1);
+      expect(windowOpenMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes file preview requests into workbench activation instead of the floating preview controller when workbench mode is active', async () => {
+    desktopViewMode = 'workbench';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-testid="workbench-open-preview"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(filePreviewOpenPreviewMock).not.toHaveBeenCalled();
+      expect(host.querySelector('[data-testid="workbench-preview-activation"]')?.textContent).toBe('/workspace/demo.txt');
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {
       dispose();

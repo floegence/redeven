@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import {
   WorkbenchContextMenu,
@@ -65,7 +65,9 @@ export interface RedevenWorkbenchSurfaceProps {
    */
   class?: string;
   widgetDefinitions?: readonly WorkbenchWidgetDefinition[];
+  filterBarWidgetTypes?: readonly WorkbenchWidgetType[];
   onApiReady?: (api: RedevenWorkbenchSurfaceApi | null) => void;
+  onRequestDelete?: (widgetId: string) => void;
 }
 
 const DEFAULT_LOCK_SHORTCUT = 'F1';
@@ -83,6 +85,38 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   const model = useWorkbenchModel(modelOptions);
   const [surfaceRootEl, setSurfaceRootEl] = createSignal<HTMLDivElement | null>(null);
   const [inputOwner, setInputOwner] = createSignal<WorkbenchInputOwner>(INITIAL_WORKBENCH_INPUT_OWNER);
+  const manuallyAddableWidgetTypes = createMemo(() => {
+    const allowedTypes = props.filterBarWidgetTypes;
+    if (!allowedTypes || allowedTypes.length <= 0) {
+      return null;
+    }
+    return new Set<WorkbenchWidgetType>(allowedTypes);
+  });
+  const filterBarWidgetDefinitions = createMemo(() => {
+    const definitions = model.widgetDefinitions();
+    const allowed = manuallyAddableWidgetTypes();
+    if (!allowed) {
+      return definitions;
+    }
+    return definitions.filter((entry) => allowed.has(entry.type));
+  });
+  const contextMenuItems = createMemo(() => {
+    const items = model.contextMenu.items();
+    const allowed = manuallyAddableWidgetTypes();
+    if (!allowed) {
+      return items;
+    }
+    return items.filter((item) => {
+      if (item.kind !== 'action') {
+        return true;
+      }
+      const addMatch = /^add-(.+)$/.exec(String(item.id ?? ''));
+      if (!addMatch) {
+        return true;
+      }
+      return allowed.has(addMatch[1] as WorkbenchWidgetType);
+    });
+  });
 
   const updateInputOwnerFromTarget = (
     target: EventTarget | null,
@@ -310,7 +344,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           onCommitFront={model.canvas.commitFront}
           onCommitMove={model.canvas.commitMove}
           onCommitResize={model.canvas.commitResize}
-          onRequestDelete={model.widgetActions.deleteWidget}
+          onRequestDelete={props.onRequestDelete ?? model.widgetActions.deleteWidget}
         />
       </div>
 
@@ -321,7 +355,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       />
 
       <RedevenWorkbenchFilterBar
-        widgetDefinitions={model.widgetDefinitions()}
+        widgetDefinitions={filterBarWidgetDefinitions()}
         widgets={model.widgets()}
         filters={model.filters()}
         onSoloFilter={model.filter.solo}
@@ -346,7 +380,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           <WorkbenchContextMenu
             x={model.contextMenu.position()?.left ?? 0}
             y={model.contextMenu.position()?.top ?? 0}
-            items={model.contextMenu.items()}
+            items={contextMenuItems()}
           />
         </Portal>
       </Show>

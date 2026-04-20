@@ -2,12 +2,14 @@ import type {
   WorkbenchWidgetItem,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
 
 export type RedevenWorkbenchMultiInstanceWidgetType =
   | 'redeven.terminal'
-  | 'redeven.files';
+  | 'redeven.files'
+  | 'redeven.preview';
 
 export type RedevenWorkbenchTerminalPanelState = Readonly<{
   sessionIds: string[];
@@ -15,9 +17,10 @@ export type RedevenWorkbenchTerminalPanelState = Readonly<{
 }>;
 
 export type RedevenWorkbenchInstanceState = Readonly<{
-  version: 1;
+  version: 2;
   latestWidgetIdByType: Partial<Record<WorkbenchWidgetType, string>>;
   terminalPanelsByWidgetId: Record<string, RedevenWorkbenchTerminalPanelState>;
+  previewItemsByWidgetId: Record<string, FileItem>;
 }>;
 
 export type WorkbenchOpenTerminalRequest = Readonly<{
@@ -33,6 +36,12 @@ export type WorkbenchOpenFileBrowserRequest = Readonly<{
   path: string;
   homePath?: string;
   title?: string;
+}>;
+
+export type WorkbenchOpenFilePreviewRequest = Readonly<{
+  requestId: string;
+  widgetId: string;
+  item: FileItem;
 }>;
 
 const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
@@ -67,11 +76,40 @@ function sanitizeTerminalPanelState(value: unknown): RedevenWorkbenchTerminalPan
   };
 }
 
+function sanitizePreviewItem(value: unknown): FileItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const path = normalizeAbsolutePath(String(value.path ?? ''));
+  if (!path) {
+    return null;
+  }
+
+  const type = compact(value.type);
+  if (type && type !== 'file') {
+    return null;
+  }
+
+  const name = compact(value.name) || basenameFromAbsolutePath(path) || 'File';
+  const sizeValue = Number(value.size);
+  const size = Number.isFinite(sizeValue) && sizeValue >= 0 ? Math.floor(sizeValue) : undefined;
+
+  return {
+    id: compact(value.id) || path,
+    type: 'file',
+    path,
+    name,
+    size,
+  };
+}
+
 export function createDefaultWorkbenchInstanceState(): RedevenWorkbenchInstanceState {
   return {
-    version: 1,
+    version: 2,
     latestWidgetIdByType: {},
     terminalPanelsByWidgetId: {},
+    previewItemsByWidgetId: {},
   };
 }
 
@@ -100,10 +138,19 @@ export function sanitizeWorkbenchInstanceState(
     ) as Record<string, RedevenWorkbenchTerminalPanelState>
     : {};
 
+  const previewItemsByWidgetId = isRecord(value.previewItemsByWidgetId)
+    ? Object.fromEntries(
+      Object.entries(value.previewItemsByWidgetId)
+        .map(([widgetId, item]) => [compact(widgetId), sanitizePreviewItem(item)])
+        .filter(([widgetId, item]) => Boolean(widgetId) && item !== null),
+    ) as Record<string, FileItem>
+    : {};
+
   return reconcileWorkbenchInstanceState({
-    version: 1,
+    version: 2,
     latestWidgetIdByType,
     terminalPanelsByWidgetId,
+    previewItemsByWidgetId,
   }, widgets);
 }
 
@@ -133,10 +180,23 @@ export function reconcileWorkbenchInstanceState(
     nextTerminalPanelsByWidgetId[widgetId] = sanitizeTerminalPanelState(panelState);
   }
 
+  const nextPreviewItemsByWidgetId: Record<string, FileItem> = {};
+  for (const [widgetId, item] of Object.entries(state.previewItemsByWidgetId)) {
+    const widget = widgetById.get(widgetId);
+    if (!widget || widget.type !== 'redeven.preview') {
+      continue;
+    }
+    const sanitizedItem = sanitizePreviewItem(item);
+    if (sanitizedItem) {
+      nextPreviewItemsByWidgetId[widgetId] = sanitizedItem;
+    }
+  }
+
   return {
-    version: 1,
+    version: 2,
     latestWidgetIdByType: nextLatestWidgetIdByType,
     terminalPanelsByWidgetId: nextTerminalPanelsByWidgetId,
+    previewItemsByWidgetId: nextPreviewItemsByWidgetId,
   };
 }
 
@@ -148,7 +208,7 @@ export function buildWorkbenchInstanceStorageKey(workbenchStorageKey: string): s
 export function isRedevenWorkbenchMultiInstanceWidgetType(
   value: unknown,
 ): value is RedevenWorkbenchMultiInstanceWidgetType {
-  return value === 'redeven.terminal' || value === 'redeven.files';
+  return value === 'redeven.terminal' || value === 'redeven.files' || value === 'redeven.preview';
 }
 
 export function buildWorkbenchFileBrowserStateScope(widgetId: string): string {
@@ -188,6 +248,27 @@ export function buildWorkbenchFileBrowserTitle(params: Readonly<{
   }
 
   return `Files · ${basenameFromAbsolutePath(normalizedPath)}`;
+}
+
+export function buildWorkbenchFilePreviewTitle(item: FileItem | null | undefined): string {
+  const path = normalizeAbsolutePath(item?.path ?? '');
+  const name = compact(item?.name) || (path ? basenameFromAbsolutePath(path) : '');
+  if (name) {
+    return `Preview · ${name}`;
+  }
+  return 'Preview';
+}
+
+export function findWorkbenchPreviewWidgetIdByPath(
+  widgets: readonly WorkbenchWidgetItem[],
+  previewItemsByWidgetId: Record<string, FileItem>,
+  path: string | null | undefined,
+): string | null {
+  const normalizedPath = normalizeAbsolutePath(path ?? '');
+  if (!normalizedPath) {
+    return null;
+  }
+  return widgets.find((widget) => widget.type === 'redeven.preview' && previewItemsByWidgetId[widget.id]?.path === normalizedPath)?.id ?? null;
 }
 
 export function pickLatestWorkbenchWidget(

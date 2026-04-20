@@ -28,6 +28,12 @@ const modelMocks = vi.hoisted(() => {
   };
 });
 
+const surfaceMocks = vi.hoisted(() => ({
+  contextMenuState: null as any,
+  contextMenuItems: [] as any[],
+  contextMenuProps: null as any,
+}));
+
 const TEST_WORKBENCH_FILTERS = {
   terminal: true,
   'file-browser': true,
@@ -37,7 +43,10 @@ const TEST_WORKBENCH_FILTERS = {
 } as const;
 
 vi.mock('@floegence/floe-webapp-core/workbench', () => ({
-  WorkbenchContextMenu: () => null,
+  WorkbenchContextMenu: (props: any) => {
+    surfaceMocks.contextMenuProps = props;
+    return <div data-testid="mock-context-menu">{props.items.map((item: any) => item.id).join(',')}</div>;
+  },
   useWorkbenchModel: () => ({
     widgets: () => [modelMocks.widget],
     viewport: () => ({ x: 0, y: 0, scale: 1 }),
@@ -49,8 +58,8 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
     optimisticFrontWidgetId: () => null,
     widgetDefinitions: () => [],
     contextMenu: {
-      state: () => null,
-      items: () => [],
+      state: () => surfaceMocks.contextMenuState,
+      items: () => surfaceMocks.contextMenuItems,
       position: () => undefined,
       close: vi.fn(),
       retarget: vi.fn(),
@@ -141,6 +150,9 @@ describe('RedevenWorkbenchSurface', () => {
     modelMocks.ensureWidget.mockImplementation(() => modelMocks.widget);
     modelMocks.deleteSelected.mockReset();
     modelMocks.setCanvasFrameRef.mockReset();
+    surfaceMocks.contextMenuState = null;
+    surfaceMocks.contextMenuItems = [];
+    surfaceMocks.contextMenuProps = null;
   });
 
   afterEach(() => {
@@ -281,5 +293,43 @@ describe('RedevenWorkbenchSurface', () => {
 
     expect(modelMocks.setCanvasFrameRef).not.toHaveBeenCalled();
     expect(modelMocks.handleArrowNavigation).toHaveBeenCalledWith('right');
+  });
+
+  it('filters programmatic widget types out of the manual add context menu', () => {
+    surfaceMocks.contextMenuState = {
+      clientX: 32,
+      clientY: 48,
+      worldX: 120,
+      worldY: 160,
+    };
+    surfaceMocks.contextMenuItems = [
+      { id: 'add-redeven.files', kind: 'action', label: 'Add Files' },
+      { id: 'add-redeven.preview', kind: 'action', label: 'Add Preview' },
+      { id: 'add-redeven.terminal', kind: 'action', label: 'Add Terminal' },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    dispose = render(() => (
+      <RedevenWorkbenchSurface
+        state={() => ({
+          version: 1,
+          widgets: [],
+          viewport: { x: 0, y: 0, scale: 1 },
+          locked: false,
+          filters: TEST_WORKBENCH_FILTERS,
+          selectedWidgetId: null,
+        })}
+        setState={() => {}}
+        widgetDefinitions={[]}
+        filterBarWidgetTypes={['redeven.files', 'redeven.terminal']}
+      />
+    ), host);
+
+    const contextMenu = document.querySelector('[data-testid="mock-context-menu"]');
+    expect(contextMenu?.textContent).toContain('add-redeven.files');
+    expect(contextMenu?.textContent).toContain('add-redeven.terminal');
+    expect(contextMenu?.textContent).not.toContain('add-redeven.preview');
   });
 });

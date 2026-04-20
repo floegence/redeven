@@ -4,21 +4,24 @@ import {
   sanitizeWorkbenchState,
   type WorkbenchState,
 } from '@floegence/floe-webapp-core/workbench';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 
-import { normalizeAbsolutePath } from '../utils/askFlowerPath';
+import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
 import { envWidgetTypeForSurface } from '../envViewMode';
 import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
 import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './surface/RedevenWorkbenchSurface';
-import { redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
+import { redevenWorkbenchFilterBarWidgetTypes, redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
 import {
   EnvWorkbenchInstancesContext,
   type EnvWorkbenchInstancesContextValue,
 } from './EnvWorkbenchInstancesContext';
 import {
+  buildWorkbenchFilePreviewTitle,
   buildWorkbenchInstanceStorageKey,
+  findWorkbenchPreviewWidgetIdByPath,
   isRedevenWorkbenchMultiInstanceWidgetType,
   pickLatestWorkbenchWidget,
   reconcileWorkbenchInstanceState,
@@ -26,6 +29,7 @@ import {
   type RedevenWorkbenchInstanceState,
   type RedevenWorkbenchTerminalPanelState,
   type WorkbenchOpenFileBrowserRequest,
+  type WorkbenchOpenFilePreviewRequest,
   type WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
 
@@ -52,6 +56,17 @@ function sameTerminalPanelState(
 ): boolean {
   return left.activeSessionId === right.activeSessionId
     && sameStringArray(left.sessionIds, right.sessionIds);
+}
+
+function samePreviewItem(left: FileItem | null | undefined, right: FileItem | null | undefined): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+  return left.path === right.path
+    && left.name === right.name
+    && left.type === right.type
+    && left.id === right.id
+    && left.size === right.size;
 }
 
 function sameInstanceState(
@@ -81,6 +96,17 @@ function sameInstanceState(
     }
   }
 
+  const leftPreviewItems = Object.entries(left.previewItemsByWidgetId);
+  const rightPreviewItems = Object.entries(right.previewItemsByWidgetId);
+  if (leftPreviewItems.length !== rightPreviewItems.length) {
+    return false;
+  }
+  for (const [widgetId, item] of leftPreviewItems) {
+    if (!samePreviewItem(item, right.previewItemsByWidgetId[widgetId])) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -98,6 +124,22 @@ function filterRequestRecordByWidgetIds<T extends { widgetId: string }>(
     next[widgetId] = request;
   }
   return changed ? next : requests;
+}
+
+function filterGuardRecordByWidgetIds(
+  guards: Record<string, () => boolean>,
+  widgetIds: ReadonlySet<string>,
+): Record<string, () => boolean> {
+  let changed = false;
+  const next: Record<string, () => boolean> = {};
+  for (const [widgetId, guard] of Object.entries(guards)) {
+    if (!widgetIds.has(widgetId)) {
+      changed = true;
+      continue;
+    }
+    next[widgetId] = guard;
+  }
+  return changed ? next : guards;
 }
 
 function readPersistedWorkbenchState(storageKey: string): WorkbenchState {
@@ -134,6 +176,8 @@ export function EnvWorkbenchPage() {
   const [surfaceApi, setSurfaceApi] = createSignal<RedevenWorkbenchSurfaceApi | null>(null);
   const [terminalOpenRequests, setTerminalOpenRequests] = createSignal<Record<string, WorkbenchOpenTerminalRequest>>({});
   const [fileBrowserOpenRequests, setFileBrowserOpenRequests] = createSignal<Record<string, WorkbenchOpenFileBrowserRequest>>({});
+  const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
+  const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
 
   createEffect(() => {
     const nextWorkbenchState = readPersistedWorkbenchState(storageKey());
@@ -141,6 +185,8 @@ export function EnvWorkbenchPage() {
     setInstanceState(readPersistedWorkbenchInstanceState(storageKey(), nextWorkbenchState));
     setTerminalOpenRequests({});
     setFileBrowserOpenRequests({});
+    setPreviewOpenRequests({});
+    setWidgetRemoveGuards({});
   });
 
   createEffect(() => {
@@ -185,6 +231,8 @@ export function EnvWorkbenchPage() {
     });
     setTerminalOpenRequests((previous) => filterRequestRecordByWidgetIds(previous, widgetIds));
     setFileBrowserOpenRequests((previous) => filterRequestRecordByWidgetIds(previous, widgetIds));
+    setPreviewOpenRequests((previous) => filterRequestRecordByWidgetIds(previous, widgetIds));
+    setWidgetRemoveGuards((previous) => filterGuardRecordByWidgetIds(previous, widgetIds));
   });
 
   createEffect(() => {
@@ -304,6 +352,87 @@ export function EnvWorkbenchPage() {
     }
   });
 
+  createEffect(() => {
+    env.workbenchFilePreviewActivationSeq();
+    const request = env.workbenchFilePreviewActivation();
+    const requestId = compact(request?.requestId);
+    const api = surfaceApi();
+    if (!requestId || !request || !api) {
+      return;
+    }
+    env.consumeWorkbenchFilePreviewActivation(requestId);
+
+    const previewPath = normalizeAbsolutePath(request.item?.path ?? '');
+    if (!previewPath) {
+      return;
+    }
+
+    const centerViewport = request.centerViewport ?? request.ensureVisible ?? true;
+    const openStrategy = request.openStrategy ?? 'focus_latest_or_create';
+    const normalizedItem: FileItem = {
+      ...request.item,
+      id: compact(request.item?.id) || previewPath,
+      type: 'file',
+      path: previewPath,
+      name: compact(request.item?.name) || basenameFromAbsolutePath(previewPath) || 'File',
+    };
+
+    let widget = null;
+    if (openStrategy !== 'create_new') {
+      const matchingWidgetId = findWorkbenchPreviewWidgetIdByPath(
+        workbenchState().widgets,
+        instanceState().previewItemsByWidgetId,
+        previewPath,
+      );
+      const matchingWidget = matchingWidgetId ? api.findWidgetById(matchingWidgetId) : null;
+      if (matchingWidget?.type === 'redeven.preview') {
+        widget = matchingWidget;
+      }
+    }
+
+    if (!widget) {
+      const latestWidgetId = instanceState().latestWidgetIdByType['redeven.preview'] ?? null;
+      if (openStrategy !== 'create_new') {
+        const latestWidget = latestWidgetId ? api.findWidgetById(latestWidgetId) : null;
+        widget = latestWidget?.type === 'redeven.preview'
+          ? latestWidget
+          : pickLatestWorkbenchWidget(workbenchState().widgets, 'redeven.preview') ?? api.findWidgetByType('redeven.preview');
+      }
+      if (!widget) {
+        widget = api.createWidget('redeven.preview', { centerViewport });
+      }
+    }
+
+    if (!widget) {
+      return;
+    }
+
+    if (request.focus !== false) {
+      api.focusWidget(widget, { centerViewport });
+    }
+
+    setInstanceState((previous) => ({
+      ...previous,
+      latestWidgetIdByType: {
+        ...previous.latestWidgetIdByType,
+        [widget.type]: widget.id,
+      },
+      previewItemsByWidgetId: {
+        ...previous.previewItemsByWidgetId,
+        [widget.id]: normalizedItem,
+      },
+    }));
+    updateWidgetTitle(widget.id, buildWorkbenchFilePreviewTitle(normalizedItem));
+    setPreviewOpenRequests((previous) => ({
+      ...previous,
+      [widget.id]: {
+        requestId,
+        widgetId: widget.id,
+        item: normalizedItem,
+      },
+    }));
+  });
+
   const updateWidgetTitle = (widgetId: string, title: string) => {
     const normalizedWidgetId = compact(widgetId);
     const normalizedTitle = compact(title);
@@ -325,6 +454,30 @@ export function EnvWorkbenchPage() {
           : widget
       ),
     }));
+  };
+
+  const removeWidget = (widgetId: string) => {
+    const normalizedWidgetId = compact(widgetId);
+    if (!normalizedWidgetId) {
+      return;
+    }
+    setWorkbenchState((previous) => ({
+      ...previous,
+      widgets: previous.widgets.filter((widget) => widget.id !== normalizedWidgetId),
+      selectedWidgetId: previous.selectedWidgetId === normalizedWidgetId ? null : previous.selectedWidgetId,
+    }));
+  };
+
+  const requestWidgetRemoval = (widgetId: string) => {
+    const normalizedWidgetId = compact(widgetId);
+    if (!normalizedWidgetId) {
+      return;
+    }
+    const guard = widgetRemoveGuards()[normalizedWidgetId];
+    if (guard && !guard()) {
+      return;
+    }
+    removeWidget(normalizedWidgetId);
   };
 
   const workbenchInstancesContextValue: EnvWorkbenchInstancesContextValue = {
@@ -424,6 +577,80 @@ export function EnvWorkbenchPage() {
         return changed ? next : previous;
       });
     },
+    previewItem: (widgetId) => {
+      const normalizedWidgetId = compact(widgetId);
+      if (!normalizedWidgetId) {
+        return null;
+      }
+      return instanceState().previewItemsByWidgetId[normalizedWidgetId] ?? null;
+    },
+    updatePreviewItem: (widgetId, item) => {
+      const normalizedWidgetId = compact(widgetId);
+      if (!normalizedWidgetId) {
+        return;
+      }
+      setInstanceState((previous) => {
+        const current = previous.previewItemsByWidgetId[normalizedWidgetId] ?? null;
+        if (samePreviewItem(current, item)) {
+          return previous;
+        }
+        const nextPreviewItemsByWidgetId = { ...previous.previewItemsByWidgetId };
+        if (item) {
+          nextPreviewItemsByWidgetId[normalizedWidgetId] = item;
+        } else {
+          delete nextPreviewItemsByWidgetId[normalizedWidgetId];
+        }
+        return {
+          ...previous,
+          previewItemsByWidgetId: nextPreviewItemsByWidgetId,
+        };
+      });
+      if (item) {
+        updateWidgetTitle(normalizedWidgetId, buildWorkbenchFilePreviewTitle(item));
+      }
+    },
+    previewOpenRequest: (widgetId) => previewOpenRequests()[compact(widgetId)] ?? null,
+    dispatchPreviewOpenRequest: (request) => {
+      setPreviewOpenRequests((previous) => ({
+        ...previous,
+        [request.widgetId]: request,
+      }));
+    },
+    consumePreviewOpenRequest: (requestId) => {
+      const normalizedRequestId = compact(requestId);
+      if (!normalizedRequestId) {
+        return;
+      }
+      setPreviewOpenRequests((previous) => {
+        let changed = false;
+        const next: Record<string, WorkbenchOpenFilePreviewRequest> = {};
+        for (const [widgetId, request] of Object.entries(previous)) {
+          if (request.requestId === normalizedRequestId) {
+            changed = true;
+            continue;
+          }
+          next[widgetId] = request;
+        }
+        return changed ? next : previous;
+      });
+    },
+    registerWidgetRemoveGuard: (widgetId, guard) => {
+      const normalizedWidgetId = compact(widgetId);
+      if (!normalizedWidgetId) {
+        return;
+      }
+      setWidgetRemoveGuards((previous) => {
+        const next = { ...previous };
+        if (guard) {
+          next[normalizedWidgetId] = guard;
+        } else {
+          delete next[normalizedWidgetId];
+        }
+        return next;
+      });
+    },
+    removeWidget,
+    requestWidgetRemoval,
     updateWidgetTitle,
   } as const;
 
@@ -434,7 +661,9 @@ export function EnvWorkbenchPage() {
           state={workbenchState}
           setState={setWorkbenchState}
           widgetDefinitions={redevenWorkbenchWidgets}
+          filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
           onApiReady={setSurfaceApi}
+          onRequestDelete={requestWidgetRemoval}
         />
         <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
       </div>

@@ -12,6 +12,7 @@ function read(relPath: string): string {
 describe('file preview wiring', () => {
   it('keeps shared preview content and switches between dialog and floating window by layout', () => {
     const contentSrc = read('./FilePreviewContent.tsx');
+    const panelSrc = read('./FilePreviewPanel.tsx');
     const docxPaneSrc = read('./DocxPreviewPane.tsx');
     const textPaneSrc = read('./TextFilePreviewPane.tsx');
     const surfaceSrc = read('./FilePreviewSurface.tsx');
@@ -64,22 +65,26 @@ describe('file preview wiring', () => {
     expect(contentSrc).toContain('Loading file...');
     expect(contentSrc).toContain('Failed to load file');
 
-    expect(surfaceSrc).toContain("import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';");
+    expect(panelSrc).toContain("import { Button, ConfirmDialog } from '@floegence/floe-webapp-core/ui';");
+    expect(panelSrc).toContain("import { FilePreviewContent } from './FilePreviewContent';");
+    expect(panelSrc).toContain("import { WindowModal } from './WindowModal';");
+    expect(panelSrc).toContain('Ask Flower');
+    expect(panelSrc).toContain('Download');
+    expect(panelSrc).toContain('Unsaved changes');
+    expect(panelSrc).toContain('Truncated preview');
+    expect(panelSrc).toContain('grid w-full grid-cols-2');
+    expect(panelSrc).toContain('<ConfirmDialog');
+    expect(panelSrc).toContain('<WindowModal');
+
+    expect(surfaceSrc).toContain("import type { FilePreviewPanelProps } from './FilePreviewPanel';");
+    expect(surfaceSrc).toContain("import { FilePreviewPanel } from './FilePreviewPanel';");
     expect(surfaceSrc).toContain("import { PREVIEW_WINDOW_Z_INDEX, PreviewWindow } from './PreviewWindow';");
-    expect(surfaceSrc).toContain("import { WindowModal } from './WindowModal';");
     expect(surfaceSrc).toContain('layout.isMobile()');
     expect(surfaceSrc).toContain('<PreviewWindow');
     expect(surfaceSrc).toContain('surfaceRef={setFloatingSurfaceEl}');
-    expect(surfaceSrc).toContain('<ConfirmDialog');
-    expect(surfaceSrc).toContain('<WindowModal');
-    expect(surfaceSrc).toContain('<Show when={isMobile()}>');
-    expect(surfaceSrc).toContain('<Show when={!isMobile()}>');
-    expect(surfaceSrc).toContain('host={floatingSurfaceEl()}');
-    expect(surfaceSrc).toContain('Ask Flower');
-    expect(surfaceSrc).toContain('Download');
-    expect(surfaceSrc).toContain('Unsaved changes');
-    expect(surfaceSrc).toContain('Truncated preview');
-    expect(surfaceSrc).toContain('grid w-full grid-cols-2');
+    expect(surfaceSrc).toContain('<FilePreviewPanel');
+    expect(surfaceSrc).toContain("closeConfirmVariant={isMobile() ? 'dialog' : 'floating'}");
+    expect(surfaceSrc).toContain('closeConfirmHost={floatingSurfaceEl()}');
     expect(surfaceSrc).not.toContain('rounded-xl border px-3 py-2.5 shadow-sm');
     expect(surfaceSrc).not.toContain('[&>div:last-child]:!w-full');
     expect(surfaceSrc).not.toContain('[&>div>div:last-child]:!w-full');
@@ -140,6 +145,8 @@ describe('file preview wiring', () => {
     expect(shellSrc).toContain("import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';");
     expect(shellSrc).toContain('const filePreviewController = createFilePreviewController');
     expect(shellSrc).toContain('const fileBrowserSurfaceController = createFileBrowserSurfaceController();');
+    expect(shellSrc).toContain('const openFilePreview = async (');
+    expect(shellSrc).toContain("setWorkbenchFilePreviewActivation({");
     expect(shellSrc).toContain('<FilePreviewHost />');
     expect(shellSrc).toContain('<FileBrowserSurfaceHost />');
     expect(shellSrc).toContain('<FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>');

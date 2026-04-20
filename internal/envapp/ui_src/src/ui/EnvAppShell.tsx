@@ -45,6 +45,7 @@ import {
   type AskFlowerComposerAnchor,
   type EnvDeckSurfaceActivationRequest,
   type EnvSettingsSection,
+  type EnvWorkbenchFilePreviewActivationRequest,
   type EnvWorkbenchSurfaceActivationRequest,
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
@@ -527,6 +528,8 @@ export function EnvAppShell() {
   const [deckSurfaceActivation, setDeckSurfaceActivation] = createSignal<EnvDeckSurfaceActivationRequest | null>(null);
   const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
   const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<EnvWorkbenchSurfaceActivationRequest | null>(null);
+  const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
+  const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<EnvWorkbenchFilePreviewActivationRequest | null>(null);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
   const [sidebarVisibilityMotion, setSidebarVisibilityMotion] = createSignal<EnvSidebarVisibilityMotion>('animated');
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
@@ -641,6 +644,16 @@ export function EnvAppShell() {
     });
   };
 
+  const consumeWorkbenchFilePreviewActivation = (requestId: string) => {
+    const normalizedRequestId = String(requestId ?? '').trim();
+    if (!normalizedRequestId) return;
+
+    setWorkbenchFilePreviewActivation((current) => {
+      if (!current) return current;
+      return current.requestId === normalizedRequestId ? null : current;
+    });
+  };
+
   const focusAIThread = (threadId: string) => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
@@ -733,6 +746,48 @@ export function EnvAppShell() {
       },
       controller: fileBrowserSurfaceController,
     });
+  };
+
+  const openFilePreview = async (
+    item: FileItem,
+    options?: {
+      openStrategy?: 'focus_latest_or_create' | 'create_new';
+      focus?: boolean;
+      ensureVisible?: boolean;
+    },
+  ): Promise<void> => {
+    const normalizedPath = normalizeAbsolutePath(item?.path ?? '');
+    if (!normalizedPath) {
+      notify.error('Preview unavailable', 'Could not resolve a valid file path.');
+      return;
+    }
+    if (item?.type && item.type !== 'file') {
+      notify.error('Preview unavailable', 'Only files can be previewed.');
+      return;
+    }
+
+    const normalizedItem: FileItem = {
+      ...item,
+      id: String(item?.id ?? '').trim() || normalizedPath,
+      type: 'file',
+      path: normalizedPath,
+      name: String(item?.name ?? '').trim() || basenameFromAbsolutePath(normalizedPath) || 'File',
+    };
+
+    if (!layout.isMobile() && viewMode() === 'workbench') {
+      setWorkbenchFilePreviewActivation({
+        requestId: createClientId('workbench-preview'),
+        item: normalizedItem,
+        focus: options?.focus ?? true,
+        ensureVisible: options?.ensureVisible ?? true,
+        centerViewport: options?.ensureVisible ?? true,
+        openStrategy: options?.openStrategy,
+      });
+      setWorkbenchFilePreviewActivationSeq((n) => n + 1);
+      return;
+    }
+
+    await filePreviewController.openPreview(normalizedItem);
   };
 
   const closeAskFlowerComposer = () => {
@@ -2392,7 +2447,7 @@ export function EnvAppShell() {
 
   const filePreviewContextValue = {
     controller: filePreviewController,
-    openPreview: async (item: FileItem) => filePreviewController.openPreview(item),
+    openPreview: async (item: FileItem) => openFilePreview(item),
     closePreview: filePreviewController.closePreview,
   } as const;
   const fileBrowserSurfaceContextValue = {
@@ -2404,6 +2459,13 @@ export function EnvAppShell() {
       persistenceKey?: string;
       stateScope?: string;
     }) => {
+      if (!layout.isMobile() && viewMode() === 'workbench') {
+        await openFileBrowserAtPath(params.path, {
+          homePath: params.homePath,
+          title: params.title,
+        });
+        return;
+      }
       await openFileBrowserSurface({
         input: params,
         controller: fileBrowserSurfaceController,
@@ -2617,6 +2679,9 @@ export function EnvAppShell() {
         workbenchSurfaceActivationSeq,
         workbenchSurfaceActivation,
         consumeWorkbenchSurfaceActivation,
+        workbenchFilePreviewActivationSeq,
+        workbenchFilePreviewActivation,
+        consumeWorkbenchFilePreviewActivation,
         filesSidebarOpen: filesMobileSidebarOpen,
         setFilesSidebarOpen: setFilesMobileSidebarOpen,
         toggleFilesSidebar: toggleFilesMobileSidebar,
@@ -2636,6 +2701,7 @@ export function EnvAppShell() {
         openTerminalInDirectoryRequest,
         openTerminalInDirectory,
         openFileBrowserAtPath,
+        openFilePreview,
         consumeOpenTerminalInDirectoryRequest,
         aiThreadFocusSeq,
         aiThreadFocusId,

@@ -1,4 +1,5 @@
 import { createContext, useContext, type Resource } from 'solid-js';
+import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { AskFlowerIntent } from './askFlowerIntent';
 import type {
@@ -53,6 +54,15 @@ export type EnvWorkbenchSurfaceActivationRequest = {
   fileBrowserPayload?: EnvFileBrowserSurfacePayload;
 };
 
+export type EnvWorkbenchFilePreviewActivationRequest = {
+  requestId: string;
+  item: FileItem;
+  focus?: boolean;
+  ensureVisible?: boolean;
+  centerViewport?: boolean;
+  openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+};
+
 export type OpenTerminalInDirectoryRequest = {
   requestId: string;
   workingDir: string;
@@ -82,6 +92,9 @@ export type EnvContextValue = {
   workbenchSurfaceActivationSeq: () => number;
   workbenchSurfaceActivation: () => EnvWorkbenchSurfaceActivationRequest | null;
   consumeWorkbenchSurfaceActivation: (requestId: string) => void;
+  workbenchFilePreviewActivationSeq: () => number;
+  workbenchFilePreviewActivation: () => EnvWorkbenchFilePreviewActivationRequest | null;
+  consumeWorkbenchFilePreviewActivation: (requestId: string) => void;
   filesSidebarOpen: () => boolean;
   setFilesSidebarOpen: (open: boolean) => void;
   toggleFilesSidebar: () => void;
@@ -114,6 +127,14 @@ export type EnvContextValue = {
       homePath?: string;
       title?: string;
       openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+    },
+  ) => Promise<void>;
+  openFilePreview: (
+    item: FileItem,
+    options?: {
+      openStrategy?: EnvWorkbenchSurfaceOpenStrategy;
+      focus?: boolean;
+      ensureVisible?: boolean;
     },
   ) => Promise<void>;
   consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;
