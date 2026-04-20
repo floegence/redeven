@@ -230,6 +230,31 @@ describe('RedevenWorkbenchSurface', () => {
     expect(modelMocks.ensureWidget).toHaveBeenCalledWith('redeven.files', { centerViewport: true });
   });
 
+  it('exposes workbench appearance attributes on the surface root', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    dispose = render(() => (
+      <RedevenWorkbenchSurface
+        state={() => ({
+          version: 1,
+          widgets: [],
+          viewport: { x: 0, y: 0, scale: 1 },
+          locked: false,
+          filters: TEST_WORKBENCH_FILTERS,
+          selectedWidgetId: null,
+        })}
+        setState={() => {}}
+        widgetDefinitions={[]}
+        appearance={{ tone: 'ivory', texture: 'pin_dot' }}
+      />
+    ), host);
+
+    const surfaceRoot = host.querySelector('.redeven-workbench-surface') as HTMLElement | null;
+    expect(surfaceRoot?.getAttribute('data-redeven-workbench-tone')).toBe('ivory');
+    expect(surfaceRoot?.getAttribute('data-redeven-workbench-texture')).toBe('pin_dot');
+  });
+
   it('does not trigger global arrow navigation when a widget root owns focus', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

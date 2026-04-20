@@ -32,6 +32,7 @@ import {
   type WorkbenchOpenFilePreviewRequest,
   type WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
+import type { WorkbenchAppearance } from './workbenchAppearance';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
@@ -162,7 +163,11 @@ function readPersistedWorkbenchInstanceState(
   );
 }
 
-export function EnvWorkbenchPage() {
+export interface EnvWorkbenchPageProps {
+  appearance?: WorkbenchAppearance;
+}
+
+export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   const env = useEnvContext();
   const storageKey = createMemo(() => resolveEnvAppStorageBinding({
     envID: env.env_id(),
@@ -660,6 +665,7 @@ export function EnvWorkbenchPage() {
         <RedevenWorkbenchSurface
           state={workbenchState}
           setState={setWorkbenchState}
+          appearance={props.appearance}
           widgetDefinitions={redevenWorkbenchWidgets}
           filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
           onApiReady={setSurfaceApi}
