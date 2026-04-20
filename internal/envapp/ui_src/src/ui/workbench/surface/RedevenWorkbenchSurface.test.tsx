@@ -32,6 +32,7 @@ const surfaceMocks = vi.hoisted(() => ({
   contextMenuState: null as any,
   contextMenuItems: [] as any[],
   contextMenuProps: null as any,
+  hudProps: null as any,
 }));
 
 const TEST_WORKBENCH_FILTERS = {
@@ -132,7 +133,10 @@ vi.mock('./RedevenWorkbenchFilterBar', () => ({
 }));
 
 vi.mock('./RedevenWorkbenchHud', () => ({
-  RedevenWorkbenchHud: () => null,
+  RedevenWorkbenchHud: (props: any) => {
+    surfaceMocks.hudProps = props;
+    return null;
+  },
 }));
 
 vi.mock('./RedevenWorkbenchLockButton', () => ({
@@ -153,6 +157,7 @@ describe('RedevenWorkbenchSurface', () => {
     surfaceMocks.contextMenuState = null;
     surfaceMocks.contextMenuItems = [];
     surfaceMocks.contextMenuProps = null;
+    surfaceMocks.hudProps = null;
   });
 
   afterEach(() => {
@@ -253,6 +258,42 @@ describe('RedevenWorkbenchSurface', () => {
     const surfaceRoot = host.querySelector('.redeven-workbench-surface') as HTMLElement | null;
     expect(surfaceRoot?.getAttribute('data-redeven-workbench-tone')).toBe('ivory');
     expect(surfaceRoot?.getAttribute('data-redeven-workbench-texture')).toBe('pin_dot');
+  });
+
+  it('forwards background appearance controls into the hud', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const onToneSelect = vi.fn();
+    const onTextureSelect = vi.fn();
+    const onResetAppearance = vi.fn();
+
+    dispose = render(() => (
+      <RedevenWorkbenchSurface
+        state={() => ({
+          version: 1,
+          widgets: [],
+          viewport: { x: 0, y: 0, scale: 1 },
+          locked: false,
+          filters: TEST_WORKBENCH_FILTERS,
+          selectedWidgetId: null,
+        })}
+        setState={() => {}}
+        widgetDefinitions={[]}
+        appearance={{ tone: 'mist', texture: 'grid' }}
+        onToneSelect={onToneSelect}
+        onTextureSelect={onTextureSelect}
+        onResetAppearance={onResetAppearance}
+      />
+    ), host);
+
+    expect(surfaceMocks.hudProps).toMatchObject({
+      scaleLabel: '100%',
+      appearance: { tone: 'mist', texture: 'grid' },
+      onToneSelect,
+      onTextureSelect,
+      onResetAppearance,
+    });
   });
 
   it('does not trigger global arrow navigation when a widget root owns focus', async () => {

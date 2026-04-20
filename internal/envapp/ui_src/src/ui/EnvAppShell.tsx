@@ -144,7 +144,6 @@ import {
   type EnvViewMode,
 } from './envViewMode';
 import { EnvWorkbenchPage } from './workbench/EnvWorkbenchPage';
-import { WorkbenchAppearanceButton } from './workbench/WorkbenchAppearanceButton';
 import {
   readStoredWorkbenchAppearance,
   resolveDefaultWorkbenchAppearance,
@@ -2534,14 +2533,6 @@ export function EnvAppShell() {
           onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'activity' })}
         />
       </Show>
-      <Show when={!layout.isMobile() && viewMode() === 'workbench'}>
-        <WorkbenchAppearanceButton
-          appearance={workbenchAppearance()}
-          onToneSelect={setWorkbenchTone}
-          onTextureSelect={setWorkbenchTexture}
-          onReset={resetWorkbenchAppearance}
-        />
-      </Show>
       <TopBarIconButton
         label="Notes overlay"
         tooltip={topBarTooltip(`Notes overlay (${notesOverlayShortcutLabel()})`)}
@@ -2671,7 +2662,16 @@ export function EnvAppShell() {
         when={accessGateVisible()}
         fallback={(
           <>
-            {mode === 'deck' ? <EnvDeckPage /> : <EnvWorkbenchPage appearance={workbenchAppearance()} />}
+            {mode === 'deck' ? (
+              <EnvDeckPage />
+            ) : (
+              <EnvWorkbenchPage
+                appearance={workbenchAppearance()}
+                onToneSelect={setWorkbenchTone}
+                onTextureSelect={setWorkbenchTexture}
+                onResetAppearance={resetWorkbenchAppearance}
+              />
+            )}
             {renderNotesOverlay()}
           </>
         )}

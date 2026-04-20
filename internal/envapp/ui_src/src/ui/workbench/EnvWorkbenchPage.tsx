@@ -32,7 +32,11 @@ import {
   type WorkbenchOpenFilePreviewRequest,
   type WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
-import type { WorkbenchAppearance } from './workbenchAppearance';
+import type {
+  WorkbenchAppearance,
+  WorkbenchAppearanceTexture,
+  WorkbenchAppearanceTone,
+} from './workbenchAppearance';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
@@ -165,6 +169,9 @@ function readPersistedWorkbenchInstanceState(
 
 export interface EnvWorkbenchPageProps {
   appearance?: WorkbenchAppearance;
+  onToneSelect?: (tone: WorkbenchAppearanceTone) => void;
+  onTextureSelect?: (texture: WorkbenchAppearanceTexture) => void;
+  onResetAppearance?: () => void;
 }
 
 export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
@@ -663,9 +670,12 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     <EnvWorkbenchInstancesContext.Provider value={workbenchInstancesContextValue}>
       <div class="relative h-full min-h-0 overflow-hidden">
         <RedevenWorkbenchSurface
+          appearance={props.appearance}
+          onToneSelect={props.onToneSelect}
+          onTextureSelect={props.onTextureSelect}
+          onResetAppearance={props.onResetAppearance}
           state={workbenchState}
           setState={setWorkbenchState}
-          appearance={props.appearance}
           widgetDefinitions={redevenWorkbenchWidgets}
           filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
           onApiReady={setSurfaceApi}

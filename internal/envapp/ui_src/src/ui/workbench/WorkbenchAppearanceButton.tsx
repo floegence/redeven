@@ -1,5 +1,5 @@
 import { createMemo, For } from 'solid-js';
-import { Refresh, Sparkles } from '@floegence/floe-webapp-core/icons';
+import { Refresh, Settings } from '@floegence/floe-webapp-core/icons';
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { Tooltip } from '../primitives/Tooltip';
@@ -59,7 +59,7 @@ function ToneSection(props: {
   return (
     <div class="space-y-2">
       <div class="px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
-        Surface Tone
+        Background Tone
       </div>
       <div class="grid grid-cols-2 gap-2">
         <For each={WORKBENCH_APPEARANCE_TONES}>
@@ -70,7 +70,7 @@ function ToneSection(props: {
                 type="button"
                 class="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
                 classList={{
-                  'border-blue-400/70 bg-blue-500/10 shadow-[0_8px_20px_-14px_rgba(37,99,235,0.55)]': selected(),
+                  'border-[#536779]/70 bg-[#415667]/10 shadow-[0_10px_20px_-16px_rgba(33,51,68,0.42)]': selected(),
                   'border-border/70 bg-background/85 hover:border-border hover:bg-muted/35': !selected(),
                 }}
                 aria-pressed={selected()}
@@ -113,7 +113,7 @@ function TextureSection(props: {
                 type="button"
                 class="flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors"
                 classList={{
-                  'border-blue-400/70 bg-blue-500/10 shadow-[0_8px_20px_-14px_rgba(37,99,235,0.55)]': selected(),
+                  'border-[#536779]/70 bg-[#415667]/10 shadow-[0_10px_20px_-16px_rgba(33,51,68,0.42)]': selected(),
                   'border-border/70 bg-background/85 hover:border-border hover:bg-muted/35': !selected(),
                 }}
                 aria-pressed={selected()}
@@ -147,13 +147,13 @@ export function WorkbenchAppearanceButton(props: WorkbenchAppearanceButtonProps)
   const tooltipLabel = createMemo(() => {
     const tone = workbenchAppearanceToneMeta(props.appearance.tone).label;
     const texture = workbenchAppearanceTextureMeta(props.appearance.texture).label;
-    return `Workbench appearance (${tone} / ${texture})`;
+    return `Workbench background settings (${tone} / ${texture})`;
   });
 
   const items = createMemo<DropdownItem[]>(() => ([
     {
       id: 'tone-section',
-      label: 'Surface tone',
+      label: 'Background tone',
       keepOpen: true,
       content: () => (
         <ToneSection
@@ -183,15 +183,11 @@ export function WorkbenchAppearanceButton(props: WorkbenchAppearanceButtonProps)
   ]));
 
   return (
-    <Tooltip content={tooltipLabel()} placement="bottom" delay={0}>
+    <Tooltip content={tooltipLabel()} placement="top" delay={0}>
       <Dropdown
-        trigger={
-          <span class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded transition-colors hover:bg-muted/60 active:bg-muted/80">
-            <Sparkles class="h-4 w-4" />
-          </span>
-        }
+        trigger={<Settings class="h-3.5 w-3.5" />}
         triggerAriaLabel={tooltipLabel()}
-        triggerClass="rounded focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
+        triggerClass="workbench-hud__button workbench-hud__settings-button cursor-pointer focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset"
         items={items()}
         onSelect={(id) => {
           if (id === 'reset') {
