@@ -331,7 +331,6 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           widgetDefinitions={model.widgetDefinitions()}
           widgets={model.widgets()}
           viewport={model.viewport()}
-          canvasFrameSize={model.canvasFrameSize()}
           selectedWidgetId={model.selectedWidgetId()}
           optimisticFrontWidgetId={model.optimisticFrontWidgetId()}
           locked={model.locked()}

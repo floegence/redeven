@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { createEffect, createSignal, onCleanup } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import type { WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
@@ -135,58 +135,47 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     workbench.registerWidgetRemoveGuard(props.widgetId, null);
   });
 
-  const surfaceReady = () => props.surfaceMetrics?.ready ?? true;
-
   return (
-    <Show
-      when={surfaceReady()}
-      fallback={(
-        <div class="flex h-full min-h-0 items-center justify-center bg-background px-4 text-sm text-muted-foreground">
-          Preparing preview surface...
-        </div>
-      )}
-    >
-      <div class="h-full min-h-0 overflow-hidden bg-background">
-        <FilePreviewPanel
-          item={controller.item()}
-          descriptor={controller.descriptor()}
-          text={controller.text()}
-          draftText={controller.draftText()}
-          editing={controller.editing()}
-          dirty={controller.dirty()}
-          saving={controller.saving()}
-          saveError={controller.saveError()}
-          canEdit={controller.canEdit()}
-          selectedText={controller.selectedText()}
-          closeConfirmOpen={controller.closeConfirmOpen()}
-          closeConfirmMessage={controller.closeConfirmMessage()}
-          onCloseConfirmChange={(open) => {
-            if (open) return;
-            controller.cancelPendingAction();
-          }}
-          onConfirmDiscardClose={() => void controller.confirmDiscardAndContinue()}
-          onStartEdit={controller.beginEditing}
-          onDraftChange={controller.updateDraft}
-          onSelectionChange={controller.updateSelection}
-          onSave={() => void controller.saveCurrent()}
-          onDiscard={controller.revertCurrent}
-          message={controller.message()}
-          objectUrl={controller.objectUrl()}
-          bytes={controller.bytes()}
-          truncated={controller.truncated()}
-          loading={controller.loading()}
-          error={controller.error()}
-          xlsxSheetName={controller.xlsxSheetName()}
-          xlsxRows={controller.xlsxRows()}
-          downloadLoading={controller.downloadLoading()}
-          onCopyPath={handleCopyPath}
-          onDownload={() => {
-            void controller.downloadCurrent();
-          }}
-          onAskFlower={handleAskFlower}
-          closeConfirmVariant="dialog"
-        />
-      </div>
-    </Show>
+    <div class="h-full min-h-0 overflow-hidden bg-background">
+      <FilePreviewPanel
+        item={controller.item()}
+        descriptor={controller.descriptor()}
+        text={controller.text()}
+        draftText={controller.draftText()}
+        editing={controller.editing()}
+        dirty={controller.dirty()}
+        saving={controller.saving()}
+        saveError={controller.saveError()}
+        canEdit={controller.canEdit()}
+        selectedText={controller.selectedText()}
+        closeConfirmOpen={controller.closeConfirmOpen()}
+        closeConfirmMessage={controller.closeConfirmMessage()}
+        onCloseConfirmChange={(open) => {
+          if (open) return;
+          controller.cancelPendingAction();
+        }}
+        onConfirmDiscardClose={() => void controller.confirmDiscardAndContinue()}
+        onStartEdit={controller.beginEditing}
+        onDraftChange={controller.updateDraft}
+        onSelectionChange={controller.updateSelection}
+        onSave={() => void controller.saveCurrent()}
+        onDiscard={controller.revertCurrent}
+        message={controller.message()}
+        objectUrl={controller.objectUrl()}
+        bytes={controller.bytes()}
+        truncated={controller.truncated()}
+        loading={controller.loading()}
+        error={controller.error()}
+        xlsxSheetName={controller.xlsxSheetName()}
+        xlsxRows={controller.xlsxRows()}
+        downloadLoading={controller.downloadLoading()}
+        onCopyPath={handleCopyPath}
+        onDownload={() => {
+          void controller.downloadCurrent();
+        }}
+        onAskFlower={handleAskFlower}
+        closeConfirmVariant="dialog"
+      />
+    </div>
   );
 }
