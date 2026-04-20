@@ -50,16 +50,18 @@ import {
   gitCommitDiffPresentationBadge,
   gitCommitDiffPresentationDetail,
   gitDiffEntryIdentity,
+  isGitWorkspaceDirectoryEntry,
   pickDefaultWorkspaceViewSectionFromSummary,
   reattachBranchFromRepoSummary,
   repoDisplayName,
   shortGitHash,
   workspaceEntryKey,
+  workspaceDirectoryPath,
+  workspacePageItems,
   workspaceSectionLabel,
   type GitBranchDetailPresentationState,
   type GitWorkspaceViewPageState,
   workspaceViewSectionCount,
-  workspaceViewSectionItems,
   workspaceViewSectionLabel,
   resolveGitBranchWorktreePath,
   type GitStashWindowRequest,
@@ -83,6 +85,7 @@ import {
   gitToneActionButtonClass,
   gitToneDotClass,
 } from "./GitChrome";
+import { GitChangesBreadcrumb } from "./GitChangesBreadcrumb";
 import { GitDiffDialog } from "./GitDiffDialog";
 import { GitVirtualTable } from "./GitVirtualTable";
 import {
@@ -208,6 +211,37 @@ function worktreeFilePath(item: GitWorkspaceChange): string {
       item.displayPath || item.path || item.newPath || item.oldPath || "",
     ).trim() || "(unknown path)"
   );
+}
+
+function branchStatusPrimaryLabel(item: GitWorkspaceChange): string {
+  const pathValue = isGitWorkspaceDirectoryEntry(item)
+    ? workspaceDirectoryPath(item)
+    : worktreeFilePath(item);
+  const parts = pathValue.split("/").filter(Boolean);
+  return parts[parts.length - 1] || pathValue || "(unknown path)";
+}
+
+function branchStatusDirectorySummary(item: GitWorkspaceChange): string {
+  const count = Number(item.descendantFileCount ?? 0);
+  return count === 1 ? "1 file" : `${count} files`;
+}
+
+function branchStatusEmptyMessage(
+  section: GitWorkspaceViewSection,
+  directoryPath = "",
+): string {
+  if (section === "changes" && directoryPath) {
+    return "No pending files are available in this folder.";
+  }
+  switch (section) {
+    case "staged":
+      return "No staged files are available in this worktree.";
+    case "conflicted":
+      return "No conflicted files are available in this worktree.";
+    case "changes":
+    default:
+      return "No pending files are available in this worktree.";
+  }
 }
 
 function compareOptionLabel(branch: GitBranchSummary): string {
@@ -418,16 +452,60 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
 }
 
 interface BranchStatusTableProps {
+  section: GitWorkspaceViewSection;
   items: GitWorkspaceChange[];
   totalCount: number;
+  scopeFileCount?: number;
+  directoryPath?: string;
   hasMore?: boolean;
   loadingMore?: boolean;
   selectedKey?: string;
   onOpenDiff?: (item: GitWorkspaceChange) => void;
+  onOpenDirectory?: (directoryPath: string) => void;
   onLoadMore?: () => void;
 }
 
 function BranchStatusTable(props: BranchStatusTableProps) {
+  const footerSummary = () => {
+    const totalRows = Math.max(0, Number(props.totalCount ?? 0));
+    const scopedFiles = Math.max(
+      0,
+      Number(props.scopeFileCount ?? props.totalCount ?? 0),
+    );
+    if (props.section === "changes" && scopedFiles !== totalRows) {
+      return (
+        <>
+          Showing{" "}
+          <span class="font-semibold tabular-nums text-foreground/90">
+            {props.items.length}
+          </span>{" "}
+          of{" "}
+          <span class="font-semibold tabular-nums text-foreground/90">
+            {totalRows}
+          </span>{" "}
+          rows covering{" "}
+          <span class="font-semibold tabular-nums text-foreground/90">
+            {scopedFiles}
+          </span>{" "}
+          file{scopedFiles === 1 ? "" : "s"}.
+        </>
+      );
+    }
+    return (
+      <>
+        Showing{" "}
+        <span class="font-semibold tabular-nums text-foreground/90">
+          {props.items.length}
+        </span>{" "}
+        of{" "}
+        <span class="font-semibold tabular-nums text-foreground/90">
+          {scopedFiles}
+        </span>{" "}
+        file{scopedFiles === 1 ? "" : "s"}.
+      </>
+    );
+  };
+
   return (
     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
       <Show
@@ -435,7 +513,10 @@ function BranchStatusTable(props: BranchStatusTableProps) {
         fallback={
           <div class="px-4 py-8">
             <GitSubtleNote>
-              No files are available in this section.
+              {branchStatusEmptyMessage(
+                props.section,
+                String(props.directoryPath ?? "").trim(),
+              )}
             </GitSubtleNote>
           </div>
         }
@@ -457,21 +538,64 @@ function BranchStatusTable(props: BranchStatusTableProps) {
             return (
               <tr
                 aria-selected={active()}
-                class={gitChangedFilesRowClass(active())}
+                class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                onClick={() => {
+                  if (isGitWorkspaceDirectoryEntry(item)) {
+                    const nextDirectoryPath = workspaceDirectoryPath(item);
+                    if (nextDirectoryPath) {
+                      props.onOpenDirectory?.(nextDirectoryPath);
+                    }
+                    return;
+                  }
+                  props.onOpenDiff?.(item);
+                }}
               >
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                   <div class="min-w-0">
                     <button
                       type="button"
                       class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
-                      title={changeSecondaryPath(item)}
-                      onClick={() => props.onOpenDiff?.(item)}
+                      title={
+                        isGitWorkspaceDirectoryEntry(item)
+                          ? workspaceDirectoryPath(item)
+                          : changeSecondaryPath(item)
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (isGitWorkspaceDirectoryEntry(item)) {
+                          const nextDirectoryPath = workspaceDirectoryPath(item);
+                          if (nextDirectoryPath) {
+                            props.onOpenDirectory?.(nextDirectoryPath);
+                          }
+                          return;
+                        }
+                        props.onOpenDiff?.(item);
+                      }}
                     >
-                      {worktreeFilePath(item)}
+                      <Show
+                        when={isGitWorkspaceDirectoryEntry(item)}
+                        fallback={worktreeFilePath(item)}
+                      >
+                        <span class="inline-flex items-center gap-1.5">
+                          <Folder class="size-3.5 shrink-0" />
+                          <span class="truncate">
+                            {branchStatusPrimaryLabel(item)}
+                          </span>
+                        </span>
+                      </Show>
                     </button>
+                    <Show when={isGitWorkspaceDirectoryEntry(item)}>
+                      <div
+                        class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
+                        title={workspaceDirectoryPath(item)}
+                      >
+                        {workspaceDirectoryPath(item)}
+                      </div>
+                    </Show>
                     <Show
                       when={
-                        changeSecondaryPath(item) !== worktreeFilePath(item)
+                        !isGitWorkspaceDirectoryEntry(item)
+                        && changeSecondaryPath(item) !== worktreeFilePath(item)
                       }
                     >
                       <div
@@ -486,25 +610,64 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                 <td
                   class={`${GIT_CHANGED_FILES_CELL_CLASS} text-muted-foreground`}
                 >
-                  {workspaceSectionLabel(
-                    (item.section as GitWorkspaceSection | undefined) ??
-                      "unstaged",
-                  )}
+                  <Show
+                    when={isGitWorkspaceDirectoryEntry(item)}
+                    fallback={workspaceSectionLabel(
+                      (item.section as GitWorkspaceSection | undefined) ??
+                        "unstaged",
+                    )}
+                  >
+                    {workspaceViewSectionLabel(props.section)}
+                  </Show>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <GitChangeStatusPill change={item.changeType} />
+                  <Show
+                    when={isGitWorkspaceDirectoryEntry(item)}
+                    fallback={<GitChangeStatusPill change={item.changeType} />}
+                  >
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <GitMetaPill tone="neutral">Folder</GitMetaPill>
+                      <Show when={item.containsUnstaged}>
+                        <GitMetaPill tone="warning">Unstaged</GitMetaPill>
+                      </Show>
+                      <Show when={item.containsUntracked}>
+                        <GitMetaPill tone="brand">Untracked</GitMetaPill>
+                      </Show>
+                    </div>
+                  </Show>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <GitChangeMetrics
-                    additions={item.additions}
-                    deletions={item.deletions}
-                  />
+                  <Show
+                    when={isGitWorkspaceDirectoryEntry(item)}
+                    fallback={
+                      <GitChangeMetrics
+                        additions={item.additions}
+                        deletions={item.deletions}
+                      />
+                    }
+                  >
+                    <div class="text-[11px] font-medium text-muted-foreground">
+                      {branchStatusDirectorySummary(item)}
+                    </div>
+                  </Show>
                 </td>
                 <td class={gitChangedFilesStickyCellClass(active())}>
                   <GitChangedFilesActionButton
-                    onClick={() => props.onOpenDiff?.(item)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (isGitWorkspaceDirectoryEntry(item)) {
+                        const nextDirectoryPath = workspaceDirectoryPath(item);
+                        if (nextDirectoryPath) {
+                          props.onOpenDirectory?.(nextDirectoryPath);
+                        }
+                        return;
+                      }
+                      props.onOpenDiff?.(item);
+                    }}
                   >
-                    View Diff
+                    {isGitWorkspaceDirectoryEntry(item)
+                      ? "Open Folder"
+                      : "View Diff"}
                   </GitChangedFilesActionButton>
                 </td>
               </tr>
@@ -515,19 +678,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           when={(props.hasMore || props.loadingMore) && props.items.length > 0}
         >
           <GitPagedTableFooter
-            summary={
-              <>
-                Showing{" "}
-                <span class="font-semibold tabular-nums text-foreground/90">
-                  {props.items.length}
-                </span>{" "}
-                of{" "}
-                <span class="font-semibold tabular-nums text-foreground/90">
-                  {props.totalCount}
-                </span>{" "}
-                file{props.totalCount === 1 ? "" : "s"}.
-              </>
-            }
+            summary={footerSummary()}
             onLoadMore={props.onLoadMore}
             hasMore={props.hasMore}
             loading={props.loadingMore}
@@ -1479,11 +1630,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       ...state,
       items: options.append ? [...state.items, ...page.items] : [...page.items],
       totalCount: Number(page.totalCount ?? 0),
+      scopeFileCount: Number(page.scopeFileCount ?? page.totalCount ?? 0),
       nextOffset: Number(page.nextOffset ?? 0),
       hasMore: Boolean(page.hasMore),
       loading: false,
       error: "",
       initialized: true,
+      directoryPath: String(page.directoryPath ?? "").trim(),
+      breadcrumbs: Array.isArray(page.breadcrumbs) ? [...page.breadcrumbs] : [],
     }));
     setStatusError("");
   };
@@ -1503,22 +1657,61 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           ? visibleStatusPageState().error
           : ""),
     );
-  const visibleStatusCount = () =>
+  const visibleStatusTotalRows = () =>
     visibleStatusPageState().initialized
-      ? visibleStatusPageState().totalCount
+      ? Number(visibleStatusPageState().totalCount ?? 0)
       : workspaceViewSectionCount(
           visibleStatusSummary(),
           selectedStatusSection(),
         );
+  const visibleStatusScopeFileCount = () =>
+    selectedStatusSection() === "changes"
+      ? visibleStatusPageState().initialized
+        ? Number(
+            visibleStatusPageState().scopeFileCount
+              ?? visibleStatusPageState().totalCount
+              ?? 0,
+          )
+        : workspaceViewSectionCount(
+            visibleStatusSummary(),
+            selectedStatusSection(),
+          )
+      : visibleStatusTotalRows();
   const visibleStatusLoadingMore = () =>
     Boolean(
       visibleStatusPageState().loading && visibleStatusPageState().initialized,
     );
   const visibleStatusItems = () =>
-    workspaceViewSectionItems(
+    workspacePageItems(
       visibleStatusWorkspace(),
       selectedStatusSection(),
+      visibleStatusPageState(),
     );
+  const activeStatusDirectoryPath = () =>
+    selectedStatusSection() === "changes"
+      ? String(visibleStatusPageState().directoryPath ?? "").trim()
+      : "";
+  const statusBreadcrumbSegments = createMemo(() =>
+    (visibleStatusPageState().breadcrumbs ?? []).map((crumb) => ({
+      label: String(crumb.label ?? "").trim() || "Folder",
+      path: String(crumb.path ?? "").trim(),
+    })),
+  );
+  const showStatusBreadcrumbRail = () =>
+    selectedStatusSection() === "changes"
+    && Boolean(activeStatusDirectoryPath())
+    && statusBreadcrumbSegments().length > 0;
+  const navigateStatusDirectory = (directoryPath: string) => {
+    selectStatusSection("changes");
+    void loadStatusSection("changes", {
+      directoryPath,
+      force: true,
+      background: Boolean(statusWorkspace()),
+    });
+  };
+  const selectStatusBreadcrumb = (segment: { path: string }) => {
+    navigateStatusDirectory(segment.path);
+  };
   const visibleStatusKey = () => workspaceEntryKey(diffDialogItem());
   const statusEmptyState = () =>
     branchStatusEmptyState(selectedBranch(), statusRepoRootPath());
@@ -1967,13 +2160,24 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   const loadStatusSection = async (
     section: GitWorkspaceViewSection,
-    options: { append?: boolean; force?: boolean; background?: boolean } = {},
+    options: {
+      append?: boolean;
+      force?: boolean;
+      background?: boolean;
+      directoryPath?: string;
+    } = {},
   ): Promise<GitListWorkspacePageResponse | undefined> => {
     const repoRootPath = statusRepoRootPath();
     if (!repoRootPath) return;
 
     const currentState = statusPageState(section);
     const append = Boolean(options.append);
+    const directoryPath =
+      section === "changes"
+        ? String(
+            options.directoryPath ?? currentState.directoryPath ?? "",
+          ).trim()
+        : "";
     const offset = append ? currentState.nextOffset : 0;
     const background = Boolean(
       options.background && !append && currentState.initialized,
@@ -2010,6 +2214,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       const resp = await rpc.git.listWorkspacePage({
         repoRootPath,
         section,
+        directoryPath: section === "changes" && directoryPath
+          ? directoryPath
+          : undefined,
         offset,
         limit: BRANCH_STATUS_PAGE_SIZE,
       });
@@ -2355,6 +2562,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           )}
                         </For>
                       </div>
+                      <Show when={showStatusBreadcrumbRail()}>
+                        <GitChangesBreadcrumb
+                          segments={statusBreadcrumbSegments()}
+                          onSelect={selectStatusBreadcrumb}
+                          class="mt-2"
+                        />
+                      </Show>
                     </Show>
                   </Show>
                 </Show>
@@ -2364,8 +2578,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             <Show when={visibleStatusWorkspace()}>
               <div class="flex min-h-0 flex-1 overflow-hidden">
                 <BranchStatusTable
+                  section={selectedStatusSection()}
                   items={visibleStatusItems()}
-                  totalCount={visibleStatusCount()}
+                  totalCount={visibleStatusTotalRows()}
+                  scopeFileCount={visibleStatusScopeFileCount()}
+                  directoryPath={activeStatusDirectoryPath()}
                   hasMore={visibleStatusPageState().hasMore}
                   loadingMore={visibleStatusLoadingMore()}
                   selectedKey={visibleStatusKey()}
@@ -2373,6 +2590,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     setDiffDialogItem(item);
                     setDiffDialogOpen(true);
                   }}
+                  onOpenDirectory={navigateStatusDirectory}
                   onLoadMore={() => {
                     void loadMoreStatusSection(selectedStatusSection());
                   }}

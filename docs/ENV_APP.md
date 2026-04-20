@@ -152,7 +152,7 @@ Current product-specific accessibility contract:
 Git browse mode distinguishes between the active repository workspace and per-branch checked-out worktrees:
 
 - The top-level `Changes` view shows the workspace state for the active repository root.
-- `Branches -> Status` resolves its own workspace snapshot from an explicit checked-out repository root instead of reusing cached data from `Changes`.
+- `Branches -> Status` resolves its own workspace snapshot from an explicit checked-out repository root instead of reusing cached data from `Changes`, and its `Changes` section now follows the same folder-aware scoped-page contract as the top-level workspace view.
 - `Changes` is the shared user-facing pending-work category in both places, so `unstaged` and `untracked` entries are grouped together there while row-level metadata still keeps the original Git section visible.
 - Workspace rows are now fetched through section-scoped pagination rather than one eager full-workspace snapshot:
   `Changes` pages over `unstaged + untracked`, `Staged` pages over the index snapshot, and `Conflicted` pages over merge-conflict entries.
@@ -165,7 +165,7 @@ Git browse mode distinguishes between the active repository workspace and per-br
 - For a linked local branch, branch status uses the branch `worktreePath`.
 - For remote branches or local branches without a checked-out worktree, branch status stays unavailable and the UI points users to `Compare` or to opening the branch in a worktree.
 - Git browse `Ask Flower` entry points use Git-authored snapshot context instead of pretending commit or workspace summaries are file-browser selections, so Flower receives a clean summary of the selected workspace section or commit metadata/file list.
-- The Git `Changes` page is now folder-aware instead of a flat pending-file list: directories drill into immediate children with breadcrumbs, file rows still open the shared diff dialog, and folder-level stage/discard actions resolve their leaf files on the server before reporting truthful affected/no-op counts back to the UI.
+- The Git `Changes` views are now folder-aware instead of flat pending-file lists: top-level `Changes` and `Branches -> Status -> Changes` both drill into immediate children with breadcrumbs, file rows still open the shared diff dialog, and folder-scoped actions stay truthful to the underlying file set instead of pretending nested directories are already expanded rows.
 - The Git `Changes` header is density-aware instead of relying on viewport-only breakpoints: measured pane width selects `comfortable`, `compact`, or `collapsed` presentation, long instructional copy drops out before primary workflow actions, and lower-priority utilities move into overflow rather than squeezing the state summary.
 - Clean Git workspace states also keep the header intentionally quiet: irrelevant disabled actions are removed instead of lingering as inactive chrome, comfortable-width clean headers collapse into a single command row instead of leaving a split action gutter, and directory breadcrumbs only appear once the user is actually inside a nested folder while still reusing the collapsed middle-segment pattern on narrow panes.
 - Workspace, compare, and commit detail collection RPCs return metadata-only file summaries. Inline diff text is retrieved only when the user opens a specific file dialog, using `getDiffContent` for preview or full-context mode.

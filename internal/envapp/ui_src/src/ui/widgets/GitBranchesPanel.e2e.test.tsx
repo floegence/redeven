@@ -801,6 +801,279 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
+  it("renders branch-status directory rows from the paged changes snapshot", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      directoryPath: "",
+      breadcrumbs: [{ label: "repo-linked", path: "" }],
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 5,
+        untrackedCount: 3,
+        conflictedCount: 0,
+      },
+      scopeFileCount: 8,
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [
+        {
+          section: "changes",
+          entryKind: "directory",
+          path: "internal",
+          displayPath: "internal",
+          directoryPath: "internal",
+          descendantFileCount: 8,
+          containsUnstaged: true,
+          containsUntracked: true,
+        },
+      ],
+    });
+
+    const branch = {
+      name: "feat-workbench-appearance",
+      fullName: "refs/heads/feat-workbench-appearance",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+
+      expect(host.textContent).toContain("internal");
+      expect(host.textContent).toContain("Folder");
+      expect(host.textContent).toContain("8 files");
+      expect(host.textContent).toContain("Open Folder");
+      expect(host.querySelectorAll("tbody tr")).toHaveLength(1);
+      expect(host.textContent).not.toContain(
+        "No pending files are available in this worktree.",
+      );
+    } finally {
+      dispose();
+    }
+  });
+
+  it("drills into branch-status change directories and lets breadcrumbs navigate back out", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    mockListWorkspacePage
+      .mockResolvedValueOnce({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        directoryPath: "",
+        breadcrumbs: [{ label: "repo-linked", path: "" }],
+        summary: {
+          stagedCount: 0,
+          unstagedCount: 2,
+          untrackedCount: 0,
+          conflictedCount: 0,
+        },
+        scopeFileCount: 2,
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [
+          {
+            section: "changes",
+            entryKind: "directory",
+            path: "internal",
+            displayPath: "internal",
+            directoryPath: "internal",
+            descendantFileCount: 2,
+            containsUnstaged: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        directoryPath: "internal",
+        breadcrumbs: [
+          { label: "repo-linked", path: "" },
+          { label: "internal", path: "internal" },
+        ],
+        summary: {
+          stagedCount: 0,
+          unstagedCount: 2,
+          untrackedCount: 0,
+          conflictedCount: 0,
+        },
+        scopeFileCount: 2,
+        totalCount: 2,
+        offset: 0,
+        nextOffset: 2,
+        hasMore: false,
+        items: [
+          {
+            section: "unstaged",
+            changeType: "modified",
+            path: "internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx",
+            displayPath: "internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx",
+            additions: 3,
+            deletions: 1,
+          },
+          {
+            section: "unstaged",
+            changeType: "modified",
+            path: "internal/envapp/ui_src/src/styles/redeven.css",
+            displayPath: "internal/envapp/ui_src/src/styles/redeven.css",
+            additions: 10,
+            deletions: 2,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        directoryPath: "",
+        breadcrumbs: [{ label: "repo-linked", path: "" }],
+        summary: {
+          stagedCount: 0,
+          unstagedCount: 2,
+          untrackedCount: 0,
+          conflictedCount: 0,
+        },
+        scopeFileCount: 2,
+        totalCount: 1,
+        offset: 0,
+        nextOffset: 1,
+        hasMore: false,
+        items: [
+          {
+            section: "changes",
+            entryKind: "directory",
+            path: "internal",
+            displayPath: "internal",
+            directoryPath: "internal",
+            descendantFileCount: 2,
+            containsUnstaged: true,
+          },
+        ],
+      });
+
+    const branch = {
+      name: "feat-workbench-appearance",
+      fullName: "refs/heads/feat-workbench-appearance",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+
+      const openFolderButton = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.trim() === "Open Folder",
+      ) as HTMLButtonElement | undefined;
+      expect(openFolderButton).toBeTruthy();
+
+      openFolderButton!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenNthCalledWith(2, {
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        directoryPath: "internal",
+        offset: 0,
+        limit: 200,
+      });
+      expect(host.textContent).toContain("EnvWorkbenchPage.tsx");
+      expect(host.textContent).toContain("redeven.css");
+
+      const rootBreadcrumb = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.trim() === "repo-linked",
+      ) as HTMLButtonElement | undefined;
+      expect(rootBreadcrumb).toBeTruthy();
+
+      rootBreadcrumb!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenNthCalledWith(3, {
+        repoRootPath: "/workspace/repo-linked",
+        section: "changes",
+        offset: 0,
+        limit: 200,
+      });
+      expect(host.textContent).toContain("Open Folder");
+    } finally {
+      dispose();
+    }
+  });
+
   it("loads staged files after explicitly switching sections", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
