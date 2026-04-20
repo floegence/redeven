@@ -1,6 +1,14 @@
 import { createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { GripVertical, X } from '@floegence/floe-webapp-core/icons';
-import type { WorkbenchWidgetDefinition, WorkbenchWidgetItem, WorkbenchWidgetType } from '@floegence/floe-webapp-core/workbench';
+import {
+  createWorkbenchWidgetSurfaceMetrics,
+  type WorkbenchViewport,
+  type WorkbenchWidgetDefinition,
+  type WorkbenchWidgetItem,
+  type WorkbenchWidgetRenderMode,
+  type WorkbenchWidgetSurfaceMetrics,
+  type WorkbenchWidgetType,
+} from '@floegence/floe-webapp-core/workbench';
 
 import { startWorkbenchHotInteraction } from './workbenchHotInteraction';
 import {
@@ -57,6 +65,9 @@ export interface RedevenWorkbenchWidgetProps {
   viewportScale: number;
   locked: boolean;
   filtered: boolean;
+  layoutMode?: WorkbenchWidgetRenderMode;
+  projectedViewport?: WorkbenchViewport;
+  surfaceReady?: boolean;
   onSelect: (widgetId: string) => void;
   onContextMenu: (event: MouseEvent, item: WorkbenchWidgetItem) => void;
   onStartOptimisticFront: (widgetId: string) => void;
@@ -109,6 +120,47 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     const current = resizeState();
     if (!current) return { width: props.width, height: props.height };
     return { width: current.width, height: current.height };
+  });
+  const surfaceMetrics = createMemo<WorkbenchWidgetSurfaceMetrics | undefined>(() => {
+    if (props.layoutMode !== 'projected_surface' || !props.projectedViewport) {
+      return undefined;
+    }
+
+    return createWorkbenchWidgetSurfaceMetrics({
+      widgetId: props.widgetId,
+      worldX: livePosition().x,
+      worldY: livePosition().y,
+      worldWidth: liveSize().width,
+      worldHeight: liveSize().height,
+      viewport: props.projectedViewport,
+      ready: props.surfaceReady ?? true,
+    });
+  });
+  const rootStyle = createMemo<JSX.CSSProperties>(() => {
+    const shared = {
+      width: `${liveSize().width}px`,
+      height: `${liveSize().height}px`,
+      'z-index':
+        isDragging() || isResizing() || props.optimisticFront
+          ? `${props.topRenderLayer + 1}`
+          : `${props.renderLayer}`,
+    } satisfies JSX.CSSProperties;
+
+    if (props.layoutMode === 'projected_surface') {
+      const rect = surfaceMetrics()?.rect;
+      return {
+        ...shared,
+        left: `${rect?.screenX ?? 0}px`,
+        top: `${rect?.screenY ?? 0}px`,
+        '--floe-workbench-projected-scale':
+          `${rect?.viewportScale ?? Math.max(props.viewportScale, 0.001)}`,
+      };
+    }
+
+    return {
+      ...shared,
+      transform: `translate(${livePosition().x}px, ${livePosition().y}px)`,
+    };
   });
 
   const finishDrag = (commitMove: boolean) => {
@@ -280,9 +332,11 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         'is-dragging': isDragging(),
         'is-resizing': isResizing(),
         'is-filtered-out': props.filtered,
+        'is-projected-surface': props.layoutMode === 'projected_surface',
       }}
       {...{ [FLOE_DIALOG_SURFACE_HOST_ATTR]: 'true' }}
       data-floe-workbench-widget-id={props.widgetId}
+      data-floe-workbench-render-mode={props.layoutMode ?? 'canvas_scaled'}
       {...{ [REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR]: 'true' }}
       {...{ [REDEVEN_WORKBENCH_WIDGET_ID_ATTR]: props.widgetId }}
       tabIndex={0}
@@ -296,15 +350,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         event.stopPropagation();
         props.onContextMenu(event, props.itemSnapshot());
       }}
-      style={{
-        transform: `translate(${livePosition().x}px, ${livePosition().y}px)`,
-        width: `${liveSize().width}px`,
-        height: `${liveSize().height}px`,
-        'z-index':
-          isDragging() || isResizing() || props.optimisticFront
-            ? `${props.topRenderLayer + 1}`
-            : `${props.renderLayer}`,
-      }}
+      style={rootStyle()}
     >
       <header
         class="workbench-widget__header"
@@ -349,6 +395,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
               widgetId={props.widgetId}
               title={props.widgetTitle}
               type={props.widgetType}
+              surfaceMetrics={surfaceMetrics()}
             />
           );
         })()}

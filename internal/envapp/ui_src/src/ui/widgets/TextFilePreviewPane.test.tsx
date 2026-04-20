@@ -35,6 +35,11 @@ vi.mock('@floegence/floe-webapp-core/editor', () => ({
         data-drop-into-editor={String(props.options.dropIntoEditor?.enabled)}
         data-paste-as={String(props.options.pasteAs?.enabled)}
         data-drag-and-drop={String(props.options.dragAndDrop)}
+        data-runtime-suggest-memory={String(props.runtimeOptions?.standaloneFeatures?.suggestMemory)}
+        data-runtime-code-lens-cache={String(props.runtimeOptions?.standaloneFeatures?.codeLensCache)}
+        data-runtime-inlay-hints-cache={String(props.runtimeOptions?.standaloneFeatures?.inlayHintsCache)}
+        data-runtime-tree-views-dnd={String(props.runtimeOptions?.standaloneFeatures?.treeViewsDnd)}
+        data-runtime-action-widget={String(props.runtimeOptions?.standaloneFeatures?.actionWidget)}
         onClick={() => {
           props.onChange?.('changed from editor');
           props.onSelectionChange?.('selected from editor', {});
@@ -172,6 +177,11 @@ describe('TextFilePreviewPane', () => {
     expect(editor?.dataset.dropIntoEditor).toBe('false');
     expect(editor?.dataset.pasteAs).toBe('false');
     expect(editor?.dataset.dragAndDrop).toBe('false');
+    expect(editor?.dataset.runtimeSuggestMemory).toBe('false');
+    expect(editor?.dataset.runtimeCodeLensCache).toBe('false');
+    expect(editor?.dataset.runtimeInlayHintsCache).toBe('false');
+    expect(editor?.dataset.runtimeTreeViewsDnd).toBe('false');
+    expect(editor?.dataset.runtimeActionWidget).toBe('false');
 
     editor?.click();
 

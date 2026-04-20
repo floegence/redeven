@@ -50,6 +50,7 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
   useWorkbenchModel: () => ({
     widgets: () => [modelMocks.widget],
     viewport: () => ({ x: 0, y: 0, scale: 1 }),
+    canvasFrameSize: () => ({ width: 1200, height: 800 }),
     locked: () => false,
     filters: () => ({ 'redeven.files': true }),
     selectedWidgetId: () => modelMocks.widget.id,
@@ -115,15 +116,15 @@ vi.mock('./RedevenWorkbenchCanvas', () => ({
         props.setCanvasFrameRef?.(el);
       }}
       data-testid="mock-canvas"
-    >
-      <article
-        data-redeven-workbench-widget-root="true"
-        data-redeven-workbench-widget-id="widget-files-1"
-        tabIndex={0}
       >
-        Files
-      </article>
-    </div>
+        <article
+          data-redeven-workbench-widget-root="true"
+          data-redeven-workbench-widget-id="widget-files-1"
+          tabIndex={0}
+        >
+          Files
+        </article>
+      </div>
   ),
 }));
 

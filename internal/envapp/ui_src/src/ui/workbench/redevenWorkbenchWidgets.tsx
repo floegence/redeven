@@ -176,6 +176,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 760, height: 560 },
     group: 'workspace',
     singleton: false,
+    renderMode: 'projected_surface',
   },
   {
     type: 'redeven.terminal',
@@ -196,6 +197,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     defaultSize: { width: 900, height: 620 },
     group: 'workspace',
     singleton: false,
+    renderMode: 'projected_surface',
   },
   {
     type: 'redeven.monitor',

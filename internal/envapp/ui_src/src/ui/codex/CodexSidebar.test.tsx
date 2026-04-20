@@ -298,6 +298,8 @@ function threadIndicatorMode(host: ParentNode, threadID: string): string | null 
   return host.querySelector(`[data-thread-id="${threadID}"] [data-thread-indicator]`)?.getAttribute('data-thread-indicator') ?? null;
 }
 
+const mountedSurfaceDisposers: Array<() => void> = [];
+
 function renderSurface(host: HTMLDivElement) {
   const [settingsSeq, setSettingsSeq] = createSignal(1);
   const dispose = render(() => (
@@ -360,8 +362,19 @@ function renderSurface(host: HTMLDivElement) {
       </CodexProvider>
     </EnvContext.Provider>
   ), host);
+  let disposed = false;
+  const cleanup = () => {
+    if (disposed) return;
+    disposed = true;
+    dispose();
+    const index = mountedSurfaceDisposers.indexOf(cleanup);
+    if (index >= 0) {
+      mountedSurfaceDisposers.splice(index, 1);
+    }
+  };
+  mountedSurfaceDisposers.push(cleanup);
   return {
-    dispose,
+    dispose: cleanup,
     bumpSettingsSeq: () => setSettingsSeq((current) => current + 1),
   };
 }
@@ -407,6 +420,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  while (mountedSurfaceDisposers.length > 0) {
+    mountedSurfaceDisposers.pop()?.();
+  }
   document.body.innerHTML = '';
   desktopStorageState.clear();
   animationFrameCallbacks.clear();

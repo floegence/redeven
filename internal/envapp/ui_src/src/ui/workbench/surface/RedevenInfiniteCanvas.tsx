@@ -28,6 +28,7 @@ export interface InfiniteCanvasContextMenuEvent {
 
 export interface RedevenInfiniteCanvasProps {
   children: JSX.Element;
+  overlay?: (viewport: InfiniteCanvasPoint) => JSX.Element;
   viewport: InfiniteCanvasPoint;
   onViewportChange?: (viewport: InfiniteCanvasPoint) => void;
   onCanvasContextMenu?: (event: InfiniteCanvasContextMenuEvent) => void;
@@ -373,6 +374,7 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
       >
         {props.children}
       </div>
+      {props.overlay?.(liveViewport())}
     </div>
   );
 }

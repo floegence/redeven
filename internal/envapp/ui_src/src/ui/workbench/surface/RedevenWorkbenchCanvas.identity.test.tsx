@@ -11,7 +11,10 @@ import { RedevenWorkbenchCanvas } from './RedevenWorkbenchCanvas';
 vi.mock('./RedevenInfiniteCanvas', () => ({
   RedevenInfiniteCanvas: (props: any) => (
     <div data-testid="mock-redeven-infinite-canvas">
-      {props.children}
+      <div data-testid="mock-redeven-infinite-canvas-viewport">
+        {props.children}
+      </div>
+      {props.overlay?.(props.viewport)}
     </div>
   ),
 }));
@@ -121,6 +124,7 @@ function renderCanvasHarness(host: HTMLDivElement) {
         widgetDefinitions={widgetDefinitions}
         widgets={state().widgets}
         viewport={state().viewport}
+        canvasFrameSize={{ width: 1200, height: 800 }}
         selectedWidgetId={state().selectedWidgetId}
         optimisticFrontWidgetId={null}
         locked={state().locked}
