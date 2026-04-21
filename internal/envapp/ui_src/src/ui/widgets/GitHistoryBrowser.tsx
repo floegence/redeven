@@ -46,7 +46,6 @@ import {
   gitChangedFilesStickyCellClass,
 } from "./GitWorkbenchPrimitives";
 import { GitVirtualTable } from "./GitVirtualTable";
-import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -285,7 +284,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                     return "Switch --detach here";
                   };
                   return (
-                    <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
+                    <div class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
                         <GitPanelFrame as="section">
                           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">

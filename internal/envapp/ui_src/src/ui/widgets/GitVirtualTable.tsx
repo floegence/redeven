@@ -1,6 +1,5 @@
 import { For, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 
 export interface GitVirtualTableProps<T> {
   items: T[];
@@ -12,7 +11,7 @@ export interface GitVirtualTableProps<T> {
 
 export function GitVirtualTable<T>(props: GitVirtualTableProps<T>) {
   return (
-    <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class={cn('min-h-0 flex-1 overflow-auto', props.viewportClass)}>
+    <div class={cn('min-h-0 flex-1 overflow-auto', props.viewportClass)}>
       <table class={props.tableClass}>
         <thead>{props.header}</thead>
         <tbody>

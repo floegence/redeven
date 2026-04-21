@@ -16,7 +16,6 @@ import {
   GitSubtleNote,
   gitChangedFilesRowClass,
 } from './GitWorkbenchPrimitives';
-import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 
 export interface GitCommitDialogProps {
   open: boolean;
@@ -84,7 +83,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
               </div>
             )}
           >
-            <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="max-h-[16rem] overflow-auto">
+            <div class="max-h-[16rem] overflow-auto">
               <table class={GIT_CHANGED_FILES_TABLE_CLASS}>
                 <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
                   <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>

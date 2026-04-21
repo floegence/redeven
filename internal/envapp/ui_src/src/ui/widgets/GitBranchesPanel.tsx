@@ -123,7 +123,6 @@ import {
   type GitMergeBranchDialogConfirmOptions,
   type GitMergeBranchDialogState,
 } from "./GitMergeBranchDialog";
-import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
 import { resolveGitBranchHeaderLayout } from "./gitBranchHeaderLayout";
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
@@ -897,7 +896,7 @@ function HistoryList(
                     }
                   >
                     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
-                      <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="min-h-0 flex-1 overflow-auto">
+                      <div class="min-h-0 flex-1 overflow-auto">
                         <table class="w-full min-w-[42rem] text-xs md:min-w-0">
                           <thead class="sticky top-0 z-10 bg-muted/30 backdrop-blur">
                             <tr

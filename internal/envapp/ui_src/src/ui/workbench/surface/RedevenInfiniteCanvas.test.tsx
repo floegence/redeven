@@ -192,8 +192,20 @@ function CanvasFileBrowserContextMenuHarness() {
 function CanvasWheelHarness(props: {
   mode: WheelHarnessMode;
   selectedWidgetId?: string | null;
+  insideWidget?: boolean;
 }) {
   const [viewport, setViewport] = createSignal(INITIAL_VIEWPORT);
+  const targetBody = (
+    <div
+      {...(props.mode === 'interactive'
+        ? { 'data-floe-canvas-interactive': 'true' }
+        : { [REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]: 'true' })}
+    >
+      <button type="button" data-testid="wheel-target">
+        Wheel target
+      </button>
+    </div>
+  );
 
   return (
     <>
@@ -204,20 +216,16 @@ function CanvasWheelHarness(props: {
         ariaLabel="Redeven wheel routing harness"
       >
         <div style={{ position: 'relative', width: '480px', height: '320px' }}>
-          <article
-            data-redeven-workbench-widget-root="true"
-            data-redeven-workbench-widget-id="widget-files-1"
-          >
-            <div
-              {...(props.mode === 'interactive'
-                ? { 'data-floe-canvas-interactive': 'true' }
-                : { [REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]: 'true' })}
+          {props.insideWidget === false ? (
+            targetBody
+          ) : (
+            <article
+              data-redeven-workbench-widget-root="true"
+              data-redeven-workbench-widget-id="widget-files-1"
             >
-              <button type="button" data-testid="wheel-target">
-                Wheel target
-              </button>
-            </div>
-          </article>
+              {targetBody}
+            </article>
+          )}
         </div>
       </RedevenInfiniteCanvas>
 
@@ -235,7 +243,7 @@ describe('RedevenInfiniteCanvas', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps cursor-centered zoom active over ordinary interactive widget regions', () => {
+  it('yields wheel ownership to the selected widget subtree', () => {
     vi.useFakeTimers();
 
     const host = document.createElement('div');
@@ -250,31 +258,19 @@ describe('RedevenInfiniteCanvas', () => {
     mockCanvasRect(canvas!);
 
     const event = dispatchWheel(target!, -120);
-    expect(event.defaultPrevented).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
 
     vi.advanceTimersByTime(100);
 
-    const nextViewport = readViewportSnapshot(host);
-    const anchoredWorldX = (WHEEL_CLIENT_X - nextViewport.x) / nextViewport.scale;
-    const anchoredWorldY = (WHEEL_CLIENT_Y - nextViewport.y) / nextViewport.scale;
-
-    expect(nextViewport.scale).toBeGreaterThan(INITIAL_VIEWPORT.scale);
-    expect(anchoredWorldX).toBeCloseTo(
-      (WHEEL_CLIENT_X - INITIAL_VIEWPORT.x) / INITIAL_VIEWPORT.scale,
-      6
-    );
-    expect(anchoredWorldY).toBeCloseTo(
-      (WHEEL_CLIENT_Y - INITIAL_VIEWPORT.y) / INITIAL_VIEWPORT.scale,
-      6
-    );
+    expect(readViewportSnapshot(host)).toEqual(INITIAL_VIEWPORT);
   });
 
-  it('yields wheel ownership to explicit local wheel consumers', () => {
+  it('keeps cursor-centered zoom active over unselected widget regions', () => {
     vi.useFakeTimers();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
-    mount(() => <CanvasWheelHarness mode="wheel_interactive" selectedWidgetId="widget-files-1" />, host);
+    mount(() => <CanvasWheelHarness mode="interactive" selectedWidgetId={null} />, host);
 
     const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
     const target = host.querySelector('[data-testid="wheel-target"]') as HTMLButtonElement | null;
@@ -284,11 +280,12 @@ describe('RedevenInfiniteCanvas', () => {
     mockCanvasRect(canvas!);
 
     const event = dispatchWheel(target!, -120);
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(true);
 
     vi.advanceTimersByTime(100);
 
-    expect(readViewportSnapshot(host)).toEqual(INITIAL_VIEWPORT);
+    const nextViewport = readViewportSnapshot(host);
+    expect(nextViewport.scale).toBeGreaterThan(INITIAL_VIEWPORT.scale);
   });
 
   it('keeps zoom ownership on the canvas when the hovered wheel consumer is not selected', () => {
@@ -312,6 +309,28 @@ describe('RedevenInfiniteCanvas', () => {
 
     const nextViewport = readViewportSnapshot(host);
     expect(nextViewport.scale).toBeGreaterThan(INITIAL_VIEWPORT.scale);
+  });
+
+  it('still respects explicit non-widget wheel islands', () => {
+    vi.useFakeTimers();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    mount(() => <CanvasWheelHarness mode="wheel_interactive" selectedWidgetId={null} insideWidget={false} />, host);
+
+    const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
+    const target = host.querySelector('[data-testid="wheel-target"]') as HTMLButtonElement | null;
+    expect(canvas).toBeTruthy();
+    expect(target).toBeTruthy();
+
+    mockCanvasRect(canvas!);
+
+    const event = dispatchWheel(target!, -120);
+    expect(event.defaultPrevented).toBe(false);
+
+    vi.advanceTimersByTime(100);
+
+    expect(readViewportSnapshot(host)).toEqual(INITIAL_VIEWPORT);
   });
 
   it('keeps a surface dialog clickable when mounted inside a workbench canvas host', async () => {

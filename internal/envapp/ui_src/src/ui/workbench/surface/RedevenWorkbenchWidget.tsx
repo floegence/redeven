@@ -113,11 +113,12 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       widgetRoot: widgetRootEl ?? null,
     });
   const handlePointerDown: JSX.EventHandler<HTMLElement, PointerEvent> = (event) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 2) return;
 
     props.onSelect(props.widgetId);
     props.onCommitFront(props.widgetId);
 
+    if (event.button !== 0) return;
     if (resolveEventOwnership(event.target) !== 'widget_shell') return;
     widgetRootEl?.focus({ preventScroll: true });
   };
