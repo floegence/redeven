@@ -55,7 +55,27 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchWheelRouting({
       target: button,
       disablePanZoom: false,
+      selectedWidgetId: 'widget-files-1',
     })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+  });
+
+  it('keeps explicit wheel consumers zoomable until their widget is selected', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
+
+    const wheelRegion = document.createElement('div');
+    wheelRegion.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    const button = document.createElement('button');
+    wheelRegion.appendChild(button);
+    widget.appendChild(wheelRegion);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: button,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'canvas_zoom' });
   });
 
   it('treats local dialog overlay surfaces inside a widget host as local surfaces', () => {

@@ -25,7 +25,10 @@ export interface RedevenWorkbenchCanvasProps {
   setCanvasFrameRef: (el: HTMLDivElement | undefined) => void;
   onViewportCommit: (viewport: WorkbenchViewport) => void;
   onCanvasContextMenu: (event: InfiniteCanvasContextMenuEvent) => void;
+  onCanvasPointerDown: (event: PointerEvent) => void;
   onSelectWidget: (widgetId: string) => void;
+  onFitWidget: (widget: WorkbenchWidgetItem) => void;
+  onOverviewWidget: (widget: WorkbenchWidgetItem) => void;
   onWidgetContextMenu: (event: MouseEvent, item: WorkbenchWidgetItem) => void;
   onStartOptimisticFront: (widgetId: string) => void;
   onCommitFront: (widgetId: string) => void;
@@ -45,6 +48,8 @@ interface RedevenWorkbenchCanvasWidgetSlotProps {
   locked: boolean;
   filters: Record<WorkbenchWidgetType, boolean>;
   onSelectWidget: (widgetId: string) => void;
+  onFitWidget: (widget: WorkbenchWidgetItem) => void;
+  onOverviewWidget: (widget: WorkbenchWidgetItem) => void;
   onWidgetContextMenu: (event: MouseEvent, item: WorkbenchWidgetItem) => void;
   onStartOptimisticFront: (widgetId: string) => void;
   onCommitFront: (widgetId: string) => void;
@@ -81,6 +86,8 @@ function RedevenWorkbenchCanvasWidgetSlot(props: RedevenWorkbenchCanvasWidgetSlo
       locked={props.locked}
       filtered={!props.filters[item().type]}
       onSelect={props.onSelectWidget}
+      onFitWidget={() => props.onFitWidget(item())}
+      onOverviewWidget={() => props.onOverviewWidget(item())}
       onContextMenu={props.onWidgetContextMenu}
       onStartOptimisticFront={props.onStartOptimisticFront}
       onCommitFront={props.onCommitFront}
@@ -108,6 +115,8 @@ export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
         viewport={props.viewport}
         onViewportChange={props.onViewportCommit}
         onCanvasContextMenu={props.onCanvasContextMenu}
+        onCanvasPointerDown={props.onCanvasPointerDown}
+        selectedWidgetId={props.selectedWidgetId}
         disablePanZoom={props.locked}
       >
         <div class="workbench-canvas__field">
@@ -126,6 +135,8 @@ export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
                 locked={props.locked}
                 filters={props.filters}
                 onSelectWidget={props.onSelectWidget}
+                onFitWidget={props.onFitWidget}
+                onOverviewWidget={props.onOverviewWidget}
                 onWidgetContextMenu={props.onWidgetContextMenu}
                 onStartOptimisticFront={props.onStartOptimisticFront}
                 onCommitFront={props.onCommitFront}

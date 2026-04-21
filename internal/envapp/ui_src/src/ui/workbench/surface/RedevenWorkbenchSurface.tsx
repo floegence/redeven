@@ -32,6 +32,7 @@ import {
 } from './workbenchInputRouting';
 
 const WORKBENCH_CANVAS_INTERACTIVE_SELECTOR = '[data-floe-canvas-interactive="true"]';
+const WORKBENCH_CONTEXT_MENU_ATTR = 'data-floe-workbench-context-menu';
 
 export interface RedevenWorkbenchSurfaceApi {
   ensureWidget: (
@@ -46,6 +47,9 @@ export interface RedevenWorkbenchSurfaceApi {
     widget: WorkbenchWidgetItem,
     options?: { centerViewport?: boolean },
   ) => WorkbenchWidgetItem;
+  fitWidget: (widget: WorkbenchWidgetItem) => WorkbenchWidgetItem;
+  unfocusWidget: (widget: WorkbenchWidgetItem) => WorkbenchWidgetItem;
+  clearSelection: () => void;
   findWidgetByType: (type: WorkbenchWidgetType) => WorkbenchWidgetItem | null;
   findWidgetById: (widgetId: string) => WorkbenchWidgetItem | null;
   updateWidgetTitle: (widgetId: string, title: string) => void;
@@ -80,6 +84,25 @@ export interface RedevenWorkbenchSurfaceProps {
 }
 
 const DEFAULT_LOCK_SHORTCUT = 'F1';
+
+function isWorkbenchContextMenuEvent(event: Event): boolean {
+  if (typeof event.composedPath === 'function') {
+    for (const node of event.composedPath()) {
+      if (
+        node &&
+        typeof node === 'object' &&
+        'getAttribute' in node &&
+        typeof node.getAttribute === 'function' &&
+        node.getAttribute(WORKBENCH_CONTEXT_MENU_ATTR) === 'true'
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return event.target instanceof Element
+    && event.target.closest(`[${WORKBENCH_CONTEXT_MENU_ATTR}="true"]`) !== null;
+}
 
 export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   const modelOptions: UseWorkbenchModelOptions = {
@@ -161,6 +184,13 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       };
     };
 
+    const focusWidgetRoot = (widgetId: string) => {
+      queueMicrotask(() => {
+        focusWorkbenchWidgetElement(surfaceRootEl(), widgetId);
+        setInputOwner(createWidgetInputOwner(widgetId, 'activation'));
+      });
+    };
+
     props.onApiReady?.({
       ensureWidget: (type, options) => model.widgetActions.ensureWidget(type, options) ?? null,
       createWidget: (type, options) => {
@@ -177,11 +207,21 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       },
       focusWidget: (widget, options) => {
         const focusedWidget = model.navigation.focusWidget(widget, options);
-        queueMicrotask(() => {
-          focusWorkbenchWidgetElement(surfaceRootEl(), focusedWidget.id);
-          setInputOwner(createWidgetInputOwner(focusedWidget.id, 'activation'));
-        });
+        focusWidgetRoot(focusedWidget.id);
         return focusedWidget;
+      },
+      fitWidget: (widget) => {
+        const focusedWidget = model.navigation.fitWidget(widget);
+        focusWidgetRoot(focusedWidget.id);
+        return focusedWidget;
+      },
+      unfocusWidget: (widget) => {
+        const focusedWidget = model.navigation.overviewWidget(widget);
+        focusWidgetRoot(focusedWidget.id);
+        return focusedWidget;
+      },
+      clearSelection: () => {
+        model.selection.clear();
       },
       findWidgetByType: (type) => model.queries.findWidgetByType(type),
       findWidgetById: (widgetId) => model.queries.findWidgetById(widgetId),
@@ -211,6 +251,22 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   const lockShortcut = () =>
     props.lockShortcut === undefined ? DEFAULT_LOCK_SHORTCUT : props.lockShortcut;
 
+  const focusWidgetForViewport = (widget: WorkbenchWidgetItem) => {
+    const focusedWidget = model.navigation.fitWidget(widget);
+    queueMicrotask(() => {
+      focusWorkbenchWidgetElement(surfaceRootEl(), focusedWidget.id);
+      setInputOwner(createWidgetInputOwner(focusedWidget.id, 'activation'));
+    });
+  };
+
+  const overviewWidgetForViewport = (widget: WorkbenchWidgetItem) => {
+    const focusedWidget = model.navigation.overviewWidget(widget);
+    queueMicrotask(() => {
+      focusWorkbenchWidgetElement(surfaceRootEl(), focusedWidget.id);
+      setInputOwner(createWidgetInputOwner(focusedWidget.id, 'activation'));
+    });
+  };
+
   createEffect(() => {
     const owner = inputOwner();
     if (owner.kind !== 'widget') return;
@@ -238,6 +294,37 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
     onCleanup(() => {
       root.removeEventListener('pointerdown', handlePointerDownCapture, true);
       root.removeEventListener('focusin', handleFocusIn);
+    });
+  });
+
+  createEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!model.contextMenu.state()) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (isWorkbenchContextMenuEvent(event)) return;
+      model.contextMenu.close();
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      model.contextMenu.close();
+    };
+
+    const handleViewportChange = () => {
+      model.contextMenu.close();
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    window.addEventListener('keydown', handleEscape, true);
+    window.addEventListener('resize', handleViewportChange);
+    window.addEventListener('scroll', handleViewportChange, true);
+
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', handlePointerDown, true);
+      window.removeEventListener('keydown', handleEscape, true);
+      window.removeEventListener('resize', handleViewportChange);
+      window.removeEventListener('scroll', handleViewportChange, true);
     });
   });
 
@@ -349,7 +436,10 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           setCanvasFrameRef={model.setCanvasFrameRef}
           onViewportCommit={model.canvas.commitViewport}
           onCanvasContextMenu={model.canvas.openCanvasContextMenu}
+          onCanvasPointerDown={model.selection.clear}
           onSelectWidget={model.canvas.selectWidget}
+          onFitWidget={focusWidgetForViewport}
+          onOverviewWidget={overviewWidgetForViewport}
           onWidgetContextMenu={model.canvas.openWidgetContextMenu}
           onStartOptimisticFront={model.canvas.startOptimisticFront}
           onCommitFront={model.canvas.commitFront}
@@ -389,7 +479,6 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           <div
             class="workbench-menu-backdrop"
             data-floe-workbench-boundary="true"
-            onClick={model.contextMenu.close}
             onContextMenu={model.contextMenu.retarget}
           />
           <WorkbenchContextMenu

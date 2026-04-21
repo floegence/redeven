@@ -1,5 +1,5 @@
 import { createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
-import { GripVertical, X } from '@floegence/floe-webapp-core/icons';
+import { Maximize, Minus, X } from '@floegence/floe-webapp-core/icons';
 import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetItem,
@@ -43,6 +43,7 @@ interface LocalResizeState {
 /** Minimum widget footprint in world-space pixels. */
 const MIN_WIDTH = 220;
 const MIN_HEIGHT = 160;
+const WIDGET_HEADER_ACTION_SELECTOR = '[data-redeven-workbench-widget-header-action="true"]';
 
 export interface RedevenWorkbenchWidgetProps {
   definition: WorkbenchWidgetDefinition;
@@ -67,6 +68,8 @@ export interface RedevenWorkbenchWidgetProps {
   onCommitFront: (widgetId: string) => void;
   onCommitMove: (widgetId: string, position: { x: number; y: number }) => void;
   onCommitResize: (widgetId: string, size: { width: number; height: number }) => void;
+  onFitWidget: () => void;
+  onOverviewWidget: () => void;
   onRequestDelete: (widgetId: string) => void;
 }
 
@@ -150,11 +153,16 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     dragAbortController = undefined;
   };
 
-  const beginDrag: JSX.EventHandler<HTMLButtonElement, PointerEvent> = (event) => {
+  const beginDrag: JSX.EventHandler<HTMLElement, PointerEvent> = (event) => {
     if (event.button !== 0 || props.locked) return;
+    if (
+      event.target instanceof Element &&
+      event.target.closest(WIDGET_HEADER_ACTION_SELECTOR) !== null
+    ) {
+      return;
+    }
 
     event.preventDefault();
-    event.stopPropagation();
     dragAbortController?.abort();
     props.onStartOptimisticFront(props.widgetId);
 
@@ -309,6 +317,8 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         if (resolveEventOwnership(event.target) !== 'widget_shell') return;
         event.preventDefault();
         event.stopPropagation();
+        props.onSelect(props.widgetId);
+        props.onCommitFront(props.widgetId);
         props.onContextMenu(event, props.itemSnapshot());
       }}
       style={rootStyle()}
@@ -316,16 +326,8 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       <header
         class="workbench-widget__header"
         {...{ [WORKBENCH_WIDGET_SHELL_ATTR]: 'true' }}
+        onPointerDown={beginDrag}
       >
-        <button
-          type="button"
-          class="workbench-widget__drag"
-          aria-label="Drag widget"
-          data-floe-canvas-interactive="true"
-          onPointerDown={beginDrag}
-        >
-          <GripVertical class="w-3.5 h-3.5" />
-        </button>
         <div class="workbench-widget__title-area">
           {(() => {
             const Icon = props.definition.icon;
@@ -333,20 +335,55 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
           })()}
           <span class="workbench-widget__title">{props.widgetTitle}</span>
         </div>
-        <button
-          type="button"
-          class="workbench-widget__close"
-          aria-label="Remove widget"
-          data-floe-canvas-interactive="true"
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            event.preventDefault();
-            props.onRequestDelete(props.widgetId);
-          }}
-        >
-          <X class="w-3 h-3" />
-        </button>
+        <div class="workbench-widget__actions">
+          <button
+            type="button"
+            class="workbench-widget__focus"
+            aria-label="Focus widget"
+            title="Focus widget"
+            data-floe-canvas-interactive="true"
+            data-redeven-workbench-widget-header-action="true"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              event.preventDefault();
+              props.onFitWidget();
+            }}
+          >
+            <Maximize class="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            class="workbench-widget__unfocus"
+            aria-label="Show widget in overview"
+            title="Show widget in overview"
+            data-floe-canvas-interactive="true"
+            data-redeven-workbench-widget-header-action="true"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              event.preventDefault();
+              props.onOverviewWidget();
+            }}
+          >
+            <Minus class="w-3 h-3" />
+          </button>
+          <button
+            type="button"
+            class="workbench-widget__close"
+            aria-label="Remove widget"
+            data-floe-canvas-interactive="true"
+            data-redeven-workbench-widget-header-action="true"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              event.preventDefault();
+              props.onRequestDelete(props.widgetId);
+            }}
+          >
+            <X class="w-3 h-3" />
+          </button>
+        </div>
       </header>
       <div class="workbench-widget__body" data-floe-canvas-interactive="true">
         {(() => {

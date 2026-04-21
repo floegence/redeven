@@ -117,22 +117,35 @@ function CanvasDialogHarness() {
   );
 }
 
-function CanvasWheelHarness(props: { mode: WheelHarnessMode }) {
+function CanvasWheelHarness(props: {
+  mode: WheelHarnessMode;
+  selectedWidgetId?: string | null;
+}) {
   const [viewport, setViewport] = createSignal(INITIAL_VIEWPORT);
 
   return (
     <>
-      <RedevenInfiniteCanvas viewport={viewport()} onViewportChange={setViewport} ariaLabel="Redeven wheel routing harness">
+      <RedevenInfiniteCanvas
+        viewport={viewport()}
+        onViewportChange={setViewport}
+        selectedWidgetId={props.selectedWidgetId}
+        ariaLabel="Redeven wheel routing harness"
+      >
         <div style={{ position: 'relative', width: '480px', height: '320px' }}>
-          <div
-            {...(props.mode === 'interactive'
-              ? { 'data-floe-canvas-interactive': 'true' }
-              : { [REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]: 'true' })}
+          <article
+            data-redeven-workbench-widget-root="true"
+            data-redeven-workbench-widget-id="widget-files-1"
           >
-            <button type="button" data-testid="wheel-target">
-              Wheel target
-            </button>
-          </div>
+            <div
+              {...(props.mode === 'interactive'
+                ? { 'data-floe-canvas-interactive': 'true' }
+                : { [REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR]: 'true' })}
+            >
+              <button type="button" data-testid="wheel-target">
+                Wheel target
+              </button>
+            </div>
+          </article>
         </div>
       </RedevenInfiniteCanvas>
 
@@ -155,7 +168,7 @@ describe('RedevenInfiniteCanvas', () => {
 
     const host = document.createElement('div');
     document.body.appendChild(host);
-    mount(() => <CanvasWheelHarness mode="interactive" />, host);
+    mount(() => <CanvasWheelHarness mode="interactive" selectedWidgetId="widget-files-1" />, host);
 
     const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
     const target = host.querySelector('[data-testid="wheel-target"]') as HTMLButtonElement | null;
@@ -189,7 +202,7 @@ describe('RedevenInfiniteCanvas', () => {
 
     const host = document.createElement('div');
     document.body.appendChild(host);
-    mount(() => <CanvasWheelHarness mode="wheel_interactive" />, host);
+    mount(() => <CanvasWheelHarness mode="wheel_interactive" selectedWidgetId="widget-files-1" />, host);
 
     const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
     const target = host.querySelector('[data-testid="wheel-target"]') as HTMLButtonElement | null;
@@ -204,6 +217,29 @@ describe('RedevenInfiniteCanvas', () => {
     vi.advanceTimersByTime(100);
 
     expect(readViewportSnapshot(host)).toEqual(INITIAL_VIEWPORT);
+  });
+
+  it('keeps zoom ownership on the canvas when the hovered wheel consumer is not selected', () => {
+    vi.useFakeTimers();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    mount(() => <CanvasWheelHarness mode="wheel_interactive" selectedWidgetId={null} />, host);
+
+    const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
+    const target = host.querySelector('[data-testid="wheel-target"]') as HTMLButtonElement | null;
+    expect(canvas).toBeTruthy();
+    expect(target).toBeTruthy();
+
+    mockCanvasRect(canvas!);
+
+    const event = dispatchWheel(target!, -120);
+    expect(event.defaultPrevented).toBe(true);
+
+    vi.advanceTimersByTime(100);
+
+    const nextViewport = readViewportSnapshot(host);
+    expect(nextViewport.scale).toBeGreaterThan(INITIAL_VIEWPORT.scale);
   });
 
   it('keeps a surface dialog clickable when mounted inside a workbench canvas host', async () => {

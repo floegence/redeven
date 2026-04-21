@@ -32,12 +32,14 @@ export interface RedevenInfiniteCanvasProps {
   viewport: InfiniteCanvasPoint;
   onViewportChange?: (viewport: InfiniteCanvasPoint) => void;
   onCanvasContextMenu?: (event: InfiniteCanvasContextMenuEvent) => void;
+  onCanvasPointerDown?: (event: PointerEvent) => void;
   ariaLabel?: string;
   class?: string;
   contentClass?: string;
   interactiveSelector?: string;
   panSurfaceSelector?: string;
   wheelInteractiveSelector?: string;
+  selectedWidgetId?: string | null;
   minScale?: number;
   maxScale?: number;
   wheelZoomSpeed?: number;
@@ -212,9 +214,14 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
 
   const handlePointerDown: JSX.EventHandler<HTMLDivElement, PointerEvent> = (event) => {
     if (event.button !== 0) return;
-    if (props.disablePanZoom) return;
 
     const targetRole = resolveTargetRole(event.target);
+    if (targetRole === 'canvas') {
+      props.onCanvasPointerDown?.(event);
+    }
+
+    if (props.disablePanZoom) return;
+
     const startedFromPanSurface = targetRole === 'pan_surface';
     if (targetRole === 'local_surface') return;
 
@@ -295,6 +302,7 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
     const routing = resolveWorkbenchWheelRouting({
       target: event.target,
       disablePanZoom: !!props.disablePanZoom,
+      selectedWidgetId: props.selectedWidgetId ?? null,
       wheelInteractiveSelector: wheelInteractiveSelector(),
     });
     if (routing.kind !== 'canvas_zoom') {

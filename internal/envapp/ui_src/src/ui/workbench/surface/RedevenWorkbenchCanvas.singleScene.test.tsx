@@ -101,7 +101,10 @@ describe('RedevenWorkbenchCanvas single-scene geometry', () => {
         setCanvasFrameRef={() => {}}
         onViewportCommit={vi.fn()}
         onCanvasContextMenu={vi.fn()}
+        onCanvasPointerDown={vi.fn()}
         onSelectWidget={vi.fn()}
+        onFitWidget={vi.fn()}
+        onOverviewWidget={vi.fn()}
         onWidgetContextMenu={vi.fn()}
         onStartOptimisticFront={vi.fn()}
         onCommitFront={vi.fn()}

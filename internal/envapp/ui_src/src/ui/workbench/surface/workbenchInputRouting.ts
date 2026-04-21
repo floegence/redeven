@@ -149,6 +149,7 @@ export function resolveRedevenWorkbenchWidgetEventOwnership(args: {
 export function resolveWorkbenchWheelRouting(args: {
   target: EventTarget | null;
   disablePanZoom: boolean;
+  selectedWidgetId?: string | null;
   wheelInteractiveSelector?: string;
 }): WorkbenchWheelRoutingDecision {
   const element = args.target instanceof Element ? args.target : null;
@@ -161,12 +162,15 @@ export function resolveWorkbenchWheelRouting(args: {
       return { kind: 'local_surface', reason: 'local_interaction_surface' };
     }
 
-    if (
-      element.closest(
-        args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR
-      ) !== null
-    ) {
-      return { kind: 'local_surface', reason: 'wheel_interactive' };
+    const wheelInteractiveRoot = element.closest(
+      args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR
+    );
+    if (wheelInteractiveRoot !== null) {
+      const widgetRoot = findWorkbenchWidgetRoot(wheelInteractiveRoot);
+      const widgetId = readWorkbenchWidgetId(widgetRoot);
+      if (!widgetId || widgetId === (args.selectedWidgetId ?? null)) {
+        return { kind: 'local_surface', reason: 'wheel_interactive' };
+      }
     }
   }
 

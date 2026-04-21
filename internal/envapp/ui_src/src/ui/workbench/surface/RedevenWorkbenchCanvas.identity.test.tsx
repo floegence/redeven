@@ -132,9 +132,12 @@ function renderCanvasHarness(host: HTMLDivElement) {
           setState((prev) => ({ ...prev, viewport }));
         }}
         onCanvasContextMenu={vi.fn()}
+        onCanvasPointerDown={vi.fn()}
         onSelectWidget={(widgetId) => {
           setState((prev) => ({ ...prev, selectedWidgetId: widgetId }));
         }}
+        onFitWidget={vi.fn()}
+        onOverviewWidget={vi.fn()}
         onWidgetContextMenu={vi.fn()}
         onStartOptimisticFront={vi.fn()}
         onCommitFront={(widgetId) => {
