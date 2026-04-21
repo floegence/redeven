@@ -1,9 +1,12 @@
 import {
   createDefaultWorkbenchState,
   sanitizeWorkbenchState,
+  type WorkbenchThemeId,
   type WorkbenchState,
   type WorkbenchWidgetDefinition,
 } from '@floegence/floe-webapp-core/workbench';
+
+import { normalizeWorkbenchTheme } from './workbenchThemeMigration';
 
 export type RuntimeWorkbenchLayoutWidget = Readonly<{
   widget_id: string;
@@ -88,6 +91,7 @@ export type PersistedWorkbenchLocalState = Readonly<{
   locked: boolean;
   filters: Record<string, boolean>;
   selectedWidgetId: string | null;
+  theme: WorkbenchThemeId;
   legacyLayoutMigrated: boolean;
 }>;
 
@@ -330,6 +334,7 @@ export function derivePersistedWorkbenchLocalState(
       Object.entries(state.filters ?? {}).map(([key, enabled]) => [key, Boolean(enabled)]),
     ),
     selectedWidgetId: compact(state.selectedWidgetId) || null,
+    theme: normalizeWorkbenchTheme(state.theme),
     legacyLayoutMigrated,
   };
 }
@@ -338,8 +343,12 @@ export function sanitizePersistedWorkbenchLocalState(
   value: unknown,
   legacyState: WorkbenchState,
   widgetDefinitions: readonly WorkbenchWidgetDefinition[],
+  fallbackTheme?: WorkbenchThemeId,
 ): PersistedWorkbenchLocalState {
-  const fallback = derivePersistedWorkbenchLocalState(legacyState, false);
+  const fallback = derivePersistedWorkbenchLocalState({
+    ...legacyState,
+    theme: fallbackTheme ?? normalizeWorkbenchTheme(legacyState.theme),
+  }, false);
   const defaultState = createDefaultWorkbenchState(widgetDefinitions);
   if (!isRecord(value)) {
     return {
@@ -353,6 +362,7 @@ export function sanitizePersistedWorkbenchLocalState(
     locked: typeof value.locked === 'boolean' ? value.locked : fallback.locked,
     filters: normalizeFilters(value.filters, defaultState.filters, widgetDefinitions),
     selectedWidgetId: compact(value.selectedWidgetId) || null,
+    theme: normalizeWorkbenchTheme(value.theme, fallback.theme),
     legacyLayoutMigrated: typeof value.legacyLayoutMigrated === 'boolean' ? value.legacyLayoutMigrated : fallback.legacyLayoutMigrated,
   };
 }
@@ -361,7 +371,12 @@ export function samePersistedWorkbenchLocalState(
   left: PersistedWorkbenchLocalState,
   right: PersistedWorkbenchLocalState,
 ): boolean {
-  if (left.locked !== right.locked || left.selectedWidgetId !== right.selectedWidgetId || left.legacyLayoutMigrated !== right.legacyLayoutMigrated) {
+  if (
+    left.locked !== right.locked
+    || left.selectedWidgetId !== right.selectedWidgetId
+    || left.theme !== right.theme
+    || left.legacyLayoutMigrated !== right.legacyLayoutMigrated
+  ) {
     return false;
   }
   if (left.viewport.x !== right.viewport.x || left.viewport.y !== right.viewport.y || left.viewport.scale !== right.viewport.scale) {
@@ -521,6 +536,7 @@ export function projectWorkbenchStateFromRuntimeLayout(args: Readonly<{
         ...args.localState.filters,
       },
       selectedWidgetId: widgetIDs.has(args.localState.selectedWidgetId ?? '') ? args.localState.selectedWidgetId : null,
+      theme: args.localState.theme,
     },
     {
       widgetDefinitions: args.widgetDefinitions,

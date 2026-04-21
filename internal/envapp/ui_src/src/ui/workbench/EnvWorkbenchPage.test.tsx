@@ -11,6 +11,7 @@ const storageMocks = vi.hoisted(() => ({
   isDesktopStateStorageAvailable: vi.fn(() => false),
   readUIStorageJSON: vi.fn(() => null),
   writeUIStorageJSON: vi.fn(),
+  removeUIStorageItem: vi.fn(),
 }));
 
 const layoutApiMocks = vi.hoisted(() => ({
@@ -173,6 +174,7 @@ vi.mock('../services/uiStorage', () => ({
   isDesktopStateStorageAvailable: storageMocks.isDesktopStateStorageAvailable,
   readUIStorageJSON: storageMocks.readUIStorageJSON,
   writeUIStorageJSON: storageMocks.writeUIStorageJSON,
+  removeUIStorageItem: storageMocks.removeUIStorageItem,
 }));
 
 vi.mock('../services/workbenchLayoutApi', () => ({
@@ -241,6 +243,15 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/workbench', () => ({
+  DEFAULT_WORKBENCH_THEME: 'default',
+  isWorkbenchThemeId: (value: unknown) => (
+    value === 'default'
+    || value === 'vibrancy'
+    || value === 'mica'
+    || value === 'midnight'
+    || value === 'aurora'
+    || value === 'terminal'
+  ),
   createDefaultWorkbenchState: vi.fn(() => ({
     version: 1,
     widgets: [],
@@ -252,6 +263,7 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
       'redeven.preview': true,
     },
     selectedWidgetId: null,
+    theme: 'default',
   })),
   sanitizeWorkbenchState: vi.fn((value: any, options?: any) => {
     if (value && value.version === 1) {
@@ -301,6 +313,7 @@ describe('EnvWorkbenchPage', () => {
     storageMocks.readUIStorageJSON.mockReset();
     storageMocks.readUIStorageJSON.mockReturnValue(null);
     storageMocks.writeUIStorageJSON.mockReset();
+    storageMocks.removeUIStorageItem.mockReset();
     layoutApiMocks.getWorkbenchLayoutSnapshot.mockReset();
     layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
       seq: 0,
@@ -410,6 +423,7 @@ describe('EnvWorkbenchPage', () => {
             'redeven.preview': true,
           },
           selectedWidgetId: 'legacy-widget',
+          theme: 'mica',
         };
       }
       return null;
@@ -432,7 +446,34 @@ describe('EnvWorkbenchPage', () => {
         version: 1,
         viewport: { x: 180, y: 120, scale: 1.25 },
         locked: true,
+        theme: 'mica',
       }),
+    );
+  });
+
+  it('migrates legacy workbench appearance into persisted local theme state', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'redeven_envapp_workbench_appearance_v1') {
+        return { tone: 'slate', texture: 'grid' };
+      }
+      return null;
+    }) as any);
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.lastStateAccessor().theme).toBe('midnight');
+    expect(storageMocks.writeUIStorageJSON).toHaveBeenCalledWith(
+      'workbench:env-123:local_state',
+      expect.objectContaining({
+        theme: 'midnight',
+      }),
+    );
+    expect(storageMocks.removeUIStorageItem).toHaveBeenCalledWith(
+      'redeven_envapp_workbench_appearance_v1',
     );
   });
 
@@ -486,6 +527,7 @@ describe('EnvWorkbenchPage', () => {
             'redeven.preview': true,
           },
           selectedWidgetId: null,
+          theme: 'default',
         };
       }
       return null;
@@ -971,6 +1013,7 @@ describe('EnvWorkbenchPage', () => {
             'redeven.preview': true,
           },
           selectedWidgetId: existingWidget.id,
+          theme: 'default',
         };
       }
       if (key === 'workbench:env-123:instances') {

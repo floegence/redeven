@@ -191,7 +191,7 @@ describe('RedevenWorkbenchWidget', () => {
     dispose = render(() => <RedevenWorkbenchWidget {...props} />, host);
 
     const focusButton = host.querySelector(
-      'button[aria-label="Focus widget"]'
+      'button[aria-label="Zoom widget to fit viewport"]'
     ) as HTMLButtonElement | null;
     const unfocusButton = host.querySelector(
       'button[aria-label="Show widget in overview"]'

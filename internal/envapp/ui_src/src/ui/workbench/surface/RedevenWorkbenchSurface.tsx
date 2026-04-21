@@ -15,11 +15,6 @@ import { RedevenWorkbenchCanvas } from './RedevenWorkbenchCanvas';
 import { RedevenWorkbenchFilterBar } from './RedevenWorkbenchFilterBar';
 import { RedevenWorkbenchHud } from './RedevenWorkbenchHud';
 import { RedevenWorkbenchLockButton } from './RedevenWorkbenchLockButton';
-import type {
-  WorkbenchAppearance,
-  WorkbenchAppearanceTexture,
-  WorkbenchAppearanceTone,
-} from '../workbenchAppearance';
 import {
   INITIAL_WORKBENCH_INPUT_OWNER,
   REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR,
@@ -59,10 +54,6 @@ export interface RedevenWorkbenchSurfaceApi {
 export interface RedevenWorkbenchSurfaceProps {
   state: () => WorkbenchState;
   setState: (updater: (prev: WorkbenchState) => WorkbenchState) => void;
-  appearance?: WorkbenchAppearance;
-  onToneSelect?: (tone: WorkbenchAppearanceTone) => void;
-  onTextureSelect?: (texture: WorkbenchAppearanceTexture) => void;
-  onResetAppearance?: () => void;
   /**
    * Keyboard shortcut key for toggling lock mode. Matches `KeyboardEvent.key`.
    * Defaults to "F1". Pass `null` to disable the shortcut entirely.
@@ -410,10 +401,9 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
   return (
     <div
       ref={setSurfaceRootEl}
-      class={`workbench-surface redeven-workbench-surface${props.class ? ` ${props.class}` : ''}`}
+      class={`workbench-surface${props.class ? ` ${props.class}` : ''}`}
       {...{ [REDEVEN_WORKBENCH_SURFACE_ROOT_ATTR]: 'true' }}
-      data-redeven-workbench-tone={props.appearance?.tone ?? 'mist'}
-      data-redeven-workbench-texture={props.appearance?.texture ?? 'grid'}
+      data-workbench-theme={model.theme()}
     >
       <div class="workbench-surface__body" data-floe-workbench-canvas-frame="true">
         <RedevenWorkbenchCanvas
@@ -462,10 +452,8 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         scaleLabel={model.scaleLabel()}
         onZoomOut={model.hud.zoomOut}
         onZoomIn={model.hud.zoomIn}
-        appearance={props.appearance}
-        onToneSelect={props.onToneSelect}
-        onTextureSelect={props.onTextureSelect}
-        onResetAppearance={props.onResetAppearance}
+        activeTheme={model.theme()}
+        onSelectTheme={(theme) => model.appearance.setTheme(theme)}
       />
 
       <Show when={model.contextMenu.state()}>

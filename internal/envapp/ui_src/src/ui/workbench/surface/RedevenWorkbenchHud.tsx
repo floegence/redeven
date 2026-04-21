@@ -1,29 +1,28 @@
+import { Show } from 'solid-js';
 import { Minus, Plus } from '@floegence/floe-webapp-core/icons';
-
-import { WorkbenchAppearanceButton } from '../WorkbenchAppearanceButton';
-import type {
-  WorkbenchAppearance,
-  WorkbenchAppearanceTexture,
-  WorkbenchAppearanceTone,
-} from '../workbenchAppearance';
+import {
+  WorkbenchThemeSelector,
+  type WorkbenchThemeId,
+} from '@floegence/floe-webapp-core/workbench';
 
 export interface RedevenWorkbenchHudProps {
   scaleLabel: string;
   onZoomOut: () => void;
   onZoomIn: () => void;
-  appearance?: WorkbenchAppearance;
-  onToneSelect?: (tone: WorkbenchAppearanceTone) => void;
-  onTextureSelect?: (texture: WorkbenchAppearanceTexture) => void;
-  onResetAppearance?: () => void;
+  activeTheme?: WorkbenchThemeId;
+  onSelectTheme?: (theme: WorkbenchThemeId) => void;
 }
 
 export function RedevenWorkbenchHud(props: RedevenWorkbenchHudProps) {
-  const hasAppearanceControls = Boolean(
-    props.appearance && props.onToneSelect && props.onTextureSelect && props.onResetAppearance,
-  );
-
   return (
     <div class="workbench-hud" data-floe-canvas-interactive="true">
+      <Show when={props.activeTheme && props.onSelectTheme}>
+        <WorkbenchThemeSelector
+          activeTheme={props.activeTheme!}
+          onSelect={(theme) => props.onSelectTheme?.(theme)}
+        />
+        <div class="workbench-hud__divider" aria-hidden="true" />
+      </Show>
       <button
         type="button"
         class="workbench-hud__button"
@@ -41,17 +40,6 @@ export function RedevenWorkbenchHud(props: RedevenWorkbenchHudProps) {
       >
         <Plus class="w-3.5 h-3.5" />
       </button>
-      {hasAppearanceControls ? (
-        <>
-          <span class="workbench-hud__divider" aria-hidden="true" />
-          <WorkbenchAppearanceButton
-            appearance={props.appearance!}
-            onToneSelect={props.onToneSelect!}
-            onTextureSelect={props.onTextureSelect!}
-            onReset={props.onResetAppearance!}
-          />
-        </>
-      ) : null}
     </div>
   );
 }

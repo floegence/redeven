@@ -145,14 +145,6 @@ import {
   type EnvViewMode,
 } from './envViewMode';
 import { EnvWorkbenchPage } from './workbench/EnvWorkbenchPage';
-import {
-  readStoredWorkbenchAppearance,
-  resolveDefaultWorkbenchAppearance,
-  type WorkbenchAppearance,
-  type WorkbenchAppearanceTexture,
-  type WorkbenchAppearanceTone,
-  writeStoredWorkbenchAppearance,
-} from './workbench/workbenchAppearance';
 
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
@@ -530,13 +522,7 @@ export function EnvAppShell() {
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
   const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('deck');
-  const [storedWorkbenchAppearance, setStoredWorkbenchAppearance] = createSignal<WorkbenchAppearance | null>(
-    readStoredWorkbenchAppearance(),
-  );
   const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
-  const workbenchAppearance = createMemo<WorkbenchAppearance>(() =>
-    storedWorkbenchAppearance() ?? resolveDefaultWorkbenchAppearance(theme.resolvedTheme() === 'dark' ? 'dark' : 'light'),
-  );
   const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
   const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
   const [deckSurfaceActivationSeq, setDeckSurfaceActivationSeq] = createSignal(0);
@@ -583,28 +569,6 @@ export function EnvAppShell() {
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [aiThreadFocusSeq, setAIThreadFocusSeq] = createSignal(0);
   const [aiThreadFocusId, setAIThreadFocusId] = createSignal<string | null>(null);
-
-  const updateWorkbenchAppearance = (patch: Partial<WorkbenchAppearance>) => {
-    const next: WorkbenchAppearance = {
-      ...workbenchAppearance(),
-      ...patch,
-    };
-    setStoredWorkbenchAppearance(next);
-    writeStoredWorkbenchAppearance(next);
-  };
-
-  const setWorkbenchTone = (tone: WorkbenchAppearanceTone) => {
-    updateWorkbenchAppearance({ tone });
-  };
-
-  const setWorkbenchTexture = (texture: WorkbenchAppearanceTexture) => {
-    updateWorkbenchAppearance({ texture });
-  };
-
-  const resetWorkbenchAppearance = () => {
-    setStoredWorkbenchAppearance(null);
-    writeStoredWorkbenchAppearance(null);
-  };
 
   createEffect(() => {
     const anchor = notesViewportAnchor();
@@ -2692,12 +2656,7 @@ export function EnvAppShell() {
             {mode === 'deck' ? (
               <EnvDeckPage />
             ) : (
-              <EnvWorkbenchPage
-                appearance={workbenchAppearance()}
-                onToneSelect={setWorkbenchTone}
-                onTextureSelect={setWorkbenchTexture}
-                onResetAppearance={resetWorkbenchAppearance}
-              />
+              <EnvWorkbenchPage />
             )}
             {renderNotesOverlay()}
           </>

@@ -62,11 +62,11 @@ import {
   type RuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchWidgetStateData,
 } from './runtimeWorkbenchLayout';
-import type {
-  WorkbenchAppearance,
-  WorkbenchAppearanceTexture,
-  WorkbenchAppearanceTone,
-} from './workbenchAppearance';
+import {
+  normalizeWorkbenchTheme,
+  readLegacyWorkbenchThemeMigration,
+  removeLegacyWorkbenchAppearance,
+} from './workbenchThemeMigration';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 0;
@@ -251,11 +251,37 @@ function readPersistedWorkbenchLocalState(
   storageKey: string,
   legacyWorkbenchState: WorkbenchState,
 ): PersistedWorkbenchLocalState {
-  return sanitizePersistedWorkbenchLocalState(
-    readUIStorageJSON(buildWorkbenchLocalStateStorageKey(storageKey), null),
+  const localStateKey = buildWorkbenchLocalStateStorageKey(storageKey);
+  const rawLocalState = readUIStorageJSON(localStateKey, null);
+  const rawLegacyState = readUIStorageJSON(storageKey, null);
+  const { theme: migratedTheme, shouldClearLegacyAppearance } = readLegacyWorkbenchThemeMigration();
+  const rawLegacyTheme = rawLegacyState && typeof rawLegacyState === 'object'
+    ? (rawLegacyState as { theme?: unknown }).theme
+    : undefined;
+  const legacyThemePersisted = Boolean(
+    typeof rawLegacyTheme === 'string'
+    && normalizeWorkbenchTheme(rawLegacyTheme) === rawLegacyTheme,
+  );
+  const nextLocalState = sanitizePersistedWorkbenchLocalState(
+    rawLocalState,
     legacyWorkbenchState,
     redevenWorkbenchWidgets,
+    !legacyThemePersisted ? migratedTheme ?? undefined : undefined,
   );
+  const rawLocalTheme = rawLocalState && typeof rawLocalState === 'object'
+    ? (rawLocalState as { theme?: unknown }).theme
+    : undefined;
+  const localThemePersisted = Boolean(
+    typeof rawLocalTheme === 'string'
+    && normalizeWorkbenchTheme(rawLocalTheme) === rawLocalTheme,
+  );
+  if (!localThemePersisted || shouldClearLegacyAppearance) {
+    writeUIStorageJSON(localStateKey, nextLocalState);
+  }
+  if (shouldClearLegacyAppearance) {
+    removeLegacyWorkbenchAppearance();
+  }
+  return nextLocalState;
 }
 
 function readPersistedWorkbenchInstanceState(
@@ -268,13 +294,6 @@ function readPersistedWorkbenchInstanceState(
   );
 }
 
-export interface EnvWorkbenchPageProps {
-  appearance?: WorkbenchAppearance;
-  onToneSelect?: (tone: WorkbenchAppearanceTone) => void;
-  onTextureSelect?: (texture: WorkbenchAppearanceTexture) => void;
-  onResetAppearance?: () => void;
-}
-
 function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     const timer = globalThis.setTimeout(resolve, timeoutMs);
@@ -285,7 +304,7 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
   });
 }
 
-export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
+export function EnvWorkbenchPage() {
   const env = useEnvContext();
   const storageKey = createMemo(() => resolveEnvAppStorageBinding({
     envID: env.env_id(),
@@ -293,7 +312,10 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   }).workbenchStorageKey);
   const initialWorkbenchState = readPersistedWorkbenchState(storageKey());
   const initialLocalState = readPersistedWorkbenchLocalState(storageKey(), initialWorkbenchState);
-  const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>(initialWorkbenchState);
+  const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>({
+    ...initialWorkbenchState,
+    theme: initialLocalState.theme,
+  });
   const [localState, setLocalState] = createSignal<PersistedWorkbenchLocalState>(initialLocalState);
   const [instanceState, setInstanceState] = createSignal<RedevenWorkbenchInstanceState>(
     readPersistedWorkbenchInstanceState(storageKey(), initialWorkbenchState),
@@ -427,7 +449,10 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     const key = storageKey();
     const legacyWorkbenchState = readPersistedWorkbenchState(key);
     const nextLocalState = readPersistedWorkbenchLocalState(key, legacyWorkbenchState);
-    setWorkbenchState(legacyWorkbenchState);
+    setWorkbenchState({
+      ...legacyWorkbenchState,
+      theme: nextLocalState.theme,
+    });
     setLocalState(nextLocalState);
     setRuntimeSnapshot(createEmptyRuntimeWorkbenchLayoutSnapshot());
     setRuntimeLayoutReady(false);
@@ -1300,10 +1325,6 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     <EnvWorkbenchInstancesContext.Provider value={workbenchInstancesContextValue}>
       <div class="relative h-full min-h-0 overflow-hidden">
         <RedevenWorkbenchSurface
-          appearance={props.appearance}
-          onToneSelect={props.onToneSelect}
-          onTextureSelect={props.onTextureSelect}
-          onResetAppearance={props.onResetAppearance}
           state={workbenchState}
           setState={setWorkbenchState}
           widgetDefinitions={redevenWorkbenchWidgets}

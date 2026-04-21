@@ -65,6 +65,7 @@ describe('runtimeWorkbenchLayout', () => {
         'redeven.terminal': false,
       },
       selectedWidgetId: 'widget-files-1',
+      theme: 'mica',
     };
     const localState = derivePersistedWorkbenchLocalState(existingState as any, true);
     const snapshot: RuntimeWorkbenchLayoutSnapshot = {
@@ -96,6 +97,7 @@ describe('runtimeWorkbenchLayout', () => {
     expect(projected.viewport).toEqual({ x: 180, y: 120, scale: 1.25 });
     expect(projected.selectedWidgetId).toBe('widget-files-1');
     expect(projected.locked).toBe(true);
+    expect(projected.theme).toBe('mica');
     expect(projected.widgets[0]).toMatchObject({
       id: 'widget-files-1',
       type: 'redeven.files',
@@ -131,6 +133,7 @@ describe('runtimeWorkbenchLayout', () => {
         'redeven.terminal': true,
       },
       selectedWidgetId: 'widget-terminal-1',
+      theme: 'midnight',
     };
 
     expect(extractRuntimeWorkbenchLayoutFromWorkbenchState(state as any)).toEqual({
@@ -160,6 +163,7 @@ describe('runtimeWorkbenchLayout', () => {
         'redeven.terminal': true,
       },
       selectedWidgetId: null,
+      theme: 'default',
     };
 
     const sanitized = sanitizePersistedWorkbenchLocalState({
@@ -182,6 +186,7 @@ describe('runtimeWorkbenchLayout', () => {
         'redeven.terminal': true,
       },
       selectedWidgetId: 'widget-files-1',
+      theme: 'default',
       legacyLayoutMigrated: true,
     });
   });

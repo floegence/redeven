@@ -100,6 +100,7 @@ function createInitialState(): WorkbenchState {
     locked: false,
     filters: createWorkbenchFilterState(widgetDefinitions),
     selectedWidgetId: null,
+    theme: 'default',
   };
 }
 

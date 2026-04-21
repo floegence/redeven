@@ -29,6 +29,7 @@ const modelMocks = vi.hoisted(() => {
     clearSelection: vi.fn(),
     cancelViewportNavigation: vi.fn(),
     setCanvasFrameRef: vi.fn(),
+    setTheme: vi.fn(),
   };
 });
 
@@ -48,6 +49,19 @@ const TEST_WORKBENCH_FILTERS = {
   'log-viewer': true,
   'code-editor': true,
 } as const;
+
+function createWorkbenchState(overrides: Record<string, unknown> = {}): any {
+  return {
+    version: 1,
+    widgets: [],
+    viewport: { x: 0, y: 0, scale: 1 },
+    locked: false,
+    filters: TEST_WORKBENCH_FILTERS,
+    selectedWidgetId: null,
+    theme: 'mica',
+    ...overrides,
+  };
+}
 
 function dispatchPointerDown(target: EventTarget): void {
   const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
@@ -81,6 +95,7 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
     selectedWidgetId: () => modelMocks.widget.id,
     topZIndex: () => 1,
     scaleLabel: () => '100%',
+    theme: () => 'mica',
     optimisticFrontWidgetId: () => null,
     widgetDefinitions: () => [],
     contextMenu: {
@@ -133,6 +148,9 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
     queries: {
       findWidgetByType: vi.fn(() => modelMocks.widget),
       findWidgetById: vi.fn(() => modelMocks.widget),
+    },
+    appearance: {
+      setTheme: modelMocks.setTheme,
     },
     setCanvasFrameRef: modelMocks.setCanvasFrameRef,
     handleCloseRequest: vi.fn(),
@@ -202,6 +220,7 @@ describe('RedevenWorkbenchSurface', () => {
     modelMocks.clearSelection.mockReset();
     modelMocks.cancelViewportNavigation.mockReset();
     modelMocks.setCanvasFrameRef.mockReset();
+    modelMocks.setTheme.mockReset();
     surfaceMocks.contextMenuState = null;
     surfaceMocks.contextMenuItems = [];
     surfaceMocks.contextMenuProps = null;
@@ -224,14 +243,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
         onApiReady={(api) => {
@@ -260,14 +272,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
         onApiReady={(api) => {
@@ -293,14 +298,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
         onApiReady={(api) => {
@@ -320,65 +318,40 @@ describe('RedevenWorkbenchSurface', () => {
     expect(modelMocks.clearSelection).toHaveBeenCalledTimes(1);
   });
 
-  it('exposes workbench appearance attributes on the surface root', async () => {
+  it('exposes the upstream workbench theme attribute on the surface root', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
-        appearance={{ tone: 'ivory', texture: 'pin_dot' }}
       />
     ), host);
 
-    const surfaceRoot = host.querySelector('.redeven-workbench-surface') as HTMLElement | null;
-    expect(surfaceRoot?.getAttribute('data-redeven-workbench-tone')).toBe('ivory');
-    expect(surfaceRoot?.getAttribute('data-redeven-workbench-texture')).toBe('pin_dot');
+    const surfaceRoot = host.querySelector('.workbench-surface') as HTMLElement | null;
+    expect(surfaceRoot?.getAttribute('data-workbench-theme')).toBe('mica');
   });
 
-  it('forwards background appearance controls into the hud', async () => {
+  it('forwards upstream theme controls into the hud', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const onToneSelect = vi.fn();
-    const onTextureSelect = vi.fn();
-    const onResetAppearance = vi.fn();
-
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
-        appearance={{ tone: 'mist', texture: 'grid' }}
-        onToneSelect={onToneSelect}
-        onTextureSelect={onTextureSelect}
-        onResetAppearance={onResetAppearance}
       />
     ), host);
 
     expect(surfaceMocks.hudProps).toMatchObject({
       scaleLabel: '100%',
-      appearance: { tone: 'mist', texture: 'grid' },
-      onToneSelect,
-      onTextureSelect,
-      onResetAppearance,
+      activeTheme: 'mica',
     });
+    surfaceMocks.hudProps.onSelectTheme('aurora');
+    expect(modelMocks.setTheme).toHaveBeenCalledWith('aurora');
   });
 
   it('does not trigger global arrow navigation when a widget root owns focus', async () => {
@@ -389,14 +362,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
         onApiReady={(api) => {
@@ -426,14 +392,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
       />
@@ -464,14 +423,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
         filterBarWidgetTypes={['redeven.files', 'redeven.terminal']}
@@ -490,14 +442,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: 'widget-files-1',
-        })}
+        state={() => createWorkbenchState({ selectedWidgetId: 'widget-files-1' })}
         setState={() => {}}
         widgetDefinitions={[]}
       />
@@ -517,14 +462,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
       />
@@ -554,14 +492,7 @@ describe('RedevenWorkbenchSurface', () => {
 
     dispose = render(() => (
       <RedevenWorkbenchSurface
-        state={() => ({
-          version: 1,
-          widgets: [],
-          viewport: { x: 0, y: 0, scale: 1 },
-          locked: false,
-          filters: TEST_WORKBENCH_FILTERS,
-          selectedWidgetId: null,
-        })}
+        state={() => createWorkbenchState()}
         setState={() => {}}
         widgetDefinitions={[]}
       />

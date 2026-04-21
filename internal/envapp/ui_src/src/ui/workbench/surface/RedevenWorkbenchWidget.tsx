@@ -320,6 +320,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         'is-dragging': isDragging(),
         'is-resizing': isResizing(),
         'is-filtered-out': props.filtered,
+        'is-locked': props.locked,
       }}
       {...{ [FLOE_DIALOG_SURFACE_HOST_ATTR]: 'true' }}
       data-floe-workbench-widget-id={props.widgetId}
@@ -346,18 +347,19 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
         onPointerDown={beginDrag}
       >
         <div class="workbench-widget__title-area">
+          <span class="workbench-widget__title-dot" aria-hidden="true" />
           {(() => {
             const Icon = props.definition.icon;
             return <Icon class="w-3.5 h-3.5" />;
           })()}
           <span class="workbench-widget__title">{props.widgetTitle}</span>
         </div>
-        <div class="workbench-widget__actions">
+        <span class="workbench-widget__window-controls" role="group" aria-label="Window controls">
           <button
             type="button"
-            class="workbench-widget__focus"
-            aria-label="Focus widget"
-            title="Focus widget"
+            class="workbench-widget__window-control workbench-widget__window-control--max"
+            aria-label="Zoom widget to fit viewport"
+            title="Zoom widget to fit viewport"
             data-floe-canvas-interactive="true"
             data-redeven-workbench-widget-header-action="true"
             onPointerDown={(event) => event.stopPropagation()}
@@ -367,11 +369,11 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
               props.onFitWidget();
             }}
           >
-            <Maximize class="w-3 h-3" />
+            <Maximize class="workbench-widget__window-control-icon" aria-hidden="true" />
           </button>
           <button
             type="button"
-            class="workbench-widget__unfocus"
+            class="workbench-widget__window-control workbench-widget__window-control--min"
             aria-label="Show widget in overview"
             title="Show widget in overview"
             data-floe-canvas-interactive="true"
@@ -383,12 +385,13 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
               props.onOverviewWidget();
             }}
           >
-            <Minus class="w-3 h-3" />
+            <Minus class="workbench-widget__window-control-icon" aria-hidden="true" />
           </button>
           <button
             type="button"
-            class="workbench-widget__close"
+            class="workbench-widget__window-control workbench-widget__window-control--close"
             aria-label="Remove widget"
+            title="Remove widget"
             data-floe-canvas-interactive="true"
             data-redeven-workbench-widget-header-action="true"
             onPointerDown={(event) => event.stopPropagation()}
@@ -398,9 +401,9 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
               props.onRequestDelete(props.widgetId);
             }}
           >
-            <X class="w-3 h-3" />
+            <X class="workbench-widget__window-control-icon" aria-hidden="true" />
           </button>
-        </div>
+        </span>
       </header>
       <div class="workbench-widget__body" data-floe-canvas-interactive="true">
         {(() => {
