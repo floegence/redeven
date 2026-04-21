@@ -12,6 +12,12 @@ import { envWidgetTypeForSurface } from '../envViewMode';
 import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
+import {
+  connectWorkbenchLayoutEventStream,
+  getWorkbenchLayoutSnapshot,
+  putWorkbenchLayout,
+  WorkbenchLayoutConflictError,
+} from '../services/workbenchLayoutApi';
 import { RedevenWorkbenchSurface, type RedevenWorkbenchSurfaceApi } from './surface/RedevenWorkbenchSurface';
 import { redevenWorkbenchFilterBarWidgetTypes, redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
 import {
@@ -32,6 +38,19 @@ import {
   type WorkbenchOpenFilePreviewRequest,
   type WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
+import {
+  buildWorkbenchLocalStateStorageKey,
+  createEmptyRuntimeWorkbenchLayoutSnapshot,
+  derivePersistedWorkbenchLocalState,
+  extractRuntimeWorkbenchLayoutFromWorkbenchState,
+  projectWorkbenchStateFromRuntimeLayout,
+  runtimeWorkbenchLayoutIsEmpty,
+  runtimeWorkbenchLayoutWidgetsEqual,
+  samePersistedWorkbenchLocalState,
+  sanitizePersistedWorkbenchLocalState,
+  type PersistedWorkbenchLocalState,
+  type RuntimeWorkbenchLayoutSnapshot,
+} from './runtimeWorkbenchLayout';
 import type {
   WorkbenchAppearance,
   WorkbenchAppearanceTexture,
@@ -39,6 +58,8 @@ import type {
 } from './workbenchAppearance';
 
 const WORKBENCH_PERSIST_DELAY_MS = 120;
+const WORKBENCH_LAYOUT_SUBMIT_DELAY_MS = 180;
+const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
 const EMPTY_TERMINAL_PANEL_STATE: RedevenWorkbenchTerminalPanelState = {
   sessionIds: [],
   activeSessionId: null,
@@ -157,6 +178,17 @@ function readPersistedWorkbenchState(storageKey: string): WorkbenchState {
   );
 }
 
+function readPersistedWorkbenchLocalState(
+  storageKey: string,
+  legacyWorkbenchState: WorkbenchState,
+): PersistedWorkbenchLocalState {
+  return sanitizePersistedWorkbenchLocalState(
+    readUIStorageJSON(buildWorkbenchLocalStateStorageKey(storageKey), null),
+    legacyWorkbenchState,
+    redevenWorkbenchWidgets,
+  );
+}
+
 function readPersistedWorkbenchInstanceState(
   storageKey: string,
   workbenchState: WorkbenchState,
@@ -174,6 +206,16 @@ export interface EnvWorkbenchPageProps {
   onResetAppearance?: () => void;
 }
 
+function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = globalThis.setTimeout(resolve, timeoutMs);
+    signal.addEventListener('abort', () => {
+      globalThis.clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}
+
 export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   const env = useEnvContext();
   const storageKey = createMemo(() => resolveEnvAppStorageBinding({
@@ -181,29 +223,175 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     desktopStateStorageAvailable: isDesktopStateStorageAvailable(),
   }).workbenchStorageKey);
   const initialWorkbenchState = readPersistedWorkbenchState(storageKey());
+  const initialLocalState = readPersistedWorkbenchLocalState(storageKey(), initialWorkbenchState);
   const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>(initialWorkbenchState);
+  const [localState, setLocalState] = createSignal<PersistedWorkbenchLocalState>(initialLocalState);
   const [instanceState, setInstanceState] = createSignal<RedevenWorkbenchInstanceState>(
     readPersistedWorkbenchInstanceState(storageKey(), initialWorkbenchState),
   );
+  const [runtimeSnapshot, setRuntimeSnapshot] = createSignal<RuntimeWorkbenchLayoutSnapshot>(
+    createEmptyRuntimeWorkbenchLayoutSnapshot(),
+  );
+  const [runtimeLayoutReady, setRuntimeLayoutReady] = createSignal(false);
+  const [submitQueued, setSubmitQueued] = createSignal(false);
+  const [submitInFlight, setSubmitInFlight] = createSignal(false);
+  const [pendingRemoteSnapshot, setPendingRemoteSnapshot] = createSignal<RuntimeWorkbenchLayoutSnapshot | null>(null);
   const [surfaceApi, setSurfaceApi] = createSignal<RedevenWorkbenchSurfaceApi | null>(null);
   const [terminalOpenRequests, setTerminalOpenRequests] = createSignal<Record<string, WorkbenchOpenTerminalRequest>>({});
   const [fileBrowserOpenRequests, setFileBrowserOpenRequests] = createSignal<Record<string, WorkbenchOpenFileBrowserRequest>>({});
   const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
   const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
 
+  const applyRuntimeSnapshot = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
+    const current = runtimeSnapshot();
+    if (
+      snapshot.seq < current.seq
+      || (
+        snapshot.seq === current.seq
+        && snapshot.revision === current.revision
+        && runtimeWorkbenchLayoutWidgetsEqual(snapshot.widgets, current.widgets)
+      )
+    ) {
+      return;
+    }
+    setRuntimeSnapshot(snapshot);
+    setWorkbenchState((previous) => projectWorkbenchStateFromRuntimeLayout({
+      snapshot,
+      localState: localState(),
+      existingState: previous,
+      widgetDefinitions: redevenWorkbenchWidgets,
+    }));
+  };
+
   createEffect(() => {
-    const nextWorkbenchState = readPersistedWorkbenchState(storageKey());
-    setWorkbenchState(nextWorkbenchState);
-    setInstanceState(readPersistedWorkbenchInstanceState(storageKey(), nextWorkbenchState));
+    const key = storageKey();
+    const legacyWorkbenchState = readPersistedWorkbenchState(key);
+    const nextLocalState = readPersistedWorkbenchLocalState(key, legacyWorkbenchState);
+    setWorkbenchState(legacyWorkbenchState);
+    setLocalState(nextLocalState);
+    setRuntimeSnapshot(createEmptyRuntimeWorkbenchLayoutSnapshot());
+    setRuntimeLayoutReady(false);
+    setSubmitQueued(false);
+    setSubmitInFlight(false);
+    setPendingRemoteSnapshot(null);
+    setInstanceState(readPersistedWorkbenchInstanceState(key, legacyWorkbenchState));
     setTerminalOpenRequests({});
     setFileBrowserOpenRequests({});
     setPreviewOpenRequests({});
     setWidgetRemoveGuards({});
+
+    const abortController = new AbortController();
+
+    const startRuntimeLayoutStream = async (signal: AbortSignal) => {
+      let connectedOnce = false;
+
+      while (!signal.aborted) {
+        try {
+          await connectWorkbenchLayoutEventStream({
+            afterSeq: runtimeSnapshot().seq,
+            signal,
+            onEvent: (event) => {
+              const nextSnapshot = event.payload;
+              if (submitQueued() || submitInFlight()) {
+                setPendingRemoteSnapshot((previous) => {
+                  if (!previous || nextSnapshot.seq >= previous.seq) {
+                    return nextSnapshot;
+                  }
+                  return previous;
+                });
+                return;
+              }
+              applyRuntimeSnapshot(nextSnapshot);
+            },
+          });
+          if (signal.aborted) return;
+          connectedOnce = true;
+        } catch (error) {
+          if (signal.aborted) return;
+          if (connectedOnce || runtimeLayoutReady()) {
+            console.warn('Workbench layout event stream disconnected:', error);
+          }
+          connectedOnce = true;
+        }
+
+        await waitForAbortOrTimeout(signal, WORKBENCH_LAYOUT_RECONNECT_DELAY_MS);
+      }
+    };
+
+    const loadRuntimeLayout = async () => {
+      try {
+        let snapshot = await getWorkbenchLayoutSnapshot();
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        let nextLocal = nextLocalState;
+        if (!nextLocal.legacyLayoutMigrated) {
+          if (runtimeWorkbenchLayoutIsEmpty(snapshot)) {
+            const legacyLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(legacyWorkbenchState);
+            if (legacyLayout.widgets.length > 0) {
+              try {
+                snapshot = await putWorkbenchLayout({
+                  base_revision: snapshot.revision,
+                  widgets: legacyLayout.widgets,
+                });
+              } catch (error) {
+                if (error instanceof WorkbenchLayoutConflictError) {
+                  snapshot = await getWorkbenchLayoutSnapshot();
+                } else {
+                  throw error;
+                }
+              }
+            }
+          }
+
+          nextLocal = {
+            ...nextLocal,
+            legacyLayoutMigrated: true,
+          };
+          setLocalState(nextLocal);
+        }
+
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        setRuntimeSnapshot(snapshot);
+        setWorkbenchState((previous) => projectWorkbenchStateFromRuntimeLayout({
+          snapshot,
+          localState: nextLocal,
+          existingState: previous,
+          widgetDefinitions: redevenWorkbenchWidgets,
+        }));
+        setRuntimeLayoutReady(true);
+        void startRuntimeLayoutStream(abortController.signal);
+      } catch (error) {
+        if (abortController.signal.aborted) {
+          return;
+        }
+        console.warn('Failed to load runtime workbench layout:', error);
+        setRuntimeLayoutReady(true);
+      }
+    };
+
+    void loadRuntimeLayout();
+
+    onCleanup(() => {
+      abortController.abort();
+    });
   });
 
   createEffect(() => {
-    const key = storageKey();
-    const state = workbenchState();
+    const state = derivePersistedWorkbenchLocalState(
+      workbenchState(),
+      localState().legacyLayoutMigrated,
+    );
+    setLocalState((previous) => (samePersistedWorkbenchLocalState(previous, state) ? previous : state));
+  });
+
+  createEffect(() => {
+    const key = buildWorkbenchLocalStateStorageKey(storageKey());
+    const state = localState();
     if (!key) {
       return;
     }
@@ -215,6 +403,64 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     onCleanup(() => {
       window.clearTimeout(timer);
     });
+  });
+
+  createEffect(() => {
+    if (!runtimeLayoutReady()) {
+      return;
+    }
+
+    const desiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
+    const currentSnapshot = runtimeSnapshot();
+    if (runtimeWorkbenchLayoutWidgetsEqual(currentSnapshot.widgets, desiredLayout.widgets)) {
+      setSubmitQueued(false);
+      return;
+    }
+
+    setSubmitQueued(true);
+    const timer = window.setTimeout(async () => {
+      const nextDesiredLayout = extractRuntimeWorkbenchLayoutFromWorkbenchState(workbenchState());
+      if (runtimeWorkbenchLayoutWidgetsEqual(runtimeSnapshot().widgets, nextDesiredLayout.widgets)) {
+        setSubmitQueued(false);
+        return;
+      }
+
+      setSubmitInFlight(true);
+      try {
+        const nextSnapshot = await putWorkbenchLayout({
+          base_revision: runtimeSnapshot().revision,
+          widgets: nextDesiredLayout.widgets,
+        });
+        setRuntimeSnapshot(nextSnapshot);
+      } catch (error) {
+        if (error instanceof WorkbenchLayoutConflictError) {
+          try {
+            const latestSnapshot = await getWorkbenchLayoutSnapshot();
+            setRuntimeSnapshot(latestSnapshot);
+          } catch (refreshError) {
+            console.warn('Failed to refresh workbench layout after conflict:', refreshError);
+          }
+        } else {
+          console.warn('Failed to persist workbench layout:', error);
+        }
+      } finally {
+        setSubmitQueued(false);
+        setSubmitInFlight(false);
+      }
+    }, WORKBENCH_LAYOUT_SUBMIT_DELAY_MS);
+
+    onCleanup(() => {
+      window.clearTimeout(timer);
+    });
+  });
+
+  createEffect(() => {
+    const bufferedSnapshot = pendingRemoteSnapshot();
+    if (!bufferedSnapshot || submitQueued() || submitInFlight()) {
+      return;
+    }
+    setPendingRemoteSnapshot(null);
+    applyRuntimeSnapshot(bufferedSnapshot);
   });
 
   createEffect(() => {
@@ -681,7 +927,10 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
           onApiReady={setSurfaceApi}
           onRequestDelete={requestWidgetRemoval}
         />
-        <LoadingOverlay visible={env.connectionOverlayVisible()} message={env.connectionOverlayMessage()} />
+        <LoadingOverlay
+          visible={!runtimeLayoutReady() || env.connectionOverlayVisible()}
+          message={!runtimeLayoutReady() ? 'Loading workbench…' : env.connectionOverlayMessage()}
+        />
       </div>
     </EnvWorkbenchInstancesContext.Provider>
   );

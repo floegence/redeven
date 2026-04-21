@@ -37,6 +37,7 @@ import (
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/threadreadstate"
+	"github.com/floegence/redeven/internal/workbenchlayout"
 )
 
 type Options struct {
@@ -47,6 +48,7 @@ type Options struct {
 	PortForward             PortForwardBackend
 	AI                      *ai.Service
 	Notes                   *notes.Service
+	WorkbenchLayout         *workbenchlayout.Service
 	Codex                   CodexBackend
 	Audit                   *auditlog.Store
 	Diagnostics             *diagnostics.Store
@@ -145,6 +147,7 @@ type Gateway struct {
 	pf      PortForwardBackend
 	ai      *ai.Service
 	notes   *notes.Service
+	layouts *workbenchlayout.Service
 	codex   CodexBackend
 	audit   *auditlog.Store
 	diag    *diagnostics.Store
@@ -259,6 +262,7 @@ func New(opts Options) (*Gateway, error) {
 		pf:                      opts.PortForward,
 		ai:                      opts.AI,
 		notes:                   opts.Notes,
+		layouts:                 opts.WorkbenchLayout,
 		codex:                   opts.Codex,
 		audit:                   opts.Audit,
 		diag:                    opts.Diagnostics,
@@ -1193,6 +1197,9 @@ func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, 
 }
 
 func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
+	if g.handleWorkbenchLayoutAPI(w, r) {
+		return
+	}
 	if g.handleNotesAPI(w, r) {
 		return
 	}

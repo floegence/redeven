@@ -27,6 +27,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/threadreadstate"
+	"github.com/floegence/redeven/internal/workbenchlayout"
 )
 
 const (
@@ -79,6 +80,7 @@ type Service struct {
 	runner  *codeserver.Runner
 	runtime *codeserver.RuntimeManager
 	notes   *notes.Service
+	layouts *workbenchlayout.Service
 	ai      *ai.Service
 	codex   *codexbridge.Manager
 	reads   *threadreadstate.Store
@@ -240,6 +242,17 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
+	workbenchLayoutPath := filepath.Join(stateAbs, "apps", "workbench", "layout.sqlite")
+	workbenchLayoutSvc, err := workbenchlayout.Open(workbenchLayoutPath)
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = notesSvc.Close()
+		_ = aiSvc.Close()
+		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
+		return nil, err
+	}
 
 	gw, err := gateway.New(gateway.Options{
 		Logger:                  logger,
@@ -248,6 +261,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		PortForward:             pfSvc,
 		AI:                      aiSvc,
 		Notes:                   notesSvc,
+		WorkbenchLayout:         workbenchLayoutSvc,
 		Codex:                   codexSvc,
 		Audit:                   opts.Audit,
 		Diagnostics:             opts.Diagnostics,
@@ -262,6 +276,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
+		_ = workbenchLayoutSvc.Close()
 		_ = aiSvc.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
@@ -271,6 +286,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
+		_ = workbenchLayoutSvc.Close()
 		_ = aiSvc.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
@@ -278,6 +294,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 	svc.gw = gw
 	svc.notes = notesSvc
+	svc.layouts = workbenchLayoutSvc
 	svc.ai = aiSvc
 	svc.codex = codexSvc
 	svc.reads = threadReadStateStore
@@ -303,6 +320,9 @@ func (s *Service) Close() error {
 	}
 	if s.notes != nil {
 		_ = s.notes.Close()
+	}
+	if s.layouts != nil {
+		_ = s.layouts.Close()
 	}
 	if s.ai != nil {
 		_ = s.ai.Close()
