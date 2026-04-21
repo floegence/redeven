@@ -71,6 +71,8 @@ export interface RedevenWorkbenchWidgetProps {
   onFitWidget: () => void;
   onOverviewWidget: () => void;
   onRequestDelete: (widgetId: string) => void;
+  onLayoutInteractionStart?: () => void;
+  onLayoutInteractionEnd?: () => void;
 }
 
 export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
@@ -79,6 +81,20 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
   let dragAbortController: AbortController | undefined;
   let resizeAbortController: AbortController | undefined;
   let widgetRootEl: HTMLElement | undefined;
+
+  const startTrackedLayoutInteraction = (kind: 'drag' | 'resize', cursor: string) => {
+    const stopHotInteraction = startWorkbenchHotInteraction({ kind, cursor });
+    let stopped = false;
+    props.onLayoutInteractionStart?.();
+    return () => {
+      if (stopped) {
+        return;
+      }
+      stopped = true;
+      stopHotInteraction();
+      props.onLayoutInteractionEnd?.();
+    };
+  };
 
   onCleanup(() => {
     dragAbortController?.abort();
@@ -166,7 +182,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     dragAbortController?.abort();
     props.onStartOptimisticFront(props.widgetId);
 
-    const stopInteraction = startWorkbenchHotInteraction({ kind: 'drag', cursor: 'grabbing' });
+    const stopInteraction = startTrackedLayoutInteraction('drag', 'grabbing');
     const scale = Math.max(props.viewportScale, 0.001);
 
     setDragState({
@@ -246,7 +262,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     resizeAbortController?.abort();
     props.onStartOptimisticFront(props.widgetId);
 
-    const stopInteraction = startWorkbenchHotInteraction({ kind: 'drag', cursor: 'nwse-resize' });
+    const stopInteraction = startTrackedLayoutInteraction('resize', 'nwse-resize');
     const scale = Math.max(props.viewportScale, 0.001);
 
     setResizeState({

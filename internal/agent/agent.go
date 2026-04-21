@@ -265,6 +265,7 @@ func New(opts Options) (*Agent, error) {
 		AIConfig:            opts.Config.AI,
 		Audit:               auditStore,
 		Diagnostics:         a.diag,
+		Terminal:            a.term,
 		LocalUIEnabled:      a.localUIEnabled,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if a == nil {

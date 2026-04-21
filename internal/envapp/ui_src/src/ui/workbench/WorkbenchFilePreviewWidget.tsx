@@ -1,7 +1,8 @@
-import { createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import type { WorkbenchWidgetBodyProps } from '@floegence/floe-webapp-core/workbench';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
+import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
@@ -13,6 +14,14 @@ import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext'
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function previewItemKey(item: { path?: string; name?: string; size?: number } | null | undefined): string {
+  return [
+    compact(item?.path),
+    compact(item?.name),
+    typeof item?.size === 'number' ? String(item.size) : '',
+  ].join('\u0000');
 }
 
 export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
@@ -33,7 +42,9 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     },
   });
   const [hydratedPath, setHydratedPath] = createSignal('');
+  const [dismissedSyncedPreviewKey, setDismissedSyncedPreviewKey] = createSignal('');
   const [pendingWidgetRemoval, setPendingWidgetRemoval] = createSignal(false);
+  const pendingSyncedItem = () => workbench.pendingSyncedPreviewItem(props.widgetId);
 
   const handleCopyPath = async (): Promise<boolean> => {
     const path = compact(controller.item()?.path);
@@ -84,24 +95,51 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     if (!item) {
       return;
     }
+    if (item.type !== 'file') {
+      return;
+    }
     const previewPath = compact(item?.path);
     if (!previewPath || previewPath === hydratedPath()) {
       return;
     }
+    const syncedItem = {
+      id: compact(item.id) || previewPath,
+      type: 'file' as const,
+      path: previewPath,
+      name: compact(item.name) || previewPath,
+      ...(typeof item.size === 'number' ? { size: item.size } : {}),
+    };
     if (controller.open() && compact(controller.item()?.path) === previewPath) {
       setHydratedPath(previewPath);
+      setDismissedSyncedPreviewKey('');
+      workbench.setPendingSyncedPreviewItem(props.widgetId, null);
       return;
     }
+    const nextKey = previewItemKey(syncedItem);
+    if (controller.dirty()) {
+      if (dismissedSyncedPreviewKey() !== nextKey) {
+        workbench.setPendingSyncedPreviewItem(props.widgetId, syncedItem);
+      }
+      return;
+    }
+    setDismissedSyncedPreviewKey('');
+    workbench.setPendingSyncedPreviewItem(props.widgetId, null);
     setHydratedPath(previewPath);
-    void controller.openPreview(item);
+    void controller.openPreview(syncedItem);
   });
 
   createEffect(() => {
     const item = controller.item();
-    if (!item) {
+    if (!item || item.type !== 'file') {
+      workbench.updatePreviewItem(props.widgetId, null);
       return;
     }
     workbench.updatePreviewItem(props.widgetId, item);
+    const pendingItem = pendingSyncedItem();
+    if (pendingItem && compact(pendingItem.path) === compact(item.path)) {
+      workbench.setPendingSyncedPreviewItem(props.widgetId, null);
+      setDismissedSyncedPreviewKey('');
+    }
   });
 
   createEffect(() => {
@@ -136,7 +174,43 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   });
 
   return (
-    <div class="h-full min-h-0 overflow-hidden bg-background">
+    <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <Show when={pendingSyncedItem()}>
+        {(item) => (
+          <div class="shrink-0 border-b border-warning/25 bg-warning/10 px-3 py-2 text-xs text-foreground">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div class="min-w-0">
+                <span class="font-semibold text-warning">Synced preview pending</span>
+                <span class="ml-2 text-muted-foreground">
+                  Another window opened {item().name || item().path}. Keep your draft or switch explicitly.
+                </span>
+              </div>
+              <div class="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void controller.openPreview(item());
+                  }}
+                >
+                  Open synced file
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setDismissedSyncedPreviewKey(previewItemKey(item()));
+                    workbench.setPendingSyncedPreviewItem(props.widgetId, null);
+                  }}
+                >
+                  Keep current draft
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Show>
+      <div class="min-h-0 flex-1 overflow-hidden">
       <FilePreviewPanel
         item={controller.item()}
         descriptor={controller.descriptor()}
@@ -176,6 +250,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
         onAskFlower={handleAskFlower}
         closeConfirmVariant="dialog"
       />
+      </div>
     </div>
   );
 }

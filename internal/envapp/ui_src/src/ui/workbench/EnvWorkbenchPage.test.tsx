@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { createSignal } from 'solid-js';
+import { createEffect, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvWorkbenchPage } from './EnvWorkbenchPage';
+import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 
 const storageMocks = vi.hoisted(() => ({
   isDesktopStateStorageAvailable: vi.fn(() => false),
@@ -18,12 +19,51 @@ const layoutApiMocks = vi.hoisted(() => ({
     revision: 0,
     updated_at_unix_ms: 0,
     widgets: [] as any[],
+    widget_states: [] as any[],
   })),
   putWorkbenchLayout: vi.fn(async (input: any): Promise<any> => ({
     seq: Math.max(1, Number(input?.base_revision ?? 0) + 1),
     revision: Math.max(1, Number(input?.base_revision ?? 0) + 1),
     updated_at_unix_ms: 200,
     widgets: (input?.widgets ?? []) as any[],
+    widget_states: [] as any[],
+  })),
+  putWorkbenchWidgetState: vi.fn(async (widgetId: string, input: any): Promise<any> => ({
+    widget_id: widgetId,
+    widget_type: input?.widget_type,
+    revision: Math.max(1, Number(input?.base_revision ?? 0) + 1),
+    updated_at_unix_ms: 300,
+    state: input?.state,
+  })),
+  createWorkbenchTerminalSession: vi.fn(async (widgetId: string): Promise<any> => ({
+    session: {
+      id: 'session-created',
+      name: 'repo',
+      working_dir: '/workspace',
+      created_at_ms: 1,
+      last_active_at_ms: 1,
+      is_active: false,
+    },
+    widget_state: {
+      widget_id: widgetId,
+      widget_type: 'redeven.terminal',
+      revision: 2,
+      updated_at_unix_ms: 301,
+      state: {
+        kind: 'terminal',
+        session_ids: ['session-1', 'session-created'],
+      },
+    },
+  })),
+  deleteWorkbenchTerminalSession: vi.fn(async (widgetId: string): Promise<any> => ({
+    widget_id: widgetId,
+    widget_type: 'redeven.terminal',
+    revision: 2,
+    updated_at_unix_ms: 302,
+    state: {
+      kind: 'terminal',
+      session_ids: [],
+    },
   })),
   connectWorkbenchLayoutEventStream: vi.fn(async (args: any) => {
     layoutApiMocks.lastStreamArgs = args;
@@ -47,6 +87,7 @@ const surfaceApiMocks = vi.hoisted(() => ({
   lastWidgetDefinitions: null as any,
   lastStateAccessor: null as any,
   lastSetState: null as any,
+  lastSurfaceProps: null as any,
 }));
 
 const stableSurfaceApi = vi.hoisted(() => ({
@@ -64,6 +105,18 @@ const stableSurfaceApi = vi.hoisted(() => ({
 const contextMocks = vi.hoisted(() => ({
   consumeWorkbenchSurfaceActivation: vi.fn(),
   consumeWorkbenchFilePreviewActivation: vi.fn(),
+}));
+
+const widgetBodyMocks = vi.hoisted(() => ({
+  renderFilesBody: null as null | ((props: any) => any),
+  renderTerminalBody: null as null | ((props: any) => any),
+  renderPreviewBody: null as null | ((props: any) => any),
+}));
+
+const contextProbeState = vi.hoisted(() => ({
+  fileOpenRequest: null as any,
+  terminalPanelState: null as any,
+  previewItem: null as any,
 }));
 
 const [envId, setEnvId] = createSignal('env-123');
@@ -125,6 +178,9 @@ vi.mock('../services/uiStorage', () => ({
 vi.mock('../services/workbenchLayoutApi', () => ({
   getWorkbenchLayoutSnapshot: layoutApiMocks.getWorkbenchLayoutSnapshot,
   putWorkbenchLayout: layoutApiMocks.putWorkbenchLayout,
+  putWorkbenchWidgetState: layoutApiMocks.putWorkbenchWidgetState,
+  createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
+  deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
   connectWorkbenchLayoutEventStream: layoutApiMocks.connectWorkbenchLayoutEventStream,
   WorkbenchLayoutConflictError: class WorkbenchLayoutConflictError extends Error {
     currentRevision: number;
@@ -132,6 +188,17 @@ vi.mock('../services/workbenchLayoutApi', () => ({
     constructor(message: string, currentRevision: number) {
       super(message);
       this.name = 'WorkbenchLayoutConflictError';
+      this.currentRevision = currentRevision;
+    }
+  },
+  WorkbenchWidgetStateConflictError: class WorkbenchWidgetStateConflictError extends Error {
+    widgetId: string;
+    currentRevision: number;
+
+    constructor(message: string, widgetId: string, currentRevision: number) {
+      super(message);
+      this.name = 'WorkbenchWidgetStateConflictError';
+      this.widgetId = widgetId;
       this.currentRevision = currentRevision;
     }
   },
@@ -143,7 +210,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       type: 'redeven.terminal',
       label: 'Terminal',
       icon: () => null,
-      body: () => null,
+      body: (props: any) => widgetBodyMocks.renderTerminalBody?.(props) ?? null,
       defaultTitle: 'Terminal',
       defaultSize: { width: 800, height: 480 },
       singleton: false,
@@ -152,7 +219,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       type: 'redeven.files',
       label: 'Files',
       icon: () => null,
-      body: () => null,
+      body: (props: any) => widgetBodyMocks.renderFilesBody?.(props) ?? null,
       defaultTitle: 'Files',
       defaultSize: { width: 720, height: 520 },
       singleton: false,
@@ -161,7 +228,7 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       type: 'redeven.preview',
       label: 'Preview',
       icon: () => null,
-      body: () => null,
+      body: (props: any) => widgetBodyMocks.renderPreviewBody?.(props) ?? null,
       defaultTitle: 'Preview',
       defaultSize: { width: 900, height: 620 },
       singleton: false,
@@ -199,6 +266,7 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
     surfaceApiMocks.lastWidgetDefinitions = props.widgetDefinitions;
     surfaceApiMocks.lastStateAccessor = props.state;
     surfaceApiMocks.lastSetState = props.setState;
+    surfaceApiMocks.lastSurfaceProps = props;
     props.onApiReady?.(stableSurfaceApi);
     return (
       <div
@@ -206,7 +274,17 @@ vi.mock('./surface/RedevenWorkbenchSurface', () => ({
         data-widget-ids={props.state().widgets.map((widget: any) => widget.id).join(',')}
         data-viewport-x={String(props.state().viewport.x)}
         data-widget-x={String(props.state().widgets[0]?.x ?? '')}
-      />
+      >
+        {props.state().widgets.map((widget: any) => {
+          const definition = props.widgetDefinitions.find((entry: any) => entry.type === widget.type);
+          const Body = definition?.body;
+          return Body ? (
+            <div data-testid={`widget-body-${widget.id}`}>
+              <Body widgetId={widget.id} title={widget.title} type={widget.type} />
+            </div>
+          ) : null;
+        })}
+      </div>
     );
   },
 }));
@@ -229,6 +307,7 @@ describe('EnvWorkbenchPage', () => {
       revision: 0,
       updated_at_unix_ms: 0,
       widgets: [],
+      widget_states: [],
     });
     layoutApiMocks.putWorkbenchLayout.mockReset();
     layoutApiMocks.putWorkbenchLayout.mockImplementation(async (input: any) => ({
@@ -236,7 +315,18 @@ describe('EnvWorkbenchPage', () => {
       revision: Math.max(1, Number(input?.base_revision ?? 0) + 1),
       updated_at_unix_ms: 200,
       widgets: input?.widgets ?? [],
+      widget_states: [],
     }));
+    layoutApiMocks.putWorkbenchWidgetState.mockReset();
+    layoutApiMocks.putWorkbenchWidgetState.mockImplementation(async (widgetId: string, input: any) => ({
+      widget_id: widgetId,
+      widget_type: input?.widget_type,
+      revision: Math.max(1, Number(input?.base_revision ?? 0) + 1),
+      updated_at_unix_ms: 300,
+      state: input?.state,
+    }));
+    layoutApiMocks.createWorkbenchTerminalSession.mockClear();
+    layoutApiMocks.deleteWorkbenchTerminalSession.mockClear();
     layoutApiMocks.connectWorkbenchLayoutEventStream.mockReset();
     layoutApiMocks.connectWorkbenchLayoutEventStream.mockImplementation(async (args: any) => {
       layoutApiMocks.lastStreamArgs = args;
@@ -256,8 +346,15 @@ describe('EnvWorkbenchPage', () => {
     surfaceApiMocks.lastWidgetDefinitions = null;
     surfaceApiMocks.lastStateAccessor = null;
     surfaceApiMocks.lastSetState = null;
+    surfaceApiMocks.lastSurfaceProps = null;
     contextMocks.consumeWorkbenchSurfaceActivation.mockReset();
     contextMocks.consumeWorkbenchFilePreviewActivation.mockReset();
+    widgetBodyMocks.renderFilesBody = null;
+    widgetBodyMocks.renderTerminalBody = null;
+    widgetBodyMocks.renderPreviewBody = null;
+    contextProbeState.fileOpenRequest = null;
+    contextProbeState.terminalPanelState = null;
+    contextProbeState.previewItem = null;
   });
 
   afterEach(() => {
@@ -286,6 +383,7 @@ describe('EnvWorkbenchPage', () => {
           created_at_unix_ms: 123,
         },
       ],
+      widget_states: [],
     });
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
       if (key === 'workbench:env-123') {
@@ -373,6 +471,7 @@ describe('EnvWorkbenchPage', () => {
           created_at_unix_ms: 123,
         },
       ],
+      widget_states: [],
     });
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
       if (key === 'workbench:env-123') {
@@ -415,6 +514,7 @@ describe('EnvWorkbenchPage', () => {
             created_at_unix_ms: 123,
           },
         ],
+        widget_states: [],
       },
     });
     await flushMicrotasks();
@@ -444,6 +544,7 @@ describe('EnvWorkbenchPage', () => {
           created_at_unix_ms: 123,
         },
       ],
+      widget_states: [],
     });
 
     const putDeferred = deferred<any>();
@@ -482,6 +583,7 @@ describe('EnvWorkbenchPage', () => {
             created_at_unix_ms: 123,
           },
         ],
+        widget_states: [],
       },
     });
     await flushMicrotasks();
@@ -526,11 +628,318 @@ describe('EnvWorkbenchPage', () => {
           created_at_unix_ms: 123,
         },
       ],
+      widget_states: [],
     });
     await flushMicrotasks();
 
     surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
     expect(surface.dataset.widgetX).toBe('540');
+  });
+
+  it('defers layout persistence during active widget interactions and flushes once at the end', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [],
+    });
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionStart();
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      widgets: previous.widgets.map((widget: any) => (
+        widget.id === 'widget-files-1'
+          ? { ...widget, x: 700 }
+          : widget
+      )),
+    }));
+    await flushMicrotasks();
+    vi.runOnlyPendingTimers();
+    await flushMicrotasks();
+
+    expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalled();
+
+    surfaceApiMocks.lastSurfaceProps.onLayoutInteractionEnd();
+    await flushMicrotasks();
+    vi.runOnlyPendingTimers();
+    await flushMicrotasks();
+
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.putWorkbenchLayout).toHaveBeenCalledWith({
+      base_revision: 1,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 700,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+    });
+  });
+
+  it('applies shared file paths and persists only committed path changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 2,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          revision: 1,
+          updated_at_unix_ms: 120,
+          state: {
+            kind: 'files',
+            current_path: '/workspace/src',
+          },
+        },
+      ],
+    });
+    widgetBodyMocks.renderFilesBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        contextProbeState.fileOpenRequest = workbench.fileBrowserOpenRequest(bodyProps.widgetId);
+      });
+      return (
+        <button
+          type="button"
+          data-testid="commit-files-path"
+          onClick={() => workbench.updateFileBrowserPath(bodyProps.widgetId, '/workspace/app')}
+        >
+          Commit path
+        </button>
+      );
+    };
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(contextProbeState.fileOpenRequest).toMatchObject({
+      widgetId: 'widget-files-1',
+      path: '/workspace/src',
+    });
+
+    (host.querySelector('[data-testid="commit-files-path"]') as HTMLButtonElement).click();
+    await flushMicrotasks();
+
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledWith('widget-files-1', {
+      base_revision: 1,
+      widget_type: 'redeven.files',
+      state: {
+        kind: 'files',
+        current_path: '/workspace/app',
+      },
+    });
+  });
+
+  it('applies shared terminal session lists while keeping the active tab local', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 2,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          revision: 1,
+          updated_at_unix_ms: 120,
+          state: {
+            kind: 'terminal',
+            session_ids: ['session-1', 'session-2'],
+          },
+        },
+      ],
+    });
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:env-123:instances') {
+        return {
+          version: 2,
+          latestWidgetIdByType: {},
+          terminalPanelsByWidgetId: {
+            'widget-terminal-1': {
+              sessionIds: ['session-1'],
+              activeSessionId: 'session-1',
+            },
+          },
+          previewItemsByWidgetId: {},
+        };
+      }
+      return null;
+    }) as any);
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        contextProbeState.terminalPanelState = workbench.terminalPanelState(bodyProps.widgetId);
+      });
+      return null;
+    };
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(contextProbeState.terminalPanelState).toEqual({
+      sessionIds: ['session-1', 'session-2'],
+      activeSessionId: 'session-1',
+    });
+
+    layoutApiMocks.lastStreamArgs.onEvent({
+      seq: 3,
+      type: 'widget_state.upserted',
+      created_at_unix_ms: 130,
+      payload: {
+        widget_id: 'widget-terminal-1',
+        widget_type: 'redeven.terminal',
+        revision: 2,
+        updated_at_unix_ms: 130,
+        state: {
+          kind: 'terminal',
+          session_ids: ['session-1', 'session-2', 'session-3'],
+        },
+      },
+    });
+    await flushMicrotasks();
+
+    expect(contextProbeState.terminalPanelState).toEqual({
+      sessionIds: ['session-1', 'session-2', 'session-3'],
+      activeSessionId: 'session-1',
+    });
+  });
+
+  it('applies shared preview items without changing layout state', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 2,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-preview-1',
+          widget_type: 'redeven.preview',
+          x: 320,
+          y: 180,
+          width: 760,
+          height: 560,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [
+        {
+          widget_id: 'widget-preview-1',
+          widget_type: 'redeven.preview',
+          revision: 1,
+          updated_at_unix_ms: 120,
+          state: {
+            kind: 'preview',
+            item: {
+              id: '/workspace/demo.txt',
+              type: 'file',
+              path: '/workspace/demo.txt',
+              name: 'demo.txt',
+              size: 12,
+            },
+          },
+        },
+      ],
+    });
+    widgetBodyMocks.renderPreviewBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        contextProbeState.previewItem = workbench.previewItem(bodyProps.widgetId);
+      });
+      return null;
+    };
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(contextProbeState.previewItem).toMatchObject({
+      path: '/workspace/demo.txt',
+      name: 'demo.txt',
+    });
+
+    layoutApiMocks.lastStreamArgs.onEvent({
+      seq: 3,
+      type: 'widget_state.upserted',
+      created_at_unix_ms: 130,
+      payload: {
+        widget_id: 'widget-preview-1',
+        widget_type: 'redeven.preview',
+        revision: 2,
+        updated_at_unix_ms: 130,
+        state: {
+          kind: 'preview',
+          item: {
+            id: '/workspace/other.txt',
+            type: 'file',
+            path: '/workspace/other.txt',
+            name: 'other.txt',
+          },
+        },
+      },
+    });
+    await flushMicrotasks();
+
+    expect(contextProbeState.previewItem).toMatchObject({
+      path: '/workspace/other.txt',
+      name: 'other.txt',
+    });
+    expect((host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement).dataset.widgetX).toBe('320');
   });
 
   it('routes workbench preview activation requests through the preview widget lifecycle', async () => {

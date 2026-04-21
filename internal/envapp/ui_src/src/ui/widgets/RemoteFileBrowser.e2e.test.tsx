@@ -1193,6 +1193,79 @@ afterEach(() => {
 });
 
 describe('RemoteFileBrowser persistence', () => {
+  it('reports committed path changes only after successful directory navigation', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    let setOpenPathRequest!: (request: {
+      requestId: string;
+      path: string;
+      homePath?: string;
+      title?: string;
+    } | null) => void;
+    const onCommittedPathChange = vi.fn();
+    const onOpenPathRequestHandled = vi.fn();
+
+    const dispose = render(() => {
+      const [openPathRequest, nextOpenPathRequest] = createSignal<{
+        requestId: string;
+        path: string;
+        homePath?: string;
+        title?: string;
+      } | null>(null);
+      setOpenPathRequest = nextOpenPathRequest;
+
+      return (
+        <LayoutProvider>
+          <EnvContext.Provider value={createEnvContext()}>
+            <RemoteFileBrowser
+              widgetId="widget-1"
+              openPathRequest={openPathRequest()}
+              onOpenPathRequestHandled={onOpenPathRequestHandled}
+              onCommittedPathChange={onCommittedPathChange}
+            />
+          </EnvContext.Provider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      onCommittedPathChange.mockClear();
+      onOpenPathRequestHandled.mockClear();
+
+      setOpenPathRequest({
+        requestId: 'open-docs',
+        path: '/workspace/repo/docs',
+        homePath: '/workspace',
+      });
+      await flush();
+
+      expect(onOpenPathRequestHandled).toHaveBeenCalledWith('open-docs');
+      expect(onCommittedPathChange).toHaveBeenCalledTimes(1);
+      expect(onCommittedPathChange).toHaveBeenCalledWith('/workspace/repo/docs');
+
+      setOpenPathRequest({
+        requestId: 'reload-docs',
+        path: '/workspace/repo/docs',
+        homePath: '/workspace',
+      });
+      await flush();
+
+      expect(onOpenPathRequestHandled).toHaveBeenCalledWith('reload-docs');
+      expect(onCommittedPathChange).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
   it('restores the persisted git mode, subview, and directory on mount', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

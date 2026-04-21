@@ -70,6 +70,11 @@ export type TerminalPanelSessionGroupState = Readonly<{
   activeSessionId: string | null;
 }>;
 
+export type TerminalPanelSessionOperations = Readonly<{
+  createSession: (name: string | undefined, workingDir: string) => Promise<string | null>;
+  deleteSession: (sessionId: string) => Promise<void>;
+}>;
+
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
   openSessionRequest?: {
@@ -81,6 +86,7 @@ export interface TerminalPanelProps {
   onOpenSessionRequestHandled?: (requestId: string) => void;
   sessionGroupState?: TerminalPanelSessionGroupState;
   onSessionGroupStateChange?: (next: TerminalPanelSessionGroupState) => void;
+  sessionOperations?: TerminalPanelSessionOperations;
   onTitleChange?: (title: string) => void;
 }
 
@@ -1610,16 +1616,28 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
+  const createPanelSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
+    const normalizedWorkingDir = normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '';
+    if (props.sessionOperations) {
+      const sessionId = await props.sessionOperations.createSession(name, normalizedWorkingDir);
+      await sessionsCoordinator.refresh();
+      return String(sessionId ?? '').trim() || null;
+    }
+
+    const session = await sessionsCoordinator.createSession(String(name ?? '').trim(), normalizedWorkingDir);
+    return String(session?.id ?? '').trim() || null;
+  };
+
   const createSession = async () => {
     if (!connected()) return;
     setCreating(true);
     setError(null);
     try {
       const nextIndex = (sessions()?.length ?? 0) + 1;
-      const session = await sessionsCoordinator.createSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '');
-      if (!session?.id) throw new Error('Invalid create response');
+      const sessionId = await createPanelSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '');
+      if (!sessionId) throw new Error('Invalid create response');
 
-      activateSession(session.id);
+      activateSession(sessionId);
     } catch (e) {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
@@ -1652,12 +1670,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       setError(null);
       try {
         const nextIndex = (sessions()?.length ?? 0) + 1;
-        const session = await sessionsCoordinator.createSession(
+        const sessionId = await createPanelSession(
           resolveRequestedSessionName(request?.preferredName, workingDir, nextIndex),
           workingDir,
         );
-        if (!session?.id) throw new Error('Invalid create response');
-        activateSession(session.id);
+        if (!sessionId) throw new Error('Invalid create response');
+        activateSession(sessionId);
       } catch (e) {
         if (handleExecuteDenied(e)) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -1735,7 +1753,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const closeSession = (id: string) => {
     void (async () => {
       try {
-        await sessionsCoordinator.deleteSession(id);
+        if (props.sessionOperations) {
+          await props.sessionOperations.deleteSession(id);
+          await sessionsCoordinator.refresh();
+        } else {
+          await sessionsCoordinator.deleteSession(id);
+        }
       } catch (e) {
         if (handleExecuteDenied(e)) return;
         setError(e instanceof Error ? e.message : String(e));

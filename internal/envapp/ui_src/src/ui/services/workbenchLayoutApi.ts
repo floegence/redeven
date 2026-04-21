@@ -2,9 +2,14 @@ import { prepareGatewayRequestInit } from './gatewayApi';
 import {
   normalizeRuntimeWorkbenchLayoutEvent,
   normalizeRuntimeWorkbenchLayoutSnapshot,
+  normalizeRuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchLayoutEvent,
   type RuntimeWorkbenchLayoutPutRequest,
   type RuntimeWorkbenchLayoutSnapshot,
+  type RuntimeWorkbenchTerminalCreateSessionRequest,
+  type RuntimeWorkbenchTerminalCreateSessionResponse,
+  type RuntimeWorkbenchWidgetState,
+  type RuntimeWorkbenchWidgetStatePutRequest,
 } from '../workbench/runtimeWorkbenchLayout';
 
 export class WorkbenchLayoutConflictError extends Error {
@@ -13,6 +18,18 @@ export class WorkbenchLayoutConflictError extends Error {
   constructor(message: string, currentRevision: number) {
     super(message);
     this.name = 'WorkbenchLayoutConflictError';
+    this.currentRevision = currentRevision;
+  }
+}
+
+export class WorkbenchWidgetStateConflictError extends Error {
+  widgetId: string;
+  currentRevision: number;
+
+  constructor(message: string, widgetId: string, currentRevision: number) {
+    super(message);
+    this.name = 'WorkbenchWidgetStateConflictError';
+    this.widgetId = widgetId;
     this.currentRevision = currentRevision;
   }
 }
@@ -44,6 +61,13 @@ async function fetchWorkbenchLayoutJSON<T>(url: string, init: RequestInit): Prom
     if (errorCode === 'WORKBENCH_LAYOUT_REVISION_CONFLICT') {
       throw new WorkbenchLayoutConflictError(message, Number(data?.data?.current_revision ?? 0));
     }
+    if (errorCode === 'WORKBENCH_WIDGET_STATE_REVISION_CONFLICT') {
+      throw new WorkbenchWidgetStateConflictError(
+        message,
+        String(data?.data?.widget_id ?? '').trim(),
+        Number(data?.data?.current_revision ?? 0),
+      );
+    }
     throw new Error(message);
   }
   return (data?.data ?? data) as T;
@@ -64,6 +88,73 @@ export async function putWorkbenchLayout(
       body: JSON.stringify(input),
     }),
   );
+}
+
+export async function putWorkbenchWidgetState(
+  widgetId: string,
+  input: RuntimeWorkbenchWidgetStatePutRequest,
+): Promise<RuntimeWorkbenchWidgetState> {
+  const state = normalizeRuntimeWorkbenchWidgetState(
+    await fetchWorkbenchLayoutJSON(
+      `/_redeven_proxy/api/workbench/widgets/${encodeURIComponent(String(widgetId ?? '').trim())}/state`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(input),
+      },
+    ),
+  );
+  if (!state) {
+    throw new Error('Invalid workbench widget state response');
+  }
+  return state;
+}
+
+export async function createWorkbenchTerminalSession(
+  widgetId: string,
+  input: RuntimeWorkbenchTerminalCreateSessionRequest,
+): Promise<RuntimeWorkbenchTerminalCreateSessionResponse> {
+  const data = await fetchWorkbenchLayoutJSON<any>(
+    `/_redeven_proxy/api/workbench/widgets/${encodeURIComponent(String(widgetId ?? '').trim())}/terminal/sessions`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+  );
+  const widgetState = normalizeRuntimeWorkbenchWidgetState(data?.widget_state);
+  if (!widgetState) {
+    throw new Error('Invalid workbench terminal session response');
+  }
+  const sessionId = String(data?.session?.id ?? '').trim();
+  if (!sessionId) {
+    throw new Error('Invalid workbench terminal session response');
+  }
+  return {
+    session: {
+      id: sessionId,
+      name: String(data?.session?.name ?? '').trim(),
+      working_dir: String(data?.session?.working_dir ?? '').trim(),
+      created_at_ms: Number(data?.session?.created_at_ms ?? 0),
+      last_active_at_ms: Number(data?.session?.last_active_at_ms ?? 0),
+      is_active: Boolean(data?.session?.is_active),
+    },
+    widget_state: widgetState,
+  };
+}
+
+export async function deleteWorkbenchTerminalSession(
+  widgetId: string,
+  sessionId: string,
+): Promise<RuntimeWorkbenchWidgetState> {
+  const state = normalizeRuntimeWorkbenchWidgetState(
+    await fetchWorkbenchLayoutJSON(
+      `/_redeven_proxy/api/workbench/widgets/${encodeURIComponent(String(widgetId ?? '').trim())}/terminal/sessions/${encodeURIComponent(String(sessionId ?? '').trim())}`,
+      { method: 'DELETE' },
+    ),
+  );
+  if (!state) {
+    throw new Error('Invalid workbench widget state response');
+  }
+  return state;
 }
 
 export async function connectWorkbenchLayoutEventStream(args: {

@@ -5,17 +5,29 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 )
 
-const workbenchLayoutConflictErrorCode = "WORKBENCH_LAYOUT_REVISION_CONFLICT"
+const (
+	workbenchLayoutConflictErrorCode      = "WORKBENCH_LAYOUT_REVISION_CONFLICT"
+	workbenchWidgetStateConflictErrorCode = "WORKBENCH_WIDGET_STATE_REVISION_CONFLICT"
+	workbenchWidgetNotFoundErrorCode      = "WORKBENCH_WIDGET_NOT_FOUND"
+	workbenchWidgetTypeMismatchErrorCode  = "WORKBENCH_WIDGET_TYPE_MISMATCH"
+)
+
+type workbenchTerminalSessionCreateRequest struct {
+	Name       string `json:"name,omitempty"`
+	WorkingDir string `json:"working_dir,omitempty"`
+}
 
 func (g *Gateway) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Request) bool {
-	if r == nil || !strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/_redeven_proxy/api/workbench/layout") {
+	if r == nil || !strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/_redeven_proxy/api/workbench/") {
 		return false
 	}
 	if g == nil || g.layouts == nil {
@@ -60,10 +72,117 @@ func (g *Gateway) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: snapshot})
 		return true
 
+	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/workbench/widgets/"):
+		return g.handleWorkbenchWidgetStateAPI(w, r)
+
 	default:
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return true
 	}
+}
+
+func (g *Gateway) handleWorkbenchWidgetStateAPI(w http.ResponseWriter, r *http.Request) bool {
+	widgetID, tail, ok := parseWorkbenchWidgetPath(r.URL.Path)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+
+	switch {
+	case r.Method == http.MethodPut && tail == "state":
+		if _, ok := g.requirePermission(w, r, requiredPermissionWrite); !ok {
+			return true
+		}
+		var body workbenchlayout.PutWidgetStateRequest
+		if err := decodeWorkbenchLayoutJSON(r.Body, &body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return true
+		}
+		state, err := g.layouts.PutWidgetState(r.Context(), widgetID, body)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: state})
+		return true
+
+	case r.Method == http.MethodPost && tail == "terminal/sessions":
+		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+			return true
+		}
+		if g.term == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "terminal service not ready"})
+			return true
+		}
+		var body workbenchTerminalSessionCreateRequest
+		if err := decodeWorkbenchLayoutJSON(r.Body, &body); err != nil && !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return true
+		}
+		session, err := g.term.CreateSession(strings.TrimSpace(body.Name), strings.TrimSpace(body.WorkingDir))
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		state, err := g.layouts.AppendTerminalSession(r.Context(), widgetID, session.ID)
+		if err != nil {
+			_ = g.term.DeleteSession(session.ID)
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{
+			"session":      session,
+			"widget_state": state,
+		}})
+		return true
+
+	case r.Method == http.MethodDelete && strings.HasPrefix(tail, "terminal/sessions/"):
+		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+			return true
+		}
+		if g.term == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "terminal service not ready"})
+			return true
+		}
+		sessionID := strings.TrimPrefix(tail, "terminal/sessions/")
+		sessionID, err := url.PathUnescape(sessionID)
+		if err != nil || strings.TrimSpace(sessionID) == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid session id"})
+			return true
+		}
+		if err := g.term.DeleteSession(sessionID); err != nil && !errors.Is(err, terminal.ErrSessionNotFound) {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		state, err := g.layouts.RemoveTerminalSession(r.Context(), widgetID, sessionID)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: state})
+		return true
+
+	default:
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return true
+	}
+}
+
+func parseWorkbenchWidgetPath(path string) (widgetID string, tail string, ok bool) {
+	const prefix = "/_redeven_proxy/api/workbench/widgets/"
+	if !strings.HasPrefix(strings.TrimSpace(path), prefix) {
+		return "", "", false
+	}
+	suffix := strings.TrimPrefix(path, prefix)
+	parts := strings.Split(strings.Trim(suffix, "/"), "/")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	unescapedWidgetID, err := url.PathUnescape(parts[0])
+	if err != nil || strings.TrimSpace(unescapedWidgetID) == "" {
+		return "", "", false
+	}
+	return strings.TrimSpace(unescapedWidgetID), strings.Join(parts[1:], "/"), true
 }
 
 func writeWorkbenchLayoutError(w http.ResponseWriter, err error) {
@@ -73,15 +192,63 @@ func writeWorkbenchLayoutError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	var conflict *workbenchlayout.RevisionConflictError
-	if errors.As(err, &conflict) {
+	var layoutConflict *workbenchlayout.RevisionConflictError
+	if errors.As(err, &layoutConflict) {
 		writeJSON(w, http.StatusConflict, apiResp{
 			OK:        false,
 			Error:     "workbench layout revision conflict",
 			ErrorCode: workbenchLayoutConflictErrorCode,
 			Data: map[string]any{
-				"current_revision": conflict.CurrentRevision,
+				"current_revision": layoutConflict.CurrentRevision,
 			},
+		})
+		return
+	}
+
+	var widgetConflict *workbenchlayout.WidgetStateRevisionConflictError
+	if errors.As(err, &widgetConflict) {
+		writeJSON(w, http.StatusConflict, apiResp{
+			OK:        false,
+			Error:     "workbench widget state revision conflict",
+			ErrorCode: workbenchWidgetStateConflictErrorCode,
+			Data: map[string]any{
+				"widget_id":        widgetConflict.WidgetID,
+				"current_revision": widgetConflict.CurrentRevision,
+			},
+		})
+		return
+	}
+
+	var widgetNotFound *workbenchlayout.WidgetNotFoundError
+	if errors.As(err, &widgetNotFound) {
+		writeJSON(w, http.StatusNotFound, apiResp{
+			OK:        false,
+			Error:     err.Error(),
+			ErrorCode: workbenchWidgetNotFoundErrorCode,
+		})
+		return
+	}
+
+	var typeMismatch *workbenchlayout.WidgetTypeMismatchError
+	if errors.As(err, &typeMismatch) {
+		writeJSON(w, http.StatusConflict, apiResp{
+			OK:        false,
+			Error:     err.Error(),
+			ErrorCode: workbenchWidgetTypeMismatchErrorCode,
+			Data: map[string]any{
+				"widget_id":     typeMismatch.WidgetID,
+				"expected_type": typeMismatch.ExpectedType,
+				"actual_type":   typeMismatch.ActualType,
+			},
+		})
+		return
+	}
+
+	if errors.Is(err, terminal.ErrSessionNotFound) {
+		writeJSON(w, http.StatusNotFound, apiResp{
+			OK:        false,
+			Error:     err.Error(),
+			ErrorCode: "TERMINAL_SESSION_NOT_FOUND",
 		})
 		return
 	}

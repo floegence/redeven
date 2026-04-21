@@ -370,10 +370,22 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Tabs: (props: any) => (
     <div>
       {props.items.map((item: any) => (
-        <button type="button" onClick={() => props.onChange?.(item.id)}>
-          {item.icon}
-          {item.label}
-        </button>
+        <span>
+          <button type="button" onClick={() => props.onChange?.(item.id)}>
+            {item.icon}
+            {item.label}
+          </button>
+          {props.closable ? (
+            <button
+              type="button"
+              aria-label={`Close ${item.label}`}
+              data-testid={`close-tab-${item.id}`}
+              onClick={() => props.onClose?.(item.id)}
+            >
+              ×
+            </button>
+          ) : null}
+        </span>
       ))}
       {props.showAdd ? <button type="button" onClick={props.onAdd}>Add</button> : null}
     </div>
@@ -651,6 +663,12 @@ function emitTerminalData(sessionId: string, data: string, sequence?: number) {
   }
 }
 
+function publishTerminalSessions() {
+  for (const subscriber of terminalSessionsState.subscribers) {
+    subscriber(terminalSessionsState.sessions);
+  }
+}
+
 function findTerminalTab(host: HTMLElement, label: string): HTMLButtonElement | undefined {
   return Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(label)) as HTMLButtonElement | undefined;
 }
@@ -756,6 +774,7 @@ describe('TerminalPanel', () => {
     terminalSessionsState.subscribers = [];
     sessionsCoordinatorMocks.refresh.mockClear();
     sessionsCoordinatorMocks.createSession.mockClear();
+    sessionsCoordinatorMocks.deleteSession.mockClear();
     sessionsCoordinatorMocks.updateSessionMeta.mockClear();
 
     let nextAnimationFrameId = 0;
@@ -1023,6 +1042,67 @@ describe('TerminalPanel', () => {
       activeSessionId: 'session-2',
     });
     expect(handledSpy).toHaveBeenCalledWith('request-workbench-group');
+  });
+
+  it('uses workbench session operations for tab create and close', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const sessionOperations = {
+      createSession: vi.fn(async () => {
+        terminalSessionsState.sessions = [
+          ...terminalSessionsState.sessions.map((session) => ({ ...session, isActive: false })),
+          {
+            id: 'session-2',
+            name: 'Terminal 2',
+            workingDir: '/workspace',
+            createdAtMs: 2,
+            isActive: true,
+            lastActiveAtMs: 20,
+          },
+        ];
+        publishTerminalSessions();
+        return 'session-2';
+      }),
+      deleteSession: vi.fn(async (sessionId: string) => {
+        terminalSessionsState.sessions = terminalSessionsState.sessions.filter((session) => session.id !== sessionId);
+        publishTerminalSessions();
+      }),
+    };
+
+    render(() => (
+      (() => {
+        const [groupState, setGroupState] = createSignal({
+          sessionIds: ['session-1'],
+          activeSessionId: 'session-1' as string | null,
+        });
+
+        return (
+          <TerminalPanel
+            variant="workbench"
+            sessionGroupState={groupState()}
+            onSessionGroupStateChange={setGroupState}
+            sessionOperations={sessionOperations}
+          />
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    expect(addButton).toBeTruthy();
+
+    addButton?.click();
+    await settleTerminalPanel();
+
+    expect(sessionOperations.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
+    expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
+
+    (host.querySelector('[data-testid="close-tab-session-2"]') as HTMLButtonElement | null)?.click();
+    await settleTerminalPanel();
+
+    expect(sessionOperations.deleteSession).toHaveBeenCalledWith('session-2');
+    expect(sessionsCoordinatorMocks.deleteSession).not.toHaveBeenCalled();
   });
 
   it('creates a new terminal session without sending a fixed 80x24 create size', async () => {

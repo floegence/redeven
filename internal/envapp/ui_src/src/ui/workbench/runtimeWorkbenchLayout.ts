@@ -21,18 +21,65 @@ export type RuntimeWorkbenchLayoutSnapshot = Readonly<{
   revision: number;
   updated_at_unix_ms: number;
   widgets: RuntimeWorkbenchLayoutWidget[];
+  widget_states: RuntimeWorkbenchWidgetState[];
 }>;
 
 export type RuntimeWorkbenchLayoutEvent = Readonly<{
   seq: number;
   type: string;
   created_at_unix_ms: number;
-  payload: RuntimeWorkbenchLayoutSnapshot;
+  payload: RuntimeWorkbenchLayoutSnapshot | RuntimeWorkbenchWidgetState;
 }>;
 
 export type RuntimeWorkbenchLayoutPutRequest = Readonly<{
   base_revision: number;
   widgets: RuntimeWorkbenchLayoutWidget[];
+}>;
+
+export type RuntimeWorkbenchPreviewItem = Readonly<{
+  id: string;
+  type: 'file';
+  path: string;
+  name: string;
+  size?: number;
+}>;
+
+export type RuntimeWorkbenchWidgetStateData =
+  | Readonly<{ kind: 'files'; current_path: string }>
+  | Readonly<{ kind: 'terminal'; session_ids: string[] }>
+  | Readonly<{ kind: 'preview'; item: RuntimeWorkbenchPreviewItem | null }>;
+
+export type RuntimeWorkbenchWidgetState = Readonly<{
+  widget_id: string;
+  widget_type: string;
+  revision: number;
+  updated_at_unix_ms: number;
+  state: RuntimeWorkbenchWidgetStateData;
+}>;
+
+export type RuntimeWorkbenchWidgetStatePutRequest = Readonly<{
+  base_revision: number;
+  widget_type: string;
+  state: RuntimeWorkbenchWidgetStateData;
+}>;
+
+export type RuntimeWorkbenchTerminalCreateSessionRequest = Readonly<{
+  name?: string;
+  working_dir?: string;
+}>;
+
+export type RuntimeWorkbenchTerminalSessionInfo = Readonly<{
+  id: string;
+  name: string;
+  working_dir: string;
+  created_at_ms: number;
+  last_active_at_ms: number;
+  is_active: boolean;
+}>;
+
+export type RuntimeWorkbenchTerminalCreateSessionResponse = Readonly<{
+  session: RuntimeWorkbenchTerminalSessionInfo;
+  widget_state: RuntimeWorkbenchWidgetState;
 }>;
 
 export type PersistedWorkbenchLocalState = Readonly<{
@@ -49,6 +96,7 @@ const EMPTY_RUNTIME_WORKBENCH_LAYOUT_SNAPSHOT: RuntimeWorkbenchLayoutSnapshot = 
   revision: 0,
   updated_at_unix_ms: 0,
   widgets: [],
+  widget_states: [],
 };
 
 function compact(value: unknown): string {
@@ -102,6 +150,93 @@ function normalizeRuntimeWorkbenchLayoutWidget(value: unknown): RuntimeWorkbench
   };
 }
 
+function normalizeAbsolutePath(value: unknown): string {
+  let path = compact(value);
+  if (!path || !path.startsWith('/')) {
+    return '';
+  }
+  while (path.includes('//')) {
+    path = path.replaceAll('//', '/');
+  }
+  if (path.length > 1) {
+    path = path.replace(/\/+$/g, '');
+  }
+  return path.length <= 4096 ? path : '';
+}
+
+function basenameFromPath(path: string): string {
+  const normalized = normalizeAbsolutePath(path);
+  if (!normalized || normalized === '/') return '';
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? '';
+}
+
+function normalizePreviewItem(value: unknown): RuntimeWorkbenchPreviewItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const path = normalizeAbsolutePath(value.path);
+  if (!path) {
+    return null;
+  }
+  const type = compact(value.type) || 'file';
+  if (type !== 'file') {
+    return null;
+  }
+  const sizeValue = Number(value.size);
+  const size = Number.isFinite(sizeValue) && sizeValue >= 0 ? Math.floor(sizeValue) : undefined;
+  return {
+    id: compact(value.id) || path,
+    type: 'file',
+    path,
+    name: compact(value.name) || basenameFromPath(path) || 'File',
+    ...(typeof size === 'number' ? { size } : {}),
+  };
+}
+
+function normalizeRuntimeWorkbenchWidgetStateData(
+  widgetType: string,
+  value: unknown,
+): RuntimeWorkbenchWidgetStateData | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const kind = compact(value.kind);
+  if (widgetType === 'redeven.files' && (!kind || kind === 'files')) {
+    const currentPath = normalizeAbsolutePath(value.current_path);
+    return currentPath ? { kind: 'files', current_path: currentPath } : null;
+  }
+  if (widgetType === 'redeven.terminal' && (!kind || kind === 'terminal')) {
+    const sessionIds = Array.isArray(value.session_ids)
+      ? Array.from(new Set(value.session_ids.map((entry) => compact(entry)).filter(Boolean)))
+      : [];
+    return { kind: 'terminal', session_ids: sessionIds };
+  }
+  if (widgetType === 'redeven.preview' && (!kind || kind === 'preview')) {
+    return { kind: 'preview', item: normalizePreviewItem(value.item) };
+  }
+  return null;
+}
+
+export function normalizeRuntimeWorkbenchWidgetState(value: unknown): RuntimeWorkbenchWidgetState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const widgetID = compact(value.widget_id);
+  const widgetType = compact(value.widget_type);
+  const state = normalizeRuntimeWorkbenchWidgetStateData(widgetType, value.state);
+  if (!widgetID || !widgetType || !state) {
+    return null;
+  }
+  return {
+    widget_id: widgetID,
+    widget_type: widgetType,
+    revision: Math.max(0, Math.trunc(finiteNumber(value.revision, 0))),
+    updated_at_unix_ms: Math.max(0, Math.trunc(finiteNumber(value.updated_at_unix_ms, 0))),
+    state,
+  };
+}
+
 function normalizeFilters(
   value: unknown,
   defaults: Record<string, boolean>,
@@ -148,11 +283,18 @@ export function normalizeRuntimeWorkbenchLayoutSnapshot(value: unknown): Runtime
         return left.widget_id.localeCompare(right.widget_id);
       })
     : [];
+  const widgetStates = Array.isArray(value.widget_states)
+    ? value.widget_states
+      .map((state) => normalizeRuntimeWorkbenchWidgetState(state))
+      .filter((state): state is RuntimeWorkbenchWidgetState => state !== null)
+      .sort((left, right) => left.widget_id.localeCompare(right.widget_id))
+    : [];
   return {
     seq: Math.max(0, Math.trunc(finiteNumber(value.seq, 0))),
     revision: Math.max(0, Math.trunc(finiteNumber(value.revision, 0))),
     updated_at_unix_ms: Math.max(0, Math.trunc(finiteNumber(value.updated_at_unix_ms, 0))),
     widgets,
+    widget_states: widgetStates,
   };
 }
 
@@ -160,10 +302,13 @@ export function normalizeRuntimeWorkbenchLayoutEvent(value: unknown): RuntimeWor
   if (!isRecord(value)) {
     return null;
   }
-  const payload = normalizeRuntimeWorkbenchLayoutSnapshot(value.payload);
+  const eventType = compact(value.type);
+  const payload = eventType === 'widget_state.upserted'
+    ? normalizeRuntimeWorkbenchWidgetState(value.payload) ?? normalizeRuntimeWorkbenchLayoutSnapshot(value.payload)
+    : normalizeRuntimeWorkbenchLayoutSnapshot(value.payload);
   return {
-    seq: Math.max(0, Math.trunc(finiteNumber(value.seq, payload.seq))),
-    type: compact(value.type),
+    seq: Math.max(0, Math.trunc(finiteNumber(value.seq, 'seq' in payload ? payload.seq : 0))),
+    type: eventType,
     created_at_unix_ms: Math.max(0, Math.trunc(finiteNumber(value.created_at_unix_ms, 0))),
     payload,
   };
@@ -252,6 +397,53 @@ export function runtimeWorkbenchLayoutWidgetsEqual(
       && widget.z_index === other.z_index
       && widget.created_at_unix_ms === other.created_at_unix_ms;
   });
+}
+
+export function runtimeWorkbenchWidgetStateDataEqual(
+  left: RuntimeWorkbenchWidgetStateData,
+  right: RuntimeWorkbenchWidgetStateData,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'files' && right.kind === 'files') {
+    return left.current_path === right.current_path;
+  }
+  if (left.kind === 'terminal' && right.kind === 'terminal') {
+    return left.session_ids.length === right.session_ids.length
+      && left.session_ids.every((id, index) => right.session_ids[index] === id);
+  }
+  if (left.kind === 'preview' && right.kind === 'preview') {
+    const leftItem = left.item;
+    const rightItem = right.item;
+    if (!leftItem || !rightItem) return leftItem === rightItem;
+    return leftItem.id === rightItem.id
+      && leftItem.type === rightItem.type
+      && leftItem.path === rightItem.path
+      && leftItem.name === rightItem.name
+      && leftItem.size === rightItem.size;
+  }
+  return false;
+}
+
+export function runtimeWorkbenchWidgetStatesEqual(
+  left: readonly RuntimeWorkbenchWidgetState[],
+  right: readonly RuntimeWorkbenchWidgetState[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((state, index) => {
+    const other = right[index];
+    return state.widget_id === other.widget_id
+      && state.widget_type === other.widget_type
+      && state.revision === other.revision
+      && runtimeWorkbenchWidgetStateDataEqual(state.state, other.state);
+  });
+}
+
+export function runtimeWorkbenchWidgetStateById(
+  states: readonly RuntimeWorkbenchWidgetState[],
+): Record<string, RuntimeWorkbenchWidgetState> {
+  return Object.fromEntries(states.map((state) => [state.widget_id, state]));
 }
 
 export function extractRuntimeWorkbenchLayoutFromWorkbenchState(

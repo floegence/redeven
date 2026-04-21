@@ -35,6 +35,8 @@ export interface RedevenWorkbenchCanvasProps {
   onCommitMove: (widgetId: string, position: { x: number; y: number }) => void;
   onCommitResize: (widgetId: string, size: { width: number; height: number }) => void;
   onRequestDelete: (widgetId: string) => void;
+  onLayoutInteractionStart?: () => void;
+  onLayoutInteractionEnd?: () => void;
 }
 
 interface RedevenWorkbenchCanvasWidgetSlotProps {
@@ -56,6 +58,8 @@ interface RedevenWorkbenchCanvasWidgetSlotProps {
   onCommitMove: (widgetId: string, position: { x: number; y: number }) => void;
   onCommitResize: (widgetId: string, size: { width: number; height: number }) => void;
   onRequestDelete: (widgetId: string) => void;
+  onLayoutInteractionStart?: () => void;
+  onLayoutInteractionEnd?: () => void;
 }
 
 function RedevenWorkbenchCanvasWidgetSlot(props: RedevenWorkbenchCanvasWidgetSlotProps) {
@@ -94,6 +98,8 @@ function RedevenWorkbenchCanvasWidgetSlot(props: RedevenWorkbenchCanvasWidgetSlo
       onCommitMove={props.onCommitMove}
       onCommitResize={props.onCommitResize}
       onRequestDelete={props.onRequestDelete}
+      onLayoutInteractionStart={props.onLayoutInteractionStart}
+      onLayoutInteractionEnd={props.onLayoutInteractionEnd}
     />
   );
 }
@@ -143,6 +149,8 @@ export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
                 onCommitMove={props.onCommitMove}
                 onCommitResize={props.onCommitResize}
                 onRequestDelete={props.onRequestDelete}
+                onLayoutInteractionStart={props.onLayoutInteractionStart}
+                onLayoutInteractionEnd={props.onLayoutInteractionEnd}
               />
             )}
           </For>
