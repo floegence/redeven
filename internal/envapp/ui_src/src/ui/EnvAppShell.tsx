@@ -4,6 +4,7 @@ import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-co
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
   Activity,
+  ArrowRightLeft,
   Code,
   Copy,
   Files,
@@ -2027,6 +2028,31 @@ export function EnvAppShell() {
     });
   };
 
+  const activityBottomItems = (): ActivityBarItem[] => {
+    if (layout.isMobile()) {
+      return [];
+    }
+
+    const items: ActivityBarItem[] = [];
+    if (desktopShellBridgeAvailable()) {
+      items.push({
+        id: 'switch-environment',
+        icon: ArrowRightLeft,
+        label: 'Switch Environment',
+        onClick: () => {
+          void openConnectionCenter();
+        },
+      });
+    }
+    items.push({
+      id: 'settings',
+      icon: Settings,
+      label: 'Runtime Settings',
+      onClick: () => openSettings(),
+    });
+    return items;
+  };
+
   const envName = () => {
     if (accessGateVisible()) return isLocalMode() ? 'Local runtime' : 'Environment';
     if (env.state !== 'ready') return 'Loading...';
@@ -2576,6 +2602,7 @@ export function EnvAppShell() {
       }
       logo={<ShellLogo />}
       activityItems={viewMode() === 'activity' ? activityItems() : []}
+      activityBottomItems={activityBottomItems()}
       topBarActions={<HeaderActions />}
       bottomBarItems={
         <>

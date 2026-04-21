@@ -431,6 +431,8 @@ afterEach(() => {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
   commandState.commands = [];
   notesOverlayState.lastProps = null;
   protocolStatus = 'disconnected';
@@ -480,10 +482,11 @@ beforeEach(() => {
   });
 });
 
-describe('EnvAppShell top bar affordances', () => {
-  it('keeps Runtime Settings in the command palette without rendering a header overflow trigger', async () => {
+describe('EnvAppShell environment entry affordances', () => {
+  it('shows Runtime Settings in the activity bottom area while keeping the header clean and command palette access intact', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
 
     const { EnvAppShell } = await import('./EnvAppShell');
     const dispose = render(() => <EnvAppShell />, host);
@@ -497,19 +500,31 @@ describe('EnvAppShell top bar affordances', () => {
             title?: string;
             keybind?: string;
           };
+      const runtimeSettingsButton = host.querySelector('[data-activity-id="settings"]') as HTMLButtonElement | null;
 
       expect(runtimeSettingsCommand).toBeTruthy();
       expect(runtimeSettingsCommand?.title).toBe('Open Runtime Settings');
       expect(runtimeSettingsCommand?.keybind).toBe('mod+,');
+      expect(runtimeSettingsButton).toBeTruthy();
+      expect(runtimeSettingsButton?.textContent).toContain('Runtime Settings');
+      expect(host.querySelector('[data-activity-id="switch-environment"]')).toBeNull();
       expect(host.querySelector('button[aria-label="Open environment actions"]')).toBeNull();
+
+      setSidebarActiveTabMock.mockClear();
+      runtimeSettingsButton?.click();
+      await flushAsync();
+
+      expect(sidebarActiveTabValue).toBe('settings');
+      expect(setSidebarActiveTabMock).toHaveBeenCalled();
     } finally {
       dispose();
     }
   }, 10000);
 
-  it('routes Switch Environment through the command palette when the desktop bridge is available', async () => {
+  it('shows Switch Environment on the activity bottom area and keeps the command palette entry when the desktop bridge is available', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const openConnectionCenterMock = vi.fn().mockResolvedValue(undefined);
     window.redevenDesktopShell = {
       openConnectionCenter: openConnectionCenterMock,
@@ -527,12 +542,21 @@ describe('EnvAppShell top bar affordances', () => {
         | {
             execute: () => Promise<void>;
           };
+      const switchEnvironmentButton = host.querySelector('[data-activity-id="switch-environment"]') as HTMLButtonElement | null;
+
       expect(switchEnvironmentCommand).toBeTruthy();
+      expect(switchEnvironmentButton).toBeTruthy();
+      expect(switchEnvironmentButton?.textContent).toContain('Switch Environment');
+
+      switchEnvironmentButton?.click();
+      await flushAsync();
+
+      expect(openConnectionCenterMock).toHaveBeenCalledTimes(1);
 
       await switchEnvironmentCommand?.execute();
       await flushAsync();
 
-      expect(openConnectionCenterMock).toHaveBeenCalledTimes(1);
+      expect(openConnectionCenterMock).toHaveBeenCalledTimes(2);
     } finally {
       dispose();
       delete window.redevenDesktopShell;
