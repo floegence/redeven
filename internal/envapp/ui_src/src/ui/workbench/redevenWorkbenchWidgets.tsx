@@ -59,6 +59,9 @@ function FilesWidget(props: WorkbenchWidgetBodyProps) {
         onTitleChange={(title) => {
           workbench.updateWidgetTitle(props.widgetId, title);
         }}
+        onCommittedPathChange={(path) => {
+          workbench.updateFileBrowserPath(props.widgetId, path);
+        }}
       />
     </div>
   );
@@ -76,6 +79,10 @@ function TerminalWidget(props: WorkbenchWidgetBodyProps) {
       sessionGroupState={panelState()}
       onSessionGroupStateChange={(next) => {
         workbench.updateTerminalPanelState(props.widgetId, () => next);
+      }}
+      sessionOperations={{
+        createSession: (name, workingDir) => workbench.createTerminalSession(props.widgetId, name, workingDir),
+        deleteSession: (sessionId) => workbench.deleteTerminalSession(props.widgetId, sessionId),
       }}
       onTitleChange={(title) => {
         workbench.updateWidgetTitle(props.widgetId, title);

@@ -369,6 +369,7 @@ export interface RemoteFileBrowserProps {
   } | null;
   onOpenPathRequestHandled?: (requestId: string) => void;
   onTitleChange?: (title: string) => void;
+  onCommittedPathChange?: (path: string) => void;
 }
 
 function normalizeBrowserStateScope(value: unknown): string {
@@ -779,6 +780,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const cloneDirCache = (source: DirCache): DirCache => new Map(source);
 
   const applyPreparedDirectoryState = (state: PreparedDirectoryState, options: { persistEnvId?: string } = {}) => {
+    const previousPath = normalizeAbsolutePath(untrack(() => currentBrowserPath()));
+    const committedPath = normalizeAbsolutePath(state.committedPath);
     batch(() => {
       cache = state.cache;
       setFiles(state.tree);
@@ -788,6 +791,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         writePersistedLastPath(options.persistEnvId, state.committedPath);
       }
     });
+    if (committedPath && committedPath !== previousPath) {
+      props.onCommittedPathChange?.(committedPath);
+    }
   };
 
   const resetFileBrowser = () => {

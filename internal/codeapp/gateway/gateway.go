@@ -36,6 +36,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/settings"
+	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/threadreadstate"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 )
@@ -49,6 +50,7 @@ type Options struct {
 	AI                      *ai.Service
 	Notes                   *notes.Service
 	WorkbenchLayout         *workbenchlayout.Service
+	Terminal                *terminal.Manager
 	Codex                   CodexBackend
 	Audit                   *auditlog.Store
 	Diagnostics             *diagnostics.Store
@@ -148,6 +150,7 @@ type Gateway struct {
 	ai      *ai.Service
 	notes   *notes.Service
 	layouts *workbenchlayout.Service
+	term    *terminal.Manager
 	codex   CodexBackend
 	audit   *auditlog.Store
 	diag    *diagnostics.Store
@@ -263,6 +266,7 @@ func New(opts Options) (*Gateway, error) {
 		ai:                      opts.AI,
 		notes:                   opts.Notes,
 		layouts:                 opts.WorkbenchLayout,
+		term:                    opts.Terminal,
 		codex:                   opts.Codex,
 		audit:                   opts.Audit,
 		diag:                    opts.Diagnostics,

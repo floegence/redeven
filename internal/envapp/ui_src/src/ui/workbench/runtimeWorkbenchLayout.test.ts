@@ -6,8 +6,12 @@ import {
   buildWorkbenchLocalStateStorageKey,
   derivePersistedWorkbenchLocalState,
   extractRuntimeWorkbenchLayoutFromWorkbenchState,
+  normalizeRuntimeWorkbenchLayoutSnapshot,
   projectWorkbenchStateFromRuntimeLayout,
   runtimeWorkbenchLayoutWidgetsEqual,
+  runtimeWorkbenchWidgetStateById,
+  runtimeWorkbenchWidgetStateDataEqual,
+  runtimeWorkbenchWidgetStatesEqual,
   sanitizePersistedWorkbenchLocalState,
   type RuntimeWorkbenchLayoutSnapshot,
 } from './runtimeWorkbenchLayout';
@@ -79,6 +83,7 @@ describe('runtimeWorkbenchLayout', () => {
           created_at_unix_ms: 100,
         },
       ],
+      widget_states: [],
     };
 
     const projected = projectWorkbenchStateFromRuntimeLayout({
@@ -214,5 +219,92 @@ describe('runtimeWorkbenchLayout', () => {
     } as any).widgets;
 
     expect(runtimeWorkbenchLayoutWidgetsEqual(left, right)).toBe(true);
+  });
+
+  it('normalizes shared widget state snapshots', () => {
+    const snapshot = normalizeRuntimeWorkbenchLayoutSnapshot({
+      seq: 3,
+      revision: 1,
+      updated_at_unix_ms: 200,
+      widgets: [],
+      widget_states: [
+        {
+          widget_id: 'widget-terminal-1',
+          widget_type: 'redeven.terminal',
+          revision: 2,
+          updated_at_unix_ms: 210,
+          state: {
+            kind: 'terminal',
+            session_ids: ['session-1', 'session-1', ' session-2 '],
+          },
+        },
+        {
+          widget_id: 'widget-preview-1',
+          widget_type: 'redeven.preview',
+          revision: 1,
+          updated_at_unix_ms: 211,
+          state: {
+            kind: 'preview',
+            item: {
+              path: '/workspace/demo.txt',
+              name: '',
+              type: 'file',
+            },
+          },
+        },
+      ],
+    });
+
+    const states = runtimeWorkbenchWidgetStateById(snapshot.widget_states);
+    expect(states['widget-terminal-1']?.state).toEqual({
+      kind: 'terminal',
+      session_ids: ['session-1', 'session-2'],
+    });
+    expect(states['widget-preview-1']?.state).toEqual({
+      kind: 'preview',
+      item: {
+        id: '/workspace/demo.txt',
+        type: 'file',
+        path: '/workspace/demo.txt',
+        name: 'demo.txt',
+      },
+    });
+  });
+
+  it('compares widget states by semantic data', () => {
+    const left = normalizeRuntimeWorkbenchLayoutSnapshot({
+      widget_states: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          revision: 1,
+          updated_at_unix_ms: 100,
+          state: {
+            kind: 'files',
+            current_path: '/workspace',
+          },
+        },
+      ],
+    }).widget_states;
+    const right = normalizeRuntimeWorkbenchLayoutSnapshot({
+      widget_states: [
+        {
+          widget_id: 'widget-files-1',
+          widget_type: 'redeven.files',
+          revision: 1,
+          updated_at_unix_ms: 200,
+          state: {
+            kind: 'files',
+            current_path: '/workspace',
+          },
+        },
+      ],
+    }).widget_states;
+
+    expect(runtimeWorkbenchWidgetStatesEqual(left, right)).toBe(true);
+    expect(runtimeWorkbenchWidgetStateDataEqual(left[0]!.state, {
+      kind: 'files',
+      current_path: '/workspace/src',
+    })).toBe(false);
   });
 });

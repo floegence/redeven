@@ -81,6 +81,8 @@ export interface RedevenWorkbenchSurfaceProps {
   filterBarWidgetTypes?: readonly WorkbenchWidgetType[];
   onApiReady?: (api: RedevenWorkbenchSurfaceApi | null) => void;
   onRequestDelete?: (widgetId: string) => void;
+  onLayoutInteractionStart?: () => void;
+  onLayoutInteractionEnd?: () => void;
 }
 
 const DEFAULT_LOCK_SHORTCUT = 'F1';
@@ -446,6 +448,8 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           onCommitMove={model.canvas.commitMove}
           onCommitResize={model.canvas.commitResize}
           onRequestDelete={props.onRequestDelete ?? model.widgetActions.deleteWidget}
+          onLayoutInteractionStart={props.onLayoutInteractionStart}
+          onLayoutInteractionEnd={props.onLayoutInteractionEnd}
         />
       </div>
 

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -93,10 +95,44 @@ func (s *Service) Replace(ctx context.Context, req PutLayoutRequest) (Snapshot, 
 	if err != nil {
 		return Snapshot{}, err
 	}
-	if event.Seq > 0 {
-		s.broadcast(event)
-	}
+	s.broadcast(event)
 	return snapshot, nil
+}
+
+func (s *Service) PutWidgetState(ctx context.Context, widgetID string, req PutWidgetStateRequest) (WidgetState, error) {
+	if s == nil || s.store == nil {
+		return WidgetState{}, errors.New("workbench layout service not initialized")
+	}
+	state, event, err := s.store.putWidgetState(ctx, widgetID, req)
+	if err != nil {
+		return WidgetState{}, err
+	}
+	s.broadcast(event)
+	return state, nil
+}
+
+func (s *Service) AppendTerminalSession(ctx context.Context, widgetID string, sessionID string) (WidgetState, error) {
+	if s == nil || s.store == nil {
+		return WidgetState{}, errors.New("workbench layout service not initialized")
+	}
+	state, event, err := s.store.appendTerminalSession(ctx, widgetID, sessionID)
+	if err != nil {
+		return WidgetState{}, err
+	}
+	s.broadcast(event)
+	return state, nil
+}
+
+func (s *Service) RemoveTerminalSession(ctx context.Context, widgetID string, sessionID string) (WidgetState, error) {
+	if s == nil || s.store == nil {
+		return WidgetState{}, errors.New("workbench layout service not initialized")
+	}
+	state, event, err := s.store.removeTerminalSession(ctx, widgetID, sessionID)
+	if err != nil {
+		return WidgetState{}, err
+	}
+	s.broadcast(event)
+	return state, nil
 }
 
 func (s *Service) removeSubscriber(id int) {
@@ -206,49 +242,28 @@ func (s *Store) replace(ctx context.Context, req PutLayoutRequest) (Snapshot, Ev
 		}
 	}
 
-	result, err := tx.ExecContext(
-		ctx,
-		`INSERT INTO workbench_layout_events(event_type, payload_json, created_at_unix_ms) VALUES (?, ?, ?)`,
-		EventTypeLayoutReplaced,
-		"",
-		nowUnixMs,
-	)
-	if err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	seq, err := result.LastInsertId()
-	if err != nil {
+	deletedWidgetIDs := removedWidgetIDs(current.Widgets, normalizedReq.Widgets)
+	if err := deleteWidgetStatesTx(ctx, tx, deletedWidgetIDs); err != nil {
 		return Snapshot{}, Event{}, err
 	}
 
-	nextSnapshot := Snapshot{
-		Seq:             seq,
-		Revision:        current.Revision + 1,
-		UpdatedAtUnixMs: nowUnixMs,
-		Widgets:         normalizedReq.Widgets,
+	seq, err := insertEventRowTx(ctx, tx, EventTypeLayoutReplaced, nowUnixMs)
+	if err != nil {
+		return Snapshot{}, Event{}, err
+	}
+	if err := updateSnapshotHeadTx(ctx, tx, current.Revision+1, seq, nowUnixMs); err != nil {
+		return Snapshot{}, Event{}, err
+	}
+
+	nextSnapshot, err := snapshotTx(ctx, tx)
+	if err != nil {
+		return Snapshot{}, Event{}, err
 	}
 	payload, err := json.Marshal(nextSnapshot)
 	if err != nil {
 		return Snapshot{}, Event{}, err
 	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`UPDATE workbench_layout_events SET payload_json = ? WHERE seq = ?`,
-		string(payload),
-		seq,
-	); err != nil {
-		return Snapshot{}, Event{}, err
-	}
-	if _, err := tx.ExecContext(
-		ctx,
-		`UPDATE workbench_layout_snapshot
-SET revision = ?, seq = ?, updated_at_unix_ms = ?
-WHERE singleton = 1`,
-		nextSnapshot.Revision,
-		nextSnapshot.Seq,
-		nextSnapshot.UpdatedAtUnixMs,
-	); err != nil {
+	if err := updateEventPayloadTx(ctx, tx, seq, payload); err != nil {
 		return Snapshot{}, Event{}, err
 	}
 
@@ -262,6 +277,236 @@ WHERE singleton = 1`,
 		CreatedAtUnixMs: nowUnixMs,
 		Payload:         payload,
 	}, nil
+}
+
+func (s *Store) putWidgetState(ctx context.Context, widgetID string, req PutWidgetStateRequest) (WidgetState, Event, error) {
+	nowUnixMs := time.Now().UnixMilli()
+	normalizedReq, err := normalizePutWidgetStateRequest(widgetID, req)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	actualWidgetType, err := loadWidgetTypeByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	if actualWidgetType != normalizedReq.WidgetType {
+		return WidgetState{}, Event{}, &WidgetTypeMismatchError{
+			WidgetID:     widgetID,
+			ExpectedType: actualWidgetType,
+			ActualType:   normalizedReq.WidgetType,
+		}
+	}
+
+	current, err := loadWidgetStateByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+
+	currentRevision := int64(0)
+	if current != nil {
+		currentRevision = current.Revision
+	}
+	if currentRevision != normalizedReq.BaseRevision {
+		if current != nil && widgetStateDataEqual(current.State, normalizedReq.State) {
+			if err := tx.Commit(); err != nil {
+				return WidgetState{}, Event{}, err
+			}
+			return *current, Event{}, nil
+		}
+		return WidgetState{}, Event{}, &WidgetStateRevisionConflictError{
+			WidgetID:        widgetID,
+			CurrentRevision: currentRevision,
+		}
+	}
+	if current != nil && widgetStateDataEqual(current.State, normalizedReq.State) {
+		if err := tx.Commit(); err != nil {
+			return WidgetState{}, Event{}, err
+		}
+		return *current, Event{}, nil
+	}
+
+	nextState := WidgetState{
+		WidgetID:        widgetID,
+		WidgetType:      actualWidgetType,
+		Revision:        currentRevision + 1,
+		UpdatedAtUnixMs: nowUnixMs,
+		State:           normalizedReq.State,
+	}
+	event, err := upsertWidgetStateTx(ctx, tx, nextState)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	return nextState, event, nil
+}
+
+func (s *Store) appendTerminalSession(ctx context.Context, widgetID string, sessionID string) (WidgetState, Event, error) {
+	nowUnixMs := time.Now().UnixMilli()
+	normalizedSessionIDs := normalizeSessionIDs([]string{sessionID})
+	if len(normalizedSessionIDs) != 1 {
+		return WidgetState{}, Event{}, &ValidationError{Message: "session_id is required"}
+	}
+	sessionID = normalizedSessionIDs[0]
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	actualWidgetType, err := loadWidgetTypeByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	if actualWidgetType != WidgetTypeTerminal {
+		return WidgetState{}, Event{}, &WidgetTypeMismatchError{
+			WidgetID:     widgetID,
+			ExpectedType: WidgetTypeTerminal,
+			ActualType:   actualWidgetType,
+		}
+	}
+
+	current, err := loadWidgetStateByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	nextSessionIDs := []string{sessionID}
+	nextRevision := int64(1)
+	if current != nil {
+		if current.State.Kind != WidgetStateKindTerminal {
+			return WidgetState{}, Event{}, &WidgetTypeMismatchError{
+				WidgetID:     widgetID,
+				ExpectedType: WidgetTypeTerminal,
+				ActualType:   current.WidgetType,
+			}
+		}
+		nextSessionIDs = append([]string{}, current.State.SessionIDs...)
+		for _, existing := range nextSessionIDs {
+			if existing == sessionID {
+				if err := tx.Commit(); err != nil {
+					return WidgetState{}, Event{}, err
+				}
+				return *current, Event{}, nil
+			}
+		}
+		nextSessionIDs = append(nextSessionIDs, sessionID)
+		nextRevision = current.Revision + 1
+	}
+
+	nextState := WidgetState{
+		WidgetID:        widgetID,
+		WidgetType:      WidgetTypeTerminal,
+		Revision:        nextRevision,
+		UpdatedAtUnixMs: nowUnixMs,
+		State: WidgetStateData{
+			Kind:       WidgetStateKindTerminal,
+			SessionIDs: normalizeSessionIDs(nextSessionIDs),
+		},
+	}
+	event, err := upsertWidgetStateTx(ctx, tx, nextState)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	return nextState, event, nil
+}
+
+func (s *Store) removeTerminalSession(ctx context.Context, widgetID string, sessionID string) (WidgetState, Event, error) {
+	nowUnixMs := time.Now().UnixMilli()
+	normalizedSessionIDs := normalizeSessionIDs([]string{sessionID})
+	if len(normalizedSessionIDs) != 1 {
+		return WidgetState{}, Event{}, &ValidationError{Message: "session_id is required"}
+	}
+	sessionID = normalizedSessionIDs[0]
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	actualWidgetType, err := loadWidgetTypeByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	if actualWidgetType != WidgetTypeTerminal {
+		return WidgetState{}, Event{}, &WidgetTypeMismatchError{
+			WidgetID:     widgetID,
+			ExpectedType: WidgetTypeTerminal,
+			ActualType:   actualWidgetType,
+		}
+	}
+
+	current, err := loadWidgetStateByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	if current == nil {
+		nextState := WidgetState{
+			WidgetID:        widgetID,
+			WidgetType:      WidgetTypeTerminal,
+			Revision:        1,
+			UpdatedAtUnixMs: nowUnixMs,
+			State: WidgetStateData{
+				Kind:       WidgetStateKindTerminal,
+				SessionIDs: []string{},
+			},
+		}
+		event, err := upsertWidgetStateTx(ctx, tx, nextState)
+		if err != nil {
+			return WidgetState{}, Event{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return WidgetState{}, Event{}, err
+		}
+		return nextState, event, nil
+	}
+
+	nextSessionIDs := make([]string, 0, len(current.State.SessionIDs))
+	changed := false
+	for _, existing := range current.State.SessionIDs {
+		if existing == sessionID {
+			changed = true
+			continue
+		}
+		nextSessionIDs = append(nextSessionIDs, existing)
+	}
+	if !changed {
+		if err := tx.Commit(); err != nil {
+			return WidgetState{}, Event{}, err
+		}
+		return *current, Event{}, nil
+	}
+
+	nextState := WidgetState{
+		WidgetID:        widgetID,
+		WidgetType:      WidgetTypeTerminal,
+		Revision:        current.Revision + 1,
+		UpdatedAtUnixMs: nowUnixMs,
+		State: WidgetStateData{
+			Kind:       WidgetStateKindTerminal,
+			SessionIDs: nextSessionIDs,
+		},
+	}
+	event, err := upsertWidgetStateTx(ctx, tx, nextState)
+	if err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return WidgetState{}, Event{}, err
+	}
+	return nextState, event, nil
 }
 
 func (s *Store) eventsAfter(ctx context.Context, afterSeq int64) ([]Event, error) {
@@ -305,7 +550,7 @@ WHERE singleton = 1`,
 		return Snapshot{}, err
 	}
 
-	rows, err := tx.QueryContext(
+	widgetRows, err := tx.QueryContext(
 		ctx,
 		`SELECT widget_id, widget_type, x, y, width, height, z_index, created_at_unix_ms
 FROM workbench_layout_widgets
@@ -314,12 +559,12 @@ ORDER BY z_index ASC, created_at_unix_ms ASC, widget_id ASC`,
 	if err != nil {
 		return Snapshot{}, err
 	}
-	defer rows.Close()
+	defer widgetRows.Close()
 
 	snapshot.Widgets = make([]WidgetLayout, 0)
-	for rows.Next() {
+	for widgetRows.Next() {
 		var widget WidgetLayout
-		if err := rows.Scan(
+		if err := widgetRows.Scan(
 			&widget.WidgetID,
 			&widget.WidgetType,
 			&widget.X,
@@ -333,9 +578,228 @@ ORDER BY z_index ASC, created_at_unix_ms ASC, widget_id ASC`,
 		}
 		snapshot.Widgets = append(snapshot.Widgets, widget)
 	}
-	if err := rows.Err(); err != nil {
+	if err := widgetRows.Err(); err != nil {
+		return Snapshot{}, err
+	}
+
+	stateRows, err := tx.QueryContext(
+		ctx,
+		`SELECT widget_id, widget_type, revision, state_json, updated_at_unix_ms
+FROM workbench_widget_states
+ORDER BY widget_id ASC`,
+	)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	defer stateRows.Close()
+
+	snapshot.WidgetStates = make([]WidgetState, 0)
+	for stateRows.Next() {
+		state, err := scanWidgetStateRow(stateRows)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		snapshot.WidgetStates = append(snapshot.WidgetStates, state)
+	}
+	if err := stateRows.Err(); err != nil {
 		return Snapshot{}, err
 	}
 
 	return snapshot, nil
+}
+
+func loadWidgetTypeByIDTx(ctx context.Context, tx *sql.Tx, widgetID string) (string, error) {
+	var widgetType string
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT widget_type FROM workbench_layout_widgets WHERE widget_id = ?`,
+		strings.TrimSpace(widgetID),
+	).Scan(&widgetType)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", &WidgetNotFoundError{WidgetID: widgetID}
+	}
+	if err != nil {
+		return "", err
+	}
+	return widgetType, nil
+}
+
+func loadWidgetStateByIDTx(ctx context.Context, tx *sql.Tx, widgetID string) (*WidgetState, error) {
+	row := tx.QueryRowContext(
+		ctx,
+		`SELECT widget_id, widget_type, revision, state_json, updated_at_unix_ms
+FROM workbench_widget_states
+WHERE widget_id = ?`,
+		strings.TrimSpace(widgetID),
+	)
+	var (
+		stateJSON string
+		state     WidgetState
+	)
+	if err := row.Scan(&state.WidgetID, &state.WidgetType, &state.Revision, &stateJSON, &state.UpdatedAtUnixMs); errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	data := WidgetStateData{}
+	if err := json.Unmarshal([]byte(stateJSON), &data); err != nil {
+		return nil, err
+	}
+	normalizedData, err := normalizeWidgetStateData(state.WidgetType, data)
+	if err != nil {
+		return nil, err
+	}
+	state.State = normalizedData
+	return &state, nil
+}
+
+func scanWidgetStateRow(scanner interface {
+	Scan(dest ...any) error
+}) (WidgetState, error) {
+	var (
+		stateJSON string
+		state     WidgetState
+	)
+	if err := scanner.Scan(&state.WidgetID, &state.WidgetType, &state.Revision, &stateJSON, &state.UpdatedAtUnixMs); err != nil {
+		return WidgetState{}, err
+	}
+	data := WidgetStateData{}
+	if err := json.Unmarshal([]byte(stateJSON), &data); err != nil {
+		return WidgetState{}, err
+	}
+	normalizedData, err := normalizeWidgetStateData(state.WidgetType, data)
+	if err != nil {
+		return WidgetState{}, err
+	}
+	state.State = normalizedData
+	return state, nil
+}
+
+func upsertWidgetStateTx(ctx context.Context, tx *sql.Tx, state WidgetState) (Event, error) {
+	stateJSON, err := json.Marshal(state.State)
+	if err != nil {
+		return Event{}, err
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO workbench_widget_states(widget_id, widget_type, revision, state_json, updated_at_unix_ms)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(widget_id) DO UPDATE SET
+  widget_type = excluded.widget_type,
+  revision = excluded.revision,
+  state_json = excluded.state_json,
+  updated_at_unix_ms = excluded.updated_at_unix_ms`,
+		state.WidgetID,
+		state.WidgetType,
+		state.Revision,
+		string(stateJSON),
+		state.UpdatedAtUnixMs,
+	); err != nil {
+		return Event{}, err
+	}
+
+	seq, err := insertEventRowTx(ctx, tx, EventTypeWidgetStateUpserted, state.UpdatedAtUnixMs)
+	if err != nil {
+		return Event{}, err
+	}
+	if err := updateSnapshotTimestampTx(ctx, tx, seq, state.UpdatedAtUnixMs); err != nil {
+		return Event{}, err
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		return Event{}, err
+	}
+	if err := updateEventPayloadTx(ctx, tx, seq, payload); err != nil {
+		return Event{}, err
+	}
+	return Event{
+		Seq:             seq,
+		Type:            EventTypeWidgetStateUpserted,
+		CreatedAtUnixMs: state.UpdatedAtUnixMs,
+		Payload:         payload,
+	}, nil
+}
+
+func insertEventRowTx(ctx context.Context, tx *sql.Tx, eventType string, nowUnixMs int64) (int64, error) {
+	result, err := tx.ExecContext(
+		ctx,
+		`INSERT INTO workbench_layout_events(event_type, payload_json, created_at_unix_ms) VALUES (?, ?, ?)`,
+		eventType,
+		"",
+		nowUnixMs,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func updateEventPayloadTx(ctx context.Context, tx *sql.Tx, seq int64, payload []byte) error {
+	_, err := tx.ExecContext(
+		ctx,
+		`UPDATE workbench_layout_events SET payload_json = ? WHERE seq = ?`,
+		string(payload),
+		seq,
+	)
+	return err
+}
+
+func updateSnapshotHeadTx(ctx context.Context, tx *sql.Tx, revision int64, seq int64, updatedAtUnixMs int64) error {
+	_, err := tx.ExecContext(
+		ctx,
+		`UPDATE workbench_layout_snapshot
+SET revision = ?, seq = ?, updated_at_unix_ms = ?
+WHERE singleton = 1`,
+		revision,
+		seq,
+		updatedAtUnixMs,
+	)
+	return err
+}
+
+func updateSnapshotTimestampTx(ctx context.Context, tx *sql.Tx, seq int64, updatedAtUnixMs int64) error {
+	var currentRevision int64
+	if err := tx.QueryRowContext(
+		ctx,
+		`SELECT revision FROM workbench_layout_snapshot WHERE singleton = 1`,
+	).Scan(&currentRevision); err != nil {
+		return err
+	}
+	return updateSnapshotHeadTx(ctx, tx, currentRevision, seq, updatedAtUnixMs)
+}
+
+func deleteWidgetStatesTx(ctx context.Context, tx *sql.Tx, widgetIDs []string) error {
+	if len(widgetIDs) == 0 {
+		return nil
+	}
+	placeholders := make([]string, 0, len(widgetIDs))
+	args := make([]any, 0, len(widgetIDs))
+	for _, widgetID := range widgetIDs {
+		placeholders = append(placeholders, "?")
+		args = append(args, widgetID)
+	}
+	_, err := tx.ExecContext(
+		ctx,
+		fmt.Sprintf("DELETE FROM workbench_widget_states WHERE widget_id IN (%s)", strings.Join(placeholders, ",")),
+		args...,
+	)
+	return err
+}
+
+func removedWidgetIDs(previous []WidgetLayout, next []WidgetLayout) []string {
+	if len(previous) == 0 {
+		return nil
+	}
+	nextIDs := make(map[string]struct{}, len(next))
+	for _, widget := range next {
+		nextIDs[widget.WidgetID] = struct{}{}
+	}
+	removed := make([]string, 0)
+	for _, widget := range previous {
+		if _, ok := nextIDs[widget.WidgetID]; ok {
+			continue
+		}
+		removed = append(removed, widget.WidgetID)
+	}
+	return removed
 }

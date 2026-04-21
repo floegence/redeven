@@ -36,6 +36,8 @@ const (
 	TypeID_TERMINAL_SESSIONS_CHANGED uint32 = 2012 // notify (agent -> client): terminal sessions list changed
 )
 
+var ErrSessionNotFound = errors.New("terminal session not found")
+
 type Manager struct {
 	agentHomeAbs string
 	log          *slog.Logger
@@ -48,6 +50,15 @@ type Manager struct {
 	bySession       map[string]map[*rpc.Server]string // session_id -> server -> conn_id
 	closedSinks     map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
 	deleteRequested map[string]struct{}               // session_id -> delete requested (used for lifecycle reason)
+}
+
+type SessionInfo struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	WorkingDir     string `json:"working_dir"`
+	CreatedAtMs    int64  `json:"created_at_ms"`
+	LastActiveAtMs int64  `json:"last_active_at_ms"`
+	IsActive       bool   `json:"is_active"`
 }
 
 type slogTerminalLogger struct{ log *slog.Logger }
@@ -106,6 +117,30 @@ func NewManager(shell string, agentHomeAbs string, log *slog.Logger) *Manager {
 	m.term.SetEventHandler(&eventHandler{m: m})
 
 	return m
+}
+
+func (m *Manager) CreateSession(name string, workingDir string) (*SessionInfo, error) {
+	sess, err := m.createSession(strings.TrimSpace(name), strings.TrimSpace(workingDir))
+	if err != nil {
+		return nil, err
+	}
+	return toSessionInfo(sess.ToSessionInfo()), nil
+}
+
+func (m *Manager) DeleteSession(sessionID string) error {
+	if m == nil {
+		return &rpc.Error{Code: 500, Message: "internal error"}
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return &rpc.Error{Code: 400, Message: "session_id is required"}
+	}
+	m.markDeleteRequested(sessionID)
+	if err := m.term.DeleteSession(sessionID); err != nil {
+		m.unmarkDeleteRequested(sessionID)
+		return ErrSessionNotFound
+	}
+	return nil
 }
 
 func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
@@ -774,6 +809,17 @@ type terminalSessionInfo struct {
 
 func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
 	return &terminalSessionInfo{
+		ID:             info.ID,
+		Name:           info.Name,
+		WorkingDir:     info.WorkingDir,
+		CreatedAtMs:    info.CreatedAt,
+		LastActiveAtMs: info.LastActive,
+		IsActive:       info.IsActive,
+	}
+}
+
+func toSessionInfo(info termgo.TerminalSessionInfo) *SessionInfo {
+	return &SessionInfo{
 		ID:             info.ID,
 		Name:           info.Name,
 		WorkingDir:     info.WorkingDir,

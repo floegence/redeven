@@ -9,7 +9,7 @@ import (
 
 const (
 	schemaKind           = "workbench_layout_runtime"
-	currentSchemaVersion = 1
+	currentSchemaVersion = 2
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -20,6 +20,7 @@ func schemaSpec() sqliteutil.Spec {
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 		},
 		Verify: verifySchema,
 	}
@@ -63,11 +64,27 @@ CREATE INDEX IF NOT EXISTS idx_workbench_layout_events_seq
 	return err
 }
 
+func migrateToV2(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS workbench_widget_states (
+  widget_id TEXT PRIMARY KEY,
+  widget_type TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  state_json TEXT NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workbench_widget_states_type
+  ON workbench_widget_states(widget_type ASC, widget_id ASC);
+`)
+	return err
+}
+
 func verifySchema(tx *sql.Tx) error {
 	requiredTables := map[string][]string{
 		"workbench_layout_snapshot": {"singleton", "revision", "seq", "updated_at_unix_ms"},
 		"workbench_layout_widgets":  {"widget_id", "widget_type", "x", "y", "width", "height", "z_index", "created_at_unix_ms"},
 		"workbench_layout_events":   {"seq", "event_type", "payload_json", "created_at_unix_ms"},
+		"workbench_widget_states":   {"widget_id", "widget_type", "revision", "state_json", "updated_at_unix_ms"},
 	}
 	for tableName, columns := range requiredTables {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
@@ -91,6 +108,7 @@ func verifySchema(tx *sql.Tx) error {
 	requiredIndexes := []string{
 		"idx_workbench_layout_widgets_order",
 		"idx_workbench_layout_events_seq",
+		"idx_workbench_widget_states_type",
 	}
 	for _, indexName := range requiredIndexes {
 		exists, err := sqliteutil.IndexExistsTx(tx, indexName)

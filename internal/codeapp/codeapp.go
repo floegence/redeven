@@ -26,6 +26,7 @@ import (
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
+	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/threadreadstate"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 )
@@ -55,6 +56,7 @@ type Options struct {
 	AIConfig    *config.AIConfig
 	Audit       *auditlog.Store
 	Diagnostics *diagnostics.Store
+	Terminal    *terminal.Manager
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
 	// code-server reconnection grace and local gateway routing.
 	LocalUIEnabled          bool
@@ -262,6 +264,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		AI:                      aiSvc,
 		Notes:                   notesSvc,
 		WorkbenchLayout:         workbenchLayoutSvc,
+		Terminal:                opts.Terminal,
 		Codex:                   codexSvc,
 		Audit:                   opts.Audit,
 		Diagnostics:             opts.Diagnostics,

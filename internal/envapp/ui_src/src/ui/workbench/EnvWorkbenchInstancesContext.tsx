@@ -8,6 +8,7 @@ import type {
   WorkbenchOpenFilePreviewRequest,
   WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
+import type { RuntimeWorkbenchPreviewItem } from './runtimeWorkbenchLayout';
 
 export type EnvWorkbenchInstancesContextValue = Readonly<{
   latestWidgetIdByType: Accessor<Partial<Record<WorkbenchWidgetType, string>>>;
@@ -19,13 +20,18 @@ export type EnvWorkbenchInstancesContextValue = Readonly<{
       previous: RedevenWorkbenchTerminalPanelState,
     ) => RedevenWorkbenchTerminalPanelState,
   ) => void;
+  createTerminalSession: (widgetId: string, name: string | undefined, workingDir: string) => Promise<string | null>;
+  deleteTerminalSession: (widgetId: string, sessionId: string) => Promise<void>;
   terminalOpenRequest: (widgetId: string) => WorkbenchOpenTerminalRequest | null;
   dispatchTerminalOpenRequest: (request: WorkbenchOpenTerminalRequest) => void;
   consumeTerminalOpenRequest: (requestId: string) => void;
   fileBrowserOpenRequest: (widgetId: string) => WorkbenchOpenFileBrowserRequest | null;
   dispatchFileBrowserOpenRequest: (request: WorkbenchOpenFileBrowserRequest) => void;
   consumeFileBrowserOpenRequest: (requestId: string) => void;
+  updateFileBrowserPath: (widgetId: string, path: string) => void;
   previewItem: (widgetId: string) => FileItem | null;
+  pendingSyncedPreviewItem: (widgetId: string) => RuntimeWorkbenchPreviewItem | null;
+  setPendingSyncedPreviewItem: (widgetId: string, item: RuntimeWorkbenchPreviewItem | null) => void;
   updatePreviewItem: (widgetId: string, item: FileItem | null) => void;
   previewOpenRequest: (widgetId: string) => WorkbenchOpenFilePreviewRequest | null;
   dispatchPreviewOpenRequest: (request: WorkbenchOpenFilePreviewRequest) => void;

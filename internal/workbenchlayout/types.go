@@ -9,13 +9,25 @@ import (
 	"strings"
 )
 
-const EventTypeLayoutReplaced = "layout.replaced"
+const (
+	EventTypeLayoutReplaced      = "layout.replaced"
+	EventTypeWidgetStateUpserted = "widget_state.upserted"
+
+	WidgetTypeFiles    = "redeven.files"
+	WidgetTypeTerminal = "redeven.terminal"
+	WidgetTypePreview  = "redeven.preview"
+
+	WidgetStateKindFiles    = "files"
+	WidgetStateKindTerminal = "terminal"
+	WidgetStateKindPreview  = "preview"
+)
 
 type Snapshot struct {
 	Seq             int64          `json:"seq"`
 	Revision        int64          `json:"revision"`
 	UpdatedAtUnixMs int64          `json:"updated_at_unix_ms"`
 	Widgets         []WidgetLayout `json:"widgets"`
+	WidgetStates    []WidgetState  `json:"widget_states"`
 }
 
 type WidgetLayout struct {
@@ -39,6 +51,76 @@ type Event struct {
 type PutLayoutRequest struct {
 	BaseRevision int64          `json:"base_revision"`
 	Widgets      []WidgetLayout `json:"widgets"`
+}
+
+type WidgetState struct {
+	WidgetID        string          `json:"widget_id"`
+	WidgetType      string          `json:"widget_type"`
+	Revision        int64           `json:"revision"`
+	UpdatedAtUnixMs int64           `json:"updated_at_unix_ms"`
+	State           WidgetStateData `json:"state"`
+}
+
+type WidgetStateData struct {
+	Kind        string       `json:"kind"`
+	CurrentPath string       `json:"current_path,omitempty"`
+	SessionIDs  []string     `json:"session_ids,omitempty"`
+	Item        *PreviewItem `json:"item,omitempty"`
+}
+
+type PreviewItem struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	Path string `json:"path"`
+	Name string `json:"name"`
+	Size *int64 `json:"size,omitempty"`
+}
+
+type PutWidgetStateRequest struct {
+	BaseRevision int64           `json:"base_revision"`
+	WidgetType   string          `json:"widget_type"`
+	State        WidgetStateData `json:"state"`
+}
+
+type WidgetStateRevisionConflictError struct {
+	WidgetID        string
+	CurrentRevision int64
+}
+
+func (e *WidgetStateRevisionConflictError) Error() string {
+	if e == nil {
+		return "workbench widget state revision conflict"
+	}
+	return fmt.Sprintf("workbench widget state revision conflict (widget_id=%s current=%d)", e.WidgetID, e.CurrentRevision)
+}
+
+type WidgetNotFoundError struct {
+	WidgetID string
+}
+
+func (e *WidgetNotFoundError) Error() string {
+	if e == nil || strings.TrimSpace(e.WidgetID) == "" {
+		return "workbench widget not found"
+	}
+	return fmt.Sprintf("workbench widget %q not found", strings.TrimSpace(e.WidgetID))
+}
+
+type WidgetTypeMismatchError struct {
+	WidgetID     string
+	ExpectedType string
+	ActualType   string
+}
+
+func (e *WidgetTypeMismatchError) Error() string {
+	if e == nil {
+		return "workbench widget type mismatch"
+	}
+	return fmt.Sprintf(
+		"workbench widget %q type mismatch (expected=%s actual=%s)",
+		strings.TrimSpace(e.WidgetID),
+		strings.TrimSpace(e.ExpectedType),
+		strings.TrimSpace(e.ActualType),
+	)
 }
 
 type ValidationError struct {
@@ -77,6 +159,31 @@ func normalizePutLayoutRequest(req PutLayoutRequest, nowUnixMs int64) (PutLayout
 	}, nil
 }
 
+func normalizePutWidgetStateRequest(widgetID string, req PutWidgetStateRequest) (PutWidgetStateRequest, error) {
+	if req.BaseRevision < 0 {
+		return PutWidgetStateRequest{}, &ValidationError{Message: "base_revision must be non-negative"}
+	}
+	normalizedWidgetID, err := normalizeWidgetID(widgetID)
+	if err != nil {
+		return PutWidgetStateRequest{}, &ValidationError{Message: fmt.Sprintf("widget_id: %v", err)}
+	}
+	_ = normalizedWidgetID
+
+	widgetType := strings.TrimSpace(req.WidgetType)
+	if widgetType == "" {
+		return PutWidgetStateRequest{}, &ValidationError{Message: "widget_type is required"}
+	}
+	state, err := normalizeWidgetStateData(widgetType, req.State)
+	if err != nil {
+		return PutWidgetStateRequest{}, err
+	}
+	return PutWidgetStateRequest{
+		BaseRevision: req.BaseRevision,
+		WidgetType:   widgetType,
+		State:        state,
+	}, nil
+}
+
 func normalizeWidgetLayouts(widgets []WidgetLayout, nowUnixMs int64) ([]WidgetLayout, error) {
 	if len(widgets) == 0 {
 		return []WidgetLayout{}, nil
@@ -110,12 +217,9 @@ func normalizeWidgetLayouts(widgets []WidgetLayout, nowUnixMs int64) ([]WidgetLa
 }
 
 func normalizeWidgetLayout(widget WidgetLayout, nowUnixMs int64) (WidgetLayout, error) {
-	id := strings.TrimSpace(widget.WidgetID)
-	if id == "" {
-		return WidgetLayout{}, errors.New("missing widget_id")
-	}
-	if len(id) > 128 {
-		return WidgetLayout{}, fmt.Errorf("widget_id %q is too long", id)
+	id, err := normalizeWidgetID(widget.WidgetID)
+	if err != nil {
+		return WidgetLayout{}, err
 	}
 
 	widgetType := strings.TrimSpace(widget.WidgetType)
@@ -158,6 +262,148 @@ func normalizeWidgetLayout(widget WidgetLayout, nowUnixMs int64) (WidgetLayout, 
 	}, nil
 }
 
+func normalizeWidgetID(value string) (string, error) {
+	id := strings.TrimSpace(value)
+	if id == "" {
+		return "", errors.New("missing widget_id")
+	}
+	if len(id) > 128 {
+		return "", fmt.Errorf("widget_id %q is too long", id)
+	}
+	return id, nil
+}
+
+func widgetStateKindForType(widgetType string) (string, bool) {
+	switch strings.TrimSpace(widgetType) {
+	case WidgetTypeFiles:
+		return WidgetStateKindFiles, true
+	case WidgetTypeTerminal:
+		return WidgetStateKindTerminal, true
+	case WidgetTypePreview:
+		return WidgetStateKindPreview, true
+	default:
+		return "", false
+	}
+}
+
+func normalizeWidgetStateData(widgetType string, state WidgetStateData) (WidgetStateData, error) {
+	kind, ok := widgetStateKindForType(widgetType)
+	if !ok {
+		return WidgetStateData{}, &ValidationError{Message: fmt.Sprintf("unsupported widget_type %q", strings.TrimSpace(widgetType))}
+	}
+	if strings.TrimSpace(state.Kind) != "" && strings.TrimSpace(state.Kind) != kind {
+		return WidgetStateData{}, &ValidationError{Message: fmt.Sprintf("state.kind must be %q", kind)}
+	}
+
+	switch kind {
+	case WidgetStateKindFiles:
+		path := normalizeAbsolutePath(state.CurrentPath)
+		if path == "" {
+			return WidgetStateData{}, &ValidationError{Message: "state.current_path is required"}
+		}
+		return WidgetStateData{Kind: kind, CurrentPath: path}, nil
+	case WidgetStateKindTerminal:
+		return WidgetStateData{Kind: kind, SessionIDs: normalizeSessionIDs(state.SessionIDs)}, nil
+	case WidgetStateKindPreview:
+		item, err := normalizePreviewItem(state.Item)
+		if err != nil {
+			return WidgetStateData{}, err
+		}
+		return WidgetStateData{Kind: kind, Item: item}, nil
+	default:
+		return WidgetStateData{}, &ValidationError{Message: "unsupported widget state kind"}
+	}
+}
+
+func normalizeAbsolutePath(value string) string {
+	path := strings.TrimSpace(value)
+	if path == "" || !strings.HasPrefix(path, "/") {
+		return ""
+	}
+	for strings.Contains(path, "//") {
+		path = strings.ReplaceAll(path, "//", "/")
+	}
+	if len(path) > 1 {
+		path = strings.TrimRight(path, "/")
+	}
+	if len(path) > 4096 {
+		return ""
+	}
+	return path
+}
+
+func normalizeSessionIDs(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(values))
+	next := make([]string, 0, len(values))
+	for _, value := range values {
+		id := strings.TrimSpace(value)
+		if id == "" || len(id) > 128 {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		next = append(next, id)
+	}
+	return next
+}
+
+func normalizePreviewItem(item *PreviewItem) (*PreviewItem, error) {
+	if item == nil {
+		return nil, nil
+	}
+	path := normalizeAbsolutePath(item.Path)
+	if path == "" {
+		return nil, &ValidationError{Message: "state.item.path is required"}
+	}
+	itemType := strings.TrimSpace(item.Type)
+	if itemType == "" {
+		itemType = "file"
+	}
+	if itemType != "file" {
+		return nil, &ValidationError{Message: "state.item.type must be file"}
+	}
+	name := strings.TrimSpace(item.Name)
+	if name == "" {
+		name = basename(path)
+	}
+	if name == "" {
+		name = "File"
+	}
+	id := strings.TrimSpace(item.ID)
+	if id == "" {
+		id = path
+	}
+	var size *int64
+	if item.Size != nil && *item.Size >= 0 {
+		value := *item.Size
+		size = &value
+	}
+	return &PreviewItem{
+		ID:   id,
+		Type: "file",
+		Path: path,
+		Name: name,
+		Size: size,
+	}, nil
+}
+
+func basename(path string) string {
+	path = strings.TrimRight(strings.TrimSpace(path), "/")
+	if path == "" {
+		return ""
+	}
+	idx := strings.LastIndex(path, "/")
+	if idx >= 0 {
+		return strings.TrimSpace(path[idx+1:])
+	}
+	return path
+}
+
 func snapshotsEqualWidgets(left Snapshot, right []WidgetLayout) bool {
 	if len(left.Widgets) != len(right) {
 		return false
@@ -168,6 +414,40 @@ func snapshotsEqualWidgets(left Snapshot, right []WidgetLayout) bool {
 		}
 	}
 	return true
+}
+
+func widgetStateDataEqual(left WidgetStateData, right WidgetStateData) bool {
+	if left.Kind != right.Kind || left.CurrentPath != right.CurrentPath {
+		return false
+	}
+	if len(left.SessionIDs) != len(right.SessionIDs) {
+		return false
+	}
+	for index := range left.SessionIDs {
+		if left.SessionIDs[index] != right.SessionIDs[index] {
+			return false
+		}
+	}
+	return previewItemsEqual(left.Item, right.Item)
+}
+
+func previewItemsEqual(left *PreviewItem, right *PreviewItem) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	leftSize := int64(-1)
+	if left.Size != nil {
+		leftSize = *left.Size
+	}
+	rightSize := int64(-1)
+	if right.Size != nil {
+		rightSize = *right.Size
+	}
+	return left.ID == right.ID &&
+		left.Type == right.Type &&
+		left.Path == right.Path &&
+		left.Name == right.Name &&
+		leftSize == rightSize
 }
 
 func isFinite(value float64) bool {
