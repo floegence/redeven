@@ -8,14 +8,21 @@ import { createWorkbenchFilterState } from '@floegence/floe-webapp-core/workbenc
 
 import { RedevenWorkbenchCanvas } from './RedevenWorkbenchCanvas';
 
+const infiniteCanvasMock = {
+  lastProps: null as any,
+};
+
 vi.mock('./RedevenInfiniteCanvas', () => ({
-  RedevenInfiniteCanvas: (props: any) => (
-    <div data-testid="mock-redeven-infinite-canvas">
-      <div data-testid="mock-redeven-infinite-canvas-viewport">
-        {props.children}
+  RedevenInfiniteCanvas: (props: any) => {
+    infiniteCanvasMock.lastProps = props;
+    return (
+      <div data-testid="mock-redeven-infinite-canvas">
+        <div data-testid="mock-redeven-infinite-canvas-viewport">
+          {props.children}
+        </div>
       </div>
-    </div>
-  ),
+    );
+  },
 }));
 
 const bodyLifecycle = {
@@ -188,6 +195,7 @@ describe('RedevenWorkbenchCanvas widget instance identity', () => {
   afterEach(() => {
     bodyLifecycle.mounts.clear();
     bodyLifecycle.cleanups.clear();
+    infiniteCanvasMock.lastProps = null;
     document.body.innerHTML = '';
   });
 
@@ -242,6 +250,44 @@ describe('RedevenWorkbenchCanvas widget instance identity', () => {
     const secondaryWidget = host.querySelector('[data-floe-workbench-widget-id="widget-secondary"]') as HTMLElement | null;
     expect(primaryWidget?.style.zIndex).toBe('1');
     expect(secondaryWidget?.style.zIndex).toBe('2');
+
+    dispose();
+  });
+
+  it('passes the direct viewport-manipulation hook through to RedevenInfiniteCanvas', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onViewportInteractionStart = vi.fn();
+
+    const dispose = render(() => (
+      <RedevenWorkbenchCanvas
+        widgetDefinitions={widgetDefinitions}
+        widgets={createInitialState().widgets}
+        viewport={{ x: 0, y: 0, scale: 1 }}
+        selectedWidgetId={null}
+        optimisticFrontWidgetId={null}
+        locked={false}
+        filters={createWorkbenchFilterState(widgetDefinitions)}
+        setCanvasFrameRef={() => {}}
+        onViewportCommit={vi.fn()}
+        onViewportInteractionStart={onViewportInteractionStart}
+        onCanvasContextMenu={vi.fn()}
+        onCanvasPointerDown={vi.fn()}
+        onSelectWidget={vi.fn()}
+        onFitWidget={vi.fn()}
+        onOverviewWidget={vi.fn()}
+        onWidgetContextMenu={vi.fn()}
+        onStartOptimisticFront={vi.fn()}
+        onCommitFront={vi.fn()}
+        onCommitMove={vi.fn()}
+        onCommitResize={vi.fn()}
+        onRequestDelete={vi.fn()}
+      />
+    ), host);
+
+    await Promise.resolve();
+
+    expect(infiniteCanvasMock.lastProps?.onViewportInteractionStart).toBe(onViewportInteractionStart);
 
     dispose();
   });

@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
+import { clientToCanvasWorld } from '@floegence/floe-webapp-core/ui';
 import {
   WorkbenchContextMenu,
   useWorkbenchModel,
@@ -394,22 +395,10 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
       '[data-floe-workbench-canvas-frame="true"]'
     ) as HTMLElement | null;
     if (!frameEl) return null;
-    const rect = frameEl.getBoundingClientRect();
-    if (
-      clientX < rect.left ||
-      clientX > rect.right ||
-      clientY < rect.top ||
-      clientY > rect.bottom
-    ) {
-      return null;
-    }
-    const localX = clientX - rect.left;
-    const localY = clientY - rect.top;
-    const vp = model.viewport();
-    return {
-      worldX: (localX - vp.x) / vp.scale,
-      worldY: (localY - vp.y) / vp.scale,
-    };
+    return clientToCanvasWorld(frameEl.getBoundingClientRect(), model.viewport(), {
+      clientX,
+      clientY,
+    });
   };
 
   const handleCreateAtClient = (type: WorkbenchWidgetType, clientX: number, clientY: number) => {
@@ -437,6 +426,7 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
           filters={model.filters()}
           setCanvasFrameRef={model.setCanvasFrameRef}
           onViewportCommit={model.canvas.commitViewport}
+          onViewportInteractionStart={model.canvas.cancelViewportNavigation}
           onCanvasContextMenu={model.canvas.openCanvasContextMenu}
           onCanvasPointerDown={model.selection.clear}
           onSelectWidget={model.canvas.selectWidget}

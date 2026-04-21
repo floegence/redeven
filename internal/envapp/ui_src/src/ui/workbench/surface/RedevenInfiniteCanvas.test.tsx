@@ -163,7 +163,7 @@ function CanvasFileBrowserContextMenuHarness() {
         >
           <LayoutProvider>
             <FileBrowserWorkspace
-              mode="files"
+              mode="git"
               onModeChange={() => {}}
               files={[
                 { id: 'folder-src', name: 'src', type: 'folder', path: '/src', children: [] },
@@ -193,6 +193,7 @@ function CanvasWheelHarness(props: {
   mode: WheelHarnessMode;
   selectedWidgetId?: string | null;
   insideWidget?: boolean;
+  onViewportInteractionStart?: (kind: 'wheel' | 'pan') => void;
 }) {
   const [viewport, setViewport] = createSignal(INITIAL_VIEWPORT);
   const targetBody = (
@@ -213,6 +214,7 @@ function CanvasWheelHarness(props: {
         viewport={viewport()}
         onViewportChange={setViewport}
         selectedWidgetId={props.selectedWidgetId}
+        onViewportInteractionStart={props.onViewportInteractionStart}
         ariaLabel="Redeven wheel routing harness"
       >
         <div style={{ position: 'relative', width: '480px', height: '320px' }}>
@@ -333,6 +335,35 @@ describe('RedevenInfiniteCanvas', () => {
     expect(readViewportSnapshot(host)).toEqual(INITIAL_VIEWPORT);
   });
 
+  it('emits a direct-manipulation signal before applying canvas zoom', () => {
+    vi.useFakeTimers();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onViewportInteractionStart = vi.fn();
+    mount(
+      () => (
+        <CanvasWheelHarness
+          mode="interactive"
+          selectedWidgetId={null}
+          onViewportInteractionStart={onViewportInteractionStart}
+        />
+      ),
+      host
+    );
+
+    const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
+    const target = host.querySelector('[data-testid="wheel-target"]') as HTMLButtonElement | null;
+    expect(canvas).toBeTruthy();
+    expect(target).toBeTruthy();
+
+    mockCanvasRect(canvas!);
+    dispatchWheel(target!, -120);
+
+    expect(onViewportInteractionStart).toHaveBeenCalledTimes(1);
+    expect(onViewportInteractionStart).toHaveBeenCalledWith('wheel');
+  });
+
   it('keeps a surface dialog clickable when mounted inside a workbench canvas host', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -351,7 +382,9 @@ describe('RedevenInfiniteCanvas', () => {
     const dialogAction = host.querySelector('[data-testid="canvas-dialog-action"]') as HTMLButtonElement | null;
     const canvas = host.querySelector('.floe-infinite-canvas') as HTMLDivElement | null;
     expect(overlayRoot).toBeTruthy();
-    expect(surfaceHost?.contains(overlayRoot ?? null)).toBe(true);
+    expect(canvas?.getAttribute('data-floe-surface-portal-layer')).toBe('true');
+    expect(canvas?.contains(overlayRoot ?? null)).toBe(true);
+    expect(surfaceHost?.contains(overlayRoot ?? null)).toBe(false);
     expect(dialogAction).toBeTruthy();
     expect(canvas).toBeTruthy();
 
@@ -418,7 +451,7 @@ describe('RedevenInfiniteCanvas', () => {
     expect(contextMenuEvent.defaultPrevented).toBe(false);
   });
 
-  it('keeps file-browser context menu items clickable when mounted inside a workbench widget host', async () => {
+  it('keeps Git-mode file-browser context menu items clickable inside a workbench widget host', async () => {
     mockMatchMedia(false);
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       return window.setTimeout(() => callback(performance.now()), 0);
@@ -452,10 +485,13 @@ describe('RedevenInfiniteCanvas', () => {
     await flushMicrotasks();
     await flushMicrotasks();
 
-    const menu = surfaceHost!.querySelector('[role="menu"]') as HTMLElement | null;
+    const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
+    const menu = canvas?.querySelector('[role="menu"]') as HTMLElement | null;
     const actionButton = Array.from(menu?.querySelectorAll('button') ?? []).find((node) => node.textContent?.includes('Duplicate')) as HTMLButtonElement | undefined;
     expect(menu).toBeTruthy();
-    expect(surfaceHost?.contains(menu ?? null)).toBe(true);
+    expect(canvas?.getAttribute('data-floe-surface-portal-layer')).toBe('true');
+    expect(canvas?.contains(menu ?? null)).toBe(true);
+    expect(surfaceHost?.contains(menu ?? null)).toBe(false);
     expect(actionButton).toBeTruthy();
 
     dispatchPointerDown(actionButton!);

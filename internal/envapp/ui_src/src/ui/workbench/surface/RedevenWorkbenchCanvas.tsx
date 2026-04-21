@@ -24,6 +24,7 @@ export interface RedevenWorkbenchCanvasProps {
   filters: Record<WorkbenchWidgetType, boolean>;
   setCanvasFrameRef: (el: HTMLDivElement | undefined) => void;
   onViewportCommit: (viewport: WorkbenchViewport) => void;
+  onViewportInteractionStart?: (kind: 'wheel' | 'pan') => void;
   onCanvasContextMenu: (event: InfiniteCanvasContextMenuEvent) => void;
   onCanvasPointerDown: (event: PointerEvent) => void;
   onSelectWidget: (widgetId: string) => void;
@@ -120,6 +121,7 @@ export function RedevenWorkbenchCanvas(props: RedevenWorkbenchCanvasProps) {
         class="workbench-canvas__infinite"
         viewport={props.viewport}
         onViewportChange={props.onViewportCommit}
+        onViewportInteractionStart={props.onViewportInteractionStart}
         onCanvasContextMenu={props.onCanvasContextMenu}
         onCanvasPointerDown={props.onCanvasPointerDown}
         selectedWidgetId={props.selectedWidgetId}

@@ -1,4 +1,10 @@
 import { createEffect, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
+import {
+  clientToCanvasLocal,
+  createViewportFromZoomAnchor,
+  localToCanvasWorld,
+  SURFACE_PORTAL_LAYER_ATTR,
+} from '@floegence/floe-webapp-core/ui';
 
 import { startWorkbenchHotInteraction } from './workbenchHotInteraction';
 import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR } from './workbenchWheelInteractive';
@@ -31,6 +37,7 @@ export interface RedevenInfiniteCanvasProps {
   overlay?: (viewport: InfiniteCanvasPoint) => JSX.Element;
   viewport: InfiniteCanvasPoint;
   onViewportChange?: (viewport: InfiniteCanvasPoint) => void;
+  onViewportInteractionStart?: (kind: 'wheel' | 'pan') => void;
   onCanvasContextMenu?: (event: InfiniteCanvasContextMenuEvent) => void;
   onCanvasPointerDown?: (event: PointerEvent) => void;
   ariaLabel?: string;
@@ -228,6 +235,7 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
     clearWheelCommitTimer();
     clearPanSurfaceClickSuppression();
     if (!startedFromPanSurface) {
+      props.onViewportInteractionStart?.('pan');
       event.preventDefault();
       rootRef?.setPointerCapture(event.pointerId);
     }
@@ -309,11 +317,14 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
       return;
     }
 
+    props.onViewportInteractionStart?.('wheel');
     event.preventDefault();
 
     const current = liveViewport();
-    const localX = event.clientX - rect.left;
-    const localY = event.clientY - rect.top;
+    const localPoint = clientToCanvasLocal(rect, {
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
     const rawDelta = resolveWheelDelta(event, rootRef);
     const nextScale = clamp(
       current.scale * Math.exp(-rawDelta * wheelZoomSpeed()),
@@ -323,13 +334,11 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
 
     if (Math.abs(nextScale - current.scale) < 0.0001) return;
 
-    const worldX = (localX - current.x) / current.scale;
-    const worldY = (localY - current.y) / current.scale;
-    const next = {
-      x: localX - worldX * nextScale,
-      y: localY - worldY * nextScale,
-      scale: nextScale,
-    };
+    const next = createViewportFromZoomAnchor({
+      viewport: current,
+      localPoint,
+      nextScale,
+    });
 
     setLiveViewport(next);
     scheduleViewportCommit(next);
@@ -343,17 +352,20 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
 
     event.preventDefault();
 
-    const localX = event.clientX - rect.left;
-    const localY = event.clientY - rect.top;
+    const localPoint = clientToCanvasLocal(rect, {
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
     const viewport = liveViewport();
+    const worldPoint = localToCanvasWorld(viewport, localPoint);
 
     props.onCanvasContextMenu?.({
       clientX: event.clientX,
       clientY: event.clientY,
-      localX,
-      localY,
-      worldX: (localX - viewport.x) / viewport.scale,
-      worldY: (localY - viewport.y) / viewport.scale,
+      localX: localPoint.localX,
+      localY: localPoint.localY,
+      worldX: worldPoint.worldX,
+      worldY: worldPoint.worldY,
     });
   };
 
@@ -366,6 +378,7 @@ export function RedevenInfiniteCanvas(props: RedevenInfiniteCanvasProps) {
         props.disablePanZoom ? 'is-locked' : '',
         props.class ?? '',
       ].filter(Boolean).join(' ')}
+      {...{ [SURFACE_PORTAL_LAYER_ATTR]: 'true' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

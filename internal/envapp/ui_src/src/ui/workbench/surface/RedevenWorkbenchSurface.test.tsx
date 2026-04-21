@@ -27,6 +27,7 @@ const modelMocks = vi.hoisted(() => {
     ensureWidget: vi.fn(() => widget),
     deleteSelected: vi.fn(),
     clearSelection: vi.fn(),
+    cancelViewportNavigation: vi.fn(),
     setCanvasFrameRef: vi.fn(),
   };
 });
@@ -98,6 +99,7 @@ vi.mock('@floegence/floe-webapp-core/workbench', () => ({
       commitFront: vi.fn(),
       commitMove: vi.fn(),
       commitResize: vi.fn(),
+      cancelViewportNavigation: modelMocks.cancelViewportNavigation,
     },
     hud: {
       zoomOut: vi.fn(),
@@ -198,6 +200,7 @@ describe('RedevenWorkbenchSurface', () => {
     modelMocks.ensureWidget.mockImplementation(() => modelMocks.widget);
     modelMocks.deleteSelected.mockReset();
     modelMocks.clearSelection.mockReset();
+    modelMocks.cancelViewportNavigation.mockReset();
     modelMocks.setCanvasFrameRef.mockReset();
     surfaceMocks.contextMenuState = null;
     surfaceMocks.contextMenuItems = [];
@@ -506,6 +509,33 @@ describe('RedevenWorkbenchSurface', () => {
     dispatchPointerDown(blankCanvas!);
 
     expect(modelMocks.clearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels programmatic viewport navigation when canvas direct manipulation begins', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    dispose = render(() => (
+      <RedevenWorkbenchSurface
+        state={() => ({
+          version: 1,
+          widgets: [],
+          viewport: { x: 0, y: 0, scale: 1 },
+          locked: false,
+          filters: TEST_WORKBENCH_FILTERS,
+          selectedWidgetId: null,
+        })}
+        setState={() => {}}
+        widgetDefinitions={[]}
+      />
+    ), host);
+
+    expect(typeof surfaceMocks.canvasProps?.onViewportInteractionStart).toBe('function');
+
+    surfaceMocks.canvasProps?.onViewportInteractionStart?.('wheel');
+    surfaceMocks.canvasProps?.onViewportInteractionStart?.('pan');
+
+    expect(modelMocks.cancelViewportNavigation).toHaveBeenCalledTimes(2);
   });
 
   it('closes the workbench menu only when pointerdown lands outside the menu boundary', () => {
