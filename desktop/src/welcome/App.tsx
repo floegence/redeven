@@ -115,6 +115,11 @@ import {
   type SSHConnectionDialogAdvancedState,
 } from './sshConnectionDialogState';
 import {
+  createDesktopSettingsDraftSession,
+  reconcileDesktopSettingsDraftSession,
+  updateDesktopSettingsDraftSessionDraft,
+} from './settingsDraftSession';
+import {
   compactPasswordStateTagLabel,
   compactSaveActionLabel,
   compactSettingsFieldLabel,
@@ -766,7 +771,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
   const [controlPlaneDialogError, setControlPlaneDialogError] = createSignal('');
   const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
-  const [draft, setDraft] = createSignal<DesktopSettingsDraft>(props.snapshot.settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
+  const [settingsDraftSession, setSettingsDraftSession] = createSignal(createDesktopSettingsDraftSession(props.snapshot.settings_surface));
   const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
@@ -783,6 +788,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const shellView = createMemo(() => buildDesktopWelcomeShellViewModel(snapshot(), visibleSurface()));
   const headerLogoSrc = createMemo(() => theme.resolvedTheme() === 'light' ? LOGO_LIGHT_URL : LOGO_DARK_URL);
   const settingsSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => snapshot().settings_surface);
+  const settingsBaselineSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => settingsDraftSession().baseline_surface);
+  const draft = createMemo(() => settingsDraftSession().draft);
   const selectedSettingsEnvironmentEntry = createMemo(() => (
     snapshot().environments.find((environment) => environment.id === snapshot().settings_surface.environment_id)
       ?? snapshot().environments.find((environment) => environment.kind === 'managed_environment')
@@ -872,7 +879,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   onCleanup(unsubscribeSnapshot);
 
   createEffect(() => {
-    setDraft(snapshot().settings_surface?.draft ?? EMPTY_SETTINGS_DRAFT);
+    setSettingsDraftSession((current) => reconcileDesktopSettingsDraftSession(
+      current,
+      snapshot().settings_surface,
+      snapshot().surface === 'environment_settings',
+    ));
   });
 
   {
@@ -1853,25 +1864,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     await performLauncherAction({ kind: 'close_launcher_or_quit' });
   }
 
+  function updateSettingsDraft(updater: (current: DesktopSettingsDraft) => DesktopSettingsDraft): void {
+    setSettingsDraftSession((current) => updateDesktopSettingsDraftSessionDraft(current, updater));
+  }
+
   function updateDraftField(name: keyof DesktopSettingsDraft, value: string): void {
     if (name === 'local_ui_password') {
-      const storedPasswordConfigured = snapshot().settings_surface.local_ui_password_configured;
-      setDraft((current) => ({
+      const storedPasswordConfigured = settingsBaselineSurface().local_ui_password_configured;
+      updateSettingsDraft((current) => ({
         ...current,
         local_ui_password: value,
         local_ui_password_mode: passwordModeForInput(value, storedPasswordConfigured),
       }));
       return;
     }
-    setDraft((current) => ({
+    updateSettingsDraft((current) => ({
       ...current,
       [name]: value,
     }));
   }
 
   function applyAccessMode(mode: DesktopAccessMode): void {
-    setDraft((current) => {
-      const storedPasswordConfigured = snapshot().settings_surface.local_ui_password_configured;
+    updateSettingsDraft((current) => {
+      const storedPasswordConfigured = settingsBaselineSurface().local_ui_password_configured;
       const nextDraft = applyDesktopAccessModeToDraft(current, mode);
       if (mode === 'local_only') {
         return {
@@ -1896,15 +1911,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function applyAccessFixedPort(portText: string): void {
-    setDraft((current) => applyDesktopAccessFixedPortToDraft(current, portText));
+    updateSettingsDraft((current) => applyDesktopAccessFixedPortToDraft(current, portText));
   }
 
   function toggleAutoPort(enabled: boolean): void {
-    setDraft((current) => applyDesktopAccessAutoPortToDraft(current, enabled));
+    updateSettingsDraft((current) => applyDesktopAccessAutoPortToDraft(current, enabled));
   }
 
   function clearStoredLocalUIPassword(): void {
-    setDraft((current) => ({
+    updateSettingsDraft((current) => ({
       ...current,
       local_ui_password: '',
       local_ui_password_mode: 'clear',
@@ -1925,7 +1940,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setSettingsError(result.error);
         return;
       }
-      await refreshSnapshot();
+      const nextSnapshot = await refreshSnapshot();
+      setSettingsDraftSession(createDesktopSettingsDraftSession(nextSnapshot.settings_surface));
       showActionToast('Environment settings saved.');
     } catch (error) {
       setSettingsError(getErrorMessage(error));
@@ -2390,6 +2406,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       <LocalEnvironmentSettingsDialog
         open={snapshot().surface === 'environment_settings'}
         snapshot={settingsSurface()}
+        baselineSnapshot={settingsBaselineSurface()}
         draft={draft()}
         busyState={busyState()}
         settingsError={settingsError()}
@@ -4263,6 +4280,7 @@ function SettingsSectionHeader(props: Readonly<{
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
+  baselineSnapshot: DesktopSettingsSurfaceSnapshot;
   draft: DesktopSettingsDraft;
   busyState: DesktopLauncherBusyState;
   settingsError: string;
@@ -4278,8 +4296,8 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
   const accessModelOptions = createMemo(() => ({
     current_runtime_url: props.snapshot.current_runtime_url,
-    local_ui_password_configured: props.snapshot.local_ui_password_configured,
-    runtime_password_required: props.snapshot.runtime_password_required,
+    local_ui_password_configured: props.baselineSnapshot.local_ui_password_configured,
+    runtime_password_required: props.baselineSnapshot.runtime_password_required,
     mode_override: accessModeOverride(),
   }));
   const accessModel = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessModelOptions()));
@@ -4287,11 +4305,32 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   const addressCardHelp = createMemo(() => settingsAddressCardHelp(accessModel().access_mode));
   const protectionCardTitle = createMemo(() => settingsProtectionCardTitle(accessModel().access_mode));
   const protectionCardHelp = createMemo(() => settingsProtectionCardHelp(accessModel().access_mode));
+  const localUIPasswordCanClear = createMemo(() => (
+    props.baselineSnapshot.local_ui_password_configured
+    && props.draft.local_ui_password_mode !== 'clear'
+    && !accessModel().password_required
+  ));
+  let previousBaselineKey = '';
 
   createEffect(() => {
     if (!props.open) {
       setAccessModeOverride(null);
     }
+  });
+
+  createEffect(() => {
+    const baselineKey = [
+      props.baselineSnapshot.mode,
+      props.baselineSnapshot.environment_kind,
+      props.baselineSnapshot.environment_id,
+      props.baselineSnapshot.draft.local_ui_bind,
+      props.baselineSnapshot.draft.local_ui_password_mode,
+      props.baselineSnapshot.local_ui_password_configured ? 'password' : 'no-password',
+    ].join(':');
+    if (previousBaselineKey !== '' && previousBaselineKey !== baselineKey) {
+      setAccessModeOverride(null);
+    }
+    previousBaselineKey = baselineKey;
   });
 
   // See ConnectionDialog: memoize the open boolean so that identity churn
@@ -4306,7 +4345,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           props.cancelSettings();
         }
       }}
-      title={props.snapshot.window_title}
+      title={props.baselineSnapshot.window_title}
       class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
@@ -4317,8 +4356,8 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             size="sm"
             variant="default"
             loading={busyStateMatchesAction(props.busyState, 'save_settings')}
-            aria-label={props.snapshot.save_label}
-            title={props.snapshot.save_label}
+            aria-label={props.baselineSnapshot.save_label}
+            title={props.baselineSnapshot.save_label}
             onClick={() => {
               void props.saveSettings();
             }}
@@ -4371,12 +4410,12 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 <div class="mt-0.5 flex items-baseline gap-1.5">
                   <div class={cn(
                     'truncate text-xs font-medium text-foreground',
-                    describeNextStartAddress(props.snapshot.next_start_address_display).primary_monospace && 'font-mono text-[12px]',
+                    describeNextStartAddress(accessModel().next_start_address_display).primary_monospace && 'font-mono text-[12px]',
                   )}>
-                    {describeNextStartAddress(props.snapshot.next_start_address_display).primary}
+                    {describeNextStartAddress(accessModel().next_start_address_display).primary}
                   </div>
-                  <Show when={describeNextStartAddress(props.snapshot.next_start_address_display).hint}>
-                    <div class="truncate text-[11px] text-muted-foreground">{describeNextStartAddress(props.snapshot.next_start_address_display).hint}</div>
+                  <Show when={describeNextStartAddress(accessModel().next_start_address_display).hint}>
+                    <div class="truncate text-[11px] text-muted-foreground">{describeNextStartAddress(accessModel().next_start_address_display).hint}</div>
                   </Show>
                 </div>
               </div>
@@ -4391,8 +4430,8 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             <div class="mt-1 text-sm text-foreground">This environment keeps its own local scope on this machine.</div>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
-            <Tag variant={passwordStateTagVariant(props.snapshot.password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {compactPasswordStateTagLabel(props.snapshot.password_state_label)}
+            <Tag variant={passwordStateTagVariant(accessModel().password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {compactPasswordStateTagLabel(accessModel().password_state_label)}
             </Tag>
           </div>
         </div>
@@ -4409,7 +4448,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 aria-label="Visibility presets"
                 class="mt-3 grid gap-3 sm:grid-cols-3"
               >
-                <For each={props.snapshot.access_mode_options}>
+                <For each={props.baselineSnapshot.access_mode_options}>
                   {(option) => {
                     const selected = createMemo(() => accessModel().access_mode === option.value);
                     const Icon = accessModeIcon(option.value);
@@ -4427,6 +4466,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                         onClick={() => {
                           if (option.value === 'custom_exposure') {
                             setAccessModeOverride('custom_exposure');
+                            props.applyAccessMode(option.value);
                             return;
                           }
                           setAccessModeOverride(null);
@@ -4503,7 +4543,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                       )}
                     >
                       <SettingsFieldInput
-                        field={props.snapshot.host_fields[0]!}
+                        field={props.baselineSnapshot.host_fields[0]!}
                         value={props.draft.local_ui_bind}
                         updateDraftField={props.updateDraftField}
                         sectionTitle={addressCardTitle()}
@@ -4519,8 +4559,11 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                       when={accessModel().access_mode === 'local_only'}
                       fallback={(
                         <LocalUIPasswordField
-                          snapshot={props.snapshot}
+                          snapshot={props.baselineSnapshot}
                           draft={props.draft}
+                          passwordStateLabel={accessModel().password_state_label}
+                          passwordStateTone={accessModel().password_state_tone}
+                          localUIPasswordCanClear={localUIPasswordCanClear()}
                           updateDraftField={props.updateDraftField}
                           clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
                           sectionTitle={protectionCardTitle()}
@@ -5072,6 +5115,9 @@ function ControlPlaneDialog(props: Readonly<{
 function LocalUIPasswordField(props: Readonly<{
   snapshot: DesktopSettingsSurfaceSnapshot;
   draft: DesktopSettingsDraft;
+  passwordStateLabel: string;
+  passwordStateTone: DesktopSettingsSurfaceSnapshot['password_state_tone'];
+  localUIPasswordCanClear: boolean;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   clearStoredLocalUIPassword: () => void;
   sectionTitle?: string;
@@ -5080,12 +5126,12 @@ function LocalUIPasswordField(props: Readonly<{
     <div class="space-y-3">
       <div class="flex flex-wrap gap-1.5">
         <Tag
-          variant={passwordStateTagVariant(props.snapshot.password_state_tone)}
+          variant={passwordStateTagVariant(props.passwordStateTone)}
           tone="soft"
           size="sm"
           class="cursor-default whitespace-nowrap"
         >
-          {compactPasswordStateTagLabel(props.snapshot.password_state_label)}
+          {compactPasswordStateTagLabel(props.passwordStateLabel)}
         </Tag>
         <Show when={trimString(props.draft.local_ui_password) !== ''}>
           <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
@@ -5099,7 +5145,7 @@ function LocalUIPasswordField(props: Readonly<{
         updateDraftField={props.updateDraftField}
         sectionTitle={props.sectionTitle}
       />
-      <Show when={props.snapshot.local_ui_password_can_clear}>
+      <Show when={props.localUIPasswordCanClear}>
         <div class="flex justify-end">
           <button
             type="button"
