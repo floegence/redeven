@@ -1,9 +1,11 @@
 import {
   DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
   resolveSurfaceInteractionTargetRole,
+  resolveSurfaceWheelRouting,
   resolveWorkbenchWidgetEventOwnership,
   WORKBENCH_WIDGET_SHELL_ATTR,
   type SurfaceInteractionTargetRole,
+  type SurfaceWheelLocalReason,
   type WorkbenchWidgetEventOwnership,
 } from '@floegence/floe-webapp-core/ui';
 import {
@@ -27,9 +29,8 @@ export type WorkbenchCanvasOwnerReason =
 
 export type WorkbenchWidgetOwnerReason = 'pointer' | 'focus' | 'activation';
 export type WorkbenchWheelLocalReason =
-  | 'typing_element'
-  | 'local_interaction_surface'
-  | 'wheel_interactive';
+  | SurfaceWheelLocalReason
+  | 'selected_widget';
 
 export type WorkbenchInputOwner =
   | { kind: 'canvas'; reason: WorkbenchCanvasOwnerReason }
@@ -75,6 +76,14 @@ export function isFocusableElement(el: Element | null): boolean {
 
   const tabIndex = el.getAttribute('tabindex');
   return tabIndex !== null && tabIndex !== '-1';
+}
+
+function resolveEventTargetElement(target: EventTarget | null): Element | null {
+  if (target instanceof Element) return target;
+  if (typeof Node !== 'undefined' && target instanceof Node) {
+    return target.parentElement;
+  }
+  return null;
 }
 
 export function findWorkbenchWidgetRoot(target: EventTarget | null): HTMLElement | null {
@@ -152,31 +161,29 @@ export function resolveWorkbenchWheelRouting(args: {
   selectedWidgetId?: string | null;
   wheelInteractiveSelector?: string;
 }): WorkbenchWheelRoutingDecision {
-  const element = args.target instanceof Element ? args.target : null;
-  if (element) {
-    if (isTypingElement(element)) {
-      return { kind: 'local_surface', reason: 'typing_element' };
-    }
-
-    if (element.closest(DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR) !== null) {
-      return { kind: 'local_surface', reason: 'local_interaction_surface' };
-    }
-
-    const wheelInteractiveRoot = element.closest(
-      args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR
-    );
-    if (wheelInteractiveRoot !== null) {
-      const widgetRoot = findWorkbenchWidgetRoot(wheelInteractiveRoot);
-      const widgetId = readWorkbenchWidgetId(widgetRoot);
-      if (!widgetId || widgetId === (args.selectedWidgetId ?? null)) {
-        return { kind: 'local_surface', reason: 'wheel_interactive' };
-      }
-    }
+  const element = resolveEventTargetElement(args.target);
+  const targetWidgetId = readWorkbenchWidgetId(findWorkbenchWidgetRoot(element));
+  if (targetWidgetId && targetWidgetId === (args.selectedWidgetId ?? null)) {
+    return { kind: 'local_surface', reason: 'selected_widget' };
   }
 
-  return args.disablePanZoom
-    ? { kind: 'ignore', reason: 'pan_zoom_disabled' }
-    : { kind: 'canvas_zoom' };
+  const fallback = resolveSurfaceWheelRouting({
+    target: args.target,
+    disablePanZoom: args.disablePanZoom,
+    localInteractionSurfaceSelector: DEFAULT_LOCAL_INTERACTION_SURFACE_SELECTOR,
+    wheelInteractiveSelector: args.wheelInteractiveSelector ?? REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_SELECTOR,
+  });
+  if (
+    fallback.kind === 'local_surface'
+    && fallback.reason === 'wheel_interactive'
+    && targetWidgetId
+  ) {
+    return args.disablePanZoom
+      ? { kind: 'ignore', reason: 'pan_zoom_disabled' }
+      : { kind: 'canvas_zoom' };
+  }
+
+  return fallback;
 }
 
 export function shouldBypassWorkbenchGlobalHotkeys(args: {

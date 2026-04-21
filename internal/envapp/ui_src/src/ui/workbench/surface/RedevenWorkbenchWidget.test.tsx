@@ -159,6 +159,29 @@ describe('RedevenWorkbenchWidget', () => {
     });
   });
 
+  it('selects on secondary presses without stealing focus from widget-local content', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const props = createWidgetProps();
+
+    dispose = render(() => <RedevenWorkbenchWidget {...props} />, host);
+
+    const widgetBody = host.querySelector('[data-testid="widget-body"]') as HTMLElement | null;
+    expect(widgetBody).toBeTruthy();
+
+    const outsideInput = document.createElement('input');
+    document.body.appendChild(outsideInput);
+    outsideInput.focus();
+
+    dispatchPointerEvent('pointerdown', widgetBody!, { button: 2, pointerId: 7 });
+    await Promise.resolve();
+
+    expect(document.activeElement).toBe(outsideInput);
+    expect(props.onSelect).toHaveBeenCalledWith('widget-files-1');
+    expect(props.onCommitFront).toHaveBeenCalledWith('widget-files-1');
+  });
+
   it('keeps header action buttons clickable without starting a drag', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

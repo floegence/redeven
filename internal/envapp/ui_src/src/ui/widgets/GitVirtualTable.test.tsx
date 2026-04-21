@@ -4,7 +4,6 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { GitVirtualTable } from './GitVirtualTable';
-import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR } from '../workbench/surface/workbenchWheelInteractive';
 
 describe('GitVirtualTable', () => {
   afterEach(() => {
@@ -71,7 +70,6 @@ describe('GitVirtualTable', () => {
       const viewport = host.querySelector('.git-virtual-table-partial-test') as HTMLDivElement | null;
       expect(viewport).toBeTruthy();
       expect(viewport?.className).toContain('overflow-auto');
-      expect(viewport?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
       expect(host.textContent).toContain('item-0');
       expect(host.textContent).toContain('item-19');
       expect(host.querySelectorAll('tr[aria-hidden="true"] td')).toHaveLength(0);

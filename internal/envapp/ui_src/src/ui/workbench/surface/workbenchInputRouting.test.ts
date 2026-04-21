@@ -24,7 +24,7 @@ describe('workbenchInputRouting', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps ordinary interactive widget regions zoomable until they opt into local wheel ownership', () => {
+  it('routes wheel events to the selected widget subtree without requiring explicit wheel markers', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -37,29 +37,28 @@ describe('workbenchInputRouting', () => {
     expect(resolveWorkbenchWheelRouting({
       target: body,
       disablePanZoom: false,
-    })).toEqual({ kind: 'canvas_zoom' });
+      selectedWidgetId: 'widget-files-1',
+    })).toEqual({ kind: 'local_surface', reason: 'selected_widget' });
   });
 
-  it('routes wheel events to local consumers when a widget region explicitly opts into wheel ownership', () => {
+  it('keeps ordinary widget regions zoomable until their widget is selected', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
 
-    const wheelRegion = document.createElement('div');
-    wheelRegion.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
-    const button = document.createElement('button');
-    wheelRegion.appendChild(button);
-    widget.appendChild(wheelRegion);
+    const body = document.createElement('div');
+    body.setAttribute('data-floe-canvas-interactive', 'true');
+    widget.appendChild(body);
     document.body.appendChild(widget);
 
     expect(resolveWorkbenchWheelRouting({
-      target: button,
+      target: body,
       disablePanZoom: false,
-      selectedWidgetId: 'widget-files-1',
-    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'canvas_zoom' });
   });
 
-  it('keeps explicit wheel consumers zoomable until their widget is selected', () => {
+  it('keeps widget-local wheel markers from stealing wheel ownership until the widget is selected', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-files-1');
@@ -76,6 +75,20 @@ describe('workbenchInputRouting', () => {
       disablePanZoom: false,
       selectedWidgetId: 'widget-terminal-1',
     })).toEqual({ kind: 'canvas_zoom' });
+  });
+
+  it('keeps explicit non-widget wheel consumers local', () => {
+    const wheelRegion = document.createElement('div');
+    wheelRegion.setAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR, 'true');
+    const button = document.createElement('button');
+    wheelRegion.appendChild(button);
+    document.body.appendChild(wheelRegion);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: button,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
   });
 
   it('treats local dialog overlay surfaces inside a widget host as local surfaces', () => {
