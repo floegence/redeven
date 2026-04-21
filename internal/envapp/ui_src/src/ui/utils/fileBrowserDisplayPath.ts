@@ -148,8 +148,8 @@ export function mapContextMenuCallbacksToAbsolute(
 export function mapContextMenuItemsToAbsolute(
   items: ContextMenuItem[] | undefined,
   rootPathAbs?: string | null,
-): ContextMenuItem[] {
-  if (!Array.isArray(items)) return [];
+): ContextMenuItem[] | undefined {
+  if (!Array.isArray(items)) return undefined;
 
   return items.map((item) => ({
     ...item,

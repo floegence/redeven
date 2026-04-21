@@ -4,9 +4,11 @@ import { createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Dialog } from '@floegence/floe-webapp-core/ui';
+import { LayoutProvider } from '@floegence/floe-webapp-core';
 
 import { RedevenInfiniteCanvas } from './RedevenInfiniteCanvas';
 import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR } from './workbenchWheelInteractive';
+import { FileBrowserWorkspace } from '../../widgets/FileBrowserWorkspace';
 
 const disposers: Array<() => void> = [];
 const INITIAL_VIEWPORT = { x: 220, y: 140, scale: 1 };
@@ -20,12 +22,29 @@ function mount(view: () => JSX.Element, host: HTMLElement): void {
 }
 
 function flushMicrotasks(): Promise<void> {
-  return Promise.resolve();
+  return Promise.resolve().then(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
 function readViewportSnapshot(host: HTMLElement) {
   const output = host.querySelector('[data-testid="viewport-snapshot"]');
   return JSON.parse(output?.textContent ?? 'null');
+}
+
+function mockMatchMedia(matches = false): void {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })),
+  });
 }
 
 function mockCanvasRect(canvas: HTMLElement): void {
@@ -57,14 +76,21 @@ function dispatchWheel(target: EventTarget, deltaY: number): WheelEvent {
   return event;
 }
 
-function dispatchPointerDown(target: EventTarget): void {
+function dispatchPointerDown(target: EventTarget, options: {
+  button?: number;
+  clientX?: number;
+  clientY?: number;
+  pointerId?: number;
+} = {}): void {
   const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
   const event = new EventCtor('pointerdown', {
     bubbles: true,
-    button: 0,
+    button: options.button ?? 0,
+    clientX: options.clientX ?? 0,
+    clientY: options.clientY ?? 0,
   });
   if (!('pointerId' in event)) {
-    Object.defineProperty(event, 'pointerId', { configurable: true, value: 1 });
+    Object.defineProperty(event, 'pointerId', { configurable: true, value: options.pointerId ?? 1 });
   }
   if (!('pointerType' in event)) {
     Object.defineProperty(event, 'pointerType', { configurable: true, value: 'mouse' });
@@ -113,6 +139,52 @@ function CanvasDialogHarness() {
       </RedevenInfiniteCanvas>
 
       <output data-testid="canvas-dialog-action-count">{String(actionCount())}</output>
+    </>
+  );
+}
+
+function CanvasFileBrowserContextMenuHarness() {
+  const [actionCount, setActionCount] = createSignal(0);
+
+  return (
+    <>
+      <RedevenInfiniteCanvas
+        viewport={INITIAL_VIEWPORT}
+        onViewportChange={() => {}}
+        selectedWidgetId="widget-files-1"
+        ariaLabel="Redeven canvas file browser harness"
+      >
+        <article
+          data-testid="canvas-file-browser-host"
+          data-floe-dialog-surface-host="true"
+          data-redeven-workbench-widget-root="true"
+          data-redeven-workbench-widget-id="widget-files-1"
+          style={{ position: 'relative', width: '420px', height: '300px' }}
+        >
+          <LayoutProvider>
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={[
+                { id: 'folder-src', name: 'src', type: 'folder', path: '/src', children: [] },
+                { id: 'file-readme', name: 'README.md', type: 'file', path: '/README.md' },
+              ]}
+              currentPath="/"
+              initialPath="/"
+              persistenceKey="canvas-file-browser-context-menu"
+              instanceId="canvas-file-browser-context-menu"
+              resetKey={0}
+              width={260}
+              open
+              contextMenuCallbacks={{
+                onDuplicate: () => setActionCount((value) => value + 1),
+              }}
+            />
+          </LayoutProvider>
+        </article>
+      </RedevenInfiniteCanvas>
+
+      <output data-testid="canvas-file-browser-action-count">{String(actionCount())}</output>
     </>
   );
 }
@@ -325,5 +397,54 @@ describe('RedevenInfiniteCanvas', () => {
     dialogAction!.dispatchEvent(contextMenuEvent);
 
     expect(contextMenuEvent.defaultPrevented).toBe(false);
+  });
+
+  it('keeps file-browser context menu items clickable when mounted inside a workbench widget host', async () => {
+    mockMatchMedia(false);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      return window.setTimeout(() => callback(performance.now()), 0);
+    });
+    vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
+      window.clearTimeout(handle);
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    mount(() => <CanvasFileBrowserContextMenuHarness />, host);
+
+    const folderButton = host.querySelector('button[title="src"]') as HTMLButtonElement | null;
+    const surfaceHost = host.querySelector('[data-testid="canvas-file-browser-host"]') as HTMLElement | null;
+    expect(folderButton).toBeTruthy();
+    expect(surfaceHost).toBeTruthy();
+
+    dispatchPointerDown(folderButton!, {
+      pointerId: 1,
+      button: 2,
+      clientX: 32,
+      clientY: 32,
+    });
+    folderButton!.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      button: 2,
+      clientX: 32,
+      clientY: 32,
+    }));
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const menu = surfaceHost!.querySelector('[role="menu"]') as HTMLElement | null;
+    const actionButton = Array.from(menu?.querySelectorAll('button') ?? []).find((node) => node.textContent?.includes('Duplicate')) as HTMLButtonElement | undefined;
+    expect(menu).toBeTruthy();
+    expect(surfaceHost?.contains(menu ?? null)).toBe(true);
+    expect(actionButton).toBeTruthy();
+
+    dispatchPointerDown(actionButton!);
+    actionButton!.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    const actionCount = host.querySelector('[data-testid="canvas-file-browser-action-count"]');
+    expect(actionCount?.textContent).toBe('1');
   });
 });

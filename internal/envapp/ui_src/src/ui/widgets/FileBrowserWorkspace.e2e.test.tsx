@@ -8,6 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FileBrowserWorkspace } from './FileBrowserWorkspace';
 import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR } from '../workbench/surface/workbenchWheelInteractive';
+import {
+  FLOE_DIALOG_SURFACE_HOST_ATTR,
+  REDEVEN_WORKBENCH_WIDGET_ID_ATTR,
+  REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR,
+} from '../workbench/surface/workbenchInputRouting';
 
 const resizeObserverState = {
   observers: [] as Array<{
@@ -20,6 +25,35 @@ async function flush() {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function dispatchPointerDown(target: EventTarget, options: {
+  button?: number;
+  clientX?: number;
+  clientY?: number;
+  pointerId?: number;
+} = {}) {
+  const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+  const event = new EventCtor('pointerdown', {
+    bubbles: true,
+    cancelable: true,
+    button: options.button ?? 0,
+    clientX: options.clientX ?? 0,
+    clientY: options.clientY ?? 0,
+  });
+  if (!('pointerId' in event)) {
+    Object.defineProperty(event, 'pointerId', {
+      configurable: true,
+      value: options.pointerId ?? 1,
+    });
+  }
+  if (!('pointerType' in event)) {
+    Object.defineProperty(event, 'pointerType', {
+      configurable: true,
+      value: 'mouse',
+    });
+  }
+  target.dispatchEvent(event);
 }
 
 function expectCodeBadgeForFile(host: HTMLElement, fileName: string, label: string, tone: string) {
@@ -1132,6 +1166,80 @@ describe('FileBrowserWorkspace interactions', () => {
       const hiddenOpenButton = Array.from(document.body.querySelectorAll('[role="menu"] button')).find((node) => node.textContent?.includes('Open in Terminal')) as HTMLButtonElement | undefined;
       expect(hiddenOpenButton).toBeUndefined();
       expect(openInTerminalSpy).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps surface-scoped context menu items clickable inside a workbench host', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const duplicateSpy = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <article
+          {...{ [FLOE_DIALOG_SURFACE_HOST_ATTR]: 'true' }}
+          {...{ [REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR]: 'true' }}
+          {...{ [REDEVEN_WORKBENCH_WIDGET_ID_ATTR]: 'widget-files-1' }}
+          class="relative h-[560px]"
+        >
+          <FileBrowserWorkspace
+            mode="files"
+            onModeChange={() => {}}
+            files={files}
+            currentPath="/"
+            initialPath="/"
+            persistenceKey="test-files-workspace-surface-context-menu"
+            instanceId="test-files-workspace-surface-context-menu"
+            resetKey={0}
+            width={260}
+            open
+            contextMenuCallbacks={{ onDuplicate: duplicateSpy }}
+          />
+        </article>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const folderButton = host.querySelector('button[title="src"]') as HTMLButtonElement | null;
+      const surfaceHost = host.querySelector(`[${FLOE_DIALOG_SURFACE_HOST_ATTR}="true"]`) as HTMLElement | null;
+      expect(folderButton).toBeTruthy();
+      expect(surfaceHost).toBeTruthy();
+
+      folderButton!.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        pointerId: 1,
+        pointerType: 'mouse',
+        button: 2,
+        clientX: 24,
+        clientY: 32,
+      }));
+      folderButton!.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        clientX: 24,
+        clientY: 32,
+      }));
+      await flush();
+      await flush();
+
+      const menu = surfaceHost!.querySelector('[role="menu"]') as HTMLElement | null;
+      const duplicateButton = Array.from(menu?.querySelectorAll('button') ?? []).find((node) => node.textContent?.includes('Duplicate')) as HTMLButtonElement | undefined;
+      expect(menu).toBeTruthy();
+      expect(menu?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+      expect(duplicateButton).toBeTruthy();
+
+      dispatchPointerDown(duplicateButton!);
+      duplicateButton!.click();
+      await flush();
+      await flush();
+
+      expect(duplicateSpy).toHaveBeenCalledTimes(1);
+      expect(duplicateSpy.mock.calls[0]?.[0]?.[0]?.path).toBe('/src');
     } finally {
       dispose();
     }

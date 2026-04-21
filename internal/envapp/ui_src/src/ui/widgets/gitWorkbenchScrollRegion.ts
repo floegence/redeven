@@ -1,0 +1,3 @@
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+
+export const GIT_WORKBENCH_SCROLL_REGION_PROPS = REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_PROPS;

@@ -5,6 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
+import { REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR } from '../workbench/surface/workbenchWheelInteractive';
 
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -113,6 +114,7 @@ describe('GitWorkbenchSidebar interactions', () => {
       expect(host.textContent).toContain('Merge x2');
       const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]');
       expect(scrollRegion).toBeTruthy();
+      expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
       expect(scrollRegion?.querySelector('[data-commit-graph-rails]')).toBeTruthy();
       expect(host.querySelectorAll('svg')).not.toHaveLength(0);
       expect(host.textContent).not.toContain('Recent history with merge structure.');

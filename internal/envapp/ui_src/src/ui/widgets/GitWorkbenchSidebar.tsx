@@ -34,6 +34,7 @@ import {
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitCommitGraph } from './GitCommitGraph';
 import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 
 export interface GitWorkbenchSidebarProps {
   subview: GitWorkbenchSubview;
@@ -103,6 +104,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   return (
     <div class={cn('flex h-full min-h-0 flex-col', props.class)}>
       <div
+        {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
         data-testid="git-sidebar-scroll-region"
         class="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
       >

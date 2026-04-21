@@ -18,6 +18,7 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
+import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 
 function itemPath(item: GitWorkspaceChange): string {
   return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
@@ -54,7 +55,7 @@ export function GitWorkspaceStatusTable(props: GitWorkspaceStatusTableProps) {
           </div>
         )}
       >
-        <div class="min-h-0 flex-1 overflow-auto">
+        <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="min-h-0 flex-1 overflow-auto">
           <table class={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[52rem] md:min-w-0`}>
             <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
               <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
