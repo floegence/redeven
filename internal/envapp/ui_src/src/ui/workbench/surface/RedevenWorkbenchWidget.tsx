@@ -1,5 +1,6 @@
 import { createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { Maximize, Minus, X } from '@floegence/floe-webapp-core/icons';
+import { startPointerSession, type PointerSessionController } from '@floegence/floe-webapp-core/ui';
 import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetItem,
@@ -78,8 +79,8 @@ export interface RedevenWorkbenchWidgetProps {
 export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
   const [dragState, setDragState] = createSignal<LocalDragState | null>(null);
   const [resizeState, setResizeState] = createSignal<LocalResizeState | null>(null);
-  let dragAbortController: AbortController | undefined;
-  let resizeAbortController: AbortController | undefined;
+  let dragSession: PointerSessionController | undefined;
+  let resizeSession: PointerSessionController | undefined;
   let widgetRootEl: HTMLElement | undefined;
 
   const startTrackedLayoutInteraction = (kind: 'drag' | 'resize', cursor: string) => {
@@ -97,10 +98,10 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
   };
 
   onCleanup(() => {
-    dragAbortController?.abort();
-    dragAbortController = undefined;
-    resizeAbortController?.abort();
-    resizeAbortController = undefined;
+    dragSession?.stop({ reason: 'manual_stop', commit: false });
+    dragSession = undefined;
+    resizeSession?.stop({ reason: 'manual_stop', commit: false });
+    resizeSession = undefined;
     untrack(dragState)?.stopInteraction();
     untrack(resizeState)?.stopInteraction();
   });
@@ -166,8 +167,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
 
     current.stopInteraction();
     setDragState(null);
-    dragAbortController?.abort();
-    dragAbortController = undefined;
+    dragSession = undefined;
   };
 
   const beginDrag: JSX.EventHandler<HTMLElement, PointerEvent> = (event) => {
@@ -180,7 +180,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
     }
 
     event.preventDefault();
-    dragAbortController?.abort();
+    dragSession?.stop({ reason: 'manual_stop', commit: false });
     props.onStartOptimisticFront(props.widgetId);
 
     const stopInteraction = startTrackedLayoutInteraction('drag', 'grabbing');
@@ -218,22 +218,12 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       });
     };
 
-    const finish = (nextEvent: PointerEvent) => {
-      if (nextEvent.pointerId !== event.pointerId) return;
-      finishDrag(true);
-    };
-
-    const cancel = (nextEvent: PointerEvent) => {
-      if (nextEvent.pointerId !== event.pointerId) return;
-      finishDrag(false);
-    };
-
-    const controller = new AbortController();
-    dragAbortController = controller;
-
-    window.addEventListener('pointermove', handleMove, { signal: controller.signal });
-    window.addEventListener('pointerup', finish, { once: true, signal: controller.signal });
-    window.addEventListener('pointercancel', cancel, { once: true, signal: controller.signal });
+    dragSession = startPointerSession({
+      pointerEvent: event,
+      captureEl: event.currentTarget,
+      onMove: handleMove,
+      onEnd: ({ commit }) => finishDrag(commit),
+    });
   };
 
   const finishResize = (commit: boolean) => {
@@ -251,8 +241,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
 
     current.stopInteraction();
     setResizeState(null);
-    resizeAbortController?.abort();
-    resizeAbortController = undefined;
+    resizeSession = undefined;
   };
 
   const beginResize: JSX.EventHandler<HTMLDivElement, PointerEvent> = (event) => {
@@ -260,7 +249,7 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
 
     event.preventDefault();
     event.stopPropagation();
-    resizeAbortController?.abort();
+    resizeSession?.stop({ reason: 'manual_stop', commit: false });
     props.onStartOptimisticFront(props.widgetId);
 
     const stopInteraction = startTrackedLayoutInteraction('resize', 'nwse-resize');
@@ -293,22 +282,12 @@ export function RedevenWorkbenchWidget(props: RedevenWorkbenchWidgetProps) {
       });
     };
 
-    const finish = (nextEvent: PointerEvent) => {
-      if (nextEvent.pointerId !== event.pointerId) return;
-      finishResize(true);
-    };
-
-    const cancel = (nextEvent: PointerEvent) => {
-      if (nextEvent.pointerId !== event.pointerId) return;
-      finishResize(false);
-    };
-
-    const controller = new AbortController();
-    resizeAbortController = controller;
-
-    window.addEventListener('pointermove', handleMove, { signal: controller.signal });
-    window.addEventListener('pointerup', finish, { once: true, signal: controller.signal });
-    window.addEventListener('pointercancel', cancel, { once: true, signal: controller.signal });
+    resizeSession = startPointerSession({
+      pointerEvent: event,
+      captureEl: event.currentTarget,
+      onMove: handleMove,
+      onEnd: ({ commit }) => finishResize(commit),
+    });
   };
 
   return (

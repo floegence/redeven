@@ -18,6 +18,7 @@ function dispatchPointerEvent(
     clientY?: number;
     button?: number;
     pointerId?: number;
+    buttons?: number;
   } = {},
 ): void {
   const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
@@ -33,6 +34,10 @@ function dispatchPointerEvent(
       value: options.pointerId ?? 1,
     });
   }
+  Object.defineProperty(event, 'buttons', {
+    configurable: true,
+    value: options.buttons ?? 1,
+  });
   target.dispatchEvent(event);
 }
 
@@ -76,6 +81,8 @@ function createWidgetProps() {
     onCommitMove: vi.fn(),
     onCommitResize: vi.fn(),
     onRequestDelete: vi.fn(),
+    onLayoutInteractionStart: vi.fn(),
+    onLayoutInteractionEnd: vi.fn(),
   };
 }
 
@@ -140,15 +147,17 @@ describe('RedevenWorkbenchWidget', () => {
       clientY: 10,
       pointerId: 4,
     });
-    dispatchPointerEvent('pointermove', window, {
+    dispatchPointerEvent('pointermove', document, {
       clientX: 50,
       clientY: 30,
       pointerId: 4,
+      buttons: 1,
     });
-    dispatchPointerEvent('pointerup', window, {
+    dispatchPointerEvent('pointerup', document, {
       clientX: 50,
       clientY: 30,
       pointerId: 4,
+      buttons: 0,
     });
 
     expect(props.onStartOptimisticFront).toHaveBeenCalledWith('widget-files-1');
@@ -157,6 +166,8 @@ describe('RedevenWorkbenchWidget', () => {
       x: 20,
       y: 10,
     });
+    expect(props.onLayoutInteractionStart).toHaveBeenCalledTimes(1);
+    expect(props.onLayoutInteractionEnd).toHaveBeenCalledTimes(1);
   });
 
   it('selects on secondary presses without stealing focus from widget-local content', async () => {
@@ -215,5 +226,93 @@ describe('RedevenWorkbenchWidget', () => {
     expect(props.onFitWidget).toHaveBeenCalledTimes(1);
     expect(props.onOverviewWidget).toHaveBeenCalledTimes(1);
     expect(props.onRequestDelete).toHaveBeenCalledWith('widget-files-1');
+  });
+
+  it('ends header drag once when the release is only observable via a later buttons=0 move', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const props = createWidgetProps();
+
+    dispose = render(() => <RedevenWorkbenchWidget {...props} />, host);
+
+    const widgetHeader = host.querySelector('.workbench-widget__header') as HTMLElement | null;
+    expect(widgetHeader).toBeTruthy();
+
+    dispatchPointerEvent('pointerdown', widgetHeader!, {
+      clientX: 10,
+      clientY: 10,
+      pointerId: 8,
+      buttons: 1,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 50,
+      clientY: 30,
+      pointerId: 8,
+      buttons: 1,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 90,
+      clientY: 50,
+      pointerId: 8,
+      buttons: 0,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 120,
+      clientY: 80,
+      pointerId: 8,
+      buttons: 0,
+    });
+
+    expect(props.onCommitMove).toHaveBeenCalledTimes(1);
+    expect(props.onCommitMove).toHaveBeenCalledWith('widget-files-1', {
+      x: 20,
+      y: 10,
+    });
+    expect(props.onLayoutInteractionEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends resize once when the release is only observable via a later buttons=0 move', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const props = createWidgetProps();
+
+    dispose = render(() => <RedevenWorkbenchWidget {...props} />, host);
+
+    const resizeHandle = host.querySelector('.workbench-widget__resize') as HTMLElement | null;
+    expect(resizeHandle).toBeTruthy();
+
+    dispatchPointerEvent('pointerdown', resizeHandle!, {
+      clientX: 100,
+      clientY: 80,
+      pointerId: 11,
+      buttons: 1,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 140,
+      clientY: 100,
+      pointerId: 11,
+      buttons: 1,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 180,
+      clientY: 120,
+      pointerId: 11,
+      buttons: 0,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 200,
+      clientY: 140,
+      pointerId: 11,
+      buttons: 0,
+    });
+
+    expect(props.onCommitResize).toHaveBeenCalledTimes(1);
+    expect(props.onCommitResize).toHaveBeenCalledWith('widget-files-1', {
+      width: 500,
+      height: 330,
+    });
+    expect(props.onLayoutInteractionEnd).toHaveBeenCalledTimes(1);
   });
 });

@@ -81,6 +81,7 @@ function dispatchPointerDown(target: EventTarget, options: {
   clientX?: number;
   clientY?: number;
   pointerId?: number;
+  buttons?: number;
 } = {}): void {
   const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
   const event = new EventCtor('pointerdown', {
@@ -95,6 +96,44 @@ function dispatchPointerDown(target: EventTarget, options: {
   if (!('pointerType' in event)) {
     Object.defineProperty(event, 'pointerType', { configurable: true, value: 'mouse' });
   }
+  Object.defineProperty(event, 'buttons', {
+    configurable: true,
+    value: options.buttons ?? 1,
+  });
+  target.dispatchEvent(event);
+}
+
+function dispatchPointerEvent(
+  type: string,
+  target: EventTarget,
+  options: {
+    button?: number;
+    clientX?: number;
+    clientY?: number;
+    pointerId?: number;
+    buttons?: number;
+  } = {},
+): void {
+  const EventCtor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+  const event = new EventCtor(type, {
+    bubbles: true,
+    button: options.button ?? 0,
+    clientX: options.clientX ?? 0,
+    clientY: options.clientY ?? 0,
+  });
+  if (!('pointerId' in event)) {
+    Object.defineProperty(event, 'pointerId', {
+      configurable: true,
+      value: options.pointerId ?? 1,
+    });
+  }
+  if (!('pointerType' in event)) {
+    Object.defineProperty(event, 'pointerType', { configurable: true, value: 'mouse' });
+  }
+  Object.defineProperty(event, 'buttons', {
+    configurable: true,
+    value: options.buttons ?? (type === 'pointerup' || type === 'pointercancel' ? 0 : 1),
+  });
   target.dispatchEvent(event);
 }
 
@@ -362,6 +401,75 @@ describe('RedevenInfiniteCanvas', () => {
 
     expect(onViewportInteractionStart).toHaveBeenCalledTimes(1);
     expect(onViewportInteractionStart).toHaveBeenCalledWith('wheel');
+  });
+
+  it('keeps panning alive across bounds while the primary button remains pressed', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    mount(() => <CanvasWheelHarness mode="interactive" selectedWidgetId={null} />, host);
+
+    const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
+    expect(canvas).toBeTruthy();
+
+    dispatchPointerDown(canvas!, {
+      clientX: 40,
+      clientY: 40,
+      pointerId: 21,
+      buttons: 1,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 420,
+      clientY: 260,
+      pointerId: 21,
+      buttons: 1,
+    });
+
+    expect(canvas?.classList.contains('is-panning')).toBe(true);
+    expect(readViewportSnapshot(host)).toEqual(INITIAL_VIEWPORT);
+  });
+
+  it('ends pan once when the release is only observable through a later buttons=0 move', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    mount(() => <CanvasWheelHarness mode="interactive" selectedWidgetId={null} />, host);
+
+    const canvas = host.querySelector('.floe-infinite-canvas') as HTMLElement | null;
+    expect(canvas).toBeTruthy();
+
+    dispatchPointerDown(canvas!, {
+      clientX: 40,
+      clientY: 40,
+      pointerId: 22,
+      buttons: 1,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 90,
+      clientY: 65,
+      pointerId: 22,
+      buttons: 1,
+    });
+
+    expect(canvas?.classList.contains('is-panning')).toBe(true);
+
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 120,
+      clientY: 90,
+      pointerId: 22,
+      buttons: 0,
+    });
+    dispatchPointerEvent('pointermove', document, {
+      clientX: 140,
+      clientY: 110,
+      pointerId: 22,
+      buttons: 0,
+    });
+
+    expect(canvas?.classList.contains('is-panning')).toBe(false);
+    expect(readViewportSnapshot(host)).toEqual({
+      x: 270,
+      y: 165,
+      scale: 1,
+    });
   });
 
   it('keeps a surface dialog clickable when mounted inside a workbench canvas host', async () => {
