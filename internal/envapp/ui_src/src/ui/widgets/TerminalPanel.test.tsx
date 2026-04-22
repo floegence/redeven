@@ -1044,7 +1044,7 @@ describe('TerminalPanel', () => {
     expect(handledSpy).toHaveBeenCalledWith('request-workbench-group');
   });
 
-  it('keeps only the active workbench terminal tab mounted live', async () => {
+  it('keeps previously activated workbench terminal tabs mounted live', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -1091,7 +1091,7 @@ describe('TerminalPanel', () => {
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();
 
-    expect(terminalEventSourceState.dataHandlers.get('session-1')?.size ?? 0).toBe(0);
+    expect(terminalEventSourceState.dataHandlers.get('session-1')?.size).toBe(1);
     expect(terminalEventSourceState.dataHandlers.get('session-2')?.size).toBe(1);
   });
 

@@ -870,7 +870,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const connected = () => Boolean(protocol.client());
   const viewActive = () => view.active();
-  const keepInactiveSessionsMounted = () => variant !== 'workbench';
   const isInDeckWidget = Boolean(String(widgetId ?? '').trim());
   const permissionReady = () => env.env.state === 'ready';
   const canBrowseFiles = createMemo(() => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read));
@@ -1619,10 +1618,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     ensureSessionInGroup(normalizedSessionId);
     setActiveSessionId(normalizedSessionId);
     setMountedSessionIds((prev) => {
-      if (!keepInactiveSessionsMounted()) {
-        if (prev.size === 1 && prev.has(normalizedSessionId)) return prev;
-        return new Set([normalizedSessionId]);
-      }
       if (prev.has(normalizedSessionId)) return prev;
       const next = new Set(prev);
       next.add(normalizedSessionId);
@@ -1808,10 +1803,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!id) return;
     if (!sessions().some((s) => s.id === id)) return;
     setMountedSessionIds((prev) => {
-      if (!keepInactiveSessionsMounted()) {
-        if (prev.size === 1 && prev.has(id)) return prev;
-        return new Set([id]);
-      }
       if (prev.has(id)) return prev;
       const next = new Set(prev);
       next.add(id);
@@ -1829,11 +1820,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   createEffect(() => {
     const ids = new Set(sessions().map((s) => s.id));
     setMountedSessionIds((prev) => {
-      if (!keepInactiveSessionsMounted()) {
-        const id = activeSessionId();
-        const next = id && ids.has(id) ? new Set([id]) : new Set<string>();
-        return prev.size === next.size && Array.from(next).every((value) => prev.has(value)) ? prev : next;
-      }
       let changed = false;
       const next = new Set<string>();
       for (const id of prev) {
